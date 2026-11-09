@@ -33,6 +33,8 @@ describe(`seeding`, () => {
             // Auto: never a seeded guess, so the daemon places the first turn by serviceability.
             account: undefined,
             model: `claude-model`,
+            // Nobody named it: a catalog that answers later resolves it again (reseatModel).
+            modelSeeded: true,
             effortPick: `high`,
             thinking: true,
             auto: false,
@@ -107,7 +109,7 @@ describe(`the provider`, () => {
         };
 
         expect(reduceSelection(moved, { kind: `restoreProvider` }, WORLD)).toEqual({
-            selection: { ...moved, provider: `claude`, account: undefined, model: `opus`, movedFrom: undefined, sentModel: undefined },
+            selection: { ...moved, provider: `claude`, account: undefined, model: `opus`, modelSeeded: false, movedFrom: undefined, sentModel: undefined },
             effects: { segmentCut: true, divider: `refresh` },
         });
         expect(reduceSelection(SEEDED, { kind: `restoreProvider` }, WORLD).selection).toBe(SEEDED);
@@ -119,7 +121,7 @@ describe(`the model`, () => {
         const owed = { ...SENT, auto: true, displacedModel: `sonnet`, movedFrom: { provider: `codex` as const, value: `codex-model` } };
 
         expect(reduceSelection(owed, { kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } }, WORLD)).toEqual({
-            selection: { ...owed, auto: false, model: `haiku`, displacedModel: undefined, movedFrom: undefined },
+            selection: { ...owed, auto: false, model: `haiku`, modelSeeded: false, displacedModel: undefined, movedFrom: undefined },
             effects: { kept: true, remember: { provider: `claude`, value: `haiku` }, divider: `refresh`, follow: true },
         });
     });
@@ -130,6 +132,7 @@ describe(`the model`, () => {
             provider: `codex`,
             account: undefined,
             model: `gpt-5`,
+            modelSeeded: false,
             harness: `claude-code`,
             sentModel: undefined,
         });
@@ -143,7 +146,16 @@ describe(`the model`, () => {
         const pick = { provider: `claude`, value: `claude-opus-5` };
 
         expect(reduceSelection(onKey, { kind: `selectModel`, pick, account: `work` }, WORLD)).toEqual({
-            selection: { ...onKey, provider: `claude`, model: `claude-opus-5`, harness: `native`, account: `work`, accountPicked: true, sentModel: undefined },
+            selection: {
+                ...onKey,
+                provider: `claude`,
+                model: `claude-opus-5`,
+                modelSeeded: false,
+                harness: `native`,
+                account: `work`,
+                accountPicked: true,
+                sentModel: undefined,
+            },
             effects: { kept: true, remember: pick, segmentCut: true, divider: `refresh`, follow: true },
         });
         // On its own provider it is an account pick as well: the daemon is asked to move there.
@@ -170,6 +182,7 @@ describe(`the model`, () => {
             selection: {
                 ...SEEDED,
                 model: `haiku`,
+                modelSeeded: false,
                 effortPick: `low`,
                 thinking: false,
                 harness: `claude-code`,
@@ -182,14 +195,41 @@ describe(`the model`, () => {
 
     it(`owes back the first model a thin catalog moved it off, and nothing for an empty one`, () => {
         const displaced = reduceSelection(SEEDED, { kind: `displaceModel`, model: `sonnet` }, WORLD);
-        expect(displaced).toEqual({ selection: { ...SEEDED, model: `sonnet`, displacedModel: `claude-model` }, effects: { divider: `refresh` } });
+        expect(displaced).toEqual({ selection: { ...SEEDED, model: `sonnet`, modelSeeded: false, displacedModel: `claude-model` }, effects: { divider: `refresh` } });
         expect(reduceSelection(displaced.selection, { kind: `displaceModel`, model: `haiku` }, WORLD).selection.displacedModel).toBe(`claude-model`);
         expect(reduceSelection({ ...SEEDED, model: `` }, { kind: `displaceModel`, model: `sonnet` }, WORLD).selection.displacedModel).toBeUndefined();
 
         expect(reduceSelection(displaced.selection, { kind: `restoreModel` }, WORLD)).toEqual({
-            selection: { ...SEEDED, model: `claude-model`, displacedModel: undefined },
+            selection: { ...SEEDED, model: `claude-model`, modelSeeded: false, displacedModel: undefined },
             effects: { divider: `refresh` },
         });
+    });
+});
+
+// A chat seeded before its catalog answered was seeded from the pick as stored, or the compile-time floor's head
+// (claude-opus-5), and kept it once the catalog listed Opus 5 among the older versions: every such chat opened on it.
+describe(`a seeded model, once a catalog answers`, () => {
+    const resolved: PickWorld = { ...WORLD, rememberedModel: (provider) => `${provider}-newest` };
+
+    it(`resolves again a model nobody named, on a chat that has sent nothing`, () => {
+        expect(reduceSelection(SEEDED, { kind: `reseatModel` }, resolved)).toEqual({ selection: { ...SEEDED, model: `claude-newest` }, effects: {} });
+    });
+
+    it(`leaves a model named here, by a card, by a restored tab, or one a turn already went out on`, () => {
+        const named = reduceSelection(SEEDED, { kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } }, WORLD).selection;
+        const worn = reduceSelection(SEEDED, { kind: `wearModel`, pin: { provider: `claude`, model: `haiku` } }, WORLD).selection;
+        const restored = reduceSelection(SEEDED, { kind: `set`, picks: { model: `haiku` } }, WORLD).selection;
+        const sent = reduceSelection(SEEDED, { kind: `sent` }, WORLD).selection;
+        for (const selection of [named, worn, restored, sent]) {
+            expect(reduceSelection(selection, { kind: `reseatModel` }, resolved).selection).toBe(selection);
+        }
+        // Nor a chat the daemon already holds a session for.
+        expect(reduceSelection(SEEDED, { kind: `reseatModel` }, { ...resolved, session: CLAUDE_SESSION }).selection).toBe(SEEDED);
+    });
+
+    it(`resolves a restored tab's model again when it was a seed in the window that stored it`, () => {
+        const restored = reduceSelection(SEEDED, { kind: `set`, picks: { model: `claude-opus-5` }, seededModel: true }, WORLD).selection;
+        expect(reduceSelection(restored, { kind: `reseatModel` }, resolved).selection.model).toBe(`claude-newest`);
     });
 });
 
@@ -377,7 +417,7 @@ describe(`what a fork and a restore write`, () => {
 describe(`a turn's own moments`, () => {
     it(`measures the next swap from the model a turn went out on, freezing the divider into the record`, () => {
         expect(reduceSelection(SEEDED, { kind: `sent` }, WORLD)).toEqual({
-            selection: { ...SEEDED, sentModel: `claude-model` },
+            selection: { ...SEEDED, sentModel: `claude-model`, modelSeeded: false },
             effects: { divider: `freeze` },
         });
         expect(reduceSelection(SEEDED, { kind: `rerun` }, WORLD)).toEqual({ selection: SEEDED, effects: { divider: `freeze` } });

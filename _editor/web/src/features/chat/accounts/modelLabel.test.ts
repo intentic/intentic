@@ -24,9 +24,10 @@ it(`names a model its catalog lists by the catalog's own label`, () => {
     expect(modelLabelFor(`gemini`, `gemini-3.8-flash-high`)).toBe(`Gemini 3.8 Flash`);
 });
 
-// The defect: a chat on a catalog nobody had read showed `claude-opus-5-5` until a picker happened to be opened.
+// The defect: a chat on a catalog nobody had read showed `claude-opus-5-5` until a picker happened to be opened. The id
+// here is one the compile-time floor does not list either, which would otherwise answer it without a read.
 it(`names an id no read catalog lists as a person would, and reads that catalog`, async () => {
-    expect(modelLabelFor(`claude`, `claude-opus-5-5`)).toBe(`Claude Opus 5.5`);
+    expect(modelLabelFor(`claude`, `claude-opus-6`)).toBe(`Claude Opus 6`);
     await Promise.resolve();
 
     expect(reads.mock.calls).toEqual([[`claude`]]);

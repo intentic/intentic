@@ -218,7 +218,9 @@ export const restoreTab = (tab: StoredTab): Conversation => {
     conversation.registered.value = tab.registered;
     // Set before anything that could talk to a daemon: this is the tab's address, asked first.
     conversation.box.value = tab.box;
-    conversation.selection.apply({ kind: `set`, picks: restoredPicks(tab, tab.isolated) });
+    // A tab stored before it named a model (or on a seed nobody changed) is still on a seed, re-resolved when a catalog answers.
+    const seededModel = tab.provider !== undefined && (tab.model === undefined || tab.modelSeeded === true);
+    conversation.selection.apply({ kind: `set`, picks: restoredPicks(tab, tab.isolated), seededModel });
     // A looked-at tab restores as still looking; it's always the focused tab, swept by the next click elsewhere.
     conversation.peek.value = tab.peek === true;
     conversation.leftAt.value = tab.leftAt;

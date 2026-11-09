@@ -18,11 +18,12 @@ import { SANDBOX_SELF_ACCESS } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { HOME_VIEW_HOST } from "../../../lib/routes/homeDetour";
 import { useOperation } from "../../../workbench/operations/operations";
-import { defaultModelFor, endpointProviders, keyedBeside, runnableReadFailure } from "../../../models/providers/providerCatalog";
+import { endpointProviders, keyedBeside, runnableReadFailure } from "../../../models/providers/providerCatalog";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
 import { holdSignInTab } from "../../../models/conversations/run/signInTab";
-import { rememberPick } from "../../../models/conversations/run/turnDefaults";
+import { loadProviderModels } from "../../../models/conversations/accounts/useChat-catalog";
+import { rememberedModelFor, rememberPick } from "../../../models/conversations/run/turnDefaults";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { accessKnown, providerReady } from "../../../models/providers/access";
 import BringAccounts from "./BringAccounts.vue";
@@ -329,9 +330,15 @@ const onLocalReady = (provider: string): void => {
 // pointed at what just connected if it had nothing to send with, its draft still in the box.
 const homeView = inject(HOME_VIEW_HOST, undefined);
 const chatLabel = computed(() => (homeView === undefined ? undefined : t(`home.view.continueInChat`)));
-const startChatting = (): void => {
+// The model is read after this provider's catalog has answered with the new sign-in: the list read before it (or none
+// at all, on a new sandbox) defaults to the compile-time floor's head, and stored here as the reader's pick that put
+// every chat on Claude Opus 5 from the first one on. The reader's own remembered family wins over the daemon default.
+const startChatting = async (): Promise<void> => {
     const provider = landed.value;
-    const pick = provider === undefined ? undefined : { provider, value: defaultModelFor(provider) };
+    if (provider !== undefined) {
+        await loadProviderModels(provider);
+    }
+    const pick = provider === undefined ? undefined : { provider, value: rememberedModelFor(provider) };
     if (pick !== undefined) {
         rememberPick(pick);
     }

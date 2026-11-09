@@ -144,6 +144,7 @@ export class ComposerSelection {
     readonly harness = computed(() => this.state.value.harness);
     readonly account = computed(() => this.state.value.account);
     readonly model = computed(() => this.state.value.model);
+    readonly modelSeeded = computed(() => this.state.value.modelSeeded);
     readonly movedFrom = computed(() => this.state.value.movedFrom);
     readonly displacedModel = computed(() => this.state.value.displacedModel);
     readonly thinking = computed(() => this.state.value.thinking);

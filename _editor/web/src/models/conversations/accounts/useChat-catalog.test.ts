@@ -21,7 +21,7 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
 const { loadActiveProviderModels, loadRunnableProviders, loadProviderModels, pollWhileRunning, readOrKeep } = await import("./useChat-catalog");
 const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract/models/provider-specs");
 const { acpProviders, endpointProviders, endpointsLoaded, nativeReady } = await import("../../providers/providerCatalog");
-const { setConversations } = await import("../tabs/useChat-tabs");
+const { conversations, setConversations } = await import("../tabs/useChat-tabs");
 const { advertisedLoops, offeredLoops } = await import("../../providers/offeredLoops");
 const { Conversation } = await import("../session/conversation");
 
@@ -161,6 +161,29 @@ test(`leaves a chat pinned to a model the catalog still offers exactly where it 
 
     expect(chat.selection.model.value).toBe(PRO_LOW);
     expect(chat.selection.displacedModel.value).toBeUndefined();
+});
+
+// A chat opened before Claude's catalog answered was seeded from the remembered pick as stored, or the compile-time
+// floor's head, claude-opus-5; the catalog still lists Opus 5 among the older versions, so the chat kept it and every
+// chat opened that early ran on it. Resolved again once the catalog answers, unless someone named the model.
+test(`resolves a chat seeded before its catalog answered, and leaves one whose model was named`, async () => {
+    const { turnDefaults } = await import("../run/turnDefaults");
+    turnDefaults.provider.value = `claude`;
+    turnDefaults.models.value = { ...turnDefaults.models.value, claude: `claude-opus-5` };
+    const seeded = new Conversation(`c-seeded`);
+    const named = chatOn(`claude`, `claude-opus-5`);
+    // Named, so the strip keeps it beside the untouched draft rather than sweeping one of two blanks.
+    named.title.value = `Named`;
+    expect(seeded.selection.model.value).toBe(`claude-opus-5`);
+    setConversations([seeded, named], seeded.conversationId, `catalog-test`);
+
+    serves([`claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-opus-5`]);
+    await loadProviderModels(`claude`);
+
+    expect(seeded.selection.model.value).toBe(`claude-opus-5-5`);
+    expect(seeded.selection.displacedModel.value).toBeUndefined();
+    expect(named.selection.model.value).toBe(`claude-opus-5`);
+    expect(conversations.value).toEqual([seeded, named]);
 });
 
 // The seam a reachable daemon runs (loadAccountStatus) used to warm the whole native list here, so a first paint asked

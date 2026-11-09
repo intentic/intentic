@@ -24,6 +24,11 @@ export interface Selection {
     // session on it.
     readonly accountPicked: boolean;
     readonly model: string;
+    // `model` is this browser's remembered pick resolved at the moment the chat was seeded (or pointed at a provider),
+    // not anyone's choice for this chat. Read before a catalog has answered, that resolution is the stored pick as it
+    // stands (or the compile-time floor's head, which said claude-opus-5 long after Opus 5.5 shipped), so the catalog's
+    // arrival re-resolves it (reseatModel) until a model is named here or a turn goes out.
+    readonly modelSeeded: boolean;
     // Provider/model the app moved this chat FROM when it couldn't run there; cleared by restoreProvider or a pick.
     readonly movedFrom: TurnPick | undefined;
     // Model the app moved this chat OFF because its provider stopped offering that id, owed back when the catalog lists
@@ -52,7 +57,7 @@ export interface Selection {
 }
 
 // The picks a caller may set outright; the two divider facts move only with the turns that decide them.
-export type Picks = Omit<Selection, "sentModel" | "switchedMidTurn" | "accountPicked">;
+export type Picks = Omit<Selection, "sentModel" | "switchedMidTurn" | "accountPicked" | "modelSeeded">;
 
 // What every window holding a conversation keeps in step (pickEcho.ts): where its next turn runs, on what, and how. A
 // window that is not drawing the chat still holds a copy of it, and a copy left on the picks it was summoned with read
@@ -136,6 +141,8 @@ export type PickAction =
     // The app's own swap off a model the provider no longer lists, owing it back (restoreModel).
     | { readonly kind: `displaceModel`; readonly model: string }
     | { readonly kind: `restoreModel` }
+    // A catalog answered: a model nobody named here resolves again against it (`modelSeeded`).
+    | { readonly kind: `reseatModel` }
     | { readonly kind: `setEffort`; readonly effort: string }
     | { readonly kind: `setThinking`; readonly thinking: boolean }
     | { readonly kind: `setFast`; readonly fast: boolean }
@@ -151,8 +158,9 @@ export type PickAction =
     | { readonly kind: `adopt`; readonly from: Selection }
     // A past Claude session from the history menu, resumed on the default account from the main tree's posture.
     | { readonly kind: `resumeHistory`; readonly sessionId: string }
-    // Picks written outright, with no rule of their own: a restored tab, a route's or a persona's answer.
-    | { readonly kind: `set`; readonly picks: Partial<Picks> }
+    // Picks written outright, with no rule of their own: a restored tab, a route's or a persona's answer. `seededModel`
+    // says the model written was a seed in the chat it came from (a restored draft nobody named one in), not a pick.
+    | { readonly kind: `set`; readonly picks: Partial<Picks>; readonly seededModel?: boolean }
     // A turn went out, a held turn re-ran, a turn settled, a turn took its settings.
     | { readonly kind: `sent` }
     | { readonly kind: `rerun` }
@@ -202,6 +210,7 @@ export const UNPICKED: Selection = {
     account: undefined,
     accountPicked: false,
     model: ``,
+    modelSeeded: false,
     movedFrom: undefined,
     displacedModel: undefined,
     thinking: true,
@@ -235,6 +244,7 @@ const pointAt = (selection: Selection, next: AgentProvider, world: PickWorld): S
         account: next === world.session?.provider ? world.session.account : undefined,
         accountPicked: false,
         model: world.rememberedModel(next),
+        modelSeeded: true,
         harness: world.rememberedHarness(next),
         displacedModel: undefined,
         sentModel: undefined,
@@ -269,6 +279,7 @@ const REDUCERS: Reducers = {
                 account: undefined,
                 accountPicked: false,
                 model: world.rememberedModel(provider),
+                modelSeeded: true,
                 effortPick: defaults.effort,
                 thinking: defaults.thinking,
                 auto: defaults.auto,
@@ -306,7 +317,7 @@ const REDUCERS: Reducers = {
         }
         const back = pointed(selection, from.provider, world);
         // The model it was displaced FROM, not the provider's remembered one: each displaced chat is owed its own back.
-        return { selection: { ...back.selection, model: from.value, movedFrom: undefined }, effects: back.effects };
+        return { selection: { ...back.selection, model: from.value, modelSeeded: false, movedFrom: undefined }, effects: back.effects };
     },
     selectModel: (selection, { pick, account }, world) => {
         if (isAutoPick(pick)) {
@@ -318,7 +329,7 @@ const REDUCERS: Reducers = {
         const moved = pointed(selection, pick.provider, world);
         // Naming a model answers the question Auto was armed to ask. A choice, so nothing is owed back either: both
         // debts go, since a same-provider pick skips the provider switch's own clearing.
-        const picked: Selection = { ...moved.selection, auto: false, model: pick.value, movedFrom: undefined, displacedModel: undefined };
+        const picked: Selection = { ...moved.selection, auto: false, model: pick.value, modelSeeded: false, movedFrom: undefined, displacedModel: undefined };
         // A same-provider swap earns a divider too: it re-reads the whole conversation on a model never seen.
         const effects: PickEffects = { ...moved.effects, kept: true, remember: pick, divider: `refresh`, follow: true };
         if (account === undefined || world.generating) {
@@ -343,6 +354,7 @@ const REDUCERS: Reducers = {
                 // Named, whoever named it: a persona's card or Auto's own reading answers the question Auto asks.
                 auto: false,
                 model: pin.model,
+                modelSeeded: false,
                 effortPick: pin.effort ?? moved.selection.effortPick,
                 thinking: pin.thinking ?? moved.selection.thinking,
                 harness: pin.harness ?? moved.selection.harness,
@@ -358,12 +370,20 @@ const REDUCERS: Reducers = {
         }
         // An empty id is not a pick (a fresh chat before its catalog lands, an ACP row), so nothing is owed for it.
         const owed = selection.model === `` ? selection.displacedModel : (selection.displacedModel ?? selection.model);
-        return { selection: { ...selection, displacedModel: owed, model }, effects: { divider: `refresh` } };
+        return { selection: { ...selection, displacedModel: owed, model, modelSeeded: false }, effects: { divider: `refresh` } };
     },
     restoreModel: (selection) =>
         selection.displacedModel === undefined
             ? unchanged(selection)
-            : { selection: { ...selection, model: selection.displacedModel, displacedModel: undefined }, effects: { divider: `refresh` } },
+            : { selection: { ...selection, model: selection.displacedModel, modelSeeded: false, displacedModel: undefined }, effects: { divider: `refresh` } },
+    // Only a model nobody named, on a chat that has sent nothing: what a turn already went out on is the chat's own.
+    reseatModel: (selection, _action, world) => {
+        if (!selection.modelSeeded || selection.sentModel !== undefined || world.session !== undefined || world.streaming) {
+            return unchanged(selection);
+        }
+        const model = world.rememberedModel(selection.provider);
+        return model === selection.model || model === `` ? unchanged(selection) : { selection: { ...selection, model }, effects: {} };
+    },
     // The PICK, not always the effort in force: the effort a turn runs at is this clamped to the model's scale.
     setEffort: (selection, { effort }) => ({ selection: { ...selection, effortPick: effort }, effects: { defaults: { effort }, follow: true } }),
     // No clamp: turning thinking off invalidates a `max` pick, but the effort in force already reads thinking.
@@ -430,6 +450,7 @@ const REDUCERS: Reducers = {
             account: from.account,
             accountPicked: false,
             model: from.model,
+            modelSeeded: from.modelSeeded,
             effortPick: from.effortPick,
             thinking: from.thinking,
             fast: from.fast,
@@ -448,6 +469,7 @@ const REDUCERS: Reducers = {
             account: undefined,
             accountPicked: false,
             model: world.rememberedModel(`claude`),
+            modelSeeded: true,
             // A restored conversation is a fresh identity in this tab; it inherits no catalog's debt.
             displacedModel: undefined,
             // Whatever the session last ran on, this window never sent it, so no swap can claim a lost cache.
@@ -458,12 +480,18 @@ const REDUCERS: Reducers = {
     // An account written outright (a restored tab, the fleet's record of the run, a route's answer) is nobody's hand pick.
     // Picks that decide where the next turn runs still move the divider with them: one drawn under the picks being
     // replaced would otherwise stand over a send that no longer makes that switch.
-    set: (selection, { picks }) => ({
-        selection: { ...selection, ...picks, ...(`account` in picks ? { accountPicked: false } : {}) },
+    // A model written outright is that chat's own (a restored tab's, a route's answer), never re-resolved by a catalog.
+    set: (selection, { picks, seededModel }) => ({
+        selection: {
+            ...selection,
+            ...picks,
+            accountPicked: `account` in picks ? false : selection.accountPicked,
+            modelSeeded: `model` in picks ? seededModel === true : selection.modelSeeded,
+        },
         effects: ROUTING_PICKS.some((pick) => pick in picks) ? { divider: `refresh` } : {},
     }),
     // The divider, if any, is frozen into the record by the segment cut, and this turn is what a swap is measured by.
-    sent: (selection) => ({ selection: { ...selection, sentModel: selection.model }, effects: { divider: `freeze` } }),
+    sent: (selection) => ({ selection: { ...selection, sentModel: selection.model, modelSeeded: false }, effects: { divider: `freeze` } }),
     rerun: (selection) => ({ selection, effects: { divider: `freeze` } }),
     settled: (selection) => ({ selection: { ...selection, switchedMidTurn: false }, effects: { divider: { settle: selection.switchedMidTurn } } }),
     // Spends Auto's one-turn mark. Not the account pick: settings taken are not a turn run (words queued behind a card go

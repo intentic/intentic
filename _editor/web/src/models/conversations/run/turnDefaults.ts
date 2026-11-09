@@ -14,12 +14,14 @@ import { TURN_DEFAULT_KEYS } from "../../../app/turnDefaultKeys";
 // definePreference, syncing the pick across every window immediately, since the app runs a full copy per window, and
 // each is the signed-in account's own (turnDefaultKeys.ts): another account on this browser starts on its own picks.
 
-// Per-provider native model map, each entry degrading to that provider's default when absent or malformed; the one
-// place that parses the persisted record.
+// Per-provider native model map, each entry empty (no pick) when absent or malformed; the one place that parses the
+// persisted record. Never filled with a default: this is read before any catalog has answered, when the default is the
+// compile-time floor's head (once claude-opus-5), and rememberPick writes the whole map back, so a pick on Codex stored that
+// floor as the reader's own Claude choice. An empty entry resolves at read instead (rememberedModelFor).
 const readModels = (raw: string | null): Record<AgentProvider, string> => {
     const stored = raw === null ? undefined : parseJsonOr(raw, undefined);
     const entries = (typeof stored === `object` && stored !== null ? stored : {}) as Record<string, unknown>;
-    return perProvider((provider) => (typeof entries[provider] === `string` ? (entries[provider] as string) : defaultModelFor(provider)));
+    return perProvider((provider) => (typeof entries[provider] === `string` ? (entries[provider] as string) : ``));
 };
 
 // Which loop each provider was last picked on; a provider absent from it opens on its default loop.

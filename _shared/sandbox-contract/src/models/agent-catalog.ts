@@ -229,10 +229,13 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.editChecks === "turn-end" ? ["edit checks said as the turn ends, not after each edit"] : []),
 ];
 
-// Claude's compile-time model floor, shared by daemon and web pre-load; versioned ids only, never a tier alias.
+// Claude's compile-time model floor, shared by daemon and web pre-load; versioned ids only, never a tier alias. Its head
+// is the default wherever no catalog has answered (the daemon before a REST read with nothing persisted, the app before
+// its first load), so it names the current generation: left on claude-opus-5 after Opus 5.5 shipped, it opened fresh
+// sandboxes and pre-load chats on the older version. Bump it when the flagship moves.
 export const CLAUDE_SEED_MODELS: readonly Model[] = [
-    { id: "claude-opus-5", label: "Claude Opus 5" },
-    { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
+    { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
+    { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
     { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
 ];
 

@@ -130,6 +130,12 @@ const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
             conversation.selection.apply({ kind: `restoreModel` });
             continue;
         }
+        // A chat that has not started, on a model nobody named for it, was seeded from the remembered pick as it read
+        // before this catalog answered: the raw stored id, or the compile-time floor's head (once claude-opus-5). Resolved
+        // again now, so it opens where the next new chat would (rememberedModelFor), not on that older version.
+        if (conversation.selection.modelSeeded.value && !conversation.registered.value && conversation.session.value === undefined) {
+            conversation.selection.apply({ kind: `reseatModel` });
+        }
         if (!valid.has(conversation.selection.model.value)) {
             conversation.selection.apply({ kind: `displaceModel`, model: body.default });
         }

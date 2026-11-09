@@ -36,6 +36,9 @@ export interface StoredTab {
     readonly account?: string;
     // Persisted per tab like `account`, so reload can't reseed an open tab's model from another tab's pick.
     readonly model?: string;
+    // `model` was this tab's seed, not a pick (Selection.modelSeeded): a reload re-resolves it once a catalog answers,
+    // rather than settling a model read off the pre-load floor as the tab's own.
+    readonly modelSeeded?: boolean;
     // The pick a thin catalog moved this tab off, owed back when the model is offered again; without it a reload
     // settles the app's substitution as if the user had made it.
     readonly displacedModel?: string;
@@ -88,6 +91,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     movedFrom: conversation.selection.movedFrom.value,
     account: conversation.selection.account.value,
     model: conversation.selection.model.value,
+    modelSeeded: conversation.selection.modelSeeded.value ? true : undefined,
     displacedModel: conversation.selection.displacedModel.value,
     effort: conversation.selection.effortPick.value,
     actsAs: conversation.selection.actsAs.value,
@@ -155,6 +159,7 @@ const StoredTabSchema: z.ZodType<StoredTab> = z.object({
     harness: AgentHarnessSchema.optional().catch(`native`),
     account: text,
     model: text,
+    modelSeeded: flag,
     displacedModel: text,
     effort: text,
     thinking: flag,

@@ -146,6 +146,14 @@ describe(`the model a new chat opens on`, () => {
         expect(rememberedModelFor(`claude`)).toBe(`claude-opus-5`);
     });
 
+    // Read before any catalog answers, the default is the compile-time floor's head; filled in here, it went back to
+    // storage with the next pick on any provider as the reader's own Claude choice.
+    it(`reads a provider with no stored pick as no pick, never as the floor's default`, () => {
+        receivePreferenceChange({ key: `ui-chat-models`, raw: JSON.stringify({ codex: `gpt-5.6` }) });
+        expect(turnDefaults.models.value[`claude`]).toBe(``);
+        expect(turnDefaults.models.value[`codex`]).toBe(`gpt-5.6`);
+    });
+
     it(`rides the stored pick untouched until the catalog has answered`, () => {
         turnDefaults.models.value = { ...turnDefaults.models.value, claude: `claude-opus-5` };
         expect(rememberedModelFor(`claude`)).toBe(`claude-opus-5`);
