@@ -4,8 +4,12 @@
 // DOM (`takeImprint`), drawn by `<SkeletonSnapshot>` (skeletonGhost.ts). No words are kept: an imprint says how long
 // a line was, never what it said.
 
-/** Bumped when the encoding below changes; a stored imprint of another version is ignored and taken again. */
-export const IMPRINT_VERSION = 2;
+/**
+ * Bumped when the encoding below changes, or when a layout every view stands in moves under all their imprints at once;
+ * a stored imprint of another version is ignored and taken again. 3: <SplitView> docked its index to the shell's rail
+ * (2026-11-09), so an imprint taken before replayed the centred page the view no longer draws.
+ */
+export const IMPRINT_VERSION = 3;
 
 /**
  * An element kept as itself. Strings are indices into the imprint's table, so a list's repeated classes cost once.

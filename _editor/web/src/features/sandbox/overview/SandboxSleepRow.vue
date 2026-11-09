@@ -25,11 +25,11 @@ const id = useId();
 </script>
 
 <template>
-    <div v-if="shown" data-setting="overview-sleep" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+    <div v-if="shown" data-setting="overview-sleep" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
         <dt class="text-subtle">
             <label :for="canShip ? id : undefined" :class="{ 'cursor-pointer': canShip }">{{ t(`sandbox.sandboxOverview.sleep`) }}</label>
         </dt>
-        <dd class="flex min-w-0 flex-col gap-1 @md:items-end">
+        <dd class="flex min-w-0 flex-col gap-1">
             <div class="flex min-w-0 items-center gap-2">
                 <span
                     v-tooltip.top="{ title: t(`sandbox.sandboxOverview.sleep`), note: t(`sandbox.sandboxOverview.sleepTipNote`) }"

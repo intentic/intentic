@@ -350,14 +350,15 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                  first read, is the hub section's own (lazySection), which holds this page's last look until /info answers. -->
             <dl
                 v-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
-                class="flex flex-col gap-3 rounded-lg bg-canvas px-3 py-2.5 text-2xs @md:gap-1.5"
+                class="flex flex-col gap-3 rounded-lg bg-canvas px-3 py-2.5 text-2xs @md:grid @md:grid-cols-facts @md:gap-y-1.5"
             >
                 <!-- First: how it runs decides what the rest of the app asks of the reader (overview/mode/SandboxModeRow.vue). -->
                 <SandboxModeRow />
-                <!-- Stack facts against the pane, not the window; technical values stay readable in full. -->
-                <div v-if="info?.image" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+                <!-- Stack facts against the pane, not the window; technical values stay readable in full. With room, one facts grid:
+                     labels as wide as the longest, each value beside its label rather than across the card from it. -->
+                <div v-if="info?.image" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
                     <dt class="text-subtle">{{ t(`sandbox.words.image`) }}</dt>
-                    <dd class="min-w-0 [overflow-wrap:anywhere] @md:text-right">
+                    <dd class="min-w-0 [overflow-wrap:anywhere]">
                         <div class="font-mono text-content">{{ info.image }}</div>
                         <div v-if="installed" class="mt-0.5 font-mono text-subtle">
                             {{ t(`sandbox.sandboxOverview.installedVersion`) }} {{ installed }}
@@ -365,16 +366,16 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                         </div>
                     </dd>
                 </div>
-                <div v-else-if="installed" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+                <div v-else-if="installed" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
                     <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.installedVersion2`) }}</dt>
-                    <dd class="min-w-0 font-mono text-content [overflow-wrap:anywhere] @md:text-right">
+                    <dd class="min-w-0 font-mono text-content [overflow-wrap:anywhere]">
                         {{ installed }}
                         <span v-if="updateAvailable" class="text-warning">{{ t(`sandbox.sandboxOverview.available`, { latest }) }}</span>
                     </dd>
                 </div>
-                <div v-if="agentUrl" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+                <div v-if="agentUrl" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
                     <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.sandboxUrl`) }}</dt>
-                    <dd class="min-w-0 @md:text-right">
+                    <dd class="min-w-0">
                         <!-- `touch-target`: this link isn't exempt like inline prose text, since it's icon-bearing, alone on its row, and opens a new tab. -->
                         <a
                             :href="agentUrl"
@@ -389,9 +390,9 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                 </div>
                 <!-- Its share of the machine, and the one form that changes it. Maintainer and up: acting on a device is
                      maintainer-floored at the daemon, so a member below that gets the fact without a button that would refuse. -->
-                <div v-if="shareLine" data-setting="overview-resources" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+                <div v-if="shareLine" data-setting="overview-resources" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
                     <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.resources`) }}</dt>
-                    <dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 @md:justify-end">
+                    <dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                         <span class="min-w-0 break-words text-content">{{ shareLine }}</span>
                         <!-- In flight, the link gives way to what it set going, from the press: a disabled link
                              that still looks pressable answered nothing for the seconds before the sandbox drops. -->
@@ -413,7 +414,7 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                         </button>
                     </dd>
                 </div>
-                <p v-if="resizeFailed !== undefined" class="text-warning">{{ resizeFailed }}</p>
+                <p v-if="resizeFailed !== undefined" class="text-warning @md:col-span-2">{{ resizeFailed }}</p>
                 <!-- Whether the machine it stands on may put it to sleep while nobody needs it; self-hides for a hosted one. -->
                 <SandboxSleepRow />
                 <!-- Who may use the host GPU, and GPU work paused after the host reported a GPU reset; self-hides without one. -->

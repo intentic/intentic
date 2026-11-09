@@ -199,7 +199,7 @@ watch(
 </script>
 
 <template>
-    <!-- Wide because the index spends 14rem of it: at the 56rem default the body would be left narrower than it was before the column arrived. -->
+    <!-- With room, the index docks to the shell's rail with the hub's name at its head and the section beside it (<SplitView>). -->
     <!-- A phone swaps: the index or one section, never both on screen (see `drill`). -->
     <SplitView :title="pageTitle" :description="pageDescription" scroll="page" :mobile="drill ? `swap` : `collapse`" :detail-open="!onIndex">
         <!-- A desktop pane too narrow for the rail keeps the strip. It wraps rather than scrolls: this is the index of everything the hub holds, and a section a reader can't see is a section they won't look for. -->

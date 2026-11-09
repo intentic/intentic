@@ -5,13 +5,19 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { railRows = 8, bodyRows = 4 } = defineProps<{
+const {
+    railRows = 8,
+    bodyRows = 4,
+    search = false,
+} = defineProps<{
     /** The page's real heading: a static string the route table already knows, never a guess. */
     title: string;
     description?: string;
     /** How many index rows to promise. Match the shortest index the page actually shows. */
     railRows?: number;
     bodyRows?: number;
+    /** Whether the index opens with a filter field, as a hub's does: promised, so the rows below it do not jump down by a field's height. */
+    search?: boolean;
 }>();
 
 // Walked in order, so the folded strip's pills are uneven the way real section names are.
@@ -25,9 +31,15 @@ const PILL_WIDTHS = [`w-20`, `w-16`, `w-24`, `w-14`, `w-20`];
                 <span v-for="(width, index) in PILL_WIDTHS" :key="index" class="skeleton block h-6 shrink-0 rounded-full" :class="width" />
             </div>
         </template>
+        <!-- The index as <NavRail> lays it out, so the real one lands on these bars: the pinned field and the rows' column
+             each keep the scroll's `pr-2` gutter, and a group's label stands on the label's own inset and gap. -->
         <template #rail>
-            <div aria-hidden="true">
-                <SkeletonRows :rows="railRows" density="dense" />
+            <div class="flex flex-col" aria-hidden="true">
+                <div v-if="search" class="pb-2 pr-2"><span class="skeleton block h-8 rounded-lg" /></div>
+                <div class="pr-2">
+                    <span class="mb-1 flex h-4 items-center px-2"><span class="skeleton block h-2.5 w-16" /></span>
+                    <div class="flex flex-col gap-0.5"><SkeletonRows :rows="railRows" density="dense" lead /></div>
+                </div>
             </div>
         </template>
         <template #detail>

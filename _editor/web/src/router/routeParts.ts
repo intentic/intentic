@@ -10,7 +10,8 @@ import { SETTINGS_DEFAULT_SECTION, settingsPartHosts } from "../features/setting
 
 // Words read when the outline draws, not when the routes are built, so a language switch reaches them.
 export const hubOutline = (title: () => string, description: () => string, railRows: number): FunctionalComponent => {
-    return () => h(SplitViewOutline, { title: title(), description: description(), railRows });
+    // Both hubs open their index with the settings search (HubLayout's `search`).
+    return () => h(SplitViewOutline, { title: title(), description: description(), railRows, search: true });
 };
 
 /** The account's settings, as both tables draw them; the outline mirrors the page's own heading (SettingsHub.vue). */

@@ -42,10 +42,10 @@ const saved = (message: string): void => {
 </script>
 
 <template>
-    <div v-if="hosted || (fences && row)" data-setting="overview-fence" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+    <div v-if="hosted || (fences && row)" data-setting="overview-fence" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
         <dt class="text-subtle">{{ t(`sandbox.networkFence.rowLabel`) }}</dt>
-        <dd v-if="hosted" class="min-w-0 text-muted @md:text-right">{{ t(`sandbox.networkFence.hosted`) }}</dd>
-        <dd v-else class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 @md:justify-end">
+        <dd v-if="hosted" class="min-w-0 text-muted">{{ t(`sandbox.networkFence.hosted`) }}</dd>
+        <dd v-else class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span class="min-w-0 break-words" :class="TONE[line.tone]">{{ line.text }}</span>
             <span v-if="said" class="text-subtle" role="status">{{ said }}</span>
             <button v-if="canShip" type="button" class="shrink-0 font-medium text-link hover:underline" @click="((opened = true), (said = undefined))">

@@ -41,12 +41,12 @@ const setAll = (value: boolean): void => {
 </script>
 
 <template>
-    <div v-if="shown && gpu" data-setting="overview-gpu" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+    <div v-if="shown && gpu" data-setting="overview-gpu" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
         <dt class="text-subtle">
             <label :for="canShip ? id : undefined" :class="{ 'cursor-pointer': canShip }">{{ t(`sandbox.sandboxOverview.gpu`) }}</label>
         </dt>
-        <dd class="flex min-w-0 flex-col gap-1 @md:items-end">
-            <div v-if="gpu.pausedFor !== undefined" data-gpu="paused" class="flex min-w-0 flex-col gap-1 @md:items-end">
+        <dd class="flex min-w-0 flex-col gap-1">
+            <div v-if="gpu.pausedFor !== undefined" data-gpu="paused" class="flex min-w-0 flex-col gap-1">
                 <span class="min-w-0 break-words text-warning">{{ t(`sandbox.sandboxOverview.gpuPaused`, { reason: gpu.pausedFor }) }}</span>
                 <button
                     v-if="canShip"

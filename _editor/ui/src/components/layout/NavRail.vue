@@ -23,7 +23,8 @@ const query = defineModel<string>({ default: `` });
     <!-- `flex-1` so the column fills the height its container gives it: in a <SplitView> whose panes scroll that is the full pane. -->
     <nav class="flex min-h-0 flex-1 flex-col">
         <!-- Pinned: neither the filter nor a way back to the top is something a reader should have to scroll to find. -->
-        <div v-if="filterable || $slots[`pinned`]" class="flex shrink-0 flex-col gap-1.5 pb-2">
+        <!-- `pr-2`, the scroll area's own gutter below, so the field ends where the rows do. -->
+        <div v-if="filterable || $slots[`pinned`]" class="flex shrink-0 flex-col gap-1.5 pr-2 pb-2">
             <!-- A FILLED field, not an outlined one: a box drawn at the top of a column that has no other boxes in it is the first thing the eye lands on. -->
             <SearchBar
                 v-if="filterable"

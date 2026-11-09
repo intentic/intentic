@@ -38,9 +38,9 @@ const save = async (): Promise<void> => {
 </script>
 
 <template>
-    <div v-if="mode !== undefined" data-setting="overview-mode" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+    <div v-if="mode !== undefined" data-setting="overview-mode" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
         <dt class="text-subtle">{{ t(`sandbox.mode.howItRuns`) }}</dt>
-        <dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 @md:justify-end">
+        <dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span class="min-w-0 break-words text-content">{{ summary }}</span>
             <button v-if="canShip" ref="anchor" type="button" class="shrink-0 font-medium text-link hover:underline" @click="open = true">
                 {{ t(`sandbox.sandboxOverview.change`) }}
