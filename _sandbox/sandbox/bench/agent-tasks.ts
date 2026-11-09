@@ -314,9 +314,9 @@ const DEFECTS: readonly Defect[] = [
     },
     {
         file: "src/agent/run/event-queue.ts",
-        find: "            if (this.ended) {\n                return;\n            }",
-        replace: "            if (!this.ended) {\n                return;\n            }",
-        why: "the queue must finish iteration once ended; inverted, it returns while still open and hangs when closed",
+        find: '            if (this.state !== "open") {\n                this.state = "ended";',
+        replace: '            if (this.state === "open") {\n                this.state = "ended";',
+        why: "the queue must finish iteration once ended; inverted, it ends while still open and hangs once closed",
     },
     {
         file: "src/agent/checkpoints/agent-steering.ts",
