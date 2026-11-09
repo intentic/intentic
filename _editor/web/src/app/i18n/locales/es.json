@@ -8892,6 +8892,7 @@
             "sandboxName": "Nombre del sandbox",
             "sandboxSmallStarterMachine": "Este sandbox es una máquina pequeña de inicio que alojamos para ti. Cuando se te quede corta, muévela a",
             "sandboxUrl": "URL del sandbox",
+            "details": "Detalles",
             "setUp": "Prepararlo allí →",
             "sleep": "Dormir cuando no se usa",
             "sleepOn": "Duerme cuando nadie lo usa, y se despierta para sus programaciones y al abrirlo",

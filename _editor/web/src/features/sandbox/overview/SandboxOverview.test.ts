@@ -310,13 +310,13 @@ it(`keeps long image, installed and available versions in full within stackable 
     latestVersion.value = latest;
     updateAvailable.value = true;
     const el = mount(sandboxRow());
-    const facts = el.querySelector(`dl`)!;
+    const facts = el.querySelector(`dl[data-overview="details"]`)!;
     expect(facts.textContent).toContain(image);
     expect(facts.textContent).toContain(installed);
     expect(facts.textContent).toContain(latest);
     expect(facts.querySelector(`.truncate`)).toBeNull();
     expect(facts.querySelector(`dd`)?.classList.contains(`[overflow-wrap:anywhere]`)).toBe(true);
-    expect(facts.firstElementChild?.classList.contains(`grid`)).toBe(true);
+    expect(facts.firstElementChild?.classList.contains(`flex-col`)).toBe(true);
 });
 
 it(`bounds a long Sandbox URL's text independently of its external-link icon without changing the address`, () => {
@@ -326,7 +326,7 @@ it(`bounds a long Sandbox URL's text independently of its external-link icon wit
     const link = el.querySelector<HTMLAnchorElement>(`dl a`)!;
     expect(link.getAttribute(`href`)).toBe(url);
     expect(link.getAttribute(`target`)).toBe(`_blank`);
-    expect(link.classList.contains(`max-w-full`)).toBe(true);
+    expect(link.classList.contains(`min-w-0`)).toBe(true);
     expect(link.classList.contains(`truncate`)).toBe(false);
     const text = link.firstElementChild!;
     expect(text.textContent).toBe(url);

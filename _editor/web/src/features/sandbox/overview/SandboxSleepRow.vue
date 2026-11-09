@@ -11,6 +11,7 @@ import { computed, useId } from "vue";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
+import OverviewSettingRow from "./OverviewSettingRow.vue";
 
 const t = useT();
 
@@ -25,28 +26,20 @@ const id = useId();
 </script>
 
 <template>
-    <div v-if="shown" data-setting="overview-sleep" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
-        <dt class="text-subtle">
-            <label :for="canShip ? id : undefined" :class="{ 'cursor-pointer': canShip }">{{ t(`sandbox.sandboxOverview.sleep`) }}</label>
-        </dt>
-        <dd class="flex min-w-0 flex-col gap-1">
-            <div class="flex min-w-0 items-center gap-2">
-                <span
-                    v-tooltip.top="{ title: t(`sandbox.sandboxOverview.sleep`), note: t(`sandbox.sandboxOverview.sleepTipNote`) }"
-                    class="min-w-0 break-words text-content"
-                    >{{ on ? t(`sandbox.sandboxOverview.sleepOn`) : t(`sandbox.sandboxOverview.sleepOff`) }}</span
-                >
-                <!-- Below maintainer the words above are the whole row: the setting is read, with no switch to press. -->
-                <ToggleSwitch
-                    v-if="canShip"
-                    :input-id="id"
-                    :model-value="on"
-                    :disabled="save.isPending.value"
-                    class="ui-switch-sm shrink-0"
-                    @update:model-value="(value: boolean) => patch({ sleepWhenUnused: value })"
-                />
-            </div>
-            <Notice v-if="refusal" :of="refusal" />
-        </dd>
-    </div>
+    <OverviewSettingRow v-if="shown" data-setting="overview-sleep" :label="t(`sandbox.sandboxOverview.sleep`)" :label-for="canShip ? id : undefined">
+        <span v-tooltip.top="{ title: t(`sandbox.sandboxOverview.sleep`), note: t(`sandbox.sandboxOverview.sleepTipNote`) }" class="min-w-0 break-words">{{
+            on ? t(`sandbox.sandboxOverview.sleepOn`) : t(`sandbox.sandboxOverview.sleepOff`)
+        }}</span>
+        <Notice v-if="refusal" :of="refusal" />
+        <!-- Below maintainer the words above are the whole row: the setting is read, with no switch to press. -->
+        <template v-if="canShip" #action>
+            <ToggleSwitch
+                :input-id="id"
+                :model-value="on"
+                :disabled="save.isPending.value"
+                class="shrink-0"
+                @update:model-value="(value: boolean) => patch({ sleepWhenUnused: value })"
+            />
+        </template>
+    </OverviewSettingRow>
 </template>

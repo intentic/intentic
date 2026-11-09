@@ -8370,6 +8370,7 @@
             "sandboxName": "Nazwa sandboxa",
             "sandboxSmallStarterMachine": "Ten sandbox to mała maszyna startowa, którą dla Ciebie hostujemy. Kiedy zrobi się ciasno, przenieś go na",
             "sandboxUrl": "Adres sandboxa",
+            "details": "Szczegóły",
             "setUp": "Skonfiguruj go tam →",
             "sleep": "Usypiaj, gdy nieużywany",
             "sleepOn": "Usypia się, gdy nikt z niego nie korzysta, i budzi przed zaplanowanymi zadaniami oraz przy otwarciu",

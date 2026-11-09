@@ -11,6 +11,7 @@ import { computed, ref, useId, watch } from "vue";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { modeSwitchLines, useSandboxMode } from "../../../../models/sandbox/mode/useSandboxMode";
 import ModeChoice from "../../../../parts/sandbox/ModeChoice.vue";
+import OverviewSettingRow from "../OverviewSettingRow.vue";
 
 const t = useT();
 const { canShip } = useRole();
@@ -38,27 +39,26 @@ const save = async (): Promise<void> => {
 </script>
 
 <template>
-    <div v-if="mode !== undefined" data-setting="overview-mode" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
-        <dt class="text-subtle">{{ t(`sandbox.mode.howItRuns`) }}</dt>
-        <dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <span class="min-w-0 break-words text-content">{{ summary }}</span>
-            <button v-if="canShip" ref="anchor" type="button" class="shrink-0 font-medium text-link hover:underline" @click="open = true">
-                {{ t(`sandbox.sandboxOverview.change`) }}
-            </button>
-        </dd>
-        <ResponsiveOverlay v-model="open" :anchor="anchor" :header="t(`sandbox.mode.question`)" side="bottom" cross="end" panel-class="w-pop p-4">
-            <div class="flex flex-col gap-3" data-sandbox-mode-editor>
-                <span :id="questionId" class="text-sm font-medium text-content">{{ t(`sandbox.mode.question`) }}</span>
-                <ModeChoice v-model="draft" :labelled-by="questionId" />
-                <ul v-if="lines.length > 0" class="flex list-disc flex-col gap-1 pl-4 text-xs text-muted">
-                    <li v-for="line in lines" :key="line">{{ line }}</li>
-                </ul>
-                <Notice v-if="refusal" :of="refusal" />
-                <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
-                    <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="open = false" />
-                    <Button tier="accent" :label="t(`ui.action.save`)" size="small" :loading="saving" :disabled="draft === mode || saving" @click="save" />
+    <OverviewSettingRow v-if="mode !== undefined" data-setting="overview-mode" :label="t(`sandbox.mode.howItRuns`)">
+        <span class="min-w-0 break-words">{{ summary }}</span>
+        <template v-if="canShip" #action>
+            <span ref="anchor" class="inline-flex">
+                <Button size="small" tier="boring" :label="t(`sandbox.sandboxOverview.change`)" @click="open = true" />
+            </span>
+            <ResponsiveOverlay v-model="open" :anchor="anchor" :header="t(`sandbox.mode.question`)" side="bottom" cross="end" panel-class="w-pop p-4">
+                <div class="flex flex-col gap-3" data-sandbox-mode-editor>
+                    <span :id="questionId" class="text-sm font-medium text-content">{{ t(`sandbox.mode.question`) }}</span>
+                    <ModeChoice v-model="draft" :labelled-by="questionId" />
+                    <ul v-if="lines.length > 0" class="flex list-disc flex-col gap-1 pl-4 text-xs text-muted">
+                        <li v-for="line in lines" :key="line">{{ line }}</li>
+                    </ul>
+                    <Notice v-if="refusal" :of="refusal" />
+                    <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
+                        <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="open = false" />
+                        <Button tier="accent" :label="t(`ui.action.save`)" size="small" :loading="saving" :disabled="draft === mode || saving" @click="save" />
+                    </div>
                 </div>
-            </div>
-        </ResponsiveOverlay>
-    </div>
+            </ResponsiveOverlay>
+        </template>
+    </OverviewSettingRow>
 </template>

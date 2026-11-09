@@ -8892,6 +8892,7 @@
             "sandboxName": "Sandbox name",
             "sandboxSmallStarterMachine": "This sandbox is a small starter machine we host for you. When it feels tight, move it to",
             "sandboxUrl": "Sandbox URL",
+            "details": "Details",
             "setUp": "Set it up there →",
             "sleep": "Sleep when unused",
             "sleepOn": "Sleeps when nobody uses it, and wakes for its schedules and when opened",

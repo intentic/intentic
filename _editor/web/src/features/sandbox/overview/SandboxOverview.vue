@@ -5,6 +5,7 @@ import {
     AnchoredOverlay,
     Button,
     Card,
+    CopyButton,
     InlineRename,
     resourcesSummary,
     SandboxLogo,
@@ -33,6 +34,7 @@ import { useRole } from "../../../client/sandbox/useRole";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
+import OverviewSettingRow from "./OverviewSettingRow.vue";
 import SandboxFenceRow from "./SandboxFenceRow.vue";
 import SandboxSleepRow from "./SandboxSleepRow.vue";
 import SandboxGpuRow from "./SandboxGpuRow.vue";
@@ -352,81 +354,89 @@ const saveStyledLogo = async (image: string): Promise<void> => {
             </div>
 
             <!-- What the sandbox reports about itself, relayed via /info and never stored by the platform. Its one wait, the
-                 first read, is the hub section's own (lazySection), which holds this page's last look until /info answers. -->
-            <dl
+                 first read, is the hub section's own (lazySection), which holds this page's last look until /info answers.
+                 Two lists, told apart by what a reader does with them: what can be changed, each with its control at the
+                 row's end, and what is only read and copied. Side by side with room, stacked against a narrow pane. -->
+            <div
                 v-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
-                class="flex flex-col gap-3 rounded-lg bg-canvas px-3 py-2.5 text-2xs @md:grid @md:grid-cols-facts @md:gap-y-1.5"
+                class="grid gap-x-6 gap-y-5 border-t border-line-subtle pt-4 @xl:grid-cols-[minmax(0,4fr)_minmax(0,3fr)]"
             >
-                <!-- First: how it runs decides what the rest of the app asks of the reader (overview/mode/SandboxModeRow.vue). -->
-                <SandboxModeRow />
-                <!-- Stack facts against the pane, not the window; technical values stay readable in full. With room, one facts grid:
-                     labels as wide as the longest, each value beside its label rather than across the card from it. -->
-                <div v-if="info?.image" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
-                    <dt class="text-subtle">{{ t(`sandbox.words.image`) }}</dt>
-                    <dd class="min-w-0 [overflow-wrap:anywhere]">
-                        <div class="font-mono text-content">{{ info.image }}</div>
-                        <div v-if="installed" class="mt-0.5 font-mono text-subtle">
-                            {{ t(`sandbox.sandboxOverview.installedVersion`) }} {{ installed }}
-                            <span v-if="updateAvailable" class="text-warning">{{ t(`sandbox.sandboxOverview.available`, { latest }) }}</span>
+                <section class="flex min-w-0 flex-col gap-3">
+                    <h3 class="text-xs font-medium text-subtle">{{ t(`shared.settings`) }}</h3>
+                    <dl data-overview="settings" class="flex flex-col divide-y divide-line-subtle">
+                        <!-- First: how it runs decides what the rest of the app asks of the reader (overview/mode/SandboxModeRow.vue). -->
+                        <SandboxModeRow />
+                        <!-- Its share of the machine, and the one form that changes it. Maintainer and up: acting on a device is
+                             maintainer-floored at the daemon, so a member below that gets the fact without a button that would refuse. -->
+                        <OverviewSettingRow v-if="shareLine" data-setting="overview-resources" :label="t(`sandbox.sandboxOverview.resources`)">
+                            <span class="min-w-0 break-words">{{ shareLine }}</span>
+                            <p v-if="resizeFailed !== undefined" class="text-warning">{{ resizeFailed }}</p>
+                            <!-- In flight, the button gives way to what it set going, from the press: a disabled button
+                                 that still looks pressable answered nothing for the seconds before the sandbox drops. -->
+                            <template v-if="canShip" #action>
+                                <span
+                                    v-if="resizePending !== undefined"
+                                    role="status"
+                                    data-testid="overview-resize-pending"
+                                    class="inline-flex max-w-48 items-center gap-1.5 text-xs text-subtle"
+                                >
+                                    <Icon name="spinner" spin class="shrink-0" aria-hidden="true" />{{ resizePending }}
+                                </span>
+                                <Button v-else size="small" tier="boring" :label="t(`sandbox.sandboxOverview.change`)" @click="resizing = true" />
+                            </template>
+                        </OverviewSettingRow>
+                        <!-- Whether the machine it stands on may put it to sleep while nobody needs it; self-hides for a hosted one. -->
+                        <SandboxSleepRow />
+                        <!-- Who may use the host GPU, and GPU work paused after the host reported a GPU reset; self-hides without one. -->
+                        <SandboxGpuRow />
+                        <!-- What it may reach on the networks around that machine; says a hosted one has none to fence. -->
+                        <SandboxFenceRow />
+                    </dl>
+                </section>
+
+                <!-- Technical values stay readable in full, wrapped rather than cut, each with the press that copies it. -->
+                <section class="flex min-w-0 flex-col gap-3 @xl:border-l @xl:border-line-subtle @xl:pl-6">
+                    <h3 class="text-xs font-medium text-subtle">{{ t(`sandbox.sandboxOverview.details`) }}</h3>
+                    <dl data-overview="details" class="flex flex-col gap-3 text-xs">
+                        <div v-if="info?.image" class="flex flex-col gap-0.5">
+                            <dt class="text-subtle">{{ t(`sandbox.words.image`) }}</dt>
+                            <dd class="min-w-0 [overflow-wrap:anywhere]">
+                                <div class="flex items-start justify-between gap-2">
+                                    <span class="min-w-0 font-mono text-content">{{ info.image }}</span>
+                                    <CopyButton :text="info.image" class="-my-1 shrink-0" />
+                                </div>
+                                <div v-if="installed" class="mt-0.5 font-mono text-subtle">
+                                    {{ t(`sandbox.sandboxOverview.installedVersion`) }} {{ installed }}
+                                    <span v-if="updateAvailable" class="text-warning">{{ t(`sandbox.sandboxOverview.available`, { latest }) }}</span>
+                                </div>
+                            </dd>
                         </div>
-                    </dd>
-                </div>
-                <div v-else-if="installed" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
-                    <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.installedVersion2`) }}</dt>
-                    <dd class="min-w-0 font-mono text-content [overflow-wrap:anywhere]">
-                        {{ installed }}
-                        <span v-if="updateAvailable" class="text-warning">{{ t(`sandbox.sandboxOverview.available`, { latest }) }}</span>
-                    </dd>
-                </div>
-                <div v-if="agentUrl" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
-                    <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.sandboxUrl`) }}</dt>
-                    <dd class="min-w-0">
-                        <!-- `touch-target`: this link isn't exempt like inline prose text, since it's icon-bearing, alone on its row, and opens a new tab. -->
-                        <a
-                            :href="agentUrl"
-                            target="_blank"
-                            rel="noopener"
-                            class="touch-target inline-flex max-w-full items-start gap-1 font-mono text-link hover:underline"
-                        >
-                            <span class="min-w-0 [overflow-wrap:anywhere]">{{ agentUrl }}</span>
-                            <Icon name="external-link" class="shrink-0 text-2xs" />
-                        </a>
-                    </dd>
-                </div>
-                <!-- Its share of the machine, and the one form that changes it. Maintainer and up: acting on a device is
-                     maintainer-floored at the daemon, so a member below that gets the fact without a button that would refuse. -->
-                <div v-if="shareLine" data-setting="overview-resources" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
-                    <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.resources`) }}</dt>
-                    <dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                        <span class="min-w-0 break-words text-content">{{ shareLine }}</span>
-                        <!-- In flight, the link gives way to what it set going, from the press: a disabled link
-                             that still looks pressable answered nothing for the seconds before the sandbox drops. -->
-                        <span
-                            v-if="canShip && resizePending !== undefined"
-                            role="status"
-                            data-testid="overview-resize-pending"
-                            class="inline-flex shrink-0 items-center gap-1.5 text-subtle"
-                        >
-                            <Icon name="spinner" spin class="shrink-0" aria-hidden="true" />{{ resizePending }}
-                        </span>
-                        <button
-                            v-else-if="canShip"
-                            type="button"
-                            class="shrink-0 font-medium text-link hover:underline"
-                            @click="resizing = true"
-                        >
-                            {{ t(`sandbox.sandboxOverview.change`) }}
-                        </button>
-                    </dd>
-                </div>
-                <p v-if="resizeFailed !== undefined" class="text-warning @md:col-span-2">{{ resizeFailed }}</p>
-                <!-- Whether the machine it stands on may put it to sleep while nobody needs it; self-hides for a hosted one. -->
-                <SandboxSleepRow />
-                <!-- Who may use the host GPU, and GPU work paused after the host reported a GPU reset; self-hides without one. -->
-                <SandboxGpuRow />
-                <!-- What it may reach on the networks around that machine; says a hosted one has none to fence. -->
-                <SandboxFenceRow />
-            </dl>
+                        <div v-else-if="installed" class="flex flex-col gap-0.5">
+                            <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.installedVersion2`) }}</dt>
+                            <dd class="min-w-0 font-mono text-content [overflow-wrap:anywhere]">
+                                {{ installed }}
+                                <span v-if="updateAvailable" class="text-warning">{{ t(`sandbox.sandboxOverview.available`, { latest }) }}</span>
+                            </dd>
+                        </div>
+                        <div v-if="agentUrl" class="flex flex-col gap-0.5">
+                            <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.sandboxUrl`) }}</dt>
+                            <dd class="flex min-w-0 items-start justify-between gap-2">
+                                <!-- `touch-target`: this link isn't exempt like inline prose text, since it's icon-bearing, alone on its row, and opens a new tab. -->
+                                <a
+                                    :href="agentUrl"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="touch-target inline-flex min-w-0 items-start gap-1 font-mono text-link hover:underline"
+                                >
+                                    <span class="min-w-0 [overflow-wrap:anywhere]">{{ agentUrl }}</span>
+                                    <Icon name="external-link" class="shrink-0 text-2xs" />
+                                </a>
+                                <CopyButton :text="agentUrl" class="-my-1 shrink-0" />
+                            </dd>
+                        </div>
+                    </dl>
+                </section>
+            </div>
         </Card>
 
         <!-- Recreates the container serving this page, so it warns before it is applied and the reconnect is the answer. -->

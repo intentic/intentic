@@ -8892,6 +8892,7 @@
             "sandboxName": "Sandbox-Name",
             "sandboxSmallStarterMachine": "Diese Sandbox ist eine kleine Einsteigermaschine, die wir für Sie betreiben. Wenn es eng wird, verschieben Sie sie auf",
             "sandboxUrl": "Sandbox-URL",
+            "details": "Details",
             "setUp": "Dort einrichten →",
             "sleep": "Schlafen, wenn ungenutzt",
             "sleepOn": "Schläft, wenn niemand sie nutzt, und wacht für ihre Zeitpläne und beim Öffnen auf",

@@ -4,6 +4,7 @@
 <script setup lang="ts">
 import { deviceEnvironment } from "@intentic/sandbox-contract/schemas/devices";
 import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
+import { Button } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useRole } from "../../../client/sandbox/useRole";
@@ -12,6 +13,7 @@ import { canFence, fenceLine } from "../../../models/sandbox/devices/egressFlow"
 import { useDevices } from "../../../models/sandbox/devices/useDevices";
 import { useSelfResources } from "../../../models/sandbox/devices/useSelfResources";
 import NetworkFenceDialog from "../fence/NetworkFenceDialog.vue";
+import OverviewSettingRow from "./OverviewSettingRow.vue";
 
 const t = useT();
 
@@ -25,7 +27,7 @@ const door = computed(() => devices.value.find((device) => device.hostId !== und
 const fences = computed(() => door.value !== undefined && canFence(door.value.facts) && slug.value !== undefined);
 const status = computed(() => door.value?.sandboxes?.find((box) => box.slug === slug.value)?.egress);
 const line = computed(() => fenceLine(status.value));
-const TONE = { default: `text-content`, success: `text-content`, warning: `text-warning`, danger: `text-danger` } as const;
+const TONE = { default: `text-muted`, success: `text-muted`, warning: `text-warning`, danger: `text-danger` } as const;
 
 const opened = ref(false);
 const said = ref<string | undefined>();
@@ -42,25 +44,24 @@ const saved = (message: string): void => {
 </script>
 
 <template>
-    <div v-if="hosted || (fences && row)" data-setting="overview-fence" class="grid gap-x-6 gap-y-0.5 @md:col-span-2 @md:grid-cols-subgrid">
-        <dt class="text-subtle">{{ t(`sandbox.networkFence.rowLabel`) }}</dt>
-        <dd v-if="hosted" class="min-w-0 text-muted">{{ t(`sandbox.networkFence.hosted`) }}</dd>
-        <dd v-else class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+    <OverviewSettingRow v-if="hosted || (fences && row)" data-setting="overview-fence" :label="t(`sandbox.networkFence.rowLabel`)">
+        <span v-if="hosted">{{ t(`sandbox.networkFence.hosted`) }}</span>
+        <template v-else>
             <span class="min-w-0 break-words" :class="TONE[line.tone]">{{ line.text }}</span>
             <span v-if="said" class="text-subtle" role="status">{{ said }}</span>
-            <button v-if="canShip" type="button" class="shrink-0 font-medium text-link hover:underline" @click="((opened = true), (said = undefined))">
-                {{ t(`sandbox.networkFence.change`) }}
-            </button>
-        </dd>
-        <NetworkFenceDialog
-            v-if="canShip && fences && hostId !== undefined"
-            :open="opened"
-            :machine="door?.label ?? ``"
-            :host-id="hostId"
-            :target="target"
-            :status="status"
-            @close="opened = false"
-            @saved="saved"
-        />
-    </div>
+        </template>
+        <template v-if="!hosted && canShip" #action>
+            <Button size="small" tier="boring" :label="t(`sandbox.networkFence.change`)" @click="((opened = true), (said = undefined))" />
+            <NetworkFenceDialog
+                v-if="fences && hostId !== undefined"
+                :open="opened"
+                :machine="door?.label ?? ``"
+                :host-id="hostId"
+                :target="target"
+                :status="status"
+                @close="opened = false"
+                @saved="saved"
+            />
+        </template>
+    </OverviewSettingRow>
 </template>
