@@ -10,7 +10,7 @@ import type { AskQuestion, ChildAgentAsk, ChildMove, ChildRun } from "@intentic/
 import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { childRunOf } from "@intentic/sandbox-contract/events/child-run";
-import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { newConversationId, SUBAGENT_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { type Holding, type LiveRun, liveRunOf } from "../../conversations/actor/conversation-holdings.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Services } from "../../composition.js";
@@ -1234,7 +1234,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, ask: C
     if (refused !== undefined) {
         return { ok: false, message: refused };
     }
-    const start: ChildStart = { asked, depth, id: `sub-${newConversationId()}` };
+    const start: ChildStart = { asked, depth, id: `${SUBAGENT_PREFIX}${newConversationId()}` };
     if (verdict.kind === "proceed") {
         return startChild(services, parent, { ...start, spec: asked });
     }

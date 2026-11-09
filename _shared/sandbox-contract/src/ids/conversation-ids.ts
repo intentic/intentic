@@ -52,12 +52,28 @@ const tail = (): string => Array.from({ length: TAIL_LENGTH }, () => pick(TAIL_S
 // A fresh id: `<word>-<tail>`, e.g. `otter-k7mq`; about ten characters against a UUID's thirty-six.
 export const newConversationId = (): string => `${pick(CONVERSATION_WORDS)}-${tail()}`;
 
-// Whether an id is shaped like one `newConversationId` draws, or like the `adjective-noun-xxxx` ids it drew before.
-// For telling an instance apart from a route (perf rollups), not a guard: a derived id can still look like one.
+// A DRAWN ID WORN UNDER A PREFIX. Three kinds of conversation draw an id like any other and say what they are in front
+// of it: a spawned subagent (`sub-otter-k7mq`), a conversation a link opened here (`link-…`) and the roster entry for a
+// task running on a linked sandbox (`linked-…`). Kept here beside the word list, since no word may read as one of them.
+export const SUBAGENT_PREFIX = "sub-";
+export const LINK_CONVERSATION_PREFIX = "link-";
+export const LINKED_PREFIX = "linked-";
+const WRAPPING_PREFIXES = [SUBAGENT_PREFIX, LINK_CONVERSATION_PREFIX, LINKED_PREFIX];
+const unwrapped = (id: string): string => {
+    const prefix = WRAPPING_PREFIXES.find((candidate) => id.startsWith(candidate));
+    return prefix === undefined ? id : id.slice(prefix.length);
+};
+
+// Whether an id is shaped like one `newConversationId` draws, or like the `adjective-noun-xxxx` ids it drew before,
+// bare or under one of the prefixes above. For telling an instance apart from a route (perf rollups), not a guard: a
+// derived id can still look like one.
 const WORDS = new Set(CONVERSATION_WORDS);
 const DRAWN_ID = new RegExp(`^([a-z]+)-[${TAIL_ALPHABET}]{${TAIL_LENGTH}}$`);
 const LEGACY_DRAWN_ID = /^[a-z]+-[a-z]+-[a-z0-9]{4}$/;
-export const looksDrawn = (id: string): boolean => WORDS.has(DRAWN_ID.exec(id)?.[1] ?? "") || LEGACY_DRAWN_ID.test(id);
+export const looksDrawn = (id: string): boolean => {
+    const drawn = unwrapped(id);
+    return WORDS.has(DRAWN_ID.exec(drawn)?.[1] ?? "") || LEGACY_DRAWN_ID.test(drawn);
+};
 
 // Derived, not drawn, so a re-computed id says whether an agent is already on this failure and a second press continues
 // it. The repo is included (one run id per project) and slugified, not hashed, since people read it.

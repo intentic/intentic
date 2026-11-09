@@ -1,7 +1,7 @@
 // The words a fresh conversation id is drawn from (`newConversationId`): everyday concrete nouns (animals, food,
 // nature, things, places) that a non-native English speaker reads and spells at sight, three to six letters, lowercase
 // a-z only. Kept out: rare or hard-to-spell words, slang and words with a rude second meaning, and words that already
-// mean something in git or in this app's id space (`main`, `fork`, `branch`, `home`, `link`, `sub`, `job`, `web`), so an
+// mean something in git or in this app's id space (`main`, `fork`, `branch`, `home`, `link`, `sub`, `job`, `web`, `watch`), so an
 // id never reads as a ref, a command or one of the derived, prefixed ids. Alphabetical, one space apart, so a
 // duplicate shows; the test holds the rules.
 export const CONVERSATION_WORDS: readonly string[] = `
@@ -33,7 +33,7 @@ sky sled sloth smile snail snake snow soap sock soda sofa soil song soup spark s
 squid stamp star statue stone stool stork storm stream street studio sugar summer summit sun sunset sushi swan
 syrup taco tape taxi tea teapot teddy temple tent ticket tide tiger toad toast toffee tofu tomato torch toucan
 towel tower town toy train tram tray tree trophy trout truck tub tuba tulip tuna tundra tunnel turnip turtle
-twig valley van vase vine violet violin wafer waffle wagon wallet walnut walrus watch wave whale wheel willow
+twig valley van vase vine violet violin wafer waffle wagon wallet walnut walrus wave whale wheel willow
 wind winter wolf wood yak yard yogurt zebra zipper
 `
     .trim()

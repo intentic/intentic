@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Capability, LinkConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { childReportPrompt } from "@intentic/sandbox-contract/events/agent-words";
 import { LINK_MAX_HOPS, type LinkHello, type LinkTask, type LinkTaskStatus } from "@intentic/sandbox-contract/schemas/links";
-import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { LINKED_PREFIX, newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import type { LinkListing } from "./link-listing.js";
@@ -37,8 +37,9 @@ import { answeringWire, createLinkBackoff, type LinkBackoff, nextRetry } from ".
 // ending reaches the parent as a spawned child's does: a parked wait takes it, or it wakes the parent. The far side's
 // words are another sandbox's agent's, so they reach the parent as outside content.
 
-// Every roster id a link task gets, which also tells a supervisor's call which engine it is for.
-export const LINKED_PREFIX = "linked-";
+// Every roster id a link task gets, which also tells a supervisor's call which engine it is for. The prefix itself
+// lives with the ids (conversation-ids.ts).
+export { LINKED_PREFIX };
 // How long a follower waits before asking again when the far side did not answer, growing to the ceiling (link-backoff.ts).
 const RETRY_FIRST_MS = 5_000;
 const RETRY_MAX_MS = 60_000;

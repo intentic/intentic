@@ -12,7 +12,7 @@ import {
     type LinkTaskStatus,
 } from "@intentic/sandbox-contract/schemas/links";
 import { legacyPathOf, page } from "@intentic/sandbox-contract/app-routes";
-import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { LINK_CONVERSATION_PREFIX, newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { Logger } from "pino";
 import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
@@ -34,8 +34,8 @@ import { linkTaskStatusMark, waitForLinkTaskStatus, wakeLinkTaskStatus } from ".
 // conversations only.
 
 // Every conversation a link opens is named so, which lets a turn's ending tell a linked conversation from any other without
-// reading the links file.
-export const LINK_CONVERSATION_PREFIX = "link-";
+// reading the links file. The prefix itself lives with the ids (conversation-ids.ts).
+export { LINK_CONVERSATION_PREFIX };
 // What a link's turns are drawn as: a program holding a credential the owner minted, which is what a link is.
 const speakerToken = (label: string): string => `${label} (linked sandbox)`;
 

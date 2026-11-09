@@ -3,7 +3,10 @@ import {
     CONVERSATION_ID,
     HOME_PREFIX,
     LAND_FIX_PREFIX,
+    LINKED_PREFIX,
+    LINK_CONVERSATION_PREFIX,
     looksDrawn,
+    SUBAGENT_PREFIX,
     TAIL_ALPHABET,
     homeConversationId,
     isHomeConversationId,
@@ -61,9 +64,31 @@ test("every word is a short lowercase word, listed once", () => {
     }
 });
 
-// A drawn id must never read as a derived one (`home-…`, `ci-fix-…`, `sub-…`) or as a git ref.
+// A drawn id must never read as a derived one (`home-…`, `ci-fix-…`, `sub-…`) or as a git ref. Every prefix a
+// conversation id is minted under is listed, wherever it is minted: fix agents, home, subagents and links (this file's
+// module), automation fires (`a-`), workflow steps (`wf-`), the public doors (`wc-` Visitor chat, `bug-` issue
+// intake), extension update reviews (`ext-update-`) and the batch packs (`xt-`, `dg-`, `mt-`). Then the neighbours a
+// drawn id would be mistaken for: a borrowed account (`lent-`) and a watch (`watch-k7mq` is its exact shape).
 test("no word collides with a derived id's prefix or a git name", () => {
-    const reserved = [HOME_PREFIX, CI_FIX_PREFIX, LAND_FIX_PREFIX, "sub-", "link-", "linked-", "lent-", "a-"].map((prefix) => prefix.split("-")[0]);
+    const prefixes = [
+        HOME_PREFIX,
+        CI_FIX_PREFIX,
+        LAND_FIX_PREFIX,
+        SUBAGENT_PREFIX,
+        LINK_CONVERSATION_PREFIX,
+        LINKED_PREFIX,
+        "a-",
+        "wf-",
+        "wc-",
+        "bug-",
+        "ext-update-",
+        "xt-",
+        "dg-",
+        "mt-",
+        "lent-",
+        "watch-",
+    ];
+    const reserved = prefixes.map((prefix) => prefix.split("-")[0]);
     for (const word of [...reserved, "main", "master", "head", "fork", "branch", "merge", "patch", "tag"]) {
         expect(CONVERSATION_WORDS).not.toContain(word);
     }
@@ -94,6 +119,17 @@ test("a drawn id, new or old, looks drawn; a route or a derived id does not", ()
     expect(looksDrawn(`git-view`)).toBe(false);
     expect(looksDrawn(`otter-km0q`)).toBe(false);
     expect(looksDrawn(ciFixConversationId(`web`, 42))).toBe(false);
+});
+
+// A subagent's and a link's conversations are drawn ids under a prefix, and their tails carry no digit about a third
+// of the time, so the prefix must not hide them.
+test("a drawn id under a subagent or link prefix still looks drawn, in either generation", () => {
+    for (const prefix of [SUBAGENT_PREFIX, LINK_CONVERSATION_PREFIX, LINKED_PREFIX]) {
+        expect(looksDrawn(`${prefix}${newConversationId()}`)).toBe(true);
+        expect(looksDrawn(`${prefix}otter-kmpq`)).toBe(true);
+        expect(looksDrawn(`${prefix}keen-pine-tkjf`)).toBe(true);
+        expect(looksDrawn(`${prefix}view`)).toBe(false);
+    }
 });
 
 test("ids are unique across a burst", () => {
