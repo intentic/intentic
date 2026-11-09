@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { User } from "@intentic/api-contract";
+import type { SandboxSummary, User } from "@intentic/api-contract";
 import { ref } from "vue";
 import { directMode } from "../../../client/directory/directState";
 import type { RememberedAccount, RememberedSandbox } from "../../../client/directory/deviceDirectory";
@@ -14,9 +14,14 @@ const enterDirect = jest.fn((account: User) => {
     authUser.value = account;
     return account;
 });
-jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ enterDirect, user: authUser }) }));
+// The session check the way back asks: the platform answering ends direct mode, as useAuth.ts does.
+const refresh = jest.fn(async () => {
+    directMode.value = false;
+    return authUser.value;
+});
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ enterDirect, refresh, user: authUser }) }));
 // The platform is down: any list it is asked for fails, which is what direct mode must never trip over.
-const list = jest.fn(async () => {
+const list = jest.fn(async (): Promise<{ sandboxes: SandboxSummary[] }> => {
     throw new Error(`the platform cannot be reached`);
 });
 jest.mock(`../../../lib/useApi`, () => ({ apiClient: { sandbox: { list } } }));
@@ -24,6 +29,7 @@ jest.mock(`../../../lib/useApi`, () => ({ apiClient: { sandbox: { list } } }));
 const { accountFromProof, enterDirectMode, enterFromMemory, pickRemembered, sandboxAt, summaryOf } = await import(`./directMode`);
 const { useSandbox } = await import(`../../../client/sandbox/useSandbox`);
 const { queryClient } = await import(`../../../lib/queryPersistence`);
+const { platformHealth } = await import(`../../../lib/platform/platformHealth`);
 
 const user: User = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
 const intentic: RememberedSandbox = {
@@ -133,6 +139,36 @@ describe(`opening from memory without asking`, () => {
         expect(enterFromMemory(undefined, {})).toBeUndefined();
         expect(enterFromMemory({ ...account, sandboxes: [] }, {})).toBeUndefined();
         expect(enterDirect).not.toHaveBeenCalled();
+    });
+});
+
+// (code review, 2026-11-09) The session answering ends direct mode before the list is asked; a list that fails then is
+// still owed, and asked again at the next recovery rather than never.
+describe(`the way back`, () => {
+    const settle = async (): Promise<void> => {
+        for (let turn = 0; turn < 10; turn += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+    };
+    const recover = async (): Promise<void> => {
+        platformHealth.noteStatus(503);
+        platformHealth.noteStatus(200);
+        await settle();
+    };
+
+    it(`asks for the list again after one that failed once the session answered, and then no more`, async () => {
+        const defaults = queryClient.getDefaultOptions();
+        // A failed list is drawn as failed at once rather than after the shared client's retries.
+        queryClient.setDefaultOptions({ queries: { ...defaults.queries, retry: false } });
+        enterFromMemory(account, {});
+        await recover();
+        expect([directMode.value, list.mock.calls.length]).toEqual([false, 1]);
+        list.mockResolvedValueOnce({ sandboxes: [] });
+        await recover();
+        expect(list.mock.calls.length).toBe(2);
+        await recover();
+        expect(list.mock.calls.length).toBe(2);
+        queryClient.setDefaultOptions(defaults);
     });
 });
 

@@ -14,6 +14,11 @@ import { platformHealth } from "../../../lib/platform/platformHealth";
 // (sharing, billing, a hosted machine's power) fails as it does offline, and the direct-mode card says why
 // (notificationSources.ts). The next session check the platform answers ends it.
 
+// Whether the window still waits for the platform's own list after opening without it: set by every way in, cleared
+// once a list the platform answered replaces the remembered one, or a sign-out ends the window's account.
+// allow(module-state): one window waits for one list
+let listOwed = false;
+
 // A remembered sandbox as a list row: no token (none is remembered; only a first bind spends one), no hosted record (its
 // machine is the platform's to drive), nothing reported. Its certified loopback name rides along where it was remembered,
 // and endpoint selection finds its loopback id in the memory by the row's id (useEndpoint.ts), so a sandbox on this very
@@ -49,6 +54,7 @@ export const enterDirectMode = (account: RememberedAccount, sandbox: RememberedS
     useAuth().enterDirect(account.user);
     queryClient.setQueryData(SANDBOX_LIST_KEY, rows);
     useSandbox().select(sandbox.id);
+    listOwed = true;
 };
 
 // What names the reader on a device that remembers no account (the platform was down before this one ever listed):
@@ -118,18 +124,25 @@ export const enterFromMemory = (account: RememberedAccount | undefined, choice: 
 // THE QUIET WAY BACK. The platform answering again (lib/platform/platformHealth.ts) ends a window opened without it
 // the way a session check always has: the session it answers takes the window back, and the list it answers replaces
 // the remembered one, with nothing for the reader to press. A session it no longer has signs the window out as before.
+//
+// The session answering ends direct mode by itself (useAuth.ts), before the list is asked; the list stays owed until the
+// platform gives it, so a list that fails right after a session that answered is asked again at the next recovery,
+// rather than leaving the window on the remembered, token-less rows (code review, 2026-11-09).
 platformHealth.onRecovered(() => {
-    if (!directMode.value) {
+    if (!directMode.value && !listOwed) {
         return;
     }
     void (async () => {
         try {
-            if ((await useAuth().refresh()) !== null) {
-                await useSandbox().refresh();
+            if (directMode.value && (await useAuth().refresh()) === null) {
+                listOwed = false;
+                return;
             }
+            await useSandbox().refresh();
+            listOwed = false;
         } catch (error) {
             // Still not answering after all: the reading turns down again and the next recovery tries again.
-            console.warn(`[direct] the platform answered, but not the session check:`, error);
+            console.warn(`[direct] the platform answered, but not with the session and the list:`, error);
         }
     })();
 });

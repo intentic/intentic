@@ -25,7 +25,7 @@ can report that the box is down. This Worker runs on Cloudflare's network, and i
 The api also has `/health`, which answers `{"status":"ok"}` after a database ping and 503 `{"status":"error"}` without
 one. `/api/identity` reads the same database, and it is the request the editor makes first.
 
-All three probes run in parallel, each with an 8 s timeout. No answer, the wrong answer or a non-200 status counts as
+All three probes run in parallel, each with an 8 s timeout, except the editor's 13 s, which outlasts the edge Worker's 10 s navigation deadline so a hung box reads as served from the edge copy rather than down. No answer, the wrong answer or a non-200 status counts as
 `down`. A correct answer that took longer than 4 s counts as `degraded`. Once the edge failover
 (`_editor/web/edge`) fronts the editor, a dead editor origin is answered from the edge copy
 (`x-intentic-served-by: edge-fallback`): that also counts as `degraded`, since the editor still loads but sign-in and

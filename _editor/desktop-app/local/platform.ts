@@ -1,4 +1,4 @@
-import { parseJsonWith } from "@intentic/base/json";
+import { parseJsonOr, parseJsonWith } from "@intentic/base/json";
 import { apiContract, type SandboxSummary, SandboxSummarySchema, type User, UserSchema } from "@intentic/api-contract";
 import { deviceKey, removeStoredValue, storedJson, storeJson } from "@intentic/ui/storage";
 import { type LocalFace, localFace, localSandboxId } from "@intentic/web/local";
@@ -134,6 +134,18 @@ export type PlatformRelay = (ask: AccountAsk) => Promise<AccountAnswer>;
 // The contract's own readers: the account by the address it signs in with, each row as the platform's list holds it,
 // so a copy read back is a list the editor would have taken from the platform.
 const KEPT_LIST_SCHEMA = UserSchema.pick({ email: true }).extend({ sandboxes: SandboxSummarySchema.array() });
+// Whether a 401 is somebody signing out: oRPC's own refusal, or the app's answer when it has no session to relay
+// (account.rs `signed_out`). A proxy's 401 page, or JSON saying neither, is not, and must not forget the last list.
+const isSignedOut = (answer: AccountAnswer): boolean => {
+    if (answer.status !== 401 || !(answer.contentType ?? ``).includes(`json`)) {
+        return false;
+    }
+    const body = parseJsonOr(answer.body, undefined);
+    if (!(body instanceof Object) || Array.isArray(body)) {
+        return false;
+    }
+    return body[`code`] === `UNAUTHORIZED` || body[`message`] === `Not signed in.`;
+};
 
 /** The account's last list as a window keeps it: whose it was (the address the app named as signed in) and its rows,
  *  each without its connect token. */
@@ -216,7 +228,7 @@ const accountList = async (face: LocalFace, relay: PlatformRelay, last: LastList
     const after = (rows: readonly SandboxSummary[]): Response => json<SandboxList>({ sandboxes: [own, ...rows.filter((row) => row.id !== own.id)] });
     try {
         const answer = await relay({ method: `GET`, path: SANDBOX_LIST });
-        if (answer.status === 401) {
+        if (isSignedOut(answer)) {
             last.forget();
             return after([]);
         }

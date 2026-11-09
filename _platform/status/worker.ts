@@ -59,6 +59,10 @@ interface Snapshot {
 
 // Past this, a probe that is answered well too late; the box answers in tens of milliseconds when well.
 const PROBE_TIMEOUT_MS = 8_000;
+// The editor's probe waits past the edge Worker's navigation deadline (_editor/web/edge/worker.ts
+// NAVIGATION_DEADLINE_MS, 10 s), so a hung box is reported as served from the edge copy (degraded) rather than down
+// before that copy can answer (code review, 2026-11-09).
+const EDITOR_PROBE_TIMEOUT_MS = 13_000;
 // Answered right but this slow: degraded, since a person waiting on it feels it.
 const SLOW_MS = 4_000;
 // How much history is kept and drawn.
@@ -77,6 +81,8 @@ interface Component {
     readonly name: string;
     readonly about: string;
     readonly url: string;
+    // How long its probe waits; PROBE_TIMEOUT_MS unless said.
+    readonly timeoutMs?: number;
     readonly judge: Judge;
 }
 
@@ -116,6 +122,7 @@ const COMPONENTS: readonly Component[] = [
         // Once the edge Worker fronts it (_editor/web/edge), a dead origin is answered from the edge copy: the editor
         // still loads and opens sandboxes directly, but sign-in and everything else the platform does is gone.
         url: `https://app.intentic.dev/`,
+        timeoutMs: EDITOR_PROBE_TIMEOUT_MS,
         judge: async (response) => {
             const fromEdge = response.headers.get(`x-intentic-served-by`) === `edge-fallback`;
             const html = response.status === 200 && (response.headers.get(`content-type`) ?? ``).includes(`text/html`) && (await response.text()).includes(`id="app"`);
@@ -144,9 +151,10 @@ const COMPONENT_BY_ID = new Map(COMPONENTS.map((component) => [component.id, com
 // One probe: the verdict, or down with why when there is no answer in time. Latency is to the whole answer.
 const probe = async (component: Component, at: number): Promise<Sample> => {
     const started = Date.now();
+    const timeoutMs = component.timeoutMs ?? PROBE_TIMEOUT_MS;
     try {
         const response = await fetch(component.url, {
-            signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+            signal: AbortSignal.timeout(timeoutMs),
             redirect: `manual`,
             headers: { accept: `text/html, application/json`, "user-agent": `intentic-status (+https://status.intentic.dev)` },
         });
@@ -158,7 +166,7 @@ const probe = async (component: Component, at: number): Promise<Sample> => {
         return { id: component.id, at, latencyMs, ...verdict };
     } catch (cause) {
         const timedOut = cause instanceof Error && (cause.name === `TimeoutError` || cause.name === `AbortError`);
-        return { id: component.id, at, state: `down`, latencyMs: null, detail: timedOut ? `no answer within ${PROBE_TIMEOUT_MS / 1000} s` : `unreachable` };
+        return { id: component.id, at, state: `down`, latencyMs: null, detail: timedOut ? `no answer within ${timeoutMs / 1000} s` : `unreachable` };
     }
 };
 

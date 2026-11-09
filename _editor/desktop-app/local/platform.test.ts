@@ -337,6 +337,30 @@ describe(`installPlatform, the last list the platform gave`, () => {
         expect(await ids()).toEqual([`local-f3a9c2`]);
     });
 
+    it(`keeps the list when a proxy answers 401 without the platform's JSON refusal`, async () => {
+        await opened();
+        await ids();
+        next = { status: 401, body: `<html>Authentication required</html>`, contentType: `text/html` };
+        const proxyRefusal = await ids();
+        next = { status: 401, body: `{}`, contentType: `application/json` };
+        const emptyRefusal = await ids();
+        next = new Error(`The platform could not be reached.`);
+        await opened();
+        expect({ proxyRefusal, emptyRefusal, reopened: await ids(), stored }).toEqual({
+            proxyRefusal: [`local-f3a9c2`, `sbx-work`, `sbx-shop`],
+            emptyRefusal: [`local-f3a9c2`, `sbx-work`, `sbx-shop`],
+            reopened: [`local-f3a9c2`, `sbx-work`, `sbx-shop`],
+            stored: { email: `ada@example.com`, sandboxes: [{ ...WORK, token: null }, { ...SHOP, token: null }] },
+        });
+    });
+
+    it(`forgets the list on the platform's oRPC sign-out refusal`, async () => {
+        await opened();
+        await ids();
+        next = { status: 401, body: `{"defined":false,"code":"UNAUTHORIZED","status":401,"message":"Unauthorized"}`, contentType: `application/json` };
+        expect({ signedOut: await ids(), stored }).toEqual({ signedOut: [`local-f3a9c2`], stored: undefined });
+    });
+
     it(`holds the list in the window's memory where storage keeps nothing`, async () => {
         const forgetful: ListKeeping = { ...keeping, read: () => undefined, write: () => undefined };
         installPlatform(FACE, relay, forgetful);

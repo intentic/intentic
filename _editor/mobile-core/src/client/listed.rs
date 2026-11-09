@@ -64,7 +64,7 @@ pub(crate) fn merge(
     sandboxes.extend(lacking);
     Kept {
         sandboxes,
-        identity: held_identity.or(identity).map(str::to_owned),
+        identity: held_identity.map(str::to_owned),
     }
 }
 
@@ -126,7 +126,15 @@ mod tests {
         // A kept list from before identities were kept is confirmed by nothing yet.
         let first = merge(&held, None, Vec::new(), Some("db1"));
         assert_eq!(ids(&first), ["a", "b"]);
-        assert_eq!(first.identity.as_deref(), Some("db1"));
+        assert_eq!(first.identity, None);
+        let next = merge(
+            &first.sandboxes,
+            first.identity.as_deref(),
+            Vec::new(),
+            Some("db1"),
+        );
+        assert_eq!(ids(&next), ["a", "b"]);
+        assert_eq!(next.identity, None);
         let unnamed = merge(&held, None, Vec::new(), None);
         assert_eq!(ids(&unnamed), ["a", "b"]);
         assert_eq!(unnamed.identity, None);
