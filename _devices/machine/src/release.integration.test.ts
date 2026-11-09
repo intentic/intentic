@@ -113,8 +113,9 @@ describe("vacate", () => {
         expect(readdirSync(dirname(path))).toEqual([]);
     });
 
-    it("moves a file a running process holds aside, under a name bin/'s sweep removes later", async () => {
-        for (const code of ["EPERM", "EBUSY", "EACCES"]) {
+    // EFAULT is what the compiled agent's Bun answered for the keyring launcher's `.previous` on a real Windows machine.
+    it("moves a file a running process holds aside, under a name bin/'s sweep removes later, whatever errno says so", async () => {
+        for (const code of ["EPERM", "EBUSY", "EACCES", "EFAULT"]) {
             const path = keptCopy();
             await vacate(path, held(code));
             expect(existsSync(path), code).toBe(false);
@@ -125,9 +126,9 @@ describe("vacate", () => {
         }
     });
 
-    it("throws any other refusal, leaving the file where it was", async () => {
-        const path = keptCopy();
-        await expect(vacate(path, held("EIO"))).rejects.toThrow("EIO");
-        expect(existsSync(path)).toBe(true);
+    it("throws when the file can be neither deleted nor moved aside, saying both", async () => {
+        // a path whose parent is gone: the move is refused as well as the delete
+        const path = join(mkdtempSync(join(tmpdir(), "vacate-")), "missing", "intentic-launch.exe.previous");
+        await expect(vacate(path, held("EIO"))).rejects.toThrow(/ENOENT.*deleting it first: EIO/u);
     });
 });

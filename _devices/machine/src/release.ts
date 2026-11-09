@@ -5,7 +5,7 @@ import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
-import { errnoCode } from "@intentic/base/errors";
+import { errorMessage } from "@intentic/base/errors";
 import { livePidRecord, WINDOWS_LAUNCH_STUB } from "@intentic/local-agent";
 import { binDir, upgradeLockPath } from "./config.js";
 
@@ -194,22 +194,27 @@ export const renameIfPresent = async (from: string, to: string): Promise<void> =
 // be running too.
 export const asideOf = (path: string, now: number): string => `${path}.old-${now}`;
 
-// What deleting a file a running process was started from answers on Windows (access denied, sharing violation).
-const HELD = new Set(["EPERM", "EBUSY", "EACCES"]);
-
 const removeFile = async (path: string): Promise<void> => await rm(path, { force: true });
 
 // `path` cleared for a rename to land on. Windows neither deletes nor replaces a file a process still runs from, but it
 // does rename one, so such a file is moved aside (asideOf) and bin/'s sweep removes it once nothing runs from it.
-// Anything else that keeps it from going is thrown. `remove` is the delete, replaceable only for a test.
+// `remove` is the delete, replaceable only for a test.
+// ANY REFUSED DELETE IS TRIED AS A MOVE, not only the errno that refusal is supposed to have. Which errno a held image
+// comes back as is the runtime's mapping, not Windows' answer: measured on rog (2026-11-09) with the compiled agent's
+// Bun 1.4.4, `rm(path, { force: true })` on a running .exe throws EFAULT where `unlink` of the same file throws EPERM.
+// A list of EPERM/EBUSY/EACCES let that EFAULT through as a hard failure, so with the keyring's launcher still running
+// from `.previous`, every update from 1.387.0 on rolled back for a week, and the agent kept syncing a Rust `target/`
+// the newer ignores leave out. A file that cannot be deleted for any other reason cannot be renamed either, so the
+// move's own refusal is what is thrown then, with the delete's beside it.
 export const vacate = async (path: string, remove: (path: string) => Promise<void> = removeFile): Promise<void> => {
     try {
         await remove(path);
-    } catch (error) {
-        if (!HELD.has(errnoCode(error) ?? "")) {
-            throw error;
+    } catch (refused) {
+        try {
+            await rename(path, asideOf(path, Date.now()));
+        } catch (stuck) {
+            throw new Error(`${errorMessage(stuck)} (deleting it first: ${errorMessage(refused)})`, { cause: stuck });
         }
-        await rename(path, asideOf(path, Date.now()));
     }
 };
 
