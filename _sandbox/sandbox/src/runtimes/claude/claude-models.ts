@@ -184,8 +184,10 @@ export interface ClaudeCatalog {
     readonly forget: () => void;
 }
 
-// Discovery spawns the CLI and models change rarely, so this caches for the daemon's life; a restart re-probes.
-const MODELS_TTL_MS = 60 * 60_000;
+// How long a catalog answer stands before REST is asked again. A new model is listed by /v1/models the moment Anthropic
+// launches it, so this is the delay before the picker can offer one; the read is a single HTTP call, because the CLI
+// half of the merge is held for the daemon's life (cliAliases below) rather than re-probed with it.
+export const MODELS_TTL_MS = 5 * 60_000;
 
 // Default is the provider's own first-listed model. Naming a tier here would silently break the moment Anthropic
 // renames its flagship; list order is the only thing that stays correct.
@@ -222,17 +224,35 @@ export const createClaudeCatalog = (
     // Parsed through the schema, not trusted; an older or truncated record degrades to the floor, not a half-row.
     const store = cacheFile<Model[]>(persistPath, { parse: (raw) => z.array(ModelSchema).safeParse(raw).data?.filter(namesVersion), fallback: () => [] });
 
+    // The CLI's list is compiled into the binary the daemon runs, so it cannot change before a restart: one probe that
+    // answered stands until then (or until forget, since the account it ran under may have gone). Spawning the CLI is
+    // the expensive half of a discovery; holding it here is what lets the REST half be re-read every few minutes. A
+    // probe that failed or answered nothing is not held, so the next discovery tries again.
+    let cliAliases: Promise<Model[]> | undefined;
+    const aliasesFor = (oauthToken: string | undefined): Promise<Model[]> => {
+        if (cliAliases !== undefined) {
+            return cliAliases;
+        }
+        const probe = discover(oauthToken, cwd).catch((error: unknown) => {
+            // Without the CLI's aliases every versioned row loses its effort levels and badges.
+            logger.warn({ err: error }, "claude models: CLI discovery failed");
+            return [];
+        });
+        cliAliases = probe;
+        void probe.then((models) => {
+            if (models.length === 0 && cliAliases === probe) {
+                cliAliases = undefined;
+            }
+        });
+        return probe;
+    };
+
     const catalog = discoveredCatalog({
         ttlMs: MODELS_TTL_MS,
         // Both sources run concurrently; either alone still yields a usable list.
         discover: async (accountId?: string) => {
             const tokens = await oauthTokens(accountId);
-            const cliModels = discover(tokens[0], cwd).catch((error: unknown) => {
-                // Without the CLI's aliases every versioned row loses its effort levels and badges.
-                logger.warn({ err: error }, "claude models: CLI discovery failed");
-                return [];
-            });
-            const [aliases, versioned] = await Promise.all([cliModels, discoverApiModels(tokens, fetchImpl, logger)]);
+            const [aliases, versioned] = await Promise.all([aliasesFor(tokens[0]), discoverApiModels(tokens, fetchImpl, logger)]);
             if (versioned !== undefined) {
                 return mergeCatalogs(aliases, versioned);
             }
@@ -249,5 +269,11 @@ export const createClaudeCatalog = (
         fromLive: withDefault,
         fromStored: withDefault,
     });
-    return { models: catalog.models, forget: catalog.forget };
+    return {
+        models: catalog.models,
+        forget: () => {
+            cliAliases = undefined;
+            catalog.forget();
+        },
+    };
 };

@@ -8,7 +8,7 @@ import { DISCOVERY_TIMEOUT_MS } from "../../agent/models/model-discovery.js";
 import { expireTimeouts, stalledFetch } from "../../http/fetch.testing.js";
 import type { Config } from "../../env.config.js";
 import type { ClaudeStore } from "../../agent/providers/claude/claude-credentials.js";
-import { createClaudeCatalog } from "./claude-models.js";
+import { createClaudeCatalog, MODELS_TTL_MS } from "./claude-models.js";
 
 // Catalog's two-source merge (CLI aliases + REST /v1/models), falling live merge to persisted last-known-good to seed
 // floor. Every test's rule: only rows naming a version are offered; aliases are mined for effort/badges, then dropped.
@@ -299,7 +299,7 @@ test("with no credential to ask REST with, the CLI's versioned rows are padded r
 });
 
 // The cache is not keyed by the credential that answered, so the account door forgets it on connect: the next read
-// asks REST with the new token instead of serving the token-less answer for the rest of the hour.
+// asks REST with the new token instead of serving the token-less answer until the window runs out.
 test("a forgotten catalog rediscovers with the account connected since, instead of serving the token-less answer", async () => {
     const fable: Model = { id: "claude-fable-5-1", label: "Fable" };
     // Everything the seed floor names, plus a tier only REST knows: what the new token can see and no token could.
@@ -386,4 +386,58 @@ test("an unreadable 200 from REST descends the ladder instead of filing the CLI'
 
     expect(catalog.models).toEqual([fable, ...recorded]);
     expect(warned).toEqual([expect.objectContaining({ status: 200 })]);
+});
+
+// A model Anthropic launches is listed by REST at once; the picker is behind it only by the answer's window, and that
+// window can be short because re-reading REST never respawns the CLI, whose list cannot change while the daemon runs.
+test("a model REST starts listing is offered once the window lapses, without probing the CLI again", async () => {
+    let clock = 1_000_000;
+    const now = jest.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+        const rest = [{ id: "claude-opus-5-5", display_name: "Claude Opus 5.5" }];
+        let probes = 0;
+        const cli = async (): Promise<Model[]> => {
+            probes += 1;
+            return [{ id: "opus", label: "Opus", efforts: ["low", "max"] }];
+        };
+        const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+        const catalog = createClaudeCatalog(emptyStore, containerToken, dir, join(dir, "models.json"), cli, apiReturns(rest));
+
+        expect((await catalog.models()).models.map((model) => model.id)).toEqual(["claude-opus-5-5"]);
+        rest.unshift({ id: "claude-opus-5-6", display_name: "Claude Opus 5.6" });
+        expect((await catalog.models()).models.map((model) => model.id)).toEqual(["claude-opus-5-5"]);
+
+        clock += MODELS_TTL_MS;
+        const after = await catalog.models();
+        expect(after.models.map((model) => model.id)).toEqual(["claude-opus-5-6", "claude-opus-5-5"]);
+        // The tier alias read once still lends its efforts to the row that arrived since.
+        expect(after.models[0]).toEqual({ id: "claude-opus-5-6", label: "Claude Opus 5.6", efforts: ["low", "max"] });
+        expect(probes).toBe(1);
+    } finally {
+        now.mockRestore();
+    }
+});
+
+test("a CLI probe that failed is tried again on the next discovery rather than held for the daemon's life", async () => {
+    let clock = 1_000_000;
+    const now = jest.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+        let probes = 0;
+        const cli = async (): Promise<Model[]> => {
+            probes += 1;
+            if (probes === 1) {
+                throw new Error("claude code cli unavailable");
+            }
+            return [{ id: "opus", label: "Opus", efforts: ["low", "max"] }];
+        };
+        const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+        const catalog = createClaudeCatalog(emptyStore, containerToken, dir, join(dir, "models.json"), cli, apiReturns([{ id: "claude-opus-5-5", display_name: "Claude Opus 5.5" }]));
+
+        expect((await catalog.models()).models).toEqual([{ id: "claude-opus-5-5", label: "Claude Opus 5.5" }]);
+        clock += MODELS_TTL_MS;
+        expect((await catalog.models()).models).toEqual([{ id: "claude-opus-5-5", label: "Claude Opus 5.5", efforts: ["low", "max"] }]);
+        expect(probes).toBe(2);
+    } finally {
+        now.mockRestore();
+    }
 });
