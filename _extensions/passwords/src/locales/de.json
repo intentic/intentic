@@ -52,7 +52,8 @@
             "attention": "Achtung",
             "fresh": "Gerade gespeichert",
             "requests": "Anfragen",
-            "weak": "Schwach oder wiederverwendet"
+            "weak": "Schwach oder wiederverwendet",
+            "removed": "Zuletzt gelöscht"
         },
         "source": {
             "browser": "gespeichert aus {via}",
@@ -138,7 +139,11 @@
             "reveal": "Angezeigt",
             "copy": "Kopiert",
             "forAgent": "{what} für {sandbox}s Agent",
-            "refused": "{what} · abgelehnt"
+            "refused": "{what} · abgelehnt",
+            "undo-remove": "Aus „Zuletzt gelöscht“ zurückgeholt",
+            "purge": "Endgültig gelöscht",
+            "add-hello": "Windows Hello eingeschaltet",
+            "master-password": "Master-Passwort geändert"
         },
         "edit": {
             "title": "Titel",
@@ -205,17 +210,31 @@
             "unlock": "Entsperren & sperren",
             "hello": "Zum Entsperren fragt Windows Hello: dein Gesicht, Fingerabdruck oder PIN.",
             "polkit": "Zum Entsperren wird das Passwort deines Computers abgefragt.",
-            "passphrase": "Zum Entsperren wird dein Wiederherstellungsschlüssel abgefragt.",
+            "passphrase": "Zum Entsperren wird dein Wiederherstellungsschlüssel abgefragt. Lege ein Master-Passwort fest, um stattdessen das einzugeben.",
             "autoLock": "Sperren nach",
             "minutes": "{count} Minute | {count} Minuten",
             "hours": "{count} Stunde | {count} Stunden",
             "lockOnSleep": "Sperren, wenn dieser Computer in den Ruhezustand geht",
             "recovery": "Wiederherstellungsschlüssel",
-            "recoveryHelp": "Der Wiederherstellungsschlüssel öffnet deine Passwörter, wenn Windows Hello zurückgesetzt wird oder dieser Computer ersetzt wird. Er wurde einmal angezeigt, als Passwörter aktiviert wurden.",
+            "recoveryHelp": "Bewahre ihn für Notfälle auf: Er öffnet deine Passwörter, wenn du dein Master-Passwort vergisst, Windows Hello zurückgesetzt oder dieser Computer ersetzt wird. Er wurde einmal angezeigt, als Passwörter eingeschaltet wurde.",
             "neverSave": "Nie speichern für",
             "neverSaveEmpty": "Nichts. „Nie für diese Website“ in einer Meldung fügt hier einen Ort hinzu.",
             "import": "Importieren",
-            "importHelp": "Eine CSV-Datei, exportiert aus Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden oder KeePassXC."
+            "importHelp": "Eine CSV-Datei, exportiert aus Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden oder KeePassXC.",
+            "master": "Zum Entsperren wird dein Master-Passwort abgefragt. Dein Wiederherstellungsschlüssel funktioniert auch.",
+            "helloOff": "Windows Hello ist für Passwörter ausgeschaltet",
+            "helloOffHelp": "Passwörter wurde ohne es eingerichtet und fragt deshalb deinen Wiederherstellungsschlüssel ab.",
+            "masterTitle": "Master-Passwort",
+            "masterOn": "Wird abgefragt, wenn Windows Hello oder die Prüfung deines Computers nicht antworten kann.",
+            "masterOff": "Nicht festgelegt. Ohne es fragt Passwörter deinen Wiederherstellungsschlüssel ab, wenn Windows Hello oder die Prüfung deines Computers nicht antworten kann.",
+            "masterSet": "Festlegen",
+            "masterChange": "Ändern",
+            "masterRemove": "Entfernen",
+            "masterNew": "Neues Master-Passwort",
+            "masterAgain": "Noch einmal eingeben",
+            "masterHelp": "Mindestens {count} Zeichen. Passwörter bittet dich zuerst auf diesem Computer um Bestätigung.",
+            "masterShort": "Mindestens {count} Zeichen.",
+            "masterMismatch": "Die beiden stimmen nicht überein."
         },
         "import": {
             "pick": "Datei wählen",
@@ -253,7 +272,8 @@
             "settingSource": "{source} wird eingerichtet…",
             "importTitle": "Nimm deine Passwörter mit",
             "importHelp": "Importiere einen CSV-Export aus deinem Browser oder Passwortmanager, oder überspringe das — sie werden beim Anmelden gespeichert.",
-            "finish": "Fertig"
+            "finish": "Fertig",
+            "helloSkipped": "Windows Hello wurde nicht eingerichtet, daher fragt Passwörter nach diesem Schlüssel, bis du Hello in den Einstellungen einschaltest."
         },
         "unavailable": {
             "title": "Passwörter ist nicht verfügbar",
@@ -271,7 +291,24 @@
             "undo": "Rückgängig",
             "view": "Ansehen",
             "undone": "Rückgängig gemacht.",
-            "dismiss": "Schließen"
+            "dismiss": "Schließen",
+            "removed": "{title} nach „Zuletzt gelöscht“ verschoben"
+        },
+        "hello": {
+            "strip": "Windows Hello ist für Passwörter nicht eingeschaltet, deshalb wird stattdessen dein Wiederherstellungsschlüssel abgefragt. Schalte es ein, um mit Gesicht, Fingerabdruck oder PIN zu bestätigen.",
+            "turnOn": "Windows Hello einschalten"
+        },
+        "removed": {
+            "title": "Zuletzt gelöscht",
+            "help": "Gelöschte Passwörter bleiben 30 Tage hier. Ein zurückgeholtes kommt so zurück, wie es war, mit den Agenten, die es nutzen durften.",
+            "empty": "Leeren",
+            "none": "In den letzten 30 Tagen wurde nichts gelöscht.",
+            "when": "gelöscht {when}",
+            "putBack": "Zurückholen",
+            "deleteForGood": "Endgültig löschen",
+            "emptyAsk": "„Zuletzt gelöscht“ leeren?",
+            "deleteAsk": "{title} endgültig löschen?",
+            "cannotUndo": "Das lässt sich nicht rückgängig machen. Passwörter bittet dich auf diesem Computer um Bestätigung."
         }
     }
 }

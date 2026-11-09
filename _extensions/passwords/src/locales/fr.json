@@ -52,7 +52,8 @@
             "attention": "Attention",
             "fresh": "Vient d'être enregistré",
             "requests": "Demandes",
-            "weak": "Faibles ou réutilisés"
+            "weak": "Faibles ou réutilisés",
+            "removed": "Supprimés récemment"
         },
         "source": {
             "browser": "enregistré depuis {via}",
@@ -138,7 +139,11 @@
             "reveal": "Affiché",
             "copy": "Copié",
             "forAgent": "{what} pour l'agent de {sandbox}",
-            "refused": "{what} · refusé"
+            "refused": "{what} · refusé",
+            "undo-remove": "Restauré depuis Supprimés récemment",
+            "purge": "Supprimé définitivement",
+            "add-hello": "Windows Hello activé",
+            "master-password": "Mot de passe principal modifié"
         },
         "edit": {
             "title": "Titre",
@@ -205,17 +210,31 @@
             "unlock": "Déverrouiller et verrouiller",
             "hello": "Le déverrouillage demande Windows Hello : votre visage, empreinte ou PIN.",
             "polkit": "Le déverrouillage demande le mot de passe de votre ordinateur.",
-            "passphrase": "Le déverrouillage demande votre clé de récupération.",
+            "passphrase": "Le déverrouillage demande votre clé de récupération. Définissez un mot de passe principal pour saisir celui-ci à la place.",
             "autoLock": "Verrouiller après",
             "minutes": "{count} minute | {count} minutes",
             "hours": "{count} heure | {count} heures",
             "lockOnSleep": "Verrouiller quand cet ordinateur se met en veille",
             "recovery": "Clé de récupération",
-            "recoveryHelp": "La clé de récupération ouvre vos mots de passe si Windows Hello est réinitialisé ou si cet ordinateur est remplacé. Elle a été montrée une fois, quand Mots de passe a été activé.",
+            "recoveryHelp": "Gardez-la pour les urgences : elle ouvre vos mots de passe si vous oubliez votre mot de passe principal, si Windows Hello est réinitialisé ou si cet ordinateur est remplacé. Elle a été affichée une fois, à l'activation de Mots de passe.",
             "neverSave": "Ne jamais enregistrer pour",
             "neverSaveEmpty": "Rien. « Jamais pour ce site » dans un avis ajoute un endroit ici.",
             "import": "Importer",
-            "importHelp": "Un fichier CSV exporté depuis Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden ou KeePassXC."
+            "importHelp": "Un fichier CSV exporté depuis Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden ou KeePassXC.",
+            "master": "Le déverrouillage demande votre mot de passe principal. Votre clé de récupération fonctionne aussi.",
+            "helloOff": "Windows Hello est désactivé pour Mots de passe",
+            "helloOffHelp": "Il a été configuré sans, donc Mots de passe demande votre clé de récupération.",
+            "masterTitle": "Mot de passe principal",
+            "masterOn": "Demandé quand Windows Hello ou la vérification de votre ordinateur ne peuvent pas répondre.",
+            "masterOff": "Non défini. Sans lui, Mots de passe demande votre clé de récupération quand Windows Hello ou la vérification de votre ordinateur ne peuvent pas répondre.",
+            "masterSet": "Définir",
+            "masterChange": "Modifier",
+            "masterRemove": "Retirer",
+            "masterNew": "Nouveau mot de passe principal",
+            "masterAgain": "Saisissez-le à nouveau",
+            "masterHelp": "Au moins {count} caractères. Mots de passe vous demandera d'abord de confirmer sur cet ordinateur.",
+            "masterShort": "Au moins {count} caractères.",
+            "masterMismatch": "Les deux ne correspondent pas."
         },
         "import": {
             "pick": "Choisir un fichier",
@@ -253,7 +272,8 @@
             "settingSource": "Configuration de {source}…",
             "importTitle": "Emportez vos mots de passe",
             "importHelp": "Importez une exportation CSV depuis votre navigateur ou gestionnaire de mots de passe, ou passez — ils s'enregistreront en vous connectant.",
-            "finish": "Terminé"
+            "finish": "Terminé",
+            "helloSkipped": "Windows Hello n'a pas été configuré, donc Mots de passe demandera cette clé jusqu'à ce que vous activiez Hello dans les Réglages."
         },
         "unavailable": {
             "title": "Mots de passe n'est pas disponible",
@@ -271,7 +291,24 @@
             "undo": "Annuler",
             "view": "Voir",
             "undone": "Annulé.",
-            "dismiss": "Fermer"
+            "dismiss": "Fermer",
+            "removed": "{title} déplacé dans Supprimés récemment"
+        },
+        "hello": {
+            "strip": "Windows Hello n'est pas activé pour Mots de passe, qui demande donc votre clé de récupération. Activez-le pour confirmer avec votre visage, votre empreinte ou votre code PIN.",
+            "turnOn": "Activer Windows Hello"
+        },
+        "removed": {
+            "title": "Supprimés récemment",
+            "help": "Les mots de passe supprimés restent ici 30 jours. Un mot de passe restauré revient tel quel, avec les agents qui pouvaient l'utiliser.",
+            "empty": "Vider",
+            "none": "Rien n'a été supprimé ces 30 derniers jours.",
+            "when": "supprimé {when}",
+            "putBack": "Restaurer",
+            "deleteForGood": "Supprimer définitivement",
+            "emptyAsk": "Vider Supprimés récemment ?",
+            "deleteAsk": "Supprimer {title} définitivement ?",
+            "cannotUndo": "Impossible d'annuler. Mots de passe vous demandera de confirmer sur cet ordinateur."
         }
     }
 }

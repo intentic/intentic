@@ -201,14 +201,16 @@ namespace IntenticKeyring {
   public static class Passphrase {
     // The recovery key box: what is asked as its heading, why under it, what went wrong with the last try (when it did)
     // in red, and one field shaped like the key.
-    public static Form Build(string title, string message, string problem) {
+    // asks: "recovery-key" (a field shaped like the key), "master-password", or "either" (consent.ts PassphraseAsks).
+    public static Form Build(string title, string message, string problem, string asks) {
       Form form = Look.NewForm();
       FlowLayoutPanel panel = Look.Column();
       panel.Controls.Add(Look.Heading(title));
       panel.Controls.Add(Look.Body(message));
       if (!String.IsNullOrEmpty(problem)) panel.Controls.Add(Look.Problem(problem));
-      panel.Controls.Add(Look.FieldLabel("Recovery key"));
-      TextBox box = Look.Field(true, true, "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX");
+      bool key = asks != "master-password" && asks != "either";
+      panel.Controls.Add(Look.FieldLabel(key ? "Recovery key" : asks == "either" ? "Master password or recovery key" : "Master password"));
+      TextBox box = Look.Field(true, key, key ? "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" : null);
       box.Name = "answer";
       panel.Controls.Add(box);
       FlowLayoutPanel buttons = Look.Buttons();
@@ -225,9 +227,9 @@ namespace IntenticKeyring {
       return form;
     }
 
-    public static string Ask(string title, string message, string problem, int seconds) {
+    public static string Ask(string title, string message, string problem, string asks, int seconds) {
       Look.Begin();
-      Form form = Build(title, message, problem);
+      Form form = Build(title, message, problem, asks);
       TextBox box = (TextBox)form.Controls.Find("answer", true)[0];
       System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
       timer.Interval = seconds * 1000;
@@ -392,7 +394,7 @@ try {
 
 const PASSPHRASE_SCRIPT = `${PREAMBLE}
 try {
-  $typed = [IntenticKeyring.Passphrase]::Ask($KeyringInput.title, $KeyringInput.message, [string]$KeyringInput.problem, [int]$KeyringInput.seconds)
+  $typed = [IntenticKeyring.Passphrase]::Ask($KeyringInput.title, $KeyringInput.message, [string]$KeyringInput.problem, [string]$KeyringInput.asks, [int]$KeyringInput.seconds)
   if ($typed -eq $null) { Answer @{ ok = $false; cancelled = $true } } else { Answer @{ ok = $true; passphrase = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($typed)) } }
 } catch {
   Answer @{ ok = $false; error = $_.Exception.Message }
@@ -492,7 +494,7 @@ export const windowsPassphrasePrompt =
     async (notice) => {
         const ran = await runPowerShell(
             runner,
-            { script: PASSPHRASE_SCRIPT, input: { title: notice.title, message: notice.message, problem: notice.problem ?? "", seconds: dialogSeconds }, timeoutMs: PROMPT_TIMEOUT_MS },
+            { script: PASSPHRASE_SCRIPT, input: { title: notice.title, message: notice.message, problem: notice.problem ?? "", asks: notice.asks ?? "recovery-key", seconds: dialogSeconds }, timeoutMs: PROMPT_TIMEOUT_MS },
             AnswerSchema,
         );
         if (!ran.ok) {

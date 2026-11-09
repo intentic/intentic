@@ -12,6 +12,7 @@ import PasswordIndex from "./PasswordIndex.vue";
 import PasswordList from "./PasswordList.vue";
 import type { PasswordsPort, SandboxRef } from "./port.js";
 import type { PasswordsSelection } from "./selection.js";
+import RemovedView from "./RemovedView.vue";
 import RequestsView from "./RequestsView.vue";
 import SettingsView from "./SettingsView.vue";
 import { usePasswordsState } from "./state.js";
@@ -52,6 +53,20 @@ watch(query, tell);
 const filter = computed(() => filterOf(current.value));
 const onSettings = computed(() => current.value === SETTINGS && manage.value);
 const onRequests = computed(() => filter.value.kind === `requests`);
+const onRemoved = computed(() => filter.value.kind === `removed` && port.recentlyDeleted !== undefined);
+// Removing is undoable where the vault keeps Recently deleted (a keyring from 2026-11-09 on) and the port can put it back.
+const removedCount = computed(() => ready.value?.recentlyDeleted ?? 0);
+const undoable = computed(() => ready.value?.recentlyDeleted !== undefined && port.undoRemove !== undefined);
+const removedOne = (name: string, title: string): void => {
+    if (undoable.value) {
+        state.toastRemoved(name, title);
+    }
+    if (selected.value === name) {
+        selected.value = undefined;
+        detailOpen.value = false;
+        tell();
+    }
+};
 const visible = computed(() => visibleItems(items.value, filter.value, query.value));
 const counts = computed(() => indexCounts(items.value, requests.value));
 const recent = computed(() => (filter.value.kind === `fresh` || query.value !== `` ? [] : recentlySaved(items.value, now.value)));
@@ -180,6 +195,24 @@ const finishFirstRun = async (): Promise<void> => {
     await state.load();
 };
 
+/* WINDOWS HELLO, for a vault set up without it: it asks for the recovery key at every yes until Hello is on. Offered
+   in a strip until it is, or until "Not now" for this visit. */
+const helloLater = ref(false);
+const addingHello = ref(false);
+const offerHello = computed(() => manage.value && port.addHello !== undefined && ready.value?.helloAddable === true && !helloLater.value);
+const turnOnHello = async (): Promise<void> => {
+    addingHello.value = true;
+    lockError.value = undefined;
+    try {
+        await port.addHello?.();
+    } catch (failure) {
+        lockError.value = messageOr(failure, t(`app.error.act`));
+    } finally {
+        addingHello.value = false;
+        await state.load();
+    }
+};
+
 // The one-time question, for a vault set up before it was asked, or set up elsewhere.
 const askRemember = computed(() => manage.value && ready.value !== undefined && !ready.value.rememberAsked && !firstRun.value);
 const rememberAll = async (): Promise<void> => {
@@ -204,6 +237,7 @@ const compactOptions = computed(() => [
     { label: t(`app.index.terminal`), value: `terminal` },
     { label: t(`app.index.fresh`), value: `fresh`, badge: counts.value.fresh },
     { label: t(`app.index.requests`), value: `requests`, badge: counts.value.requests },
+    ...(removedCount.value > 0 ? [{ label: t(`app.index.removed`), value: `removed`, badge: removedCount.value }] : []),
 ]);
 
 const emptyText = computed(() => {
@@ -294,6 +328,12 @@ watch(item, async (found) => {
             <template #strips>
                 <Notice v-if="lockError" tone="danger" size="sm" @dismiss="lockError = undefined">{{ lockError }}</Notice>
                 <Notice v-if="state.readError.value" tone="danger" size="sm">{{ state.readError.value }}</Notice>
+                <Notice v-if="offerHello" tone="info" size="sm" @dismiss="helloLater = true">
+                    {{ t(`app.hello.strip`) }}
+                    <template #actions>
+                        <Button tier="accent" size="small" :label="t(`app.hello.turnOn`)" :loading="addingHello" @click="turnOnHello()" />
+                    </template>
+                </Notice>
                 <Notice v-if="askRemember" tone="info" size="sm">
                     {{ t(`app.remember.strip`) }}
                     <template #actions><Button tier="accent" size="small" :label="t(`app.remember.turnOn`)" @click="rememberAll()" /></template>
@@ -309,7 +349,7 @@ watch(item, async (found) => {
             </template>
 
             <template #rail>
-                <PasswordIndex :counts="counts" :sandboxes="knownSandboxes" :current="current" @pick="pick" />
+                <PasswordIndex :counts="counts" :sandboxes="knownSandboxes" :current="current" :removed="removedCount" @pick="pick" />
             </template>
 
             <template #detail>
@@ -317,9 +357,12 @@ watch(item, async (found) => {
                     v-if="onSettings && ready"
                     :port="port"
                     :unlock="ready.unlock"
+                    :hello-addable="ready.helloAddable === true"
+                    :master-password="ready.masterPassword"
                     @changed="state.load()"
                     @close="pick(`all`)"
                 />
+                <RemovedView v-else-if="onRemoved" :port="port" :now="now" :count="removedCount" @changed="state.load()" />
                 <RequestsView v-else-if="onRequests" :requests="requests" :items="items" :port="port" :now="now" @answered="state.load()" />
                 <div v-else ref="body" class="relative flex min-h-0 flex-1 gap-6">
                     <div v-if="showList" class="flex min-h-0 flex-col" :class="narrow ? `flex-1` : `w-80 shrink-0`">
@@ -333,8 +376,10 @@ watch(item, async (found) => {
                             :sandboxes="knownSandboxes"
                             :now="now"
                             :alone="narrow"
+                            :undoable="undoable"
                             @back="detailOpen = false"
                             @changed="state.load()"
+                            @removed="removedOne"
                         />
                         <p v-else class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-subtle">{{ t(`app.list.nothingSelected`) }}</p>
                     </div>

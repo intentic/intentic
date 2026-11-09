@@ -29,6 +29,7 @@ const run = async (task: () => Promise<void>): Promise<void> => {
 
 /* 1. THE ONE PERMISSION, and the recovery key it makes. */
 const recoveryKey = ref<string | undefined>(undefined);
+const helloSkipped = ref(false);
 const keySaved = ref(false);
 const sources = shallowRef<readonly SourceStatus[]>([]);
 const turnOn = (): Promise<void> =>
@@ -36,6 +37,8 @@ const turnOn = (): Promise<void> =>
         const made = await port.setUp({ hello: status?.hello ?? false });
         // No key: the vault was there already, and an empty "shown only now" key would read as a new one.
         recoveryKey.value = made.recoveryKey;
+        // Hello offered here and not enrolled: this key is what Passwords asks for until Hello is turned on in Settings.
+        helloSkipped.value = status?.hello === true && made.hello === false;
         step.value = made.recoveryKey === undefined ? `existing` : `recovery`;
     });
 
@@ -114,6 +117,7 @@ const notNow = (): Promise<void> =>
             <section v-else-if="step === `recovery`" class="flex flex-col gap-4">
                 <h2 class="text-lg font-semibold text-content">{{ t(`app.first.recoveryTitle`) }}</h2>
                 <p class="text-sm text-muted">{{ status?.hello === false ? t(`app.first.recoveryHelpNoHello`) : t(`app.first.recoveryHelp`) }}</p>
+                <Notice v-if="helloSkipped" tone="warning" size="sm">{{ t(`app.first.helloSkipped`) }}</Notice>
                 <code class="block select-all break-all rounded-xl border border-line-subtle bg-card px-4 py-4 text-center font-mono text-base tracking-wide text-content">{{ recoveryKey }}</code>
                 <div class="flex flex-wrap gap-2">
                     <CopyButton :text="recoveryKey ?? ``" :label="t(`app.detail.copy`)" />

@@ -174,8 +174,9 @@ pub fn plain_args(verb: &str) -> Vec<String> {
 }
 
 /// The Passwords app's verbs (`keyring app <op>`), each with how long it may take: one that may wait on the person at
-/// this computer (Show, Copy, a restore, a setting, an answer to an agent, an import, a source set up, a save) gets the
-/// consent limit, every other one is a read. Anything not on this list is refused before a process starts.
+/// this computer (Show, Copy, a restore, a setting, an answer to an agent, an import, a source set up, a save, putting a
+/// removed password back or deleting it for good, Windows Hello turned on, the master password) gets the consent limit,
+/// every other one is a read. Anything not on this list is refused before a process starts.
 pub const APP_OPS: &[(&str, bool)] = &[
     ("reveal", true),
     ("copy", true),
@@ -193,6 +194,12 @@ pub const APP_OPS: &[(&str, bool)] = &[
     ("import", true),
     ("sources", false),
     ("setup-source", true),
+    ("recently-deleted", false),
+    ("undo-remove", true),
+    ("purge", true),
+    ("add-hello", true),
+    ("set-master-password", true),
+    ("remove-master-password", true),
 ];
 
 /// How long `op` may run, or why it is no op at all.

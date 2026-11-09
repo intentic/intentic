@@ -114,6 +114,14 @@ export const EntryInfoSchema = z.object({
 });
 export type EntryInfo = z.infer<typeof EntryInfoSchema>;
 
+// An entry in Recently deleted (2026-11-09): what the list showed of it, and when it was removed. Never a value.
+export const RemovedInfoSchema = z.object({ entry: EntryInfoSchema, removedAt: z.number() });
+export type RemovedInfo = z.infer<typeof RemovedInfoSchema>;
+
+// The shortest master password the keyring takes: it guards the vault file as the recovery key's 150 bits do, behind
+// scrypt's half a second a guess, so it is held to the length a password manager's master password usually is.
+export const MASTER_PASSWORD_MIN = 10;
+
 export const EntryRulesSchema = z.object(entryRules);
 export type EntryRules = z.infer<typeof EntryRulesSchema>;
 export const EntryPatchSchema = EntryRulesSchema.partial().strict();
@@ -264,6 +272,22 @@ export const KeyringRequestSchema = z.discriminatedUnion("op", [
     // git's credential helper (`intentic-keyring git-credential get|erase`; its `store` is a `capture` with source `git`):
     // the value for an https remote at the person's yes, or word that the last one failed.
     z.object({ op: z.literal("git-credential"), action: z.enum(["get", "erase"]), url: z.string().url().max(500), username: z.string().max(256).optional() }).strict(),
+
+    // ---- Recently deleted, and the ways of unlocking (2026-11-09) ----
+
+    // What `remove` kept: names and rules, never values, readable while locked.
+    z.object({ op: z.literal("recently-deleted") }).strict(),
+    // Put a removed entry back as it was, its shares included. Narrowing undone, so asked only to unlock.
+    z.object({ op: z.literal("undo-remove"), name: KeyringSecretNameSchema }).strict(),
+    // Forget a removed entry for good, or every one with no `name`: the one step that cannot be undone, so it asks.
+    z.object({ op: z.literal("purge"), name: KeyringSecretNameSchema.optional() }).strict(),
+    // Wrap the vault for Windows Hello where setup could not (no helper yet, Hello skipped): asks once more by the way the
+    // vault opens now, then enrols Hello.
+    z.object({ op: z.literal("add-hello") }).strict(),
+    // Set or change the master password, sealed to the inbox key for `{ kind: "inbox", sandbox: "unlock", secret:
+    // "master-password" }` (MASTER_PASSWORD_PURPOSE); and take it away, leaving the recovery key. Both ask.
+    z.object({ op: z.literal("set-master-password"), sealed: SealedBoxSchema }).strict(),
+    z.object({ op: z.literal("remove-master-password") }).strict(),
 ]);
 export type KeyringRequest = z.infer<typeof KeyringRequestSchema>;
 export type KeyringOp = KeyringRequest["op"];
@@ -326,6 +350,12 @@ export const KEYRING_RESPONSES = {
     "phone-pair": KeyringPhonePairResultSchema,
     "phone-fill": KeyringPhoneFillResultSchema,
     "git-credential": answer(z.object({ value: z.string().optional(), username: z.string().optional() })),
+    "recently-deleted": answer(z.object({ items: z.array(RemovedInfoSchema).describe("Newest first.") })),
+    "undo-remove": done,
+    purge: answer(z.object({ purged: z.number().int().nonnegative() })),
+    "add-hello": done,
+    "set-master-password": done,
+    "remove-master-password": done,
 } as const satisfies { readonly [K in KeyringOp]: z.ZodType };
 
 export type KeyringResponse<K extends KeyringOp> = z.infer<(typeof KEYRING_RESPONSES)[K]>;

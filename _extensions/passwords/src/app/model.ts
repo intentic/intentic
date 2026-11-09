@@ -31,7 +31,8 @@ export type PasswordFilter =
     | { readonly kind: "sandbox"; readonly url: string }
     | { readonly kind: "fresh" }
     | { readonly kind: "requests" }
-    | { readonly kind: "weak" };
+    | { readonly kind: "weak" }
+    | { readonly kind: "removed" };
 
 /** The filter as the URL carries it: `all`, `site`, `fresh`, `sandbox:https://…`. */
 export const filterKey = (filter: PasswordFilter): string => {
@@ -54,7 +55,7 @@ export const filterOf = (key: string | undefined): PasswordFilter => {
     if (key.startsWith("sandbox:")) {
         return { kind: "sandbox", url: key.slice("sandbox:".length) };
     }
-    if (key === "fresh" || key === "requests" || key === "weak") {
+    if (key === "fresh" || key === "requests" || key === "weak" || key === "removed") {
         return { kind: key };
     }
     // SAFETY: CATEGORIES holds exactly the PasswordCategory values, and `has` just said `key` is one of them.
@@ -66,6 +67,9 @@ const passes = (item: PasswordItem, filter: PasswordFilter): boolean => {
         case "all":
         case "requests":
             return true;
+        // Recently deleted lists what is no longer among the passwords (RemovedView.vue).
+        case "removed":
+            return false;
         case "category":
             return item.category === filter.category;
         case "sandbox":

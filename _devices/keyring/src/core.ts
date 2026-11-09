@@ -6,12 +6,9 @@ import {
     type KeyringSandboxKeys,
     KeyringSandboxKeysSchema,
     type KeyringState,
-    type KeyringSyncItem,
-    type KeyringSyncPeer,
     type SealedBox,
 } from "@intentic/sandbox-contract/schemas/keyring";
 import { keyFingerprint, newSealKeyPair, seal, unseal } from "@intentic/sandbox-contract/keyring-seal";
-import type { z } from "zod";
 import { type Answer, type KeyringDeps, NOT_SET_UP, type Opened, type OpenRequest, type PendingParts, refuse, type ValueRead, type VaultAccess } from "./passwords/access.js";
 import { AppOps } from "./passwords/app-ops.js";
 import { Askpass } from "./askpass/answer.js";
@@ -23,6 +20,9 @@ import { Fills } from "./passwords/fills.js";
 import { type KeysFile, pinOf, samePin } from "./keys.js";
 import { Needs } from "./passwords/needs.js";
 import { Phones } from "./passwords/phone.js";
+import { RecentlyDeleted, removedInfoOf, withoutExpired } from "./passwords/removed.js";
+import { Sync } from "./passwords/sync.js";
+import { Unlocking } from "./passwords/unlocking.js";
 import {
     acceptGrant,
     applyPatch,
@@ -43,19 +43,18 @@ import type { EntryInfo, EntryRules, KeyringRequest, KeyringResponse, Refusal, S
 import type { Place, Seen } from "./typing/typist.js";
 import {
     emptyOpenPart,
+    hasMasterPassword,
     helloChallenge,
     helloWrapOf,
     newVaultKey,
     openDocument,
     type OpenPart,
     PENDING_INBOX_MAX,
-    PENDING_SYNC_MAX,
     type SandboxPin,
     SCRYPT_COST,
     sealDocument,
     type SealedCopy,
     type StoredEntry,
-    StoredEntrySchema,
     unwrapHello,
     unwrapPassphrase,
     VALUE_MAX_BYTES,
@@ -105,41 +104,23 @@ const APP_OPS = [
 ] as const;
 type AppOp = (typeof APP_OPS)[number];
 type AppRequest = RequestOf<AppOp>;
-type LocalRequest = Exclude<KeyringRequest, RelayedRequest | AppRequest>;
+// Recently deleted and the ways of unlocking (2026-11-09).
+const WAYS_OPS = ["recently-deleted", "undo-remove", "purge", "add-hello", "set-master-password", "remove-master-password"] as const;
+type WaysRequest = RequestOf<(typeof WAYS_OPS)[number]>;
+type LocalRequest = Exclude<KeyringRequest, RelayedRequest | AppRequest | WaysRequest>;
 const RELAYED = new Set<Op>(RELAYED_OPS);
 const APP = new Set<Op>(APP_OPS);
 const isRelayed = (request: KeyringRequest): request is RelayedRequest => RELAYED.has(request.op);
 const isApp = (request: KeyringRequest): request is AppRequest => APP.has(request.op);
+const WAYS = new Set<Op>(WAYS_OPS);
+const isWays = (request: KeyringRequest): request is WaysRequest => WAYS.has(request.op);
 
 const fromConsent = (answer: Extract<ConsentAnswer, { ok: false }>): Refusal => refuse(answer.code, answer.reason);
-
-interface Merged {
-    readonly doc: VaultDocument;
-    readonly accepted: number;
-}
 
 // How long a fresh unlock lasts after setup: long enough to add the first entries without asking again.
 const SETUP_UNLOCK_MINUTES = 15;
 // After a person answers a prompt, the window they were in takes a moment to get the keyboard back.
 const FOCUS_SETTLE_MS = 400;
-
-// A sync item carries one entry, without its shares: each computer shares its own entries with its own sandboxes.
-const SyncEntrySchema = StoredEntrySchema.omit({ shares: true, revision: true });
-type SyncEntry = z.infer<typeof SyncEntrySchema>;
-
-const syncEntryOf = (entry: StoredEntry): SyncEntry => {
-    const sent: SyncEntry = { name: entry.name, rules: entry.rules, source: entry.source, createdAt: entry.createdAt, updatedAt: entry.updatedAt };
-    if (entry.backend !== undefined) {
-        sent.backend = entry.backend;
-    }
-    if (entry.value !== undefined) {
-        sent.value = entry.value;
-    }
-    if (entry.deleted === true) {
-        sent.deleted = true;
-    }
-    return sent;
-};
 
 const pointerOf = (entry: EntryInfo, share: ShareInfo): KeyringPointer => ({
     name: entry.name,
@@ -177,6 +158,9 @@ export class Keyring {
     readonly #needs: Needs;
     readonly #phones: Phones;
     readonly #askpass: Askpass;
+    readonly #removed: RecentlyDeleted;
+    readonly #sync: Sync;
+    readonly #unlocking: Unlocking;
 
     constructor(private readonly deps: KeyringDeps) {
         this.#access = {
@@ -198,6 +182,9 @@ export class Keyring {
         this.#needs = new Needs(this.#access);
         this.#phones = new Phones(this.#access);
         this.#askpass = new Askpass(this.#access, this.#captures);
+        this.#removed = new RecentlyDeleted(this.#access);
+        this.#sync = new Sync(this.#access);
+        this.#unlocking = new Unlocking({ ...this.#access, rewrap: async (wraps) => await this.#rewrap(wraps) });
     }
 
     // ---- files and the vault's state ----
@@ -227,10 +214,11 @@ export class Keyring {
 
     #opener(file: VaultFile): VaultOpener {
         const withPassphrase = async (passphrase: string): Promise<Buffer | undefined> => await unwrapPassphrase(file.wraps, passphrase);
+        const master = hasMasterPassword(file.wraps);
         const hello = helloWrapOf(file.wraps);
         return hello === undefined
-            ? { withPassphrase }
-            : { withPassphrase, hello: { credential: hello.credential, challenge: hello.challenge, withSignature: (signature) => unwrapHello(hello, signature) } };
+            ? { withPassphrase, master }
+            : { withPassphrase, master, hello: { credential: hello.credential, challenge: hello.challenge, withSignature: (signature) => unwrapHello(hello, signature) } };
     }
 
     // Asks the person when `person` says to or the vault is locked, and opens the inner document with what the answer gave.
@@ -255,7 +243,7 @@ export class Keyring {
             return { doc: held.doc, key: held.key, asked: true, how: answer.how, choice: chosen };
         }
         if (answer.vaultKey === undefined) {
-            return refuse("locked", "Passwords could not be opened with that answer: unlock it with its recovery key.");
+            return refuse("locked", "Passwords could not be opened with that answer: unlock it with its master password or recovery key.");
         }
         try {
             return { doc: openDocument(answer.vaultKey, file.sealed), key: answer.vaultKey, asked: true, how: answer.how, choice: chosen };
@@ -300,7 +288,7 @@ export class Keyring {
         if (file === undefined) {
             throw new Error("committing a vault that was never set up");
         }
-        const doc = { ...opened.doc, revision: opened.doc.revision + 1 };
+        const doc = withoutExpired({ ...opened.doc, revision: opened.doc.revision + 1 }, this.deps.now());
         const entries = Object.values(doc.entries).filter((entry) => entry.deleted !== true);
         const open: OpenPart = {
             entries: entries.map(entryInfoOf),
@@ -344,6 +332,20 @@ export class Keyring {
         if (seen !== undefined && seen.length > 0) {
             open.pendingSeen = seen;
         }
+        if (doc.trash !== undefined && doc.trash.length > 0) {
+            open.trash = removedInfoOf(doc.trash);
+        }
+    }
+
+    // Writes the vault file with other wraps (passwords/unlocking.ts): a way of unlocking added or taken away.
+    async #rewrap(wraps: readonly Wrap[]): Promise<void> {
+        const file = this.#file;
+        if (file === undefined) {
+            throw new Error("rewrapping a vault that was never set up");
+        }
+        const next: VaultFile = { ...file, wraps: [...wraps] };
+        await this.deps.vault.write(next);
+        this.#file = next;
     }
 
     // Writes only the open part, for what arrives while locked.
@@ -392,6 +394,9 @@ export class Keyring {
         if (isRelayed(request)) {
             return await this.#relayed(request);
         }
+        if (isWays(request)) {
+            return await this.#ways(request);
+        }
         return isApp(request) ? await this.#app(request) : await this.#local(request);
     }
 
@@ -415,7 +420,7 @@ export class Keyring {
             case "edit":
                 return await this.#lock(async () => await this.edit(request));
             case "remove":
-                return await this.#lock(async () => await this.remove(request.name));
+                return await this.#lock(async () => await this.#removed.remove(request.name));
             case "share":
                 return await this.#lock(async () => await this.share(request));
             case "unshare":
@@ -469,6 +474,24 @@ export class Keyring {
         }
     }
 
+    // Recently deleted (passwords/removed.ts) and the ways of unlocking (passwords/unlocking.ts).
+    async #ways(request: WaysRequest): Promise<KeyringResponse<Op>> {
+        switch (request.op) {
+            case "recently-deleted":
+                return this.#removed.list();
+            case "undo-remove":
+                return await this.#lock(async () => await this.#removed.undo(request.name));
+            case "purge":
+                return await this.#lock(async () => await this.#removed.purge(request.name));
+            case "add-hello":
+                return await this.#lock(async () => await this.#unlocking.addHello());
+            case "set-master-password":
+                return await this.#lock(async () => await this.#unlocking.setMasterPassword(request.sealed));
+            case "remove-master-password":
+                return await this.#lock(async () => await this.#unlocking.removeMasterPassword());
+        }
+    }
+
     // What intentic-machine relays for a sandbox.
     async #relayed(request: RelayedRequest): Promise<KeyringResponse<Op>> {
         switch (request.op) {
@@ -483,13 +506,13 @@ export class Keyring {
             case "copies":
                 return { ok: true, copies: this.#file?.open.copies[sandboxKey(request.sandbox)] ?? [] };
             case "sync-state":
-                return await this.syncState();
+                return await this.#sync.state();
             case "sync-pair":
-                return await this.#lock(async () => await this.syncPair(request.pair));
+                return await this.#lock(async () => await this.#sync.pair(request.pair));
             case "sync-outbox":
-                return await this.#lock(async () => await this.syncOutbox());
+                return await this.#lock(async () => await this.#sync.outbox());
             case "sync-deliver":
-                return await this.#lock(async () => await this.syncDeliver(request.deliver.items));
+                return await this.#lock(async () => await this.#sync.deliver(request.deliver.items));
             case "capture":
                 return await this.#lock(async () => await this.#captures.capture(request.item, request.sandbox));
             // Not under the lock: a need may wait minutes on a person, and the vault's other ops must not wait with it.
@@ -509,7 +532,8 @@ export class Keyring {
         const keys = await this.#load();
         const held = this.#held();
         const hello = this.deps.consent.hello;
-        const helloReady = hello !== undefined && (file === undefined || helloWrapOf(file.wraps) !== undefined) && (await hello.available());
+        const helloHere = hello !== undefined && (await hello.available());
+        const helloReady = helloHere && (file === undefined || helloWrapOf(file.wraps) !== undefined);
         const state: KeyringState = {
             version: this.deps.version,
             locked: held === undefined,
@@ -519,6 +543,9 @@ export class Keyring {
         };
         if (file !== undefined) {
             state.remember = (held === undefined ? file.open.settings : held.doc.settings)?.remember ?? DEFAULT_SETTINGS.remember;
+            state.helloAddable = helloHere && helloWrapOf(file.wraps) === undefined;
+            state.masterPassword = hasMasterPassword(file.wraps);
+            state.recentlyDeleted = this.#removed.items().length;
         }
         if (this.#unlocked !== undefined && held !== undefined) {
             state.unlockedUntil = this.#unlocked.until;
@@ -598,7 +625,7 @@ export class Keyring {
                 await this.#record({ op: "inbox", outcome: "refused", code: taken.refusal.code, secret: item.name, sandbox: item.sandbox, reason: taken.refusal.refusal });
             }
         }
-        doc = this.#mergeSync(doc, file.open.pendingSync).doc;
+        doc = this.#sync.merge(doc, file.open.pendingSync).doc;
         doc = seenIn(this.#captures.takeIn(doc, captures), new Set(seen));
         await this.#commit({ doc, key: opened.key }, { pendingInbox: [], pendingSync: [], pendingCaptures: [], pendingSeen: [] });
     }
@@ -719,25 +746,6 @@ export class Keyring {
         }
         await this.#commit({ doc: withEntry(opened.doc, changed), key: opened.key });
         await this.#record({ op: "edit", outcome: "done", secret: request.name, asked: opened.asked, reason: widening.join("; ") });
-        return { ok: true };
-    }
-
-    async remove(name: string): Answer<"remove"> {
-        const file = this.#file;
-        if (file === undefined || this.#shown(name) === undefined) {
-            return refuse("unknown", `The keyring has no entry named ${name}.`);
-        }
-        const opened = await this.#open(file, { title: `Remove ${name} from the keyring?`, message: "Every sandbox it is shared with loses it, and a paired keyring removes it too.", person: true });
-        if ("ok" in opened) {
-            return opened;
-        }
-        const entry = opened.doc.entries[name];
-        if (entry === undefined) {
-            return refuse("unknown", `The keyring has no entry named ${name}.`);
-        }
-        const tombstone: StoredEntry = { name, rules: entry.rules, source: entry.source, shares: [], createdAt: entry.createdAt, updatedAt: this.deps.now(), revision: opened.doc.revision + 1, deleted: true };
-        await this.#commit({ doc: withEntry(opened.doc, tombstone), key: opened.key });
-        await this.#record({ op: "remove", outcome: "done", secret: name });
         return { ok: true };
     }
 
@@ -1064,117 +1072,6 @@ export class Keyring {
             revision: doc.revision + 1,
         };
         return { ok: true, doc: withEntry({ ...doc, pins: { ...doc.pins, [sandbox]: pin } }, entry) };
-    }
-
-    // ---- keeping two keyrings in step ----
-
-    async syncState(): Answer<"sync-state"> {
-        const keys = await this.#load();
-        const file = this.#file;
-        if (file === undefined || keys.sync === undefined) {
-            return refuse("locked", NOT_SET_UP);
-        }
-        return { ok: true, sync: { key: keys.sync, peers: file.open.peers, revision: file.open.revision } };
-    }
-
-    async syncPair(pair: RequestOf<"sync-pair">["pair"]): Answer<"sync-pair"> {
-        const file = this.#file;
-        const keys = await this.#load();
-        if (file === undefined || keys.sync === undefined) {
-            return refuse("locked", NOT_SET_UP);
-        }
-        const opened = await this.#open(file, {
-            title: `Pair with the keyring on ${pair.peer.device}?`,
-            message: `This keyring (${pair.self}) is ${keyFingerprint(keys.sync)}; the one on ${pair.peer.device} is ${keyFingerprint(pair.peer.key)}. Say yes only if ${pair.peer.device} shows these same two. Paired, each keeps the other's entries in step.`,
-            person: true,
-        });
-        if ("ok" in opened) {
-            return opened;
-        }
-        const peer: KeyringSyncPeer = { device: pair.peer.device, key: pair.peer.key, pairedAt: this.deps.now() };
-        const peers = [...opened.doc.peers.filter((other) => other.key !== peer.key && other.device !== peer.device), peer];
-        // A new peer is sent everything once: its mark starts before the first revision.
-        await this.#commit({ doc: { ...opened.doc, peers, syncSent: { ...opened.doc.syncSent, [peer.key]: -1 } }, key: opened.key });
-        await this.#record({ op: "sync-pair", outcome: "done", target: peer.device, asked: true });
-        return { ok: true };
-    }
-
-    // One peer's share of the outbox: every entry changed since it was last sent, one sealed item each.
-    #outboxFor(doc: VaultDocument, peer: KeyringSyncPeer): KeyringSyncItem[] {
-        const since = doc.syncSent?.[peer.key] ?? -1;
-        return Object.values(doc.entries)
-            .filter((entry) => entry.revision > since)
-            .map((entry) => ({
-                from: doc.sync.publicKey,
-                to: peer.key,
-                revision: entry.revision,
-                sealed: seal(peer.key, JSON.stringify(syncEntryOf(entry)), { kind: "sync", account: doc.sync.publicKey, device: peer.key, revision: entry.revision }),
-            }));
-    }
-
-    // Only while unlocked: sealing an entry needs its value, and a sync is not worth a prompt.
-    async syncOutbox(): Answer<"sync-outbox"> {
-        const held = this.#held();
-        if (held === undefined || held.doc.peers.length === 0) {
-            return { ok: true, items: [] };
-        }
-        const items = held.doc.peers.flatMap((peer) => this.#outboxFor(held.doc, peer));
-        if (items.length > 0) {
-            const syncSent = Object.fromEntries(held.doc.peers.map((peer) => [peer.key, held.doc.revision]));
-            await this.#commit({ doc: { ...held.doc, syncSent: { ...held.doc.syncSent, ...syncSent } }, key: held.key });
-        }
-        return { ok: true, items };
-    }
-
-    async syncDeliver(items: readonly KeyringSyncItem[]): Answer<"sync-deliver"> {
-        const file = this.#file;
-        const keys = await this.#load();
-        if (file === undefined || keys.sync === undefined) {
-            return { ok: true, accepted: 0 };
-        }
-        const peers = new Set(file.open.peers.map((peer) => peer.key));
-        const ours = items.filter((item) => item.to === keys.sync && peers.has(item.from));
-        const held = this.#held();
-        if (held === undefined) {
-            await this.#writeOpen({ ...file.open, pendingSync: [...file.open.pendingSync, ...ours].slice(-PENDING_SYNC_MAX) });
-            return { ok: true, accepted: ours.length };
-        }
-        const merged = this.#mergeSync(held.doc, ours);
-        if (merged.accepted > 0) {
-            await this.#commit({ doc: merged.doc, key: held.key });
-        }
-        return { ok: true, accepted: merged.accepted };
-    }
-
-    // One item opened and checked as an entry of this vault, or undefined for one that does not open or parse.
-    #syncedEntry(doc: VaultDocument, item: KeyringSyncItem): StoredEntry | undefined {
-        try {
-            const incoming = SyncEntrySchema.parse(JSON.parse(unseal(doc.sync, item.sealed, { kind: "sync", account: item.from, device: item.to, revision: item.revision })));
-            const local = doc.entries[incoming.name];
-            const shares = incoming.deleted === true ? [] : (local?.shares ?? []);
-            return StoredEntrySchema.parse({ ...incoming, shares, revision: doc.revision + 1 });
-        } catch {
-            // allow(silent-catch): an item that does not open or parse is not the paired keyring's, and is counted out
-            return undefined;
-        }
-    }
-
-    // Items merged: the newer change of an entry wins, a removal included; shares stay this computer's.
-    #mergeSync(doc: VaultDocument, items: readonly KeyringSyncItem[]): Merged {
-        const peers = new Set(doc.peers.map((peer) => peer.key));
-        const entries = { ...doc.entries };
-        let accepted = 0;
-        for (const item of items) {
-            const incoming = peers.has(item.from) && item.to === doc.sync.publicKey ? this.#syncedEntry(doc, item) : undefined;
-            if (incoming !== undefined) {
-                const local = entries[incoming.name];
-                if (local === undefined || local.updatedAt < incoming.updatedAt) {
-                    entries[incoming.name] = incoming;
-                }
-                accepted++;
-            }
-        }
-        return { doc: { ...doc, entries }, accepted };
     }
 
     // ---- this computer's own programs ----

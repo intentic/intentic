@@ -2,7 +2,7 @@ import type { KeyringGrant, KeyringGrantTarget } from "@intentic/sandbox-contrac
 import { grantNonce, type KeyringKeyPair, newSealKeyPair, newSignKeyPair, signGrant } from "@intentic/sandbox-contract/keyring-seal";
 import { noAudit, type AuditRecord } from "./audit.js";
 import { BackendReader } from "./backends.js";
-import type { ChoiceNotice, Consent, ConsentRequest, ValueAnswer, ValueNotice } from "./consent/consent.js";
+import type { ChoiceNotice, Consent, ConsentRequest, HelloDriver, ValueAnswer, ValueNotice } from "./consent/consent.js";
 import { Keyring } from "./core.js";
 import type { KeysFile } from "./keys.js";
 import type { EntryRules } from "./protocol.js";
@@ -132,7 +132,7 @@ export interface Harness {
     readonly clock: { now: number };
 }
 
-export const keyringHarness = (sandboxes: readonly FakeSandbox[], runner?: Runner): Harness => {
+export const keyringHarness = (sandboxes: readonly FakeSandbox[], runner?: Runner, hello?: HelloDriver): Harness => {
     const person = fakePerson();
     const window = fakeWindow();
     const files: Harness["files"] = { vault: undefined, keys: undefined };
@@ -156,7 +156,7 @@ export const keyringHarness = (sandboxes: readonly FakeSandbox[], runner?: Runne
                 return Promise.resolve();
             },
         },
-        consent: person.consent,
+        consent: hello === undefined ? person.consent : { ...person.consent, hello },
         typist: window.typist,
         backends: new BackendReader(runner ?? (() => Promise.reject(new Error("no password manager in this test")))),
         fetchKeys: (url) => {
@@ -186,3 +186,18 @@ export const passwordRules = (over: Partial<EntryRules> = {}): EntryRules => ({
     askpassRememberMinutes: 0,
     ...over,
 });
+
+// Windows Hello that signs every challenge with the same fixed signature, as a TPM's deterministic RSA key does.
+export const fakeHello = (signature: Buffer = Buffer.alloc(256, 7)): HelloDriver & { readonly enrolled: string[] } => {
+    const enrolled: string[] = [];
+    return {
+        enrolled,
+        available: () => Promise.resolve(true),
+        enrol: (credential) => {
+            enrolled.push(credential);
+            return Promise.resolve({ ok: true, value: { signature, publicKey: "AAAA" } });
+        },
+        sign: () => Promise.resolve({ ok: true, value: signature }),
+        verify: () => Promise.resolve({ ok: true, value: true }),
+    };
+};

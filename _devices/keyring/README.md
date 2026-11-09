@@ -61,10 +61,12 @@ In the service's own folder (`%ProgramData%\Intentic\Keyring\<SID>` on Windows, 
 Linux), readable by the service's account and an administrator only:
 
 - `vault.json`: the entries, sealed under the vault key (AES-256-GCM), and the vault key wrapped once per way of
-  unlocking: by a key scrypt derives from the recovery key; on Windows by a key derived from a Windows Hello signature
+  unlocking: by a key scrypt derives from the recovery key, and from the master password when the person set one; on
+  Windows by a key derived from a Windows Hello signature
   over a fixed challenge (KeyCredentialManager signs with an RSA key in the TPM; PKCS#1 v1.5 signatures are
   deterministic, so the same challenge gives the same key, and only a Hello gesture produces one); on Linux by the
-  service's own key (`service-key.json`). The inbox and sync private keys live inside the sealed part.
+  service's own key (`service-key.json`). The inbox and sync private keys live inside the sealed part, as does Recently
+  deleted (below).
 - `keys.json`: what the keyring needs while locked: its `seal` key pair (for values sent to it to type) and each
   sandbox's pinned keys.
 - `audit.jsonl`: one line per decision (who asked, for what, the answer), never a value.
@@ -150,7 +152,9 @@ Two processes share the work (`src/service/`):
 - The helper proves itself with a Windows Hello signature over the service's challenge, and every yes it relays is a
   Hello signature over a fresh challenge, checked by the service against the Hello key pinned at setup
   (`src/service/hello-verify.ts`), so a helper the agent started cannot say yes for the person. Unlocking is a Hello
-  tap; the recovery key opens the vault when Hello is reset.
+  tap; the recovery key opens the vault when Hello is reset. A vault set up before Hello could be enrolled (no session
+  helper yet, Hello skipped) gets it later with `add-hello`: asked once by the way the vault opens now, then enrolled
+  and pinned, since nothing was pinned before (`src/passwords/unlocking.ts`).
 - The marker `%ProgramData%\Intentic\Keyring\<SID>.hardened` says the service is installed for that user. The name is
   from hardened mode, kept so a PC set up before still reads as set up.
 
@@ -195,6 +199,27 @@ stored. The vault wraps the vault key under it exactly as it wrapped a passphras
 the field `passphrase`. Asked for in the passphrase box ("Type your recovery key"), it is read without regard to case,
 spaces or dashes, with I, L and O read as 1, 1 and 0; anything else is tried as typed, so a passphrase from before
 still opens a vault it made.
+
+### The master password
+
+The recovery key is for emergencies; typing it at every yes is not. Where Windows Hello or polkit cannot answer, the
+person may set a master password instead (`set-master-password`, at least 10 characters, sealed to the inbox key on its
+way in). It is one more scrypt wrap (`role: "master"`), kept first so it is the first one tried, and the recovery key's
+wrap is never taken away: it stays the way back for a forgotten master password. A password that reads as a recovery
+key is refused, since the box would read it as one. With a master password set, the box asks for it and says the
+recovery key works too. The session helper's box and the service can be a release apart and the door's call has no
+field for what is asked, so the service says it with the hint its message ends with (`asksOf` in
+`src/service/remote.ts`); a helper that does not know the hint shows its recovery-key box, which opens the vault with a
+master password all the same. `remove-master-password` takes it away again.
+
+## Recently deleted
+
+Removing an entry narrows where it may go, so it asks nobody while unlocked, as a narrowing edit does; what makes that
+safe is that it can be taken back (`src/passwords/removed.ts`). The entry leaves the list and every sandbox at once (a
+tombstone, which a paired keyring is told of and keeps in its own Recently deleted), and the entry as it was, value,
+history and shares included, waits in the sealed part for 30 days. `recently-deleted` lists it from the open part,
+names and rules only; `undo-remove` puts it back unasked while unlocked; `purge` forgets one, or all, for good, and is
+the one step that asks.
 
 ### Starting over
 

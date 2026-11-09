@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { serialLock } from "@intentic/base/async";
 import { z } from "zod";
-import type { ChoiceAnswer, ChoicePrompt, HelloDriver, HelloResult, PassphrasePrompt, PromptAnswer, ValueAnswer, ValuePrompt } from "../consent/consent.js";
+import type { ChoiceAnswer, ChoicePrompt, HelloDriver, HelloResult, PassphraseAsks, PassphrasePrompt, PromptAnswer, ValueAnswer, ValuePrompt } from "../consent/consent.js";
 import type { Inspected, Typed, Typist } from "../typing/typist.js";
 import type { HelperCall } from "./door.js";
 import { helloSigned } from "./hello-verify.js";
@@ -152,14 +152,29 @@ export const RECOVERY_FILE = "intentic-passwords-recovery-key.txt";
 
 // What the recovery prompt adds to the request it is shown for: the passphrase box is where the recovery key goes.
 export const RECOVERY_HINT = `Your recovery key is the one Passwords showed once, when it was set up. If you saved it, it is in ${RECOVERY_FILE}: paste it here.`;
+// The same where the person set a master password (2026-11-09), and where the asker cannot know whether they did.
+export const MASTER_HINT = "Type your master password for Passwords. Forgot it? Your recovery key works here too.";
+export const EITHER_HINT = `Type your master password for Passwords if you set one. Otherwise paste your recovery key, the one Passwords showed once when it was set up (in ${RECOVERY_FILE} if you saved it).`;
 
-// The recovery key (or a passphrase from before recovery keys), asked by the helper; the core checks it against the vault,
-// so a helper cannot make one up. What the person typed is read as a recovery key first (recovery.ts).
+const HINTS = { "recovery-key": RECOVERY_HINT, "master-password": MASTER_HINT, either: EITHER_HINT } as const satisfies Readonly<Record<PassphraseAsks, string>>;
+
+/**
+ * What a passphrase call asks for, read from the hint its message ends with. The door's call has no field for it: a
+ * helper a release behind skips a call it does not parse, so the service would wait out its deadline for nothing. A
+ * helper that does not know the hint shows its recovery-key box, into which a master password opens the vault all the
+ * same.
+ */
+export const asksOf = (message: string): PassphraseAsks => (message.endsWith(MASTER_HINT) ? "master-password" : message.endsWith(EITHER_HINT) ? "either" : "recovery-key");
+
+// The recovery key or the master password (or a passphrase from before recovery keys), asked by the helper; the core
+// checks it against the vault, so a helper cannot make one up. What the person typed is read as a recovery key first
+// (recovery.ts): a master password never reads as one, since the keyring refuses to set one that does.
 export const remotePassphrasePrompt =
     (link: HelperLink): PassphrasePrompt =>
     async (notice): Promise<PromptAnswer> => {
-        // The door's call has no field for the problem (a helper a release behind would refuse one), so it leads the message.
-        const message = [notice.problem, notice.message, RECOVERY_HINT].filter((part) => part !== undefined).join("\n\n");
+        // The door's call has no field for the problem (a helper a release behind would refuse one), so it leads the
+        // message, and what is asked for is the hint that ends it (asksOf).
+        const message = [notice.problem, notice.message, HINTS[notice.asks ?? "recovery-key"]].filter((part) => part !== undefined).join("\n\n");
         const reply = await link.call({ call: "passphrase", title: notice.title, message }, TypedPassphraseSchema, PROMPT_DEADLINE_MS);
         if (reply === undefined) {
             return { kind: "unavailable", reason: link.ready ? "the session helper did not answer" : NO_SESSION };

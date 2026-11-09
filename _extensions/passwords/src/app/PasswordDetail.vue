@@ -25,7 +25,7 @@ import PasswordValuePopover from "./PasswordValuePopover.vue";
 import type { AccessLevel, ActivityLine, PasswordItem, PasswordPatch, PasswordsPort, PasswordVersion, SandboxRef } from "./port.js";
 import { accessHelp, activitySentence, originLabel, savedLine } from "./words.js";
 
-const { item, port, sandboxes, now } = defineProps<{
+const { item, port, sandboxes, now, undoable = false } = defineProps<{
     item: PasswordItem;
     port: PasswordsPort;
     /** The sandboxes linked to this computer, offered access whether or not they have it yet. */
@@ -33,8 +33,10 @@ const { item, port, sandboxes, now } = defineProps<{
     now: number;
     /** Narrow layout: the detail stands alone, with a way back to the list. */
     alone?: boolean;
+    /** The vault keeps Recently deleted: Delete asks nothing, and the toast's Undo puts it back. */
+    undoable?: boolean;
 }>();
-const emit = defineEmits<{ back: []; changed: [] }>();
+const emit = defineEmits<{ back: []; changed: []; removed: [name: string, title: string] }>();
 
 const manage = computed(() => port.capabilities.manage);
 const error = ref<string | undefined>(undefined);
@@ -221,13 +223,22 @@ watch(
 );
 onBeforeUnmount(() => clearTimeout(hideTimer));
 
+// Undoable where the vault keeps Recently deleted, so it goes at once; final otherwise, so it is confirmed first.
 const confirmDelete = ref(false);
 const remove = (): Promise<void> =>
     act(`remove`, async () => {
         await port.remove(item.name);
         confirmDelete.value = false;
+        emit(`removed`, item.name, item.title);
         emit(`changed`);
     });
+const askDelete = (): void => {
+    if (undoable) {
+        void remove();
+    } else {
+        confirmDelete.value = true;
+    }
+};
 
 const healthLine = computed(() => {
     const health = item.health;
@@ -428,8 +439,8 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
         </Section>
 
         <div v-if="manage" class="pt-2">
-            <button type="button" :class="ui.textButton({ tone: `danger` })" @click="confirmDelete = true">
-                <Icon name="trash" />{{ t(`app.detail.delete`) }}
+            <button type="button" :class="ui.textButton({ tone: `danger` })" :disabled="waiting !== undefined" @click="askDelete()">
+                <Icon :name="waiting === `remove` ? `spinner` : `trash`" :spin="waiting === `remove`" />{{ t(`app.detail.delete`) }}
             </button>
         </div>
 

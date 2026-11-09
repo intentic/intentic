@@ -4,7 +4,7 @@ import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { keyringPaths } from "../address.js";
-import { type PassphraseNotice, WRONG_RECOVERY_KEY } from "../consent/consent.js";
+import { type PassphraseNotice, WRONG_PROOF } from "../consent/consent.js";
 import { KEYRING_RESPONSES } from "../protocol.js";
 import { keyringHarness } from "../testing.js";
 import { noTypist } from "../typing/typist.js";
@@ -211,7 +211,7 @@ test("a recovery key that did not open the vault is asked for again at once, say
     try {
         await eventually(() => helper.gate.proven);
         expect(service.link.ready).toBe(true);
-        expect(at.notices.map((notice) => notice.problem)).toEqual([undefined, WRONG_RECOVERY_KEY]);
+        expect(at.notices.map((notice) => notice.problem)).toEqual([undefined, WRONG_PROOF]);
     } finally {
         service.close();
         await helper.stop();
@@ -226,7 +226,7 @@ test("after three keys that did not open it, the box waits for the next need, an
     const helper = proving(doorFile, at.hands, lines);
     try {
         await eventually(() => lines.includes("not asking again until something needs a person here"));
-        expect(at.notices.map((notice) => notice.problem)).toEqual([undefined, WRONG_RECOVERY_KEY, WRONG_RECOVERY_KEY]);
+        expect(at.notices.map((notice) => notice.problem)).toEqual([undefined, WRONG_PROOF, WRONG_PROOF]);
         helper.gate.want();
         await eventually(() => helper.gate.proven);
         expect(at.notices.at(-1)?.problem).toBeUndefined();
@@ -286,6 +286,6 @@ test("a restarted service that wants a person is passed over without a box, unti
 
 test("the helper's recovery-key box says what went wrong with the last key", async () => {
     const at = person([RECOVERY]);
-    await proofFor({ method: "passphrase" }, at.hands, { problem: WRONG_RECOVERY_KEY });
-    expect(at.notices[0]).toMatchObject({ problem: WRONG_RECOVERY_KEY });
+    await proofFor({ method: "passphrase" }, at.hands, { problem: WRONG_PROOF });
+    expect(at.notices[0]).toMatchObject({ problem: WRONG_PROOF });
 });

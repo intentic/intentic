@@ -52,7 +52,8 @@
             "attention": "Atención",
             "fresh": "Recién guardada",
             "requests": "Solicitudes",
-            "weak": "Débiles o reutilizadas"
+            "weak": "Débiles o reutilizadas",
+            "removed": "Eliminadas recientemente"
         },
         "source": {
             "browser": "guardada desde {via}",
@@ -138,7 +139,11 @@
             "reveal": "Mostrada",
             "copy": "Copiada",
             "forAgent": "{what} para el agente de {sandbox}",
-            "refused": "{what} · rechazada"
+            "refused": "{what} · rechazada",
+            "undo-remove": "Recuperada de Eliminadas recientemente",
+            "purge": "Eliminada para siempre",
+            "add-hello": "Windows Hello activado",
+            "master-password": "Contraseña maestra cambiada"
         },
         "edit": {
             "title": "Título",
@@ -205,17 +210,31 @@
             "unlock": "Desbloquear y bloquear",
             "hello": "Para desbloquear pide Windows Hello: tu cara, huella o PIN.",
             "polkit": "Para desbloquear pide la contraseña de tu ordenador.",
-            "passphrase": "Para desbloquear pide tu clave de recuperación.",
+            "passphrase": "Para desbloquear se pide tu clave de recuperación. Define una contraseña maestra para escribir esa en su lugar.",
             "autoLock": "Bloquear tras",
             "minutes": "{count} minuto | {count} minutos",
             "hours": "{count} hora | {count} horas",
             "lockOnSleep": "Bloquear cuando este ordenador se suspenda",
             "recovery": "Clave de recuperación",
-            "recoveryHelp": "La clave de recuperación abre tus contraseñas si se restablece Windows Hello o se sustituye este ordenador. Se mostró una vez, cuando activaste Contraseñas.",
+            "recoveryHelp": "Guárdala para emergencias: abre tus contraseñas si olvidas tu contraseña maestra, se restablece Windows Hello o cambias de ordenador. Se mostró una vez, al activar Contraseñas.",
             "neverSave": "Nunca guardar para",
             "neverSaveEmpty": "Nada. “Nunca en este sitio” en un aviso añade un sitio aquí.",
             "import": "Importar",
-            "importHelp": "Un archivo CSV exportado de Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden o KeePassXC."
+            "importHelp": "Un archivo CSV exportado de Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden o KeePassXC.",
+            "master": "Para desbloquear se pide tu contraseña maestra. Tu clave de recuperación también sirve.",
+            "helloOff": "Windows Hello está desactivado para Contraseñas",
+            "helloOffHelp": "Se configuró sin él, así que Contraseñas pide tu clave de recuperación.",
+            "masterTitle": "Contraseña maestra",
+            "masterOn": "Se pide cuando Windows Hello o la comprobación de tu ordenador no pueden responder.",
+            "masterOff": "Sin definir. Sin ella, Contraseñas pide tu clave de recuperación cuando Windows Hello o la comprobación de tu ordenador no pueden responder.",
+            "masterSet": "Definir",
+            "masterChange": "Cambiar",
+            "masterRemove": "Quitar",
+            "masterNew": "Nueva contraseña maestra",
+            "masterAgain": "Escríbela de nuevo",
+            "masterHelp": "Al menos {count} caracteres. Contraseñas te pedirá antes que lo confirmes en este ordenador.",
+            "masterShort": "Al menos {count} caracteres.",
+            "masterMismatch": "No coinciden."
         },
         "import": {
             "pick": "Elegir un archivo",
@@ -253,7 +272,8 @@
             "settingSource": "Configurando {source}…",
             "importTitle": "Trae tus contraseñas",
             "importHelp": "Importa una exportación CSV de tu navegador o gestor de contraseñas, o sáltalo y se irán guardando al iniciar sesión.",
-            "finish": "Hecho"
+            "finish": "Hecho",
+            "helloSkipped": "Windows Hello no se configuró, así que Contraseñas te pedirá esta clave hasta que actives Hello en Ajustes."
         },
         "unavailable": {
             "title": "Contraseñas no está disponible",
@@ -271,7 +291,24 @@
             "undo": "Deshacer",
             "view": "Ver",
             "undone": "Deshecho.",
-            "dismiss": "Descartar"
+            "dismiss": "Descartar",
+            "removed": "{title} se ha movido a Eliminadas recientemente"
+        },
+        "hello": {
+            "strip": "Windows Hello no está activado para Contraseñas, así que te pide la clave de recuperación. Actívalo para confirmar con tu cara, tu huella o tu PIN.",
+            "turnOn": "Activar Windows Hello"
+        },
+        "removed": {
+            "title": "Eliminadas recientemente",
+            "help": "Las contraseñas eliminadas se quedan aquí 30 días. Si recuperas una, vuelve tal como estaba, con los agentes que podían usarla.",
+            "empty": "Vaciar",
+            "none": "No se ha eliminado nada en los últimos 30 días.",
+            "when": "eliminada {when}",
+            "putBack": "Recuperar",
+            "deleteForGood": "Eliminar para siempre",
+            "emptyAsk": "¿Vaciar Eliminadas recientemente?",
+            "deleteAsk": "¿Eliminar {title} para siempre?",
+            "cannotUndo": "No se puede deshacer. Contraseñas te pedirá que lo confirmes en este ordenador."
         }
     }
 }

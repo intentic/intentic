@@ -33,7 +33,26 @@ export const savedLine = (item: PasswordItem, now: number): string => {
 };
 
 // The ops the catalog has a sentence for (`app.activity.<op>`); any other is named as the keyring wrote it.
-const ACTIVITY_OPS: ReadonlySet<string> = new Set([`type`, `release`, `askpass`, `capture`, `fill`, `need`, `add`, `edit`, `remove`, `share`, `unshare`, `restore`, `reveal`, `copy`]);
+const ACTIVITY_OPS: ReadonlySet<string> = new Set([
+    `type`,
+    `release`,
+    `askpass`,
+    `capture`,
+    `fill`,
+    `need`,
+    `add`,
+    `edit`,
+    `remove`,
+    `share`,
+    `unshare`,
+    `restore`,
+    `reveal`,
+    `copy`,
+    `undo-remove`,
+    `purge`,
+    `add-hello`,
+    `master-password`,
+]);
 
 const REFUSED: ReadonlySet<string> = new Set([`refused`, `declined`, `denied`, `failed`]);
 

@@ -1,4 +1,4 @@
-<!-- Passwords' settings on this computer: where passwords are remembered from, how it unlocks and locks, the recovery key, places never saved for, and import. -->
+<!-- Passwords' settings on this computer: where passwords are remembered from, how it unlocks and locks (Windows Hello, the master password), the recovery key, places never saved for, and import. -->
 <script setup lang="ts">
 import { Button, Icon, messageOr, Notice, Section, ToggleSwitch, ui } from "@intentic/extension-ui";
 import type { KeyringOrigin } from "@intentic/sandbox-contract/schemas/keyring";
@@ -9,7 +9,19 @@ import ImportPanel from "./ImportPanel.vue";
 import type { PasswordsPort, PasswordsSettings, PasswordsSettingsPatch, RememberSource, SourceStatus, UnlockWay } from "./port.js";
 import { originLabel } from "./words.js";
 
-const { port, unlock } = defineProps<{ port: PasswordsPort; unlock: readonly UnlockWay[] }>();
+const {
+    port,
+    unlock,
+    helloAddable = false,
+    masterPassword,
+} = defineProps<{
+    port: PasswordsPort;
+    unlock: readonly UnlockWay[];
+    /** Windows Hello signs here and the vault was set up without it. */
+    helloAddable?: boolean;
+    /** Whether a master password is set; undefined where the keyring cannot keep one. */
+    masterPassword?: boolean | undefined;
+}>();
 const emit = defineEmits<{ changed: []; close: [] }>();
 
 const settings = shallowRef<PasswordsSettings | undefined>(undefined);
@@ -82,9 +94,43 @@ const onLockMinutes = (event: Event): void => {
     }
 };
 
-const unlockNote = computed(() =>
-    unlock.includes(`hello`) ? t(`app.settings.hello`) : unlock.includes(`polkit`) ? t(`app.settings.polkit`) : t(`app.settings.passphrase`),
-);
+const unlockNote = computed(() => {
+    if (unlock.includes(`hello`)) {
+        return t(`app.settings.hello`);
+    }
+    if (unlock.includes(`polkit`)) {
+        return t(`app.settings.polkit`);
+    }
+    return masterPassword === true ? t(`app.settings.master`) : t(`app.settings.passphrase`);
+});
+
+/* WINDOWS HELLO, turned on for a vault set up without it. */
+const addHello = (): Promise<void> => act(`hello`, async () => await port.addHello?.());
+
+/* THE MASTER PASSWORD: typed twice in a small form of its own, sent once, never kept on the page after. */
+const MASTER_MIN = 10;
+const canMaster = computed(() => masterPassword !== undefined && port.setMasterPassword !== undefined);
+const masterOpen = ref(false);
+const masterDraft = ref(``);
+const masterAgain = ref(``);
+const masterProblem = computed(() => {
+    if (masterDraft.value.length > 0 && [...masterDraft.value].length < MASTER_MIN) {
+        return t(`app.settings.masterShort`, { count: MASTER_MIN });
+    }
+    return masterAgain.value.length > 0 && masterAgain.value !== masterDraft.value ? t(`app.settings.masterMismatch`) : undefined;
+});
+const masterReady = computed(() => [...masterDraft.value].length >= MASTER_MIN && masterAgain.value === masterDraft.value);
+const closeMaster = (): void => {
+    masterOpen.value = false;
+    masterDraft.value = ``;
+    masterAgain.value = ``;
+};
+const saveMaster = (): Promise<void> =>
+    act(`master`, async () => {
+        await port.setMasterPassword?.(masterDraft.value);
+        closeMaster();
+    });
+const removeMaster = (): Promise<void> => act(`master`, async () => await port.removeMasterPassword?.());
 
 const forget = (origin: KeyringOrigin): Promise<void> =>
     update(`never:${originKey(origin)}`, { neverSave: (settings.value?.neverSave ?? []).filter((known) => originKey(known) !== originKey(origin)) });
@@ -137,6 +183,62 @@ const forget = (origin: KeyringOrigin): Promise<void> =>
             <div class="flex flex-col gap-3">
                 <p class="text-xs text-muted">{{ unlockNote }}</p>
                 <div class="flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
+                    <div v-if="helloAddable && port.addHello" class="flex items-center gap-3 px-4 py-3">
+                        <div class="flex min-w-0 flex-1 flex-col">
+                            <span class="text-sm text-content">{{ t(`app.settings.helloOff`) }}</span>
+                            <span class="text-2xs text-subtle">{{ t(`app.settings.helloOffHelp`) }}</span>
+                        </div>
+                        <Button tier="accent" size="small" :label="t(`app.hello.turnOn`)" :loading="waiting === `hello`" :disabled="waiting !== undefined" @click="addHello()" />
+                    </div>
+                    <div v-if="canMaster" class="flex flex-col gap-3 px-4 py-3">
+                        <div class="flex items-center gap-3">
+                            <div class="flex min-w-0 flex-1 flex-col">
+                                <span class="text-sm text-content">{{ t(`app.settings.masterTitle`) }}</span>
+                                <span class="text-2xs text-subtle">{{ masterPassword ? t(`app.settings.masterOn`) : t(`app.settings.masterOff`) }}</span>
+                            </div>
+                            <template v-if="!masterOpen">
+                                <button
+                                    v-if="masterPassword && port.removeMasterPassword"
+                                    type="button"
+                                    :class="ui.textButton({ size: `xs`, tone: `quiet` })"
+                                    :disabled="waiting !== undefined"
+                                    @click="removeMaster()"
+                                >
+                                    {{ t(`app.settings.masterRemove`) }}
+                                </button>
+                                <Button
+                                    tier="boring"
+                                    size="small"
+                                    :label="masterPassword ? t(`app.settings.masterChange`) : t(`app.settings.masterSet`)"
+                                    :disabled="waiting !== undefined"
+                                    @click="masterOpen = true"
+                                />
+                            </template>
+                        </div>
+                        <form v-if="masterOpen" class="flex max-w-sm flex-col gap-2" @submit.prevent="masterReady && saveMaster()">
+                            <input
+                                v-model="masterDraft"
+                                type="password"
+                                autocomplete="new-password"
+                                :class="ui.input({ size: `sm` })"
+                                :placeholder="t(`app.settings.masterNew`)"
+                                :aria-label="t(`app.settings.masterNew`)"
+                            />
+                            <input
+                                v-model="masterAgain"
+                                type="password"
+                                autocomplete="new-password"
+                                :class="ui.input({ size: `sm` })"
+                                :placeholder="t(`app.settings.masterAgain`)"
+                                :aria-label="t(`app.settings.masterAgain`)"
+                            />
+                            <p class="text-2xs" :class="masterProblem ? `text-danger` : `text-subtle`">{{ masterProblem ?? t(`app.settings.masterHelp`, { count: MASTER_MIN }) }}</p>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" :class="ui.textButton({ size: `xs`, tone: `quiet` })" @click="closeMaster()">{{ t(`app.cancel`) }}</button>
+                                <Button type="submit" tier="accent" size="small" :label="t(`app.save`)" :loading="waiting === `master`" :disabled="!masterReady || waiting !== undefined" />
+                            </div>
+                        </form>
+                    </div>
                     <label class="flex items-center gap-3 px-4 py-3">
                         <span class="flex-1 text-sm text-content">{{ t(`app.settings.autoLock`) }}</span>
                         <select :class="ui.input({ size: `sm` }, `w-auto`)" :value="settings.autoLockMinutes" :disabled="waiting !== undefined" @change="onLockMinutes">

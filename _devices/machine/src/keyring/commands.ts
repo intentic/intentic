@@ -317,7 +317,7 @@ const edit = buildCommand<EditFlags, [string]>({
 });
 
 const remove = buildCommand<JsonFlags, [string]>({
-    docs: { brief: "Remove an entry, and with it every share of it" },
+    docs: { brief: "Remove an entry, and with it every share of it: kept in Recently deleted for 30 days (`keyring app undo-remove`)" },
     parameters: { positional: { kind: "tuple", parameters: [NAME] }, flags: { json } },
     async func(this: CommandContext, flags: JsonFlags, name: string) {
         await keyringAnswer(

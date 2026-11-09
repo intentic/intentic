@@ -19,19 +19,25 @@ export const newRecoveryKey = (random: (size: number) => Buffer = randomBytes): 
     return grouped(Array.from(bytes, (byte) => CROCKFORD[byte & 31] ?? "0").join(""));
 };
 
+// The 30 characters `typed` reads as, or undefined when it is not a recovery key's.
+const bareKey = (typed: string): string | undefined => {
+    const bare = typed
+        .toUpperCase()
+        .replace(/[\s-]/gu, "")
+        .replace(/[IL]/gu, "1")
+        .replace(/O/gu, "0");
+    return bare.length !== LENGTH || [...bare].some((character) => !CROCKFORD.includes(character)) ? undefined : bare;
+};
+
 /**
  * What a person typed, as the recovery key it was meant to be: case, spaces and dashes ignored, and the letters Crockford
  * reads as digits (I and L as 1, O as 0) read so. Anything else, a passphrase from before recovery keys among them, is
  * given back exactly as typed, so the vault still opens with it.
  */
 export const asRecoveryKey = (typed: string): string => {
-    const bare = typed
-        .toUpperCase()
-        .replace(/[\s-]/gu, "")
-        .replace(/[IL]/gu, "1")
-        .replace(/O/gu, "0");
-    if (bare.length !== LENGTH || [...bare].some((character) => !CROCKFORD.includes(character))) {
-        return typed;
-    }
-    return grouped(bare);
+    const bare = bareKey(typed);
+    return bare === undefined ? typed : grouped(bare);
 };
+
+/** Whether what a person typed reads as a recovery key: what a master password may never be (passwords/unlocking.ts). */
+export const looksLikeRecoveryKey = (typed: string): boolean => bareKey(typed) !== undefined;

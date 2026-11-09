@@ -16,13 +16,14 @@ import {
     SealedBoxSchema,
 } from "@intentic/sandbox-contract/schemas/keyring";
 import { z } from "zod";
-import { BackendConfigSchema, BackendRefSchema, CapturedInfoSchema, EntryInfoSchema, EntryRulesSchema, KeyringSettingsSchema, ShareInfoSchema } from "./protocol.js";
+import { BackendConfigSchema, BackendRefSchema, CapturedInfoSchema, EntryInfoSchema, EntryRulesSchema, KeyringSettingsSchema, RemovedInfoSchema, ShareInfoSchema } from "./protocol.js";
 
 // THE VAULT FILE, `vault.json`. One random 32-byte vault key seals the inner document (every entry with its value, the
 // inbox and sync private keys, the sandboxes' keys as they were pinned, the paired keyrings, the password managers'
 // settings) under AES-256-GCM. The key itself is stored only wrapped, once per way of unlocking: under a key scrypt
-// derives from the passphrase; under one HKDF derives from a Windows Hello signature over a fixed challenge (Hello signs
-// with an RSA key held by the TPM, PKCS#1 v1.5, which is deterministic: the same challenge always gives the same
+// derives from the recovery key (or a passphrase from before recovery keys), and from the person's master password when
+// they set one (`role: "master"`); under one HKDF derives from a Windows Hello signature over a fixed challenge (Hello
+// signs with an RSA key held by the TPM, PKCS#1 v1.5, which is deterministic: the same challenge always gives the same
 // signature, and only a Hello gesture produces one); and in hardened mode under DPAPI for the service's own account.
 //
 // Beside the sealed part sits an OPEN part, readable while locked: a copy of what the inner document says about names and
@@ -60,6 +61,9 @@ const PassphraseWrapSchema = BoxSchema.extend({
     N: z.number().int().min(2 ** 10).max(2 ** 20),
     r: z.number().int().min(1).max(32),
     p: z.number().int().min(1).max(16),
+    // The person's master password (2026-11-09). Absent: the recovery key, a passphrase from before recovery keys, or
+    // the Linux service's own secret (service-key.ts).
+    role: z.literal("master").optional(),
 }).strict();
 const HelloWrapSchema = BoxSchema.extend({
     method: z.literal("hello"),
@@ -130,6 +134,13 @@ export const UNDO_MAX = 50;
 export const PhonePinSchema = z.object({ keys: KeyringPhoneKeysSchema, sandbox: z.string(), pairedAt: z.number() }).strict();
 export type PhonePin = z.infer<typeof PhonePinSchema>;
 
+// A removed entry as it was, value and history included, kept TRASH_KEEP_MS so Recently deleted can put it back
+// (passwords/removed.ts). Its tombstone stays in `entries`, which is what a paired keyring is told.
+export const TrashedEntrySchema = z.object({ entry: StoredEntrySchema, removedAt: z.number() }).strict();
+export type TrashedEntry = z.infer<typeof TrashedEntrySchema>;
+export const TRASH_MAX = 500;
+export const TRASH_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+
 export const VaultDocumentSchema = z
     .object({
         v: z.literal(1),
@@ -147,6 +158,8 @@ export const VaultDocumentSchema = z
         settings: KeyringSettingsSchema.optional(),
         undo: z.array(UndoRecordSchema).max(UNDO_MAX).optional(),
         phones: z.record(z.string(), PhonePinSchema).optional(),
+        // Recently deleted (2026-11-09), absent from an older vault.
+        trash: z.array(TrashedEntrySchema).max(TRASH_MAX).optional(),
     })
     .strict();
 export type VaultDocument = z.infer<typeof VaultDocumentSchema>;
@@ -185,6 +198,8 @@ export const OpenPartSchema = z
         pendingNeeds: z.array(KeyringPendingNeedSchema).max(PENDING_NEEDS_MAX).optional(),
         pendingSeen: z.array(KeyringSecretNameSchema).max(5000).optional(),
         phones: z.array(z.object({ device: z.string(), label: z.string(), pairedAt: z.number() }).strict()).optional(),
+        // Recently deleted as names and rules (2026-11-09), so the app lists it while locked. Never a value.
+        trash: z.array(RemovedInfoSchema).max(TRASH_MAX).optional(),
     })
     .strict();
 export type OpenPart = z.infer<typeof OpenPartSchema>;
@@ -251,17 +266,22 @@ const deriveFromPassphrase = async (passphrase: string, salt: Buffer, cost: Scry
         );
     });
 
-export const wrapWithPassphrase = async (vaultKey: Buffer, passphrase: string, cost: ScryptCost = SCRYPT_COST): Promise<Wrap> => {
+export const wrapWithPassphrase = async (vaultKey: Buffer, passphrase: string, cost: ScryptCost = SCRYPT_COST, role?: "master"): Promise<Wrap> => {
     const salt = randomBytes(16);
     const wrapKey = await deriveFromPassphrase(passphrase, salt, cost);
-    return { method: "passphrase", salt: salt.toString("base64url"), N: cost.N, r: cost.r, p: cost.p, ...sealBox(wrapKey, vaultKey, wrapAad("passphrase")) };
+    const wrap: Wrap = { method: "passphrase", salt: salt.toString("base64url"), N: cost.N, r: cost.r, p: cost.p, ...sealBox(wrapKey, vaultKey, wrapAad("passphrase")) };
+    return role === undefined ? wrap : { ...wrap, role };
 };
+
+/** Whether the person has set a master password: a passphrase wrap of its own beside the recovery key's. */
+export const hasMasterPassword = (wraps: readonly Wrap[]): boolean => wraps.some((wrap) => wrap.method === "passphrase" && wrap.role === "master");
 
 // The vault key, or undefined when `passphrase` is not the one it was wrapped with.
 export const unwrapPassphrase = async (wraps: readonly Wrap[], passphrase: string): Promise<Buffer | undefined> => {
     for (const wrap of wraps) {
         if (wrap.method === "passphrase") {
-            // One wrap per method in practice; tried in order should a rewrap ever leave two.
+            // In the order the file keeps them: a master password's wrap goes first (passwords/unlocking.ts), so the
+            // answer typed most often costs one scrypt, and the recovery key the second.
             const wrapKey = await deriveFromPassphrase(passphrase, Buffer.from(wrap.salt, "base64url"), wrap);
             const key = openBox(wrapKey, wrap, wrapAad("passphrase"));
             if (key !== undefined) {

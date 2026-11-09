@@ -1,8 +1,8 @@
-import type { KeyringOp, KeyringResponse } from "./protocol.js";
+import type { KeyringOp, KeyringResponse, RemovedInfo } from "./protocol.js";
 import { unseal } from "@intentic/sandbox-contract/keyring-seal";
 import { sealForKeyring } from "./seal.js";
 import { fakeSandbox, type Harness, keyringHarness, passwordRules } from "./testing.js";
-import type { KeyringShareMode } from "@intentic/sandbox-contract/schemas/keyring";
+import type { KeyringShareMode, KeyringSyncItem } from "@intentic/sandbox-contract/schemas/keyring";
 
 const SECRET = "fortinet-password-123";
 
@@ -22,6 +22,15 @@ const withSharedEntry = async (h: Harness, sandboxUrl: string, mode: KeyringShar
     expect(await h.keyring.handle({ op: "share", name: "VPN_FORTI", sandbox: sandboxUrl, machine: "rog", mode })).toMatchObject({ ok: true });
     await h.keyring.handle({ op: "lock" });
     h.person.asked.length = 0;
+};
+
+// The outbox's items: `sync-outbox` is not the only answer with `items` (`recently-deleted` has them too).
+const syncItems = (answer: KeyringResponse<KeyringOp>): KeyringSyncItem[] => {
+    if (!answer.ok || !("items" in answer)) {
+        throw new Error("no outbox");
+    }
+    const items: readonly (KeyringSyncItem | RemovedInfo)[] = answer.items;
+    return items.filter((item): item is KeyringSyncItem => "sealed" in item);
 };
 
 const sealedOf = (answer: KeyringResponse<KeyringOp>): Parameters<typeof unseal>[1] => {
@@ -305,21 +314,17 @@ describe("sync", () => {
         await a.keyring.handle({ op: "sync-pair", pair: { peer: { device: "omen", key: bState.sync.key }, self: "rog" } });
         await b.keyring.handle({ op: "sync-pair", pair: { peer: { device: "rog", key: aState.sync.key }, self: "omen" } });
         await a.keyring.handle({ op: "add", name: "SHARED", sealed: sealForKeyring(await inboxKey(a), "SHARED", "synced-value-1"), rules: passwordRules(), replace: false });
-        const outbox = await a.keyring.handle({ op: "sync-outbox" });
-        if (!outbox.ok || !("items" in outbox)) {
-            throw new Error("no outbox");
-        }
-        expect(JSON.stringify(outbox.items)).not.toContain("synced-value-1");
-        expect(await b.keyring.handle({ op: "sync-deliver", deliver: { items: outbox.items } })).toMatchObject({ ok: true, accepted: outbox.items.length });
+        const outbox = syncItems(await a.keyring.handle({ op: "sync-outbox" }));
+        expect(JSON.stringify(outbox)).not.toContain("synced-value-1");
+        expect(await b.keyring.handle({ op: "sync-deliver", deliver: { items: outbox } })).toMatchObject({ ok: true, accepted: outbox.length });
         expect(b.keyring.list()).toMatchObject({ ok: true, entries: [{ name: "SHARED" }] });
         a.clock.now += 1000;
         await a.keyring.handle({ op: "remove", name: "SHARED" });
-        const second = await a.keyring.handle({ op: "sync-outbox" });
-        if (!second.ok || !("items" in second)) {
-            throw new Error("no outbox");
-        }
-        await b.keyring.handle({ op: "sync-deliver", deliver: { items: second.items } });
+        const second = syncItems(await a.keyring.handle({ op: "sync-outbox" }));
+        await b.keyring.handle({ op: "sync-deliver", deliver: { items: second } });
         expect(b.keyring.list()).toMatchObject({ ok: true, entries: [] });
+        // Removed on the other computer, it is kept in this one's Recently deleted too.
+        expect(await b.keyring.handle({ op: "recently-deleted" })).toMatchObject({ ok: true, items: [{ entry: { name: "SHARED" } }] });
     });
 
     test("items from a keyring that is not paired are counted out", async () => {
@@ -333,11 +338,8 @@ describe("sync", () => {
         }
         await stranger.keyring.handle({ op: "sync-pair", pair: { peer: { device: "rog", key: aState.sync.key }, self: "evil" } });
         await stranger.keyring.handle({ op: "add", name: "PLANTED", sealed: sealForKeyring(await inboxKey(stranger), "PLANTED", "planted-value"), rules: passwordRules(), replace: false });
-        const outbox = await stranger.keyring.handle({ op: "sync-outbox" });
-        if (!outbox.ok || !("items" in outbox)) {
-            throw new Error("no outbox");
-        }
-        expect(await a.keyring.handle({ op: "sync-deliver", deliver: { items: outbox.items } })).toEqual({ ok: true, accepted: 0 });
+        const outbox = syncItems(await stranger.keyring.handle({ op: "sync-outbox" }));
+        expect(await a.keyring.handle({ op: "sync-deliver", deliver: { items: outbox } })).toEqual({ ok: true, accepted: 0 });
     });
 });
 

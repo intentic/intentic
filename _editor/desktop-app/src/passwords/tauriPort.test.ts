@@ -41,6 +41,10 @@ describe(`vaultOf`, () => {
             state: { version: `1`, locked: true, unlock: [`hello`], keys: KEYS, pendingInbox: 0, pendingCaptures: 2 },
         };
         expect(vaultOf(ready, `rog`, false)).toMatchObject({ kind: `ready`, locked: true, pendingCaptures: 2, rememberAsked: false, computer: `rog` });
+        // A keyring from before Recently deleted and master passwords says nothing of them, so the app offers neither.
+        expect(vaultOf(ready, `rog`, false)).toMatchObject({ helloAddable: false, masterPassword: undefined, recentlyDeleted: undefined });
+        const later: KeyringStatus = { ...ready, state: { version: `1`, locked: true, unlock: [`passphrase`], keys: KEYS, pendingInbox: 0, helloAddable: true, masterPassword: false, recentlyDeleted: 3 } };
+        expect(vaultOf(later, `rog`, false)).toMatchObject({ helloAddable: true, masterPassword: false, recentlyDeleted: 3 });
     });
 
     // Its service installed and the helper in front of it silent: never "turn on", which would read as starting over.

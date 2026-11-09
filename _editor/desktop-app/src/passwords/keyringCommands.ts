@@ -138,6 +138,13 @@ export interface KeyringAppOps {
     };
     readonly sources: { readonly in: Record<string, never>; readonly out: { sources: readonly KeyringSourceStatus[] } };
     readonly "setup-source": { readonly in: { source: keyof KeyringRemember }; readonly out: object };
+    // Recently deleted and the ways of unlocking (2026-11-09): absent from an older keyring, which the app then does not offer.
+    readonly "recently-deleted": { readonly in: Record<string, never>; readonly out: { items: readonly { entry: KeyringEntry; removedAt: number }[] } };
+    readonly "undo-remove": { readonly in: { name: string }; readonly out: object };
+    readonly purge: { readonly in: { name?: string }; readonly out: { purged: number } };
+    readonly "add-hello": { readonly in: Record<string, never>; readonly out: object };
+    readonly "set-master-password": { readonly in: { password: string }; readonly out: object };
+    readonly "remove-master-password": { readonly in: Record<string, never>; readonly out: object };
 }
 export type KeyringAppOp = keyof KeyringAppOps;
 /** The keyring said no, in its own words; `code` says which no (`locked`, `declined`, `agent-too-old`, …). */

@@ -4,7 +4,7 @@ import { sleep } from "@intentic/base/async";
 import { z } from "zod";
 import { claimPidFile } from "@intentic/local-agent";
 import { keyringPaths } from "../address.js";
-import { type ChoicePrompt, type HelloDriver, type PassphrasePrompt, type ValuePrompt, WRONG_RECOVERY_KEY } from "../consent/consent.js";
+import { type ChoicePrompt, type HelloDriver, type PassphrasePrompt, type ValuePrompt, WRONG_PROOF } from "../consent/consent.js";
 import { KEYRING_RESPONSES, type KeyringOp, type KeyringRequest, type KeyringResponse } from "../protocol.js";
 import { realRunner, type Runner } from "../run.js";
 import { serveKeyring } from "../server.js";
@@ -15,7 +15,7 @@ import { type Challenge, ChallengeSchema, type DoorFile, DoorFileSchema, type He
 import { LineSocket } from "./lines.js";
 import { asRecoveryKey } from "./recovery.js";
 import { neededPerson, ProofGate, proofAsked } from "./proof-gate.js";
-import { RECOVERY_HINT } from "./remote.js";
+import { asksOf, EITHER_HINT } from "./remote.js";
 
 // `intentic-keyring session`: the protected keyring's hands in this user's session, started at sign-in. It does two
 // things. It keeps the user's own pipe answering (intentic-machine, intentic-askpass and the CLI keep asking there) by
@@ -96,7 +96,7 @@ export const answerCall = async (hands: Hands, call: HelperCall): Promise<Helper
             return made.ok ? { ok: true, signature: made.value.signature.toString("base64"), publicKey: made.value.publicKey } : { ok: false, cancelled: made.cancelled, reason: made.reason };
         }
         case "passphrase":
-            return await hands.passphrase({ title: call.title, message: call.message });
+            return await hands.passphrase({ title: call.title, message: call.message, asks: asksOf(call.message) });
         case "value":
             return hands.value === undefined
                 ? { kind: "unavailable", reason: "this session cannot show Passwords' own box" }
@@ -126,7 +126,9 @@ export const proofFor = async (challenge: Challenge, hands: Hands, { pid = proce
             // The service asks polkit about this process, which shows its own dialog in this session: nothing to type here.
             return { method: "polkit", pid };
         case "passphrase": {
-            const typed = await hands.passphrase({ title: PROOF_NOTICE.title, message: `${PROOF_NOTICE.message}\n\n${RECOVERY_HINT}`, problem });
+            // The challenge does not say whether this vault has a master password (a field there would turn away a helper
+            // a release behind), so the box asks for either.
+            const typed = await hands.passphrase({ title: PROOF_NOTICE.title, message: `${PROOF_NOTICE.message}\n\n${EITHER_HINT}`, problem, asks: "either" });
             return typed.kind === "answered" ? { method: "passphrase", passphrase: asRecoveryKey(typed.passphrase) } : { method: "declined" };
         }
         case "unset":
@@ -286,7 +288,7 @@ export const keepProving = async (proving: Proving): Promise<void> => {
         wrongKeys = outcome === "wrong-key" ? wrongKeys + 1 : 0;
         if (outcome === "wrong-key" && wrongKeys < PROOF_TRIES) {
             // A key that did not open the vault is asked for again at once, saying so, rather than the box just closing.
-            look = { quiet: false, problem: WRONG_RECOVERY_KEY };
+            look = { quiet: false, problem: WRONG_PROOF };
         } else if (outcome === "gone") {
             await sleep(proving.retryMs ?? RETRY_MS);
             look = { quiet: false };

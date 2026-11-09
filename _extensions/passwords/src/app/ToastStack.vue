@@ -45,7 +45,7 @@ onBeforeUnmount(() => {
 const undo = async (toast: Toast): Promise<void> => {
     pause(toast.id);
     try {
-        await port.undo(toast.name, toast.at);
+        await (toast.outcome === `removed` ? port.undoRemove?.(toast.name) : port.undo(toast.name, toast.at));
         said.value.set(toast.id, t(`app.toast.undone`));
         emit(`undone`);
     } catch (failure) {
@@ -67,16 +67,19 @@ const undo = async (toast: Toast): Promise<void> => {
                 @focusin="pause(toast.id)"
                 @focusout="start(toast.id)"
             >
-                <Icon name="check-circle" class="text-success" />
+                <Icon :name="toast.outcome === `removed` ? `trash` : `check-circle`" :class="toast.outcome === `removed` ? `text-muted` : `text-success`" />
                 <div class="flex min-w-0 flex-1 flex-col gap-1">
-                    <p class="text-sm text-content">
+                    <p v-if="toast.outcome === `removed`" class="text-sm font-medium text-content">{{ t(`app.toast.removed`, { title: toast.title }) }}</p>
+                    <p v-else class="text-sm text-content">
                         <span class="font-medium">{{ toast.outcome === `updated` ? t(`app.toast.updated`, { title: toast.title }) : t(`app.toast.saved`, { title: toast.title }) }}</span>
                         <span class="text-muted"> · {{ t(`app.toast.from`, { via: toast.via }) }}</span>
                     </p>
                     <p v-if="said.get(toast.id)" class="text-xs text-muted">{{ said.get(toast.id) }}</p>
                     <div v-else class="flex gap-3">
                         <button type="button" :class="ui.textButton({ size: `xs`, flush: true })" @click="undo(toast)">{{ t(`app.toast.undo`) }}</button>
-                        <button type="button" :class="ui.textButton({ size: `xs`, flush: true })" @click="emit(`view`, toast.name)">{{ t(`app.toast.view`) }}</button>
+                        <button v-if="toast.outcome !== `removed`" type="button" :class="ui.textButton({ size: `xs`, flush: true })" @click="emit(`view`, toast.name)">
+                            {{ t(`app.toast.view`) }}
+                        </button>
                     </div>
                 </div>
                 <button type="button" :class="ui.iconButton({ size: `xs` })" :aria-label="t(`app.toast.dismiss`)" @click="emit(`dismiss`, toast.id)">

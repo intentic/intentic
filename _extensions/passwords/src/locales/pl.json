@@ -52,7 +52,8 @@
             "attention": "Uwaga",
             "fresh": "Właśnie zapisane",
             "requests": "Prośby",
-            "weak": "Słabe lub używane ponownie"
+            "weak": "Słabe lub używane ponownie",
+            "removed": "Ostatnio usunięte"
         },
         "source": {
             "browser": "zapisane z {via}",
@@ -138,7 +139,11 @@
             "reveal": "Pokazano",
             "copy": "Skopiowano",
             "forAgent": "{what} dla agenta {sandbox}",
-            "refused": "{what} · odmówiono"
+            "refused": "{what} · odmówiono",
+            "undo-remove": "Przywrócono z Ostatnio usuniętych",
+            "purge": "Usunięto na zawsze",
+            "add-hello": "Włączono Windows Hello",
+            "master-password": "Zmieniono hasło główne"
         },
         "edit": {
             "title": "Tytuł",
@@ -205,17 +210,31 @@
             "unlock": "Odblokowanie i blokada",
             "hello": "Odblokowanie pyta o Windows Hello: twarz, odcisk palca lub PIN.",
             "polkit": "Odblokowanie pyta o hasło komputera.",
-            "passphrase": "Odblokowanie pyta o klucz odzyskiwania.",
+            "passphrase": "Odblokowanie wymaga klucza odzyskiwania. Ustaw hasło główne, aby wpisywać je zamiast niego.",
             "autoLock": "Zablokuj po",
             "minutes": "{count} minuta | {count} minuty | {count} minut",
             "hours": "{count} godzina | {count} godziny | {count} godzin",
             "lockOnSleep": "Zablokuj, gdy komputer przejdzie w uśpienie",
             "recovery": "Klucz odzyskiwania",
-            "recoveryHelp": "Klucz odzyskiwania otwiera hasła, jeśli Windows Hello zostanie zresetowane lub ten komputer zostanie wymieniony. Pokazano go raz, gdy włączono Hasła.",
+            "recoveryHelp": "Zachowaj go na wypadek awarii: otwiera Twoje hasła, gdy zapomnisz hasła głównego, Windows Hello zostanie zresetowane lub zmienisz komputer. Był pokazany raz, przy włączaniu Haseł.",
             "neverSave": "Nigdy nie zapisuj dla",
             "neverSaveEmpty": "Nic. „Nigdy dla tej strony” w powiadomieniu dodaje miejsce tutaj.",
             "import": "Importuj",
-            "importHelp": "Plik CSV wyeksportowany z Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden lub KeePassXC."
+            "importHelp": "Plik CSV wyeksportowany z Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden lub KeePassXC.",
+            "master": "Odblokowanie wymaga hasła głównego. Klucz odzyskiwania też działa.",
+            "helloOff": "Windows Hello jest wyłączone dla Haseł",
+            "helloOffHelp": "Hasła skonfigurowano bez niego, więc proszą o klucz odzyskiwania.",
+            "masterTitle": "Hasło główne",
+            "masterOn": "Pojawia się prośba o nie, gdy Windows Hello ani komputer nie mogą potwierdzić, że to Ty.",
+            "masterOff": "Nie ustawiono. Bez niego Hasła proszą o klucz odzyskiwania, gdy Windows Hello ani komputer nie mogą potwierdzić, że to Ty.",
+            "masterSet": "Ustaw",
+            "masterChange": "Zmień",
+            "masterRemove": "Usuń",
+            "masterNew": "Nowe hasło główne",
+            "masterAgain": "Wpisz je ponownie",
+            "masterHelp": "Co najmniej {count} znaków. Najpierw Hasła poproszą o potwierdzenie na tym komputerze.",
+            "masterShort": "Co najmniej {count} znaków.",
+            "masterMismatch": "Hasła nie są takie same."
         },
         "import": {
             "pick": "Wybierz plik",
@@ -253,7 +272,8 @@
             "settingSource": "Konfigurowanie {source}…",
             "importTitle": "Przenieś swoje hasła",
             "importHelp": "Zaimportuj eksport CSV z przeglądarki lub menedżera haseł albo pomiń — zapiszą się przy logowaniu.",
-            "finish": "Gotowe"
+            "finish": "Gotowe",
+            "helloSkipped": "Windows Hello nie zostało skonfigurowane, więc Hasła będą prosić o ten klucz, dopóki nie włączysz Hello w Ustawieniach."
         },
         "unavailable": {
             "title": "Hasła są niedostępne",
@@ -271,7 +291,24 @@
             "undo": "Cofnij",
             "view": "Pokaż",
             "undone": "Cofnięto.",
-            "dismiss": "Zamknij"
+            "dismiss": "Zamknij",
+            "removed": "Przeniesiono {title} do Ostatnio usuniętych"
+        },
+        "hello": {
+            "strip": "Windows Hello nie jest włączone dla Haseł, więc zamiast tego pojawia się prośba o klucz odzyskiwania. Włącz je, aby potwierdzać twarzą, odciskiem palca lub kodem PIN.",
+            "turnOn": "Włącz Windows Hello"
+        },
+        "removed": {
+            "title": "Ostatnio usunięte",
+            "help": "Usunięte hasła są tu przez 30 dni. Przywrócone wraca w niezmienionej postaci, razem z agentami, którzy mogli go używać.",
+            "empty": "Opróżnij",
+            "none": "W ciągu ostatnich 30 dni nic nie usunięto.",
+            "when": "usunięto {when}",
+            "putBack": "Przywróć",
+            "deleteForGood": "Usuń na zawsze",
+            "emptyAsk": "Opróżnić Ostatnio usunięte?",
+            "deleteAsk": "Usunąć {title} na zawsze?",
+            "cannotUndo": "Tego nie da się cofnąć. Hasła poproszą o potwierdzenie na tym komputerze."
         }
     }
 }

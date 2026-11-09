@@ -52,7 +52,8 @@
             "attention": "Attention",
             "fresh": "Just saved",
             "requests": "Requests",
-            "weak": "Weak or reused"
+            "weak": "Weak or reused",
+            "removed": "Recently deleted"
         },
         "source": {
             "browser": "saved from {via}",
@@ -138,7 +139,11 @@
             "reveal": "Shown",
             "copy": "Copied",
             "forAgent": "{what} for {sandbox}'s agent",
-            "refused": "{what} · refused"
+            "refused": "{what} · refused",
+            "undo-remove": "Put back from Recently deleted",
+            "purge": "Deleted for good",
+            "add-hello": "Windows Hello turned on",
+            "master-password": "Master password changed"
         },
         "edit": {
             "title": "Title",
@@ -205,17 +210,31 @@
             "unlock": "Unlock & lock",
             "hello": "Unlocking asks Windows Hello: your face, fingerprint or PIN.",
             "polkit": "Unlocking asks for your computer's password.",
-            "passphrase": "Unlocking asks for your recovery key.",
+            "passphrase": "Unlocking asks for your recovery key. Set a master password to type that instead.",
             "autoLock": "Lock after",
             "minutes": "{count} minute | {count} minutes",
             "hours": "{count} hour | {count} hours",
             "lockOnSleep": "Lock when this computer sleeps",
             "recovery": "Recovery key",
-            "recoveryHelp": "The recovery key opens your passwords if Windows Hello is reset or this computer is replaced. It was shown once, when Passwords was turned on.",
+            "recoveryHelp": "Keep it for emergencies: it opens your passwords if you forget your master password, Windows Hello is reset, or this computer is replaced. It was shown once, when Passwords was turned on.",
             "neverSave": "Never save for",
             "neverSaveEmpty": "Nothing. A notice's “Never for this site” adds a place here.",
             "import": "Import",
-            "importHelp": "A CSV file exported from Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden or KeePassXC."
+            "importHelp": "A CSV file exported from Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden or KeePassXC.",
+            "master": "Unlocking asks for your master password. Your recovery key works too.",
+            "helloOff": "Windows Hello is off for Passwords",
+            "helloOffHelp": "It was set up without it, so Passwords asks for your recovery key.",
+            "masterTitle": "Master password",
+            "masterOn": "Asked for when Windows Hello or your computer's own check can't answer.",
+            "masterOff": "Not set. Without one, Passwords asks for your recovery key when Windows Hello or your computer's own check can't answer.",
+            "masterSet": "Set",
+            "masterChange": "Change",
+            "masterRemove": "Remove",
+            "masterNew": "New master password",
+            "masterAgain": "Type it again",
+            "masterHelp": "At least {count} characters. Passwords asks you to confirm on this computer first.",
+            "masterShort": "At least {count} characters.",
+            "masterMismatch": "The two don't match."
         },
         "import": {
             "pick": "Choose a file",
@@ -253,7 +272,8 @@
             "settingSource": "Setting up {source}…",
             "importTitle": "Bring your passwords along",
             "importHelp": "Import a CSV export from your browser or password manager, or skip this and let them be saved as you sign in.",
-            "finish": "Done"
+            "finish": "Done",
+            "helloSkipped": "Windows Hello wasn't set up, so Passwords will ask for this key until you turn Hello on in Settings."
         },
         "unavailable": {
             "title": "Passwords isn't available",
@@ -271,7 +291,24 @@
             "undo": "Undo",
             "view": "View",
             "undone": "Undone.",
-            "dismiss": "Dismiss"
+            "dismiss": "Dismiss",
+            "removed": "Moved {title} to Recently deleted"
+        },
+        "hello": {
+            "strip": "Windows Hello isn't turned on for Passwords, so it asks for your recovery key instead. Turn it on to confirm with your face, fingerprint or PIN.",
+            "turnOn": "Turn on Windows Hello"
+        },
+        "removed": {
+            "title": "Recently deleted",
+            "help": "Deleted passwords stay here for 30 days. Put one back and it returns as it was, with the agents that could use it.",
+            "empty": "Empty",
+            "none": "Nothing was deleted in the last 30 days.",
+            "when": "deleted {when}",
+            "putBack": "Put back",
+            "deleteForGood": "Delete for good",
+            "emptyAsk": "Empty Recently deleted?",
+            "deleteAsk": "Delete {title} for good?",
+            "cannotUndo": "This can't be undone. Passwords asks you to confirm on this computer."
         }
     }
 }

@@ -132,6 +132,9 @@ export const vaultOf = (status: KeyringStatus | undefined, computer: string, rem
             remember: status.state.remember ?? REMEMBER_NOTHING,
             rememberAsked,
             computer,
+            helloAddable: status.state.helloAddable === true,
+            masterPassword: status.state.masterPassword,
+            recentlyDeleted: status.state.recentlyDeleted,
         };
     }
     if (status.setUp) {
@@ -251,7 +254,11 @@ export const tauriPasswordsPort = (): PasswordsPort => {
         status: () => readStatus(readHere),
         list,
         sandboxes: async () => (await readHere()).links.map((link) => ({ url: link.sandboxUrl, label: sandboxLabel(link.sandboxUrl) })),
-        setUp: async ({ hello }) => ({ recoveryKey: (await keyringSetup(hello)).recoveryKey }),
+        setUp: async ({ hello }) => {
+            const made = await keyringSetup(hello);
+            // Whether Hello was enrolled, so the first run can say when it was not and Settings can turn it on later.
+            return { recoveryKey: made.recoveryKey, hello: made.state?.unlock.includes(`hello`) };
+        },
         reset: async () => {
             await keyringReset();
         },
@@ -262,6 +269,25 @@ export const tauriPasswordsPort = (): PasswordsPort => {
         add: async (draft) => ({ name: (await keyringApp(`save`, { title: draft.title, username: draft.username, value: draft.value, kind: draft.kind, origins: draft.origins, note: draft.note })).name }),
         edit: editEntry,
         remove: (name) => keyringRemove(name),
+        recentlyDeleted: async () => {
+            const [{ items }, { links }] = await Promise.all([keyringApp(`recently-deleted`, {}), readHere()]);
+            return items.map((removed) => ({ item: itemOf(removed.entry, sandboxOfWith(links)), removedAt: removed.removedAt }));
+        },
+        undoRemove: async (name) => {
+            await keyringApp(`undo-remove`, { name });
+        },
+        purge: async (name) => {
+            await keyringApp(`purge`, name === undefined ? {} : { name });
+        },
+        addHello: async () => {
+            await keyringApp(`add-hello`, {});
+        },
+        setMasterPassword: async (password) => {
+            await keyringApp(`set-master-password`, { password });
+        },
+        removeMasterPassword: async () => {
+            await keyringApp(`remove-master-password`, {});
+        },
         setAccess: setAccessFor,
         history: async (name) => (await keyringApp(`history`, { name })).versions,
         restore: async (name, version) => {

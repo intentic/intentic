@@ -104,6 +104,10 @@ export const KeyringStateSchema = z.object({
     pendingInbox: z.number().int().nonnegative().describe("Values sent to be kept that wait for the next unlock."),
     pendingCaptures: z.number().int().nonnegative().optional().describe("Credentials seen in use while locked, kept sealed until the next unlock. Absent from a keyring older than 2026-10-19."),
     remember: KeyringRememberSchema.optional().describe("Which sources the person let the keyring remember passwords from, so a collector knows whether to send one. Absent before setup and from an older keyring."),
+    // The fields below are absent before setup and from a keyring older than 2026-11-09.
+    helloAddable: z.boolean().optional().describe("Windows Hello signs here but the vault was set up without it, so it asks for the recovery key: `add-hello` turns Hello on."),
+    masterPassword: z.boolean().optional().describe("The person set a master password, asked for instead of the recovery key where Hello or polkit cannot answer."),
+    recentlyDeleted: z.number().int().nonnegative().optional().describe("Removed entries kept in Recently deleted, which `undo-remove` puts back."),
 });
 export type KeyringState = z.infer<typeof KeyringStateSchema>;
 

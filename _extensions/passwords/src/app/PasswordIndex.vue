@@ -6,8 +6,15 @@ import { t } from "../i18n.js";
 import { filterKey, type IndexCounts, type PasswordFilter } from "./model.js";
 import type { SandboxRef } from "./port.js";
 
-const { counts, sandboxes, current } = defineProps<{
+const {
+    counts,
+    sandboxes,
+    current,
+    removed = 0,
+} = defineProps<{
     counts: IndexCounts;
+    /** Passwords waiting in Recently deleted: an entry of its own once there is one. */
+    removed?: number;
     /** Every sandbox that has access to at least one password, by its label. */
     sandboxes: readonly SandboxRef[];
     /** The filter key on screen (`all`, `site`, `sandbox:https://…`, `settings`). */
@@ -52,6 +59,7 @@ const groups = computed((): NavGroup<Entry>[] => {
             entry({ kind: `fresh` }, t(`app.index.fresh`), `sparkles`, counts.fresh),
             entry({ kind: `requests` }, t(`app.index.requests`), `bolt`, counts.requests, counts.requests > 0),
             entry({ kind: `weak` }, t(`app.index.weak`), `shield`, counts.weak),
+            ...(removed > 0 ? [entry({ kind: `removed` }, t(`app.index.removed`), `trash`, removed)] : []),
         ],
     });
     return result;

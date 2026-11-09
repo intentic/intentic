@@ -64,6 +64,12 @@ export interface PasswordItem {
 
 export type UnlockWay = "hello" | "passphrase" | "polkit";
 
+/** A password in Recently deleted: as the list showed it, and when it was removed. */
+export interface RemovedPassword {
+    readonly item: PasswordItem;
+    readonly removedAt: number;
+}
+
 /** One stage of a fix that takes a while (an update, a repair), as the person watches it go by. */
 export interface FixStep {
     readonly id: string;
@@ -104,6 +110,12 @@ export type VaultStatus =
           /** Whether the one-time "remember the passwords you type" has been answered, either way. */
           readonly rememberAsked: boolean;
           readonly computer: string;
+          /** Windows Hello signs here, but the vault was set up without it, so it asks for the recovery key instead. */
+          readonly helloAddable?: boolean | undefined;
+          /** Whether a master password is set; absent where the keyring cannot keep one (one older than 2026-11-09). */
+          readonly masterPassword?: boolean | undefined;
+          /** How many removed passwords wait in Recently deleted; absent where removing is final (an older keyring). */
+          readonly recentlyDeleted?: number | undefined;
       };
 
 export interface PasswordDraft {
@@ -229,7 +241,7 @@ export interface PasswordsPort {
      * Sets up the protected vault: one administrator prompt, Windows Hello, and a recovery key shown once. No key when the
      * vault was there already: its key is the one shown when it was first set up.
      */
-    readonly setUp: (options: { readonly hello: boolean }) => Promise<{ readonly recoveryKey?: string | undefined }>;
+    readonly setUp: (options: { readonly hello: boolean }) => Promise<{ readonly recoveryKey?: string | undefined; readonly hello?: boolean | undefined }>;
     readonly unlock: (minutes?: number) => Promise<void>;
     readonly lock: () => Promise<void>;
     /**
@@ -245,7 +257,18 @@ export interface PasswordsPort {
 
     readonly add: (draft: PasswordDraft) => Promise<{ readonly name: string }>;
     readonly edit: (name: string, patch: PasswordPatch) => Promise<void>;
+    /** Where the vault keeps Recently deleted (`recentlyDeleted` in its status), unasked while unlocked and undoable. */
     readonly remove: (name: string) => Promise<void>;
+    /** Recently deleted, newest first; putting one back; deleting one, or every one, for good (asks at the computer). */
+    readonly recentlyDeleted?: (() => Promise<readonly RemovedPassword[]>) | undefined;
+    readonly undoRemove?: ((name: string) => Promise<void>) | undefined;
+    readonly purge?: ((name?: string) => Promise<void>) | undefined;
+
+    /** Turns Windows Hello on for a vault set up without it (`helloAddable`): asked once by the way it opens now. */
+    readonly addHello?: (() => Promise<void>) | undefined;
+    /** Sets or changes the master password, asked for instead of the recovery key; and takes it away again. */
+    readonly setMasterPassword?: ((password: string) => Promise<void>) | undefined;
+    readonly removeMasterPassword?: (() => Promise<void>) | undefined;
     readonly setAccess: (name: string, sandbox: string, level: AccessLevel) => Promise<void>;
 
     readonly history: (name: string) => Promise<readonly PasswordVersion[]>;

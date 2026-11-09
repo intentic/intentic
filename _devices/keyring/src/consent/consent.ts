@@ -14,6 +14,8 @@ import { KEYRING_GRANT_TTL_MAX_MS } from "@intentic/sandbox-contract/schemas/key
 export interface VaultOpener {
     // The vault key for `passphrase`, or undefined when it is not the keyring's.
     readonly withPassphrase: (passphrase: string) => Promise<Buffer | undefined>;
+    // The person set a master password: the typed box asks for it first, the recovery key still opening it too.
+    readonly master?: boolean;
     // Present where the vault is wrapped for Windows Hello.
     readonly hello?: HelloOpener;
 }
@@ -81,10 +83,16 @@ export type PromptAnswer =
     // No dialog could be shown here (no display, no prompt program): why, in words.
     | { readonly kind: "unavailable"; readonly reason: string };
 
+// What the typed box asks for: the recovery key; the master password, when the person set one (the recovery key still
+// opening it); or either, where the asker cannot know which this vault has (the session helper's sign-in proof).
+export type PassphraseAsks = "recovery-key" | "master-password" | "either";
+
 // What the recovery-key box shows: what is asked, and what went wrong with the last try, set apart from the rest.
 export interface PassphraseNotice extends Notice {
     // "That did not open Passwords…": the last thing typed was not the key. Absent on a first ask.
     readonly problem?: string | undefined;
+    // Absent: the recovery key, as every box asked before master passwords.
+    readonly asks?: PassphraseAsks | undefined;
 }
 
 // A passphrase dialog of the platform's own.
@@ -92,6 +100,10 @@ export type PassphrasePrompt = (notice: PassphraseNotice) => Promise<PromptAnswe
 
 /** What the box says after a recovery key that did not open the vault. */
 export const WRONG_RECOVERY_KEY = "That did not open Passwords. Check the recovery key and try again: it is six groups of five letters and digits.";
+/** What the session helper's sign-in box says after an answer that did not, not knowing which of the two it asked for. */
+export const WRONG_PROOF = "That did not open Passwords. Check your master password or recovery key and try again.";
+/** What it says after a master password that did not, where the person set one. */
+export const WRONG_MASTER_PASSWORD = "That did not open Passwords. Check your master password and try again. Your recovery key works here too.";
 
 // THE TYPE-ONCE BOX (2026-10-19): the keyring's own dialog asking the person for a value it does not hold yet, for a
 // prompt nothing in the vault answers (ssh asking for a password nobody saved, a program's password field, an agent's
@@ -156,8 +168,10 @@ export const passphraseConsent = (prompt: PassphrasePrompt, extras: ConsentExtra
         if (opener === undefined) {
             return nobodyToAsk(request, "the keyring is not set up yet: `intentic-machine keyring setup` sets it up.");
         }
+        const asks: PassphraseAsks = opener.master === true ? "master-password" : "recovery-key";
+        const wrong = opener.master === true ? WRONG_MASTER_PASSWORD : WRONG_RECOVERY_KEY;
         for (let attempt = 1; attempt <= PASSPHRASE_TRIES; attempt++) {
-            const answer = await prompt(attempt === 1 ? { title: request.title, message: request.message } : { title: request.title, message: request.message, problem: WRONG_RECOVERY_KEY });
+            const answer = await prompt(attempt === 1 ? { title: request.title, message: request.message, asks } : { title: request.title, message: request.message, problem: wrong, asks });
             if (answer.kind === "cancelled") {
                 return { ok: false, code: "declined", reason: "The person at the computer said no." };
             }

@@ -13,7 +13,8 @@ export interface Toast {
     readonly title: string;
     readonly via: string;
     readonly at: number;
-    readonly outcome: `saved` | `updated`;
+    /** `removed`: a password this app moved to Recently deleted, which Undo puts back. */
+    readonly outcome: `saved` | `updated` | `removed`;
 }
 
 export function usePasswordsState(port: PasswordsPort) {
@@ -53,15 +54,22 @@ export function usePasswordsState(port: PasswordsPort) {
         }
     };
 
+    const pushToast = (next: Omit<Toast, `id`>): void => {
+        toastId += 1;
+        // The newest on top, and no more than three: a burst of imports is one look at the list, not a wall.
+        toasts.value = [{ id: toastId, ...next }, ...toasts.value].slice(0, 3);
+    };
+
+    /** "Moved github.com to Recently deleted · Undo", for a removal made here. */
+    const toastRemoved = (name: string, title: string): void => pushToast({ name, title, via: ``, at: Date.now(), outcome: `removed` });
+
     const dismissToast = (id: number): void => {
         toasts.value = toasts.value.filter((toast) => toast.id !== id);
     };
 
     const hear = (event: PasswordsEvent): void => {
         if (event.kind === `captured`) {
-            toastId += 1;
-            // The newest on top, and no more than three: a burst of imports is one look at the list, not a wall.
-            toasts.value = [{ id: toastId, name: event.name, title: event.title, via: event.via, at: event.at, outcome: event.outcome }, ...toasts.value].slice(0, 3);
+            pushToast({ name: event.name, title: event.title, via: event.via, at: event.at, outcome: event.outcome });
         }
         void load();
     };
@@ -91,6 +99,7 @@ export function usePasswordsState(port: PasswordsPort) {
         toasts,
         load,
         dismissToast,
+        toastRemoved,
         ready: computed(() => (status.value?.kind === `ready` ? status.value : undefined)),
     };
 }

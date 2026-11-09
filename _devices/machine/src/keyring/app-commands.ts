@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { askKeyring, type EntryPatch, KeyringSettingsPatchSchema, type KeyringClientOptions, keyringPaths, type KeyringRequest, sealForKeyring } from "@intentic/keyring";
+import { askKeyring, type EntryPatch, KeyringSettingsPatchSchema, type KeyringClientOptions, keyringPaths, type KeyringRequest, MASTER_PASSWORD_MIN, sealForKeyring, sealMasterPassword } from "@intentic/keyring";
 import { seal } from "@intentic/sandbox-contract/keyring-seal";
 import { mergeRules, type OriginRules, rulesForOrigin } from "@intentic/sandbox-contract/policy/keyring-origins";
 import { KEYRING_CAPTURE_BATCH_MAX, type KeyringCaptureItem, KeyringNeedAnswerSchema, KeyringOriginSchema, KeyringSecretNameSchema, type SealedBox } from "@intentic/sandbox-contract/schemas/keyring";
@@ -297,6 +297,35 @@ const setupSource = verb("Set a source up on this computer: terminal (ssh, sudo,
     }
 });
 
+// ---- Recently deleted, and the ways of unlocking (2026-11-09) ----
+
+const recentlyDeleted = verb("Passwords removed in the last 30 days, newest first (never their values)", "Recently deleted was not read.", Empty, async () => await ask({ op: "recently-deleted" }));
+
+const undoRemove = verb("Put a removed password back as it was", "Nothing was put back.", NameSchema, async (request) => {
+    const restored = await ask({ op: "undo-remove", name: request.name });
+    // It comes back with its shares: the sandboxes that could use it read this keyring now.
+    if (restored.ok) {
+        await pushKeyringChanged();
+    }
+    return restored;
+});
+
+const purge = verb("Delete a removed password for good, or every one without a name (asks you)", "Nothing was deleted.", z.object({ name: KeyringSecretNameSchema.optional() }).strict(), async (request) => {
+    return await ask(request.name === undefined ? { op: "purge" } : { op: "purge", name: request.name });
+});
+
+const addHello = verb("Turn on Windows Hello for a vault set up without it (asks you)", "Windows Hello was not turned on.", Empty, async () => await ask({ op: "add-hello" }));
+
+// The password is sealed here to the vault's inbox key, for a master password alone, before it reaches the pipe.
+const setMasterPassword = verb(
+    "Set or change the master password, asked instead of the recovery key where Hello cannot answer (asks you)",
+    "The master password was not set.",
+    z.object({ password: z.string().min(MASTER_PASSWORD_MIN).max(1024) }).strict(),
+    async (request) => await ask({ op: "set-master-password", sealed: sealMasterPassword(await inboxKey(), request.password) }),
+);
+
+const removeMasterPassword = verb("Remove the master password, leaving the recovery key (asks you)", "The master password was not removed.", Empty, async () => await ask({ op: "remove-master-password" }));
+
 export const appCommands = buildRouteMap({
     routes: {
         reveal,
@@ -315,6 +344,12 @@ export const appCommands = buildRouteMap({
         import: importRows,
         sources,
         "setup-source": setupSource,
+        "recently-deleted": recentlyDeleted,
+        "undo-remove": undoRemove,
+        purge,
+        "add-hello": addHello,
+        "set-master-password": setMasterPassword,
+        "remove-master-password": removeMasterPassword,
     },
     docs: { brief: "The Passwords app's verbs: each reads one JSON object on stdin" },
 });
