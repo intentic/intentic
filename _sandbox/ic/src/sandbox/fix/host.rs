@@ -1617,7 +1617,7 @@ mod tests {
     }
 
     #[test]
-    fn a_windows_prerequisite_is_offered_with_consent_and_a_pending_restart_parks_the_session() {
+    fn a_windows_prerequisite_is_offered_with_consent_even_with_a_restart_pending() {
         let features_off = plan::Facts {
             build: 22631,
             arch: Some(plan::ARCH_X64),
@@ -1645,9 +1645,12 @@ mod tests {
             })),
             ..base(Os::Windows)
         };
-        let parked = prerequisites(&pending, &never).expect("applies");
-        assert_eq!(parked.who(), Some(Who::You));
-        assert!(parked.session, "a restart is the only way on");
+        // Windows Update's restart is not asked for first: the restart that turning the features on needs finishes it.
+        let offered = prerequisites(&pending, &never).expect("applies");
+        assert_eq!(
+            repair_of(&offered),
+            Some(Repair::Prerequisite("wsl-features"))
+        );
         assert!(prerequisites(&base(Os::Linux), &never).is_none());
     }
 }

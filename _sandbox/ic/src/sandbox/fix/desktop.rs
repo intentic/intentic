@@ -216,7 +216,17 @@ pub fn prerequisite(facts: &DeviceFacts, id: &str) -> Done {
     #[cfg(windows)]
     {
         match id {
-            "wsl-features" => applied(crate::prepare::fix::enable_wsl_features()),
+            "wsl-features" => match crate::prepare::fix::enable_wsl_features() {
+                // Windows would not stage the features beside the restart it was already waiting for (prepare/plan.rs
+                // turns them on regardless, so that one restart finishes both): that restart comes first, as ic docker
+                // prepare falls back to, and the next pass turns the features on.
+                Err(crate::prepare::fix::Trouble::Failed(_))
+                    if windows_facts(facts).reboot_pending =>
+                {
+                    Ok(Applied::AfterRestart)
+                }
+                done => applied(done),
+            },
             "wsl-kernel" => applied(crate::prepare::fix::update_wsl_kernel()),
             "docker-users" => applied(crate::prepare::fix::add_to_docker_users(&windows_facts(
                 facts,

@@ -479,6 +479,26 @@ pub fn run(args: Args) -> Result<()> {
                             print_summary(&facts, false);
                             return sign_out_or_restart(&pending, &facts.user, args.yes, &facts);
                         }
+                        // Windows would not stage WSL2's features beside the operation it already had staged (plan.rs
+                        // turns them on in the same session as that pending restart, so the one restart finishes
+                        // both). Its restart comes first after all, and the next session turns the features on: the
+                        // two restarts this used to cost every such PC, now only the ones where Windows refuses.
+                        Err(fix::Trouble::Failed(problem))
+                            if requirement.id == "wsl-features" && facts.reboot_pending =>
+                        {
+                            crate::ui::warn(&format!(
+                                "{}: {problem} - Windows has to finish the restart it is waiting for first; the setup turns WSL2 on after it.",
+                                requirement.title
+                            ));
+                            let pending = plan::restart_requirement();
+                            announce(&pending);
+                            announce_state(
+                                requirement.id,
+                                "done",
+                                Some("turned on after the restart Windows is waiting for"),
+                            );
+                            restart_after = Some(pending);
+                        }
                         Err(fix::Trouble::Failed(problem)) => {
                             announce_state(requirement.id, "failed", Some(problem.as_str()));
                             print_summary(&facts, false);

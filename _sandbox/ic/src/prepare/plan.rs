@@ -311,8 +311,8 @@ pub fn wsl_ready(facts: &Facts) -> bool {
     facts.service_vmcompute && wsl_functioning(facts)
 }
 
-/// WSL2's Windows features themselves are off — the one fix in this flow that only a restart finishes, and so the only
-/// one a restart Windows is already waiting for has to come before (see `requirements`).
+/// WSL2's Windows features themselves are off — the one fix in this flow that only a restart finishes, and so the one
+/// that shares the restart Windows may already be waiting for (see `requirements`).
 fn wsl_features_off(facts: &Facts) -> bool {
     !wsl_functioning(facts) && (!facts.service_wsl || !facts.service_vmcompute)
 }
@@ -371,9 +371,10 @@ pub fn sign_out_requirement(facts: &Facts) -> Requirement {
     )
 }
 
-/// A RESTART WINDOWS IS ALREADY WAITING FOR. Built in one place because two moments produce it: the examination
-/// before anything is changed, and a fix that would otherwise end on a sign-out (mod.rs) while Windows also waits
-/// for a restart, since a restart is a new sign-in too and asking for both sent a reader through each in turn.
+/// A RESTART WINDOWS IS ALREADY WAITING FOR. Built in one place because two moments in mod.rs produce it: Windows
+/// refusing to stage WSL2's features on top of the operation it already has staged, and a fix that would otherwise end
+/// on a sign-out while Windows also waits for a restart, since a restart is a new sign-in too and asking for both sent
+/// a reader through each in turn.
 pub fn restart_requirement() -> Requirement {
     req(
         "pending-restart",
@@ -534,17 +535,12 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
         return found;
     }
 
-    // ---- a restart Windows is already waiting for ----
-    // Enabling optional features on top of a staged servicing operation is how a machine ends up with a
-    // half-installed WSL and a `wsl --install` that reports success and changes nothing. That is the only thing here
-    // a pending restart gets in the way of: a PC whose WSL2 already works installs and runs Docker with Windows
-    // Update's restart still pending, and asking for it first cost such a PC a restart it did not need (and a PC that
-    // also needed the features, a second one after it).
-    if facts.reboot_pending && wsl_features_off(facts) {
-        found.push(restart_requirement());
-        found.extend(disk(facts));
-        return found;
-    }
+    // ---- a restart Windows is already waiting for: not a step of its own ----
+    // Windows stages a feature beside whatever it already has staged, and one restart finishes both, so WSL2's
+    // features are turned on in this session whatever Windows Update is waiting for. Asking for that restart first
+    // cost a fresh PC two: telemetry for 2026-11-01 and 2026-11-09 shows the first one asked seconds after "Set up
+    // this PC" with nothing done, and the features' own restart after it. Where Windows does refuse to stage the
+    // features on top of its own pending operation, the setup falls back to that restart first (mod.rs, `run`).
 
     // ---- WSL2, which is what Docker's Linux engine actually runs in ----
     // Working WSL outranks the service names, for the same reason as above: the services are how we GUESS the
@@ -561,7 +557,11 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
             "wsl-features",
             "Windows features for Docker",
             &format!("Docker runs its Linux engine inside WSL2, and {missing}."),
-            "We will turn them on. Windows asks for permission once, and then needs a restart.",
+            if facts.reboot_pending {
+                "We will turn them on. Windows asks for permission once, and the restart it is already waiting for finishes them: one restart for both."
+            } else {
+                "We will turn them on. Windows asks for permission once, and then needs a restart."
+            },
             Action::FixElevated,
         ));
     } else if !wsl_ready(facts) {
@@ -1154,11 +1154,14 @@ pub fn advisories(facts: &Facts) -> Vec<String> {
     if facts.build == 0 {
         notes.push("could not read this device's Windows version.".to_string());
     }
-    if facts.reboot_pending && !wsl_features_off(facts) {
-        notes.push(
+    if facts.reboot_pending {
+        notes.push(if wsl_features_off(facts) {
+            "Windows is waiting to restart for its own updates; the restart that turns WSL2 on finishes those too, so you restart once."
+                .to_string()
+        } else {
             "Windows is waiting to restart for its own updates; Docker does not need that restart, so the setup carries on."
-                .to_string(),
-        );
+                .to_string()
+        });
     }
     notes
 }
@@ -1628,17 +1631,52 @@ mod tests {
         );
     }
 
-    /* A PENDING RESTART COMES FIRST — when there are features to turn on, and only then. */
+    /* A PENDING RESTART IS NOT A STEP OF ITS OWN — the features are turned on beside it, and one restart finishes both.
+    Asking for it first cost a fresh PC two restarts (telemetry, 2026-11-01 and 2026-11-09). */
     #[test]
-    fn a_pending_restart_is_dealt_with_before_features_are_touched() {
+    fn a_pending_restart_shares_the_restart_the_features_need() {
         let facts = Facts {
             reboot_pending: true,
+            servicing_reboot_pending: true,
+            test_engine: Some(crate::engine::Kind::Intentic),
             ..bare()
         };
         let found = requirements(&facts);
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].id, "pending-restart");
-        assert_eq!(found[0].action, Action::Restart);
+        assert_eq!(
+            found.iter().map(|r| r.id).collect::<Vec<_>>(),
+            vec!["wsl-features", "engine"]
+        );
+        assert!(
+            found.iter().all(|r| r.action != Action::Restart),
+            "no restart is asked for before the features: {found:?}"
+        );
+        assert_eq!(found[0].action, Action::FixElevated);
+        assert!(
+            found[0].remedy.contains("one restart"),
+            "{}",
+            found[0].remedy
+        );
+        assert!(
+            summary_restart_needed(&found, false),
+            "the one restart is still said"
+        );
+        assert!(
+            advisories(&facts)
+                .iter()
+                .any(|note| note.contains("restart once")),
+            "{:?}",
+            advisories(&facts)
+        );
+        // Without a restart pending, the features say their own restart.
+        let plain = requirements(&Facts {
+            test_engine: Some(crate::engine::Kind::Intentic),
+            ..bare()
+        });
+        assert!(
+            plain[0].remedy.contains("then needs a restart"),
+            "{}",
+            plain[0].remedy
+        );
     }
 
     /// Windows Update's restart is not Docker's: a PC whose WSL2 already works carries on, and is told why.
@@ -1668,7 +1706,8 @@ mod tests {
                 .all(|row| row.state != RowState::Unjudged),
             "nothing blocked, so nothing is left unjudged"
         );
-        // Features that are only half there (services present, WSL not answering) are still features to turn on.
+        // Features that are only half there (services present, WSL not answering) are still features to turn on, in
+        // this session.
         assert_eq!(
             ids(&Facts {
                 reboot_pending: true,
@@ -1676,7 +1715,7 @@ mod tests {
                 wsl_status_ok: false,
                 ..healthy()
             }),
-            vec!["pending-restart"]
+            vec!["wsl-features"]
         );
     }
 
