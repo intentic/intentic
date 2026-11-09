@@ -96,7 +96,10 @@ describe(`the Test`, () => {
         expect(form.name.value).toBe(`ssh`);
         // The first connection keeps the bare id; the account names the next one.
         const second = testOn(SSH, async () => ({ checked: true, ok: true, message: `Signed in as Ada.`, who: `Ada` }));
-        second.state.instances.value = [{ id: `ssh`, kind: `ssh`, status: { state: `active` }, config: {}, secrets: [] }];
+        // Held on this tile, and so among every tile's connections, which the name is kept clear of (capabilityForm.ts).
+        const first: CapabilitySummary = { id: `ssh`, kind: `ssh`, status: { state: `active` }, config: {}, secrets: [] };
+        second.state.instances.value = [first];
+        second.state.capabilities.value = [first];
         await second.test.runProbe();
         expect(second.form.name.value).toBe(`ssh-ada`);
     });
