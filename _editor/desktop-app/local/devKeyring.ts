@@ -99,6 +99,8 @@ const entryOf = (sample: Sample, index: number): KeyringEntry => ({
 });
 
 let entries: KeyringEntry[] = SAMPLES.map(entryOf);
+// Removed entries, kept for the Recently deleted view until purged or put back.
+let removed: { entry: KeyringEntry; removedAt: number }[] = [];
 let needs: KeyringPendingNeed[] = [
     {
         id: `need0000000000000001`,
@@ -218,6 +220,24 @@ const APP: StandInApp = {
     import: ({ rows }) => prompted(() => ok({ saved: rows.length, updated: 0, unchanged: 0, skipped: 0 })),
     sources: () => ok({ sources: SOURCES() }),
     "setup-source": () => prompted(() => undefined),
+    "recently-deleted": () => ok({ items: removed }),
+    "undo-remove": ({ name }) =>
+        prompted(() => {
+            const back = removed.find((item) => item.entry.name === name);
+            removed = removed.filter((item) => item.entry.name !== name);
+            entries = back === undefined ? entries : [...entries, back.entry];
+            return undefined;
+        }),
+    purge: ({ name }) =>
+        prompted(() => {
+            const kept = name === undefined ? [] : removed.filter((item) => item.entry.name !== name);
+            const purged = removed.length - kept.length;
+            removed = kept;
+            return ok({ purged });
+        }),
+    "add-hello": () => prompted(() => undefined),
+    "set-master-password": () => prompted(() => undefined),
+    "remove-master-password": () => prompted(() => undefined),
 };
 
 const appVerb = <Op extends KeyringAppOp>(op: Op, input: KeyringAppOps[Op][`in`]): string | Promise<string> => APP[op](input);
@@ -275,7 +295,9 @@ export const keyringVerb = (command: string, args: InvokeArgs | undefined): stri
             });
         case `keyring_remove`:
             return prompted(() => {
-                entries = entries.filter((entry) => entry.name !== argsOf(args).name);
+                const name = argsOf(args).name;
+                removed = [...removed, ...entries.filter((entry) => entry.name === name).map((entry) => ({ entry, removedAt: Date.now() }))];
+                entries = entries.filter((entry) => entry.name !== name);
                 return undefined;
             });
         case `keyring_share`:

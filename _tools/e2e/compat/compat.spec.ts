@@ -20,7 +20,8 @@ const SANDBOX_ID = `compat-sandbox`;
 const SANDBOX_NAME = `Released sandbox`;
 
 // The pages, and what each has to show before it counts as drawn: the board's cards and buttons, the files' tabs, a
-// chat's box to type in, the Sandbox page under the sandbox's own name. Read off the page's structure and the seeded
+// chat's box to type in, the Sandbox page's overview under the sandbox's own name (its card's heading: the hub's own
+// heading names the place, "Sandbox settings", not whose it is). Read off the page's structure and the seeded
 // name rather than its words, so a reworded label does not fail a check about versions.
 // Each at its address inside the person's sandbox, which names it: signing in left the account a setup row of its own
 // (the wizard's), which an address naming no sandbox would open instead.
@@ -30,7 +31,7 @@ const PAGES: readonly { readonly path: string; readonly drawn: (page: Page) => P
     { path: insidePath(SANDBOX_ID, pages.chat()), drawn: (page) => expect(page.locator(`main`).getByRole(`textbox`).first()).toBeVisible() },
     {
         path: insidePath(SANDBOX_ID, pages.sandboxSettings(`overview`)),
-        drawn: (page) => expect(page.locator(`main`).getByRole(`heading`, { level: 1, name: SANDBOX_NAME })).toBeVisible(),
+        drawn: (page) => expect(page.locator(`main`).getByRole(`heading`, { level: 2, name: SANDBOX_NAME })).toBeVisible(),
     },
 ];
 
