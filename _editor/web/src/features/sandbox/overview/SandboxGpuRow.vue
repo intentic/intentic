@@ -49,12 +49,12 @@ const setAll = (value: boolean): void => {
                 {{ t(`sandbox.sandboxOverview.gpuResume`) }}
             </button>
         </div>
-        <span v-tooltip.top="{ title: t(`sandbox.sandboxOverview.gpu`), note: t(`sandbox.sandboxOverview.gpuTipNote`) }" class="min-w-0 break-words">{{
+        <span v-tooltip.top="{ title: t(`sandbox.sandboxOverview.gpu`), note: t(`sandbox.sandboxOverview.gpuTipNote`) }" class="min-w-0 break-words py-1">{{
             all ? t(`sandbox.sandboxOverview.gpuAll`) : t(`sandbox.sandboxOverview.gpuOnRequest`)
         }}</span>
         <Notice v-if="refusal" :of="refusal" />
         <template v-if="canShip" #action>
-            <ToggleSwitch :input-id="id" :model-value="all" :disabled="save.isPending.value" class="shrink-0" @update:model-value="setAll" />
+            <ToggleSwitch :input-id="id" :model-value="all" :disabled="save.isPending.value" class="ui-switch-sm shrink-0" @update:model-value="setAll" />
         </template>
     </OverviewSettingRow>
 </template>

@@ -759,6 +759,14 @@
             "startedByControlToken": "Gestartet vom Steuer-Token {tokenLabel}",
             "unclaimed": "Nicht übernommen"
         },
+        "foreignLand": {
+            "title": "Arbeit von {name} übernehmen?",
+            "body": "Diese Unterhaltung gehört {name}, nicht Ihnen. Das Übernehmen bringt ihre Änderungen jetzt in den gemeinsamen Arbeitsbereich, ob {name} damit fertig ist oder nicht.",
+            "confirm": "Arbeit von {name} übernehmen",
+            "owner": "Besitzt diese Unterhaltung",
+            "ownerAt": "Besitzt diese Unterhaltung · {email}",
+            "files": "{count} Datei geändert | {count} Dateien geändert"
+        },
         "parentMark": {
             "openParent": "Auftraggeber öffnen",
             "startedBy": "Gestartet von „{title}“; öffnet sie"
@@ -8876,7 +8884,6 @@
             "couldntSaveLogo": "Das Logo ließ sich nicht speichern.",
             "gettingWorkspaceReady": "Der Workspace wird vorbereitet…",
             "installedVersion": "installierte Version",
-            "installedVersion2": "Installierte Version",
             "logoAdd": "Logo hinzufügen",
             "logoChange": "Logo ändern",
             "needMorePower": "Brauchen Sie mehr Leistung?",
@@ -8892,6 +8899,7 @@
             "sandboxName": "Sandbox-Name",
             "sandboxSmallStarterMachine": "Diese Sandbox ist eine kleine Einsteigermaschine, die wir für Sie betreiben. Wenn es eng wird, verschieben Sie sie auf",
             "sandboxUrl": "Sandbox-URL",
+            "runsOn": "Läuft auf",
             "details": "Details",
             "setUp": "Dort einrichten →",
             "sleep": "Schlafen, wenn ungenutzt",

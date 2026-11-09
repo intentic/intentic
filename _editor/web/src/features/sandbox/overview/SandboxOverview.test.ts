@@ -301,7 +301,7 @@ it(`states this sandbox's own hours on the hosted card, with Billing where a pla
 });
 
 // Structural wrap/shrink assertions complement the real-browser pane audit; jsdom cannot measure CSS layout.
-it(`keeps long image, installed and available versions in full within stackable facts`, () => {
+it(`keeps long image, installed and available versions in full beside the name, wrapping`, () => {
     const image = `ghcr.io/intentic/sandbox:stable-2026.10.10-4f5dd184296f1351fa2f795d36b4d3c7081a4f9c`;
     const installed = `2026.10.03-stable-4f5dd184296f1351fa2f795d36b4d3c7081a4f9c`;
     const latest = `2026.10.10-stable-729f184f364d3c7081a4f9c2f795d36b4d3c7081a4f9c`;
@@ -310,13 +310,13 @@ it(`keeps long image, installed and available versions in full within stackable 
     latestVersion.value = latest;
     updateAvailable.value = true;
     const el = mount(sandboxRow());
-    const facts = el.querySelector(`dl[data-overview="details"]`)!;
+    const facts = el.querySelector(`[data-overview="image"]`)!;
     expect(facts.textContent).toContain(image);
     expect(facts.textContent).toContain(installed);
     expect(facts.textContent).toContain(latest);
     expect(facts.querySelector(`.truncate`)).toBeNull();
-    expect(facts.querySelector(`dd`)?.classList.contains(`[overflow-wrap:anywhere]`)).toBe(true);
-    expect(facts.firstElementChild?.classList.contains(`flex-col`)).toBe(true);
+    expect(facts.firstElementChild?.classList.contains(`[overflow-wrap:anywhere]`)).toBe(true);
+    expect(facts.classList.contains(`flex-wrap`)).toBe(true);
 });
 
 it(`bounds a long Sandbox URL's text independently of its external-link icon without changing the address`, () => {
@@ -348,7 +348,7 @@ const onConnectedMachine = (): void => {
     };
 };
 const changeButton = (el: HTMLElement): HTMLButtonElement | undefined =>
-    [...el.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `Change…`);
+    el.querySelector<HTMLButtonElement>(`[data-setting="overview-resources"] button`) ?? undefined;
 
 it(`hands a maintainer the Resources form, not the owner alone`, async () => {
     onConnectedMachine();

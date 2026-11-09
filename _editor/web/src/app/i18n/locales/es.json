@@ -759,6 +759,14 @@
             "startedByControlToken": "Iniciada por el token de control {tokenLabel}",
             "unclaimed": "Sin reclamar"
         },
+        "foreignLand": {
+            "title": "¿Llevar el trabajo de {name}?",
+            "body": "Esta conversación es de {name}, no tuya. Llevarla mete sus cambios ahora en el espacio de trabajo que comparten todos, haya terminado o no con ella.",
+            "confirm": "Llevar el trabajo de {name}",
+            "owner": "Es dueño de esta conversación",
+            "ownerAt": "Es dueño de esta conversación · {email}",
+            "files": "{count} archivo cambiado | {count} archivos cambiados"
+        },
         "parentMark": {
             "openParent": "Abrir padre",
             "startedBy": "Iniciada por «{title}»; la abre"
@@ -8876,7 +8884,6 @@
             "couldntSaveLogo": "No se pudo guardar el logotipo.",
             "gettingWorkspaceReady": "Preparando el espacio de trabajo…",
             "installedVersion": "versión instalada",
-            "installedVersion2": "Versión instalada",
             "logoAdd": "Añadir logo",
             "logoChange": "Cambiar logo",
             "needMorePower": "¿Necesitas más potencia?",
@@ -8892,6 +8899,7 @@
             "sandboxName": "Nombre del sandbox",
             "sandboxSmallStarterMachine": "Este sandbox es una máquina pequeña de inicio que alojamos para ti. Cuando se te quede corta, muévela a",
             "sandboxUrl": "URL del sandbox",
+            "runsOn": "Se ejecuta en",
             "details": "Detalles",
             "setUp": "Prepararlo allí →",
             "sleep": "Dormir cuando no se usa",

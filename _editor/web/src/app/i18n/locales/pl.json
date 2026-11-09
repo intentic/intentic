@@ -759,6 +759,14 @@
             "startedByControlToken": "Uruchomiona przez token sterujący {tokenLabel}",
             "unclaimed": "Nieprzejęte"
         },
+        "foreignLand": {
+            "title": "Scalić pracę: {name}?",
+            "body": "Ta rozmowa należy do: {name}, nie do Ciebie. Scalenie przenosi jej zmiany już teraz do obszaru roboczego wspólnego dla wszystkich, niezależnie od tego, czy jej właściciel skończył.",
+            "confirm": "Scal pracę: {name}",
+            "owner": "Właściciel tej rozmowy",
+            "ownerAt": "Właściciel tej rozmowy · {email}",
+            "files": "{count} zmieniony plik | {count} zmienione pliki | {count} zmienionych plików"
+        },
         "parentMark": {
             "openParent": "Otwórz rodzica",
             "startedBy": "Uruchomiona przez „{title}”; otwiera ją"
@@ -8354,7 +8362,6 @@
             "couldntSaveLogo": "Nie udało się zapisać logo.",
             "gettingWorkspaceReady": "Przygotowywanie przestrzeni roboczej…",
             "installedVersion": "zainstalowana wersja",
-            "installedVersion2": "Zainstalowana wersja",
             "logoAdd": "Dodaj logo",
             "logoChange": "Zmień logo",
             "needMorePower": "Potrzebujesz więcej mocy?",
@@ -8370,6 +8377,7 @@
             "sandboxName": "Nazwa sandboxa",
             "sandboxSmallStarterMachine": "Ten sandbox to mała maszyna startowa, którą dla Ciebie hostujemy. Kiedy zrobi się ciasno, przenieś go na",
             "sandboxUrl": "Adres sandboxa",
+            "runsOn": "Działa na",
             "details": "Szczegóły",
             "setUp": "Skonfiguruj go tam →",
             "sleep": "Usypiaj, gdy nieużywany",

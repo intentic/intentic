@@ -759,6 +759,14 @@
             "startedByControlToken": "Lancée par le jeton de contrôle {tokenLabel}",
             "unclaimed": "Non réclamé"
         },
+        "foreignLand": {
+            "title": "Intégrer le travail de {name} ?",
+            "body": "Cette conversation est celle de {name}, pas la vôtre. L'intégrer place ses modifications dès maintenant dans l'espace de travail que tout le monde partage, que {name} en ait fini ou non.",
+            "confirm": "Intégrer le travail de {name}",
+            "owner": "Propriétaire de cette conversation",
+            "ownerAt": "Propriétaire de cette conversation · {email}",
+            "files": "{count} fichier modifié | {count} fichiers modifiés"
+        },
         "parentMark": {
             "openParent": "Ouvrir le parent",
             "startedBy": "Lancée par « {title} » ; l’ouvre"
@@ -8876,7 +8884,6 @@
             "couldntSaveLogo": "Impossible d'enregistrer le logo.",
             "gettingWorkspaceReady": "Préparation de l'espace de travail…",
             "installedVersion": "version installée",
-            "installedVersion2": "Version installée",
             "logoAdd": "Ajouter un logo",
             "logoChange": "Changer le logo",
             "needMorePower": "Besoin de plus de puissance ?",
@@ -8892,6 +8899,7 @@
             "sandboxName": "Nom du sandbox",
             "sandboxSmallStarterMachine": "Ce sandbox est une petite machine de démarrage que nous hébergeons pour vous. Quand cela devient serré, déplacez-le sur",
             "sandboxUrl": "URL du sandbox",
+            "runsOn": "S'exécute sur",
             "details": "Détails",
             "setUp": "L'installer là-bas →",
             "sleep": "Mettre en veille quand il est inutilisé",

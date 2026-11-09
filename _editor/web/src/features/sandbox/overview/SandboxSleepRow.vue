@@ -27,7 +27,7 @@ const id = useId();
 
 <template>
     <OverviewSettingRow v-if="shown" data-setting="overview-sleep" :label="t(`sandbox.sandboxOverview.sleep`)" :label-for="canShip ? id : undefined">
-        <span v-tooltip.top="{ title: t(`sandbox.sandboxOverview.sleep`), note: t(`sandbox.sandboxOverview.sleepTipNote`) }" class="min-w-0 break-words">{{
+        <span v-tooltip.top="{ title: t(`sandbox.sandboxOverview.sleep`), note: t(`sandbox.sandboxOverview.sleepTipNote`) }" class="min-w-0 break-words py-1">{{
             on ? t(`sandbox.sandboxOverview.sleepOn`) : t(`sandbox.sandboxOverview.sleepOff`)
         }}</span>
         <Notice v-if="refusal" :of="refusal" />
@@ -37,7 +37,7 @@ const id = useId();
                 :input-id="id"
                 :model-value="on"
                 :disabled="save.isPending.value"
-                class="shrink-0"
+                class="ui-switch-sm shrink-0"
                 @update:model-value="(value: boolean) => patch({ sleepWhenUnused: value })"
             />
         </template>

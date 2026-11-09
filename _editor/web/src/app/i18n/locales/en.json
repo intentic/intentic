@@ -759,6 +759,14 @@
             "startedByControlToken": "Started by the control token {tokenLabel}",
             "unclaimed": "Unclaimed"
         },
+        "foreignLand": {
+            "title": "Land {name}'s work?",
+            "body": "This conversation is {name}'s, not yours. Landing brings its changes into the workspace everyone shares now, whether or not they are finished with it.",
+            "confirm": "Land {name}'s work",
+            "owner": "Owns this conversation",
+            "ownerAt": "Owns this conversation · {email}",
+            "files": "{count} file changed | {count} files changed"
+        },
         "parentMark": {
             "openParent": "Open parent",
             "startedBy": "Started by “{title}”; opens it"
@@ -8876,7 +8884,6 @@
             "couldntSaveLogo": "Couldn't save the logo.",
             "gettingWorkspaceReady": "Getting the workspace ready…",
             "installedVersion": "installed version",
-            "installedVersion2": "Installed version",
             "logoAdd": "Add logo",
             "logoChange": "Change logo",
             "needMorePower": "Need more power?",
@@ -8892,6 +8899,7 @@
             "sandboxName": "Sandbox name",
             "sandboxSmallStarterMachine": "This sandbox is a small starter machine we host for you. When it feels tight, move it to",
             "sandboxUrl": "Sandbox URL",
+            "runsOn": "Runs on",
             "details": "Details",
             "setUp": "Set it up there →",
             "sleep": "Sleep when unused",

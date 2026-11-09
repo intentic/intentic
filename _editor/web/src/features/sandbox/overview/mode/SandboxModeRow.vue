@@ -12,6 +12,7 @@ import { useRole } from "../../../../client/sandbox/useRole";
 import { modeSwitchLines, useSandboxMode } from "../../../../models/sandbox/mode/useSandboxMode";
 import ModeChoice from "../../../../parts/sandbox/ModeChoice.vue";
 import OverviewSettingRow from "../OverviewSettingRow.vue";
+import { EDITABLE_VALUE, FIXED_VALUE } from "../overviewLook";
 
 const t = useT();
 const { canShip } = useRole();
@@ -40,12 +41,16 @@ const save = async (): Promise<void> => {
 
 <template>
     <OverviewSettingRow v-if="mode !== undefined" data-setting="overview-mode" :label="t(`sandbox.mode.howItRuns`)">
-        <span class="min-w-0 break-words">{{ summary }}</span>
-        <template v-if="canShip" #action>
-            <span ref="anchor" class="inline-flex">
-                <Button size="small" tier="boring" :label="t(`sandbox.sandboxOverview.change`)" @click="open = true" />
+        <button v-if="canShip" ref="anchor" type="button" :class="EDITABLE_VALUE" @click="open = true">
+            <span class="flex min-w-0 items-baseline gap-1.5">
+                <span class="min-w-0 break-words">{{ summary }}</span>
+                <Icon name="pencil" class="shrink-0 text-2xs text-subtle opacity-60 transition-opacity group-hover/value:opacity-100" aria-hidden="true" />
             </span>
-            <ResponsiveOverlay v-model="open" :anchor="anchor" :header="t(`sandbox.mode.question`)" side="bottom" cross="end" panel-class="w-pop p-4">
+            <span class="sr-only">{{ t(`sandbox.sandboxOverview.change`) }}</span>
+        </button>
+        <span v-else :class="FIXED_VALUE">{{ summary }}</span>
+        <template v-if="canShip">
+            <ResponsiveOverlay v-model="open" :anchor="anchor" :header="t(`sandbox.mode.question`)" side="bottom" cross="start" panel-class="w-pop p-4">
                 <div class="flex flex-col gap-3" data-sandbox-mode-editor>
                     <span :id="questionId" class="text-sm font-medium text-content">{{ t(`sandbox.mode.question`) }}</span>
                     <ModeChoice v-model="draft" :labelled-by="questionId" />
