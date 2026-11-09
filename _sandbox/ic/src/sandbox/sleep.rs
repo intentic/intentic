@@ -397,7 +397,8 @@ the runner dials out, and nobody opens it: between turns it reads as unused, and
 wake is somebody opening a sandbox's page (a runner has none) or its own alarm (it has none). omen's keeper slept
 runner-omen after 30 idle minutes and it stayed down until it was removed. A runner's daemon now says it is kept awake,
 and this holds the same for a runner on an image from before that. */
-const RUNNER_STAYS_AWAKE: &str = "a runner: the sandbox it works for dispatches to it, and nothing would wake it";
+const RUNNER_STAYS_AWAKE: &str =
+    "a runner: the sandbox it works for dispatches to it, and nothing would wake it";
 
 /// Why the keeper's sweep leaves a sandbox awake before anything is read of it: a runner. Pure.
 fn swept_awake(slug: &str) -> Option<&'static str> {
@@ -924,8 +925,14 @@ pub fn wakes(args: WakesArgs) -> Result<()> {
 mod tests {
     #[test]
     fn the_keepers_sweep_never_sleeps_a_runner_and_considers_every_other_sandbox() {
-        assert_eq!(super::swept_awake("runner-omen"), Some(super::RUNNER_STAYS_AWAKE));
-        assert_eq!(super::swept_awake("runner-radarsu-omen-runner"), Some(super::RUNNER_STAYS_AWAKE));
+        assert_eq!(
+            super::swept_awake("runner-omen"),
+            Some(super::RUNNER_STAYS_AWAKE)
+        );
+        assert_eq!(
+            super::swept_awake("runner-radarsu-omen-runner"),
+            Some(super::RUNNER_STAYS_AWAKE)
+        );
         assert_eq!(super::swept_awake("sandbox-a4ba63bf2aa5"), None);
         assert_eq!(super::swept_awake("winengine"), None);
     }
