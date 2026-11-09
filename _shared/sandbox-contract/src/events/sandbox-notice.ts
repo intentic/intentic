@@ -104,6 +104,9 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
     // A turn sent thin for a small window ("16k"): what was left out, and whether the base instructions were swapped too.
     z.object({ code: z.literal("contextTrim"), params: z.object({ window: z.string(), omitted: z.string().optional(), base: z.boolean() }) }),
     z.object({ code: z.literal("resumed"), params: z.object({ reason: ResumeNoticeReasonSchema }) }),
+    // A Continue somebody scheduled, gone out by itself when its time came (the daemon's continuation.ts): `waited` how
+    // long ago it was scheduled, already worded ("41h 3m"). The turn's own rows follow, whatever became of it.
+    z.object({ code: z.literal("scheduledContinue"), params: z.object({ waited: z.string() }) }),
     // How a turn a spent allowance held continued the conversation (schemas/providers/handoff.ts): `tokens` the context
     // it started from and `from` the one carrying the session whole would have re-read (both worded, "118k"); `cleared`
     // older tool outputs a trimmed copy stubbed; `model` the one that wrote a summary. `fellBack` names the hand-off that

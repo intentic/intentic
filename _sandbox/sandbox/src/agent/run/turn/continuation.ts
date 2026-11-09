@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { type MessageReceipt, profileOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
+import { liveRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import type { QueuedItem } from "../../../conversations/actor/conversation-queue.js";
 import { conversationProfile } from "../../../conversations/registry/agents-store.js";
 import { opt } from "../../../opt.js";
@@ -16,6 +19,35 @@ import { carryOnTurn } from "./turn-resume.js";
    goes it is the very Continue a press makes now (carryOnTurn): the held turn runs again as it was, or, with nothing
    held, the agent is told to continue in its own session. A turn that starts first makes it moot, and it is dropped
    (conversation-queue.ts, superseded). */
+
+/* A SCHEDULED CONTINUE SAYS IT WAS ONE (2026-11-09). Three Continues booked two days earlier went out at a boot, failed
+   within seconds, and stood in Attention stamped "now" with a failure and nothing else: read beside a restart, they
+   looked like turns the restart had cut. A continuation that waited in the queue now leaves a row on the turn it
+   starts saying it was scheduled, and how long ago, so whatever follows (a failure, a hold, the work) has its cause
+   above it. One sent the moment it was pressed says nothing: the person is looking at their own press. */
+const SCHEDULED_AFTER_MS = 60_000;
+
+const waitedLabel = (ms: number): string => {
+    const minutes = Math.max(1, Math.round(ms / 60_000));
+    const hours = Math.floor(minutes / 60);
+    if (hours === 0) {
+        return `${minutes}m`;
+    }
+    return hours < 48 ? `${hours}h ${minutes % 60}m` : `${Math.floor(hours / 24)}d ${hours % 24}h`;
+};
+
+/** The row a scheduled Continue leaves on the turn it starts; undefined for one that went as it was pressed. */
+export const scheduledContinueRow = (waitedMs: number): TranscriptRow | undefined => {
+    if (waitedMs < SCHEDULED_AFTER_MS) {
+        return undefined;
+    }
+    const waited = waitedLabel(waitedMs);
+    return {
+        role: "notice",
+        text: `A Continue scheduled ${waited} ago went out by itself.`,
+        noticeCode: noticeCode({ code: "scheduledContinue", params: { waited } }),
+    };
+};
 
 // The turn a queued continuation makes, attributed to whoever booked it, on the routing it was booked with.
 const continuationTurn = (item: Omit<QueuedItem, "revision">): TurnInput & { readonly conversationId: string } => ({
@@ -43,7 +75,13 @@ export const continueQueued = async (
         return undefined;
     }
     services.conversations.send(conversationId, { kind: "queue-taken", ids: [item.id] });
-    services.logger.info({ conversationId, run: started.id }, "admission: a booked continuation went out");
+    const waitedMs = Date.now() - item.queuedAt;
+    const scheduled = scheduledContinueRow(waitedMs);
+    const live = liveRunOf(services.conversations, conversationId);
+    if (scheduled !== undefined && live?.id === started.id) {
+        live.note(scheduled);
+    }
+    services.logger.info({ conversationId, run: started.id, waitedMs }, "admission: a booked continuation went out");
     return new Map([[item.id, { delivered: "started", run: started.id }]]);
 };
 

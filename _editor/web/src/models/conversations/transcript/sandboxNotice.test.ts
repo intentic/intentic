@@ -113,6 +113,11 @@ const DAEMON: readonly TranscriptRow[] = [
         text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}`,
         noticeCode: noticeCode({ code: `restartInterrupted` }),
     },
+    {
+        role: `notice`,
+        text: `A Continue scheduled 41h 3m ago went out by itself.`,
+        noticeCode: noticeCode({ code: `scheduledContinue`, params: { waited: `41h 3m` } }),
+    },
     // A turn moved onto another account before it ran (turn-plan.ts), for each reason a move has.
     accountMovedRow({ why: `refused`, from: `Work`, to: `radarsu@gmail.com`, said: `Your organization has disabled Claude Code.` }),
     accountMovedRow({ why: `reach`, from: `Owner's`, to: `Team` }),

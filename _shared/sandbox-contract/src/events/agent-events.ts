@@ -66,6 +66,9 @@ export const AgentErrorCodeSchema = z.enum([
     // The model can only write one-shot jobs (Model.helperOnly: its server says it cannot call tools, or
     // it is the quick-jobs local model), refused before sending; the words wait for another model.
     "model-helper-only",
+    // The turn names a model endpoint (`endpoint/<id>`) nobody has connected here any more: its capability was removed
+    // since the conversation last ran on it, refused before sending; the words wait for another model, or the endpoint.
+    "endpoint-gone",
     // The privacy shield is on, the provider is untrusted, and the runtime is one it cannot read by content at
     // all (an ACP agent, Pi), refused before sending; the words wait for a covered provider.
     "privacy-unshielded",

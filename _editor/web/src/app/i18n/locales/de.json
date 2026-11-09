@@ -3293,6 +3293,7 @@
             "keptPlanning": "Weiter geplant.",
             "watching": "Beobachtet {note}, geprüft alle {every}.",
             "restartInterrupted": "Die Sandbox wurde neu gestartet, bevor dieser Zug beendet war. „Fortsetzen“ macht im gespeicherten Worktree weiter.",
+            "scheduledContinue": "Ein vor {waited} geplantes „Fortsetzen“ wurde von selbst gesendet.",
             "depsInstalling": "{count} hinzugefügte oder geänderte Abhängigkeit wird installiert; die Prüfungen des Projekts laufen danach, und das Ergebnis erscheint unter Aktivität. | {count} hinzugefügte oder geänderte Abhängigkeiten werden installiert; die Prüfungen des Projekts laufen danach, und das Ergebnis erscheint unter Aktivität.",
             "depsQueued": "{count} hinzugefügte oder geänderte Abhängigkeit wird in Ihrem Baum installiert: Die Installation wartet, bis jede andere Installation fertig ist, erscheint unter Arbeits-Terminals, und ihr Ergebnis erscheint unter Aktivität. | {count} hinzugefügte oder geänderte Abhängigkeiten werden in Ihrem Baum installiert: Die Installation wartet, bis jede andere Installation fertig ist, erscheint unter Arbeits-Terminals, und ihr Ergebnis erscheint unter Aktivität.",
             "retrying": "{message} Wird automatisch wiederholt: Versuch {attempt} von {of}.",

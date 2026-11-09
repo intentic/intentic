@@ -3293,6 +3293,7 @@
             "keptPlanning": "Siguió planificando.",
             "watching": "Vigilando {note}, comprobado cada {every}.",
             "restartInterrupted": "El sandbox se reinició antes de que terminara este turno. Continuar lo retoma desde el worktree guardado.",
+            "scheduledContinue": "Un «Continuar» programado hace {waited} se envió solo.",
             "depsInstalling": "Instalando {count} dependencia que añadió o cambió; las comprobaciones del proyecto se ejecutan al terminar y el resultado aparece en Actividad. | Instalando {count} dependencias que añadió o cambió; las comprobaciones del proyecto se ejecutan al terminar y el resultado aparece en Actividad.",
             "depsQueued": "Se está instalando en tu árbol {count} dependencia que añadió o cambió: la instalación espera a que termine cualquier otra, aparece en Terminales de trabajo y su resultado llega a Actividad. | Se están instalando en tu árbol {count} dependencias que añadió o cambió: la instalación espera a que termine cualquier otra, aparece en Terminales de trabajo y su resultado llega a Actividad.",
             "retrying": "{message} Reintentando automáticamente: intento {attempt} de {of}.",

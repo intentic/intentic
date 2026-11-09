@@ -239,6 +239,8 @@ const codedLine = (notice: SandboxNotice, audience: Audience, place: NoticePlace
             return t(`chat.sandboxNotice.watching`, { note: notice.params.note, every: notice.params.every });
         case `resumed`:
             return RESUMED[notice.params.reason]();
+        case `scheduledContinue`:
+            return t(`chat.sandboxNotice.scheduledContinue`, { waited: notice.params.waited });
         case `keptWarm`:
             return t(`chat.sandboxNotice.keptWarm`, notice.params, notice.params.refreshes);
         case `keptCold`:

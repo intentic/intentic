@@ -98,6 +98,9 @@ export const FAILURE_CODES = {
     "model-unavailable": { kind: "model", course: "door", anotherModelClears: true },
     "context-window-too-small": { kind: "contextFull", course: "door", anotherModelClears: true },
     "model-helper-only": { kind: "model", course: "door", anotherModelClears: true },
+    // The endpoint the turn would run on is no longer connected. Not `repeats`: that names a wall no other model gets
+    // past (wayOut.ts), and this one any other model does.
+    "endpoint-gone": { kind: "model", course: "door", anotherModelClears: true },
     // The privacy shield refused an untrusted provider on a runtime it cannot read by content at all.
     "privacy-unshielded": { kind: "privacy", course: "door" },
     // The turn carries a tool list its runtime cannot keep.

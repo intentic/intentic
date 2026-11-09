@@ -341,7 +341,7 @@ describe(`a failure, by its code's course`, () => {
     });
 
     // Each provider is named after the code that asked, so the catalog's reads say which refusals reloaded what.
-    it(`reads the catalog again for a refused model or trial, and for nothing else`, async () => {
+    it(`reads the catalog again for a refused model, a removed endpoint or a trial, and for nothing else`, async () => {
         loadTrialStatus.mockClear();
         loadProviderModels.mockClear();
         for (const code of AgentErrorCodeSchema.options) {
@@ -352,7 +352,7 @@ describe(`a failure, by its code's course`, () => {
             failures.apply({ kind: `error`, message: `The provider's own words.`, code });
             failures.cancelProbe();
         }
-        const reloaded = [`model-unavailable`, `grok-model-invalid`, `codex-model-invalid`, `trial-model-unavailable`].toSorted();
+        const reloaded = [`model-unavailable`, `endpoint-gone`, `grok-model-invalid`, `codex-model-invalid`, `trial-model-unavailable`].toSorted();
         await waitFor(() => expect(loadProviderModels.mock.calls.map(([provider]) => provider).toSorted()).toEqual(reloaded));
         expect(loadTrialStatus).toHaveBeenCalledTimes(3);
     });

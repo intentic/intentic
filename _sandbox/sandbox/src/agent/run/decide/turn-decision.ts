@@ -189,6 +189,11 @@ const personaWarnings = (persona: TurnPersona, input: AgentTurn): TurnWarning[] 
         ? [{ fields: { actsAs: input.actsAs }, message: "persona: no such card, this turn reaches no account and no tools" }]
         : [];
 
+// Why a turn on a removed endpoint was refused, in words the owner can act on: what is gone, and the two ways on.
+const endpointGoneRefusal = (id: string): string =>
+    `The model endpoint "${id}" is no longer connected to this sandbox, so nothing was sent. ` +
+    "Pick another model to carry on, or add it back as an Endpoint capability.";
+
 // A tool list (an automation's `allowedTools`) is a boundary only where the runtime checks every call against it
 // (AgentCapabilities.toolAllowlist); anywhere else the turn would run with that runtime's whole toolbox, so it is turned
 // away before anything spawns and the words wait for a runtime that can keep the list.
@@ -222,6 +227,13 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         return { ok: false, code: "account-not-allowed", message, ...opt("account", account), warnings: [warning], spawn: false };
     }
     const runtime = turnRuntime(input, facts.entry);
+    // The endpoint the conversation last ran on is no longer connected: nothing could serve the turn, so it is kept for
+    // another model rather than started into the credential resolver's refusal.
+    if (facts.endpointGone !== undefined) {
+        const said = { conversationId: input.conversationId, provider: runtime.provider, endpoint: facts.endpointGone };
+        const warning = { fields: said, message: "endpoint: the turn names a model endpoint no longer connected, refused before sending" };
+        return { ok: false, code: "endpoint-gone", message: endpointGoneRefusal(facts.endpointGone), warnings: [warning], spawn: false };
+    }
     // A model that can only write one-shot jobs is turned away at the door whatever the turn would carry: an agent turn
     // is tool calls, and a server that drops tools answers one with words that do nothing. The picker does not offer
     // such a model for chat; this holds every other way in (a restored tab, a pinned run role, a route).

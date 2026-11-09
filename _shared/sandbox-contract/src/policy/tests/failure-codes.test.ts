@@ -13,7 +13,7 @@ test("every code the wire names has a row, and the table names no code the wire 
 });
 
 // The door course names the codes refused before the model saw a word.
-test("the codes turned away at the door are exactly the nineteen refused before the model saw a word", () => {
+test("the codes turned away at the door are exactly the twenty refused before the model saw a word", () => {
     const door = codesWhere((code) => failureCourseOf(code) === "door");
     expect(door).toEqual(
         [
@@ -23,6 +23,7 @@ test("the codes turned away at the door are exactly the nineteen refused before 
             "unknown-command",
             "context-window-too-small",
             "model-helper-only",
+            "endpoint-gone",
             "privacy-unshielded",
             "tools-unenforced",
             "agent-domain-refused",
@@ -48,6 +49,7 @@ test("another model clears exactly the refusals about the model, its trial or it
         "account-not-allowed",
         "context-window-too-small",
         "model-helper-only",
+        "endpoint-gone",
         "trial-unavailable",
         "trial-model-unavailable",
         "trial-exhausted",
@@ -95,6 +97,7 @@ test("every code keeps the kind the board named it by", () => {
         "model-unavailable": "model",
         "trial-model-unavailable": "model",
         "model-helper-only": "model",
+        "endpoint-gone": "model",
         "context-window-too-small": "contextFull",
         "context-overflow": "contextFull",
         "engine-version-floor": "update",

@@ -3293,6 +3293,7 @@
             "keptPlanning": "Planification poursuivie.",
             "watching": "Surveille {note}, vérifié toutes les {every}.",
             "restartInterrupted": "Le sandbox a redémarré avant la fin de ce tour. Continuer le reprend depuis le worktree enregistré.",
+            "scheduledContinue": "Une reprise planifiée il y a {waited} est partie d’elle-même.",
             "depsInstalling": "Installation de {count} dépendance ajoutée ou modifiée ; les vérifications du projet s'exécutent ensuite, et le résultat arrive dans Activité. | Installation de {count} dépendances ajoutées ou modifiées ; les vérifications du projet s'exécutent ensuite, et le résultat arrive dans Activité.",
             "depsQueued": "{count} dépendance ajoutée ou modifiée est en cours d'installation dans votre arborescence : l'installation attend la fin de toute autre installation, apparaît dans Terminaux de travail, et son résultat arrive dans Activité. | {count} dépendances ajoutées ou modifiées sont en cours d'installation dans votre arborescence : l'installation attend la fin de toute autre installation, apparaît dans Terminaux de travail, et son résultat arrive dans Activité.",
             "retrying": "{message} Nouvelle tentative automatique : essai {attempt} sur {of}.",

@@ -94,7 +94,7 @@ export const servedEndpointModel = async (
     const capability = await services.capabilities.get(id);
     const config = capability === undefined ? undefined : endpointConfigOf(capability);
     if (config === undefined) {
-        // Not an endpoint this sandbox holds; the credential resolver will refuse it by name a moment later.
+        // Not an endpoint this sandbox holds; the plan turns the turn away by name (turn-decision.ts, `endpoint-gone`).
         return undefined;
     }
     const catalog = await services.endpointModels.models(id, config);

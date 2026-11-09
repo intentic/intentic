@@ -195,6 +195,24 @@ test("a model whose server cannot call tools is refused before anything is sent,
     );
 });
 
+// An endpoint removed under a conversation that last ran on it (2026-11-09): the turn used to be accepted, set up, and
+// failed uncoded by the credential resolver seconds later, a crash in Attention whose Continue could only fail again.
+test("a turn on an endpoint no longer connected is refused before anything is sent, and says the ways on", async () => {
+    const services = servicesWith({
+        logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [], get: async () => undefined }),
+    });
+
+    const plan = await planTurn(services, turn({ agent: "endpoint/anthropic-2", model: "claude-opus-5-5" }), context);
+
+    expect(plan).toMatchObject({
+        ok: false,
+        code: "endpoint-gone",
+        message:
+            'The model endpoint "anthropic-2" is no longer connected to this sandbox, so nothing was sent. Pick another model to carry on, or add it back as an Endpoint capability.',
+    });
+});
+
 test("the same endpoint serving a large window is planned normally", async () => {
     const big = { id: "gpu-box", kind: "endpoint" as const, config: { baseUrl: "http://gpu.local:8000/v1", protocol: "openai" as const } };
     const services = servicesWith({

@@ -159,8 +159,9 @@ export class TurnFailures {
                     },
                 );
                 return;
+            case `endpoint-gone`:
             case `model-unavailable`:
-                // The plan does not carry the pinned model: the reloaded catalog repoints the picker.
+                // The plan does not carry the pinned model, or its endpoint is gone: the reloaded catalog repoints the picker.
                 this.reloadModels();
                 return;
             case `engine-version-floor`: {

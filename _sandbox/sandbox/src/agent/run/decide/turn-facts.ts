@@ -23,7 +23,8 @@ import { homeNoteIfDue } from "../../../conversations/home/home-policy.js";
 import { type AccountRoute, offBlockedAccount } from "../../providers/accounts/blocked-account.js";
 import { cacheCold, offSpentAccount, placeCold } from "../../providers/accounts/account-placement.js";
 import { type ReachedRoute, routeWithinReach } from "./account-reach.js";
-import { endpointIdOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { endpointIdOf, isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import { endpointConfigOf } from "../../../endpoints/local-model.js";
 import { routingFor } from "../../../conversations/registry/routing.js";
 import { type IqSearchTeaching, iqSearchInstruction } from "../../prompt/iq-search-instruction.js";
 import { type DeclaredWindow, servedEndpointModel, windowOf } from "../../prompt/window/context-budget.js";
@@ -61,6 +62,9 @@ export interface AdmittedTurnFacts {
     // Set where the endpoint's catalog marks the model as able to run one-shot jobs only, never a turn; absent for
     // every native provider and every model nothing has said that of.
     readonly helperOnly?: { readonly label: string; readonly reason: HelperOnly };
+    // The endpoint the turn would run on, by id, where nothing installed serves it any more: its capability was removed
+    // since the conversation last ran there. Absent for every native provider, the trial, and an endpoint still held.
+    readonly endpointGone?: string;
     // Why the privacy shield refuses this turn: it is on, the provider is untrusted, and the runtime is one the gateway
     // cannot stand in front of. Absent: it may run.
     readonly privacyRefusal?: PrivacyRefusal;
@@ -319,6 +323,21 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "workspace"
 >;
 
+/* AN ENDPOINT REMOVED UNDER A CONVERSATION (2026-11-09). Three conversations last ran on an endpoint whose capability was
+   then removed. A Continue booked on each went out at the next boot, was accepted, set up, and three seconds later failed
+   in the credential resolver with "Unknown model endpoint": an uncoded failure, so each stood in Attention as a crash
+   with a Continue that could only fail the same way. Read here instead, off the same manifest the resolver reads, the
+   turn is turned away at the door (turn-decision.ts, `endpoint-gone`): nothing is set up, it is kept whole, and every
+   window offers another model as the way on. */
+const goneEndpoint = (provider: TurnRuntime["provider"], installed: readonly Capability[]): string | undefined => {
+    const id = endpointIdOf(provider);
+    if (id === undefined || isTrialProvider(provider)) {
+        return undefined;
+    }
+    const capability = installed.find((held) => held.id === id);
+    return capability !== undefined && endpointConfigOf(capability) !== undefined ? undefined : id;
+};
+
 // Asked of every turn, since a policy can change between two of them: the shield's verdict on the route the turn's runtime
 // reaches its provider by (privacy-trust.ts runtimeRoute).
 const privacyRefusalOf = (services: Pick<Services, "privacyShield" | "perf">, runtime: TurnRuntime, conversationId: string | undefined): Promise<PrivacyRefusal | undefined> =>
@@ -383,6 +402,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         repoChecks,
         declared,
         ...opt("helperOnly", helperOnly === undefined || served === undefined ? undefined : { label: served.row.label, reason: helperOnly }),
+        ...opt("endpointGone", goneEndpoint(runtime.provider, installed)),
         ...opt("privacyRefusal", privacyRefusal),
         installed,
         setup,

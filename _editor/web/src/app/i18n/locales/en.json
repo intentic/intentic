@@ -3293,6 +3293,7 @@
             "keptPlanning": "Kept planning.",
             "watching": "Watching for {note}, checked every {every}.",
             "restartInterrupted": "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. The sandbox ended the turn's in-process helpers. Background jobs and dev servers ended on a container restart; a daemon-only restart may preserve kept jobs and terminal sessions. A container recreation clears /tmp, including scripts and screenshots; check before relying on any file there. Retained helper edits stay in .claude/worktrees/agent-*. Keep evidence that must survive in /work/.intentic/records/artifacts/.",
+            "scheduledContinue": "A Continue scheduled {waited} ago went out by itself.",
             "depsInstalling": "Installing {count} dependency it added or changed; the project's checks run when that finishes, and the outcome lands in Activity. | Installing {count} dependencies it added or changed; the project's checks run when that finishes, and the outcome lands in Activity.",
             "depsQueued": "{count} dependency it added or changed is being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity. | {count} dependencies it added or changed are being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.",
             "retrying": "{message} Retrying by itself: attempt {attempt} of {of}.",
