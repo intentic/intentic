@@ -33,9 +33,11 @@ flowchart LR
   `intentic:navigate` (`../README.md` has what each carries).
 - **The app's icon and the system's notifications.** `badge.rs` puts the workspace tab's mark on the tray icon, the
   Windows taskbar button's overlay (put back each time a face is shown, since Windows drops it with the button) and a
-  Linux dock's count, and the open sandbox's logo as the frame's icon (on Windows its big icon too, which is the one
-  the taskbar button draws, and an app id of the frame's own, without which the button draws the Start menu shortcut's
-  icon instead); `notice.rs` puts up, withdraws and clears the notifications the page asks for (WinRT toasts with
+  Linux dock's count, and the open sandbox's logo as the frame's icon (on Windows its big icon too). On Windows the
+  frame's taskbar button is the open sandbox's own: an app id per sandbox, with relaunch properties naming the sandbox,
+  a command that opens it and its logo written to an icon file, since a pinned button draws its shortcut's icon and
+  never the window's; without a sandbox it is the app's, under an id no Start menu shortcut carries. The identity is
+  kept in the app's local data (`taskbar/`) so a launch, or a pin's, starts under it; `notice.rs` puts up, withdraws and clears the notifications the page asks for (WinRT toasts with
   protocol activation, or `org.freedesktop.Notifications` over `zbus`), on one thread of their own, and answers a
   press with the workspace at the notification's route. Both take the page's word for what to show
   (`intentic://badge`, `intentic://notice`) and decide nothing about it.

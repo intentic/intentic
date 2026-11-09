@@ -41,6 +41,21 @@ describe(`the badge link`, () => {
         expect(params(desktopBadgeLink({ mark: `none`, count: 0, tooltip: `  ` }))).toEqual({ mark: `none` });
     });
 
+    it(`names the open sandbox the taskbar button belongs to, on one bounded line`, () => {
+        expect(params(desktopBadgeLink({ mark: `none`, count: 0, sandbox: { id: `sbx_1-a`, name: `Game\nserver` } }))).toEqual({
+            mark: `none`,
+            sandbox: `sbx_1-a`,
+            name: `Game server`,
+        });
+        expect(params(desktopBadgeLink({ mark: `none`, count: 0, sandbox: { id: `sbx`, name: ` ` } }))).toEqual({ mark: `none`, sandbox: `sbx` });
+    });
+
+    it(`drops a sandbox id the app could not take, and its name with it`, () => {
+        for (const id of [``, `../box`, `a b`, `x`.repeat(65)]) {
+            expect(params(desktopBadgeLink({ mark: `none`, count: 0, sandbox: { id, name: `Box` } }))).toEqual({ mark: `none` });
+        }
+    });
+
     it(`holds the tooltip to one bounded line`, () => {
         expect(param(desktopBadgeLink({ mark: `done`, count: 0, tooltip: `two\nlines` }), `tooltip`)).toBe(`two lines`);
         expect(Array.from(param(desktopBadgeLink({ mark: `done`, count: 0, tooltip: `ż`.repeat(150) }), `tooltip`) ?? ``)).toHaveLength(100);

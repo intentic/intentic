@@ -259,6 +259,17 @@ pub struct BadgeArgs {
     /// The open sandbox's logo, unmarked, a PNG: the icon of the app's window (its taskbar button, its dock tile).
     /// Absent is the app's own icon.
     pub window: Option<Vec<u8>>,
+    /// The sandbox open in the workspace, whose taskbar button the window's is on Windows (badge.rs): a pin made from it
+    /// wears its logo and opens it. Absent is the app's own button.
+    pub sandbox: Option<BadgeSandbox>,
+}
+
+/// `sandbox=<id>[&name=<text>]` on a badge: the open sandbox, by the id a shell link opens it with and the name a pin
+/// made from its button is labelled with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BadgeSandbox {
+    pub id: String,
+    pub name: Option<String>,
 }
 
 /// The most a badge image may weigh, decoded. A 64-pixel icon is a few kilobytes; this bounds what a link can make
@@ -269,6 +280,8 @@ const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
 const BADGE_TOOLTIP_MAX: usize = 100;
 /// More than any count a dock can draw.
 const BADGE_COUNT_MAX: u32 = 9_999;
+/// A pin's label: the page sends the sandbox's name cut to this many characters.
+const BADGE_NAME_MAX: usize = 60;
 
 /// A badge image as the page sends it: URL-safe base64 of a PNG, unpadded. Absent is `Some(None)`, the image the app
 /// already has; present and not a PNG is `None`, which drops the whole link rather than drawing half of it.
@@ -287,22 +300,27 @@ fn png_of(encoded: Option<String>) -> Option<Option<Vec<u8>>> {
 }
 
 /// `badge`'s values held to their shape. The count is the reader's only for `asks`, and a count that is not a number
-/// is no badge at all.
-fn badge_of(
-    mark: &str,
-    count: Option<String>,
-    tooltip: Option<String>,
-    icon: Option<String>,
-    overlay: Option<String>,
-    window: Option<String>,
-) -> Option<BadgeArgs> {
-    let mark = BadgeMark::parse(mark)?;
-    let count = match count {
+/// is no badge at all; nor is a sandbox id or name out of shape. A name without a sandbox names nothing.
+fn badge_of(get: impl Fn(&str) -> Option<String>) -> Option<BadgeArgs> {
+    let mark = BadgeMark::parse(&get("mark")?)?;
+    let count = match get("count") {
         Some(count) => count.parse::<u32>().ok()?.min(BADGE_COUNT_MAX),
         None => 0,
     };
-    let tooltip = match tooltip {
+    let tooltip = match get("tooltip") {
         Some(text) if is_shown_text(&text, BADGE_TOOLTIP_MAX) => Some(text),
+        Some(_) => return None,
+        None => None,
+    };
+    let sandbox = match get("sandbox") {
+        Some(id) if is_sandbox_id(&id) => Some(BadgeSandbox {
+            id,
+            name: match get("name") {
+                Some(name) if is_shown_text(&name, BADGE_NAME_MAX) => Some(name),
+                Some(_) => return None,
+                None => None,
+            },
+        }),
         Some(_) => return None,
         None => None,
     };
@@ -310,9 +328,10 @@ fn badge_of(
         mark,
         count: if mark == BadgeMark::Asks { count } else { 0 },
         tooltip,
-        icon: png_of(icon)?,
-        overlay: png_of(overlay)?,
-        window: png_of(window)?,
+        icon: png_of(get("icon"))?,
+        overlay: png_of(get("overlay"))?,
+        window: png_of(get("window"))?,
+        sandbox,
     })
 }
 
@@ -899,15 +918,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             roster_of(&get("list")?, get("account").as_deref()).map(Link::Roster)
         }
         "roster" => None,
-        "badge" if source.is_app() => badge_of(
-            &get("mark")?,
-            get("count"),
-            get("tooltip"),
-            get("icon"),
-            get("overlay"),
-            get("window"),
-        )
-        .map(Link::Badge),
+        "badge" if source.is_app() => badge_of(get).map(Link::Badge),
         "badge" => None,
         // The workspace's own page and no other: a floating panel is the same page, and has no ears (wake.rs).
         "wake"
@@ -2132,6 +2143,7 @@ L"}"#,
                 icon: Some(PNG.to_vec()),
                 overlay: Some(PNG.to_vec()),
                 window: Some(PNG.to_vec()),
+                sandbox: None,
             }
         );
         // No mark: the app's own icon, no overlay, no count.
@@ -2144,7 +2156,36 @@ L"}"#,
                 icon: None,
                 overlay: None,
                 window: None,
+                sandbox: None,
             })
+        );
+    }
+
+    /// The open sandbox rides along, so the taskbar button can be its own; a name alone names nothing.
+    #[test]
+    fn a_badge_names_the_open_sandbox() {
+        assert_eq!(
+            badge_of_link(
+                "intentic://badge?mark=none&sandbox=sbx_1-a&name=Game%20server",
+                APP
+            )
+            .and_then(|args| args.sandbox),
+            Some(BadgeSandbox {
+                id: "sbx_1-a".into(),
+                name: Some("Game server".into()),
+            })
+        );
+        assert_eq!(
+            badge_of_link("intentic://badge?mark=none&sandbox=sbx", APP)
+                .and_then(|args| args.sandbox),
+            Some(BadgeSandbox {
+                id: "sbx".into(),
+                name: None,
+            })
+        );
+        assert_eq!(
+            badge_of_link("intentic://badge?mark=none&name=Game", APP).map(|args| args.sandbox),
+            Some(None)
         );
     }
 
@@ -2173,6 +2214,12 @@ L"}"#,
             "intentic://badge?mark=done&icon=bm90IGEgcG5n".to_string(),
             format!("intentic://badge?mark=done&tooltip={}", "x".repeat(101)),
             "intentic://badge?mark=done&tooltip=two%0Alines".to_string(),
+            "intentic://badge?mark=done&sandbox=..%2Fbox".to_string(),
+            format!(
+                "intentic://badge?mark=done&sandbox=sbx&name={}",
+                "x".repeat(61)
+            ),
+            "intentic://badge?mark=done&sandbox=sbx&name=two%0Alines".to_string(),
         ] {
             assert_eq!(parse_link(&link, APP), None, "{link}");
         }

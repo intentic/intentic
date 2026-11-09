@@ -159,7 +159,14 @@ export const startBrowserTab = (): void => {
     // the desktop app's icon alike.
     const logo = computed(() => active.value?.image ?? undefined);
     watch(logo, (image) => setTabLogo(image), { immediate: true });
-    watch([shown, logo], ([mark, image]) => showDesktopBadge(mark, image), { immediate: true });
+    // The open sandbox owns the desktop app's taskbar button, so a pin made from it is that sandbox's (badge.rs). Its id
+    // is known from storage before its row has loaded, and saying so keeps the button where it is through a page load
+    // rather than moving it to the app's own and back.
+    const sandbox = computed(() => {
+        const id = active.value?.id ?? activeSandboxId.value;
+        return id === undefined ? undefined : { id, name: active.value?.id === id ? active.value.name : undefined };
+    });
+    watch([shown, logo, sandbox], ([mark, image, open]) => showDesktopBadge(mark, image, open), { immediate: true });
     onScopeDispose(() => {
         setTabLogo(undefined);
         setTabMark(undefined);

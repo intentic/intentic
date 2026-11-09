@@ -34,6 +34,9 @@ struct Standing {
     window: Option<Image<'static>>,
     /// The count a Linux dock was last told.
     count: Option<u32>,
+    /// The taskbar identity the frame's button was last given (Windows), so a badge that names the same sandbox with
+    /// the same logo leaves the button where it is.
+    identity: Option<Identity>,
 }
 
 /// A PNG the page drew, read as an image, or nothing for one that is not a PNG or is too large to be an icon.
@@ -63,16 +66,30 @@ pub fn show(app: &AppHandle, args: BadgeArgs) {
     }
     let overlay = args.overlay.as_deref().and_then(image_of);
     let count = args.count;
-    let tell_dock = {
+    let window = args.window.as_deref().and_then(image_of);
+    let identity = identity_of(
+        app,
+        args.sandbox.as_ref(),
+        args.window.as_deref().filter(|_| window.is_some()),
+    );
+    let (tell_dock, moved) = {
         let badge = app.state::<Badge>();
         let mut standing = badge.0.lock().unwrap();
         standing.overlay = overlay;
-        standing.window = args.window.as_deref().and_then(image_of);
-        standing.count.replace(count) != Some(count)
+        standing.window = window;
+        let moved = standing.identity.as_ref() != Some(&identity);
+        standing.identity = Some(identity.clone());
+        (standing.count.replace(count) != Some(count), moved)
     };
     if let Some(frame) = crate::frame::frame(app) {
+        if moved {
+            identity_now(app, &frame, identity);
+        }
         window_icon_now(app, &frame);
         overlay_now(app, &frame);
+        if moved {
+            overlay_later(app);
+        }
     }
     if tell_dock {
         dock(app, count);
@@ -85,10 +102,18 @@ pub fn show(app: &AppHandle, args: BadgeArgs) {
 /// round to it, so the mark is put back a moment later and once more after that rather than straight away, when there
 /// is no button yet to put it on.
 pub fn window_shown(window: &Webview) {
-    if !cfg!(windows) || !is_face(window.label()) {
+    if is_face(window.label()) {
+        overlay_later(window.app_handle());
+    }
+}
+
+/// The overlay put back on a taskbar button Windows has just made anew: a frame back from the tray, or one whose
+/// identity moved it to another button ([`identity_now`]).
+fn overlay_later(app: &AppHandle) {
+    if !cfg!(windows) {
         return;
     }
-    let app = window.app_handle().clone();
+    let app = app.clone();
     tauri::async_runtime::spawn(async move {
         for wait in [Duration::from_millis(300), Duration::from_millis(1500)] {
             tokio::time::sleep(wait).await;
@@ -193,33 +218,247 @@ mod big_icon {
     }
 }
 
-/// The frame's own taskbar identity, set before it is first shown. An installed copy's Start menu shortcut carries the
-/// app's id (tauri-bundler's `SetLnkAppUserModelId`), which toasts need (notice.rs), and Windows draws the button of a
-/// window it can match to that shortcut with the shortcut's icon, whatever `ICON_BIG` says: the sandbox's logo never
-/// showed in an installed app, only in a copy run from the build tree, which has no shortcut. An id of the window's own
-/// unhooks the button from the shortcut, so it draws the window's icon; toasts still go out under the shortcut's id. The
-/// relaunch command and name keep a pin made from the running button opening the app, under its name. No relaunch icon:
-/// Windows draws a button whose window names one with that icon rather than the window's, so `exe,0` put the lotus back
-/// on the button whatever logo the frame wore (seen on Windows 11, 2026-11-02).
-#[cfg(windows)]
+/* THE FRAME'S TASKBAR IDENTITY (Windows).
+ *
+ * A pinned taskbar button is drawn with its shortcut's icon, never the window's, and the shortcut Windows makes when the
+ * reader pins a running button takes its icon from the window's relaunch properties (or the executable's, the lotus,
+ * when it names none). One identity for every sandbox meant one pin, and the lotus on it in every sandbox: pinned on
+ * rog on 2026-11-07, the button kept the lotus while `ICON_BIG` wore the logo. So the button is the open sandbox's own,
+ * as Chrome gives each profile its own: an id per sandbox, a relaunch icon that is the sandbox's logo written to a file,
+ * a relaunch command that opens that sandbox, and its name. A pin made from it wears that logo and opens that sandbox;
+ * switching sandboxes moves the window to the other sandbox's button. Without a sandbox the button is the app's own,
+ * under an id that matches no Start menu shortcut: one that did (`SetLnkAppUserModelId`, which toasts need, notice.rs)
+ * would draw the shortcut's icon whatever the window wore. */
+
+/// What the frame's taskbar button belongs to. Kept, so a launch starts under the identity the app last had (and a pin's
+/// launch under the pin's own) rather than appearing as the app's and jumping into place once the page has loaded.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Identity {
+    /// The open sandbox, or none for the app's own button.
+    sandbox: Option<String>,
+    /// The sandbox's name, which a pin made from the button is labelled with.
+    name: Option<String>,
+    /// The sandbox's logo as an icon file, which a pin made from the button wears. None is the executable's icon.
+    icon: Option<std::path::PathBuf>,
+}
+
+impl Identity {
+    const APP: Self = Self {
+        sandbox: None,
+        name: None,
+        icon: None,
+    };
+}
+
+/// Where the logos are written as icons, and the identity kept between launches.
+fn taskbar_dir(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path()
+        .app_local_data_dir()
+        .ok()
+        .map(|dir| dir.join("taskbar"))
+}
+
+const KEPT: &str = "identity.json";
+
+/// The button the badge's sandbox and logo make. The logo is written once per picture, under a name of its own: Windows
+/// caches an icon by its file's path, and a pin keeps the path it was made with, so a file is never written over.
+fn identity_of(
+    app: &AppHandle,
+    sandbox: Option<&crate::setup_link::BadgeSandbox>,
+    logo: Option<&[u8]>,
+) -> Identity {
+    // Only Windows' taskbar has buttons to give an identity, and nowhere else is a logo written for one.
+    let Some(sandbox) = sandbox.filter(|_| cfg!(windows)) else {
+        return Identity::APP;
+    };
+    let icon = logo.zip(taskbar_dir(app)).and_then(|(png, dir)| {
+        let path = dir.join(icon_file_name(&sandbox.id, png));
+        if path.is_file() {
+            return Some(path);
+        }
+        let written = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, ico_of(png)?));
+        match written {
+            Ok(()) => Some(path),
+            Err(error) => {
+                eprintln!("intentic: the sandbox's logo could not be kept for its taskbar button: {error}");
+                None
+            }
+        }
+    });
+    Identity {
+        sandbox: Some(sandbox.id.clone()),
+        name: sandbox.name.clone(),
+        icon,
+    }
+}
+
+/// `<sandbox>-<the picture's digest>.ico`: the sandbox's id is a file name's characters already (`is_sandbox_id`).
+fn icon_file_name(sandbox: &str, png: &[u8]) -> String {
+    use sha2::Digest;
+    let digest = sha2::Sha256::digest(png);
+    let short: String = digest[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!("{sandbox}-{short}.ico")
+}
+
+/// An icon file holding the PNG as it is, which Windows reads since Vista: one entry, its size in the directory (0 is
+/// 256), the PNG after the header.
+fn ico_of(png: &[u8]) -> std::io::Result<Vec<u8>> {
+    let image = image_of(png).ok_or_else(|| std::io::Error::other("not an icon"))?;
+    let side = |pixels: u32| u8::try_from(pixels).unwrap_or(0);
+    let length = u32::try_from(png.len()).map_err(std::io::Error::other)?;
+    let mut ico = Vec::with_capacity(22 + png.len());
+    ico.extend_from_slice(&[0, 0, 1, 0, 1, 0]);
+    ico.extend_from_slice(&[side(image.width()), side(image.height()), 0, 0]);
+    ico.extend_from_slice(&1u16.to_le_bytes());
+    ico.extend_from_slice(&32u16.to_le_bytes());
+    ico.extend_from_slice(&length.to_le_bytes());
+    ico.extend_from_slice(&22u32.to_le_bytes());
+    ico.extend_from_slice(png);
+    Ok(ico)
+}
+
+/// The id a sandbox's button goes by: the app's own followed by the sandbox's, inside the 128 characters an id may have.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn taskbar_id(base: &str, identity: &Identity) -> String {
+    match &identity.sandbox {
+        Some(sandbox) => format!("{base}.sandbox.{sandbox}"),
+        None => format!("{base}.window"),
+    }
+}
+
+/// What a pin made from the button runs: the app, at the sandbox where there is one (setup_link.rs `shell_target`).
+#[cfg_attr(not(windows), allow(dead_code))]
+fn relaunch_args(identity: &Identity) -> String {
+    match &identity.sandbox {
+        Some(sandbox) => format!(" intentic://shell?open=sandbox&id={sandbox}"),
+        None => String::new(),
+    }
+}
+
+/// The identity a frame about to be shown for the first time starts with: the sandbox a link this launch carries opens
+/// (a pin's launch), when the app has given that sandbox a button before, or else the one it last had.
+fn starting_identity(app: &AppHandle) -> Identity {
+    if !cfg!(windows) {
+        return Identity::APP;
+    }
+    let kept: Option<Kept> =
+        taskbar_dir(app).and_then(|dir| crate::state::read_json(&dir.join(KEPT)));
+    let Some(kept) = kept else {
+        return Identity::APP;
+    };
+    let launched = std::env::args()
+        .skip(1)
+        .find_map(|arg| launched_sandbox(&arg));
+    let identity = launched
+        .and_then(|sandbox| {
+            kept.known
+                .into_iter()
+                .find(|known| known.sandbox.as_deref() == Some(sandbox.as_str()))
+        })
+        .unwrap_or(kept.last);
+    // A logo file cleared away since keeps the executable's icon rather than naming one that is not there.
+    Identity {
+        icon: identity.icon.filter(|icon| icon.is_file()),
+        ..identity
+    }
+}
+
+/// The sandbox a `intentic://shell?open=sandbox&id=…` argument opens.
+fn launched_sandbox(arg: &str) -> Option<String> {
+    match crate::setup_link::parse_link(arg, crate::setup_link::Source::External)? {
+        crate::setup_link::Link::Shell(crate::setup_link::ShellTarget::Sandbox { id, .. }) => {
+            Some(id)
+        }
+        _ => None,
+    }
+}
+
+/// The identity last given, and each sandbox's last one, between launches.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Kept {
+    last: Identity,
+    known: Vec<Identity>,
+}
+
+/// The most sandboxes whose last identity is kept for a pin's launch.
+const KNOWN_MAX: usize = 64;
+
+fn keep(app: &AppHandle, identity: &Identity) {
+    let Some(dir) = taskbar_dir(app).filter(|_| cfg!(windows)) else {
+        return;
+    };
+    let path = dir.join(KEPT);
+    let mut known = crate::state::read_json::<Kept>(&path)
+        .map(|kept| kept.known)
+        .unwrap_or_default();
+    if identity.sandbox.is_some() {
+        known.retain(|other| other.sandbox != identity.sandbox);
+        known.insert(0, identity.clone());
+        known.truncate(KNOWN_MAX);
+    }
+    if std::fs::create_dir_all(&dir).is_ok() {
+        crate::state::write_json(
+            &path,
+            &Kept {
+                last: identity.clone(),
+                known,
+            },
+        );
+    }
+}
+
+/// The frame's taskbar identity before it is first shown: the taskbar reads a window's id when it makes its button.
 pub fn own_taskbar_button(app: &AppHandle, window: &Window) {
+    let identity = starting_identity(app);
+    put_identity(app, window, &identity);
+    app.state::<Badge>().0.lock().unwrap().identity = Some(identity);
+}
+
+/// The button moved to another identity: Windows makes the window a button under the new id at once, wearing the
+/// relaunch icon, and the identity is kept for the next launch.
+fn identity_now(app: &AppHandle, window: &Window, identity: Identity) {
+    keep(app, &identity);
+    let (handle, frame) = (app.clone(), window.clone());
+    if let Err(error) = window.run_on_main_thread(move || put_identity(&handle, &frame, &identity))
+    {
+        eprintln!("intentic: the taskbar button could not be moved: {error}");
+    }
+}
+
+#[cfg(windows)]
+fn put_identity(app: &AppHandle, window: &Window, identity: &Identity) {
     let Ok(hwnd) = window.hwnd() else {
         return;
     };
     let exe = std::env::current_exe().ok();
-    let id = format!("{}.window", app.config().identifier);
-    if let Err(error) = taskbar_identity::put(hwnd, &id, exe.as_deref()) {
-        eprintln!("intentic: the taskbar button could not be given the window's own id: {error}");
+    let relaunch = exe.as_deref().map(|exe| taskbar_identity::Relaunch {
+        command: format!("\"{}\"{}", exe.display(), relaunch_args(identity)),
+        name: match &identity.name {
+            Some(name) => format!("{name} · Intentic"),
+            None => "Intentic".to_string(),
+        },
+        icon: match &identity.icon {
+            Some(icon) => format!("{},0", icon.display()),
+            None => format!("{},0", exe.display()),
+        },
+    });
+    if let Err(error) = taskbar_identity::put(
+        hwnd,
+        &taskbar_id(&app.config().identifier, identity),
+        relaunch.as_ref(),
+    ) {
+        eprintln!("intentic: the taskbar button could not be given its identity: {error}");
     }
 }
 
 #[cfg(not(windows))]
-pub fn own_taskbar_button(_app: &AppHandle, _window: &Window) {}
+fn put_identity(_app: &AppHandle, _window: &Window, _identity: &Identity) {}
 
 #[cfg(windows)]
 mod taskbar_identity {
-    use std::path::Path;
-
     use windows::Win32::Foundation::{HWND, PROPERTYKEY};
     use windows::Win32::System::Com::StructuredStorage::{
         PropVariantChangeType, PROPVARIANT, PVCHF_DEFAULT,
@@ -237,8 +476,17 @@ mod taskbar_identity {
         }
     }
     const RELAUNCH_COMMAND: PROPERTYKEY = key(2);
+    const RELAUNCH_ICON: PROPERTYKEY = key(3);
     const RELAUNCH_NAME: PROPERTYKEY = key(4);
     const ID: PROPERTYKEY = key(5);
+
+    /// What a pin made from the button runs, is called and wears.
+    pub struct Relaunch {
+        pub command: String,
+        pub name: String,
+        /// `path,index`: the sandbox's logo file, or the executable's own icon.
+        pub icon: String,
+    }
 
     /// The shell reads these properties as `VT_LPWSTR`; `PROPVARIANT::from(&str)` is a `VT_BSTR`.
     fn text(value: &str) -> windows::core::Result<PROPVARIANT> {
@@ -255,14 +503,16 @@ mod taskbar_identity {
         Ok(wide)
     }
 
-    pub fn put(hwnd: HWND, id: &str, exe: Option<&Path>) -> windows::core::Result<()> {
+    /// The relaunch properties first and the id last: the taskbar reads them all when the id changes, and they count
+    /// only beside one.
+    pub fn put(hwnd: HWND, id: &str, relaunch: Option<&Relaunch>) -> windows::core::Result<()> {
         // SAFETY: the frame's own window, on the thread that made it.
         let store: IPropertyStore = unsafe { SHGetPropertyStoreForWindow(hwnd)? };
-        let mut values = Vec::with_capacity(3);
-        // The relaunch properties count only beside an id, and the command only with its name, so both or neither.
-        if let Some(exe) = exe.map(Path::display) {
-            values.push((RELAUNCH_COMMAND, text(&format!("\"{exe}\""))?));
-            values.push((RELAUNCH_NAME, text("Intentic")?));
+        let mut values = Vec::with_capacity(4);
+        if let Some(relaunch) = relaunch {
+            values.push((RELAUNCH_COMMAND, text(&relaunch.command)?));
+            values.push((RELAUNCH_NAME, text(&relaunch.name)?));
+            values.push((RELAUNCH_ICON, text(&relaunch.icon)?));
         }
         values.push((ID, text(id)?));
         for (key, value) in &values {
@@ -333,6 +583,67 @@ mod tests {
         assert!(is_face(crate::windows::HOME));
         assert!(!is_face("floating-chat"));
         assert!(!is_face("files-1"));
+    }
+
+    fn sandbox(id: &str, icon: Option<&str>) -> Identity {
+        Identity {
+            sandbox: Some(id.into()),
+            name: Some("Game".into()),
+            icon: icon.map(Into::into),
+        }
+    }
+
+    /// Each sandbox's button is its own, so a pin made from it is that sandbox's; without one the button is the app's,
+    /// under an id no Start menu shortcut carries.
+    #[test]
+    fn each_sandbox_has_a_taskbar_button_of_its_own() {
+        assert_eq!(
+            taskbar_id("dev.intentic.desktop", &Identity::APP),
+            "dev.intentic.desktop.window"
+        );
+        let id = taskbar_id("dev.intentic.desktop", &sandbox(&"x".repeat(64), None));
+        assert_eq!(
+            id,
+            format!("dev.intentic.desktop.sandbox.{}", "x".repeat(64))
+        );
+        // The most an AppUserModelID may be.
+        assert!(id.len() <= 128);
+    }
+
+    /// A pin opens the sandbox it was made in, through the link a shell opens one with.
+    #[test]
+    fn a_pin_opens_its_sandbox() {
+        assert_eq!(relaunch_args(&Identity::APP), "");
+        let args = relaunch_args(&sandbox("sbx_1", None));
+        assert_eq!(launched_sandbox(args.trim()), Some("sbx_1".to_string()));
+        assert_eq!(launched_sandbox("intentic://shell?open=device"), None);
+        assert_eq!(launched_sandbox("--autostart"), None);
+    }
+
+    /// A logo is a file of its own per picture, since Windows caches an icon by its path and a pin keeps the path.
+    #[test]
+    fn each_logo_is_written_once_under_a_name_of_its_own() {
+        let one = icon_file_name("sbx", b"one");
+        assert_eq!(one, icon_file_name("sbx", b"one"));
+        assert_ne!(one, icon_file_name("sbx", b"two"));
+        assert_ne!(one, icon_file_name("other", b"one"));
+        assert!(one.starts_with("sbx-") && one.ends_with(".ico"));
+    }
+
+    #[test]
+    fn a_logo_becomes_an_icon_file_holding_its_png() {
+        let png = include_bytes!("../icons/32x32.png");
+        let ico = ico_of(png).expect("a PNG the page could have drawn");
+        // Reserved, type 1 (icon), one image; 32 × 32 at 32 bits, its length, and its place right after the directory.
+        assert_eq!(&ico[..6], &[0, 0, 1, 0, 1, 0]);
+        assert_eq!(&ico[6..8], &[32, 32]);
+        assert_eq!(
+            u32::from_le_bytes(ico[14..18].try_into().unwrap()) as usize,
+            png.len()
+        );
+        assert_eq!(u32::from_le_bytes(ico[18..22].try_into().unwrap()), 22);
+        assert_eq!(&ico[22..], png);
+        assert!(ico_of(b"not a png").is_err());
     }
 
     #[test]

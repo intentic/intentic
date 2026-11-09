@@ -18,6 +18,9 @@ const TITLE_MAX = 200;
 const BODY_MAX = 400;
 const KEY_MAX = 200;
 const TOOLTIP_MAX = 100;
+const SANDBOX_NAME_MAX = 60;
+// A sandbox's id as the app takes one (setup_link.rs `is_sandbox_id`): it names a taskbar identity and a file there.
+const SANDBOX_ID = /^[A-Za-z0-9_-]{1,64}$/u;
 
 /* THE TAB'S MARK, FOR THE APP'S ICON. */
 
@@ -35,6 +38,11 @@ export interface DesktopBadge {
     readonly overlay?: string;
     /** The open sandbox's logo, unmarked, in the same encoding: the window's icon. None keeps the app's own. */
     readonly window?: string;
+    /**
+     * The open sandbox, which the window's taskbar button belongs to on Windows: a pin made from it carries the
+     * sandbox's logo and name and opens that sandbox (badge.rs `taskbar_identity`). None is the app's own button.
+     */
+    readonly sandbox?: { readonly id: string; readonly name?: string };
 }
 
 export const desktopBadgeLink = (badge: DesktopBadge): string => {
@@ -54,6 +62,13 @@ export const desktopBadgeLink = (badge: DesktopBadge): string => {
     }
     if (badge.window !== undefined) {
         params.set(`window`, badge.window);
+    }
+    if (badge.sandbox !== undefined && SANDBOX_ID.test(badge.sandbox.id)) {
+        params.set(`sandbox`, badge.sandbox.id);
+        const name = badge.sandbox.name === undefined ? `` : oneLine(badge.sandbox.name, SANDBOX_NAME_MAX);
+        if (name !== ``) {
+            params.set(`name`, name);
+        }
     }
     return `intentic://badge?${params.toString()}`;
 };

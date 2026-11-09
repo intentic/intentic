@@ -1,5 +1,5 @@
 import { t } from "@intentic/ui/i18n";
-import { announceDesktopBadge, type DesktopBadgeMark, desktopNotices } from "../../app/environments/desktopNotices";
+import { announceDesktopBadge, type DesktopBadge, type DesktopBadgeMark, desktopNotices } from "../../app/environments/desktopNotices";
 import { cropOf, drawableLogo, drawPng, iconKey, iconSvg, overlaySvg } from "./tabIcon";
 import type { TabMark } from "./tabSignal";
 
@@ -41,9 +41,10 @@ let shown: string | undefined;
 
 /**
  * Puts the mark on the desktop app's icon, or takes it off, over the open sandbox's logo where it has one; the window's
- * own icon (its taskbar button) becomes that logo, unmarked. A badge already up costs nothing.
+ * own icon (its taskbar button) becomes that logo, unmarked, and the button the open sandbox's own. A badge already up
+ * costs nothing.
  */
-export const showDesktopBadge = (mark: TabMark | undefined, logo?: string): void => {
+export const showDesktopBadge = (mark: TabMark | undefined, logo?: string, sandbox?: DesktopBadge[`sandbox`]): void => {
     // Nothing to draw for in a browser, or in an app that takes no badge.
     if (!desktopNotices()) {
         return;
@@ -51,7 +52,7 @@ export const showDesktopBadge = (mark: TabMark | undefined, logo?: string): void
     const own = drawableLogo(logo);
     const tooltip = badgeTooltip(mark);
     // The tooltip carries the count past nine, which the drawing does not.
-    const key = `${iconKey(mark) ?? `none`}|${tooltip ?? ``}|${own ?? ``}`;
+    const key = `${iconKey(mark) ?? `none`}|${tooltip ?? ``}|${own ?? ``}|${sandbox?.id ?? ``}|${sandbox?.name ?? ``}`;
     if (key === shown) {
         return;
     }
@@ -61,7 +62,7 @@ export const showDesktopBadge = (mark: TabMark | undefined, logo?: string): void
     const kind: DesktopBadgeMark = mark?.kind ?? `none`;
     const count = mark?.kind === `asks` ? mark.count : 0;
     if (mark === undefined && own === undefined) {
-        announceDesktopBadge({ mark: kind, count });
+        announceDesktopBadge({ mark: kind, count, sandbox });
         return;
     }
     void cropOf(own)
@@ -76,6 +77,6 @@ export const showDesktopBadge = (mark: TabMark | undefined, logo?: string): void
             if (turn !== drawing) {
                 return;
             }
-            announceDesktopBadge({ mark: kind, count, tooltip, icon: linkImage(icon), overlay: linkImage(overlay), window: linkImage(window) });
+            announceDesktopBadge({ mark: kind, count, tooltip, icon: linkImage(icon), overlay: linkImage(overlay), window: linkImage(window), sandbox });
         });
 };
