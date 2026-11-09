@@ -17,6 +17,10 @@
                                      an environment.d fragment, a skill) reaches the daemon when the turn lands,
                                      reviewed like code. The live copy is at /mnt/intentic-main/.intentic/config/
 <repo>/.intentic/checks.json         what THAT repository asks to have run on its own code (checks-and-ci.md)
+<repo>/.intentic/sync.json           what of THAT repository the owner's computers leave out of file sync, beside the
+                                     built-in list (node_modules, build output, secrets): {"ignore": ["/runs"]}, paths
+                                     from the repo root, `*` within one name, no `**`/`!`. Committed; ignored files
+                                     stay where they are on both sides, they just stop syncing
 /work/.intentic/records/             sessions/ (transcripts), artifacts/browser/ (screenshots),
                                      artifacts/pages/<conversation>/ (pages shown in chat). Shared live
 /work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay). Shared live

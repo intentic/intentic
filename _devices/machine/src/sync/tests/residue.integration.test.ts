@@ -15,7 +15,7 @@ import {
     isSafeRelativePath,
     isShellSafePath,
     sweepableHusks,
-} from "../residue.js";
+} from "../ignores/residue.js";
 
 // The invariant every test here defends: nothing is removed that the session would have carried. The cases are the
 // ones measured on a dogfooding machine — six package directories moved in the sandbox, each left standing on this

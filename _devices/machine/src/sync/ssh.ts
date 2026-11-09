@@ -24,6 +24,7 @@ import {
     userSshConfigPath,
 } from "./config.js";
 import { keyComment } from "./environment.js";
+import { readRepoIgnores } from "./ignores/repo-ignores.js";
 import { runProcess } from "./exec.js";
 import { syncSshPort, syncSshPorts } from "./tunnel.js";
 
@@ -113,8 +114,22 @@ const WORKSPACE_ROOT_ONLY: ReadonlySet<string> = new Set([`/${STATE_DIR}`, `/${R
 
 export const PROJECT_IGNORES: readonly string[] = IGNORES.filter((pattern) => !WORKSPACE_ROOT_ONLY.has(pattern));
 
-// The ignore list a pairing's workspace session is created with.
-export const ignoresFor = (pairing: Pick<Pairing, "project">): readonly string[] => (isProjectPairing(pairing) ? PROJECT_IGNORES : IGNORES);
+// The ignore list a pairing's workspace session is created with: the built-in one, then what the repositories in its
+// folder ask to leave out (repo-ignores.ts), read from this device's copy on every call so an edit reaches the session
+// at the watcher's next pass. A pairing with no folder yet has only the built-in list.
+export const ignoresFor = (pairing: Pick<Pairing, "project" | "localDir">): readonly string[] => {
+    const builtIn = isProjectPairing(pairing) ? PROJECT_IGNORES : IGNORES;
+    if (pairing.localDir === undefined) {
+        return builtIn;
+    }
+    const repos = readRepoIgnores(pairing.localDir, isProjectPairing(pairing)).patterns;
+    return repos.length === 0 ? builtIn : [...builtIn, ...repos];
+};
+
+// Whether a pattern is one of this agent's own, as opposed to one a repository asked for: only these name build output
+// a build puts back, which is all residue.ts may ever delete.
+const BUILT_IN: ReadonlySet<string> = new Set(IGNORES);
+export const isBuiltInIgnore = (pattern: string): boolean => BUILT_IN.has(pattern);
 
 // The state dir's own one-way, sandbox-first backup, since the workspace session excludes it wholesale from
 // two-way sync. Patterns are anchored, not depth-matched; a group collapses to a folder only when wholly excluded.

@@ -13,7 +13,8 @@ import { labelValue, sessionOwner } from "./environment.js";
 import { runProcess, runProcessSync, type SyncExecResult } from "./exec.js";
 import { mutagenEnv } from "./mutagen-env.js";
 import { projectShell, realProjectRunner, sandboxCopy } from "./project/project-remote.js";
-import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
+import { reportRepoIgnoreProblems } from "./ignores/repo-ignores.js";
+import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./ignores/residue.js";
 import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshTransportAnswers } from "./ssh.js";
 import { deviceSymlinks, type SymlinkMode } from "./symlinks.js";
 
@@ -823,6 +824,7 @@ export const ensureSyncSession = async (
             `${pairingKey(pairing)}: this device cannot create symbolic links (${symlinks.refusal}), so its file sync leaves them out instead of failing on each one every cycle. On Windows, turning on Developer Mode lets the next start of this agent carry them.`,
         );
     }
+    reportRepoIgnoreProblems(pairingKey(pairing), placed.localDir, isProjectPairing(pairing), log);
     // Both sessions, converged in order, sequential since they share one ssh transport and daemon; workspace first
     // since that's what the user is waiting on. An unreachable sandbox leaves both alone, never half-converged.
     let converged = true;

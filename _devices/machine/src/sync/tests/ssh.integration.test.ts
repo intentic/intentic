@@ -18,7 +18,7 @@ import {
     surplusSessions,
     type SyncSessionSpec,
 } from "../mutagen.js";
-import { ignoreMatcher } from "../residue.js";
+import { ignoreMatcher } from "../ignores/residue.js";
 import {
     BACKUP_IGNORES,
     IGNORES,

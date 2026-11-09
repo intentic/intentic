@@ -1,7 +1,7 @@
 import { windowsHolds } from "@intentic/base/contained";
 import { escapeRegExp } from "@intentic/base/escape";
 import type { ProjectChange as PrintedChange, ProjectChangeKind } from "@intentic/sandbox-contract/schemas/project-bring-back";
-import { isSafeRelativePath } from "../residue.js";
+import { isSafeRelativePath } from "../ignores/residue.js";
 
 // WHAT A COPY-FIRST PROJECT'S SANDBOX CHANGED, worked out from two listings of the same folder: this device's copy and
 // the sandbox's, each path with its size and sha256. Pure, so every rule below is a test rather than a branch inside a
@@ -36,22 +36,31 @@ const MUTAGEN_TEMPORARY = ".mutagen-temporary-*";
 // One pattern of the spellings a project's ignore list uses (ssh.ts PROJECT_IGNORES), as Mutagen reads it: a single
 // name, `*` matching within it, that matches the name at any depth, or only at the root when it starts with `/`; or
 // `**/` followed by names joined by `/`, each with `*` matching within it as above (`**/target/*/debug`), which matches
-// that run of folders at any depth, the root included. A matched directory takes everything under it along. Anything
-// else (`!`, `?`, a `**` past the first, `[...]`, any other inner or trailing `/`) is refused rather than approximated:
+// that run of folders at any depth, the root included; or `/` followed by such a run, which matches it only from the
+// root (a repository's `.intentic/sync.json`, repo-ignores.ts). A matched directory takes everything under it along.
+// Anything else (`!`, `?`, a `**` past the first, `[...]`, any other inner or trailing `/`) is refused rather than approximated:
 // a pattern read too narrowly would offer an ignored file, a secret among them, for bringing back.
 const PATTERN = /^\/?[^/*?[\]!\\{}]*(?:\*[^/*?[\]!\\{}]*)*$/;
 const SEGMENT = String.raw`(?:[^/*?[\]!\\{}]|\*(?!\*))+`;
 const DEEP_PATH = new RegExp(String.raw`^\*\*\/${SEGMENT}(?:\/${SEGMENT})+$`);
+const ROOTED_PATH = new RegExp(String.raw`^\/${SEGMENT}(?:\/${SEGMENT})+$`);
+
+// A run of names joined by `/`, each with `*` matching within one name.
+const runExpression = (run: string): string =>
+    run
+        .split("/")
+        .map((segment) => segment.split("*").map(escapeRegExp).join("[^/]*"))
+        .join("/");
+
+const noTraversal = (pattern: string): boolean => pattern.split("/").every((segment) => segment !== "." && segment !== "..");
 
 // The pattern as a regular expression over a whole relative path, which the sandbox's walk runs as it is (project-remote.ts).
 export const ignoreExpression = (pattern: string): string => {
-    if (DEEP_PATH.test(pattern) && pattern.split("/").slice(1).every((segment) => segment !== "." && segment !== "..")) {
-        const run = pattern
-            .slice("**/".length)
-            .split("/")
-            .map((segment) => segment.split("*").map(escapeRegExp).join("[^/]*"))
-            .join("/");
-        return `(?:^|/)${run}(?:/|$)`;
+    if (DEEP_PATH.test(pattern) && noTraversal(pattern)) {
+        return `(?:^|/)${runExpression(pattern.slice("**/".length))}(?:/|$)`;
+    }
+    if (ROOTED_PATH.test(pattern) && noTraversal(pattern)) {
+        return `^${runExpression(pattern.slice("/".length))}(?:/|$)`;
     }
     const bare = pattern.replace(/^\//, "");
     if (!PATTERN.test(pattern) || bare === "" || bare.includes("**")) {

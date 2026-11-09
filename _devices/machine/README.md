@@ -201,6 +201,18 @@ flowchart LR
   woken cycles, and the copy belongs where the owner already looks. So were `--hash xxh128` and `--compression none`
   on top (5.3 s of the daemon's CPU against 5.2 s): no gain worth recreating every session for, or tying the agent to
   a Mutagen build with its SSPL-licensed extras.
+- **A repository can leave its own folders out** (2026-11-09, [`sync/ignores/repo-ignores.ts`](src/sync/ignores/repo-ignores.ts)), in a
+  committed `<repo>/.intentic/sync.json`: `{"ignore": ["/runs", "bench/data/*.bin"]}`. Each pattern is a path from
+  that repository's root (a leading `/` optional), `*` matching within one name; `**`, `?`, `[...]` and `!` are
+  refused, `!` because it would switch a built-in ignore (`.env` among them) back on. The agent reads its own copy of
+  the file: a project folder's at its root, a workspace's in its top-level folders and one level below them, never
+  the workspace root's own `.intentic/`. The patterns are anchored to the session's root (`/integra/runs`) and appended
+  to the built-in list, so editing the file is drift the watcher's next pass replaces the session for, like any other.
+  A refused pattern or a malformed file is logged once and leaves the rest syncing. Ignoring a path deletes nothing:
+  both copies keep it and stop exchanging changes, and taking the line out later meets two copies that may differ.
+  These patterns are never residue (`sync/ignores/residue.ts`), since what a person chose not to sync is not build output.
+  Measured on rog: with Cargo's caches already out, a game's `runs/` was 27k of the 33k entries the sandbox's agent
+  rescanned every 2 s.
 - `setup` replaces what this agent's `known_hosts` holds for the pairing's alias (hashed entries included): with the
   host key the enrollment carries when it carries one (a sandbox reads its sshd's public key off its history volume and
   answers with it, `SyncEnrollmentAnswerSchema` in the contract), else with nothing, so `accept-new` records the key

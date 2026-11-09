@@ -2,7 +2,8 @@ import { readdir, rm } from "node:fs/promises";
 import { join, posix } from "node:path";
 import type { Log } from "@intentic/local-agent";
 import { clearableOnDevice, type DeviceConflict } from "@intentic/sandbox-contract/schemas/devices";
-import type { SandboxEndpoint } from "./endpoint.js";
+import type { SandboxEndpoint } from "../endpoint.js";
+import { isBuiltInIgnore } from "../ssh.js";
 
 // BUILD OUTPUT IS NOT A CONFLICT. Two-way-safe exists to stop one person's edit overwriting another's, and for that it
 // is right; but the standoff it produces most often on a workspace has no two sides at all. An agent moves or deletes a
@@ -33,10 +34,12 @@ const REPOSITORY = ".git";
 // holding one is never residue, so the patterns that name them are not taught here, whichever build made the session.
 const isPrivateName = (name: string): boolean => name.startsWith(".env") || name === ".secrets.json" || name === "claude.json";
 
+// WHAT A REPOSITORY ASKED NOT TO SYNC IS NOT BUILD OUTPUT EITHER (repo-ignores.ts): a `/runs` someone left out holds
+// recordings no build makes again, so only this agent's own patterns are taught here, whatever the session carries.
 export const ignoreMatcher = (patterns: readonly string[]): ((path: string) => boolean) => {
     const anywhere = new Set<string>();
     const atRoot = new Set<string>();
-    for (const pattern of patterns.filter((candidate) => !isPrivateName(candidate.replace(/^\//, "")))) {
+    for (const pattern of patterns.filter((candidate) => isBuiltInIgnore(candidate) && !isPrivateName(candidate.replace(/^\//, "")))) {
         if (PLAIN_PATTERN.test(pattern)) {
             anywhere.add(pattern);
         } else if (pattern.startsWith("/") && PLAIN_PATTERN.test(pattern.slice(1))) {
