@@ -17,9 +17,12 @@ const {
     scrollKey = undefined,
     width = `wide`,
     description,
+    caption = undefined,
 } = defineProps<{
     title: string;
     description?: string;
+    /** What kind of place the title names ("Sandbox settings" under a sandbox's name), under it at the head of a docked index. */
+    caption?: string;
     /** collapse: the rail narrows the body; swap: the rail selects a document, shown one pane at a time when folded. */
     mobile?: `collapse` | `swap`;
     /** `swap` only, whether a folded split is showing the document rather than the list. */
@@ -85,34 +88,34 @@ const hasDetailHead = computed(() => (description !== undefined && description !
     <div ref="root" class="flex min-w-0 flex-col" :class="scroll === `panes` ? `h-full min-h-0 overflow-hidden` : docked ? `min-h-full` : ``">
         <!-- DOCKED: the index on the pane's left edge, the body beside it. -->
         <div v-if="docked" class="flex min-w-0 flex-1" :class="scroll === `panes` ? `min-h-0` : ``">
-            <!-- THE INDEX IS PART OF THE PAGE, NOT A PANEL BESIDE IT. It stands on the page's own canvas with no fill of its
-                 own: a filled column beside the shell's filled rail read as a file tree, a tool, where this is the page's
-                 table of contents. A hairline is its only edge, and it runs the pane's full height (the column stretches
-                 the row), so the index reads as one column of the page however short the body is. Its contents stick to the
-                 top of the scroll in `page` mode and scroll among themselves in either. -->
-            <div class="flex shrink-0 flex-col border-r border-line-subtle" :class="[RAIL, scroll === `panes` ? `min-h-0` : ``]">
+            <!-- THE INDEX IS A COLUMN OF ITS OWN, docked to the shell's rail: the same surface and edge the rail stands on, so
+                 rail and index read as one piece of navigation, the area and the page within it, and the body beside them
+                 as the page. Full height (the column stretches the row) however short the body is; its contents stick to
+                 the top of the scroll in `page` mode and scroll among themselves in either. -->
+            <div class="flex shrink-0 flex-col border-r border-line bg-card" :class="[RAIL, scroll === `panes` ? `min-h-0` : ``]">
                 <div
                     class="flex min-h-0 flex-col py-(--ui-page-padding) pl-4 pr-2"
                     :class="scroll === `page` ? `sticky top-0 max-h-dvh` : `flex-1`"
                     :style="viewport === undefined ? undefined : { maxHeight: viewport }"
                 >
-                    <!-- The screen's name heads its index, at the size of a column's heading rather than a page's: the body
-                         beside it carries its own headings, and a 2xl name in a 16rem column outweighed all of them. One row
-                         tall, the height of the body's head beside it, so the two tops line up. On the rows' inset, so the
-                         name, the group labels and the rows' icons stand on one line down the column. -->
-                    <header class="ui-page-header mb-3 flex min-h-8 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 pl-2 pr-2">
-                        <!-- The way back and the name never part (see PageHeader). -->
-                        <div class="flex min-w-0 max-w-full items-center gap-1.5">
-                            <button
-                                v-if="back"
-                                type="button"
-                                :class="ui.iconButton({ size: `md` }, `-ml-1.5 shrink-0`)"
-                                :aria-label="back.label"
-                                @click="back.go()"
-                            >
-                                <Icon name="arrow-left" />
-                            </button>
-                            <h1 class="min-w-0 truncate text-lg font-semibold">{{ title }}</h1>
+                    <!-- WHOSE INDEX THIS IS, said first and at a glance: a mark where the screen has one (a sandbox's logo), its
+                         name, and under it what kind of place this is. A column heading's size rather than a page's: the body
+                         beside it carries its own headings, and a 2xl name in a 16rem column outweighed all of them. Tall enough for a mark
+                         and two lines whichever of them a screen has, so the rows below start at one height on every screen. -->
+                    <header class="ui-page-header mb-4 flex min-h-10 shrink-0 items-center gap-3 pl-1 pr-2">
+                        <button
+                            v-if="back"
+                            type="button"
+                            :class="ui.iconButton({ size: `md` }, `-mr-1 shrink-0`)"
+                            :aria-label="back.label"
+                            @click="back.go()"
+                        >
+                            <Icon name="arrow-left" />
+                        </button>
+                        <span v-if="$slots[`mark`]" class="flex shrink-0"><slot name="mark" /></span>
+                        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <h1 class="truncate text-base leading-tight font-semibold">{{ title }}</h1>
+                            <p v-if="caption" class="truncate text-xs leading-tight text-muted">{{ caption }}</p>
                         </div>
                         <slot name="info" />
                     </header>

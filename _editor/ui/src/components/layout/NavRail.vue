@@ -21,10 +21,11 @@ const query = defineModel<string>({ default: `` });
 
 <template>
     <!-- `flex-1` so the column fills the height its container gives it: in a <SplitView> whose panes scroll that is the full pane. -->
-    <nav class="flex min-h-0 flex-1 flex-col">
+    <!-- `ui-nav-index`: the rows an index is read at (utilities.css), whoever draws them. -->
+    <nav class="ui-nav-index flex min-h-0 flex-1 flex-col">
         <!-- Pinned: neither the filter nor a way back to the top is something a reader should have to scroll to find. -->
         <!-- `pr-2`, the scroll area's own gutter below, so the field ends where the rows do. -->
-        <div v-if="filterable || $slots[`pinned`]" class="flex shrink-0 flex-col gap-1.5 pr-2 pb-2">
+        <div v-if="filterable || $slots[`pinned`]" class="flex shrink-0 flex-col gap-1.5 pr-2 pb-3">
             <!-- A FILLED field, not an outlined one: a box drawn at the top of a column that has no other boxes in it is the first thing the eye lands on. -->
             <SearchBar
                 v-if="filterable"
@@ -40,7 +41,12 @@ const query = defineModel<string>({ default: `` });
         <!-- The index and document use separate scroll containers. -->
         <div class="ui-softscroll min-h-0 flex-1 overflow-y-auto pr-2">
             <!-- THE GAP BETWEEN GROUPS RIDES THE SECTION, not the heading. -->
-            <section v-for="group in groups" :key="group.key" class="pt-3 first:pt-0">
+            <!-- A hairline between groups, so the index scans as a few blocks rather than one run of rows; the first has none. -->
+            <section
+                v-for="group in groups"
+                :key="group.key"
+                class="mt-3 border-t border-line-subtle pt-3 first:mt-0 first:border-t-0 first:pt-0"
+            >
                 <!-- The rail's own tier's header, and it scrolls with its rows: a pinned one needs a fill to scroll under, and a band behind a header is what the documentation rail was fixed for three times. -->
                 <SectionHeader
                     v-if="group.label !== undefined"

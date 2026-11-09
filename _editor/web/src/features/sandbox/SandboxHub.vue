@@ -44,7 +44,7 @@ const SECTIONS = new Map<string, Component>([
 
 <script setup lang="ts">
 import type { ViewBadge } from "@intentic/extension-api";
-import type { NavGroup } from "@intentic/ui";
+import { type NavGroup, SandboxLogo } from "@intentic/ui";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import {
@@ -261,7 +261,8 @@ useSectionWarmup(() => groups.value.flatMap((group) => group.items.flatMap(hubRo
 
 <template>
     <HubLayout
-        :title="sandbox.active.value?.name ?? t(`shared.sandboxHub`)"
+        :title="sandbox.active.value?.name ?? t(`shared.sandboxSettings`)"
+        :caption="sandbox.active.value?.name === undefined ? undefined : t(`shared.sandboxSettings`)"
         :route-name="HUB"
         :default-slug="defaultSlug"
         :addressable="isGuest"
@@ -270,6 +271,12 @@ useSectionWarmup(() => groups.value.flatMap((group) => group.items.flatMap(hubRo
         :ready="!isLoading"
         :search="search"
     >
+        <!-- The sandbox's own face at the head of its settings, as the rail's switcher and the overview draw it. -->
+        <template v-if="sandbox.active.value" #mark>
+            <span class="flex size-9 items-center justify-center rounded-lg bg-content/5">
+                <SandboxLogo :size="24" :image="sandbox.active.value.image ?? null" :name="sandbox.active.value.name" />
+            </span>
+        </template>
         <template #default="{ slug }">
             <AccessGate v-if="withheld.includes(slug)" :reason="MAINTAINERS" :place="placeOf(slug)" />
             <!-- Nothing until the tier is known: a maintainer's section must not send its reads for someone below. -->

@@ -138,6 +138,7 @@ const washes = computed(() => interactive || selected || href !== undefined || a
         :rel="href !== undefined ? `noopener` : undefined"
         :type="as === `button` && href === undefined ? `button` : undefined"
         :aria-current="selected ? `true` : undefined"
+        data-row
         class="group flex w-full flex-wrap content-center items-center justify-between gap-x-4 gap-y-2 text-left"
         :class="[
             // The tier's height for a bare or a described row (row.ts), which a flush row leaves to the container padding it.
@@ -175,6 +176,7 @@ const washes = computed(() => interactive || selected || href !== undefined || a
                 v-if="icon !== undefined"
                 :name="icon"
                 :spin="spin"
+                data-row-icon
                 class="shrink-0"
                 :class="[TIERS[tier].icon, selected && tone === `default` ? `text-link` : TONES[tone]]"
             />
@@ -188,6 +190,7 @@ const washes = computed(() => interactive || selected || href !== undefined || a
                     :is="heading === undefined ? `div` : `h${heading}`"
                     v-if="title !== undefined || $slots[`title`]"
                     v-tooltip.overflow="$slots[`title`] ? undefined : title"
+                    data-row-title
                     class="min-w-0"
                     :class="[
                         $slots[`title`] ? `` : `truncate`,

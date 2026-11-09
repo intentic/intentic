@@ -18,6 +18,9 @@ const {
     bodyRows?: number;
     /** Whether the index opens with a filter field, as a hub's does: promised, so the rows below it do not jump down by a field's height. */
     search?: boolean;
+    /** Whether the index's head carries a mark (a sandbox's logo), so the name beside it lands where the real one will. */
+    mark?: boolean;
+    caption?: string;
 }>();
 
 // Walked in order, so the folded strip's pills are uneven the way real section names are.
@@ -25,7 +28,8 @@ const PILL_WIDTHS = [`w-20`, `w-16`, `w-24`, `w-14`, `w-20`];
 </script>
 
 <template>
-    <SplitView :title="title" :description="description" scroll="page">
+    <SplitView :title="title" :description="description" :caption="caption" scroll="page">
+        <template v-if="mark" #mark><span class="skeleton block size-9 rounded-lg" aria-hidden="true" /></template>
         <template #compact>
             <div class="flex gap-2 overflow-hidden border-b border-line-subtle pb-2" aria-hidden="true">
                 <span v-for="(width, index) in PILL_WIDTHS" :key="index" class="skeleton block h-6 shrink-0 rounded-full" :class="width" />
@@ -34,8 +38,8 @@ const PILL_WIDTHS = [`w-20`, `w-16`, `w-24`, `w-14`, `w-20`];
         <!-- The index as <NavRail> lays it out, so the real one lands on these bars: the pinned field and the rows' column
              each keep the scroll's `pr-2` gutter, and a group's label stands on the label's own inset and gap. -->
         <template #rail>
-            <div class="flex flex-col" aria-hidden="true">
-                <div v-if="search" class="pb-2 pr-2"><span class="skeleton block h-8 rounded-lg" /></div>
+            <div class="ui-nav-index flex flex-col" aria-hidden="true">
+                <div v-if="search" class="pb-3 pr-2"><span class="skeleton block h-8 rounded-lg" /></div>
                 <div class="pr-2">
                     <span class="mb-1 flex h-4 items-center px-2"><span class="skeleton block h-2.5 w-16" /></span>
                     <div class="flex flex-col gap-0.5"><SkeletonRows :rows="railRows" density="dense" lead /></div>

@@ -106,6 +106,7 @@ const SANDBOX_VIEWS = {
                 () => t(`shared.sandboxHub`),
                 () => ``,
                 7,
+                { search: true, mark: true },
             ),
         ),
     },

@@ -9,14 +9,20 @@ import { SETTINGS_DEFAULT_SECTION, settingsPartHosts } from "../features/setting
 // (localRoutes.ts).
 
 // Words read when the outline draws, not when the routes are built, so a language switch reaches them.
-export const hubOutline = (title: () => string, description: () => string, railRows: number): FunctionalComponent => {
-    // Both hubs open their index with the settings search (HubLayout's `search`).
-    return () => h(SplitViewOutline, { title: title(), description: description(), railRows, search: true });
+// `head` says what heads the real index, so its rows land where the outline's bars were: the hubs' settings search
+// (HubLayout's `search`), a sandbox's logo beside its name.
+export const hubOutline = (
+    title: () => string,
+    description: () => string,
+    railRows: number,
+    head: { readonly search?: boolean; readonly mark?: boolean } = {},
+): FunctionalComponent => {
+    return () => h(SplitViewOutline, { title: title(), description: description(), railRows, ...head });
 };
 
 /** The account's settings, as both tables draw them; the outline mirrors the page's own heading (SettingsHub.vue). */
 export const accountSettingsView = (): Component =>
-    asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(() => t(`shared.settings`), () => ``, 5));
+    asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(() => t(`shared.settings`), () => ``, 5, { search: true }));
 
 // Voice and Data were Settings rows of their own until 2026-10-17; each is drawn at the foot of another section now
 // (settingsNav.ts `within`), so its old address opens that section at the part's anchor. `base` is where the account's

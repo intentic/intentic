@@ -23,6 +23,7 @@ const t = useT();
 const {
     title,
     description,
+    caption,
     groups,
     routeName,
     defaultSlug,
@@ -33,6 +34,8 @@ const {
 } = defineProps<{
     title: string;
     description?: string;
+    /** What kind of place the title names, under it at the head of the docked index (<SplitView>'s `caption`). */
+    caption?: string;
     /**
      * The hub's name (`sandbox`, `settings`), which its sections' work is kept under (hubWork.ts). Their addresses are
      * the route the hub is drawn on, with another `:tab`.
@@ -201,7 +204,16 @@ watch(
 <template>
     <!-- With room, the index docks to the shell's rail with the hub's name at its head and the section beside it (<SplitView>). -->
     <!-- A phone swaps: the index or one section, never both on screen (see `drill`). -->
-    <SplitView :title="pageTitle" :description="pageDescription" scroll="page" :mobile="drill ? `swap` : `collapse`" :detail-open="!onIndex">
+    <SplitView
+        :title="pageTitle"
+        :description="pageDescription"
+        :caption="caption"
+        scroll="page"
+        :mobile="drill ? `swap` : `collapse`"
+        :detail-open="!onIndex"
+    >
+        <!-- The hub's mark, beside its name at the head of the docked index (a sandbox's logo). -->
+        <template v-if="$slots[`mark`]" #mark><slot name="mark" /></template>
         <!-- A desktop pane too narrow for the rail keeps the strip. It wraps rather than scrolls: this is the index of everything the hub holds, and a section a reader can't see is a section they won't look for. -->
         <template v-if="!drill" #compact>
             <div class="flex flex-col gap-2 border-b border-line-subtle pb-2">

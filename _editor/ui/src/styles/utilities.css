@@ -81,6 +81,25 @@
             pointer-events: auto;
         }
     }
+
+/* THE INDEX COLUMN'S ROWS (<NavRail>, and the outline that stands in for it): a dense row's frame at a size an index is
+   read at. The dense tier is the app's smallest (12px titles, 32px rows), right for a popover or a stamp list and too
+   small for the column a reader scans to find a page: these rows are 36px with 13px titles and an 18px glyph, and the
+   picked one is set in the heavier weight as well as tinted, so it is found by shape and not only by colour. Keyed
+   to the dense tier's own classes, so a described row (taller by its own floor) and any other tier keep theirs. */
+    .ui-nav-index [data-row].min-h-8 {
+        min-height: calc(var(--spacing) * 9);
+    }
+    .ui-nav-index [data-row-title].text-xs {
+        font-size: 0.8125rem;
+        line-height: 1.25rem;
+    }
+    .ui-nav-index [data-row-icon].text-base {
+        font-size: var(--text-lg);
+    }
+    .ui-nav-index .ui-row-select-on [data-row-title] {
+        font-weight: 600;
+    }
 }
 
 /* THE ICON'S BOX (Icon.vue): a 1em glyph that sits on the text it labels and keeps its size in a flex row, where the flex
