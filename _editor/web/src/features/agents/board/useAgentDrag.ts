@@ -14,7 +14,7 @@ import { useNotifications } from "../../../workbench/notifications/notifications
 import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import type { OwnerHold } from "../../../models/conversations/review/ownerHold";
 import { keepDeleted, restoreAndLand } from "../../../models/fleet/ownerHoldActions";
-import { asksBeforeLand, clearedToLand } from "../../../models/fleet/presses/foreignLand";
+import { asksFirst, cleared, type ForeignPress } from "../../../models/fleet/presses/foreignPress";
 
 // Pointer-driven card drag: Pointer Events (not HTML5 drag-and-drop) give a real AgentCard ghost, Escape-to-cancel, and
 // DOM hit-testing for the drop target. A drop never assigns a lane: it runs the action, and the action claims the card
@@ -148,6 +148,10 @@ const runAction = async (id: string, chosen: PendingAction, at?: string): Promis
     await invalidateAgentAction(id, at);
 };
 
+// Which of the board's presses decide what becomes of the work, and so ask first on somebody else's card.
+export const foreignPressOf = (chosen: PendingAction): ForeignPress | undefined =>
+    chosen === `land` || chosen === `reland` || chosen === `restoreDeleted` ? `land` : chosen === `discard` ? `discard` : undefined;
+
 // The card doesn't move lane here; the action's claim does, on the press, and the roster frame the action provokes
 // confirms it. The action's own layer only withholds a second press on the same card until this one has answered.
 const perform = async (id: string, chosen: PendingAction, at?: string, run: () => Promise<void> = () => runAction(id, chosen, at)): Promise<void> => {
@@ -155,9 +159,10 @@ const perform = async (id: string, chosen: PendingAction, at?: string, run: () =
     if (pendingOn(id, at) !== undefined) {
         return;
     }
-    // Every press that lands (the button, the drop, the menu, Restore & land) asks first when the conversation is
-    // somebody else's (foreignLand), before the card is held: a no leaves it exactly as it was.
-    if ((chosen === `land` || chosen === `reland` || chosen === `restoreDeleted`) && asksBeforeLand(id, at) && !(await clearedToLand(id, at))) {
+    // Every press that lands (the button, the drop, the menu, Restore & land) or discards asks first when the
+    // conversation is somebody else's (foreignPress), before the card is held: a no leaves it exactly as it was.
+    const asks = foreignPressOf(chosen);
+    if (asks !== undefined && asksFirst(id, at) && !(await cleared(asks, id, at))) {
         return;
     }
     const lift = hold(id, at, { action: chosen });
@@ -241,7 +246,7 @@ const pendingLand = sandboxRef<LandAsk | undefined>(() => undefined);
 // The card's Land now or Land again: straight through, or held for the confirm when `confirmFirst` (a phone).
 const pressLand = (agent: Pick<FleetAgent, "id" | "sandboxId" | "title" | "diff">, chosen: LandAsk[`chosen`], confirmFirst: boolean): Promise<void> => {
     // Somebody else's conversation has a confirm of its own on the way (perform), which says all this one would.
-    if (!confirmFirst || asksBeforeLand(agent.id, agent.sandboxId)) {
+    if (!confirmFirst || asksFirst(agent.id, agent.sandboxId)) {
         return perform(agent.id, chosen, agent.sandboxId);
     }
     pendingLand.value = { id: agent.id, at: agent.sandboxId, chosen, title: agent.title, files: agent.diff?.files };

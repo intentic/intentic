@@ -51,14 +51,14 @@ jest.mock("../../../models/fleet/agentActions", () => ({
     nothingLanded: () => stub.nothingLanded,
 }));
 
-// The question before somebody else's land (foreignLand): the real module, over a signed-in reader.
+// The question before a press on somebody else's card (foreignPress): the real module, over a signed-in reader.
 jest.mock("../../../client/auth/useAuth", () => ({ useAuth: () => ({ user: { value: { email: `me@example.com` } } }) }));
 jest.mock("../../../workbench/presence/usePresence", () => ({ presenceOthers: { value: [] } }));
 
 const { askAgentToResolve, landAgent } = await import("../../../models/fleet/agentActions");
-const { answerForeignLand, foreignLandAsk } = await import("../../../models/fleet/presses/foreignLand");
+const { answerForeign, foreignAsk } = await import("../../../models/fleet/presses/foreignPress");
 const { pendingOn } = await import("../../../models/fleet/useAgents-provisional");
-const { useAgentDrag } = await import("./useAgentDrag");
+const { foreignPressOf, useAgentDrag } = await import("./useAgentDrag");
 
 afterEach(() => {
     stub.agents.clear();
@@ -197,17 +197,17 @@ describe(`a land of a conversation somebody else owns`, () => {
     beforeEach(() => {
         stub.agents.set(`a`, { owner: { email: `anna@example.com` } });
     });
-    afterEach(() => answerForeignLand(false));
+    afterEach(() => answerForeign(false));
 
     it(`waits for the reader's yes, then lands`, async () => {
         const drag = useAgentDrag();
         const pressed = drag.landNow(`a`);
         await Promise.resolve();
-        expect(foreignLandAsk.value?.owner.email).toBe(`anna@example.com`);
+        expect(foreignAsk.value?.owner.email).toBe(`anna@example.com`);
         expect(landAgent).not.toHaveBeenCalled();
         expect(pendingOn(`a`, undefined)).toBeUndefined();
 
-        answerForeignLand(true);
+        answerForeign(true);
         await Promise.resolve();
         await Promise.resolve();
         expect(landAgent).toHaveBeenCalledTimes(1);
@@ -219,10 +219,20 @@ describe(`a land of a conversation somebody else owns`, () => {
         const drag = useAgentDrag();
         const pressed = drag.landNow(`a`);
         await Promise.resolve();
-        answerForeignLand(false);
+        answerForeign(false);
         await pressed;
         expect(landAgent).not.toHaveBeenCalled();
         expect(pendingOn(`a`, undefined)).toBeUndefined();
+    });
+
+    it(`asks before the presses that decide what becomes of the work, and no others`, () => {
+        expect(foreignPressOf(`land`)).toBe(`land`);
+        expect(foreignPressOf(`reland`)).toBe(`land`);
+        expect(foreignPressOf(`restoreDeleted`)).toBe(`land`);
+        expect(foreignPressOf(`discard`)).toBe(`discard`);
+        expect(foreignPressOf(`stop`)).toBeUndefined();
+        expect(foreignPressOf(`resolve`)).toBeUndefined();
+        expect(foreignPressOf(`archive`)).toBeUndefined();
     });
 
     it(`asks its own question on a phone instead of the board's generic one`, async () => {
@@ -230,8 +240,8 @@ describe(`a land of a conversation somebody else owns`, () => {
         const pressed = drag.pressLand(theirs, `land`, true);
         await Promise.resolve();
         expect(drag.pendingLand.value).toBeUndefined();
-        expect(foreignLandAsk.value?.id).toBe(`a`);
-        answerForeignLand(false);
+        expect(foreignAsk.value?.id).toBe(`a`);
+        answerForeign(false);
         await pressed;
     });
 });

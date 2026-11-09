@@ -525,6 +525,7 @@
             "archiveEmptiedFinishedAgents": "Archiwum opróżnione. Skończone agenty zbiorą się tu znowu same po kilku spokojnych dniach.",
             "archiveEveryFinishedAgent": "Zarchiwizuj każdego skończonego agenta",
             "archivedWillBeDeleted": "{count} zarchiwizowany agent zostanie usunięty na dobre — jego gałąź, rozmowa i historia. Tego nie można cofnąć. | {count} zarchiwizowane agenty zostaną usunięte na dobre — gałąź, rozmowa i historia każdego z nich. Tego nie można cofnąć. | {count} zarchiwizowanych agentów zostanie usuniętych na dobre — gałąź, rozmowa i historia każdego z nich. Tego nie można cofnąć.",
+            "archivedOthers": "{count} z nich należy do kogoś innego: {names}. | {count} z nich należą do innych osób: {names}. | {count} z nich należy do innych osób: {names}.",
             "askAgent": "Zapytaj agenta",
             "backToFinishedAgents": "Wróć do skończonych agentów",
             "copySessionName": "Kopiuj nazwę sesji",
@@ -759,10 +760,22 @@
             "startedByControlToken": "Uruchomiona przez token sterujący {tokenLabel}",
             "unclaimed": "Nieprzejęte"
         },
-        "foreignLand": {
-            "title": "Scalić pracę: {name}?",
-            "body": "Ta rozmowa należy do: {name}, nie do Ciebie. Scalenie przenosi jej zmiany już teraz do obszaru roboczego wspólnego dla wszystkich, niezależnie od tego, czy jej właściciel skończył.",
-            "confirm": "Scal pracę: {name}",
+        "foreignPress": {
+            "land": {
+                "title": "Scalić pracę: {name}?",
+                "body": "Ta rozmowa należy do: {full}, nie do Ciebie. Scalenie przenosi jej zmiany już teraz do obszaru roboczego wspólnego dla wszystkich, niezależnie od tego, czy jej właściciel skończył.",
+                "confirm": "Scal pracę: {name}"
+            },
+            "discard": {
+                "title": "Odrzucić pracę: {name}?",
+                "body": "Ta rozmowa należy do: {full}, nie do Ciebie. Odrzucenie usuwa jej gałąź i wszystko, co na niej jest, a nie zostało scalone. Tego nie można cofnąć.",
+                "confirm": "Odrzuć pracę: {name}"
+            },
+            "autoLand": {
+                "title": "Scalać pracę automatycznie: {name}?",
+                "body": "Ta rozmowa należy do: {full}, nie do Ciebie. Od teraz wszystko, co ukończy, trafia do obszaru roboczego wspólnego dla wszystkich, zanim ktokolwiek to sprawdzi.",
+                "confirm": "Scalaj automatycznie"
+            },
             "owner": "Właściciel tej rozmowy",
             "ownerAt": "Właściciel tej rozmowy · {email}",
             "files": "{count} zmieniony plik | {count} zmienione pliki | {count} zmienionych plików"

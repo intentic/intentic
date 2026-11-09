@@ -525,6 +525,7 @@
             "archiveEmptiedFinishedAgents": "Archive vidée. Les agents terminés s'y accumuleront de nouveau tout seuls après quelques jours calmes.",
             "archiveEveryFinishedAgent": "Archiver tous les agents terminés",
             "archivedWillBeDeleted": "{count} agent archivé sera supprimé définitivement : sa branche, sa conversation et son historique. C'est irréversible. | {count} agents archivés seront supprimés définitivement : pour chacun sa branche, sa conversation et son historique. C'est irréversible.",
+            "archivedOthers": "{count} d'entre eux appartient à quelqu'un d'autre : {names}. | {count} d'entre eux appartiennent à d'autres personnes : {names}.",
             "askAgent": "Demander à l'agent",
             "backToFinishedAgents": "Retour aux agents terminés",
             "copySessionName": "Copier le nom de la session",
@@ -759,10 +760,22 @@
             "startedByControlToken": "Lancée par le jeton de contrôle {tokenLabel}",
             "unclaimed": "Non réclamé"
         },
-        "foreignLand": {
-            "title": "Intégrer le travail de {name} ?",
-            "body": "Cette conversation est celle de {name}, pas la vôtre. L'intégrer place ses modifications dès maintenant dans l'espace de travail que tout le monde partage, que {name} en ait fini ou non.",
-            "confirm": "Intégrer le travail de {name}",
+        "foreignPress": {
+            "land": {
+                "title": "Intégrer le travail de {name} ?",
+                "body": "Cette conversation est celle de {full}, pas la vôtre. L'intégrer place ses modifications dès maintenant dans l'espace de travail que tout le monde partage, que le travail y soit terminé ou non.",
+                "confirm": "Intégrer le travail de {name}"
+            },
+            "discard": {
+                "title": "Abandonner le travail de {name} ?",
+                "body": "Cette conversation est celle de {full}, pas la vôtre. L'abandonner supprime sa branche et tout ce qui s'y trouve sans avoir été intégré. C'est irréversible.",
+                "confirm": "Abandonner le travail de {name}"
+            },
+            "autoLand": {
+                "title": "Intégrer automatiquement le travail de {name} ?",
+                "body": "Cette conversation est celle de {full}, pas la vôtre. Désormais, tout ce qu'elle termine entre dans l'espace de travail que tout le monde partage sans que personne ne le relise d'abord.",
+                "confirm": "Intégrer automatiquement"
+            },
             "owner": "Propriétaire de cette conversation",
             "ownerAt": "Propriétaire de cette conversation · {email}",
             "files": "{count} fichier modifié | {count} fichiers modifiés"

@@ -525,6 +525,7 @@
             "archiveEmptiedFinishedAgents": "Archiv geleert. Fertige Agenten sammeln sich nach ein paar ruhigen Tagen von selbst wieder hier.",
             "archiveEveryFinishedAgent": "Jeden fertigen Agenten archivieren",
             "archivedWillBeDeleted": "{count} archivierter Agent wird endgültig gelöscht — sein Branch, seine Unterhaltung und seine Historie. Das lässt sich nicht rückgängig machen. | {count} archivierte Agenten werden endgültig gelöscht — jeweils Branch, Unterhaltung und Historie. Das lässt sich nicht rückgängig machen.",
+            "archivedOthers": "{count} davon gehört jemand anderem: {names}. | {count} davon gehören anderen: {names}.",
             "askAgent": "Den Agenten fragen",
             "backToFinishedAgents": "Zurück zu den fertigen Agenten",
             "copySessionName": "Session-Namen kopieren",
@@ -759,10 +760,22 @@
             "startedByControlToken": "Gestartet vom Steuer-Token {tokenLabel}",
             "unclaimed": "Nicht übernommen"
         },
-        "foreignLand": {
-            "title": "Arbeit von {name} übernehmen?",
-            "body": "Diese Unterhaltung gehört {name}, nicht Ihnen. Das Übernehmen bringt ihre Änderungen jetzt in den gemeinsamen Arbeitsbereich, ob {name} damit fertig ist oder nicht.",
-            "confirm": "Arbeit von {name} übernehmen",
+        "foreignPress": {
+            "land": {
+                "title": "Arbeit von {name} übernehmen?",
+                "body": "Diese Unterhaltung gehört {full}, nicht Ihnen. Das Übernehmen bringt ihre Änderungen jetzt in den gemeinsamen Arbeitsbereich, ob die Arbeit daran abgeschlossen ist oder nicht.",
+                "confirm": "Arbeit von {name} übernehmen"
+            },
+            "discard": {
+                "title": "Arbeit von {name} verwerfen?",
+                "body": "Diese Unterhaltung gehört {full}, nicht Ihnen. Das Verwerfen löscht ihren Branch und alles darauf, was noch nicht übernommen wurde. Das lässt sich nicht rückgängig machen.",
+                "confirm": "Arbeit von {name} verwerfen"
+            },
+            "autoLand": {
+                "title": "Arbeit von {name} automatisch übernehmen?",
+                "body": "Diese Unterhaltung gehört {full}, nicht Ihnen. Von nun an kommt alles, was sie abschließt, in den gemeinsamen Arbeitsbereich, ohne dass es jemand vorher prüft.",
+                "confirm": "Automatisch übernehmen"
+            },
             "owner": "Besitzt diese Unterhaltung",
             "ownerAt": "Besitzt diese Unterhaltung · {email}",
             "files": "{count} Datei geändert | {count} Dateien geändert"

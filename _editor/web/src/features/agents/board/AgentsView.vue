@@ -25,6 +25,8 @@ import { useAgentFilter } from "./useAgentFilter";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import { useAuth } from "../../../client/auth/useAuth";
+import { foreignShare } from "../../../models/fleet/presses/foreignPress";
+import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { useSandboxSharedAccess } from "../../../models/sandbox/useSandboxSharedAccess";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -107,6 +109,8 @@ const { view, move } = useBoardView(needle);
 const workflows = useWorkflowRuns();
 const { personas } = usePersonas();
 const { user } = useAuth();
+// How much of the archive is other people's, for the one press that deletes all of it (the purge confirm below).
+const othersArchived = computed(() => foreignShare(archived.value, user.value?.email, presenceOthers.value));
 const { sharedAccess } = useSandboxSharedAccess();
 const scope = useBoardScope({ agents, runs: workflows.runs, personas, me: computed(() => user.value?.email), sharedAccess });
 const { ownerOptions, ownerScope, projectHidden, attentionElsewhere, scopedHeld } = scope;
@@ -709,6 +713,16 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             @cancel="pendingPurge = false"
             @confirm="confirmPurge"
         >
+            <!-- Delete all takes everybody's, and the count alone doesn't say so: whose else goes is named before the yes. -->
+            <p v-if="othersArchived.count > 0" class="text-xs font-medium text-warning" data-purge-others>
+                {{
+                    t(
+                        `agents.agentsView.archivedOthers`,
+                        { count: othersArchived.count, names: othersArchived.owners.map((owner) => owner.name).join(`, `) },
+                        othersArchived.count,
+                    )
+                }}
+            </p>
             <p class="text-xs text-muted">{{ t(`agents.agentsView.workTheyAlreadyLanded`) }}</p>
         </ConfirmDialog>
         <!-- A real card, so the drag reads as the card itself; `pointer-events-none` keeps the hit test on what's underneath it. -->

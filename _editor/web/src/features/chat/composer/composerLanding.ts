@@ -6,6 +6,7 @@ import { landsByDefault } from "../../../models/sandbox/environment/rules";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { useRole } from "../../../client/sandbox/useRole";
+import { pressAutoLand } from "../../../models/fleet/presses/autoLandPress";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 
 // The composer setting about how a conversation's work arrives rather than what it says: whether its finished work lands
@@ -37,7 +38,7 @@ export const homeLandingOf = (
  * read by the daemon when the running turn, if any, finishes.
  */
 export const useComposerLanding = (conversation: () => Conversation) => {
-    const { agentById, setAutoLand } = useAgents();
+    const { agentById } = useAgents();
     const { settings } = useSandboxSettings();
     const { canShip, canLandHome } = useRole();
     const sandboxLands = computed(() => landsByDefault(settings.value?.rules ?? []));
@@ -61,7 +62,7 @@ export const useComposerLanding = (conversation: () => Conversation) => {
     const set = (on: boolean): void => {
         const answer = on === sandboxLands.value ? undefined : on;
         if (registered.value) {
-            void setAutoLand(conversation().conversationId, answer ?? null);
+            void pressAutoLand(conversation().conversationId, answer ?? null, on);
             return;
         }
         conversation().autoLandDraft.value = answer;

@@ -36,6 +36,7 @@ import { QUIET_TRANSCRIPT_WAIT } from "../../../models/conversations/transcript/
 import { boxNameOf, openInSandbox, otherFleet } from "../../../models/fleet/fleetScope";
 import { otherBoxes, refreshAcross } from "../../../models/sandbox/live/fleetAcross";
 import { useAgentChanges } from "./useAgentChanges";
+import { asksFirst } from "../../../models/fleet/presses/foreignPress";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useRole } from "../../../client/sandbox/useRole";
@@ -408,6 +409,14 @@ const confirmDiscard = async (): Promise<void> => {
     pendingDiscard.value = false;
     await changes.discard();
 };
+// Somebody else's conversation has a confirm of its own inside the press (foreignPress), which says all this one would.
+const askDiscard = (): void => {
+    if (asksFirst(agentId.value, remoteBox.value)) {
+        void changes.discard();
+        return;
+    }
+    pendingDiscard.value = true;
+};
 // Hand-over: a member from the presence roster, or an address typed for somebody not connected. The daemon decides
 // whether the caller may and whether the address is a member's; a refusal is shown in its own words. The press is
 // the card's, in the ledger: a dialog closed or a page left mid-press finds it still held, and its refusal kept.
@@ -710,7 +719,7 @@ const confirmHandOver = async (): Promise<void> => {
                 @selected="closeMenu"
                 @rename="edit.begin()"
                 @identity="identityOpen = true"
-                @discard="pendingDiscard = true"
+                @discard="askDiscard"
                 @force-land="pendingForceLand = true"
                 @hand-over="openHandOver"
             />

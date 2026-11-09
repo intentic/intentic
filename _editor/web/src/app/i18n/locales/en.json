@@ -525,6 +525,7 @@
             "archiveEmptiedFinishedAgents": "Archive emptied. Finished agents will collect here again on their own after a few quiet days.",
             "archiveEveryFinishedAgent": "Archive every finished agent",
             "archivedWillBeDeleted": "{count} archived agent will be deleted for good, its branch, its conversation and its history. This cannot be undone. | {count} archived agents will be deleted for good, each one's branch, its conversation and its history. This cannot be undone.",
+            "archivedOthers": "{count} of them is somebody else's: {names}. | {count} of them are other people's: {names}.",
             "askAgent": "Ask the agent",
             "backToFinishedAgents": "Back to finished agents",
             "copySessionName": "Copy session name",
@@ -759,10 +760,22 @@
             "startedByControlToken": "Started by the control token {tokenLabel}",
             "unclaimed": "Unclaimed"
         },
-        "foreignLand": {
-            "title": "Land {name}'s work?",
-            "body": "This conversation is {name}'s, not yours. Landing brings its changes into the workspace everyone shares now, whether or not they are finished with it.",
-            "confirm": "Land {name}'s work",
+        "foreignPress": {
+            "land": {
+                "title": "Land {name}'s work?",
+                "body": "This conversation is {full}'s, not yours. Landing brings its changes into the workspace everyone shares now, whether or not they are finished with it.",
+                "confirm": "Land {name}'s work"
+            },
+            "discard": {
+                "title": "Discard {name}'s work?",
+                "body": "This conversation is {full}'s, not yours. Discarding deletes its branch and everything on it that hasn't landed. This cannot be undone.",
+                "confirm": "Discard {name}'s work"
+            },
+            "autoLand": {
+                "title": "Let {name}'s work land by itself?",
+                "body": "This conversation is {full}'s, not yours. From now on, whatever it finishes goes into the workspace everyone shares with nobody reviewing it first.",
+                "confirm": "Land it automatically"
+            },
             "owner": "Owns this conversation",
             "ownerAt": "Owns this conversation · {email}",
             "files": "{count} file changed | {count} files changed"

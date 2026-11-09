@@ -7,6 +7,7 @@ import { formatUntil } from "@intentic/ui/time";
 import { computed, nextTick, ref } from "vue";
 import { agentDisplayTitle, agentStatusMeta } from "../../../../models/agent-status/agentStatus-meta";
 import { useAgents } from "../../../../models/fleet/useAgents";
+import { pressAutoLand } from "../../../../models/fleet/presses/autoLandPress";
 import { autoVersionRule, landsByDefault, NAMED_RULES } from "../../../../models/sandbox/environment/rules";
 import { useRules } from "../../../../models/sandbox/environment/useRules";
 import { useRole } from "../../../../client/sandbox/useRole";
@@ -52,7 +53,7 @@ const backToHours = async (from: Exclude<View, `hours`>): Promise<void> => {
     (from === `picker` ? pickerRow : agentsRow).value?.focus({ preventScroll: true });
 };
 
-const { fleet, setAutoLand } = useAgents();
+const { fleet } = useAgents();
 const { byId, upsert, settings } = useRules();
 const { canShip } = useRole();
 const sandboxLands = computed(() => landsByDefault(settings.value?.rules ?? []));
@@ -158,7 +159,7 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
                     class="composer-ghost h-6 shrink-0 gap-1 self-center px-2 text-2xs font-medium max-md:h-9"
                     v-tooltip.top="{ title: t(`chat.sendLater.alsoLandIt`), note: t(`chat.sendLater.alsoLandItNote`) }"
                     :aria-label="t(`chat.sendLater.alsoLandIt`)"
-                    @click.stop="setAutoLand(agent.id, sandboxLands ? null : true)"
+                    @click.stop="pressAutoLand(agent.id, sandboxLands ? null : true, true)"
                     @keydown.enter.stop
                 >
                     <Icon name="download" class="text-2xs text-link" />{{ t(`chat.sendLater.autoLand`) }}

@@ -26,6 +26,7 @@ import { formatClock } from "@intentic/ui/format";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { keptWarm, warmOffer } from "../../../../models/fleet/promptCache";
 import { isRemote } from "../../../../models/fleet/fleetScope";
+import { asksFirst, cleared } from "../../../../models/fleet/presses/foreignPress";
 import { downloadBundle } from "./agentBundle";
 
 // Session-level actions (refresh, rename, land, hold, archive, discard), as opposed to diff actions; once-per-session
@@ -106,6 +107,10 @@ const autoLandOn = computed(() => effectiveAutoLand(agentById(agentId), sandboxL
 const toggleAutoLand = async (): Promise<void> => {
     const next = !autoLandOn.value;
     emit(`selected`);
+    // Turning it on for somebody else's conversation is a land agreed to in advance, and asks like one (foreignPress).
+    if (next && asksFirst(agentId, undefined) && !(await cleared(`autoLand`, agentId, undefined))) {
+        return;
+    }
     await changes.setAutoLand(next === sandboxLands.value ? null : next);
 };
 
