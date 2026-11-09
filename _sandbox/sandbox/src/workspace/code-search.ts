@@ -11,8 +11,9 @@ const BACKLOG_LOG_MS = 30_000;
 // 2.5 GiB: under the child's inherited 3 GiB heap cap, so a runaway is replaced before V8 makes it a fatal error.
 const IQ_MEMORY_CEILING_BYTES = 2.5 * 1024 * 1024 * 1024;
 // Ten minutes nobody searched: the child (index plus both ML models, ~350 MB measured idle on 2026-10-10, most of it
-// swapped) is let go, and the next search or turn forks it again, paying the models' load once. Every turn asks for
-// context, so a sandbox in use never reaches this; one left alone among a dozen others on a PC stops holding it.
+// swapped) is let go, and the next search forks it again, paying the models' load once. Asks come from the search
+// box, the chores rail's hotspots and reference globbing; per-turn context also asks, but only with `iqTurnContext`
+// on, which it is not by default. A sandbox left alone among a dozen others on a PC stops holding it.
 const IQ_IDLE_EXIT_MS = 10 * 60_000;
 
 // The workspace's code-search engine, run in a child process the daemon supervises and replaces past its memory ceiling.

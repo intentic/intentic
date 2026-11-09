@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { EMBED_INTRA_OP_THREADS } from "./onnx-threads.js";
+import { ONNX_SESSION_OPTIONS } from "./onnx-threads.js";
 
 export const MODEL_ID = "Xenova/bge-small-en-v1.5";
 const EMBEDDING_DIM = 384;
@@ -37,12 +37,21 @@ export const loadEmbedder = async (modelDir: string | undefined): Promise<Embedd
     env.allowRemoteModels = false;
     const extractor = await pipeline("feature-extraction", MODEL_ID, {
         dtype: "q8",
-        session_options: { intraOpNumThreads: EMBED_INTRA_OP_THREADS, interOpNumThreads: 1 },
+        session_options: ONNX_SESSION_OPTIONS,
     });
+    // One text per model call. A batch is padded to its longest member, and chunks run from one line to 1,200 chars,
+    // so most of a batch's work was padding. Measured 2026-11-09 on this repository's chunks: batches of 16 embedded
+    // 5.0 chunks per CPU-second with an 869 MB peak, one at a time 13.9 with 233 MB, vectors at cosine 0.99 or more
+    // to the batched ones, within the int8 quantization the index stores them at.
     const embed = async (texts: readonly string[]): Promise<Float32Array[]> => {
-        const tensor = await extractor([...texts], { pooling: POOLING, normalize: true });
-        const data = tensor.data as Float32Array;
-        return texts.map((_, i) => new Float32Array(data.buffer, data.byteOffset + i * EMBEDDING_DIM * 4, EMBEDDING_DIM));
+        const vectors: Float32Array[] = [];
+        for (const text of texts) {
+            const tensor = await extractor(text, { pooling: POOLING, normalize: true });
+            // SAFETY: feature-extraction with pooling yields a float32 tensor of one EMBEDDING_DIM row per input.
+            const data = tensor.data as Float32Array;
+            vectors.push(new Float32Array(data.buffer, data.byteOffset, EMBEDDING_DIM));
+        }
+        return vectors;
     };
     return {
         modelId: MODEL_ID,

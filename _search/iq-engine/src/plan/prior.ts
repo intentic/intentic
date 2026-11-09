@@ -12,4 +12,6 @@ const GENERATED_PRIOR = 0.3;
 const GENERATED =
     /(^|\/)(pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|bun\.lockb?|Cargo\.lock|poetry\.lock|Pipfile\.lock|uv\.lock|Gemfile\.lock|composer\.lock|go\.sum|flake\.lock|mix\.lock|pubspec\.lock|Package\.resolved|packages\.lock\.json)$|\.min\.(js|css)$|\.(js|css|mjs|cjs)\.map$|(^|\/)__snapshots__\/|\.snap$|\.svg$|(^|\/)\.env(\.[\w.-]+)?$/;
 
-export const classPrior = (path: string): number => (GENERATED.test(path) ? GENERATED_PRIOR : CLASS_PRIOR[classOf(path)]);
+export const isGenerated = (path: string): boolean => GENERATED.test(path);
+
+export const classPrior = (path: string): number => (isGenerated(path) ? GENERATED_PRIOR : CLASS_PRIOR[classOf(path)]);

@@ -1,3 +1,4 @@
+import { embeddable, NOT_EMBEDDED } from "../embed/embeddable.js";
 import type { Embedder } from "../embed/embedder.js";
 import type { VectorCache } from "../embed/vector-cache.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
@@ -21,9 +22,22 @@ export const embedPending = async (
     const started = Date.now();
     let done = 0;
     while (done < cap && Date.now() - started < timeBudgetMs) {
-        const rows = db.all("SELECT id, file_id, hash, text FROM chunks WHERE embedded = 0 LIMIT ?", Math.min(BATCH, cap - done));
-        if (rows.length === 0) {
+        const pending = db.all(
+            "SELECT c.id, c.file_id, c.hash, c.text, f.path FROM chunks c JOIN files f ON f.id = c.file_id WHERE c.embedded = 0 LIMIT ?",
+            Math.min(BATCH, cap - done),
+        );
+        if (pending.length === 0) {
             break;
+        }
+        // A chunk queued before its file was excluded (replaceFile marks new ones itself) is settled without the model.
+        const rows = pending.filter((row) => embeddable(String(row["path"])));
+        const excluded = pending.filter((row) => !embeddable(String(row["path"])));
+        if (excluded.length > 0) {
+            db.transaction(() => {
+                for (const row of excluded) {
+                    db.run("UPDATE chunks SET embedded = ? WHERE id = ?", NOT_EMBEDDED, Number(row["id"]));
+                }
+            });
         }
         const cached = cache?.get(rows.map((row) => row["hash"] as string)) ?? new Map<string, Uint8Array>();
         const missing = new Map<string, string>();
@@ -50,7 +64,7 @@ export const embedPending = async (
                 putVector(db, Number(row["id"]), Number(row["file_id"]), new Float32Array(blob.buffer, blob.byteOffset, blob.byteLength / 4));
             }
         });
-        done += rows.length;
+        done += pending.length;
     }
     return Number(db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedded = 0")?.["n"] ?? 0);
 };

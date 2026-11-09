@@ -26,6 +26,9 @@ const MAX_SHADOW_BYTES = 8 * 1024 * 1024;
 const maxBytesOf = (entry: FileEntry): number => (entry.text === undefined ? MAX_FILE_BYTES : MAX_SHADOW_BYTES);
 
 // Bump when parse/chunk/complexity logic changes; forces a reparse, but unchanged chunks keep their embeddings.
+// Left at 3 on purpose when windows became content-cut and lost their line labels (2026-11-09): that changed the
+// hash of over half this repository's chunks (142k of 268k), and a reparse would have re-embedded them all on every
+// sandbox at its first boot. Each file takes the new windows when it next changes, which re-embeds only that file.
 const PARSER_VERSION = "3";
 
 // Symbol/chunk/complexity production is injected here (ast-grep, chunker); tests can run the indexer without either.

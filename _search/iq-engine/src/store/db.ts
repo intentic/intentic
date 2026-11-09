@@ -14,6 +14,22 @@ const EMBEDDING_DIM = 384;
 // Reclaim runs only once the freelist exceeds this fraction of total pages.
 const COMPACT_FREELIST_RATIO = 0.25;
 
+// sqlite-vec 0.1 keeps vectors in blocks of fixed slots and does not reuse the slot a delete frees, and every re-index
+// of a changed file deletes and re-adds its vectors. This repository's table was 12% live on 2026-11-09 (268k
+// vectors in 2.18M slots, about 800 MB of a 1.3 GB index), and a nearest-neighbour query reads every block: 500 ms
+// there, 90 ms on a compacted copy of 107 MB. The table is rebuilt once live vectors fill less than this share of
+// its slots.
+const VECTOR_OCCUPANCY_FLOOR = 0.5;
+// Under this many slots (a few MB) a rebuild would save too little to be worth writing.
+const VECTOR_REBUILD_MIN_SLOTS = 16 * 1024;
+
+// The dense tier's table, created by the DDL and again by a rebuild.
+const VECTOR_TABLE = `CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0(
+    chunk_id INTEGER PRIMARY KEY,
+    embedding int8[${EMBEDDING_DIM}] distance_metric=cosine,
+    file_id INTEGER
+)`;
+
 const DDL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS files (
@@ -81,11 +97,7 @@ END;
 -- file_id is a metadata column rather than an auxiliary (+) one specifically so a scoped query can filter on it
 -- DURING the ranking pass: filtering afterwards would return the top k of the workspace and then discard the
 -- ones out of scope, which is a different (and wrong) answer.
-CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0(
-    chunk_id INTEGER PRIMARY KEY,
-    embedding int8[${EMBEDDING_DIM}] distance_metric=cosine,
-    file_id INTEGER
-);
+${VECTOR_TABLE};
 -- vec0 is not a real table, so it is outside foreign keys: nothing cascades into it. This trigger is what
 -- deletes a vector when its chunk goes, including on the FK cascade from files that chunks_fts_ad also relies on.
 CREATE TRIGGER IF NOT EXISTS chunks_vec_ad AFTER DELETE ON chunks BEGIN
@@ -95,14 +107,53 @@ END;
 
 const pragmaNumber = (db: SqliteDb, name: "freelist_count" | "page_count"): number => Number(db.get(`PRAGMA ${name}`)?.[name] ?? 0);
 
-/** Reclaims freelist pages once fragmentation exceeds the threshold; returns whether a vacuum ran. */
+// Live vectors and allocated slots, read from sqlite-vec's own shadow tables; undefined where a version names them
+// differently, which leaves the table as it is.
+const vectorOccupancy = (db: SqliteDb): { live: number; slots: number } | undefined => {
+    const shadows = Number(
+        db.get("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN ('chunk_vectors_chunks', 'chunk_vectors_rowids')")?.["n"] ?? 0,
+    );
+    if (shadows !== 2) {
+        return undefined;
+    }
+    const slots = Number(db.get("SELECT COALESCE(SUM(size), 0) AS n FROM chunk_vectors_chunks")?.["n"] ?? 0);
+    const live = Number(db.get("SELECT COUNT(*) AS n FROM chunk_vectors_rowids")?.["n"] ?? 0);
+    return { live, slots };
+};
+
+/** Rebuilds the vector table packed when most of its slots are dead; returns whether it did. */
+export const compactVectors = (db: SqliteDb): boolean => {
+    const occupancy = vectorOccupancy(db);
+    if (occupancy === undefined || occupancy.slots < VECTOR_REBUILD_MIN_SLOTS || occupancy.live >= occupancy.slots * VECTOR_OCCUPANCY_FLOOR) {
+        return false;
+    }
+    // One transaction: a reader keeps the old table until the new one is whole. A vector whose chunk is gone is left
+    // behind. The stored int8 blob goes back in as int8 (vec_int8), since by length alone it would read as 96 floats;
+    // no ORDER BY, because a sorter strips the subtype vec_int8 sets and the insert then refuses the blob.
+    db.transaction(() => {
+        db.run("CREATE TEMP TABLE kept_vectors AS SELECT v.chunk_id, v.embedding, v.file_id FROM chunk_vectors v JOIN chunks c ON c.id = v.chunk_id");
+        db.run("DROP TABLE chunk_vectors");
+        db.run(VECTOR_TABLE);
+        db.run("INSERT INTO chunk_vectors (chunk_id, embedding, file_id) SELECT chunk_id, vec_int8(embedding), file_id FROM kept_vectors");
+        db.run("DROP TABLE kept_vectors");
+    });
+    return true;
+};
+
+/**
+ * Packs the vector table when most of it is dead (compactVectors), then reclaims freelist pages once fragmentation
+ * exceeds the threshold; returns whether a vacuum ran.
+ */
 export const compactIndex = (db: SqliteDb): boolean => {
+    compactVectors(db);
     const pageCount = pragmaNumber(db, "page_count");
     const freePages = pragmaNumber(db, "freelist_count");
     if (pageCount === 0 || freePages / pageCount < COMPACT_FREELIST_RATIO) {
         return false;
     }
-    db.run("PRAGMA incremental_vacuum");
+    // Stepped to the end (all, not run): each step of this pragma frees one page, so a single step reclaimed one page
+    // per compaction, and the file never shrank.
+    db.all("PRAGMA incremental_vacuum");
     return true;
 };
 

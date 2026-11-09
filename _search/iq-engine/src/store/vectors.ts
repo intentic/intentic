@@ -55,10 +55,10 @@ export const vectorsOfFile = (db: SqliteDb, path: string): Map<string, Uint8Arra
     return vectors;
 };
 
-/** Drops every stored vector; a model swap invalidates all of them at once. */
+/** Drops every stored vector; a model swap invalidates all of them at once. Chunks left out on purpose stay out. */
 export const clearVectors = (db: SqliteDb): void => {
     db.run("DELETE FROM chunk_vectors");
-    db.run("UPDATE chunks SET embedded = 0");
+    db.run("UPDATE chunks SET embedded = 0 WHERE embedded = 1");
 };
 
 export interface VectorHit {

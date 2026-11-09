@@ -1,3 +1,4 @@
+import { embeddable, NOT_EMBEDDED } from "../embed/embeddable.js";
 import type { ChunkRow, IndexStatus, SymbolRow } from "../types.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import { copyVector, vectorsOfFile } from "./vectors.js";
@@ -37,7 +38,9 @@ export const deleteFile = (db: SqliteDb, id: number): void => {
 };
 
 // Replace one file's index rows in a single shape: upsert the file, drop derived rows, reinsert. Embeddings for
-// unchanged chunk content are copied over by hash so renames/moves/reformats never re-embed.
+// unchanged chunk content are copied over by hash so renames/moves/reformats never re-embed. A file that gets no
+// vectors (embeddable) has its chunks marked so and nothing carried, which also drops vectors stored before it was
+// excluded.
 export const replaceFile = (
     db: SqliteDb,
     file: { path: string; repo: string | undefined; lang: string | undefined; mtimeMs: number; size: number; hash: string; complexity: number },
@@ -45,7 +48,8 @@ export const replaceFile = (
     chunks: readonly ChunkRow[],
     imports: readonly string[],
 ): void => {
-    const previousEmbeddings = vectorsOfFile(db, file.path);
+    const embed = embeddable(file.path);
+    const previousEmbeddings = embed ? vectorsOfFile(db, file.path) : new Map<string, Uint8Array>();
     db.run("DELETE FROM files WHERE path = ?", file.path);
     db.run(
         "INSERT INTO files (path, repo, lang, mtime_ms, size, hash, complexity) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -78,12 +82,13 @@ export const replaceFile = (
         // RETURNING rather than a follow-up lookup: the vector table is keyed by chunk id, and this is the only
         // place that mints one.
         const inserted = db.get(
-            "INSERT INTO chunks (file_id, start_line, end_line, hash, text) VALUES (?, ?, ?, ?, ?) RETURNING id",
+            "INSERT INTO chunks (file_id, start_line, end_line, hash, text, embedded) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
             id,
             chunk.startLine,
             chunk.endLine,
             chunk.hash,
             chunk.text,
+            embed ? 0 : NOT_EMBEDDED,
         );
         const carried = previousEmbeddings.get(chunk.hash);
         if (carried !== undefined) {

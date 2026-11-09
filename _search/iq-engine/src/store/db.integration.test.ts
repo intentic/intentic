@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Row } from "@intentic/base/sqlite";
-import { compactIndex, isIndexBusy, openIndex } from "./db.js";
+import { compactIndex, compactVectors, isIndexBusy, openIndex } from "./db.js";
+import { nearestChunks, putVector } from "./vectors.js";
 
 const dirs: string[] = [];
 
@@ -33,8 +34,49 @@ test("new indexes use incremental auto-vacuum and reclaim a materially fragmente
         const freeBefore = pragma(db.get("PRAGMA freelist_count"), "freelist_count");
         expect(freeBefore / pagesBefore).toBeGreaterThan(0.25);
         expect(compactIndex(db)).toBe(true);
-        expect(pragma(db.get("PRAGMA page_count"), "page_count")).toBeLessThan(pagesBefore);
-        expect(pragma(db.get("PRAGMA freelist_count"), "freelist_count")).toBeLessThan(freeBefore);
+        // Every free page goes, not one: the file shrinks by at least the whole freelist (pointer-map pages may follow).
+        expect(pragma(db.get("PRAGMA freelist_count"), "freelist_count")).toBe(0);
+        expect(pragma(db.get("PRAGMA page_count"), "page_count")).toBeLessThanOrEqual(pagesBefore - freeBefore);
+    } finally {
+        db.close();
+    }
+});
+
+// sqlite-vec never reuses a slot a delete frees, so re-indexing leaves the vector table mostly dead: a rebuild has to
+// keep every live vector, answer nearest-neighbour queries exactly as before, and give the slots back.
+test("a mostly dead vector table is rebuilt packed, keeping every live vector and its answers", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "iq-db-"));
+    dirs.push(dir);
+    const db = openIndex(dir, "write");
+    const slots = (): number => Number(db.get("SELECT COALESCE(SUM(size), 0) AS n FROM chunk_vectors_chunks")?.["n"] ?? 0);
+    try {
+        const total = 20_000;
+        db.transaction(() => {
+            db.run("INSERT INTO files (path, mtime_ms, size, hash) VALUES ('a.ts', 0, 1, 'h')");
+            for (let i = 1; i <= total; i += 1) {
+                db.run("INSERT INTO chunks (id, file_id, start_line, end_line, hash, text) VALUES (?, 1, ?, ?, ?, 'x')", i, i, i, `c${i}`);
+                const vec = new Float32Array(384);
+                // Distinct directions, so the nearest ten have no ties a rebuild could reorder.
+                vec.forEach((_, d) => (vec[d] = Math.sin(i * 0.37 + d * 1.13)));
+                putVector(db, i, 1, vec);
+            }
+        });
+        expect(compactVectors(db)).toBe(false);
+        // Three quarters of the chunks go, as a re-index would delete them; their vectors go with them by trigger.
+        db.run("DELETE FROM chunks WHERE id % 4 != 0");
+        const query = new Float32Array(384);
+        query.forEach((_, d) => (query[d] = Math.cos(d * 0.71)));
+        const before = nearestChunks(db, query, 10, undefined);
+        const slotsBefore = slots();
+
+        expect(compactIndex(db)).toBe(true);
+
+        expect(slots()).toBeLessThan(slotsBefore / 2);
+        expect(Number(db.get("SELECT COUNT(*) AS n FROM chunk_vectors_rowids")?.["n"])).toBe(total / 4);
+        expect(nearestChunks(db, query, 10, undefined)).toEqual(before);
+        expect(nearestChunks(db, query, 10, [1]).length).toBe(10);
+        // Packed now: nothing to do until deletes thin it out again.
+        expect(compactVectors(db)).toBe(false);
     } finally {
         db.close();
     }
