@@ -1,6 +1,8 @@
 // A conversation's id is the most public string this app produces: the git branch, the worktree directory, the URL, and
-// the card title. `adjective-noun-tail` reads at a glance; the tail keeps it unique and must satisfy
+// the card title. `word-tail` reads at a glance; the tail keeps it unique and must satisfy
 // ConversationIdSchema. Sandbox-started conversations use their own prefixed, derived ids instead.
+
+import { CONVERSATION_WORDS } from "./conversation-words.js";
 
 // The injection guard every path that interpolates a conversation id relies on: is this safe to put in a path.
 export const CONVERSATION_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
@@ -15,117 +17,14 @@ export const CONVERSATION_TITLE_MAX = 80;
 export const clipTitle = (title: string): string =>
     title.length <= CONVERSATION_TITLE_MAX ? title : `${title.slice(0, CONVERSATION_TITLE_MAX - 1).trimEnd()}…`;
 
-// Short (nothing over seven letters) and visually distinct: no near-rhymes, no shared first syllable.
-const ADJECTIVES = [
-    "amber",
-    "brave",
-    "brisk",
-    "calm",
-    "clear",
-    "coral",
-    "crisp",
-    "deft",
-    "eager",
-    "fair",
-    "fleet",
-    "glad",
-    "grand",
-    "keen",
-    "kind",
-    "lively",
-    "lucid",
-    "mellow",
-    "merry",
-    "mild",
-    "noble",
-    "plain",
-    "prime",
-    "proud",
-    "quick",
-    "quiet",
-    "rapid",
-    "ready",
-    "rich",
-    "ripe",
-    "sharp",
-    "sleek",
-    "smart",
-    "snug",
-    "solid",
-    "spry",
-    "stark",
-    "steady",
-    "still",
-    "stout",
-    "sunny",
-    "swift",
-    "tidy",
-    "true",
-    "vivid",
-    "warm",
-    "wise",
-    "witty",
-] as const;
-
-const NOUNS = [
-    "alder",
-    "anchor",
-    "arbor",
-    "arrow",
-    "aspen",
-    "badger",
-    "basin",
-    "beacon",
-    "birch",
-    "bison",
-    "cedar",
-    "cinder",
-    "comet",
-    "condor",
-    "cove",
-    "crane",
-    "delta",
-    "ember",
-    "falcon",
-    "fern",
-    "fjord",
-    "forge",
-    "gale",
-    "glade",
-    "harbor",
-    "heron",
-    "ivy",
-    "lantern",
-    "ledger",
-    "lichen",
-    "lynx",
-    "maple",
-    "marsh",
-    "meadow",
-    "mesa",
-    "moth",
-    "otter",
-    "pebble",
-    "pine",
-    "quarry",
-    "quill",
-    "raven",
-    "reef",
-    "ridge",
-    "rowan",
-    "sable",
-    "sage",
-    "shale",
-    "spruce",
-    "summit",
-    "thistle",
-    "tundra",
-    "vale",
-    "willow",
-    "wren",
-] as const;
-
-// Four base36 characters is 1.7M values per word pair, far past any workspace's collision risk.
+// One word and a tail: `otter-k7mq`, about ten characters, since every letter counts on the board's rows. The word is
+// what a person reads and says; the tail is what keeps it unique.
+//
+// The tail is lowercase on purpose. The id is also the branch and the worktree directory, and both reach Windows and
+// macOS filesystems that fold case, where `otter-K7mq` and `otter-k7mq` would be one folder. So the tail's alphabet is
+// base36 with the characters people misread dropped (0/o, 1/l/i): 31 symbols, four of them 923,521 values per word,
+// and with the word list about 2^29 ids in all, far past any workspace's collision risk.
+export const TAIL_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
 const TAIL_LENGTH = 4;
 
 // Rejects the short remainder above the last full bucket rather than folding it back with `%`, which would bias the
@@ -146,12 +45,19 @@ const randomBelow = (upperBound: number): number => {
 // get the same name.
 const pick = <T>(values: readonly T[]): T => values[randomBelow(values.length)]!;
 
-// Lowercase base36, one character per draw: 0-9a-z, all of which the id guard accepts.
-const tail = (): string => Array.from({ length: TAIL_LENGTH }, () => randomBelow(36).toString(36)).join("");
+// One TAIL_ALPHABET character per draw, all of which the id guard accepts.
+const TAIL_SYMBOLS = [...TAIL_ALPHABET];
+const tail = (): string => Array.from({ length: TAIL_LENGTH }, () => pick(TAIL_SYMBOLS)).join("");
 
-// A fresh id: `<adjective>-<noun>-<tail>`, e.g. `swift-otter-k9m2`; about sixteen characters against a UUID's
-// thirty-six.
-export const newConversationId = (): string => `${pick(ADJECTIVES)}-${pick(NOUNS)}-${tail()}`;
+// A fresh id: `<word>-<tail>`, e.g. `otter-k7mq`; about ten characters against a UUID's thirty-six.
+export const newConversationId = (): string => `${pick(CONVERSATION_WORDS)}-${tail()}`;
+
+// Whether an id is shaped like one `newConversationId` draws, or like the `adjective-noun-xxxx` ids it drew before.
+// For telling an instance apart from a route (perf rollups), not a guard: a derived id can still look like one.
+const WORDS = new Set(CONVERSATION_WORDS);
+const DRAWN_ID = new RegExp(`^([a-z]+)-[${TAIL_ALPHABET}]{${TAIL_LENGTH}}$`);
+const LEGACY_DRAWN_ID = /^[a-z]+-[a-z]+-[a-z0-9]{4}$/;
+export const looksDrawn = (id: string): boolean => WORDS.has(DRAWN_ID.exec(id)?.[1] ?? "") || LEGACY_DRAWN_ID.test(id);
 
 // Derived, not drawn, so a re-computed id says whether an agent is already on this failure and a second press continues
 // it. The repo is included (one run id per project) and slugified, not hashed, since people read it.

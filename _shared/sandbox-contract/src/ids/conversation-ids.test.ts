@@ -1,6 +1,10 @@
 import {
     CI_FIX_PREFIX,
     CONVERSATION_ID,
+    HOME_PREFIX,
+    LAND_FIX_PREFIX,
+    looksDrawn,
+    TAIL_ALPHABET,
     homeConversationId,
     isHomeConversationId,
     ciFixConversationId,
@@ -11,6 +15,7 @@ import {
     newConversationId,
     nextFixAttemptId,
 } from "./conversation-ids.js";
+import { CONVERSATION_WORDS } from "./conversation-words.js";
 import { ConversationIdSchema } from "../schemas/agent.js";
 
 const mockRandomValues = (values: readonly number[]) => {
@@ -37,28 +42,58 @@ test("every generated id passes the conversation-id guard", () => {
     }
 });
 
-test("an id reads as a word pair with a short tail, and stays short", () => {
+test("an id reads as one word and a short tail, and stays short", () => {
     const id = newConversationId();
-    expect(id).toMatch(/^[a-z]+-[a-z]+-[0-9a-z]{4}$/);
-    expect(id.length).toBeLessThan(24);
+    expect(id).toMatch(/^[a-z]{3,6}-[2-9a-hjkmnp-z]{4}$/);
+    expect(id.length).toBeLessThanOrEqual(11);
+});
+
+test("the tail never uses a character people misread", () => {
+    expect(TAIL_ALPHABET).toHaveLength(31);
+    expect(TAIL_ALPHABET).not.toMatch(/[01ilo]/);
+});
+
+test("every word is a short lowercase word, listed once", () => {
+    expect(CONVERSATION_WORDS.length).toBeGreaterThan(500);
+    expect(new Set(CONVERSATION_WORDS).size).toBe(CONVERSATION_WORDS.length);
+    for (const word of CONVERSATION_WORDS) {
+        expect(word).toMatch(/^[a-z]{3,6}$/);
+    }
+});
+
+// A drawn id must never read as a derived one (`home-…`, `ci-fix-…`, `sub-…`) or as a git ref.
+test("no word collides with a derived id's prefix or a git name", () => {
+    const reserved = [HOME_PREFIX, CI_FIX_PREFIX, LAND_FIX_PREFIX, "sub-", "link-", "linked-", "lent-", "a-"].map((prefix) => prefix.split("-")[0]);
+    for (const word of [...reserved, "main", "master", "head", "fork", "branch", "merge", "patch", "tag"]) {
+        expect(CONVERSATION_WORDS).not.toContain(word);
+    }
 });
 
 test("retries a random draw outside the last complete bucket", () => {
-    const bucketSize = Math.floor(2 ** 32 / 36);
-    const { getRandomValues, remaining } = mockRandomValues([0, 0, 0xffff_ffff, 0, bucketSize, bucketSize * 2, bucketSize * 3]);
+    const bucketSize = Math.floor(2 ** 32 / 31);
+    const { getRandomValues, remaining } = mockRandomValues([0, 0xffff_ffff, 0, bucketSize, bucketSize * 2, bucketSize * 3]);
 
-    expect(newConversationId()).toBe(`amber-alder-0123`);
-    expect(getRandomValues).toHaveBeenCalledTimes(7);
+    expect(newConversationId()).toBe(`${CONVERSATION_WORDS[0]}-2345`);
+    expect(getRandomValues).toHaveBeenCalledTimes(6);
     expect(remaining).toEqual([]);
 });
 
-test("maps complete random buckets to equal-width base36 characters", () => {
-    const bucketSize = Math.floor(2 ** 32 / 36);
-    const limit = bucketSize * 36;
-    const { remaining } = mockRandomValues([0, 0, bucketSize - 1, bucketSize, bucketSize * 35, limit - 1]);
+test("maps complete random buckets to equal-width tail characters", () => {
+    const bucketSize = Math.floor(2 ** 32 / 31);
+    const limit = bucketSize * 31;
+    const { remaining } = mockRandomValues([0, bucketSize - 1, bucketSize, bucketSize * 30, limit - 1]);
 
-    expect(newConversationId()).toBe(`amber-alder-01zz`);
+    expect(newConversationId()).toBe(`${CONVERSATION_WORDS[0]}-23zz`);
     expect(remaining).toEqual([]);
+});
+
+test("a drawn id, new or old, looks drawn; a route or a derived id does not", () => {
+    expect(looksDrawn(newConversationId())).toBe(true);
+    expect(looksDrawn(`otter-kmpq`)).toBe(true);
+    expect(looksDrawn(`keen-pine-tkjf`)).toBe(true);
+    expect(looksDrawn(`git-view`)).toBe(false);
+    expect(looksDrawn(`otter-km0q`)).toBe(false);
+    expect(looksDrawn(ciFixConversationId(`web`, 42))).toBe(false);
 });
 
 test("ids are unique across a burst", () => {

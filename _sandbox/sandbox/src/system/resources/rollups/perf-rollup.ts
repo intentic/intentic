@@ -1,4 +1,5 @@
 import type { Logger } from "pino";
+import { looksDrawn } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { z } from "zod";
 import { opt } from "../../../opt.js";
 import { BUCKETS, bucketOf, HISTOGRAM_VERSION, histogramQuantile, roundMs, storedHistogram } from "./perf-histogram.js";
@@ -27,9 +28,11 @@ export const OTHER_SUBJECT = "(other)";
 
 export const alignToWindow = (ms: number): number => Math.floor(ms / ROLLUP_WINDOW_MS) * ROLLUP_WINDOW_MS;
 
-// A path segment that names an instance rather than a route: anything carrying a digit (ids, hashes, ports) and the
-// `adjective-noun-xxxx` conversation ids, which carry none often enough (`keen-pine-tkjf`).
-const INSTANCE_SEGMENT = /\/(?:[^/]*\d[^/]*|[a-z]+-[a-z]+-[a-z0-9]{4})(?=\/|$)/g;
+// A path segment that names an instance rather than a route: anything carrying a digit (ids, hashes, ports) and a drawn
+// conversation id, which carries none often enough (`otter-kmpq`, `keen-pine-tkjf`). The drawn shape is asked of the
+// word list rather than a pattern, since `word-xxxx` alone would fold routes like `git-view` too.
+const PATH_SEGMENT = /\/([^/]*)(?=\/|$)/g;
+const isInstance = (segment: string): boolean => /\d/.test(segment) || looksDrawn(segment);
 
 type FieldValue = PerfFields[string];
 
@@ -37,7 +40,7 @@ const isText = (value: FieldValue): value is string => typeof value === "string"
 
 /** A request's route as `METHOD /path/:id`, query dropped and instance segments folded, so one route is one subject. */
 export const routeTemplate = (method: FieldValue, path: string): string =>
-    `${isText(method) ? `${method} ` : ""}${(path.split("?")[0] ?? "").replaceAll(INSTANCE_SEGMENT, "/:id")}`;
+    `${isText(method) ? `${method} ` : ""}${(path.split("?")[0] ?? "").replaceAll(PATH_SEGMENT, (whole, segment: string) => (isInstance(segment) ? "/:id" : whole))}`;
 
 /** The subcommand of a git label (gitCommandLabel): its first word that is not a global option (`--no-optional-locks`). */
 export const gitSubcommand = (label: string): string => label.split(" ").find((word) => word !== "" && !word.startsWith("-")) ?? label;

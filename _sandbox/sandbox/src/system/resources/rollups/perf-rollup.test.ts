@@ -41,6 +41,8 @@ const rowsOf = (text: string): RollupRow[] =>
 
 test("a request is filed under its route, with ids, conversation ids and the query folded out", () => {
     expect(routeTemplate("GET", "/agents/keen-pine-tkjf/diff")).toBe("GET /agents/:id/diff");
+    expect(routeTemplate("GET", "/agents/otter-kmpq/diff")).toBe("GET /agents/:id/diff");
+    expect(routeTemplate("GET", "/agents/git-view")).toBe("GET /agents/git-view");
     expect(routeTemplate("POST", "/system/devices/rog::wsl:archlinux1/commands/dev-rebuild-log")).toBe("POST /system/devices/:id/commands/dev-rebuild-log");
     expect(routeTemplate("GET", "/settings/ai-literacy/en?x=1")).toBe("GET /settings/ai-literacy/en");
     expect(routeTemplate(undefined, "text")).toBe("text");
