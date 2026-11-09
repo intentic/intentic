@@ -69,6 +69,84 @@ test("never runs a second check while the first is still out", async () => {
     expect(looks).toBe(2);
 });
 
+test("an old check cannot end a restarted poll, which checks again after it", async () => {
+    const old = Promise.withResolvers<boolean>();
+    let looks = 0;
+    const { value: poll, stop } = inScope(() => usePoll({
+        everyMs: 1_000,
+        check: () => ++looks === 1 ? old.promise : false,
+    }));
+    poll.start();
+    poll.stop();
+    poll.start();
+    expect(looks).toBe(1);
+    old.resolve(true);
+    await advanceTimersByTimeAsync(0);
+    expect({ looks, polling: poll.polling.value }).toEqual({ looks: 2, polling: true });
+    stop();
+});
+
+test("a restarted poll out of sight waits for visibility after the old check ends", async () => {
+    const old = Promise.withResolvers<boolean>();
+    const visible = ref(true);
+    let looks = 0;
+    const { value: poll, stop } = inScope(() => usePoll({
+        everyMs: 1_000,
+        visible,
+        check: () => ++looks === 1 ? old.promise : false,
+    }));
+    poll.start();
+    poll.stop();
+    visible.value = false;
+    poll.start();
+    old.resolve(true);
+    await advanceTimersByTimeAsync(0);
+    expect({ looks, polling: poll.polling.value }).toEqual({ looks: 1, polling: true });
+    visible.value = true;
+    await nextTick();
+    await advanceTimersByTimeAsync(0);
+    expect(looks).toBe(2);
+    stop();
+});
+
+test("a restart with immediate disabled waits for its own clock", async () => {
+    const old = Promise.withResolvers<boolean>();
+    let looks = 0;
+    const { value: poll, stop } = inScope(() => usePoll({
+        everyMs: 1_000, immediate: false,
+        check: () => ++looks === 1 ? old.promise : false,
+    }));
+    poll.start();
+    await advanceTimersByTimeAsync(1_000);
+    poll.stop();
+    poll.start();
+    old.resolve(true);
+    await advanceTimersByTimeAsync(0);
+    expect({ looks, polling: poll.polling.value }).toEqual({ looks: 1, polling: true });
+    await advanceTimersByTimeAsync(1_000);
+    expect(looks).toBe(2);
+    stop();
+});
+
+test("a focus check requested during an old run waits for it without being lost", async () => {
+    const old = Promise.withResolvers<boolean>();
+    let looks = 0;
+    const { value: poll, stop } = inScope(() => usePoll({
+        everyMs: 1_000, immediate: false,
+        check: () => ++looks === 1 ? old.promise : false,
+    }));
+    poll.start();
+    await advanceTimersByTimeAsync(1_000);
+    poll.stop();
+    poll.start();
+    window.dispatchEvent(new Event(`focus`));
+    expect(looks).toBe(1);
+    old.resolve(true);
+    await advanceTimersByTimeAsync(0);
+    expect({ looks, polling: poll.polling.value }).toEqual({ looks: 2, polling: true });
+    stop();
+});
+
 test("a failed look is not the end of the wait", async () => {
     let looks = 0;
     const { value: poll } = inScope(() =>

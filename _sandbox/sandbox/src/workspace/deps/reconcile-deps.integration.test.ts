@@ -179,6 +179,101 @@ test("a manifest burst installs only once the writes around it have gone quiet",
     }
 });
 
+test("stopping during the quiet window cancels the queued install", async () => {
+    const root = await workspace();
+    await drifted(root);
+    const started: string[] = [];
+    const deps = coordinator(root, started);
+    jest.useFakeTimers();
+    try {
+        const stop = deps.watch((listener) => {
+            listener(["app/package.json"]);
+            return () => undefined;
+        });
+        stop();
+        await advanceTimersByTimeAsync(100);
+        await realSleep(200);
+        expect(started).toEqual([]);
+        expect(jest.getTimerCount()).toBe(0);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("a restarted watcher does not inherit the cancelled quiet window", async () => {
+    const root = await workspace();
+    await drifted(root);
+    const started: string[] = [];
+    const deps = coordinator(root, started);
+    jest.useFakeTimers();
+    try {
+        const stop = deps.watch((listener) => {
+            listener(["app/package.json"]);
+            return () => undefined;
+        });
+        stop();
+        const stopNext = deps.watch((listener) => {
+            listener(["app/src/main.ts"]);
+            return () => undefined;
+        });
+        stop(); // Disposing the old watch again cannot stop its replacement.
+        await waitFor(() => expect(started).toEqual(["app--install"]), SETTLES);
+        stopNext();
+        expect(jest.getTimerCount()).toBe(0);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("an old watch disposer cannot clear its replacement's quiet window", async () => {
+    const root = await workspace();
+    await drifted(root);
+    const started: string[] = [];
+    const deps = coordinator(root, started);
+    const subscribe = (listener: (paths: string[]) => void): (() => void) => {
+        listener(["app/package.json"]);
+        return () => undefined;
+    };
+    jest.useFakeTimers();
+    try {
+        const stop = deps.watch(subscribe);
+        stop();
+        const stopNext = deps.watch(subscribe);
+        stop();
+        await advanceTimersByTimeAsync(15);
+        await realSleep(200);
+        expect(started).toEqual([]);
+        await advanceTimersByTimeAsync(5);
+        await waitFor(() => expect(started).toEqual(["app--install"]), SETTLES);
+        stopNext();
+        expect(jest.getTimerCount()).toBe(0);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("stopping while the install lane is prepared prevents the install", async () => {
+    const root = await workspace();
+    await drifted(root);
+    const started: string[] = [];
+    const preparing = Promise.withResolvers<void>();
+    const lane = Promise.withResolvers<string>();
+    const deps = createDependencyCoordinator({
+        workspace: { root },
+        processes: processes(started),
+        logger: silent,
+        requestsPath: join(root, "requests.json"),
+        lane: () => { preparing.resolve(); return lane.promise; },
+    });
+    const stop = deps.watch(watch().subscribe);
+    const ended = deps.installEnded("app");
+    await preparing.promise;
+    stop();
+    lane.resolve("pnpm install");
+    expect(await ended).toBe(false);
+    expect(started).toEqual([]);
+});
+
 // 2026-10-20: the coordinator waited out an install by asking `running` every two seconds, and `mcp__deps__install` by
 // re-scanning the workspace every two; both are woken by the install pane's own end now.
 test("an install pane's end wakes the coordinator at once, and installEnded reports it once its outcome is written down", async () => {

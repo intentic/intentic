@@ -2,7 +2,7 @@ import { appendFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { advanceTimersByTimeAsync, realYield, SETTLES, waitFor } from "@intentic/testing/bun";
-import { waitForEnd, waitForLogMatch } from "./app-wait.js";
+import { LOG_FALLBACK_MS, waitForEnd, waitForLogMatch } from "./app-wait.js";
 
 /* app_logs / app_status with waitFor or untilExit: the call answers on the event it waits for (a line landing in the
    log, the program's exit) rather than the agent calling again and again, and at its timeout at the latest (2026-10-20).
@@ -76,6 +76,48 @@ test("no match within the timeout says so", async () => {
     const waiting = waitForLogMatch({ path: log, pattern: /ready/, timeoutMs: 150, read: readIfThere(log) });
     await advanceTimersByTimeAsync(150);
     expect(await waiting).toBe("timeout");
+});
+
+test("the final read waits for a read already in flight before looking for flushed output", async () => {
+    const first = Promise.withResolvers<string>();
+    const exited = Promise.withResolvers<void>();
+    let reads = 0;
+    let active = 0;
+    let peak = 0;
+    const waiting = waitForLogMatch({
+        path: join(dir, "serial.log"), pattern: /ready/, timeoutMs: 10_000, ended: exited.promise,
+        read: async () => {
+            reads += 1;
+            active += 1;
+            peak = Math.max(peak, active);
+            try {
+                return reads === 1 ? await first.promise : "ready";
+            } finally {
+                active -= 1;
+            }
+        },
+    });
+    exited.resolve();
+    await realYield();
+    first.resolve("");
+    expect(await waiting).toBe("matched");
+    expect(reads).toBe(2);
+    expect(peak).toBe(1);
+});
+
+test("a timed-out read cannot run a queued fallback or a late exit read", async () => {
+    const first = Promise.withResolvers<string>();
+    const exited = Promise.withResolvers<void>();
+    const read = jest.fn(async () => await first.promise);
+    const waiting = waitForLogMatch({
+        path: join(dir, "timeout.log"), pattern: /ready/, timeoutMs: LOG_FALLBACK_MS + 100, read, ended: exited.promise,
+    });
+    await advanceTimersByTimeAsync(LOG_FALLBACK_MS + 100);
+    expect(await waiting).toBe("timeout");
+    first.resolve("");
+    exited.resolve();
+    await realYield();
+    expect(read).toHaveBeenCalledTimes(1);
 });
 
 test("untilExit ends on the exit event, not a poll of the run", async () => {

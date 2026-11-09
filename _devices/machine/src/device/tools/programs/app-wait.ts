@@ -34,46 +34,61 @@ export interface LogWait {
     readonly ended?: Promise<unknown> | undefined;
 }
 
+type LogReadState =
+    | { readonly kind: "idle" }
+    | { readonly kind: "reading"; rerun: "nothing" | "changed" | "ended" }
+    | { readonly kind: "done" };
+
 // Answers on the first read that matches, re-reading on every change the watch reports. One read runs at a time; a
 // change during a read asks for one more, so the line that landed mid-read is not missed.
 export const waitForLogMatch = async ({ path, pattern, timeoutMs, read, ended }: LogWait): Promise<LogWaitOutcome> =>
     await new Promise((resolve) => {
-        let done = false;
-        let reading = false;
-        let again = false;
+        let state: LogReadState = { kind: "idle" };
         const stops: (() => void)[] = [];
         const finish = (outcome: LogWaitOutcome): void => {
-            if (done) {
+            if (state.kind === "done") {
                 return;
             }
-            done = true;
+            state = { kind: "done" };
             for (const stop of stops) {
                 stop();
             }
             resolve(outcome);
         };
-        const check = async (): Promise<boolean> => {
-            if (done) {
-                return false;
+        const drain = async (reading: Extract<LogReadState, { kind: "reading" }>, final: boolean): Promise<void> => {
+            for (;;) {
+                // allow(silent-catch): a log unreadable for now (being rotated, locked on Windows) is read again on the next change.
+                const text = await read().catch(() => "");
+                if (state !== reading) {
+                    return;
+                }
+                if (pattern.test(text)) {
+                    finish("matched");
+                    return;
+                }
+                if (final) {
+                    finish("ended");
+                    return;
+                }
+                if (reading.rerun === "nothing") {
+                    state = { kind: "idle" };
+                    return;
+                }
+                final = reading.rerun === "ended";
+                reading.rerun = "nothing";
             }
-            if (reading) {
-                again = true;
-                return false;
+        };
+        const check = async (final = false): Promise<void> => {
+            if (state.kind === "done") {
+                return;
             }
-            reading = true;
-            try {
-                do {
-                    again = false;
-                    // allow(silent-catch): a log unreadable for now (being rotated, locked on Windows) is read again on the next change.
-                    if (pattern.test(await read().catch(() => ""))) {
-                        finish("matched");
-                        return true;
-                    }
-                } while (again);
-                return false;
-            } finally {
-                reading = false;
+            if (state.kind === "reading") {
+                state.rerun = final || state.rerun === "ended" ? "ended" : "changed";
+                return;
             }
+            const reading: Extract<LogReadState, { kind: "reading" }> = { kind: "reading", rerun: "nothing" };
+            state = reading;
+            await drain(reading, final);
         };
         const cap = setTimeout(() => finish("timeout"), timeoutMs);
         const fallback = setInterval(() => void check(), LOG_FALLBACK_MS);
@@ -85,16 +100,7 @@ export const waitForLogMatch = async ({ path, pattern, timeoutMs, read, ended }:
         // Watching before the first read: a line written between the two is then heard rather than lost.
         void check();
         // The last read after the end, for output flushed as the program exited.
-        const lastRead = async (): Promise<void> => {
-            let text = "";
-            try {
-                text = await read();
-            } catch {
-                // allow(silent-catch): an unreadable log at the end matches nothing, which "ended" then says.
-            }
-            finish(pattern.test(text) ? "matched" : "ended");
-        };
-        void ended?.then(lastRead);
+        void ended?.then(() => check(true), () => check(true));
     });
 
 export interface EndWait {

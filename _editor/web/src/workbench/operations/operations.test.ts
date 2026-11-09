@@ -10,6 +10,7 @@ import {
     dismissOperation,
     forgetOperations,
     OperationGaveUp,
+    type OperationReport,
     operationAt,
     operationRunning,
     startOperation,
@@ -265,12 +266,16 @@ it(`ends a run as failed at its give-up time, aborting its signal, and never hea
     jest.useFakeTimers();
     const work = deferred<string>();
     let aborted: unknown;
+    let reports: OperationReport | undefined;
     const view = mount(() => useOperation<string>(KEY));
     const ended = view.view.run({
         what: `Publishing`,
         failed: (error) => ({ tone: `warning`, title: error instanceof OperationGaveUp ? `gave up after ${error.afterMs}` : `other` }),
         giveUpMs: 30_000,
         task: (report) => {
+            reports = report;
+            report.line(`before deadline`);
+            report.progress(`publishing`);
             report.signal.addEventListener(`abort`, () => (aborted = report.signal.reason));
             return work.promise;
         },
@@ -282,10 +287,16 @@ it(`ends a run as failed at its give-up time, aborting its signal, and never hea
     expect(run?.state).toBe(`failed`);
     expect(view.view.failure.value?.title).toBe(`gave up after 30000`);
     expect(aborted).toBeInstanceOf(OperationGaveUp);
+    const outcome = operationAt(KEY);
+    reports?.line(`after deadline`);
+    reports?.progress(`too late`);
     work.resolve(`late`);
     await advanceTimersByTimeAsync(0);
     expect(operationAt(KEY)?.state).toBe(`failed`);
     expect(operationAt(KEY)?.value).toBeUndefined();
+    expect(operationAt(KEY)).toBe(outcome);
+    expect(operationAt(KEY)?.lines).toEqual([`before deadline`]);
+    expect(operationAt(KEY)?.progress).toBe(`publishing`);
     view.scope.stop();
 });
 

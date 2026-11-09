@@ -66,49 +66,92 @@ export interface AutoUpgrade {
     readonly nudge: () => void;
 }
 
-export const startAutoUpgrade = (log: Log): AutoUpgrade => {
+export interface AutoUpgradeSeams {
+    readonly readSwaps: typeof readSwaps;
+    readonly readMachineConfig: typeof readMachineConfig;
+    readonly publishedVersion: typeof publishedVersion;
+    readonly installedBuild: typeof installedBuild;
+    readonly installedChildren: () => Promise<(string | undefined)[]>;
+    readonly launchUpgrade: typeof launchUpgrade;
+}
+
+export const startAutoUpgrade = (log: Log, seams: AutoUpgradeSeams = {
+    readSwaps, readMachineConfig, publishedVersion, installedBuild, launchUpgrade,
+    installedChildren: async () => await Promise.all((await heldDistros()).map((distro) => installedIn(distro))),
+}): AutoUpgrade => {
     let timer: NodeJS.Timeout | undefined;
-    let stopped = false;
+    let phase: "waiting" | "checking" | "nudged" | "stopped" = "waiting";
+    const stopped = (): boolean => phase === "stopped";
+    const nudged = (): boolean => phase === "nudged";
     let releaseDueAt = 0;
     const schedule = (delay: number): void => {
-        clearTimeout(timer);
-        if (!stopped) {
-            timer = setTimeout(() => void tick(), delay);
+        if (stopped()) {
+            return;
         }
+        if (phase === "checking" || phase === "nudged") {
+            phase = "nudged";
+            return;
+        }
+        clearTimeout(timer);
+        timer = setTimeout(() => void tick(), delay);
     };
-    const tick = async (): Promise<void> => {
-        const swapping = upgradeHeldBy(icSwapsInFlight, await readSwaps());
+    const check = async (): Promise<number> => {
+        const swapping = upgradeHeldBy(icSwapsInFlight, await seams.readSwaps());
+        if (stopped()) {
+            return LEVEL_EVERY_MS;
+        }
         if (swapping.length > 0) {
             log(
                 `auto-upgrade: put off while ${swapping.join(", ")} ${swapping.length === 1 ? "is" : "are"} mid-swap; looking again in ${DEFERRED_MS / 60_000} minutes.`,
             );
-            schedule(DEFERRED_MS);
+            return DEFERRED_MS;
+        }
+        const config = await seams.readMachineConfig();
+        if (stopped()) {
+            return LEVEL_EVERY_MS;
+        }
+        const asksRelease = config.agentUpdates !== false && Date.now() >= releaseDueAt;
+        const [published, children] = await Promise.all([
+            asksRelease ? seams.publishedVersion() : Promise.resolve(undefined),
+            seams.installedChildren(),
+        ]);
+        if (stopped()) {
+            return LEVEL_EVERY_MS;
+        }
+        if (asksRelease) {
+            releaseDueAt = Date.now() + RELEASE_EVERY_MS + Math.floor(Math.random() * RELEASE_JITTER_MS);
+        }
+        const decision = autoUpgradeDecision({ own: seams.installedBuild(), children, published, config, now: Date.now() });
+        if (decision !== undefined) {
+            log(`auto-upgrade: bringing this machine to ${decision.target}${decision.level ? " (levelling to its newest side)" : ""}.`);
+            await seams.launchUpgrade(decision.level);
+        }
+        return LEVEL_EVERY_MS;
+    };
+    const tick = async (): Promise<void> => {
+        if (stopped()) {
             return;
         }
+        phase = "checking";
+        let next = LEVEL_EVERY_MS;
         try {
-            const config = await readMachineConfig();
-            const asksRelease = config.agentUpdates !== false && Date.now() >= releaseDueAt;
-            const [published, children] = await Promise.all([
-                asksRelease ? publishedVersion() : Promise.resolve(undefined),
-                heldDistros().then(async (held) => await Promise.all(held.map(async (distro) => await installedIn(distro)))),
-            ]);
-            if (asksRelease) {
-                releaseDueAt = Date.now() + RELEASE_EVERY_MS + Math.floor(Math.random() * RELEASE_JITTER_MS);
-            }
-            const decision = autoUpgradeDecision({ own: installedBuild(), children, published, config, now: Date.now() });
-            if (decision !== undefined) {
-                log(`auto-upgrade: bringing this machine to ${decision.target}${decision.level ? " (levelling to its newest side)" : ""}.`);
-                await launchUpgrade(decision.level);
-            }
+            next = await check();
         } catch (error) {
-            log(`auto-upgrade: skipped this round — ${errorMessage(error)}`);
+            if (!stopped()) {
+                log(`auto-upgrade: skipped this round — ${errorMessage(error)}`);
+            }
+        } finally {
+            if (!stopped()) {
+                const delay = nudged() ? NUDGE_MS : next;
+                phase = "waiting";
+                schedule(delay);
+            }
         }
-        schedule(LEVEL_EVERY_MS);
     };
     schedule(FIRST_CHECK_MS + Math.floor(Math.random() * FIRST_JITTER_MS));
     return {
         stop: () => {
-            stopped = true;
+            phase = "stopped";
             clearTimeout(timer);
         },
         nudge: () => schedule(NUDGE_MS),

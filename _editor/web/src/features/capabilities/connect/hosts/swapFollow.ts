@@ -78,13 +78,11 @@ const live = new Set<() => void>();
 export const followSwap = (options: SwapFollowOptions): SwapFollow => {
     const scope = effectScope(true);
     let now: SwapProgress = { streaming: options.streaming, severed: false, wentDown: false };
-    let watching = true;
-    let asking = false;
+    let phase: `watching` | `asking` | `stopped` = `watching`;
+    let connection = 0;
+    const watching = (): boolean => phase !== `stopped`;
     let deadline: ReturnType<typeof setTimeout> | undefined;
-    let finish: (how: Ending) => void = () => undefined;
-    const landed = new Promise<void>((resolve, reject) => {
-        finish = (how) => (how === `landed` ? resolve() : reject(new SwapGaveUp(t(how))));
-    });
+    const { promise: landed, resolve, reject } = Promise.withResolvers<void>();
     // allow(silent-catch): a deadline can run out before anybody awaits this (while the stream still races it); whoever awaits it hears the refusal, and that is no unhandled one.
     landed.catch(() => undefined);
 
@@ -93,16 +91,16 @@ export const followSwap = (options: SwapFollowOptions): SwapFollow => {
         options.progress(now);
     };
     const stop = (): void => {
-        watching = false;
+        phase = `stopped`;
         clearTimeout(deadline);
         scope.stop();
         live.delete(stop);
     };
     // Ends the follow, landed or with the words for why not; one already let go hears nothing more.
-    const end = (how: Ending): void => {
-        if (watching) {
+    const end = (how: Ending | undefined): void => {
+        if (watching() && how !== undefined) {
             stop();
-            finish(how);
+            return how === `landed` ? resolve() : reject(new SwapGaveUp(t(how)));
         }
     };
     // One deadline at a time, each saying what not knowing means at that point.
@@ -111,16 +109,21 @@ export const followSwap = (options: SwapFollowOptions): SwapFollow => {
         deadline = setTimeout(() => end(said), ms);
     };
     const check = async (): Promise<void> => {
-        if (!watching || !options.here() || !options.reachable() || asking) {
+        if (phase !== `watching` || !options.here() || !options.reachable()) {
             return;
         }
-        asking = true;
+        phase = `asking`;
+        const observed = connection;
         // allow(silent-catch): a sandbox still coming up refuses its reads; that is "not landed yet", and the next poll asks again
-        const how = endOf(await options.verdict(now).catch((): SwapVerdict => `waiting`), now);
-        asking = false;
-        if (how !== undefined) {
-            end(how);
+        const verdict = await options.verdict(now).catch((): SwapVerdict => `waiting`);
+        if (!watching()) {
+            return;
         }
+        phase = `watching`;
+        if (!options.here() || !options.reachable() || observed !== connection) {
+            return;
+        }
+        end(endOf(verdict, now));
     };
 
     live.add(stop);
@@ -131,9 +134,8 @@ export const followSwap = (options: SwapFollowOptions): SwapFollow => {
         watch(
             () => (options.here() ? options.reachable() : undefined),
             (up) => {
-                if (!watching) {
-                    return;
-                }
+                if (!watching()) {return;}
+                connection++;
                 if (up === undefined) {
                     clearTimeout(deadline);
                     return;
@@ -157,12 +159,12 @@ export const followSwap = (options: SwapFollowOptions): SwapFollow => {
     return {
         landed,
         heard: () => {
-            if (watching && now.wentDown && options.here() && options.reachable()) {
+            if (watching() && now.wentDown && options.here() && options.reachable()) {
                 giveUpIn(BACK_PATIENCE_MS, `capabilities.hostRecreate.returnTimedOut`);
             }
         },
         streamDied: () => {
-            if (!watching) {
+            if (!watching()) {
                 return;
             }
             set({ streaming: false, severed: true });

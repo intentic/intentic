@@ -1,4 +1,6 @@
-import { autoUpgradeDecision, type AutoUpgradeReading, retryAfterMs, upgradeHeldBy } from "./auto-upgrade.js";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import type { MachineConfig } from "./machine.js";
+import { autoUpgradeDecision, type AutoUpgradeReading, retryAfterMs, startAutoUpgrade, upgradeHeldBy } from "./auto-upgrade.js";
 
 const HOUR = 60 * 60_000;
 const NOW = 1_800_000_000_000;
@@ -81,5 +83,88 @@ describe("upgradeHeldBy", () => {
 describe("retryAfterMs", () => {
     it("doubles per failure from an hour and never waits longer than a day", () => {
         expect([1, 2, 3, 4, 5, 6, 12].map((count) => retryAfterMs(count) / HOUR)).toEqual([1, 2, 4, 8, 16, 24, 24]);
+    });
+});
+
+describe("the upgrade scheduler", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    const scheduler = () => {
+        const readSwaps = jest.fn(async () => []);
+        const readMachineConfig = jest.fn(async (): Promise<MachineConfig> => ({}));
+        const publishedVersion = jest.fn(async (): Promise<string | undefined> => "1.305.0");
+        const installedChildren = jest.fn(async () => ["1.304.0"]);
+        const launchUpgrade = jest.fn(async (_level: boolean) => undefined);
+        const log = jest.fn((_line: string) => undefined);
+        const upgrade = startAutoUpgrade(log, {
+            readSwaps, readMachineConfig, publishedVersion, installedChildren, launchUpgrade,
+            installedBuild: () => "1.304.0",
+        });
+        return { upgrade, readSwaps, readMachineConfig, publishedVersion, installedChildren, launchUpgrade, log };
+    };
+
+    it("coalesces nudges during a check into one later pass", async () => {
+        const world = scheduler();
+        const pending = Promise.withResolvers<string | undefined>();
+        world.publishedVersion.mockImplementationOnce(() => pending.promise);
+        world.upgrade.nudge();
+        await advanceTimersByTimeAsync(30_000);
+        expect(world.readSwaps).toHaveBeenCalledTimes(1);
+        world.upgrade.nudge();
+        world.upgrade.nudge();
+        await advanceTimersByTimeAsync(60_000);
+        expect(world.readSwaps).toHaveBeenCalledTimes(1);
+        pending.resolve("1.305.0");
+        await advanceTimersByTimeAsync(0);
+        expect(world.launchUpgrade).toHaveBeenCalledTimes(1);
+        await advanceTimersByTimeAsync(29_999);
+        expect(world.readSwaps).toHaveBeenCalledTimes(1);
+        await advanceTimersByTimeAsync(1);
+        expect(world.readSwaps).toHaveBeenCalledTimes(2);
+        world.upgrade.stop();
+    });
+
+    it("does not launch or re-arm after stop during release discovery", async () => {
+        const world = scheduler();
+        const pending = Promise.withResolvers<string | undefined>();
+        world.publishedVersion.mockImplementationOnce(() => pending.promise);
+        world.upgrade.nudge();
+        await advanceTimersByTimeAsync(30_000);
+        world.upgrade.stop();
+        world.upgrade.nudge();
+        pending.resolve("1.305.0");
+        await advanceTimersByTimeAsync(2 * HOUR);
+        expect(world.launchUpgrade).not.toHaveBeenCalled();
+        expect(world.log).not.toHaveBeenCalled();
+        expect(world.readSwaps).toHaveBeenCalledTimes(1);
+        expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it("does not reach for releases after stop during the config read", async () => {
+        const world = scheduler();
+        const pending = Promise.withResolvers<MachineConfig>();
+        world.readMachineConfig.mockImplementationOnce(() => pending.promise);
+        world.upgrade.nudge();
+        await advanceTimersByTimeAsync(30_000);
+        world.upgrade.stop();
+        pending.resolve({});
+        await advanceTimersByTimeAsync(0);
+        expect(world.publishedVersion).not.toHaveBeenCalled();
+        expect(world.installedChildren).not.toHaveBeenCalled();
+        expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it("reports a failed swap read and keeps the next scheduled check", async () => {
+        const world = scheduler();
+        world.readSwaps.mockRejectedValueOnce(new Error("ic unavailable"));
+        world.upgrade.nudge();
+        await advanceTimersByTimeAsync(30_000);
+        expect(world.log).toHaveBeenCalledWith("auto-upgrade: skipped this round — ic unavailable");
+        expect(world.launchUpgrade).not.toHaveBeenCalled();
+        await advanceTimersByTimeAsync(HOUR);
+        expect(world.readSwaps).toHaveBeenCalledTimes(2);
+        expect(world.launchUpgrade).toHaveBeenCalledWith(false);
+        world.upgrade.stop();
     });
 });

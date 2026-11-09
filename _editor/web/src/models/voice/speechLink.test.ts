@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { waitFor } from "@intentic/testing/bun";
+import { realYield, waitFor } from "@intentic/testing/bun";
 import type { SpeechStatus } from "@intentic/sandbox-contract/schemas/speech";
 import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 
@@ -38,8 +38,10 @@ class FakeSocket extends EventTarget {
     readyState: number = WebSocket.CONNECTING;
     binaryType = `blob`;
     readonly sent: unknown[] = [];
+    onSend?: () => void;
     send(data: unknown): void {
         this.sent.push(typeof data === `string` ? JSON.parse(data) : (data as ArrayBuffer).byteLength);
+        this.onSend?.();
     }
     // Closing a socket that is already closed says nothing more, as in a browser.
     close(): void {
@@ -72,6 +74,74 @@ const asRaw = (seam: object): SpeechLinkDeps[`raw`] => seam as SpeechLinkDeps[`r
 const samples = (count: number): Float32Array => new Float32Array(count).fill(0.1);
 
 describe(`on the live stream`, () => {
+    it(`keeps unreplayed ops when a socket drops partway through replay`, async () => {
+        const sockets: FakeSocket[] = [];
+        const { said, events } = recorder();
+        const link = openSpeechLink(`en`, events, {
+            timing: FAST,
+            opus: async () => false,
+            socketUrl: async () => `ws://daemon`,
+            openSocket: () => {
+                const socket = new FakeSocket();
+                sockets.push(socket);
+                if (sockets.length === 1) {socket.onSend = () => socket.close();}
+                return asSocket(socket);
+            },
+        });
+        try {
+            link.begin(0, samples(10));
+            link.end(0, samples(10));
+            link.begin(1, samples(10));
+            link.end(1, samples(10));
+            await waitFor(() => expect(sockets).toHaveLength(1));
+            sockets[0]!.open();
+            await waitFor(() => expect(sockets).toHaveLength(2));
+            sockets[1]!.open();
+            expect(said).toContainEqual([`failed`, 0, `phrase`]);
+            expect(sockets[1]!.sent).toEqual([{ type: `begin`, id: 1 }, 20, { type: `end`, id: 1, keep: 10 }]);
+            sockets[1]!.say({ type: `final`, id: 1, text: `kept`, decodeMs: 1 });
+            expect(said).toContainEqual([`final`, 1, `kept`]);
+        } finally {
+            link.close();
+        }
+    });
+
+    it(`closes the previous framer whenever another open takes ownership`, async () => {
+        const socket = new FakeSocket();
+        const packets: Array<() => void> = [];
+        const close = jest.fn(() => undefined);
+        const { events } = recorder();
+        let dialled = false;
+        const link = openSpeechLink(`en`, events, {
+            timing: FAST,
+            opus: async () => true,
+            socketUrl: async () => `ws://daemon`,
+            openSocket: () => { dialled = true; return asSocket(socket); },
+            encoderFor: (send) => {
+                packets.push(() => send(new ArrayBuffer(5)));
+                return { start: () => undefined, push: () => undefined, finish: async () => undefined, close };
+            },
+        });
+        await waitFor(() => expect(dialled).toBe(true));
+        jest.useFakeTimers();
+        try {
+            socket.open();
+            link.begin(0, samples(10));
+            await realYield();
+            socket.open();
+            expect(close).toHaveBeenCalledTimes(1);
+            packets[0]!();
+            link.begin(1, samples(10));
+            await realYield();
+            packets[1]!();
+            expect(socket.sent).toEqual([{ type: `begin`, id: 0 }, { type: `begin`, id: 1 }, 5]);
+        } finally {
+            link.close();
+            jest.useRealTimers();
+        }
+        expect(close).toHaveBeenCalledTimes(2);
+    });
+
     it(`replays what was said before the socket opened, frames phrases as the contract says, and reports the daemon's words`, async () => {
         const sockets: FakeSocket[] = [];
         const { said, events } = recorder();
@@ -200,6 +270,76 @@ describe(`on the live stream`, () => {
         expect(said).toContainEqual([`failed`, undefined, `unprovisioned`]);
     });
 
+    it(`never sends an old encoder's late packets or end into a reconnected stream`, async () => {
+        const sockets: FakeSocket[] = [];
+        const encoded = Promise.withResolvers<void>();
+        const finishing = Promise.withResolvers<void>();
+        const closed = jest.fn(() => undefined);
+        const { events } = recorder();
+        const link = openSpeechLink(`en`, events, {
+            timing: FAST,
+            opus: async () => true,
+            socketUrl: async () => `ws://daemon`,
+            openSocket: () => {
+                const socket = new FakeSocket();
+                sockets.push(socket);
+                return asSocket(socket);
+            },
+            encoderFor: (send) => ({
+                start: () => undefined,
+                push: () => undefined,
+                finish: async () => {
+                    finishing.resolve();
+                    await encoded.promise;
+                    send(new ArrayBuffer(5));
+                },
+                close: closed,
+            }),
+        });
+        try {
+            await waitFor(() => expect(sockets).toHaveLength(1));
+            sockets[0]!.open();
+            link.begin(0, samples(10));
+            link.end(0, samples(10));
+            await finishing.promise;
+            sockets[0]!.close();
+            expect(closed).toHaveBeenCalledTimes(1);
+            await waitFor(() => expect(sockets).toHaveLength(2));
+            sockets[1]!.open();
+            encoded.resolve();
+            await realYield();
+            expect(sockets[1]!.sent).toEqual([]);
+            link.begin(1, samples(10));
+            link.end(1, samples(10));
+            await waitFor(() => expect(sockets[1]!.sent).toHaveLength(3));
+            expect(sockets[1]!.sent).toEqual([{ type: `begin`, id: 1 }, 5, { type: `end`, id: 1, keep: 10 }]);
+        } finally {
+            encoded.resolve();
+            link.close();
+        }
+    });
+
+    it(`closes an ended encoder even when its queued finish has not begun`, async () => {
+        const socket = new FakeSocket();
+        const { events } = recorder();
+        const close = jest.fn(() => undefined);
+        const finish = jest.fn(async () => undefined);
+        let dialled = false;
+        const link = openSpeechLink(`en`, events, {
+            opus: async () => true,
+            socketUrl: async () => `ws://daemon`,
+            openSocket: () => { dialled = true; return asSocket(socket); },
+            encoderFor: () => ({ start: () => undefined, push: () => undefined, finish, close }),
+        });
+        await waitFor(() => expect(dialled).toBe(true));
+        socket.open();
+        link.begin(0, samples(10));
+        link.end(0, samples(10));
+        link.close();
+        await realYield();
+        expect({ closes: close.mock.calls.length, finishes: finish.mock.calls.length, sent: socket.sent }).toEqual({ closes: 1, finishes: 0, sent: [] });
+    });
+
     it(`loses only the phrases in flight when the socket drops, and dials again for the next`, async () => {
         const sockets: FakeSocket[] = [];
         const { said, events } = recorder();
@@ -295,6 +435,29 @@ describe(`as a live socket`, () => {
 });
 
 describe(`on a daemon without the stream`, () => {
+    it(`ignores a transcription that answers after dictation closed`, async () => {
+        const transcript = Promise.withResolvers<{ text: string }>();
+        const posting = Promise.withResolvers<void>();
+        const { said, events } = recorder();
+        const link = openSpeechLink(`en`, events, {
+            socketUrl: async () => undefined,
+            raw: asRaw(async (key: string) => {
+                if (key === `GET /speech/status`) {
+                    return READY;
+                }
+                posting.resolve();
+                return await transcript.promise;
+            }),
+        });
+        link.begin(0, samples(10));
+        link.end(0, samples(10));
+        await posting.promise;
+        link.close();
+        transcript.resolve({ text: `too late` });
+        await realYield();
+        expect(said).toEqual([[`transport`, `http`], [`status`, `ready`]]);
+    });
+
     it(`polls the model while it downloads, then posts each phrase spoken meanwhile as a WAV, in order`, async () => {
         const statuses: SpeechStatus[] = [
             { provisioned: true, model: `downloading`, engine: `parakeet`, received: 1, total: 10 },

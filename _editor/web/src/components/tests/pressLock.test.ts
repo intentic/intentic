@@ -94,6 +94,35 @@ it(`releases the lock when the work fails, so a retry is possible`, async () => 
     expect(states.at(-1)).toEqual({ locked: false, working: false });
 });
 
+it(`stays disposed when late work tries to take the lock again`, async () => {
+    const states: PressState[] = [];
+    const lock = createPressLock((state) => states.push({ ...state }));
+    const work = deferred();
+    lock.hold(work.promise);
+    lock.dispose();
+    work.settle();
+    lock.hold(Promise.resolve());
+    await advanceTimersByTimeAsync(1_000);
+    expect(states).toEqual([{ locked: true, working: false }]);
+});
+
+it(`keeps new work locked when it arrives during the spinner's minimum hold`, async () => {
+    const states: PressState[] = [];
+    const lock = createPressLock((state) => states.push({ ...state }));
+    const first = deferred();
+    const second = deferred();
+    lock.hold(first.promise);
+    await advanceTimersByTimeAsync(200);
+    first.settle();
+    await advanceTimersByTimeAsync(10);
+    lock.hold(second.promise);
+    await advanceTimersByTimeAsync(1_000);
+    expect(states.at(-1)).toEqual({ locked: true, working: true });
+    second.settle();
+    await advanceTimersByTimeAsync(0);
+    expect(states.at(-1)).toEqual({ locked: false, working: false });
+});
+
 it(`reports work from every handler a template stacked on one click, and none from a sync one`, () => {
     const work = deferred();
     expect(firePress(() => undefined, new Event(`click`))).toBeUndefined();

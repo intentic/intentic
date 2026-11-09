@@ -94,7 +94,6 @@ export const liveSocket = <Address, Out extends object = object>(options: LiveSo
     // still in flight is told to stop, and a straggler's late open or close is nobody's.
     const session = new Latest();
     let ponged = false;
-
     const schedule = (signal: AbortSignal, uptimeMs = 0): void => {
         retry = window.setTimeout(() => void dial(signal), ladder.next(uptimeMs));
     };
@@ -115,6 +114,7 @@ export const liveSocket = <Address, Out extends object = object>(options: LiveSo
                 heardAt = openedAt;
                 ponged = false;
                 options.onOpen?.();
+                if (signal.aborted || channel !== link.mine) {return;}
                 ping = window.setInterval(() => {
                     // Replaced: nobody's now, so neither pinged nor judged by the silence clock; its own close ends it.
                     if (channel !== link.mine) {

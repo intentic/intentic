@@ -44,27 +44,41 @@ export const nextBackoff = (previous: number, startedAt: number, endedAt: number
 export interface EgressFollower {
     readonly stop: () => void;
 }
+
+type FollowerState =
+    | { readonly kind: "checking" }
+    | { readonly kind: "waiting"; readonly timer: NodeJS.Timeout; readonly wake: () => void }
+    | { readonly kind: "running"; readonly child: FollowerChild }
+    | { readonly kind: "stopped" };
+
 export const startEgressFollower = (log: Log, seams: FollowerSeams = realFollowerSeams()): EgressFollower => {
-    let stopped = false;
-    let child: FollowerChild | undefined;
-    let wake: (() => void) | undefined;
-    let timer: NodeJS.Timeout | undefined;
+    let state: FollowerState = { kind: "checking" };
+    const stopped = (): boolean => state.kind === "stopped";
     const pause = async (ms: number): Promise<void> =>
         await new Promise<void>((resolve) => {
-            wake = resolve;
-            timer = setTimeout(resolve, ms);
+            if (stopped()) {
+                resolve();
+                return;
+            }
+            const timer = setTimeout(resolve, ms);
             timer.unref();
+            state = { kind: "waiting", timer, wake: resolve };
         });
     const loop = async (): Promise<void> => {
         let backoff = FIRST_BACKOFF_MS;
         let said = false;
         // until stop() ends it, at one of the two waits below
         for (;;) {
-            if (stopped) {
+            if (stopped()) {
                 return;
             }
+            state = { kind: "checking" };
             // allow(silent-catch): an ic that cannot say its features does not advertise this one; asked again later
-            if (!(await seams.advertised().catch(() => false))) {
+            const advertised = await seams.advertised().catch(() => false);
+            if (stopped()) {
+                return;
+            }
+            if (!advertised) {
                 // one ask per recheck interval, until stopped
                 await pause(RECHECK_MS);
                 continue;
@@ -74,11 +88,11 @@ export const startEgressFollower = (log: Log, seams: FollowerSeams = realFollowe
                 said = true;
             }
             const startedAt = seams.now();
-            child = seams.spawn((line) => log(`egress follow: ${line}`));
+            const child = seams.spawn((line) => log(`egress follow: ${line}`));
+            state = { kind: "running", child };
             // the one child runs until it ends; the next starts only after it
             const ended = await child.exited;
-            child = undefined;
-            if (stopped) {
+            if (stopped()) {
                 return;
             }
             const { wait, next } = nextBackoff(backoff, startedAt, seams.now());
@@ -91,10 +105,14 @@ export const startEgressFollower = (log: Log, seams: FollowerSeams = realFollowe
     void loop();
     return {
         stop: () => {
-            stopped = true;
-            clearTimeout(timer);
-            wake?.();
-            child?.stop();
+            const previous = state;
+            state = { kind: "stopped" };
+            if (previous.kind === "waiting") {
+                clearTimeout(previous.timer);
+                previous.wake();
+            } else if (previous.kind === "running") {
+                previous.child.stop();
+            }
         },
     };
 };

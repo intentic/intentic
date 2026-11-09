@@ -11,7 +11,7 @@ interface Spawned extends FollowerChild {
     stopped: boolean;
 }
 
-const harness = (advertised: () => boolean) => {
+const harness = (advertised: () => boolean | Promise<boolean>) => {
     const spawned: Spawned[] = [];
     const lines: string[] = [];
     let clock = 0;
@@ -86,4 +86,23 @@ test("a follower that exits is started again after the backoff, and stop ends th
     expect(world.spawned[2]?.stopped).toBe(true);
     await world.tick(120_000);
     expect(world.spawned).toHaveLength(3);
+});
+
+test.each([true, false])("stays stopped when a pending feature check answers %s", async (supported) => {
+    jest.useFakeTimers();
+    const advertised = Promise.withResolvers<boolean>();
+    let checks = 0;
+    const world = harness(() => {
+        checks += 1;
+        return advertised.promise;
+    });
+    world.follower.stop();
+    advertised.resolve(supported);
+    await world.tick(0);
+    expect(jest.getTimerCount()).toBe(0);
+    await world.tick(20 * 60_000);
+    expect(world.spawned).toEqual([]);
+    expect(world.lines).toEqual([]);
+    expect(checks).toBe(1);
+    expect(jest.getTimerCount()).toBe(0);
 });

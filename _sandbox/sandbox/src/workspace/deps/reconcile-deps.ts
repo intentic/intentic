@@ -226,9 +226,8 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
     const failedOn = new Map<string, string>();
     let quietAfter = 0;
     let settlingWorkspaceBurst = false;
-    let dirty = false;
-    let scheduled = false;
-    let stopped = false;
+    let maintenance: "idle" | "running" | "rerun" = "idle";
+    let lifetime = new AbortController();
     const endings = createInstallEndings();
 
     const remember = (dir: string, origin: DependencyOrigin): void => {
@@ -251,10 +250,11 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
                 }
             })
             .join(" ");
-    const waitForQuiet = async (): Promise<void> => {
-        while (quietAfter > Date.now()) {
-            await sleep(quietAfter - Date.now());
+    const waitForQuiet = async (signal: AbortSignal): Promise<void> => {
+        while (!signal.aborted && quietAfter > Date.now()) {
+            await sleep(quietAfter - Date.now(), { signal });
         }
+        signal.throwIfAborted();
         settlingWorkspaceBurst = false;
     };
 
@@ -272,8 +272,9 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
     const installLine = async (project: ProjectSetupStatus): Promise<string> =>
         deps.lane === undefined ? project.recipe.command : deps.lane(project.recipe.command);
 
-    const pass = async (): Promise<void> => {
+    const pass = async (signal: AbortSignal): Promise<void> => {
         const [projects, requested] = await Promise.all([workspaceSetup(deps.workspace.root, deps.processes), requests.read()]);
+        signal.throwIfAborted();
         const known = new Map(projects.map((project) => [project.dir, project]));
         // A ready or removed project's request is cleared, keeping the durable file a worklist, not a history.
         await removeRequests(
@@ -303,10 +304,13 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
         });
         const started: Array<{ dir: string; key: string; requested: boolean }> = [];
         for (const project of due) {
+            if (signal.aborted) {break;}
             const requestedOrigin = requested.projects[project.dir];
             const origin = causes.get(project.dir) ?? requestedOrigin ?? backgroundOrigin;
             try {
-                await startInstall(deps.workspace.root, project, deps.processes, await installLine(project));
+                const command = await installLine(project);
+                if (signal.aborted) {break;}
+                await startInstall(deps.workspace.root, project, deps.processes, command);
             } catch (error) {
                 deps.logger.warn({ err: error, dir: project.dir }, "dependency coordinator: install would not start");
                 tell(failureListeners, { dir: project.dir, origin }, deps.logger, "failure listener");
@@ -346,32 +350,38 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
         if (origin.kind === "external") {
             backgroundOrigin = origin;
         }
-        dirty = true;
-        if (scheduled || stopped) {
+        if (lifetime.signal.aborted) {return;}
+        if (maintenance !== "idle") {
+            maintenance = "rerun";
             return;
         }
-        scheduled = true;
+        maintenance = "running";
+        const { signal } = lifetime;
         // One pass at a time: two observations of the same drift can't start the same install twice.
         void (async () => {
-            while (dirty) {
-                if (stopped) {
-                    break;
+            do {
+                maintenance = "running";
+                try {
+                    await waitForQuiet(signal);
+                    await pass(signal);
+                } finally {
+                    // Whoever waited on a project this pass did not install looks again (installEnded).
+                    endings.endAll(false);
                 }
-                dirty = false;
-                await waitForQuiet();
-                // Whoever waited on a project this pass did not install looks again (installEnded).
-                await pass().finally(() => endings.endAll(false));
-            }
+            } while (!signal.aborted && maintenancePending());
         })()
-            .catch((error: unknown) => deps.logger.warn({ err: error }, "dependency coordinator: maintenance pass failed"))
+            .catch((error: unknown) => {
+                if (!signal.aborted) {deps.logger.warn({ err: error }, "dependency coordinator: maintenance pass failed");}
+            })
             .finally(() => {
-                scheduled = false;
+                const rerun = maintenancePending();
+                maintenance = "idle";
                 backgroundOrigin = { kind: "external" };
-                if (dirty && !stopped) {
-                    schedule({ kind: "external" });
-                }
+                if (rerun && !lifetime.signal.aborted) {schedule({ kind: "external" });}
             });
     };
+    // Read after callbacks across awaits, outside TypeScript's narrowing of the assignment to "running" above.
+    const maintenancePending = (): boolean => maintenance === "rerun";
 
     const status = async (): Promise<ProjectSetupStatus[]> => {
         const [projects, requested] = await Promise.all([workspaceSetup(deps.workspace.root, deps.processes), requests.read()]);
@@ -461,7 +471,8 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             return caused.length === 0 && fresh.length === 0 ? undefined : { missing, started: [], deferred: true };
         },
         watch: (subscribe) => {
-            stopped = false;
+            if (lifetime.signal.aborted) {lifetime = new AbortController();}
+            const watching = lifetime;
             const unsubscribe = subscribe((paths) => {
                 const manifestChanged = paths.length === 0 || paths.some((path) => isManifest(basename(path)));
                 // A manifest arms the settle window; later batches extend it, since source files can follow it by
@@ -477,7 +488,11 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             });
             schedule({ kind: "startup" });
             return () => {
-                stopped = true;
+                watching.abort();
+                if (watching === lifetime) {
+                    settlingWorkspaceBurst = false;
+                    quietAfter = 0;
+                }
                 unsubscribe();
             };
         },

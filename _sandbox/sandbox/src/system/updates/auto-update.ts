@@ -6,7 +6,7 @@ import { isNewer } from "@intentic/sandbox-contract/state/versions";
 import type { RestartResume } from "../restart-resume.js";
 import { askedRestart } from "../restart-resume.js";
 import { opt } from "../../opt.js";
-import type { UpdatePolicyFile } from "./update-policy.js";
+import type { UpdatePolicy, UpdatePolicyFile } from "./update-policy.js";
 import { errorMessage } from "@intentic/base/errors";
 
 // Apply only an already-staged update after visible work is idle and a cancellable countdown has allowed queued turns to start.
@@ -168,6 +168,21 @@ export interface AutoUpdater {
     readonly stop: () => void;
 }
 
+const appliedOf = (policy: UpdatePolicy, offer: AutoUpdateOffer): AutoUpdate["lastApplied"] =>
+    policy.applied !== undefined && offer.running !== undefined && (policy.applied.to === undefined || bare(policy.applied.to) === bare(offer.running))
+        ? policy.applied
+        : undefined;
+
+const updateTarget = async (deps: AutoUpdateDeps, stopped: () => boolean): Promise<{ version: string; host: string } | undefined> => {
+    const version = takeableVersion(await deps.offer());
+    if (stopped()) {return undefined;}
+    if (version === undefined) {throw new Error("There is no downloaded update to take right now.");}
+    const host = await deps.host(true);
+    if (stopped()) {return undefined;}
+    if (host === undefined) {throw new Error("The machine that runs this sandbox is not connected, so nothing here can ask it to update.");}
+    return { version, host };
+};
+
 type Phase = "idle" | "waiting" | "countdown" | "updating";
 
 export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
@@ -234,11 +249,13 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
     };
 
     const fail = async (message: string): Promise<void> => {
+        if (stopped) {return;}
         const count = (failure?.count ?? 0) + 1;
         const retryAt = now() + RETRY_MS[Math.min(count, RETRY_MS.length) - 1]!;
         failure = { message, retryAt, count };
         deps.logger.warn({ version, failure: message, retryAt }, "auto-update: the machine did not update this sandbox, trying again later");
         await deps.policy.applied(undefined);
+        if (stopped) {return;}
         phase = "waiting";
         publish();
     };
@@ -246,12 +263,14 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
     // Hands the machine the update, as the Update button would. A stream that just stops is the cutover: this process is
     // about to be stopped, and the next boot resumes what the restart cut. One that answers in words did not restart.
     const apply = async (target: string | undefined, host: string): Promise<void> => {
+        if (stopped) {return;}
         clearCountdown();
         phase = "updating";
         holds = [];
         publish();
         const at = now();
         await deps.policy.applied({ at, ...opt("to", target) });
+        if (stopped) {return;}
         deps.logger.info({ host, version: target }, "auto-update: nothing here would feel the restart, the machine updates this sandbox now");
         deps.restartResume.announce?.({ by: "daemon", host, action: "update", reason: `update when quiet, to ${target ?? "the newest version"}: nothing here would feel the restart` });
         let answered = false;
@@ -267,6 +286,7 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
             answered = true;
             words = errorMessage(error);
         }
+        if (stopped) {return;}
         if (answered) {
             await fail(words ?? UNSAID);
             return;
@@ -281,15 +301,13 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
             return;
         }
         const [policy, offer] = await Promise.all([deps.policy.read(), deps.offer()]);
+        if (stopped) {return;}
         looked = true;
         enabled = policy.auto !== false;
         pausedUntil = policy.pausedUntil !== undefined && policy.pausedUntil > now() ? policy.pausedUntil : undefined;
         // Read back only once it is the version that runs: an update that never came up says so through the host's own
         // outcome, and must not read as one taken by itself.
-        lastApplied =
-            policy.applied !== undefined && offer.running !== undefined && (policy.applied.to === undefined || bare(policy.applied.to) === bare(offer.running))
-                ? policy.applied
-                : undefined;
+        lastApplied = appliedOf(policy, offer);
         const target = enabled ? takeableVersion(offer) : undefined;
         if (target === undefined) {
             clearCountdown();
@@ -306,6 +324,7 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
             failure = undefined;
         }
         const [activity, host] = await Promise.all([deps.activity(), hostNow()]);
+        if (stopped) {return;}
         holds = holdsOf({ activity, breaking: offer.breaking, pausedUntil, host, retryAt: failure?.retryAt, waitingSince, now: now() });
         if (holds.length > 0 || host === undefined) {
             clearCountdown();
@@ -350,6 +369,7 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
         },
         configure: (input) =>
             serialize(async () => {
+                if (stopped) {return snapshot();}
                 if (input.enabled !== undefined) {
                     await deps.policy.setAuto(input.enabled);
                 }
@@ -360,18 +380,12 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
                     if (phase === "updating") {
                         return snapshot();
                     }
-                    const target = takeableVersion(await deps.offer());
-                    if (target === undefined) {
-                        throw new Error("There is no downloaded update to take right now.");
-                    }
-                    const host = await deps.host(true);
-                    if (host === undefined) {
-                        throw new Error("The machine that runs this sandbox is not connected, so nothing here can ask it to update.");
-                    }
+                    const target = await updateTarget(deps, () => stopped);
+                    if (target === undefined) {return snapshot();}
                     // A person asked: no countdown, no hold, and none of the last try's wait.
-                    version = target;
+                    version = target.version;
                     failure = undefined;
-                    void apply(target, host).catch((error: unknown) => deps.logger.warn({ err: error }, "auto-update: taking the update now failed"));
+                    void apply(target.version, target.host).catch((error: unknown) => deps.logger.warn({ err: error }, "auto-update: taking the update now failed"));
                     return snapshot();
                 }
                 await look();
@@ -379,7 +393,7 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
             }),
         // Coalesced: a roster that churns while tabs reconnect is one look, not one per frame.
         poke: () => {
-            if (pokeTimer !== undefined) {
+            if (stopped || pokeTimer !== undefined) {
                 return;
             }
             pokeTimer = setTimeout(() => {

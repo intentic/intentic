@@ -74,6 +74,18 @@ test("a close the caller ends in its drop handler is never dialled again", async
     expect({ dialled: harnessed.dialled.length, retrying: harnessed.live.retrying() }).toEqual({ dialled: 1, retrying: false });
 });
 
+test("ending in the open callback cannot leave a heartbeat behind", async () => {
+    jest.useFakeTimers();
+    const harnessed = harness({ onOpen: () => harnessed.live.end() });
+    live.push(harnessed.live);
+    harnessed.live.connect();
+    await waitFor(() => expect(harnessed.dialled).toHaveLength(1));
+    harnessed.dialled[0]!.link.opened();
+    expect(jest.getTimerCount()).toBe(0);
+    await advanceTimersByTimeAsync(FAST.staleMs * 2);
+    expect(harnessed.dialled[0]!.sent).toEqual([]);
+});
+
 test("connecting afresh lets the old channel go, and its late close and messages are nobody's", async () => {
     jest.useFakeTimers();
     const { live: socket, dialled, drops } = harness();

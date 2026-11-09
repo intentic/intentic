@@ -56,6 +56,11 @@ interface Transport {
     readonly close: () => void;
 }
 
+type LinkState =
+    | { readonly kind: `dialling` }
+    | { readonly kind: SpeechTransport; readonly transport: Transport }
+    | { readonly kind: `closed` };
+
 /** The seams a test replaces: how a socket address is minted and a socket opened, and how the daemon is asked. */
 export interface SpeechLinkDeps {
     readonly socketUrl: (path: string, extra: Record<string, string>) => Promise<string | undefined>;
@@ -134,11 +139,27 @@ const streamAddress = async (
 // The ops as an Opus socket frames them (opusVoice.ts): one encoder per phrase, and every send in one chain, so a
 // phrase's packets leave after its begin (the encoder holds them until `start`) and its end after its last packet.
 const opusFramer = (send: (out: StreamOut) => void, encoderFor: SpeechLinkDeps["encoderFor"]): Framer => {
+    const lifetime = new AbortController();
+    const encoders = new Set<PhraseEncoder>();
+    const close = (encoder: PhraseEncoder | undefined): void => {
+        if (encoder !== undefined && encoders.delete(encoder)) {encoder.close();}
+    };
+    const emit = (out: StreamOut): void => {
+        if (!lifetime.signal.aborted) {
+            send(out);
+        }
+    };
     let chain: Promise<void> = Promise.resolve();
     let encoding: { readonly id: number; readonly encoder: PhraseEncoder } | undefined;
     const inTurn = (work: () => void | Promise<void>): void => {
-        // allow(silent-catch): a send that throws is a socket already gone, whose drop fails the phrases in flight
-        chain = chain.then(work).catch(() => undefined);
+        chain = chain
+            .then(() => {
+                if (!lifetime.signal.aborted) {
+                    return work();
+                }
+            })
+            // allow(silent-catch): a send that throws is a socket already gone, whose drop fails the phrases in flight
+            .catch(() => undefined);
     };
     const release = (id: number): PhraseEncoder | undefined => {
         const held = encoding?.id === id ? encoding.encoder : undefined;
@@ -151,11 +172,12 @@ const opusFramer = (send: (out: StreamOut) => void, encoderFor: SpeechLinkDeps["
         apply: (op: Op): void => {
             switch (op.kind) {
                 case `begin`: {
-                    encoding?.encoder.close();
-                    const encoder = encoderFor((packet) => send(packet));
+                    close(encoding?.encoder);
+                    const encoder = encoderFor((packet) => emit(packet));
+                    encoders.add(encoder);
                     encoding = { id: op.id, encoder };
                     inTurn(() => {
-                        send({ type: `begin`, id: op.id });
+                        emit({ type: `begin`, id: op.id });
                         encoder.start();
                     });
                     encoder.push(op.samples);
@@ -169,18 +191,26 @@ const opusFramer = (send: (out: StreamOut) => void, encoderFor: SpeechLinkDeps["
                 case `end`: {
                     const ended = release(op.id);
                     inTurn(async () => {
-                        await ended?.finish();
-                        send({ type: `end`, id: op.id, keep: op.samples.length });
+                        try {
+                            await ended?.finish();
+                            emit({ type: `end`, id: op.id, keep: op.samples.length });
+                        } finally {
+                            close(ended);
+                        }
                     });
                     return;
                 }
                 case `drop`:
-                    release(op.id)?.close();
-                    inTurn(() => send({ type: `drop`, id: op.id }));
+                    close(release(op.id));
+                    inTurn(() => emit({ type: `drop`, id: op.id }));
                     return;
             }
         },
-        close: () => encoding?.encoder.close(),
+        close: () => {
+            lifetime.abort();
+            for (const encoder of encoders) {close(encoder);}
+            encoding = undefined;
+        },
     };
 };
 
@@ -220,7 +250,6 @@ const heard = (text: string, events: SpeechLinkEvents, inFlight: Set<number>): v
 const httpTransport = (lang: string, events: SpeechLinkEvents, deps: SpeechLinkDeps): Transport => {
     const controller = new AbortController();
     const { signal } = controller;
-    const open = new Map<number, Float32Array[]>();
     const queue: { readonly id: number; readonly samples: Float32Array }[] = [];
     let ready = false;
     let polling = false;
@@ -272,6 +301,7 @@ const httpTransport = (lang: string, events: SpeechLinkEvents, deps: SpeechLinkD
                 try {
                     const startedAt = Date.now();
                     const { text } = await deps.raw(`POST /speech/transcribe`, { query: { lang }, input: wavOf16k(next.samples), signal });
+                    signal.throwIfAborted();
                     queue.shift();
                     events.final(next.id, text, Date.now() - startedAt);
                 } catch (cause) {
@@ -296,25 +326,14 @@ const httpTransport = (lang: string, events: SpeechLinkEvents, deps: SpeechLinkD
     void poll();
     return {
         apply: (op) => {
-            switch (op.kind) {
-                case `begin`:
-                    open.set(op.id, [op.samples]);
-                    return;
-                case `audio`:
-                    open.get(op.id)?.push(op.samples);
-                    return;
-                case `drop`:
-                    open.delete(op.id);
-                    return;
-                case `end`:
-                    open.delete(op.id);
-                    queue.push({ id: op.id, samples: op.samples });
-                    if (ready) {
-                        void drain();
-                    } else {
-                        void poll();
-                    }
-                    return;
+            if (op.kind !== `end`) {
+                return;
+            }
+            queue.push({ id: op.id, samples: op.samples });
+            if (ready) {
+                void drain();
+            } else {
+                void poll();
             }
         },
         close: () => controller.abort(),
@@ -333,8 +352,7 @@ export const openSpeechLink = (
     options: SpeechLinkOptions = {},
 ): SpeechLink => {
     const deps = { ...DEFAULT_DEPS, ...overrides };
-    let transport: Transport | undefined;
-    let closed = false;
+    let state: LinkState = { kind: `dialling` };
     // What was said before a transport took the link, replayed into it in order.
     const held: Op[] = [];
     // The phrases the current transport saw begin: one begun on a socket since lost cannot be finished on the next, so
@@ -342,10 +360,6 @@ export const openSpeechLink = (
     const begun = new Set<number>();
     // The phrases ended on the stream and not yet answered.
     const inFlight = new Set<number>();
-    // Whether the dial in hand got as far as opening: a socket that never opens is a daemon with no stream route, and one
-    // that opened and dropped is a restart to ride out.
-    let up = false;
-    let onHttp = false;
 
     const forward = (to: Transport, op: Op): void => {
         if (op.kind === `begin`) {
@@ -362,15 +376,18 @@ export const openSpeechLink = (
     };
 
     const settle = (chosen: Transport, name: SpeechTransport): void => {
-        if (closed) {
+        if (state.kind === `closed`) {
             chosen.close();
             return;
         }
-        transport = chosen;
+        const selected: LinkState = { kind: name, transport: chosen };
+        state = selected;
         begun.clear();
         events.transport?.(name);
-        for (const op of held.splice(0)) {
-            forward(chosen, op);
+        while (held.length > 0) {
+            if (state !== selected) {return;}
+            const op = held.shift();
+            if (op !== undefined) {forward(chosen, op);}
         }
     };
 
@@ -387,26 +404,26 @@ export const openSpeechLink = (
         },
         open: webSocketChannel<StreamOut>({ text: (text) => heard(text, events, inFlight), binary: () => undefined }, deps.openSocket),
         onOpen: () => {
-            up = true;
             framer?.close();
             framer = opusSocket ? opusFramer((out) => live.send(out), deps.encoderFor) : pcmFramer((out) => live.send(out));
             settle(stream, `stream`);
         },
         onUnreachable: () => fallBack(),
         onDrop: () => {
-            if (!up) {
+            if (state.kind === `dialling`) {
                 // An upgrade the daemon refused: no stream route there, so its WAV door.
                 fallBack();
                 return;
             }
             // A socket that dies after it was up (a daemon restart) costs only the phrases in flight; the next phrase waits
             // for the socket dialled in its place.
-            up = false;
+            state = { kind: `dialling` };
+            framer?.close();
+            framer = undefined;
             for (const id of inFlight) {
                 events.failed(id, `phrase`);
             }
             inFlight.clear();
-            transport = undefined;
         },
         // The speech route answers no ping, so silence says nothing about it.
         staleCheck: `once-ponged`,
@@ -433,24 +450,24 @@ export const openSpeechLink = (
     };
 
     const fallBack = (): void => {
-        live.end();
-        if (!onHttp) {
-            onHttp = true;
-            settle(httpTransport(lang, events, deps), `http`);
+        if (state.kind === `http` || state.kind === `closed`) {
+            return;
         }
+        live.end();
+        settle(httpTransport(lang, events, deps), `http`);
     };
 
     live.connect();
 
     const apply = (op: Op): void => {
-        if (closed) {
+        if (state.kind === `closed`) {
             return;
         }
-        if (transport === undefined) {
+        if (state.kind === `dialling`) {
             held.push(op);
             return;
         }
-        forward(transport, op);
+        forward(state.transport, op);
     };
 
     return {
@@ -459,10 +476,12 @@ export const openSpeechLink = (
         end: (id, samples) => apply({ kind: `end`, id, samples }),
         drop: (id) => apply({ kind: `drop`, id }),
         close: () => {
-            closed = true;
+            const previous = state;
+            state = { kind: `closed` };
             held.length = 0;
-            transport?.close();
-            transport = undefined;
+            if (previous.kind === `stream` || previous.kind === `http`) {
+                previous.transport.close();
+            }
             // Whichever transport was chosen, the socket is let go with the link: one still dialling must not open later.
             live.dispose();
         },

@@ -148,11 +148,14 @@ describe("createAutoUpdater", () => {
         },
     };
 
-    const make = (): AutoUpdater => {
+    const make = (
+        activityNow: () => Promise<AutoUpdateActivity> = async () => activity,
+        applied: UpdatePolicyFile["applied"] = policyFile.applied,
+    ): AutoUpdater => {
         updater = createAutoUpdater({
             offer: async () => current,
-            activity: async () => activity,
-            policy: policyFile,
+            activity: activityNow,
+            policy: { ...policyFile, applied },
             host: async () => host,
             async *relay(to, flow) {
                 relayed.push({ host: to, flow });
@@ -186,6 +189,40 @@ describe("createAutoUpdater", () => {
         relayed = [];
         asks = [];
         changes = 0;
+    });
+
+    test("a quiet reading arriving after stop cannot arm a new countdown", async () => {
+        jest.useFakeTimers();
+        try {
+            const reading = Promise.withResolvers<AutoUpdateActivity>();
+            const auto = make(() => reading.promise);
+            await advanceTimersByTimeAsync(0);
+            auto.stop();
+            const atStop = changes;
+            reading.resolve(QUIET);
+            await advanceTimersByTimeAsync(0);
+            expect({ changes, timers: jest.getTimerCount(), relayed }).toEqual({ changes: atStop, timers: 0, relayed: [] });
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test("stop during update bookkeeping cannot hand the restart to the machine", async () => {
+        jest.useFakeTimers();
+        try {
+            const recording = Promise.withResolvers<void>();
+            const saved = Promise.withResolvers<void>();
+            const auto = make(async () => QUIET, async () => { recording.resolve(); await saved.promise; });
+            await advanceTimersByTimeAsync(0);
+            await auto.configure({ applyNow: true });
+            await recording.promise;
+            auto.stop();
+            saved.resolve();
+            await advanceTimersByTimeAsync(0);
+            expect({ asks, relayed, timers: jest.getTimerCount() }).toEqual({ asks: [], relayed: [], timers: 0 });
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     test("waits while agents work and somebody is at the editor, naming both, and touches nothing", async () => {

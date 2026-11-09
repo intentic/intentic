@@ -1,4 +1,4 @@
-import { getCurrentScope, onScopeDispose, ref, toValue, watch, type MaybeRefOrGetter, type Ref } from "vue";
+import { computed, getCurrentScope, onScopeDispose, shallowRef, toValue, watch, type MaybeRefOrGetter, type Ref } from "vue";
 
 // ASKING AGAIN UNTIL SOMETHING HAS HAPPENED: a restart landing, a payment going through, a start finishing. One clock
 // per wait, never two checks at once, an end (the check says done, or the deadline passes), and a check the moment the
@@ -28,34 +28,43 @@ export interface Poll {
     readonly stop: () => void;
 }
 
+type PollRun = { deadline: number; requested: boolean };
+
 export const usePoll = ({ everyMs, check, immediate = true, visible }: PollOptions): Poll => {
-    const polling = ref(false);
+    const run = shallowRef<PollRun>();
+    const polling = computed(() => run.value !== undefined);
     let timer: ReturnType<typeof setInterval> | undefined;
-    let deadline = 0;
     let looking = false;
 
     const stop = (): void => {
         clearInterval(timer);
         timer = undefined;
-        deadline = 0;
-        polling.value = false;
+        run.value = undefined;
     };
 
     const look = async (): Promise<void> => {
-        if (!polling.value || looking) {
+        if (run.value === undefined) {
             return;
         }
+        // A busy check holds one request for the current run, whether it came from start, focus or the clock.
+        run.value.requested = true;
+        if (looking) {return;}
         looking = true;
-        let done = false;
         try {
-            done = (await check()) === true;
-        } catch {
-            // allow(silent-catch): a failed look is "not yet", which the next tick asks again; the check says why if it cares.
+            while (run.value?.requested) {
+                if (visible !== undefined && !toValue(visible)) {break;}
+                const observed: PollRun = run.value;
+                observed.requested = false;
+                let done = false;
+                try {
+                    done = (await check()) === true;
+                } catch {
+                    // allow(silent-catch): a failed look is "not yet", which the next tick asks again; the check says why if it cares.
+                }
+                if (run.value === observed && (done || Date.now() > observed.deadline)) {stop();}
+            }
         } finally {
             looking = false;
-        }
-        if (polling.value && (done || Date.now() > deadline)) {
-            stop();
         }
     };
 
@@ -73,11 +82,12 @@ export const usePoll = ({ everyMs, check, immediate = true, visible }: PollOptio
     };
 
     const start = (forMs?: number): void => {
-        deadline = Math.max(deadline, forMs === undefined ? Number.POSITIVE_INFINITY : Date.now() + forMs);
-        if (polling.value) {
+        const deadline = forMs === undefined ? Number.POSITIVE_INFINITY : Date.now() + forMs;
+        if (run.value !== undefined) {
+            run.value.deadline = Math.max(run.value.deadline, deadline);
             return;
         }
-        polling.value = true;
+        run.value = { deadline, requested: false };
         // Out of sight: the clock and the first look wait for the window to come back.
         if (visible !== undefined && !toValue(visible)) {
             return;

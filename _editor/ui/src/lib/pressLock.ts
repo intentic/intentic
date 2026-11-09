@@ -39,42 +39,53 @@ export interface PressLock {
 
 export const createPressLock = (notify: (state: PressState) => void): PressLock => {
     let running = 0;
-    let working = false;
+    let phase: `idle` | `pending` | `visible` | `holding` | `disposed` = `idle`;
     let revealTimer: ReturnType<typeof setTimeout> | undefined;
     let holdTimer: ReturnType<typeof setTimeout> | undefined;
     let shownAt = 0;
-    let disposed = false;
 
-    const emit = (): void => notify({ locked: running > 0 || working, working });
+    const emit = (): void => notify({ locked: phase !== `idle`, working: phase === `visible` || phase === `holding` });
 
     // Work is done: drop the spinner, unless it's been on screen less than its minimum hold, in which case let it
     // finish being seen (blinking off immediately reads as a fault).
     const settle = (): void => {
-        if (disposed || running > 0) {
+        if (phase === `disposed` || running > 0) {
             return;
         }
         clearTimeout(revealTimer);
         revealTimer = undefined;
         const remaining = MINIMUM_HOLD_MS - (Date.now() - shownAt);
-        if (!working || remaining <= 0) {
-            working = false;
+        if (phase === `pending` || remaining <= 0) {
+            phase = `idle`;
             emit();
             return;
         }
+        phase = `holding`;
         holdTimer = setTimeout(() => {
             holdTimer = undefined;
-            working = false;
+            phase = `idle`;
             emit();
         }, remaining);
     };
 
     return {
         hold: (work) => {
+            if (phase === `disposed`) {
+                // allow(silent-catch): the caller owns the failure even after its control has gone away.
+                void Promise.resolve(work).catch(() => undefined);
+                return;
+            }
+            clearTimeout(holdTimer);
+            holdTimer = undefined;
             running += 1;
-            if (revealTimer === undefined && !working) {
+            if (phase === `holding`) {
+                phase = `visible`;
+            }
+            if (phase === `idle`) {
+                phase = `pending`;
                 revealTimer = setTimeout(() => {
                     revealTimer = undefined;
-                    working = true;
+                    phase = `visible`;
                     shownAt = Date.now();
                     emit();
                 }, REVEAL_DELAY_MS);
@@ -89,7 +100,7 @@ export const createPressLock = (notify: (state: PressState) => void): PressLock 
                 });
         },
         dispose: () => {
-            disposed = true;
+            phase = `disposed`;
             clearTimeout(revealTimer);
             clearTimeout(holdTimer);
         },

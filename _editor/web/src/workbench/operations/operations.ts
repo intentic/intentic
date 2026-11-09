@@ -181,6 +181,9 @@ export const startOperation = async <T, F extends OperationFailure = NoticeModel
     entries.set(address, entry);
     // Writes land only while this run is still the one filed there; one put away by a test seam writes nowhere.
     const update = (patch: Partial<Entry>): void => {
+        if (entry.state !== `running`) {
+            return;
+        }
         const current = entries.get(address) === entry;
         entry = { ...entry, ...patch };
         if (current) {
