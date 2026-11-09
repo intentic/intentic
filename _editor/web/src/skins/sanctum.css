@@ -711,16 +711,25 @@
 
 /* THE RAIL IS THE SAME STONE AS THE COLUMN BESIDE IT, ONE SHADE DOWN. Every secondary column that stands next to it (the
    settings nav, the file tree: `bg-card`) is --color-card, so the rail is mixed from the same surface ramp, between the
-   card and the canvas: same hue, same chroma, only lighter or darker. It used to mix 20% gold into the stone, add the base rail's
-   brand wash and run a light-to-dark gradient. Beside the plain card that read as a second, olive material, and the
-   gold tiles had nothing to stand out against. The gold now lives only on the tiles that are hovered or picked. */
+   card and the canvas: same hue, same chroma, only lighter or darker. It used to mix 20% gold into the stone itself and add the
+   base rail's brand wash; beside the plain card that read as a second, olive material. The light that falls down it
+   stays (the rail's own character): a warm gilt glow at the top that sinks into shadow at the foot, drawn OVER the
+   matched stone, so the hue it starts from is the column's. */
 [data-skin="sanctum"] .icon-rail {
 /* Named, not inlined, because a tile's count badge is ringed in this exact colour. */
-    --ui-tile-ground: color-mix(in oklab, var(--color-surface-900) 60%, var(--color-surface-950));
+    --ui-tile-ground: color-mix(in oklab, var(--color-surface-900) 70%, var(--color-surface-950));
     background-color: var(--ui-tile-ground);
-    background-image: var(--sanctum-rail);
-    background-size: 48px 96px;
-    background-repeat: repeat;
+    background-image:
+        var(--sanctum-rail),
+        linear-gradient(
+            180deg,
+            color-mix(in oklab, var(--sanctum-gold-bright) 7%, transparent),
+            transparent 45%,
+            rgba(0, 0, 0, 0.16)
+        );
+    background-position: 0 0, 0 0;
+    background-size: 48px 96px, 100% 100%;
+    background-repeat: repeat, no-repeat;
     box-shadow: none;
 }
 
