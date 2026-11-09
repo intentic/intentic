@@ -623,13 +623,14 @@
 /* A PICKED ROW IS GOLD, NOT EMBER, and on a screen with a tree. */
     [data-skin="sanctum"] .ui-row-select-on,
     [data-skin="sanctum"] .ui-row-select-on:hover:not(:disabled) {
-        background: rgba(201, 160, 92, 0.1);
-        box-shadow: inset 2px 0 0 var(--color-selection-edge);
+        background:
+            var(--ui-row-select-mark),
+            rgba(201, 160, 92, 0.1);
     }
 
     [data-skin="sanctum"] .ui-row-select-horizontal.ui-row-select-on,
     [data-skin="sanctum"] .ui-row-select-horizontal.ui-row-select-on:hover:not(:disabled) {
-        box-shadow: none;
+        background: rgba(201, 160, 92, 0.1);
     }
 
     /* A pointer's hover only (utilities.css says why); the press is the same wash, at once. */

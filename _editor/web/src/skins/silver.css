@@ -406,12 +406,13 @@
     /* A PICKED ROW is a wash of light with a soft silver edge; a pointed-at row, half that wash. */
     [data-skin="silver"] .ui-row-select-on,
     [data-skin="silver"] .ui-row-select-on:hover:not(:disabled) {
-        background: var(--silver-wash-strong);
-        box-shadow: inset 2px 0 0 var(--color-selection-edge);
+        background:
+            var(--ui-row-select-mark),
+            var(--silver-wash-strong);
     }
     [data-skin="silver"] .ui-row-select-horizontal.ui-row-select-on,
     [data-skin="silver"] .ui-row-select-horizontal.ui-row-select-on:hover:not(:disabled) {
-        box-shadow: none;
+        background: var(--silver-wash-strong);
     }
     @media (hover: hover) {
         [data-skin="silver"] .ui-row-select:hover:not(:disabled) {

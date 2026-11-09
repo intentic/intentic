@@ -213,6 +213,20 @@
         background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
     }
 
+/* THE PICKED ROW'S MARK, for a skin that draws one (Sanctum's gold, Silver's bright): a 3px capsule, 16px tall, standing
+   at the row's leading edge on its centre line. Background layers, laid over the skin's wash, and not an inset shadow:
+   a shadow follows the row's radius, so on a rounded row (the index column's, 8px) a full-height edge bends into a
+   bracket at both corners. The capsule keeps clear of the corners at any row height, needs no positioned
+   pseudo-element on some two hundred call sites, and leaves `box-shadow` to the focus ring. */
+    .ui-row-select-on {
+        --ui-row-select-mark:
+            radial-gradient(circle closest-side, var(--color-selection-edge) 96%, transparent) left calc(50% - 6.5px) / 3px 3px
+                no-repeat,
+            radial-gradient(circle closest-side, var(--color-selection-edge) 96%, transparent) left calc(50% + 6.5px) / 3px 3px
+                no-repeat,
+            linear-gradient(var(--color-selection-edge) 0 0) left center / 3px 13px no-repeat;
+    }
+
 /* A folder about to take a drop (a tree row, a home tile, a breadcrumb): fuller than the selected tint, with a rule. */
     .ui-row-select-drop {
         background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);
