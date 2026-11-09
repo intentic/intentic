@@ -17,12 +17,9 @@ const {
     scrollKey = undefined,
     width = `wide`,
     description,
-    caption = undefined,
 } = defineProps<{
     title: string;
     description?: string;
-    /** What kind of place the title names ("Sandbox settings" under a sandbox's name), under it at the head of a docked index. */
-    caption?: string;
     /** collapse: the rail narrows the body; swap: the rail selects a document, shown one pane at a time when folded. */
     mobile?: `collapse` | `swap`;
     /** `swap` only, whether a folded split is showing the document rather than the list. */
@@ -98,11 +95,11 @@ const hasDetailHead = computed(() => (description !== undefined && description !
                     :class="scroll === `page` ? `sticky top-0 max-h-dvh` : `flex-1`"
                     :style="viewport === undefined ? undefined : { maxHeight: viewport }"
                 >
-                    <!-- WHOSE INDEX THIS IS, said first and at a glance: a mark where the screen has one (a sandbox's logo), its
-                         name, and under it what kind of place this is. A column heading's size rather than a page's: the body
-                         beside it carries its own headings, and a 2xl name in a 16rem column outweighed all of them. Tall enough for a mark
-                         and two lines whichever of them a screen has, so the rows below start at one height on every screen. -->
-                    <header class="ui-page-header mb-4 flex min-h-10 shrink-0 items-center gap-3 pl-1 pr-2">
+                    <!-- WHAT THIS INDEX IS ("Sandbox settings", "Capabilities"), at a column heading's size rather than a page's:
+                         the body beside it carries its own headings, and a 2xl name in a 16rem column outweighed all of them. Never
+                         whose it is: the shell's rail already wears the sandbox's face and the overview its name, and a third copy
+                         of either here was noise (2026-11-09). -->
+                    <header class="ui-page-header mb-4 flex min-h-9 shrink-0 items-center gap-3 pl-1 pr-2">
                         <button
                             v-if="back"
                             type="button"
@@ -112,11 +109,7 @@ const hasDetailHead = computed(() => (description !== undefined && description !
                         >
                             <Icon name="arrow-left" />
                         </button>
-                        <span v-if="$slots[`mark`]" class="flex shrink-0"><slot name="mark" /></span>
-                        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                            <h1 class="truncate text-base leading-tight font-semibold">{{ title }}</h1>
-                            <p v-if="caption" class="truncate text-xs leading-tight text-muted">{{ caption }}</p>
-                        </div>
+                        <h1 class="min-w-0 flex-1 truncate text-base leading-tight font-semibold">{{ title }}</h1>
                         <slot name="info" />
                     </header>
                     <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">

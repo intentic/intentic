@@ -103,10 +103,10 @@ const SANDBOX_VIEWS = {
         component: asyncView(
             () => import(`../features/sandbox/SandboxHub.vue`),
             hubOutline(
-                () => t(`shared.sandboxHub`),
+                () => t(`shared.sandboxSettings`),
                 () => ``,
                 7,
-                { search: true, mark: true },
+                { search: true },
             ),
         ),
     },

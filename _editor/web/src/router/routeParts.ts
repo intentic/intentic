@@ -10,12 +10,12 @@ import { SETTINGS_DEFAULT_SECTION, settingsPartHosts } from "../features/setting
 
 // Words read when the outline draws, not when the routes are built, so a language switch reaches them.
 // `head` says what heads the real index, so its rows land where the outline's bars were: the hubs' settings search
-// (HubLayout's `search`), a sandbox's logo beside its name.
+// (HubLayout's `search`).
 export const hubOutline = (
     title: () => string,
     description: () => string,
     railRows: number,
-    head: { readonly search?: boolean; readonly mark?: boolean } = {},
+    head: { readonly search?: boolean } = {},
 ): FunctionalComponent => {
     return () => h(SplitViewOutline, { title: title(), description: description(), railRows, ...head });
 };

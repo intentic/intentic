@@ -18,9 +18,6 @@ const {
     bodyRows?: number;
     /** Whether the index opens with a filter field, as a hub's does: promised, so the rows below it do not jump down by a field's height. */
     search?: boolean;
-    /** Whether the index's head carries a mark (a sandbox's logo), so the name beside it lands where the real one will. */
-    mark?: boolean;
-    caption?: string;
 }>();
 
 // Walked in order, so the folded strip's pills are uneven the way real section names are.
@@ -28,8 +25,7 @@ const PILL_WIDTHS = [`w-20`, `w-16`, `w-24`, `w-14`, `w-20`];
 </script>
 
 <template>
-    <SplitView :title="title" :description="description" :caption="caption" scroll="page">
-        <template v-if="mark" #mark><span class="skeleton block size-9 rounded-lg" aria-hidden="true" /></template>
+    <SplitView :title="title" :description="description" scroll="page">
         <template #compact>
             <div class="flex gap-2 overflow-hidden border-b border-line-subtle pb-2" aria-hidden="true">
                 <span v-for="(width, index) in PILL_WIDTHS" :key="index" class="skeleton block h-6 shrink-0 rounded-full" :class="width" />
