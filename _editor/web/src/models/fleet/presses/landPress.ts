@@ -7,6 +7,7 @@ import { invalidateAgentAction, landAgent, nothingLanded } from "../agentActions
 import { useAgents } from "../useAgents";
 import type { FleetAgent } from "../useAgents-fleet";
 import { hold, pendingOn } from "../useAgents-provisional";
+import { asksBeforeLand, clearedToLand } from "./foreignLand";
 
 // A land a person presses by hand, from whichever surface offers it: the board card's Land now and Land again, the
 // card's menu, and the chat list's menu for the same agent. One runner, so each says a refusal and an empty land the
@@ -44,6 +45,10 @@ export const landByHand = async (id: string, chosen: LandChoice, at: string | un
 export const landFromMenu = async (agent: Pick<FleetAgent, `id` | `sandboxId`>, chosen: LandChoice): Promise<void> => {
     const { id, sandboxId: at } = agent;
     if (pendingOn(id, at) !== undefined) {
+        return;
+    }
+    // Somebody else's conversation asks first (foreignLand), before the card is held: a no leaves it as it was.
+    if (asksBeforeLand(id, at) && !(await clearedToLand(id, at))) {
         return;
     }
     const lift = hold(id, at, { action: chosen });

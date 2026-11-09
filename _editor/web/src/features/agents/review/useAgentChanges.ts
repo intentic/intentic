@@ -31,6 +31,7 @@ import { landedAway } from "../fleet/agentStatus-land";
 import { agentBlockers, blockersOf } from "../../../models/conversations/review/conflictResolution";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { commitOnly, keepDeleted, restoreAndLand } from "../../../models/fleet/ownerHoldActions";
+import { asksBeforeLand, clearedToLand } from "../../../models/fleet/presses/foreignLand";
 import type { OwnerHold } from "../../../models/conversations/review/ownerHold";
 import { useNotifications } from "../../../workbench/notifications/notifications";
 import { landsOnto } from "../../../models/fleet/branches/branchLanding";
@@ -304,7 +305,8 @@ export function useAgentChanges(
         tag: string,
         options: Omit<RunOptions<LandResult | undefined, NoticeModel>, `tag` | `task`> & { readonly task: () => Promise<LandResult | void> },
     ): Promise<Operation<LandResult | undefined> | undefined> => {
-        if (actionBusy.value) {
+        // A land of somebody else's conversation asks first (foreignLand), before anything is committed or drawn as landing.
+        if (actionBusy.value || (tag === `land` && asksBeforeLand(agentId.value, reach.value) && !(await clearedToLand(agentId.value, reach.value)))) {
             return undefined;
         }
         return work.run(tag, { quiet: true, ...options, tag, task: async () => (await options.task()) ?? undefined });

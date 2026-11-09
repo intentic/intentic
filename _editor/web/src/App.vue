@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import AiLiteracyNotice from "./features/sandbox/ai-literacy/AiLiteracyNotice.vue";
 import HostModelPicker from "./features/chat/models/host/HostModelPicker.vue";
+import ForeignLandConfirm from "./parts/fleet/ForeignLandConfirm.vue";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "./client/auth/useAuth";
@@ -65,6 +66,8 @@ watch(user, (current, previous) => {
     <SignInWall />
     <SignInDialog v-if="signsInInPlace" />
     <HostModelPicker />
+<!-- THE QUESTION BEFORE LANDING SOMEBODY ELSE'S CONVERSATION, one for every surface that lands (models/fleet/presses/foreignLand.ts). -->
+    <ForeignLandConfirm />
     <AiLiteracyNotice v-if="user && activeSandboxId && !local && workspaceTab" />
 <!-- THE ONE LANE. -->
     <NotificationHost />

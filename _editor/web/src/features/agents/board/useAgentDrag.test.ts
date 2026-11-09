@@ -15,7 +15,7 @@ const stub = {
     // inventing its own wording.
     nothingLanded: `Nothing to land: this conversation's branch holds no work your workspace doesn't already have.`,
     // Cards the store answers `agentById` with, and what each press of the watch's Stop asked the store to do.
-    agents: new Map<string, { watches?: { id: string }[]; jobs?: { id: string; watch?: string; endedAt?: number }[] }>(),
+    agents: new Map<string, { watches?: { id: string }[]; jobs?: { id: string; watch?: string; endedAt?: number }[]; owner?: { email: string } }>(),
     unwatched: new Set<string>(),
     stoppedJobs: new Set<string>(),
 };
@@ -51,7 +51,12 @@ jest.mock("../../../models/fleet/agentActions", () => ({
     nothingLanded: () => stub.nothingLanded,
 }));
 
+// The question before somebody else's land (foreignLand): the real module, over a signed-in reader.
+jest.mock("../../../client/auth/useAuth", () => ({ useAuth: () => ({ user: { value: { email: `me@example.com` } } }) }));
+jest.mock("../../../workbench/presence/usePresence", () => ({ presenceOthers: { value: [] } }));
+
 const { askAgentToResolve, landAgent } = await import("../../../models/fleet/agentActions");
+const { answerForeignLand, foreignLandAsk } = await import("../../../models/fleet/presses/foreignLand");
 const { pendingOn } = await import("../../../models/fleet/useAgents-provisional");
 const { useAgentDrag } = await import("./useAgentDrag");
 
@@ -182,4 +187,51 @@ it("the watch's Stop ends the command a job's watch waits on, and only disarms a
     await unwatchNow(`ci`);
     expect([...stub.stoppedJobs]).toEqual([`held/job-9672`]);
     expect([...stub.unwatched]).toEqual([`ci`]);
+});
+
+// SOMEBODY ELSE'S CONVERSATION ASKS BEFORE IT LANDS. The question comes before the card is held, so a no leaves the card
+// as it was: nothing landing, nothing claimed, and the next press free to ask again.
+describe(`a land of a conversation somebody else owns`, () => {
+    const theirs = { id: `a`, sandboxId: undefined, title: `Fix signup`, diff: undefined };
+
+    beforeEach(() => {
+        stub.agents.set(`a`, { owner: { email: `anna@example.com` } });
+    });
+    afterEach(() => answerForeignLand(false));
+
+    it(`waits for the reader's yes, then lands`, async () => {
+        const drag = useAgentDrag();
+        const pressed = drag.landNow(`a`);
+        await Promise.resolve();
+        expect(foreignLandAsk.value?.owner.email).toBe(`anna@example.com`);
+        expect(landAgent).not.toHaveBeenCalled();
+        expect(pendingOn(`a`, undefined)).toBeUndefined();
+
+        answerForeignLand(true);
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(landAgent).toHaveBeenCalledTimes(1);
+        stub.lands[0]?.({ landed: true, changed: true });
+        await pressed;
+    });
+
+    it(`lands nothing and holds nothing on a no`, async () => {
+        const drag = useAgentDrag();
+        const pressed = drag.landNow(`a`);
+        await Promise.resolve();
+        answerForeignLand(false);
+        await pressed;
+        expect(landAgent).not.toHaveBeenCalled();
+        expect(pendingOn(`a`, undefined)).toBeUndefined();
+    });
+
+    it(`asks its own question on a phone instead of the board's generic one`, async () => {
+        const drag = useAgentDrag();
+        const pressed = drag.pressLand(theirs, `land`, true);
+        await Promise.resolve();
+        expect(drag.pendingLand.value).toBeUndefined();
+        expect(foreignLandAsk.value?.id).toBe(`a`);
+        answerForeignLand(false);
+        await pressed;
+    });
 });
