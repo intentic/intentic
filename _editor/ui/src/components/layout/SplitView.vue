@@ -39,13 +39,14 @@ const slots = useSlots();
 // The docked head draws its own way back: PageHeader's is sized for a page's title, this one for a column's.
 const back = usePageBack();
 
-// One width for all five screens, not a per-caller scale; 16rem fits the longest label, the rest truncate.
-const RAIL = `w-64`;
+// One width for all screens, not a per-caller scale: 17rem fits a package path in the index's 13px mono (the
+// documentation's `_sandbox/privacy-detect`) beside its mark; anything longer truncates.
+const RAIL = `w-68`;
 
 // Below this width the body can't fit its rows beside the rail. Measured on the split's own root, which spans the
 // pane in every arrangement (a docked rail and a folded page alike), so folding cannot change the width that called
-// for it: 44rem of rail and body, plus the page's gutters either side.
-const FOLD_AT_REM = 47;
+// for it: 45rem of rail and body, plus the page's gutters either side.
+const FOLD_AT_REM = 48;
 const root = ref<HTMLElement | undefined>(undefined);
 const narrow = useNarrow(root, FOLD_AT_REM);
 
@@ -112,7 +113,7 @@ const hasDetailHead = computed(() => (description !== undefined && description !
                         <h1 class="min-w-0 flex-1 truncate text-base leading-tight font-semibold">{{ title }}</h1>
                         <slot name="info" />
                     </header>
-                    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                    <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
                         <slot name="rail" />
                     </div>
                 </div>

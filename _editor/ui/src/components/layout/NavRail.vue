@@ -39,7 +39,8 @@ const query = defineModel<string>({ default: `` });
         </div>
 
         <!-- The index and document use separate scroll containers. -->
-        <div class="ui-softscroll min-h-0 flex-1 overflow-y-auto pr-2">
+        <!-- `overflow-x-hidden`: an index never scrolls sideways; a row too long for it truncates. -->
+        <div class="ui-softscroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-2">
             <!-- THE GAP BETWEEN GROUPS RIDES THE SECTION, not the heading. -->
             <!-- A hairline between groups, so the index scans as a few blocks rather than one run of rows; the first has none. -->
             <section

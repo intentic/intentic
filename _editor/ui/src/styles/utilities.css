@@ -100,6 +100,11 @@
     .ui-nav-index .ui-row-select-on [data-row-title] {
         font-weight: 600;
     }
+/* A title slot's text that asks to truncate is often an inline <span>, where `truncate` clips nothing and a long name
+   (a package path in mono) pushes the row past the column instead of ending in an ellipsis. */
+    .ui-nav-index [data-row-title] > .truncate {
+        display: block;
+    }
 }
 
 /* THE ICON'S BOX (Icon.vue): a 1em glyph that sits on the text it labels and keeps its size in a flex row, where the flex
