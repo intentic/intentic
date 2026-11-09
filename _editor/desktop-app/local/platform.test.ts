@@ -361,6 +361,30 @@ describe(`installPlatform, the last list the platform gave`, () => {
         expect({ signedOut: await ids(), stored }).toEqual({ signedOut: [`local-f3a9c2`], stored: undefined });
     });
 
+    // (code review, 2026-11-09) Storage that took an older list and then refuses a newer one (over quota) must not have
+    // its older copy shown over the window's newer memory.
+    it(`shows the window's newer list over an older one storage kept and then refused to replace`, async () => {
+        const full: ListKeeping = {
+            ...keeping,
+            write: (kept) => {
+                if (stored === undefined || kept === undefined) {
+                    stored = kept;
+                }
+            },
+        };
+        installPlatform(FACE, relay, full);
+        next = listed(WORK);
+        await ids();
+        await ids();
+        next = listed(WORK, SHOP);
+        await ids();
+        next = new Error(`The platform could not be reached.`);
+        expect({ shown: await ids(), stored: stored?.sandboxes.map((row) => row.id) }).toEqual({
+            shown: [`local-f3a9c2`, `sbx-work`, `sbx-shop`],
+            stored: [`sbx-work`],
+        });
+    });
+
     it(`holds the list in the window's memory where storage keeps nothing`, async () => {
         const forgetful: ListKeeping = { ...keeping, read: () => undefined, write: () => undefined };
         installPlatform(FACE, relay, forgetful);

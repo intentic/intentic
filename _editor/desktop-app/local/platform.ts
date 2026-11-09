@@ -195,6 +195,10 @@ interface LastList {
 
 const lastList = (keeping: ListKeeping): LastList => {
     let held: KeptList | undefined;
+    // Whether storage refused this window's last list (over quota, off): the storage layer drops such a write without a
+    // word, so it is read back, and an older copy left in storage is then not shown over the newer one held here (code
+    // review, 2026-11-09).
+    let storageBehind = false;
     return {
         took: async (sandboxes) => {
             const email = await named(keeping);
@@ -203,15 +207,19 @@ const lastList = (keeping: ListKeeping): LastList => {
             }
             held = { email, sandboxes: sandboxes.map((row) => ({ ...row, token: null })) };
             keeping.write(held);
+            storageBehind = JSON.stringify(keeping.read()) !== JSON.stringify(held);
         },
         forget: () => {
             held = undefined;
+            storageBehind = false;
             keeping.write(undefined);
         },
-        // What another window kept since is newer than this one's memory, which still stands where storage is off or full.
+        // What another window kept since is newer than this one's memory, unless storage refused this window's own list:
+        // then this window's memory is the newest copy there is.
         shown: async () => {
             const email = await named(keeping);
-            return [keeping.read(), held].find((kept) => kept !== undefined && kept.email === email)?.sandboxes ?? [];
+            const copies = storageBehind ? [held, keeping.read()] : [keeping.read(), held];
+            return copies.find((kept) => kept !== undefined && kept.email === email)?.sandboxes ?? [];
         },
     };
 };
