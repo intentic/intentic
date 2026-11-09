@@ -392,6 +392,18 @@ fn sleep_idle(slug: Option<String>, minutes: u64, json: bool, source: Source) ->
     Ok(())
 }
 
+/* A RUNNER IS NEVER SWEPT TO SLEEP (2026-11-09). It is a container its parent sandbox dispatches turns to over the socket
+the runner dials out, and nobody opens it: between turns it reads as unused, and a sleep has nothing to undo it, since a
+wake is somebody opening a sandbox's page (a runner has none) or its own alarm (it has none). omen's keeper slept
+runner-omen after 30 idle minutes and it stayed down until it was removed. A runner's daemon now says it is kept awake,
+and this holds the same for a runner on an image from before that. */
+const RUNNER_STAYS_AWAKE: &str = "a runner: the sandbox it works for dispatches to it, and nothing would wake it";
+
+/// Why the keeper's sweep leaves a sandbox awake before anything is read of it: a runner. Pure.
+fn swept_awake(slug: &str) -> Option<&'static str> {
+    crate::runner::is_runner(slug).then_some(RUNNER_STAYS_AWAKE)
+}
+
 /// One sandbox through every reason to leave it awake, put to sleep when none holds: whether it slept, why, and the
 /// alarm its sleep set.
 fn consider(slug: &str, idle_ms: u64, source: Source) -> (bool, String, Option<u64>) {
@@ -400,6 +412,9 @@ fn consider(slug: &str, idle_ms: u64, source: Source) -> (bool, String, Option<u
 }
 
 fn considered(slug: &str, idle_ms: u64, source: Source) -> (bool, String, Option<u64>) {
+    if let Some(why) = swept_awake(slug) {
+        return (false, why.to_string(), None);
+    }
     // Only this side's own: another side's keeper runs its own sweep, and only the side that slept a sandbox asks for
     // its wakes (its record is the one that says asleep). One adopted from a silent keeper is left awake for the same
     // reason.
@@ -907,6 +922,14 @@ pub fn wakes(args: WakesArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_keepers_sweep_never_sleeps_a_runner_and_considers_every_other_sandbox() {
+        assert_eq!(super::swept_awake("runner-omen"), Some(super::RUNNER_STAYS_AWAKE));
+        assert_eq!(super::swept_awake("runner-radarsu-omen-runner"), Some(super::RUNNER_STAYS_AWAKE));
+        assert_eq!(super::swept_awake("sandbox-a4ba63bf2aa5"), None);
+        assert_eq!(super::swept_awake("winengine"), None);
+    }
+
     use super::*;
     use crate::record::{Phase, Swap};
 

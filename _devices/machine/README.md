@@ -800,11 +800,24 @@ clock.
   that is down, a leftover record, a loopback address. rog ran `ic sandbox fix sandbox-2e8d89d75865` every few minutes
   for a sandbox removed long before. It is said once and left. Until Docker has answered a listing once, nothing can be
   told, so the records stand in for the listing, which is the logon case the keeper is for.
+- **Runners** ([`device/sandbox-rounds/runner-keeper.ts`](src/device/sandbox-rounds/runner-keeper.ts), 2026-11-09)
+  are kept by their link, not by `ic sandbox fix`: nobody opens a runner, and its parent cannot reach this machine's
+  Docker, so nothing else would bring one back. Once a minute, for every runner this side keeps, a container that is not
+  running (asleep, stopped, exited) is started with `ic sandbox start`, and a running one whose link to its parent has
+  been down for ten minutes of the keeper watching is restarted with `ic sandbox restart`, but only while that parent
+  answers `/health` from this machine (otherwise it is asleep, restarting or gone, and the runner keeps dialling on its
+  own). The runner says how its link stands in `/run/intentic/runner-link.json` inside its container (written on every
+  change and once a minute); a reading that stops moving is a hung daemon, restarted without asking the parent. A gap of
+  more than three minutes between looks is this machine having slept, and starts the watch over. A runner refused by its
+  parent, or still running work a restart would cut, is said once and left. A try that did not bring it back waits
+  10 minutes before the next, doubling to 4 hours. `runner-up` and `runner-remove` hold the runner while they run, so the
+  round never starts one being set up or removed. Until Docker answers a listing, a runner's record counts for the sweep,
+  whose fix is what starts Docker Desktop after a reboot.
 - **The switch** is this environment's `sandboxKeeper` in `machine.json` (absent means on), set by
   `intentic-machine sandbox keeper on|off` and read by `keeper status`. It is re-read every round.
 - **It keeps the agent resident.** An agent with no link, no pairing and no distro to serve used to take its login
   entry away and exit, and then nothing started Docker Desktop after the next reboot. It now stays while the keeper is
-  on and this machine hosts a sandbox other than a runner: the ones `ic sandbox list --json` names when Docker answers,
+  on and this machine hosts a sandbox or a runner: the ones `ic sandbox list --json` names when Docker answers,
   except those another side keeps (`keptElsewhere`, 2026-10-05: a distro's agent stayed for the Windows side's
   sandboxes), else the ones ic keeps a record of (a removed sandbox's record lasts until `ic sandbox tidy` archives it,
   so the listing wins whenever it answers). The resident asks at start and then every five minutes, and only while it has

@@ -139,11 +139,14 @@ const promising = (promises: {
     readonly automations?: readonly AutomationRecord[];
     readonly approvals?: readonly ApprovalSummary[];
     readonly holds?: readonly AutomationApproval[];
+    readonly runner?: boolean;
 }): Services => {
     const { agents, conversations } = memoryFleet();
     return unstubbed<Services>("services", {
         agents,
         conversations,
+        // A runner's daemon holds its parent's credential source from boot (runners/runner-mode.ts); only its presence is read.
+        runnerParent: promises.runner === true ? { current: unstubbed<NonNullable<Services["runnerParent"]["current"]>>("parent", {}) } : {},
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         automations: memoryAutomationsStore([...(promises.automations ?? [])]),
         heldWakes: unstubbed<Services["heldWakes"]>("heldWakes", { list: async () => [...(promises.holds ?? [])] }),
@@ -287,6 +290,13 @@ test.each(["event", "listener"] as const)("an enabled %s receiver holds a local 
     await services.automations.upsert({ ...record, enabled: true, expiresAt: Date.now() - 1 });
     expect(await continuousReception(services)).toBe(false);
     expect(await quietProbes(services).keepAwake()).toBe(false);
+});
+
+// Nobody opens a runner: between its parent's turns it would read as unused, and a keeper that slept it had nothing to
+// wake it (platform-presence.ts, A RUNNER IS NEVER QUIET).
+test("a runner is kept awake whatever its settings say, and an ordinary sandbox is not", async () => {
+    expect(await quietProbes(promising({ runner: true })).keepAwake()).toBe(true);
+    expect(await quietProbes(promising({})).keepAwake()).toBe(false);
 });
 
 // What the sleep socket answers the keeper with is a check run after its question, so it reads each change to a booking.

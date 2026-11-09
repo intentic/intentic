@@ -12,6 +12,11 @@ use crate::util::{bail, base64, nul_frame, sha256_hex, Result};
 /// (list, update, remove, cleanup.sh) already recognises a runner as a sandbox container — which it is.
 const SLUG_PREFIX: &str = "runner-";
 
+/// Whether a slug names a runner rather than a person's sandbox. Pure.
+pub fn is_runner(slug: &str) -> bool {
+    slug.starts_with(SLUG_PREFIX)
+}
+
 /// A generated name when the caller supplies none: short, unique enough for one machine, and obviously
 /// machine-minted so nobody mistakes it for something they chose.
 fn generated_name() -> String {

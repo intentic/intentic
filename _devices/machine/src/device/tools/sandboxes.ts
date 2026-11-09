@@ -327,7 +327,9 @@ export const runnerFlow = async (
         // Built first, so a request missing its pairing (or an overlay missing its hash) is refused before anything is
         // spawned.
         const args = icRunnerArgs(op, name, parentUrl, pair, files);
-        const { code, output } = await runIc(args, onLine);
+        // Held for its length, so the keeper's runner round (runner-keeper.ts) never starts one being set up or removed.
+        const release = holdIcFlow(`runner-${name}`, { moves: true });
+        const { code, output } = await runIc(args, onLine).finally(release);
         if (code !== 0) {
             throw new Error(`That runner ${op === "runner-up" ? "start" : "removal"} failed on this device.\n\n${output}`);
         }

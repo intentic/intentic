@@ -493,16 +493,17 @@ test("a run that needs the computer restarted says so once", async () => {
 });
 
 // What keeps the agent resident on a machine with no link and no pairing (resident.ts).
-test("the sandboxes this machine hosts are this side's in the listing when Docker answers, else ic's records, never a runner", async () => {
+// A runner counts: its parent cannot bring it back after a reboot, and this agent can (runner-keeper.ts).
+test("the sandboxes this machine hosts are this side's in the listing when Docker answers, else ic's records, runners included", async () => {
     const rows = [{ slug: "work" }, { slug: "runner-abc" }, { slug: "theirs", keptElsewhere: "linux" }];
-    expect(await hostedSlugs(async () => await Promise.resolve(rows), async () => await Promise.resolve(["gone"]))).toEqual(["work"]);
+    expect(await hostedSlugs(async () => await Promise.resolve(rows), async () => await Promise.resolve(["gone"]))).toEqual(["work", "runner-abc"]);
     expect(await hostedSlugs(async () => await Promise.resolve([]), async () => await Promise.resolve(["gone"]))).toEqual([]);
     expect(
         await hostedSlugs(
             async () => await Promise.reject(new Error("Cannot connect to the Docker daemon")),
             async () => await Promise.resolve(["work", "runner-abc"]),
         ),
-    ).toEqual(["work"]);
+    ).toEqual(["work", "runner-abc"]);
 });
 
 /* WHOSE SANDBOXES (2026-10-05): each environment's keeper sweeps only for the sandboxes it keeps, and a slug with no
@@ -514,9 +515,10 @@ test("an environment keeps the listed sandboxes no other side keeps, and recorde
     expect(["mine", "theirs", "binned", "gone"].map(scope.present)).toEqual([true, true, true, false]);
     // A trash docker would not show is none: no record is taken for a sandbox on a guess.
     expect(keeperScope([], ["binned"], undefined).own).toEqual([]);
-    // Until Docker has answered once, nothing can be told: the records are this environment's sandboxes.
-    const blind = keeperScope(undefined, ["work", "gone"], undefined);
-    expect({ own: blind.own, running: blind.running, gone: blind.present("gone") }).toEqual({ own: ["work", "gone"], running: [], gone: true });
+    // Until Docker has answered once, nothing can be told: the records are this environment's sandboxes, a runner's
+    // included, since the sweep's fix is what starts the engine for it after a reboot.
+    const blind = keeperScope(undefined, ["work", "gone", "runner-x"], undefined);
+    expect({ own: blind.own, running: blind.running, gone: blind.present("gone") }).toEqual({ own: ["work", "gone", "runner-x"], running: [], gone: true });
 });
 
 test("ic's trash is read off its marker volumes, and nothing else on the engine", () => {

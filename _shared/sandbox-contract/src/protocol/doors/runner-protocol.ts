@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NeedsActionSchema } from "../../policy/needs-action.js";
+import type { PeerLink } from "../peer-dial.js";
 
 // The runner link's edges: the /system/runners/connect handshake, boot env, and turn placement (procedures live in
 // contracts/runner.contract.ts). A runner is a sandbox image in runner mode, no browser owner or tunnel, that dials its
@@ -41,6 +42,49 @@ export type RunnerHello = z.infer<typeof RunnerHelloSchema>;
 export const RUNNER_HEARTBEAT_MS = 30_000;
 
 export const runnerConnectUrl = (parentUrl: string): string => `${parentUrl.replace(/^http/, "ws").replace(/\/$/, "")}/system/runners/connect`;
+
+/* WHAT A RUNNER SAYS OF ITS OWN LINK, FOR THE MACHINE IT RUNS ON (2026-11-09). A runner can be up, its daemon answering,
+   and still be no use to anyone: its socket to the parent is the whole point of it, and only the runner can see it. It
+   writes this file inside its container (never on /health, which answers the public address) on every change of the
+   link and once a minute, and the machine agent's keeper reads it through `docker exec` to bring back a runner whose
+   link stays down while its parent answers that machine (machine: device/sandbox-rounds/runner-keeper.ts). */
+export const RUNNER_LINK_PATH = "/run/intentic/runner-link.json";
+
+export const RunnerLinkReadingSchema = z.object({
+    // When this was written: a reading that stops moving is a daemon that stopped writing it.
+    at: z.number(),
+    // The parent's public address, which the keeper asks from the machine itself before it blames the runner.
+    parent: z.string(),
+    state: z.enum(["open", "connecting", "closed"]),
+    // The first failure of the outage the link is in, absent while it is open or before its first attempt has failed.
+    since: z.number().optional(),
+    failures: z.number().optional(),
+    // The parent refused this runner's enrollment (close 1008): its loop has stopped, and only re-pairing brings it back.
+    revoked: z.boolean().optional(),
+    // Work a restart would cut (bootstrap/working-now.ts, purpose "restart"): a held turn carries on with its parent away.
+    working: z.number(),
+});
+export type RunnerLinkReading = z.infer<typeof RunnerLinkReadingSchema>;
+
+// The reading the machine's keeper judges the link by (RUNNER_LINK_PATH above). Pure.
+export const runnerLinkReading = (
+    link: Pick<PeerLink, "state" | "outage">,
+    parent: string,
+    revoked: boolean,
+    working: number,
+    now: number,
+): RunnerLinkReading => {
+    const outage = link.outage();
+    const reading: RunnerLinkReading = { at: now, parent, state: link.state(), working };
+    if (outage !== undefined) {
+        reading.since = outage.since;
+        reading.failures = outage.failures;
+    }
+    if (revoked) {
+        reading.revoked = true;
+    }
+    return reading;
+};
 
 // Where a runner redeems its pairing for a durable token, once, over plain HTTPS.
 export const runnerEnrollUrl = (parentUrl: string): string => `${parentUrl.replace(/\/$/, "")}/system/runners/enroll`;

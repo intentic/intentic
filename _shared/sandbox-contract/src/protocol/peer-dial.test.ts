@@ -65,7 +65,7 @@ const ladder = (delay = 1_000) => {
     return rungs;
 };
 
-const dialling = (delay?: number) => {
+const dialling = (delay?: number, longOutageMs?: number) => {
     const sockets: FakeSocket[] = [];
     const attached: FakeSocket[] = [];
     const said: string[] = [];
@@ -81,6 +81,7 @@ const dialling = (delay?: number) => {
         attach: (socket) => void attached.push(socket),
         backoff,
         silenceMs: SILENCE_MS,
+        longOutageMs,
         log: (message) => void said.push(message),
         revoked,
     });
@@ -273,6 +274,34 @@ test.each([
 // The ladder caps at 30s and would stay there forever. Right for the first minutes, absurd after the first week: a
 // link to a sandbox that no longer exists spent 2,880 attempts a day saying so. It is never given up — a laptop closed
 // for a fortnight has to find its sandboxes again — it just stops asking every half minute.
+// A runner exists for its parent alone: the parent coming back (a restart, an update, a wake) is when it is wanted, so
+// its long outage rests a minute between tries rather than a quarter of an hour (runners/runner-link.ts).
+test("a door can rest a long outage for less than the default, and still rests past the ladder", async () => {
+    jest.useFakeTimers();
+    try {
+        const RUNG_MS = 30_000;
+        const REST_MS = 60_000;
+        const { link, sockets } = dialling(RUNG_MS, REST_MS);
+        for (let attempt = 1; attempt <= LONG_OUTAGE_ATTEMPTS; attempt += 1) {
+            // one drop per attempt is serial by definition
+            await waitFor(() => expect(sockets).toHaveLength(attempt));
+            sockets.at(-1)?.drops(1006);
+            if (attempt < LONG_OUTAGE_ATTEMPTS) {
+                // ditto
+                await advanceTimersByTimeAsync(RUNG_MS);
+            }
+        }
+        await advanceTimersByTimeAsync(REST_MS + RUNG_MS - 1);
+        expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS);
+        await advanceTimersByTimeAsync(1);
+        await waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS + 1));
+        link.stop();
+        await link.done;
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
 test("a link nobody has answered in a long time rests between tries, and is never given up", async () => {
     jest.useFakeTimers();
     try {

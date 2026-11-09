@@ -1,7 +1,7 @@
 import { hostname } from "node:os";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { errorMessage } from "@intentic/base/errors";
-import { execBounded, runBounded } from "@intentic/base/process";
+import { runBounded } from "@intentic/base/process";
 import { parseJsonWith } from "@intentic/base/json";
 import type { Log } from "@intentic/local-agent";
 import type { RestartIntent, RestartSide } from "@intentic/sandbox-contract/schemas/restart-intent";
@@ -14,6 +14,8 @@ import { type IcRun, lastLine, type Rounds, startRounds } from "./ic-rounds.js";
 import { readSwaps, swapsUnderway } from "./ic-swaps.js";
 import { readChannelSlugs } from "./swap-records.js";
 import { fleet, holdIcFlow, icInFlight, runIc } from "../tools/sandboxes.js";
+import { keptRunners, machineRunnerSeams, newRunnerKeeperState, type RunnerKeeperSeams, type RunnerKeeperState, runRunnerRound } from "./runner-keeper.js";
+import { type KeeperScope, keeperScope, type ListedSandbox, readTrashed } from "./keeper-scope.js";
 import {
     newSleepers,
     runSleep,
@@ -24,6 +26,9 @@ import {
     startWakeRound,
     WAKES_DEADLINE_MS,
 } from "./sleep.js";
+
+// Split out (keeper-scope.ts) and said here too, where the keeper's readers have always found them.
+export { hostedSlugs, keeperScope, type ListedSandbox, trashedFrom } from "./keeper-scope.js";
 
 // THE KEEPER: when a sandbox on this machine stops answering (Docker Desktop not started after a reboot, a container
 // that stopped, a daemon whose registration gave up, a full disk), `ic sandbox fix --auto` heals what is safe to heal
@@ -228,88 +233,6 @@ export const unreachableHere = (links: readonly LinkView[], known: ReadonlySet<s
 // The slugs whose link is up now: whatever the keeper was waiting out for them is over.
 const answeringSlugs = (links: readonly LinkView[]): string[] => links.filter(({ reading }) => reading.state === "open").flatMap(({ url }) => pairingSlugs(url));
 
-// Runners belong to a parent sandbox, which brings them back itself.
-const people = (slugs: readonly string[]): string[] => slugs.filter((slug) => !slug.startsWith("runner-"));
-
-// One row of `ic sandbox list --json` as far as the keeper reads it: which sandbox, and the other side of this computer
-// that keeps it, when another does (`keptElsewhere`, absent for this side's own and from an older ic).
-export interface ListedSandbox {
-    readonly slug: string;
-    // Its container's name, where the restart intent is written (restartIntent below); absent from a fake listing.
-    readonly container?: string | undefined;
-    readonly keptElsewhere?: string | undefined;
-    // Put to sleep for want of use (sleep.ts): its link is down on purpose, and the keeper leaves it be.
-    readonly asleep?: boolean | undefined;
-    // Its container is running; absent from a fake listing.
-    readonly running?: boolean | undefined;
-}
-
-/* WHOSE SANDBOXES THE KEEPER LOOKS AFTER (2026-10-05). On Windows, ic on Windows and ic in each WSL distro list every
-   sandbox on the one Docker engine, but only the side that created a sandbox keeps it, and every environment runs a
-   keeper. So each keeper sweeps only while its environment keeps a sandbox of its own: one the listing names without
-   `keptElsewhere` (a sandbox the other side has stopped keeping is listed without it once ic adopts it, so adoption
-   reaches this side by the same rule), or one this environment's ic still holds a record of that sits in ic's trash.
-   And a slug with no container and no trash entry is gone: a dead link or a leftover record naming it is not a reason
-   to run `ic sandbox fix` on it every few minutes for ever, which is what rog did for sandbox-2e8d89d75865. Absence
-   proves nothing until Docker has answered, though: until a listing has, the records are all there is, and the logon
-   case (Docker Desktop off after a reboot) is exactly when the keeper must still run. */
-export interface KeeperScope {
-    // The sandboxes this environment keeps, which are what a sweep is for; and those of them with a container, which are
-    // what ic acts on and what a sweep holds up front (none while no listing has answered: ic names what it acts on).
-    readonly own: readonly string[];
-    readonly running: readonly string[];
-    // Whether a slug still exists on this engine (a container, or an entry in ic's trash); always true while no listing
-    // has answered, since nothing can be told then.
-    readonly present: (slug: string) => boolean;
-    // The listed sandboxes another side keeps: never this keeper's to fix.
-    readonly elsewhere: ReadonlySet<string>;
-}
-
-// Pure over the last listing that answered (undefined while none has), this environment's records, and the slugs in
-// ic's trash (undefined when they could not be read, which counts as none: on doubt, nothing is acted on).
-export const keeperScope = (
-    listed: readonly ListedSandbox[] | undefined,
-    records: readonly string[],
-    trashed: readonly string[] | undefined,
-): KeeperScope => {
-    if (listed === undefined) {
-        return { own: people(records), running: [], present: () => true, elsewhere: new Set() };
-    }
-    const containers = new Set(listed.map((row) => row.slug));
-    const binned = new Set(trashed ?? []);
-    const mine = listed.filter((row) => row.keptElsewhere === undefined).map((row) => row.slug);
-    const recordedInTrash = records.filter((slug) => !containers.has(slug) && binned.has(slug));
-    return {
-        own: people([...new Set([...mine, ...recordedInTrash])]),
-        running: people(mine),
-        present: (slug) => containers.has(slug) || binned.has(slug),
-        elsewhere: new Set(listed.filter((row) => row.keptElsewhere !== undefined).map((row) => row.slug)),
-    };
-};
-
-// The sandboxes this machine hosts and this environment keeps, for the resident's "is anything left to serve": the
-// listing when Docker answers (it alone knows a removed sandbox is gone, and which side keeps the rest), else this
-// environment's records, which are all there is while Docker is down.
-export const hostedSlugs = async (listing: () => Promise<readonly ListedSandbox[]>, records: () => Promise<readonly string[]>): Promise<string[]> => {
-    // allow(silent-catch): a listing that fails is Docker being down, which is exactly when the records answer instead
-    const listed = await listing().catch(() => undefined);
-    return people(listed === undefined ? await records() : listed.filter((row) => row.keptElsewhere === undefined).map((row) => row.slug));
-};
-
-// ic's trash on this engine, read off the marker volume each removal leaves (`intentic-trashed-<unix seconds>-<slug>`,
-// ic: sandbox/trash.rs), which is the one place ic writes it down. Pure.
-export const trashedFrom = (volumes: string): string[] =>
-    volumes
-        .split(/\r?\n/)
-        .map((name) => /^intentic-trashed-\d+-(.+)$/.exec(name.trim())?.[1])
-        .filter((slug): slug is string => slug !== undefined);
-
-// Throws when docker does not answer: an unread trash is not an empty one.
-const readTrashed = async (): Promise<string[]> => {
-    const { stdout } = await execBounded("docker", ["volume", "ls", "--format", "{{.Name}}", "--filter", "name=intentic-trashed-"], { timeoutMs: 20_000 });
-    return trashedFrom(stdout);
-};
-
 /* THE ROUND. */
 
 // Everything the keeper reads or runs, injected so its decisions are asserted without timers, links or an ic.
@@ -346,6 +269,7 @@ export interface KeeperSeams {
     // absent, restarts are said without a side and nothing is written into the container.
     readonly side?: () => Promise<RestartSide>;
     readonly writeIntent?: (container: string, intent: KeeperRestartIntent) => Promise<void>;
+    readonly runners?: RunnerKeeperSeams;
 }
 
 interface Wait {
@@ -376,6 +300,7 @@ export interface KeeperState {
     on: boolean | undefined;
     // What this agent knows sleeps, shared with the wake round.
     readonly sleepers: Sleepers;
+    readonly runners: RunnerKeeperState;
 }
 
 export const newKeeperState = (start: number, sleepers: Sleepers = newSleepers()): KeeperState => ({
@@ -389,6 +314,7 @@ export const newKeeperState = (start: number, sleepers: Sleepers = newSleepers()
     fixing: false,
     on: undefined,
     sleepers,
+    runners: newRunnerKeeperState(start + FIRST_SWEEP_MS),
 });
 
 // Says `line` under `key` unless it is what was said there last.
@@ -752,6 +678,11 @@ export const runKeeperRound = async (state: KeeperState, seams: KeeperSeams, log
         await relist(state, seams, records);
     }
     const scope = keeperScope(state.listed, records, state.trashed);
+    if (seams.runners !== undefined && keptRunners(state.listed).length > 0) {
+        // Held like a fix, so no other round starts work under a start or restart it makes.
+        state.fixing = true;
+        await runRunnerRound(state.runners, seams.runners, keptRunners(state.listed), log).finally(() => (state.fixing = false));
+    }
     if (sweepDue) {
         await sweep(state, seams, scope, log);
         if (scope.own.length > 0) {
@@ -807,6 +738,7 @@ export const machineKeeperSeams = ({ links, loopback, watching, poke }: KeeperWi
     sleep: async (idleMinutes) => await runIc(sleepArgs(idleMinutes), () => undefined, {}, { deadlineMs: SLEEP_DEADLINE_MS }),
     side: sideOf,
     writeIntent: writeIntentInto,
+    runners: machineRunnerSeams(async (args) => await runIc(args, () => undefined, {}, { deadlineMs: FIX_DEADLINE_MS }), icInFlight, (slug) => holdIcFlow(slug, KEEPER_HOLD)),
 });
 
 // The keeper and its wake round, which runs whatever the switch says: a sandbox asleep when the keeper was switched off

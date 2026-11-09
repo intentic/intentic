@@ -35,13 +35,19 @@ export const nextPromisedWakeAt = async (services: BootPhase["services"]): Promi
 // same questions idle-stop asks, plus whether a workspace app is in use and whether the owner switched sleep off for this
 // sandbox (settings `sleepWhenUnused`). Its promised wakes are the sleep's, crons among them: the keeper sets an alarm
 // for the soonest and starts the sandbox ahead of it.
+/* A RUNNER IS NEVER QUIET (2026-11-09). Nobody opens a runner (runners/runner-mode.ts): it waits for its parent to
+   dispatch, so between turns it read as unused, and omen's keeper put runner-omen to sleep after 30 idle minutes
+   (machine.log 2026-10-31T09:36:34, the parent's "peer disconnected" the same second). A wake comes only from somebody
+   opening a sandbox's page or from its own alarm, and a runner has neither, so it stayed down until it was removed.
+   Kept awake here, which every ic reads the same way (no `quietSince`), whatever its version. */
 export const quietProbes = (services: BootPhase["services"]): QuietProbes => ({
     connected: connectedCount,
     working: () => workingNow(services, "idle-stop").length,
     terminalActivityAt: lastTerminalActivity,
     appsInUse: () => anyConnected(services.processes.ports()),
     nextWakeAt: async () => (await nextPromisedWake(services, "sleep")) ?? 0,
-    keepAwake: async () => !(await services.sandboxSettings.get()).sleepWhenUnused || await continuousReception(services),
+    keepAwake: async () =>
+        services.runnerParent.current !== undefined || !(await services.sandboxSettings.get()).sleepWhenUnused || (await continuousReception(services)),
 });
 
 // What the daemon does when the organisation policy or a file it pins moves, started at boot beside the policy's own

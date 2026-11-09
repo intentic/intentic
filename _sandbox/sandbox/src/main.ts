@@ -298,7 +298,7 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop, sleep, left }: Ready,
 
     // Parent link, for a runner (or one that ever was: an identity on /history outlives an env-stripping rebuild).
     // After the gate, since a parent's first act dispatches a turn. Never fatal: a failed enrollment just logs once.
-    void startRunnerMode(services, runnerEnv).catch((error: unknown) => logger.error({ err: error }, "runner: could not come online"));
+    void startRunnerMode(services, runnerEnv, () => workingNow(services, "restart").length).catch((error: unknown) => logger.error({ err: error }, "runner: could not come online"));
 
     startPhase(logger, "sweeps", () => startBootSweeps(phase));
     startPhase(logger, "restores", () => startBootRestores(phase));

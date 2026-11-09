@@ -63,6 +63,9 @@ export interface PeerDialSpec<S extends SocketLike> {
     readonly backoff: { readonly next: (heldMs: number) => number; readonly reset: () => void };
 /* How long this socket may hear nothing before the link is presumed dead: `peerLinkSilenceMs` of the heartbeat the door's own hub pings on. */
     readonly silenceMs: number;
+    /* The rest a long outage takes between tries (LONG_OUTAGE_MS when absent). A door whose far end is the only reason it
+       exists, a runner and its parent, rests far less: the parent coming back is the moment it is wanted. */
+    readonly longOutageMs?: number | undefined;
     readonly log: (message: string) => void;
     // Sandbox refused the enrollment (1008); the loop has already stopped, this is where the peer says so.
     readonly revoked: () => void;
@@ -197,7 +200,7 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
             openedAt = undefined;
             // The rest is added to the ladder's draw rather than replacing it: a flat fifteen minutes would bring back in
             // lockstep every link that entered the long outage together.
-            const delay = outage.fail() >= LONG_OUTAGE_ATTEMPTS ? LONG_OUTAGE_MS + rung : rung;
+            const delay = outage.fail() >= LONG_OUTAGE_ATTEMPTS ? (spec.longOutageMs ?? LONG_OUTAGE_MS) + rung : rung;
             outage.complain(said, delay);
             ladder.wait(delay, open);
         };
