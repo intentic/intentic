@@ -14,7 +14,7 @@ import SortableLift from "../../components/sortable/SortableLift.vue";
 import { useRequestAddSandbox, warmAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { processAskedBy } from "../../models/processes/processAddress";
-import { homeEntryPath, sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
+import { foldedPath, sameViewPath } from "../../models/sandbox/sandboxScreen";
 import { GUEST_SECTION } from "../../models/sandbox/sandboxNav";
 import { useAuth } from "../../client/auth/useAuth";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
@@ -36,6 +36,7 @@ defineOptions({ inheritAttrs: false });
 const { phone = false } = defineProps<{ phone?: boolean }>();
 const t = useT();
 const router = useRouter();
+const route = useRoute();
 const sandbox = useSandbox();
 const { homeOnly } = useRole();
 const { user } = useAuth();
@@ -76,12 +77,16 @@ const openSettings = (id: string): void => {
     seenReady(id);
     void router.push(toHome(id, page.sandboxSettings(box.role === `guest` ? GUEST_SECTION : undefined)));
 };
-// Into the sandbox, as a double-click goes: the menu's way for a keyboard, and the place a reader learns the double-click.
-// Inside it for real, where it was last left, even when that was its Models (lib/routes/homeDetour.ts shows those in
-// place only in Home's frame).
+// THE RAIL FOLDED ONTO A SANDBOX: its sections come back out of the bookmark and the other sandboxes fold away under its
+// switcher (shell/rail/railMorph.ts), the page on screen staying as it is (sandboxScreen.ts `foldedPath`). A press on the
+// selected sandbox's tile, a double-click or Enter on any, and the menu's Open for a keyboard. From Home's own page,
+// which is no page of a sandbox, it opens where it was last left.
 const enter = (id: string): void => {
     seenReady(id);
-    void router.push(sandboxEntryPath(id));
+    const folded = foldedPath(route, id);
+    if (folded !== undefined) {
+        void router.push(folded);
+    }
 };
 const withMenuId = (act: (id: string) => void): void => {
     const id = boxes.value[menuIndex.value]?.id;
@@ -133,10 +138,13 @@ const noteOf = (id: string): string => {
     if (run !== undefined) {
         return processNote(run);
     }
-    return readySandboxes.value.has(id) ? t(`home.newSandbox.ready`) : t(`home.doubleClickToEnter`);
+    if (readySandboxes.value.has(id)) {
+        return t(`home.newSandbox.ready`);
+    }
+    // The selected sandbox is one press from its own views; any other shows first, and opens on the second.
+    return selected(id) && !homeOnly.value ? t(`home.clickToFold`) : t(`home.doubleClickToEnter`);
 };
 // The tile of the sandbox whose chat the page shows; on a page of the person's own (settings), none is.
-const route = useRoute();
 // While the new sandbox's page, or a process's, stands in the chat's place, its tile is the selected one; the new
 // sandbox's dialog over the chat leaves the chat's own tile selected.
 // Around any page of a sandbox in Home's frame, the sandbox its address names is the selected one; on Home's own page
@@ -152,8 +160,10 @@ const add = useRequestAddSandbox();
 let last: { id: string; at: number } | undefined;
 const choose = (id: string, input: `click` | `enter`): void => {
     const now = Date.now();
-    // A home-only guest has no sandbox to enter: its home is the whole of what it reaches there.
-    const action = homeOnly.value ? `select` : tileAction(input, last?.id === id, last === undefined ? Infinity : now - last.at);
+    // A home-only guest has no sandbox to enter: its home is the whole of what it reaches there. On a desktop the
+    // sandbox already selected folds the rail onto itself at one press: there is nothing left to select.
+    const again = !phone && input === `click` && selected(id);
+    const action = homeOnly.value ? `select` : again ? `enter` : tileAction(input, last?.id === id, last === undefined ? Infinity : now - last.at);
     last = { id, at: now };
     seenReady(id);
     if (action === `enter`) {
@@ -161,9 +171,10 @@ const choose = (id: string, input: `click` | `enter`): void => {
     } else if (phone) {
         void router.push(toHome(id));
     } else {
-        // The section Home was asked to show of every sandbox, of this one; else its home conversation. Replaced, as
-        // a look along the rail; the address names the sandbox, which selects it (router/shellGates.ts).
-        void router.replace(homeEntryPath(id));
+        // The view on screen, of this sandbox (sandboxScreen.ts `sameViewPath`): the same section, or where Home opens it
+        // around no page of one. Replaced, as a look along the rail; the address names the sandbox, which selects it
+        // (router/shellGates.ts).
+        void router.replace(sameViewPath(id, route));
     }
 };
 </script>
@@ -254,6 +265,8 @@ const choose = (id: string, input: `click` | `enter`): void => {
                 :key="box.id"
                 type="button"
                 data-sortable-item
+                :data-rail-key="`sandbox:${box.id}`"
+                data-rail-into="sandboxes"
                 class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg"
                 :class="
                     drag.carried.value === box.id
@@ -287,7 +300,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
             </span>
         </SortableLift>
         <NewSandboxTile />
-        <span class="relative flex shrink-0">
+        <span class="relative flex shrink-0" data-rail-key="rail:add-sandbox">
             <button
                 type="button"
                 :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"

@@ -1,20 +1,21 @@
-<!-- THE WAY UP TO HOME FROM INSIDE A SANDBOX: the reader's other sandboxes as overlapping circles under the switcher, two on
-     top and one tucked below, the last a "+n" past three. One press opens Home (features/home/), every sandbox at once.
-     Not a Home tile (the owner turned one down twice): it says something a tile could not, which other sandboxes there are
-     and which of them waits for the reader, the reason to go up at all. Draws nothing for a reader with no other sandbox. -->
+<!-- ALL SANDBOXES, FOLDED: the reader's other sandboxes as overlapping circles under the switcher, two on top and one
+     tucked below, the last a "+n" past three. One press unrolls them along the rail (MasterRail.vue): each circle flies
+     out to its tile and the sections go into the bookmark (railMorph.ts, by the marks below), the page on screen staying
+     where it is (sandboxScreen.ts `unrolledPath`). Not a Home tile (the owner turned one down twice): it says something
+     a tile could not, which other sandboxes there are and which of them waits for the reader, the reason to unroll at
+     all. Draws nothing for a reader with no other sandbox. -->
 <script setup lang="ts">
 import { SandboxLogo, type Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { identityHue } from "../../lib/identityHue";
-import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { clusterOf } from "../../models/home/otherSandboxes";
 import { sandboxOrder } from "../../models/home/sandboxOrder";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
-import { homeEntryPath } from "../../models/sandbox/sandboxScreen";
+import { unrolledPath } from "../../models/sandbox/sandboxScreen";
 import { commandShortcut } from "../../workbench/commands/useCommands";
 import { badgeClass } from "../../workbench/views/viewBadge";
 
@@ -57,11 +58,9 @@ const tint = (id: string) => {
     };
 };
 
-// Home on the sandbox the reader came from: the section Home shows of every sandbox, else its home conversation.
-const home = computed(() => {
-    const id = sandbox.activeSandboxId.value;
-    return id === undefined ? HOME_PATH : homeEntryPath(id);
-});
+// The page on screen, the rail unrolled around it.
+const route = useRoute();
+const home = computed(() => unrolledPath(route));
 
 const needy = computed(() => cluster.value.slots.filter((slot) => slot.needsYou > 0));
 const tip = computed<Tip>(() => ({
@@ -85,6 +84,7 @@ const label = computed(() =>
         v-if="cluster.slots.length > 0"
         :to="home"
         class="icon-rail-cluster ui-row-select ui-row-select-horizontal flex items-center justify-center rounded-lg"
+        data-rail-holds="sandboxes"
         :aria-label="label"
         v-tooltip.right="tip"
     >
@@ -92,6 +92,8 @@ const label = computed(() =>
             <span
                 v-for="(slot, index) in cluster.slots"
                 :key="slot.id"
+                :data-rail-key="`sandbox:${slot.id}`"
+                data-rail-into="sandboxes"
                 class="icon-rail-cluster-circle absolute flex items-center justify-center rounded-full font-semibold"
                 :class="{ 'opacity-40 grayscale': slot.unreachable, 'bg-card': slot.image }"
                 :style="{ ...at(index), ...(slot.image ? {} : tint(slot.id)) }"

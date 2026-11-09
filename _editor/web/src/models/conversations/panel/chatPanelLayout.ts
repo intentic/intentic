@@ -4,7 +4,6 @@ import { computed, ref } from "vue";
 import type { Router } from "vue-router";
 import type { ScreenPoint } from "../../../workbench/window/floating";
 import { chatFullSlot } from "../../../workbench/window/panelSlots";
-import { homeFrame } from "../../../lib/routes/homeSection";
 import { here, isPage, page } from "../../../lib/routes/links";
 import { useChatFloating } from "./chatFloating";
 import { type ChatPosition, useLayout } from "../../../workbench/window/useLayout";
@@ -19,9 +18,9 @@ const floating = useChatFloating();
 const layout = useLayout();
 
 export const chatWide = computed(() => floating.floats.value || chatFullSlot.value !== null);
-// Home's frame around a section of a sandbox (lib/routes/homeSection.ts) decides for itself: its Chat is the full-window
-// chat, and every other section has the chat docked to its right, whichever home the reader keeps it in inside a sandbox.
-export const chatOnRail = computed(() => (homeFrame.value === undefined ? layout.chatHome.value === `rail` : homeFrame.value === `chat`));
+// The reader's own choice, whether the rail is folded or unrolled (models/home/masterRail.ts): until 2026-11-09 the
+// unrolled rail docked the chat to the side whatever was chosen, and unrolling it moved the whole page.
+export const chatOnRail = computed(() => layout.chatHome.value === `rail`);
 // The rail's home with this page drawing it: the chat is the rail tile's full-window /chat, not a window of its own.
 export const chatOnRailTile = computed(() => chatOnRail.value && !floating.floats.value);
 // The side home in effect: the chat lives in the side panel, under whatever was opened beside it (shell/side). Neither

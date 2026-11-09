@@ -16,7 +16,7 @@ Object.defineProperty(globalThis, `localStorage`, {
     },
 });
 
-const { chooseHomeSection, homeSection, sameSection, sectionPageOf, showsSection, storedHomeSection } = await import("./homeSection");
+const { chooseHomeSection, homeSection, sameSection, sectionOfPage, sectionPageOf, showsSection, storedHomeSection } = await import("./homeSection");
 const KEY = `ui-home-section`;
 
 const WORKSPACE = { id: `workspace`, page: { name: `workspace`, params: {} }, label: `Workspace`, icon: `file-tree` } as const;
@@ -115,5 +115,26 @@ describe(`the pages a section owns`, () => {
         expect(sectionPageOf(`/ext/crm/main`)).toEqual({ name: `extension`, params: { ext: `crm`, key: `main` } });
         expect(sectionPageOf(`/s/a1b2c3d4e5f6/browsers`)).toEqual({ name: `browsers`, params: {} });
         expect(sectionPageOf(`/settings`)).toBeUndefined();
+    });
+});
+
+describe(`the section a page belongs to`, () => {
+    it(`is the page itself with nothing open in it`, () => {
+        expect(sectionOfPage(page.workspace(`src/a.ts`))).toEqual({ name: `workspace`, params: {} });
+        expect(sectionOfPage(page.capabilities(`docker`))).toEqual({ name: `capabilities`, params: {} });
+        expect(sectionOfPage(page.chat())).toEqual({ name: `chat`, params: {} });
+    });
+
+    it(`is the board for an agent opened from it`, () => {
+        expect(sectionOfPage(page.agent(`cnv_1`))).toEqual({ name: `agents`, params: {} });
+    });
+
+    it(`keeps what says which view it is: an extension's view, a section of the sandbox's settings`, () => {
+        expect(sectionOfPage(page.extension(`crm`, `main`))).toEqual({ name: `extension`, params: { ext: `crm`, key: `main` } });
+        expect(sectionOfPage(page.sandboxSettings(`models`))).toEqual({ name: `sandboxSettings`, params: { tab: `models` } });
+    });
+
+    it(`is nothing for a page that is no sandbox's`, () => {
+        expect(sectionOfPage(page.account(`appearance`))).toBeUndefined();
     });
 });

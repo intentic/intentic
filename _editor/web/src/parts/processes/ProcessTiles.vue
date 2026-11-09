@@ -29,6 +29,7 @@ const t = useT();
                 :aria-label="`${tile.title} · ${tile.note}`"
                 :aria-current="selected === tile.id ? 'true' : undefined"
                 v-tooltip.right="{ title: tile.title, note: tile.note }"
+                :data-rail-key="`process:${tile.id}`"
                 :data-process-tile="tile.report.kind"
                 :data-state="tile.report.state"
                 @click="emit(`open`, tile)"

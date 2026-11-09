@@ -5,7 +5,7 @@ import { readWindowState, writeWindowState } from "../../workbench/window/window
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { insideScreen, type LandingRole, sandboxEntry } from "../../lib/routes/firstScreens";
-import { type HomeSection, homeSection, sectionLink, showsSection } from "../../lib/routes/homeSection";
+import { type HomeSection, homeSection, sectionLink, sectionOfPage, showsSection } from "../../lib/routes/homeSection";
 import { frameOf, isSandboxPage, linkOf, pageOf, routeSandbox, routeSegment, segmentOf, toHome, toInside } from "../../lib/routes/links";
 
 // Remembers which screen each sandbox was last on and lands there on a switch, since a route naming something
@@ -51,6 +51,62 @@ export const homeEntryPath = (sandboxId: string): string => {
     return section === undefined ? toHome(sandboxId) : sectionEntryPath(sandboxId, section);
 };
 
+// What these read of the route on screen: its frame, its sandbox, and the address the page is named by.
+type ScreenRoute = Pick<RouteLocationNormalized, `meta` | `params` | `fullPath`>;
+
+// The page a route in Home's frame shows, as a link: none for Home's own page, and none with the rail folded.
+const unrolledPage = (route: ScreenRoute) => (frameOf(route) === `home` && pageOf(route) !== undefined ? linkOf(route.fullPath) : undefined);
+
+/**
+ * Where a press on a sandbox's tile goes while the rail is unrolled: the view on screen, of that sandbox. The section the
+ * page belongs to (lib/routes/homeSection.ts `sectionOfPage`), on the screen that sandbox was last left on when that is
+ * the section's own, so a look along the rail compares the same thing in each. Around no page of a sandbox (Home's own
+ * chat, the account's pages), where Home opens that sandbox.
+ */
+export const sameViewPath = (sandboxId: string, route: ScreenRoute): string => {
+    const link = unrolledPage(route);
+    const section = link === undefined || roleNow().homeOnly ? undefined : sectionOfPage(link);
+    return section === undefined ? homeEntryPath(sandboxId) : sectionEntryPath(sandboxId, { page: section });
+};
+
+/**
+ * The address on screen with the rail unrolled: the same page of the same sandbox in Home's frame, so "All sandboxes"
+ * changes the rail and nothing else. One of the account's pages keeps its own address there; with no page to keep (no
+ * sandbox open, a page outside the shell), Home as it opens.
+ */
+export const unrolledPath = (route: ScreenRoute): string => {
+    if (frameOf(route) === `home`) {
+        return route.fullPath;
+    }
+    const link = frameOf(route) === `inside` ? linkOf(route.fullPath) : undefined;
+    const sandboxId = routeSandbox(route) ?? activeSandboxId.value;
+    if (link === undefined) {
+        return sandboxId === undefined ? toHome() : homeEntryPath(sandboxId);
+    }
+    if (!isSandboxPage(link.page)) {
+        return toHome(undefined, link);
+    }
+    return sandboxId === undefined ? toHome() : toHome(sandboxId, link);
+};
+
+/**
+ * The address on screen with the rail folded onto a sandbox (the one on screen unless another is named): the same page,
+ * inside it. Another sandbox than the one on screen is folded onto the same view of it (`sameViewPath`); Home's own
+ * page is no page of a sandbox, so from there the sandbox opens where it was last left. Nothing with no sandbox to fold
+ * onto.
+ */
+export const foldedPath = (route: ScreenRoute, sandboxId: string | undefined = routeSandbox(route) ?? activeSandboxId.value): string | undefined => {
+    if (sandboxId === undefined) {
+        return undefined;
+    }
+    if (frameOf(route) !== `home`) {
+        return route.fullPath;
+    }
+    const named = routeSandbox(route);
+    const shown = named === undefined || named === sandboxId ? unrolledPage(route) : linkOf(sameViewPath(sandboxId, route));
+    return shown === undefined ? sandboxEntryPath(sandboxId) : toInside(sandboxId, shown);
+};
+
 // Overrides "land on the last screen" for a switch with a known destination (opening an agent from another
 // sandbox's card). Recorded rather than pushed after the switch: the landing watch replaces at flush:post and
 // would cancel a concurrent push. Either form of address, read as that sandbox's.
@@ -82,7 +138,7 @@ const screenOf = (to: RouteLocationNormalized, sandboxId: string): string | unde
 };
 
 // The same frame's entry for the sandbox switched to: inside it, its last screen; in Home's frame, what a press on its
-// tile opens there. An account's page, or a sandbox's settings seen from Home, stays in view, now of the sandbox
+// tile opens there (`sameViewPath`). An account's page, or a sandbox's settings seen from Home, stays in view, now of the sandbox
 // switched to, since whoever switched named nowhere else.
 const entryAfterSwitch = (route: RouteLocationNormalized, sandboxId: string): string | undefined => {
     const shown = pageOf(route);
@@ -91,7 +147,7 @@ const entryAfterSwitch = (route: RouteLocationNormalized, sandboxId: string): st
         const link = linkOf(route.fullPath);
         return link === undefined ? undefined : frame === `home` ? toHome(sandboxId, link) : toInside(sandboxId, link);
     }
-    return frame === `home` ? homeEntryPath(sandboxId) : sandboxEntryPath(sandboxId);
+    return frame === `home` ? sameViewPath(sandboxId, route) : sandboxEntryPath(sandboxId);
 };
 
 // Both wait for the router (workbench/navigation), which the route table installs after this module has run.

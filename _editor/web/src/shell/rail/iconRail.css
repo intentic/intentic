@@ -11,6 +11,9 @@
        crosses a glyph stroke — including on the open tile, where plate and ink are the same colour. A skin
        repainting the rail re-points this and the ring follows. */
     --ui-tile-ground: color-mix(in oklab, var(--color-brand-950) 11%, var(--color-card));
+    /* A circle of the cluster of other sandboxes (below). On the rail rather than on the cluster, so a circle's copy in
+       flight between the cluster and its tile (railMorph.ts) keeps its measure outside it. */
+    --cluster-d: calc(var(--icon-rail-tile-size) * 0.4);
 }
 
 /* flex-shrink: 0 everywhere: with `height` (not min-height) tiles would otherwise compress instead of scrolling. */
@@ -67,7 +70,6 @@
    reaches); the press target around it is the tile's width and only as tall as the cluster needs, so it costs the rail
    about two thirds of a tile. */
 .icon-rail-cluster {
-    --cluster-d: calc(var(--icon-rail-tile-size) * 0.4);
     width: var(--icon-rail-tile-size);
     height: calc(var(--cluster-d) * 1.68 + var(--icon-rail-gap));
 }

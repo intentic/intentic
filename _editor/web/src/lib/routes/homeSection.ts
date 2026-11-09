@@ -11,8 +11,13 @@ import { currentRoute, frameOf, isSandboxPage, linkOf, type PageLink, pageCovers
 // folder of the Workspace. Then a press on a sandbox's tile opens that section of it in Home's frame, and Home itself
 // opens on it. The section runs on its own address, `/home/<sandbox>/<page>`, since every section keeps its state there
 // (the Workspace writes the open file into the path the moment it mounts), and that address says the frame is Home's
-// (models/home/masterRail.ts). Every section but the Chat docks the sandbox's chat panel to its right, as inside the
-// sandbox.
+// (models/home/masterRail.ts).
+//
+// ONE VIEW, THE RAIL UNROLLED OR FOLDED (2026-11-09). Home's frame is no second screen: it is the same shell with the
+// sandboxes unrolled along the rail and the sections put away in the bookmark at its foot. Unrolling keeps the page on
+// screen (models/sandbox/sandboxScreen.ts `unrolledPath`), a press on another sandbox's tile shows the same section of
+// that one (`sameViewPath`, by `sectionOfPage` below), and everything beside the rail is laid out as it is folded. What
+// is kept here is only where Home opens when no page is named: the bare address, the first screen.
 //
 // One choice for every sandbox on this device, like the chat's home: it is how the reader likes to look at their
 // sandboxes, not a fact about one of them. Here, below every model, since the shell, the chat's layout and a sandbox's
@@ -103,17 +108,31 @@ export const sameSection = (left: Pick<HomeSection, `page`> | undefined, right: 
     left !== undefined && right !== undefined && showsSection(left, sectionLink(right)) && showsSection(right, sectionLink(left));
 
 /**
- * What Home's frame is around when it is around a page of a sandbox rather than its own chat or the account's pages: the
- * sandbox's Chat, which is a chat already (`chat`), or any other page, which has the sandbox's chat panel docked to its
- * right (`docked`). Read off the address, which says the frame (lib/routes/links.ts).
+ * The section a page belongs to, as the rail's tile would name it: the page itself with nothing open in it (no file, no
+ * tab, no catalog entry), the board for an agent opened from it, and the two pages whose values say WHICH view they are
+ * kept whole (an extension's view, a section of the sandbox's settings). Nothing for a page that is no sandbox's. Read
+ * off the address alone, so the rail can say what is on screen without reading any sandbox's list of tiles.
  */
-export type HomeFrame = `chat` | `docked`;
-
-export const homeFrame = computed((): HomeFrame | undefined => {
-    const route = currentRoute();
-    const shown = route === undefined || frameOf(route) !== `home` ? undefined : pageOf(route);
-    if (shown === undefined || !isSandboxPage(shown)) {
+export const sectionOfPage = (link: Pick<PageLink, `page` | `params`>): SectionPage | undefined => {
+    if (!isSandboxPage(link.page)) {
         return undefined;
     }
-    return shown === `chat` ? `chat` : `docked`;
+    if (link.page === `agent` || link.page === `agentPage`) {
+        return { name: `agents`, params: {} };
+    }
+    const whole = link.page === `extension` || link.page === `sandboxSettings`;
+    const params = whole ? Object.entries(link.params).filter((entry): entry is [string, string] => entry[1] !== undefined && entry[1] !== ``) : [];
+    return { name: link.page, params: Object.fromEntries(params) };
+};
+
+/**
+ * Whether the rail of sandboxes stands around a page of a sandbox, rather than around Home's own chat or the account's
+ * pages. Then everything beside the rail is the sandbox's, exactly as with the rail folded (2026-11-09): its status
+ * bar, its chat in the home the reader keeps it in, what was opened beside. Read off the address, which says the frame
+ * (lib/routes/links.ts).
+ */
+export const sandboxPageInHome = computed((): boolean => {
+    const route = currentRoute();
+    const shown = route === undefined || frameOf(route) !== `home` ? undefined : pageOf(route);
+    return shown !== undefined && isSandboxPage(shown);
 });

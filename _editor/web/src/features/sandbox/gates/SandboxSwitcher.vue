@@ -84,6 +84,10 @@ const isActive = (option: SandboxSummary): boolean => !local && option.id === sa
 const trigger = ref<HTMLButtonElement | null>(null);
 const panel = ref<HTMLElement | null>(null);
 const menu = useHoverMenu(panel);
+// The rail folding onto this sandbox at a press on its tile (HomeSandboxes.vue) leaves the pointer resting right here. A
+// switcher that came up under it was not pointed at, so its panel waits for the pointer to come back.
+const arrived = performance.now();
+const hoverTrigger = { ...menu.trigger, pointerenter: (event: PointerEvent): void => void (performance.now() - arrived > 400 && menu.trigger.pointerenter(event)) };
 const open = menu.open;
 const pressed = menu.pressed;
 // The local window's own half (switcherPlace.ts): opening a sandbox through the app, the sign-in, a failure by its row.
@@ -293,6 +297,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
         <button
             ref="trigger"
             type="button"
+            :data-rail-key="folder || sandbox.activeSandboxId.value === undefined ? undefined : `sandbox:${sandbox.activeSandboxId.value}`"
             class="sandbox-switcher icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center overflow-hidden rounded-lg"
             :class="[
                 isPage(route, `sandboxSettings`) ? 'ui-row-select-on text-link' : 'text-muted hover:text-content',
@@ -303,7 +308,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
             "
             aria-haspopup="dialog"
             :aria-expanded="open"
-            v-on="menu.trigger"
+            v-on="hoverTrigger"
         >
             <!-- This computer has one mark, whichever folder the local window shows. -->
             <span class="flex size-full items-center justify-center overflow-hidden rounded-md [&_span]:text-inherit">

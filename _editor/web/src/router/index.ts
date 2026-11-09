@@ -46,15 +46,8 @@ import { here, linkOf, page, routeSandbox } from "../lib/routes/links";
 import { activeConversation, pageRoutes } from "./pageRoutes";
 import { legacyFloatingRoutes, legacyRoutes } from "./legacyRoutes";
 
-declare module "vue-router" {
-    interface RouteMeta {
-        /**
-         * The tab title, as a function rather than a string: the route table is built once, while this module is
-         * still being imported, and `t` has no catalog to read yet. Called on every navigation instead (below).
-         */
-        title?: () => string;
-    }
-}
+// A route's tab title is its meta's `title` (lib/routes/links.ts declares it, beside the frame and the page), called on
+// every navigation (below).
 
 // Google minting starts immediately, before the session round trip or this page's chunk, so the wait is not dead time
 // on a screen whose whole content is waiting for Google; only when the app's handoff params are present, and not on a

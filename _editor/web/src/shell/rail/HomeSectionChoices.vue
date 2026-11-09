@@ -1,23 +1,32 @@
-<!-- The views Home can show of every sandbox (lib/routes/homeSection.ts): its home conversation, then the sections the
-     selected sandbox's own rail offers (sectionTiles.ts), its Chat ranked among them. Mounted only while the
-     list is open (HomeSectionPicker.vue), so the tiles are read only then; keyed and filtered as Show a file's list is
-     (workspace/home/HomeCoverPicker.vue). -->
+<!-- The views the bookmark holds (HomeSectionPicker.vue): the home conversation, then every section the selected sandbox's
+     own rail offers folded (sectionTiles.ts), on it or behind its More, its Chat ranked among them and Capabilities
+     after, each wearing the badge its tile would. Mounted only while the list is open, so the tiles are read only
+     then; keyed and filtered as Show a file's list is (workspace/home/HomeCoverPicker.vue). -->
 <script setup lang="ts">
 import { SearchBar, useListNavigation } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
+import type { ViewBadge } from "@intentic/extension-api";
 import { computed, nextTick, onMounted, ref } from "vue";
+import { useHeldDoor } from "../../components/heldPlace";
 import { type HomeSection, sameSection, sectionPageOf } from "../../lib/routes/homeSection";
 import { here, page } from "../../lib/routes/links";
+import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import RailIcon from "./RailIcon.vue";
 import { type SectionTile, useSectionTiles } from "./sectionTiles";
 
-const { chosen } = defineProps<{ chosen: HomeSection | undefined }>();
+const { chosen } = defineProps<{ chosen: Pick<HomeSection, `page`> | undefined }>();
 const emit = defineEmits<{ choose: [section: HomeSection | undefined] }>();
 
 const t = useT();
+// Capabilities is no tile of its own on the folded rail (its + and its More row are the doors, ShellDesktop.vue), so it
+// is added here for whoever may open it.
+const connects = useHeldDoor(`capabilities.list`);
 // The Chat heads the sandbox's sections, as on its rail when it docks there.
-const { tiles } = useSectionTiles(() => [{ id: `chat`, to: here(page.chat()), label: t(`shared.chat`), icon: `comments` }]);
+const { tiles: sections } = useSectionTiles(() => [{ id: `chat`, to: here(page.chat()), label: t(`shared.chat`), icon: `comments` }]);
+const tiles = computed<readonly SectionTile[]>(() =>
+    connects.value ? [...sections.value, { id: `capabilities`, to: here(page.capabilities()), label: t(`shared.capabilities`) }] : sections.value,
+);
 
 // A tile is a section when its address is a page of the sandbox's own; one that is not is no view Home can show.
 const sectionOf = ({ id, to, label, icon, monogram }: SectionTile): HomeSection | undefined => {
@@ -40,6 +49,7 @@ interface Row {
     readonly key: string;
     readonly label: string;
     readonly section: HomeSection | undefined;
+    readonly badge?: ViewBadge | undefined;
 }
 const HOME = `\u0000home`;
 const query = ref(``);
@@ -49,7 +59,7 @@ const rows = computed<readonly Row[]>(() => {
         { key: HOME, label: t(`home.section.homeConversation`), section: undefined },
         ...tiles.value.flatMap((tile): Row[] => {
             const section = sectionOf(tile);
-            return section === undefined ? [] : [{ key: tile.to, label: tile.label, section }];
+            return section === undefined ? [] : [{ key: tile.to, label: tile.label, section, badge: tile.badge }];
         }),
     ];
     return all.filter((row) => row.label.toLowerCase().includes(needle));
@@ -119,6 +129,8 @@ const onFieldKey = (event: KeyboardEvent): void => {
                 <RailIcon v-else :section="row.section.id" :fallback="row.section.icon" :label="row.label" :monogram="row.section.monogram" />
             </span>
             <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
+            <!-- What the section's tile wears on the folded rail (its count, its mark), so nothing it says is lost here. -->
+            <ViewBadgeChip :badge="row.badge" class="shrink-0 text-[0.625rem]" />
             <Icon v-if="isChosen(row)" name="check" class="shrink-0 text-2xs text-link" aria-hidden="true" />
         </li>
     </ul>

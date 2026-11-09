@@ -703,23 +703,38 @@ it lists (Sandbox ▸ Models, today) stays on Home as `/home[/:sandbox]?show=<vi
 hidden, so its draft survives the trip. One router guard covers every door to the view, so no link needs to know it
 was pressed on Home; a tile's double-click and the desktop opener enter the sandbox for real (`goInside`). A dialog was
 the rejected alternative: a sign-in is a trip to another tab and back, which an address survives and a dialog does not.
-**Home can show a section of each sandbox instead of its home conversation** (2026-10-29, `lib/routes/homeSection.ts`).
-A quiet tile at the foot of Home's rail, above the account (`shell/rail/HomeSectionPicker.vue`), offers the home
-conversation, which is the default, and the sections the selected sandbox's own rail offers: its Chat, Board, Workspace,
-Devices and extension views. It works the way Show a file picks one file for every folder. The choice is this device's
-and applies to every sandbox: a press on a tile opens that section of the sandbox, and Home's bare address opens on it
-too. The section runs on its own address, since each section keeps its state there, behind the sandbox's gate. The shell
-keeps Home's frame around it: the rail of sandboxes stays (`models/home/masterRail.ts`, kept for the tab's reloads),
-the Chat fills the page, and every other section docks the sandbox's chat panel to its right, whatever chat
-home the reader keeps inside a sandbox. Any other page of the sandbox, a double-click on a tile, or the composer's Open
-gives the rail back, as it does from Home's own page. A corner of the page was the rejected place for the tile: every
-section has its own header there, and only the rail is the same in every view.
+**One view, the rail folded or unrolled** (2026-11-09). Home's frame is no second screen: it is the same shell with the
+sandboxes unrolled along the rail and one sandbox's sections put away in the bookmark at its foot
+(`shell/rail/MasterRail.vue`, `HomeSectionPicker.vue`); folded, the rail wears that sandbox's sections and the other
+sandboxes sit in the cluster under its switcher (`OtherSandboxes.vue`). The address still says which
+(`/home/<sandbox>/<page>` unrolled, `/s/<sandbox>/<page>` folded; `models/home/masterRail.ts`), so Back, a reload and a
+shared link keep the rail as it was. Three rules hold it together (`models/sandbox/sandboxScreen.ts`):
+- **Unrolling and folding keep the page.** "All sandboxes" (the cluster, `Mod+Alt+H`) goes to the same page in the other
+  frame (`unrolledPath`, `foldedPath`), and the page's component is the same instance before and after. Folding is a
+  press on the selected sandbox's tile, a double-click or Enter on any tile, the tile menu's Open, or the shortcut
+  again. Home's own page is no page of a sandbox, so folding from it opens the sandbox where it was last left.
+- **A press on another sandbox's tile shows the same view of that one** (`sameViewPath`): the section the page belongs
+  to (`lib/routes/homeSection.ts` `sectionOfPage`), on the screen that sandbox was last left on in it. Around Home's own
+  chat or an account page it opens where Home opens: the view last picked in the bookmark, else the home conversation.
+- **Nothing beside the rail depends on the rail** (`sandboxBeside`): the status bar, the quick bar, the side column and
+  the chat's home are the same folded and unrolled. Until this date the unrolled rail hid the status bar and docked the
+  chat to the side whatever the reader kept.
+
+The bookmark lists the home conversation, every section the folded rail offers on it or behind More, the Chat and
+Capabilities, each with the badge its tile wears, and marks the view on screen. A pick shows that view and is kept on
+this device as what Home's bare address opens on. The change of rail is played rather than swapped
+(`shell/rail/railMorph.ts`, the plan in `railFlights.ts`): each sandbox flies between the switcher or its circle in the
+cluster and its tile, and each section tile between its place and the bookmark. Parts name themselves with
+`data-rail-key`, `data-rail-into` and `data-rail-holds`; the flights are copies in a layer over the rail, moved by
+`transform` and `opacity` alone, and nothing plays with motion off. A corner of the page was the rejected place for
+the bookmark: every section has its own header there, and only the rail is the same in every view.
 With no model connected, the chat's one press is the notice's "Connect a model" (or "Connect Claude" for a provider
 somebody picked), Send is disabled and its Enter shakes that press, and the composer's pill says "No model" rather
 than offering a second door (`features/chat/accounts/ChatAccountPanel.vue`).
 The shared composer offers model selection to non-guest members in either audience mode. Effort appears when the
 selected model and runtime support it, and stays hidden under Auto or on the free trial.
-The desktop status bar stays hidden in the master view, including personal settings opened from it.
+The desktop status bar is drawn wherever a sandbox's page is on screen, the rail folded or unrolled; Home's own page and
+the account's pages opened from it have none.
 Home and personal settings need only a signed-in account: an unfinished, offline or incompatible sandbox never gates
 them or redirects them to setup, including a direct visit to `/settings`.
 Home also opens from the logo menu in This computer before any sandbox exists. In the desktop app, the account menu

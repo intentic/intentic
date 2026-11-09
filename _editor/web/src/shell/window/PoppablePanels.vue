@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { homeFrame } from "../../lib/routes/homeSection";
-import { masterRail } from "../../models/home/masterRail";
+import { sandboxBeside } from "../../models/home/masterRail";
 import { here, isPage, page } from "../../lib/routes/links";
 import { homeConversation } from "../../models/home/homeChat";
 import { computed, onUnmounted } from "vue";
@@ -74,9 +73,9 @@ browsers.onDocked(() => {
     <!-- Grid area and border live on the panel, not the slot: the slot is `display: contents` and generates no box. -->
     <Teleport :to="chatTarget">
         <!-- In the master view, its one chat: the same panel a popped-out window draws, without the tab row (HomeChatSlot.vue).
-             Around a section of a sandbox (homeFrame), the sandbox's own chat, as inside it. -->
+             Around a page of a sandbox (sandboxBeside), the sandbox's own chat, the rail folded or unrolled. -->
         <ChatPanel v-if="homeChat" :tabs="false" :only="homeConversation" style="grid-area: chat" />
-        <ChatPanel v-else-if="chat.shows.value && (!masterRail || homeFrame !== undefined)" :bar="inBar" style="grid-area: chat" />
+        <ChatPanel v-else-if="chat.shows.value && sandboxBeside" :bar="inBar" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
         <div

@@ -17,6 +17,7 @@ import {
     routeSandbox,
     routeShows,
     samePage,
+    sameScreen,
     toFloating,
     toHome,
     toInside,
@@ -172,6 +173,24 @@ describe(`the frames named outright`, () => {
         expect(toFloating(BOX, `chat`)).toBe(`/s/${BOX}/floating/chat`);
         expect(toTop(`invite`, { token: `t1` })).toBe(`/invite/t1`);
         expect(toTop(`login`, {}, { returnTo: `/home` })).toBe(`/login?returnTo=%2Fhome`);
+    });
+});
+
+describe(`the same screen at its two addresses`, () => {
+    const at = (address: string) => router.resolve(address);
+
+    it(`is the same page of the same sandbox, the rail folded or unrolled around it`, () => {
+        expect(sameScreen(at(insidePath(BOX, page.workspace(`src/a.ts`))), at(homePath(BOX, page.workspace(`src/a.ts`))))).toBe(true);
+    });
+
+    it(`is not another page, another file or another sandbox`, () => {
+        expect(sameScreen(at(insidePath(BOX, page.workspace())), at(homePath(BOX, page.agents())))).toBe(false);
+        expect(sameScreen(at(insidePath(BOX, page.workspace(`src/a.ts`))), at(homePath(BOX, page.workspace(`src/b.ts`))))).toBe(false);
+        expect(sameScreen(at(insidePath(BOX, page.agents())), at(homePath(`other`, page.agents())))).toBe(false);
+    });
+
+    it(`is not Home's own page, which is no page of a sandbox`, () => {
+        expect(sameScreen(at(insidePath(BOX, page.agents())), at(homePath(BOX)))).toBe(false);
     });
 });
 

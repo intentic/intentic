@@ -45,6 +45,12 @@ declare module "vue-router" {
         frame?: FrameKind;
         /** The page of the shared table the route draws; none for Home's own page and the shell's redirects. */
         page?: PageName;
+        /**
+         * The tab title, as a function rather than a string: the route table is built once, while the router's module
+         * is still being imported, and `t` has no catalog to read yet. Called on every navigation instead
+         * (router/index.ts), and by whoever names the page on screen (shell/rail/HomeSectionPicker.vue).
+         */
+        title?: () => string;
     }
 }
 
@@ -184,6 +190,20 @@ export const pageCovers = (outer: Pick<PageLink, `page` | `params`>, inner: Pick
 /** Whether two links are the same page with the same values. */
 export const samePage = (left: Pick<PageLink, `page` | `params`>, right: Pick<PageLink, `page` | `params`>): boolean =>
     pageCovers(left, right) && pageCovers(right, left);
+
+/**
+ * Whether two routes are the same screen: the same page with the same values, of the same sandbox, whichever frame each
+ * is drawn in. So the rail unrolling or folding around a page (`/s/<sandbox>/agents`, `/home/<sandbox>/agents`) is told
+ * from a visit to another page.
+ */
+export const sameScreen = (
+    left: Pick<RouteLocationNormalizedLoaded, `path` | `params`>,
+    right: Pick<RouteLocationNormalizedLoaded, `path` | `params`>,
+): boolean => {
+    const shown = linkOf(left.path);
+    const other = linkOf(right.path);
+    return shown !== undefined && other !== undefined && samePage(shown, other) && routeSandbox(left) === routeSandbox(right);
+};
 
 /**
  * Whether a route shows the page an address names (a rail tile's, in either form) or a page below it, in whichever

@@ -14371,6 +14371,7 @@
         "open": "Alle Sandboxes",
         "noSandboxLine": "Eine Sandbox ist ein privater Computer, auf unseren Maschinen oder deinen eigenen, auf dem Agenten an deinem Projekt arbeiten. Du sprichst von hier aus mit ihr.",
         "doubleClickToEnter": "Doppelklicken zum Öffnen",
+        "clickToFold": "Klicken für ihre Ansichten",
         "moveTileUp": "Nach oben",
         "moveTileDown": "Nach unten",
         "sortByName": "Nach Name sortieren",

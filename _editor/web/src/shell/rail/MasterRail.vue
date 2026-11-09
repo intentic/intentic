@@ -1,8 +1,9 @@
-<!-- THE MASTER VIEW'S RAIL (models/home/masterRail.ts says when the shell wears it): the shell's own rail, its look and its
-     account control, with the sandboxes as its tiles (features/home/HomeSandboxes.vue), what Home shows of each above the
-     account (HomeSectionPicker.vue), then the processes under way
-     (RailProcesses.vue), less those about a sandbox that has its tile here, which wears them itself; which the reader follows and answers here rather than on another screen. Signed out, which only Home
-     allows, the account's place is the way to sign in: a returning person's sandboxes are behind it. -->
+<!-- THE RAIL UNROLLED ONTO EVERY SANDBOX (models/home/masterRail.ts says when): what the shell's one rail holds then, drawn
+     inside its `nav` (ShellDesktop.vue), which stays as the tiles change and plays the change (railMorph.ts). The
+     sandboxes as its tiles (features/home/HomeSandboxes.vue), then the processes under way (RailProcesses.vue), less
+     those about a sandbox that has its tile here, which wears them itself; at the foot the bookmark the sections were
+     put away in (HomeSectionPicker.vue), over the account. Signed out, which only Home allows, the account's place is
+     the way to sign in: a returning person's sandboxes are behind it. -->
 <script setup lang="ts">
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
@@ -25,31 +26,29 @@ const signedOut = computed(() => user.value === null);
 // The sandboxes HomeSandboxes.vue draws a tile for: their runs are worn on those tiles, not beside them.
 const sandbox = useSandbox();
 const tiled = computed(() => new Set(switchableSandboxes(sandbox.sandboxes.value).map((box) => box.id)));
-// What Home shows of every sandbox is chosen by its foot, once there is a sandbox to show; never by a member whose Home is
-// all they reach (useRole `homeOnly`).
+// The bookmark holds a sandbox's sections once there is a sandbox to show; never for a member whose Home is all they
+// reach (useRole `homeOnly`), who has no section to open.
 const { homeOnly } = useRole();
 const choosesSection = computed(() => tiled.value.size > 0 && !homeOnly.value);
 </script>
 
 <template>
-    <nav class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
-        <HomeSandboxes />
-        <!-- What runs for the reader meanwhile (a sign-in, this PC's setup, a sandbox's), its page on Home in the chat's place. -->
-        <RailProcesses :tiled="tiled" />
-        <RouterLink
-            v-if="signedOut"
-            :to="signInAt(HOME_PATH)"
-            class="icon-rail-tile ui-row-select ui-row-select-horizontal mt-auto flex items-center justify-center rounded-lg text-muted hover:text-content"
-            :aria-label="t(`home.firstRun.signIn`)"
-            v-tooltip.right="t(`home.firstRun.signIn`)"
-        >
-            <!-- The account's empty place, as LocalAccountTile.vue draws it: an arrow into a door reads as leaving here. -->
-            <Icon name="user" class="icon-rail-glyph" aria-hidden="true" />
-        </RouterLink>
-        <!-- The foot, held together at the bottom: the view over the account, whose own top margin finds no room inside it. -->
-        <div v-else class="mt-auto flex flex-col items-center" style="gap: var(--icon-rail-gap)">
-            <HomeSectionPicker v-if="choosesSection" />
-            <AccountPanel />
-        </div>
-    </nav>
+    <HomeSandboxes />
+    <!-- What runs for the reader meanwhile (a sign-in, this PC's setup, a sandbox's), its page on Home in the chat's place. -->
+    <RailProcesses :tiled="tiled" />
+    <RouterLink
+        v-if="signedOut"
+        :to="signInAt(HOME_PATH)"
+        class="icon-rail-tile ui-row-select ui-row-select-horizontal mt-auto flex items-center justify-center rounded-lg text-muted hover:text-content"
+        :aria-label="t(`home.firstRun.signIn`)"
+        v-tooltip.right="t(`home.firstRun.signIn`)"
+    >
+        <!-- The account's empty place, as LocalAccountTile.vue draws it: an arrow into a door reads as leaving here. -->
+        <Icon name="user" class="icon-rail-glyph" aria-hidden="true" />
+    </RouterLink>
+    <!-- The foot, held together at the bottom: the bookmark over the account, whose own top margin finds no room inside it. -->
+    <div v-else class="mt-auto flex flex-col items-center" style="gap: var(--icon-rail-gap)">
+        <HomeSectionPicker v-if="choosesSection" />
+        <AccountPanel />
+    </div>
 </template>

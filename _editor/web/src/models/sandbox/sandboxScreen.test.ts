@@ -62,7 +62,8 @@ const router = createRouter({
 });
 const replace = jest.spyOn(router, `replace`);
 
-const { homeEntryPath, landOnAfterSwitch, routeChoosesSandbox, sandboxEntryPath, sectionEntryPath } = await import("./sandboxScreen");
+const { foldedPath, homeEntryPath, landOnAfterSwitch, routeChoosesSandbox, sameViewPath, sandboxEntryPath, sectionEntryPath, unrolledPath } =
+    await import("./sandboxScreen");
 const { homeSection } = await import("../../lib/routes/homeSection");
 const { installNavigation } = await import("../../workbench/navigation/navigation");
 installNavigation(router);
@@ -256,5 +257,68 @@ describe(`a switch in Home's frame`, () => {
         expect(sectionEntryPath(`sb2`, WORKSPACE)).toBe(homePath(`sb2`, page.workspace(`src/b.ts`, { query: { agent: `cnv_1` } })));
         expect(sectionEntryPath(`sb3`, WORKSPACE)).toBe(homePath(`sb3`, page.workspace()));
         expect(homeEntryPath(`sb3`)).toBe(homePath(`sb3`));
+    });
+});
+
+/* One view, the rail unrolled or folded (2026-11-09): unrolling and folding change the address's frame and nothing else,
+   and a look along the unrolled rail shows the same view of each sandbox. */
+describe(`the rail unrolled and folded around the page on screen`, () => {
+    const here = () => router.currentRoute.value;
+
+    it(`unrolls around the same page of the same sandbox, whatever is open in it`, async () => {
+        await go(insidePath(`sb1`, page.workspace(`src/a.ts`, { query: { agent: `cnv_1` } })));
+
+        expect(unrolledPath(here())).toBe(homePath(`sb1`, page.workspace(`src/a.ts`, { query: { agent: `cnv_1` } })));
+    });
+
+    it(`folds back onto the same page, so the two are each other's way back`, async () => {
+        await go(homePath(`sb1`, page.agent(`cnv_1`)));
+
+        expect(foldedPath(here())).toBe(insidePath(`sb1`, page.agent(`cnv_1`)));
+        expect(unrolledPath(here())).toBe(homePath(`sb1`, page.agent(`cnv_1`)));
+    });
+
+    it(`folds from Home's own page, which is no page of a sandbox, to where the sandbox was last left`, async () => {
+        await go(insidePath(`sb1`, page.agents()));
+        await go(homePath(`sb1`));
+
+        expect(foldedPath(here())).toBe(insidePath(`sb1`, page.agents()));
+    });
+
+    it(`shows the view on screen of the sandbox pressed, on the screen it was last left on in that view`, async () => {
+        await go(insidePath(`sb2`, page.workspace(`src/b.ts`)));
+        await go(homePath(`sb1`, page.workspace(`src/a.ts`)));
+
+        expect(sameViewPath(`sb2`, here())).toBe(homePath(`sb2`, page.workspace(`src/b.ts`)));
+        expect(sameViewPath(`sb3`, here())).toBe(homePath(`sb3`, page.workspace()));
+    });
+
+    it(`shows the board of the sandbox pressed from an agent opened on another's, never that agent`, async () => {
+        await go(homePath(`sb1`, page.agent(`cnv_1`)));
+
+        expect(sameViewPath(`sb2`, here())).toBe(homePath(`sb2`, page.agents()));
+    });
+
+    it(`opens the sandbox pressed where Home opens it, around no page of a sandbox`, async () => {
+        await go(homePath(`sb1`));
+        expect(sameViewPath(`sb2`, here())).toBe(homePath(`sb2`));
+
+        homeSection.value = WORKSPACE;
+        expect(sameViewPath(`sb2`, here())).toBe(homePath(`sb2`, page.workspace()));
+    });
+
+    it(`folds onto another sandbox than the one on screen at the same view of it`, async () => {
+        await go(homePath(`sb1`, page.agent(`cnv_1`)));
+
+        expect(foldedPath(here(), `sb2`)).toBe(insidePath(`sb2`, page.agents()));
+    });
+
+    it(`lands a switch made without a navigation on the same view, not on what Home opens on`, async () => {
+        homeSection.value = WORKSPACE;
+        await go(homePath(`sb1`, page.agents()));
+
+        await switchTo(`sb2`);
+
+        expect(landedOn()).toBe(homePath(`sb2`, page.agents()));
     });
 });

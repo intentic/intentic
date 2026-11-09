@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { useHomeCommand } from "./commands/useHomeCommand";
-import { masterRail } from "../models/home/masterRail";
-import { here, isPage, page, routeShows } from "../lib/routes/links";
+import { masterRail, sandboxBeside } from "../models/home/masterRail";
+import { here, isPage, page, routeShows, sameScreen } from "../lib/routes/links";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import TourMark from "../features/tour/TourMark.vue";
 import type { MarkStep } from "../features/tour/tourMarks";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
-import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type Tip, type TipTone, type TooltipValue } from "@intentic/ui";
+import { ui, ContextMenu, type TipTone, type TooltipValue } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRouter } from "vue-router";
@@ -60,8 +60,10 @@ import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { type SectionTile, tileLabel, tileParts, useSectionTiles } from "./rail/sectionTiles";
 import { useRailPins } from "./rail/railPins";
 import { useChatRailDrag } from "./rail/chatTileDrag";
+import { useRailMorph } from "./rail/railMorph";
 import ChatTileDragLayer from "./rail/ChatTileDragLayer.vue";
 import RailIcon from "./rail/RailIcon.vue";
+import RailMore from "./rail/RailMore.vue";
 import TileMark from "../components/TileMark.vue";
 import { RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
 import PresenceAvatars from "../workbench/presence/PresenceAvatars.vue";
@@ -73,7 +75,8 @@ import { useT } from "@intentic/ui/i18n";
 
 // The tiles themselves, and every badge on them, are rail/sectionTiles.ts's, shared with the phone's rail.
 const t = useT();
-useHomeCommand();
+// All sandboxes, in place: the rail unrolls around the page on screen, and folds back (commands/useHomeCommand.ts).
+useHomeCommand(true);
 
 // The hover: the name alone, or the name as a card's headline over what the tile is carrying. A warning or danger badge
 // lends the headline its dot, since that tone marks a standing state rather than a count.
@@ -160,6 +163,10 @@ const railTileTip = (tile: SectionTile): TooltipValue =>
 
 // Carry the chat tile to a new window or the right side. Not while it floats, when the tile is only passing through.
 const railNav = ref<HTMLElement | null>(null);
+// ONE RAIL, FOLDED ONTO A SANDBOX OR UNROLLED ONTO ALL OF THEM (models/home/masterRail.ts). The `nav` stays and what it
+// holds changes; the change is played, each sandbox to its tile and each section into the bookmark, or back
+// (rail/railMorph.ts), so it reads as one rail rearranging rather than a second screen.
+useRailMorph(() => railNav.value, masterRail);
 const chatDrag = useChatRailDrag(() => railNav.value?.getBoundingClientRect(), router);
 const chatCarriable = (tile: RailTile): boolean => tile.id === `chat` && !chatFloats.value;
 const pressTile = (tile: RailTile, event: PointerEvent): void => {
@@ -283,33 +290,6 @@ const onTileContextMenu = (tile: RailTile, event: MouseEvent): void => {
     showBesideRail(tileMenu.value, event);
 };
 
-// Every offRail section, as real links (so click behaviors work), sorted alphabetically rather than by
-// rail rank; each row can pin the section (railPins.ts). Never badges — anything with something to say is already on the rail.
-const moreTrigger = ref<HTMLButtonElement | null>(null);
-const moreOpen = ref(false);
-// The count is the whole point of hovering; phrased like every other tile's label. A `computed`, so it is rebuilt
-// when the language changes rather than holding the words it was born with.
-const moreLabel = computed(() =>
-    moreTiles.value.length === 0
-        ? t(`shell.shellDesktop.moreSections`)
-        : t(`shell.shellDesktop.moreSectionsOffRail`, { count: moreTiles.value.length }, moreTiles.value.length),
-);
-const moreTip = computed((): Tip => ({
-    title: t(`shell.shellDesktop.moreSections`),
-    rows: moreTiles.value.length === 0 ? [] : [{ label: t(`shell.shellDesktop.offRail`), value: moreTiles.value.length }],
-}));
-const dismissMore = (event: MouseEvent): void => {
-    if (!browserOwnsClick(event)) {
-        moreOpen.value = false;
-    }
-};
-// Pins here, not from a right-click, since an offRail section has no tile to click; the row leaves as
-// it's pressed (that departure is the feedback). Refocuses the door trigger so a keyboard reader isn't stranded.
-const keepOnRail = (tile: SectionTile): void => {
-    pins.toggle(tile.to);
-    moreTrigger.value?.focus();
-};
-
 const sideWidth = computed(() =>
     besideChat.value && !besideFills.value ? layout.chatWidth.value + layout.besideWidth.value : layout.chatWidth.value,
 );
@@ -330,8 +310,9 @@ const showSection = (): void => {
         setSplit(true);
     }
 };
+// Nor is the rail unrolling or folding around the page on screen: the same screen at its other address.
 const stopSectionVisits = router.afterEach((to, from, failure) => {
-    if (failure === undefined ? to.path !== from.path : isNavigationFailure(failure, NavigationFailureType.duplicated)) {
+    if (failure === undefined ? to.path !== from.path && !sameScreen(to, from) : isNavigationFailure(failure, NavigationFailureType.duplicated)) {
         showSection();
     }
 });
@@ -391,12 +372,20 @@ useGettingStarted();
 
 <template>
     <div class="shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
-        <!-- The master view keeps the rail itself (its look, its account control) and swaps only its tiles for the sandboxes. -->
-        <MasterRail v-if="masterRail" />
-        <nav v-else ref="railNav" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
+        <!-- The one rail. Unrolled, its tiles are the sandboxes and its sections are in the bookmark (rail/MasterRail.vue);
+             folded, the template below: one sandbox's sections, the others in the cluster under its switcher. -->
+        <nav
+            ref="railNav"
+            class="icon-rail flex flex-col items-center border-r border-line bg-card"
+            :data-rail="masterRail ? `unrolled` : `folded`"
+            style="grid-area: rail"
+        >
+          <MasterRail v-if="masterRail" />
+          <template v-else>
             <!-- Top of the rail: switch between sandboxes, add one, or manage access. No Home tile above it, by the owner's
-                 decision (it came back once already): the way out to Home is the other sandboxes' cluster under it, which
-                 a guest, fenced out of Home, never sees; then the switcher's own header mark and Mod+Alt+H. -->
+                 decision (it came back once already): the way to every sandbox is the others' cluster under it, which
+                 unrolls them along this rail and which a guest, fenced out of Home, never sees; then the switcher's own
+                 header mark and Mod+Alt+H. -->
             <SandboxSwitcher />
             <OtherSandboxes v-if="!isGuest" />
             <!-- Other members connected right now, live from the daemon's /events roster. -->
@@ -415,6 +404,8 @@ useGettingStarted();
                             v-if="tile.ghost"
                             class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
                             aria-hidden="true"
+                            :data-rail-key="`section:${tile.to}`"
+                            data-rail-into="sections"
                         >
                             <RailIcon
                                 :section="tile.id"
@@ -434,6 +425,8 @@ useGettingStarted();
                                     tile.id === `chat` && chatDrag.dragging.value,
                             }"
                             :draggable="chatCarriable(tile) ? `false` : undefined"
+                            :data-rail-key="`section:${tile.to}`"
+                            data-rail-into="sections"
                             :aria-label="railTileLabel(tile)"
                             v-tooltip.right="railTileTip(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
@@ -480,89 +473,7 @@ useGettingStarted();
             <!-- What runs for the reader meanwhile (a sign-in, this PC's setup, a sandbox's): Home holds their pages. -->
             <RailProcesses v-if="!isGuest" sandbox-rail />
             <GettingStartedRing v-if="!isGuest" />
-            <button
-                v-if="!isGuest"
-                ref="moreTrigger"
-                type="button"
-                class="icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center rounded-lg text-muted hover:text-content"
-                :class="{ 'ui-row-select-on text-link': moreOpen }"
-                aria-haspopup="menu"
-                :aria-expanded="moreOpen"
-                :aria-label="moreLabel"
-                v-tooltip.right="moreOpen ? undefined : moreTip"
-                @click="moreOpen = !moreOpen"
-            >
-                <RailIcon section="more" class="icon-rail-glyph" />
-            </button>
-
-            <!-- Same overlay as the switcher and account avatar: AnchoredOverlay rows, not PrimeVue's ContextMenu. -->
-            <AnchoredOverlay v-model="moreOpen" :anchor="moreTrigger ?? undefined" side="right" cross="start" menu>
-                <div class="flex w-48 flex-col gap-0.5 p-1">
-                    <!-- With every section pinned the menu is empty, and saying only that sent its reader back four times: it
-                         says where the way back is too (the tile's own menu, onTileContextMenu). -->
-                    <template v-if="moreTiles.length === 0 && !(maker && connects)">
-                        <p class="px-2 pt-1.5 text-xs text-subtle">{{ t(`shell.shellDesktop.everySectionOnRail`) }}</p>
-                        <p class="px-2 pb-1.5 text-2xs text-subtle">{{ t(`shell.shellDesktop.howToUnpin`) }}</p>
-                    </template>
-                    <!-- Two controls per row — go there, and pin it (keepOnRail) — as siblings, not nested. -->
-                    <div
-                        v-for="tile in moreTiles"
-                        :key="tile.to"
-                        class="ui-row-select group flex items-center rounded-md text-xs"
-                        :class="isNavActive(tile.to) ? 'ui-row-select-on text-link' : 'text-content'"
-                    >
-                        <RouterLink
-                            :to="tile.to"
-                            class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left"
-                            :aria-current="isNavActive(tile.to) ? 'page' : undefined"
-                            @click="dismissMore"
-                        >
-                            <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                                <RailIcon
-                                    :section="tile.id"
-                                    :fallback="tile.icon"
-                                    :label="tile.label"
-                                    class="text-base"
-                                    :class="isNavActive(tile.to) ? 'text-link' : 'text-muted'"
-                                />
-                            </span>
-                            <span class="min-w-0 flex-1 truncate">{{ tile.label }}</span>
-                        </RouterLink>
-                        <!-- Hidden until hover, focus, or a coarse pointer, so it doesn't compete with the row's real job. -->
-                        <button
-                            type="button"
-                            :class="[
-                                // `transition`, not the recipe's own `transition-colors`, and passed THROUGH it
-                                // so twMerge drops the one it replaces: two transition-* utilities on one
-                                // element are a conflict CSS settles by stylesheet order rather than by the
-                                // order they are written in, and the one that loses here is the fade this
-                                // control appears with. The default property list covers colour and opacity
-                                // both, which is exactly the pair this button animates.
-                                ui.iconButton({ size: `xs`, tone: `subtle` }, `mr-1 transition`),
-                                `opacity-0 pointer-coarse:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100`,
-                            ]"
-                            :aria-label="t(`shell.shellDesktop.keepOnRail`, { label: tile.label })"
-                            v-tooltip.top="t(`shell.shellDesktop.pin`)"
-                            @click="keepOnRail(tile)"
-                        >
-                            <Icon name="pin" class="text-xs" />
-                        </button>
-                    </div>
-                    <!-- Plain words gave the rail's + to a new conversation; what it used to open stays here, one press in. -->
-                    <RouterLink
-                        v-if="maker && connects"
-                        :to="here(page.capabilities())"
-                        class="ui-row-select flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-xs"
-                        :class="isPage(route, `capabilities`) ? 'ui-row-select-on text-link' : 'text-content'"
-                        @click="dismissMore"
-                    >
-                        <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                            <RailIcon section="capabilities" class="text-base" :class="isPage(route, `capabilities`) ? 'text-link' : 'text-muted'" />
-                        </span>
-                        <span class="min-w-0 flex-1 truncate">{{ t(`shell.words.addCapability`) }}</span>
-                    </RouterLink>
-                </div>
-            </AnchoredOverlay>
+            <RailMore v-if="!isGuest" :tiles="moreTiles" />
 
             <!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. A
                  guest or anyone below a maintainer connects nothing: what this box can reach is the operator's decision. -->
@@ -570,6 +481,7 @@ useGettingStarted();
                 v-if="!isGuest && maker"
                 type="button"
                 :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
+                data-rail-key="rail:new-agent"
                 :aria-label="words.newAgent"
                 v-tooltip.right="words.newAgent"
                 @click="startAgent()"
@@ -580,6 +492,8 @@ useGettingStarted();
                 v-else-if="connects"
                 :to="here(page.capabilities())"
                 :class="[ui.addTile(`icon-rail-tile ui-row-select-horizontal rounded-lg hover:bg-overlay`), { 'ui-row-select-on text-link': isPage(route, `capabilities`) }]"
+                data-rail-key="section:capabilities"
+                data-rail-into="sections"
                 :aria-label="t(`shell.words.addCapability`)"
                 v-tooltip.right="t(`shell.words.addCapability`)"
             >
@@ -588,6 +502,7 @@ useGettingStarted();
 
             <!-- The account control: avatar opening a popover with account identity and actions. -->
             <AccountPanel />
+          </template>
         </nav>
 
         <!-- The right-hand column: things opened beside the section, and the chat when its home is the side. -->
@@ -615,14 +530,15 @@ useGettingStarted();
 
         <!-- The foot of the window, under the section and the side panel: what the sandbox is running, the terminal first,
              and with geek metrics on, how full it is. Outside the gate, like the chat column: a stalled sandbox still says
-             what it had going, and the terminal's chip goes inert until it answers. -->
-        <StatusBar v-if="!masterRail" :persistent="statusBarShown" :metrics="liveMetrics" style="grid-area: status">
+             what it had going, and the terminal's chip goes inert until it answers. Wherever a sandbox's page is on
+             screen, the rail folded or unrolled (sandboxBeside): only Home's own chat and the account's pages have none. -->
+        <StatusBar v-if="sandboxBeside" :persistent="statusBarShown" :metrics="liveMetrics" style="grid-area: status">
             <template #start><RuntimeChips :runtime="runtimeChips" /><WakeStatusChip /></template>
         </StatusBar>
 
         <!-- The parked chat's scratch pad, floating in the section's own cell: opening it must not reflow the page the reader
              opened it to talk about. Outside the gate, like the chat column: a stalled sandbox is a thing to ask about. -->
-        <ChatQuickBar v-if="!masterRail" />
+        <ChatQuickBar v-if="sandboxBeside" />
 
         <!-- Portals to body, so it overlays the whole shell regardless of where it sits in the grid. -->
         <QuickOpen />
