@@ -1,27 +1,13 @@
 import type { LocalFace } from "@intentic/web/local";
 import { ACCOUNT_POINTER_KEY, resetAccountPartitionForTests, storedValue } from "@intentic/ui/storage";
 import { seedFolderSession, seedFolderWindow } from "./folderSession";
+import { memoryStorage } from "./storage.testing";
 
 // What a folder window's boot leaves for the editor: the session its sandbox client opens the folder with, and the folder
 // as the sandbox it opens on, both where the editor reads them, whichever account the browser is signed in to.
 
 const FACE: LocalFace = { daemonUrl: `http://127.0.0.1:47148`, token: `window-bearer`, id: `f3a9c2`, name: `brief.docx`, path: `/home/ada/Documents`, file: `brief.docx` };
 const SANDBOX = `local-f3a9c2`;
-
-// The browser's storage as a page has it: plain names, nothing scoped.
-const memoryStorage = (): Storage => {
-    const items = new Map<string, string>();
-    return {
-        get length() {
-            return items.size;
-        },
-        clear: () => items.clear(),
-        getItem: (key) => items.get(key) ?? null,
-        key: (index) => [...items.keys()][index] ?? null,
-        removeItem: (key) => void items.delete(key),
-        setItem: (key, value) => void items.set(key, String(value)),
-    };
-};
 
 let local: Storage;
 const realLocal = Object.getOwnPropertyDescriptor(globalThis, `localStorage`);

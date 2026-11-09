@@ -24,6 +24,17 @@ The native mobile client's Rust core: everything the app does that is not drawin
   assertion. `src/client/` sends the kept session, sandboxes and board as the core starts, then refreshes them and
   follows the open sandbox's `/events` stream, reconnecting with backoff. `tests/flow.rs` runs the whole path against a
   fake platform and daemon.
+- **Only the platform's clear word forgets anything.** Signing out forgets everything the store keeps, so the core
+  signs out only when `/rpc/me` answers 200 with a body of JSON `null`, or a platform call answers 401 with the api's
+  own JSON error (one naming its `code`). Better Auth and the api answer 500 when their database fails, so that pair
+  is the platform's word. A 5xx, a timeout, an empty or HTML 200, a proxy's 401 page or a body that does not read is an
+  error, and what was kept stays on screen. A daemon's token is forgotten only on a 401 carrying the daemon's own
+  error, since minting another needs the platform. A refreshed sandbox list replaces the kept one only when it comes
+  from the database the kept list came from (`GET /api/identity`, kept beside the list). A list from another database,
+  or from one that cannot say which it is, is a reset: the kept rows it lacks stay after the rows it lists, as the web
+  client keeps them ([listed.rs](src/client/listed.rs)). 2026-11-09: before this, any 401 signed out and any list
+  replaced the kept one, so a platform answering off a restored or wrong database emptied the phone. `tests/outage.rs`
+  holds both rules against a fake platform.
 - **A conversation is rows, not frames.** `src/conversation/` keeps an open conversation's rows: the newest page of
   its record, then its live run over `/agent/attach`, whose patches count rows from the run's first one. Each row is
   rendered once per change and read by the list through `Core.rowCount` and `Core.row`, as `Event::Rows` says what

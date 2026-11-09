@@ -78,7 +78,10 @@ flowchart LR
   are answered in the page (`local/machineFace.ts`): who is signed in is the account `roster.json` names, the list is
   each sandbox with a loopback port, at `http://127.0.0.1:<localPort>` and keyed by the platform's id for it (or
   `machine-<id>` before one is known), and anything else of the platform answers in plain words that it needs the
-  internet. Each running sandbox is opened with a session the machine minted for its owner (`ic sandbox session`,
+  internet. Each is named and pictured by the nearest copy that has its owner's name and logo (`names_of`, 2026-11-09):
+  the sandbox's own (`displayName`, `logo` in the listing, absent from an older `ic`), then the app's name for its slug
+  (`sandboxes.json`), then the workspace's last roster row for its platform id, then its slug and no logo; a logo only
+  as a `data:image/…` URL, which draws with no network. Each running sandbox is opened with a session the machine minted for its owner (`ic sandbox session`,
   kept in the app's memory only), written where the editor's sandbox client reads one; a sandbox that wakes later, or
   whose daemon refuses its session, gets one minted again and handed over on the editor's own session channel. The
   daemon admits the face's origin on the loopback port alone (the sandbox daemon's README). The page is granted
@@ -127,7 +130,7 @@ flowchart LR
   workspace; nothing opens by itself (2026-10-26). Settings open in the window itself (`#/settings`), and
   signing out leaves it on its folder. The sandboxes are what the workspace last told the app, and the account what the
   platform last answered (below): the workspace's switcher hands both over on `intentic://roster` whenever either
-  changes, a sign-out empties them, and the app keeps them in `roster.json` (`local_roster`), with no address, token or logo, so a row carries a name, where it runs and
+  changes, a sign-out empties them, and the app keeps them in `roster.json` (`local_roster`), with no address or token, so a row carries a name, its logo as a small inline thumbnail (`image`, a `data:image/…` URL of at most 64 KB; 2026-11-09), where it runs and
   whether it is shared, and no count or state, and the account an address, a name and an `https` avatar. Before the
   workspace has listed any, Add sandbox is the place chip's one row; the account menu shows the named account at once
   and then what the platform answers (below). It opens on the folder it was last
@@ -234,7 +237,14 @@ flowchart LR
   no first paint waits on the network, and the folder's row followed by the account's on every later ask. The remove
   dialog's door onto this computer is the app's own `ic` (`machine` in `src/host.ts`), since every sandbox's daemon
   refuses this page's origin off the loopback port. As before, only the app's bundle can call the relay: the
-  documents a local window draws run no script there._ A sign-out also
+  documents a local window draws run no script there._ _(2026-11-09) A later ask the platform gives no list for (the
+  relay rejects, an error status, an answer out of shape) is the folder's row followed by the last list it did give,
+  instead of the folder alone, which read as every sandbox gone. The window keeps that list in memory for its life and
+  in the bundle origin's `localStorage` for the next window (`intentic.local.accountSandboxes`, through the shared
+  storage layer, `platform.ts` `storedListKeeping`), under the account `roster.json` names, and shows it only while
+  that is still the account. Every row is kept with its connect token nulled, in memory and on disk: a folder window
+  never dials another sandbox, since picking one opens the workspace on it. Every list the platform gives replaces it,
+  an empty one included, and a 401 (nobody signed in) forgets it._ A sign-out also
   deletes the session from the store (every account's, the `_multi-` cookies of the others among them), empties
   `roster.json` and reloads the workspace window, so both faces are signed out together. A switch to another account
   signed in beside it, or a sign-out of only the one in front of the reader (`set-active`, `revoke`), empties
@@ -656,6 +666,16 @@ flowchart LR
   verb), but only for a sandbox the agent syncs, and its folders' pairings go with it. A sandbox a folder's setup made
   moments ago, which the workspace may not list yet, is never let go of for a roster.
 
+  _(2026-11-09)_ Nor is anything let go of, or forgotten from `roster.json`, for a roster that lists no sandbox at all
+  (`project.rs` `roster_to_keep`, `stale_projects`, `dropped_sandboxes`): the workspace's list comes up empty as often
+  because the platform could not be asked (a cold load while it was down) as because the account has none, and only the
+  platform's clear answer takes anything away. The same account's empty list keeps the rows held, under the account as
+  told; a list with rows still says which sandboxes went, and a sign-out or another account still replaces them. The
+  cost is the account's very last sandbox going elsewhere: the roster no longer says so, and its sync here is let go of
+  by its removal (Devices' Remove here, or the sandbox's machine) rather than for the roster. _Before, an empty list
+  while signed in read as every sandbox gone: this machine let go of every folder the account synced, and the local
+  windows and the sandbox face lost every name._
+
   **Whose a folder's sandbox is** (2026-10-25). Every roster that names who is signed in teaches the app which account
   each listed sandbox belongs to (`sandbox-owners.json`, by platform row, kept across a sign-out; `state.rs`
   `learn_owners`). A sandbox counts as gone only when the account that owns it stops listing it (`project.rs`
@@ -812,7 +832,7 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `wake?state=off\|listening\|paused\|blocked\|error&word=…[&until=…]` | the workspace window | What the workspace page's wake-word listening is doing, whenever that changes: kept for the tray's rows, and whether it is wanted (any state but `off`) and the word written to `wake.json` for the next launch. `word` is one line of 1 to 40 characters; `until` (epoch milliseconds, a positive whole number) rides only with `paused`. A value out of shape drops the link. |
 | `machine-face` | the workspace window | Sends that window to the face (`files/sandbox`, machine_face.rs), as the offline page's button does: the hosted page's offer of this computer's sandboxes when it cannot reach the platform, made only where the app told it `machineFace: true`. It carries nothing; a build without the face drops it. |
 | `notice?do=open&token=…` | anywhere | A press on one of the app's notifications, as Windows delivers it through the OS: the workspace at that notification's route. A token this run did not issue, letters and digits only, opens the workspace as it is. |
-| `roster?list=<JSON>[&account=<JSON>]` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`) and who is signed in (`email`, `name`, `image`), kept in `roster.json` for the rail's foot and the app's own reads (a local window's switcher asks the platform itself, through `account_relay`); `[]` and no account after a sign-out. One value out of shape drops the link: an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word, an account without an address, an avatar that is not an `https` address. |
+| `roster?list=<JSON>[&account=<JSON>]` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`, and an optional `image`: the logo as a `data:image/…` thumbnail of at most 64 KB, dropped alone when it is not one) and who is signed in (`email`, `name`, `image`), kept in `roster.json` for the rail's foot and the app's own reads (a local window's switcher asks the platform itself, through `account_relay`); `[]` and no account after a sign-out, while `[]` for the account already named keeps the rows held. One value out of shape drops the link: an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word, an account without an address, an avatar that is not an `https` address. |
 | `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close[&confirmed=1]`, `dirty&value=0\|1`, `drag`, `raise`, `fit`, `mode`. |
 | `local?do=…` | local windows only | `open-folder` and `open-file` in the system dialog, `reveal[&path=…]` an entry of the window's own folder, `sandbox` (the folder's sandbox opened, or the window asked to put up its dialog), `ask&path=…`, and the project's `changes`, `bring-back[&paths=<JSON array>]`, `restore&point=…`, `direction&value=to-sandbox\|both`. |
 

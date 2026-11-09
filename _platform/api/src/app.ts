@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { ACCOUNT_HEADER, API_BASE_PATH, type BootReport, type SetupReport } from "@intentic/api-contract";
+import { presentationDigest, type ReachabilityDeleted } from "@intentic/api-contract/ingress";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
@@ -320,9 +321,16 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
         if (announced.count === 0) {
             return kit.refuse(404, `unknown sandbox`);
         }
-        // The identity key rides along so the daemon can verify the platform's identity assertions (sign-in.ts), and the
-        // row's own id, so the machine that runs it can open it by that id with no network (ingress-schemas.ts).
-        return kit.answer({ ok: true as const, ...(await identityField(prisma)), platformId: sandbox.id, identityKey: identityKeyOf(config) });
+        // The identity key rides along so the daemon can verify the platform's identity assertions (sign-in.ts), the
+        // row's own id, so the machine that runs it can open it by that id with no network, and the digest of its name
+        // and logo, so the daemon asks for those again only when they changed (ingress-schemas.ts).
+        return kit.answer({
+            ok: true as const,
+            ...(await identityField(prisma)),
+            platformId: sandbox.id,
+            identityKey: identityKeyOf(config),
+            presentationDigest: await presentationDigest(sandbox.name, sandbox.image),
+        });
     });
 
     // The doors a platform that forgot a sandbox needs: adoption, and which database this is (recovery.routes.ts).
@@ -345,7 +353,8 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
 
     app.route(`/`, orgPolicyHttpRoutes({ prisma }));
 
-    /* The sandbox presents itself through the same sessionless credentialed door as announce. */
+    /* The sandbox presents itself through the same sessionless credentialed door as announce. The daemon asks when an
+     * announce's digest says its copy is stale, when someone asks it to refresh, and when an export packs a bundle. */
     ingress(`presentation`, async (_c, kit) => {
         const token = kit.connectToken;
         if (token === undefined) {
@@ -358,7 +367,12 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
         if (!sandbox) {
             return kit.refuse(404, `unknown sandbox`);
         }
-        return kit.answer({ name: sandbox.name, ...(sandbox.image === null ? {} : { image: sandbox.image }) });
+        // With the digest an announce carries for the same pair, which the daemon keeps beside its copy.
+        return kit.answer({
+            name: sandbox.name,
+            ...(sandbox.image === null ? {} : { image: sandbox.image }),
+            digest: await presentationDigest(sandbox.name, sandbox.image),
+        });
     });
 
     // A builder's report, authenticated by its per-build secret; body capped twice against an abusive caller.
@@ -417,12 +431,14 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
         return updated.count === 0 ? kit.refuse(404, `unknown sandbox`) : kit.answer({ ok: true });
     });
 
-    // Unauthenticated by design (existence isn't secret); matches `tunnelId` exactly, never a prefix over it. The edge
-    // refuses a tunnel on a 404 and on nothing else (ingress revocation.rs), so a 404 is a deletion record and only that
-    // (2026-10-02). An id with neither a row nor a record is one this database never knew or has forgotten, and answers
-    // `known: false` with a 200: the edge could only be asked about it by a daemon holding a grant this platform signed,
-    // and refusing it turned a restore or a wrong DATABASE_URL into every sandbox going dark within a minute. Rejected:
-    // keeping 404 for both, which is what made forgetting a sandbox indistinguishable from deleting it.
+    // Unauthenticated by design (existence isn't secret); matches `tunnelId` exactly, never a prefix over it. A 404 here
+    // is a deletion record and only that (2026-10-02), and its body says so (`ReachabilityDeletedSchema`, `deleted:
+    // true`): the edge refuses a tunnel only on that body, said twice some 30 s apart, never on a bare 404, which
+    // something in front of the api answers too (ingress revocation.rs, 2026-11-09). An id with neither a row nor a
+    // record is one this database never knew or has forgotten, and answers `known: false` with a 200: the edge could only
+    // be asked about it by a daemon holding a grant this platform signed, and refusing it turned a restore or a wrong
+    // DATABASE_URL into every sandbox going dark within a minute. Rejected: keeping 404 for both, which is what made
+    // forgetting a sandbox indistinguishable from deleting it.
     ingress(`reachability`, async (c, kit) => {
         const sandboxId = c.req.param(`sandboxId`) ?? ``;
         // Shape-checked before the query: outside the fixed alphabet/length can't be a sandbox, skip the database.
@@ -435,7 +451,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
         });
         if (sandbox === null) {
             return (await isTombstoned(prisma, sandboxId))
-                ? kit.refuse(404, `deleted sandbox`)
+                ? c.json({ error: `deleted sandbox`, deleted: true } satisfies ReachabilityDeleted, 404)
                 : kit.answer({ ok: true, lane: `tunnel`, known: false });
         }
         // Today's edge reads only the status. `lane` stays for an edge build from before the replay lane went, which

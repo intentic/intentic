@@ -26,6 +26,9 @@ pub const WAKE: Endpoint = Endpoint::post("/rpc/sandbox/wake");
 pub const DESKTOP_HANDOFF: Endpoint = Endpoint::post("/rpc/desktop/handoff");
 /// Its second half, sessionless, from the app the browser handed back to: [`HandoffRedeem`] in, [`Redeemed`] out.
 pub const DESKTOP_REDEEM: Endpoint = Endpoint::post("/rpc/desktop/redeem");
+/// Which database the platform reads, sessionless and outside `/rpc` (an ingress route, `PlatformIdentitySchema`):
+/// [`PlatformIdentity`]. A kept sandbox list remembers it, so a list from another database never deletes its rows.
+pub const IDENTITY: Endpoint = Endpoint::get("/api/identity");
 /// Registers this install with the push relay: [`PushDevice`] in, [`PushGrant`] out.
 pub const PUSH_REGISTER: Endpoint = Endpoint::post("/rpc/push/register");
 pub const PUSH_UNREGISTER: Endpoint = Endpoint::post("/rpc/push/unregister");
@@ -41,6 +44,14 @@ pub struct User {
     /// `google`, `email`, or both; absent from a platform older than email sign-in, where every account is Google's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sign_in_methods: Option<Vec<String>>,
+}
+
+/// Which database the platform reads: random per database, with when it was given.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlatformIdentity {
+    pub identity: String,
+    /// ISO instant this database was given its identity.
+    pub since: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

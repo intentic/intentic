@@ -43,7 +43,8 @@ import { fileUsageParkStore, usageParksDocument } from "./usage/usage-parks.js";
 import { fileIssuesStore, issuesDocument } from "./issues/issues-store.js";
 import { fileInstallsStore, issueInstallsDocument } from "./store/installs.js";
 import { filePeerTools, type PeerToolMemory } from "./peers/peer-tool-memory.js";
-import { fetchPresentation, type SandboxPresentation } from "./system/platform-client.js";
+import { askPresentation } from "./system/platform-client.js";
+import { daemonPresentation, type PresentationMirror } from "./system/presentation/presentation-mirror.js";
 import type { Config } from "./env.config.js";
 import { keepCodeCounts } from "./git/changes/code-counts.js";
 import { createOpenCodeService } from "./runtimes/opencode/opencode.js";
@@ -213,11 +214,9 @@ export interface Services
     readonly turnMounts: TurnMounts;
     // This sandbox's identity for the Connections card; undefined means /info returns {} (loopback/test).
     readonly info: SandboxInfo | undefined;
-    // How the platform says this sandbox presents itself: the owner's name for it and its switcher logo. Neither is
-    // workspace state, so an export has to ask; injected rather than imported so the bundler stays testable and a
-    // headless daemon can simply not have one. Resolves undefined whenever the platform can't answer — an export
-    // must never fail over presentation.
-    readonly presentation: () => Promise<SandboxPresentation | undefined>;
+    // The owner's name and logo for this sandbox, and its own copy for a client reaching it with the platform down
+    // (system/presentation/presentation-mirror.ts): an export asks through `forExport`, GET /system/presentation reads it.
+    readonly presentation: PresentationMirror;
     // Whether this sandbox can chat before an AI account connects, and today's allowance; unset with no platform.
     readonly trial: TrialService;
     // Loopback TLS terminator for a dev platform; awaited by the translator's render so the address isn't a race.
@@ -496,6 +495,7 @@ const createDaemonMembers = (
     const { config, logger, workspace, capabilities, conversations, chores, runtimeInstalls, processes, serviceProcesses, ownerGrants } = deps;
     // Born converged: main() closes the gate, so a test or host-internal preview build has nothing to wait for.
     const boot = createBootTracker(logger);
+    const presentation = daemonPresentation(config, () => askPresentation(config), logger);
     return {
         config,
         logger,
@@ -505,6 +505,7 @@ const createDaemonMembers = (
         announcer: createAnnouncer(config, logger, {
             identityKey: deps.platformIdentityKey.learn,
             platformId: (id) => void rememberPlatformRow(config.historyRoot, id).catch((error: Error) => logger.warn({ err: error }, "announce: the platform's id for this sandbox was not kept")),
+            ...presentation.listeners,
         }),
         orgPolicy: deps.orgPolicy,
         reach: createReachReporter(config, logger, () => boot),
@@ -515,7 +516,7 @@ const createDaemonMembers = (
         probePiAgent,
         turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${config.sandbox.port}${TURN_MOUNT_BASE}` }),
         info: sandboxInfoOf(config),
-        presentation: () => fetchPresentation(config),
+        presentation: presentation.mirror,
         probeRunner: createProbeRunner({
             workspace,
             chores,

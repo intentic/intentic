@@ -28,7 +28,9 @@ flowchart LR
   answers text, two stream an upstream's bytes, and every refusal is `{ "error": … }`, which older daemons and `ic`
   already read. A request field is added optional, and a label a machine sends about itself is dropped when it does
   not parse rather than refusing the call. Its test pins the old body shapes, and the Rust and shell callers'
-  spellings of the paths and of `CONNECT_TOKEN_HEADER`.
+  spellings of the paths and of `CONNECT_TOKEN_HEADER`. `presentationDigest` (WebCrypto, so the editor can import the
+  entry point) is the one rule both the platform's announce answer and the daemon's copy of a sandbox's name and logo
+  are digested by.
 - `wakeAlarm` is the hosted daemon's durable sleep promise: `POST /sandbox/wake-alarm`, authenticated by its connect
   token, takes `{ at: <epoch milliseconds> }` or `{ at: null }` to cancel, with an optional `personAt` (the last moment
   a person was there since that boot), and answers `{ ok: true }` after storage. A daemon with something due requires

@@ -855,6 +855,7 @@ mod tests {
                     name: (*id).into(),
                     place: "own".into(),
                     shared: *shared,
+                    image: None,
                 })
                 .collect(),
         };
@@ -1218,12 +1219,30 @@ mod tests {
                 name: "Shop".into(),
                 place: "cloud".into(),
                 shared: false,
+                image: Some("data:image/png;base64,iVBORw0KGgo=".into()),
             }],
         };
         state_in(&dir).remember_roster(told.clone());
         assert_eq!(state_in(&dir).roster(), told);
         state_in(&dir).remember_roster(Roster::default());
         assert_eq!(state_in(&dir).roster(), Roster::default());
+        let logoless = RosterEntry {
+            image: None,
+            ..told.sandboxes[0].clone()
+        };
+        // Written before rows carried a logo: read with none.
+        std::fs::write(
+            dir.join("roster.json"),
+            r#"{"account":{"email":"ada@example.com","name":"Ada"},"sandboxes":[{"id":"s1","name":"Shop","place":"cloud","shared":false}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            state_in(&dir).roster(),
+            Roster {
+                account: told.account.clone(),
+                sandboxes: vec![logoless.clone()],
+            }
+        );
         // The file as it was first written, a bare list, is read as that list with nobody named.
         std::fs::write(
             dir.join("roster.json"),
@@ -1234,7 +1253,7 @@ mod tests {
             state_in(&dir).roster(),
             Roster {
                 account: None,
-                sandboxes: told.sandboxes.clone(),
+                sandboxes: vec![logoless],
             }
         );
         std::fs::remove_dir_all(&dir).unwrap();

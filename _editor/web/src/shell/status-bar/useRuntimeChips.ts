@@ -4,6 +4,8 @@ import { here, linkOf, page, pageCovers, type PageLink } from "../../lib/routes/
 import { useAudience } from "../../app/useAudience";
 import { useRole } from "../../client/sandbox/useRole";
 import { useSandbox } from "../../client/sandbox/useSandbox";
+import { directMode } from "../../client/directory/directState";
+import { platformHealth } from "../../lib/platform/platformHealth";
 import { useBrowsersQuery } from "../../features/browsers/browsersQuery";
 import { useDesktopQuery } from "../../features/desktop/desktopQuery";
 import { usePanels } from "../../models/extensions/usePanels";
@@ -28,6 +30,8 @@ export interface RuntimeChips {
     readonly toggleTerminal: () => void;
     /** A stalled sandbox has no shell to open; the terminal's chip goes inert until it answers. */
     readonly reachable: Ref<boolean>;
+    /** Intentic's servers not answering, or the window open without them: the offline chip, which keeps the bar up. */
+    readonly offline: ComputedRef<boolean>;
 }
 
 export function useRuntimeChips(): RuntimeChips {
@@ -87,5 +91,6 @@ export function useRuntimeChips(): RuntimeChips {
             .filter((chip) => chip.to === undefined || sectionReachable(here(chip.to))),
     );
 
-    return { chips, toggleTerminal: () => terminal.toggle(), reachable };
+    const offline = computed(() => platformHealth.down.value || directMode.value);
+    return { chips, toggleTerminal: () => terminal.toggle(), reachable, offline };
 }

@@ -959,6 +959,7 @@ mod tests {
             name: id.into(),
             place: "own".into(),
             shared: false,
+            image: None,
         }
     }
 

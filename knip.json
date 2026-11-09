@@ -58,6 +58,8 @@
                 "_tools/nav/**/*.mjs",
                 "_tools/oxlint/*.mjs",
                 "_tools/turbo-cache/*.mjs",
+                // Cloudflare runs it by its wrangler.jsonc `main`, outside any import graph (README.md beside it).
+                "_platform/status/worker.ts",
                 ".githooks/*",
                 // The native Android spike is a Gradle, Cargo and Flutter tree with no package.json; its bench and
                 // fixture writer are scripts run by hand with node and bun.
@@ -78,7 +80,9 @@
                 "_editor/android-app/**",
                 "_editor/android-native/**/build/**",
                 "_editor/mobile-core/target/**"
-            ]
+            ],
+            // `cloudflare:workers` is the Workers runtime's own module (the status Worker's Durable Object), not a package.
+            "ignoreDependencies": ["cloudflare"]
         },
         "_editor/web": {
             "entry": [
@@ -89,7 +93,9 @@
                 "src/**/*.test.{ts,mts,mjs}",
                 "scripts/*.mjs",
                 "src/app/environments/environment.local.ts",
-                "src/app/environments/environment.deployment.ts"
+                "src/app/environments/environment.deployment.ts",
+                // The editor's failover Worker, run by Cloudflare from edge/wrangler.jsonc `main` (edge/README.md).
+                "edge/worker.ts"
             ],
             "ignore": ["public/**"],
             // Its config reads the localhost cert as it loads, so knip cannot load it; the entries above stand in for it.

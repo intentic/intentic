@@ -6,6 +6,7 @@ import { ref } from "vue";
 import { z } from "zod";
 import { storedValue, storeValue } from "../../app/storage/browserStorage";
 import { normalizeDaemonUrl } from "../../lib/daemonUrl";
+import { reportClient } from "../../app/clientDiagnostics";
 
 // THE SANDBOXES THIS DEVICE REMEMBERS, per account: where each answered when the platform last listed it, so a
 // platform that is down, or that answers from a database that forgot them, never leaves its owner with nothing to
@@ -83,7 +84,16 @@ const directory = ref<DeviceDirectory>(read());
 
 const write = (next: DeviceDirectory): void => {
     directory.value = next;
-    storeValue(KEY, JSON.stringify(next));
+    const serialized = JSON.stringify(next);
+    storeValue(KEY, serialized);
+    // A write the browser refused (over quota, storage off) is dropped by the storage layer without a word, and this is
+    // the memory an outage needs: said where whoever investigates will find it (2026-11-09).
+    if (storedValue(KEY) !== serialized) {
+        reportClient(`directory.dropped`, `this device could not keep its memory of the account's sandboxes`, {
+            level: `warn`,
+            fields: { chars: serialized.length, accounts: Object.keys(next.accounts).length },
+        });
+    }
 };
 
 // The loopback ids of a list's rows, by row id: what `sandboxIdOf` reads off each owner's connect token. Worked out by

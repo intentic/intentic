@@ -10,6 +10,12 @@ primary_region = "iad"
   # Built and pushed by the `docker:release` turbo task, never by Fly. See Dockerfile.
   image = "ghcr.io/intentic/ingress:latest"
 
+# The certificate's volume, as fly.toml mounts it: the machines carry their `ingress_state` volumes whichever shape
+# deploys them (README.md, "The certificate kept on disk").
+[mounts]
+  source = "ingress_state"
+  destination = "/var/lib/intentic-ingress"
+
 [http_service]
   internal_port = 8080
   force_https = true

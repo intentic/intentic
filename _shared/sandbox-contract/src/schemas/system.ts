@@ -217,6 +217,31 @@ export const DaemonSessionSchema = z.object({
 });
 export type DaemonSession = z.infer<typeof DaemonSessionSchema>;
 
+// (2026-11-09) The owner's name for the sandbox and its switcher logo, as the sandbox last heard them from the platform,
+// which holds them. The sandbox keeps a copy so a client that reaches it while the platform is down still shows both.
+// Its own routes (system.presentation, system.presentationRefresh) rather than fields on /info: /info is read often,
+// and a logo is a data URL of up to 150 KB.
+export const SandboxPresentationSchema = z.object({
+    name: z.string().describe("What the owner calls this sandbox, as the switcher shows it."),
+    image: z.string().nullable().describe("Its logo, as an image data URL. Null for none: the switcher draws the name's monogram instead."),
+    at: z.string().describe("When the sandbox heard this copy from the platform (ISO)."),
+});
+export type SandboxPresentation = z.infer<typeof SandboxPresentationSchema>;
+export const PresentationReadSchema = z.object({
+    presentation: SandboxPresentationSchema.nullable().describe(
+        "The copy the sandbox holds. Null until it has heard one, which takes reaching the platform once.",
+    ),
+});
+export type PresentationRead = z.infer<typeof PresentationReadSchema>;
+export const PresentationRefreshSchema = PresentationReadSchema.extend({
+    refreshed: z
+        .boolean()
+        .describe(
+            "Whether the platform answered. False means it could not be reached or refused, and `presentation` is the copy the sandbox already held, which a failed ask never removes.",
+        ),
+});
+export type PresentationRefresh = z.infer<typeof PresentationRefreshSchema>;
+
 // Passkeys registered with one sandbox, and the owner's rule that a passkey is the only proof that opens it. The
 // daemon is the WebAuthn relying party; these are the shapes its /system/passkeys routes and the 428 step-up carry.
 

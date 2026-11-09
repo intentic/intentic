@@ -230,7 +230,7 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
             // Asked for, not derived: the display name and logo are platform rows the daemon holds no copy of, and
             // this is the one moment they can be captured into something portable. Best-effort — a platform that
             // does not answer costs the bundle its presentation, never the export.
-            const presentation = await services.presentation().catch(() => undefined);
+            const presentation = await services.presentation.forExport().catch(() => undefined);
             const manifest: BundleManifest = {
                 version: 3,
                 ...sourceBlocks(services.config.sandbox.name, presentation),

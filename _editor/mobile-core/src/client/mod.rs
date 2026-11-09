@@ -6,6 +6,7 @@ mod act;
 mod board;
 mod conversations;
 mod link;
+mod listed;
 mod passkey;
 mod push;
 
@@ -30,6 +31,8 @@ pub(crate) type Sink = Box<dyn Fn(Event) + Send + Sync>;
 const PLATFORM: &str = "platform";
 const EMAIL: &str = "email";
 const SANDBOXES: &str = "sandboxes";
+// The platform database the kept sandboxes are confirmed by (listed.rs).
+const SANDBOXES_IDENTITY: &str = "sandboxes-identity";
 const OPEN: &str = "open";
 
 fn failed(error: SessionError) -> Outcome {
@@ -288,6 +291,7 @@ impl Client {
         };
         match self.platform().me(&signed_in.cookie).await {
             Ok(Some(_)) => self.after_sign_in().await,
+            // The platform's own word that the session ended (`Platform::me` says which answers are).
             Ok(None) => self.forget_everything().await,
             // Offline: keep showing what was kept; the link retries on its own once it runs.
             Err(error) => {
@@ -473,16 +477,34 @@ impl Client {
         let Some(cookie) = cookie else {
             return Err(SessionError::SignedOut);
         };
-        let sandboxes = match self.platform().sandboxes(&cookie).await {
+        // Which database answered, asked beside the list: a list lacking kept rows removes them only when it is the
+        // database they came from (listed.rs).
+        let platform = self.platform();
+        let (listed, identity) = tokio::join!(platform.sandboxes(&cookie), platform.identity());
+        let listed = match listed {
+            // Only the platform's own refusal: a page in front of it answering 401 is an error like any other.
             Err(SessionError::SignedOut) => {
                 self.forget_everything().await;
                 return Err(SessionError::SignedOut);
             }
             other => other?,
         };
-        self.stored(|store| store.put_json(SANDBOXES, &sandboxes));
+        let held_identity: Option<String> = self.stored(|store| store.get(SANDBOXES_IDENTITY));
         let mut state = self.state.lock().await;
-        state.sandboxes = sandboxes;
+        let kept = listed::merge(
+            &state.sandboxes,
+            held_identity.as_deref(),
+            listed,
+            identity.as_deref(),
+        );
+        self.stored(|store| {
+            store.put_json(SANDBOXES, &kept.sandboxes)?;
+            match &kept.identity {
+                Some(identity) => store.put(SANDBOXES_IDENTITY, identity),
+                None => Ok(()),
+            }
+        });
+        state.sandboxes = kept.sandboxes;
         self.say_sandboxes(&state);
         Ok(())
     }

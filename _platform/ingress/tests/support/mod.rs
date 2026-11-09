@@ -517,20 +517,34 @@ pub async fn upgrade(port: u16, host: &str, path: &str, protocol: &str) -> (Stri
     (String::from_utf8_lossy(&head).into_owned(), stream)
 }
 
-/// A platform answering `/api/reachability/<id>` from a table, `(status, body)` per id and 404 for the rest, recording
-/// every question.
+/// What the api answers `/api/reachability/<id>` for a sandbox it deleted (app.ts), the record the edge acts on.
+pub const DELETION_RECORD: &str = r#"{"error":"deleted sandbox"}"#;
+
+/// A platform answering `/api/reachability/<id>` from a table, `(status, body)` per id and the deletion record for the
+/// rest, recording every question. `answer` changes an id's entry while it runs.
 pub struct Platform {
     pub url: String,
     pub asked: Arc<Mutex<Vec<String>>>,
+    answers: Arc<Mutex<HashMap<String, (u16, String)>>>,
     _listening: Listening,
+}
+
+impl Platform {
+    pub fn answer(&self, id: &str, status: u16, body: &str) {
+        self.answers
+            .lock()
+            .unwrap()
+            .insert(id.to_owned(), (status, body.to_owned()));
+    }
 }
 
 pub async fn platform(answers: HashMap<String, (u16, String)>) -> Platform {
     let asked = Arc::new(Mutex::new(Vec::new()));
     let recording = asked.clone();
-    let answers = Arc::new(answers);
+    let answers = Arc::new(Mutex::new(answers));
+    let table = answers.clone();
     let listening = serve::listen("127.0.0.1:0", move |request, _| {
-        let answers = answers.clone();
+        let answers = table.clone();
         let asked = recording.clone();
         async move {
             let path = request.uri().path().to_owned();
@@ -539,7 +553,12 @@ pub async fn platform(answers: HashMap<String, (u16, String)>) -> Platform {
                 asked.lock().unwrap().push(path.clone());
             }
             let id = path.rsplit('/').next().unwrap_or_default();
-            let (status, answer) = answers.get(id).cloned().unwrap_or((404, "gone".to_owned()));
+            let (status, answer) = answers
+                .lock()
+                .unwrap()
+                .get(id)
+                .cloned()
+                .unwrap_or((404, DELETION_RECORD.to_owned()));
             let mut response = Response::new(body::full(answer));
             *response.status_mut() = StatusCode::from_u16(status).unwrap();
             response
@@ -550,6 +569,7 @@ pub async fn platform(answers: HashMap<String, (u16, String)>) -> Platform {
     Platform {
         url: format!("http://127.0.0.1:{}", listening.address.port()),
         asked,
+        answers,
         _listening: listening,
     }
 }

@@ -28,12 +28,22 @@ flowchart LR
   Before this, two containers holding one grant took the tunnel from each other every minute.
 - Holds only the platform's Ed25519 public key, so it verifies grants and can never mint one. Revocation is a
   cached, fail-open `GET /api/reachability/<id>` to the api, at registration, on a miss, and for every held sandbox
-  as its minute-long cached answer expires (eight at a time). A 404 there is a deletion record and nothing else: the
-  api answers 200 (`known: false`) for an id it has no record of either way, so an api reading a database that forgot
-  a sandbox does not take it off the edge (2026-10-02). A held sandbox found deleted has every tunnel closed with code
-  4010, and its netd stops dialling; a redial is refused 403 with the `unknown-sandbox` verdict (2026-10-05: a deleted
-  sandbox stayed reachable until its netd redialled). The cache holds at most 10,000 answers, past which a new one is
-  not kept.
+  as its minute-long cached answer expires (eight at a time). Only the api's own deletion record counts as a deletion:
+  a 404 whose body is JSON saying `"deleted": true`, or the api's refusal for a deleted sandbox,
+  `{"error":"deleted sandbox"}`. Any other 404 (a page, plain text, the api's `not a sandbox id`) is no statement and
+  answers that the sandbox exists, like a 5xx or a timeout. The api answers 200 (`known: false`) for an id it has no
+  record of either way, so an api reading a database that forgot a sandbox does not take it off the edge (2026-10-02).
+- A deletion record is believed only once the api says it twice: the first leaves the sandbox reachable and is not
+  asked again for 30 s, and the second, at least that long after with no answer between that the sandbox exists,
+  confirms it. The held-sandbox pass waits those 30 s and asks again on the spot; a registration or a miss confirms at
+  its next lookup. A confirmed deletion closes every tunnel with code 4010, and its netd stops dialling for an hour; a
+  redial is refused 403 with the `unknown-sandbox` verdict (2026-10-05: a deleted sandbox stayed reachable until its
+  netd redialled), and once a deletion was believed, the record again refuses at once. A first record that 10 minutes
+  do not confirm is forgotten. 2026-11-09: any 404 used to be a deletion, so one from something in front of the api (a
+  misrouted hostname, a placeholder page) would have closed every tunnel the edge held and silenced each netd for an
+  hour. 30 s rather than 10 s because a rolling api restart or a hostname route change outlasts 10 s, and a deletion
+  already takes up to two minutes to reach the tunnels. The cache holds at most 10,000 answers and first records, past
+  which a new one is not kept.
 - Routes on each request's Host, since HTTP/2 coalesces many hostnames onto one connection. A sandbox with no tunnel
   answers 502 with an `x-intentic-edge` header naming why (`edge-verdict.ts` in the contract), which the editor reads.
 - What the edge serves beyond HTTPS over TCP is declared, never probed for: binding the QUIC door
@@ -210,26 +220,20 @@ file when it differs. Before this, an edge machine that restarted while the api 
 the whole outage, so every sandbox it held was unreachable even though its tunnel was up. A PEM pair named with
 `INGRESS_TLS_CERT_FILE` is on disk already and is not copied.
 
-**On Fly the file needs a volume to outlive a restart.** A machine's root filesystem is rebuilt from the image every
-time the machine starts, so without a volume the file is written and lost, which is exactly the old behaviour: safe to
-deploy, and no help yet. [fly.toml](fly.toml) mounts nothing, because a `[mounts]` section makes every machine need
-a volume of its own, attached only when the machine is created. To turn it on, per region the edge runs in:
+**On Fly the file lives on a volume (since 2026-11-09).** A machine's root filesystem is rebuilt from the image every
+time the machine starts, so without a volume the file is written and lost. Each edge machine has its own 1 GB
+`ingress_state` volume in its region, mounted at `/var/lib/intentic-ingress` by [fly.toml](fly.toml)'s `[mounts]`.
+A `[mounts]` section makes every machine need a volume of its own, attached only when the machine is created, so a
+machine added later (another region, a replacement) needs its volume first:
 
 ```sh
 fly volumes create ingress_state --size 1 --region <region> -a intentic-ingress   # one per machine
+fly machine clone <id> --region <region> --attach-volume <vol>:/var/lib/intentic-ingress -a intentic-ingress
 ```
 
-then add to `fly.toml`
-
-```toml
-[mounts]
-  source = "ingress_state"
-  destination = "/var/lib/intentic-ingress"
-```
-
-and replace each machine so it is created with its volume (`fly machine clone <id> --attach-volume <vol>:/var/lib/intentic-ingress`
-then destroy the old one, one region at a time), which drops the tunnels that machine held as any roll does. The
-private key then lives on the volume as it lives in the api's database. A deployment whose edge runs in a container on a
+then destroy the machine it replaces, one region at a time, which drops the tunnels that machine held as any roll does.
+The 2026-11-09 roll did exactly this through the Machines API (same config and image digest, plus the mount). The
+private key lives on the volume as it lives in the api's database. A deployment whose edge runs in a container on a
 host of its own needs only a volume mounted at the same directory.
 
 ## Terminating TLS at the edge: done

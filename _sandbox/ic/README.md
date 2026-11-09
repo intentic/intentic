@@ -265,8 +265,12 @@ flowchart LR
 - **This machine's sandboxes with no network** (2026-10-16, [`loopback.rs`](src/sandbox/loopback.rs)).
   `ic sandbox list --json` rows also carry `sandboxId` (the 12-hex id of the connect token, null without one),
   `localPort` (the host port the loopback listener is published on, from the binding docker holds, null when it
-  publishes none) and `platformId` (the platform's id for the row, read off the sandbox's `/history/platform-row.json`,
-  null before an announce named one). `ic sandbox session <slug> --json` ([`session.rs`](src/sandbox/session.rs))
+  publishes none), `platformId` (the platform's id for the row, read off the sandbox's `/history/platform-row.json`,
+  null before an announce named one), and `displayName` and `logo`: the owner's name for the sandbox and its logo as
+  the daemon last heard them from the platform, read off `/history/presentation.json` beside the row's id, so the
+  desktop app still shows them while the platform is down (2026-11-09). `displayName` is the file's `name` when not
+  empty, `logo` its `image` only when that is a `data:image/` URL; a missing or unreadable file makes both null and is
+  never an error. Each file is one `docker cp`, every one of them at once. `ic sandbox session <slug> --json` ([`session.rs`](src/sandbox/session.rs))
   prints one line `{"slug","sandboxId","platformId","localPort","email","token","expiresAt"}`: a daemon session for
   the bound owner, minted by `docker exec`ing the image's `host-session-cli.js` (the daemon's README says why the machine is
   a proof). It refuses a sandbox nobody has signed in to yet, and one too old to have the script (update it). The token

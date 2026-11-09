@@ -7,6 +7,11 @@ import { signInAt } from "../lib/routes/signIn";
 import { restoreImprints } from "../lib/skeletonPersistence";
 import { isHomePath } from "../lib/routes/home";
 import { enterShell } from "../lib/accounts/accountBoundary";
+import { activeSandboxId } from "../app/storage/activeSandbox";
+import { rememberedAccount } from "../client/directory/deviceDirectory";
+import { platformHealth } from "../lib/platform/platformHealth";
+import { normalizeDaemonUrl } from "../lib/daemonUrl";
+import { enterFromMemory, type MemoryChoice } from "../features/sandbox/recovery/directMode";
 
 // Resolves the session once (Better Auth cookie); redirects to /login only when the platform authoritatively says none.
 // An unavailable platform gets its own retry screen, not treated as a sign-out.
@@ -20,6 +25,17 @@ const SESSION_BUDGET_MS = 10_000;
 const withinBudget = <T>(work: Promise<T>, budgetMs: number): Promise<T> =>
     Promise.race([work, new Promise<T>((_resolve, reject) => setTimeout(() => reject(new Error(`the platform did not answer in time`)), budgetMs))]);
 
+// Which remembered sandbox an automatic entry opens for this address: the one a sandbox's own address names (`/open?url=`),
+// and only that one, since an address this device does not remember is the outage screen's to offer; else the one this
+// window had open.
+export const memoryChoice = (to: RouteLocationNormalized): MemoryChoice => {
+    if (to.path === topPath(`open`)) {
+        const named = [to.query[`url`]].flat()[0];
+        return { daemonUrl: (named === null || named === undefined ? undefined : normalizeDaemonUrl(named)) ?? `` };
+    }
+    return activeSandboxId.value === undefined ? {} : { activeId: activeSandboxId.value };
+};
+
 export const unavailable = (to: RouteLocationNormalized): RouteLocationRaw => ({
     path: topPath(`platformUnavailable`),
     query: { returnTo: to.fullPath },
@@ -32,7 +48,14 @@ export const resolveUser = async (to: RouteLocationNormalized): Promise<Resolved
         try {
             current = await withinBudget(refresh(), SESSION_BUDGET_MS);
         } catch {
-            return { redirect: unavailable(to), signedOut: false };
+            // A check that hung past the budget told the platform's health nothing yet; one that failed already did
+            // (useAuth.ts reports every answer), and a refusal it answered stays the platform answering.
+            if (platformHealth.state.value !== `up`) {
+                platformHealth.noteUnreachable();
+            }
+            // A device that remembers the account opens the workspace as it, at once (recovery/directMode.ts).
+            const remembered = enterFromMemory(rememberedAccount(), memoryChoice(to));
+            return remembered === undefined ? { redirect: unavailable(to), signedOut: false } : { user: remembered };
         }
     }
     // Signed out: the login screen carries the page that asked for it, the address asked for rather than where the shell's

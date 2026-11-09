@@ -4,7 +4,7 @@
 
 use super::{Client, session_key};
 use crate::bridge::{Event, LinkState};
-use crate::net::{Auth, HttpError};
+use crate::net::{Auth, HttpError, refusal_names};
 use crate::session::SessionError;
 use crate::wire::Millis;
 use crate::wire::agents::{AGENTS, AgentsList};
@@ -149,10 +149,13 @@ async fn attempt(client: &'static Client, sandbox: &SandboxSummary, cookie: &str
     }
 }
 
-/// A failed call on a live link: a refused token is forgotten and minted afresh at once, anything else waits.
+/// A failed call on a live link: a token the daemon refused is forgotten and minted afresh at once, anything else
+/// waits. Refused means a 401 carrying the daemon's own error (oRPC's `code`, a raw route's `error`): a 401 page from
+/// something in front of it says nothing about the token, and forgetting it while the platform is down would leave
+/// nothing to mint a new one with.
 fn lost(client: &Client, key: &str, error: HttpError) -> Ended {
     match error {
-        HttpError::Status { status: 401, .. } => {
+        HttpError::Status { status: 401, body } if refusal_names(&body, &["code", "error"]) => {
             client.stored(|store| store.forget_secret(key));
             Ended::Again
         }

@@ -35,6 +35,13 @@ export const RelayChannelSchema = z.object({
         ),
 });
 export type RelayChannel = z.infer<typeof RelayChannelSchema>;
+// The relay's own word that a relay channel will never deliver again: the device is gone, the relay has no row for it, or
+// its secret was rotated. It rides as the `data` of the relay's refusal (the platform's push-relay.routes.ts), and the
+// daemon forgets a channel only on it (push/senders/relay.ts). (2026-11-09) A status alone used to be enough, and a 403
+// or 404 is also what a proxy in front of a platform that is down answers (an HTML page, Cloudflare's), so an outage
+// silently unregistered every phone.
+export const RELAY_CHANNEL_GONE = "gone";
+export const RelayGoneSchema = z.object({ data: z.object({ channel: z.literal(RELAY_CHANNEL_GONE) }) });
 export const PushChannelSchema = z.discriminatedUnion("kind", [WebPushChannelSchema, RelayChannelSchema]);
 export type PushChannel = z.infer<typeof PushChannelSchema>;
 // The one identity every push route uses (subscribe, unsubscribe, config); derived from the channel's own shape so the

@@ -12,6 +12,7 @@ import type { Config } from "../env.config.js";
 import { isLocalHost } from "./tls/local-tls.js";
 import { nodeRequest } from "./tls/node-request.js";
 import { parseJsonOr } from "@intentic/base/json";
+import { opt } from "../opt.js";
 
 // Every platform call is one exchange over node:https (nodeRequest): undici can skip a dev platform's self-signed cert
 // only process-wide.
@@ -143,27 +144,36 @@ export const reportToPlatform = <K extends DaemonIngressRoute>(config: Config, r
         (error: unknown): PlatformReport => ({ error: errorMessage(error) }),
     );
 
-// The owner's name for this sandbox and its switcher logo: held only by the platform, so a bundle must ask for them.
+// The owner's name for this sandbox and its switcher logo as a bundle carries them: the platform decides them, so an
+// export asks it (presentation-mirror.ts keeps the copy the sandbox shows while the platform is down).
 export interface SandboxPresentation {
     readonly name?: string;
     readonly image?: string;
 }
 
-// Best-effort, never a throw: an export must not fail because the platform is unreachable, headless or older.
-export const fetchPresentation = async (config: Config): Promise<SandboxPresentation | undefined> => {
+export type PresentationAnswer = IngressOutput<"presentation">;
+
+// The platform's word on the name and logo, from a 200 whose body is one; undefined when it could not be reached, is not
+// configured, refused, or answered anything else, which every caller reads as no news, never as "none". Never a throw.
+export const askPresentation = async (config: Config): Promise<PresentationAnswer | undefined> => {
     try {
-        const { data } = await callIngress(config, { route: "presentation" });
-        if (data === undefined) {
-            return undefined;
-        }
-        const { name, image } = data;
-        const presentation: SandboxPresentation = {
-            ...(name !== "" ? { name } : {}),
-            ...(image !== undefined && image !== "" ? { image } : {}),
-        };
-        return presentation.name === undefined && presentation.image === undefined ? undefined : presentation;
+        const answer = await callIngress(config, { route: "presentation" });
+        return answer.status === 200 ? answer.data : undefined;
     } catch {
-        // allow(silent-catch): best-effort by contract, see above.
+        // allow(silent-catch): an unreachable or headless platform is no news by contract, see above.
         return undefined;
     }
+};
+
+// An answer as a bundle carries it: an empty name or logo is left out, and an answer with neither is none.
+export const presentationOf = (answer: PresentationAnswer | undefined): SandboxPresentation | undefined => {
+    if (answer === undefined) {
+        return undefined;
+    }
+    const { name, image } = answer;
+    const presentation: SandboxPresentation = {
+        ...opt("name", name === "" ? undefined : name),
+        ...opt("image", image === "" ? undefined : image),
+    };
+    return presentation.name === undefined && presentation.image === undefined ? undefined : presentation;
 };

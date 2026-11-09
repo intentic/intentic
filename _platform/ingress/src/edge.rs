@@ -8,8 +8,9 @@
 //! here or on a peer, is refused (409 naming where the holder runs, or `HELD_ELSEWHERE_CODE`). A held QUIC connection is
 //! proven by a probe stream at registration and every `PROBE_EVERY`, takes requests only once proven, and is closed with
 //! `DEMOTED_CODE` when a probe or a stalled request finds it serving nothing, the socket carrying on meanwhile. Every held
-//! sandbox's existence is asked again as its cached answer expires, and one the platform deleted is closed with
-//! `DELETED_CODE`, rather than staying reachable until its netd happened to redial.
+//! sandbox's existence is asked again as its cached answer expires, and one the platform deleted, by its own deletion
+//! record said twice (revocation.rs), is closed with `DELETED_CODE`, rather than staying reachable until its netd
+//! happened to redial.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -42,7 +43,7 @@ use crate::grant::GrantKey;
 use crate::legacy;
 use crate::peers::Peers;
 use crate::registry::{Elsewhere, Held, Holder, Registry, Slot};
-use crate::revocation::Revocation;
+use crate::revocation::{Revocation, Standing};
 use crate::session::{Failed, Session};
 
 // A QUIC connection that has not said who it is by now never will.
@@ -261,9 +262,9 @@ impl Edge {
     }
 
     /// Asks the platform again, every `every`, whether each sandbox held here still exists, `RECHECK_AT_ONCE` at a
-    /// time; the revocation cache asks only for answers that expired. One the platform deleted has every tunnel closed
-    /// with `DELETED_CODE`, and its netd stops dialling. Before 2026-10-05 existence was asked only at registration,
-    /// so a deleted sandbox stayed reachable until its netd happened to redial.
+    /// time; the revocation cache asks only for answers that expired. One the platform confirmed deleted has every
+    /// tunnel closed with `DELETED_CODE`, and its netd stops dialling. Before 2026-10-05 existence was asked only at
+    /// registration, so a deleted sandbox stayed reachable until its netd happened to redial.
     pub fn recheck_held(self: &Arc<Self>, every: Duration) {
         if !self.revocation.enforced() {
             return;
@@ -282,30 +283,60 @@ impl Edge {
         });
     }
 
-    /// One pass of `recheck_held`; answers how many sandboxes it closed.
+    /// One pass of `recheck_held`; answers how many sandboxes it closed. A sandbox whose deletion the platform recorded
+    /// only once so far is asked again once the revocation's `confirm_after` has passed, in this same pass, and closed
+    /// only when the record comes back: one deletion record never closes anything (2026-11-09).
     pub async fn recheck_once(&self) -> usize {
         let held = self.registry.held_ids();
         let deleted = std::sync::atomic::AtomicUsize::new(0);
+        let doubted = std::sync::Mutex::new(Vec::new());
         futures_util::stream::iter(held)
+            .for_each_concurrent(RECHECK_AT_ONCE, |id| {
+                let (deleted, doubted) = (&deleted, &doubted);
+                async move {
+                    match self.revocation.standing(&id).await {
+                        Standing::Exists => {}
+                        Standing::Doubted => doubted.lock().expect("never poisoned").push(id),
+                        Standing::Deleted => {
+                            if self.close_deleted(&id) {
+                                deleted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            }
+                        }
+                    }
+                }
+            })
+            .await;
+        let doubted = doubted.into_inner().expect("never poisoned");
+        if doubted.is_empty() {
+            return deleted.into_inner();
+        }
+        tokio::time::sleep(self.revocation.confirm_after()).await;
+        futures_util::stream::iter(doubted)
             .for_each_concurrent(RECHECK_AT_ONCE, |id| {
                 let deleted = &deleted;
                 async move {
-                    if self.revocation.allows(&id).await {
-                        return;
-                    }
-                    let close = Close {
-                        code: DELETED_CODE,
-                        reason: "this sandbox was deleted".into(),
-                    };
-                    let closed = self.registry.close_id(&id, &close);
-                    if closed > 0 {
+                    if self.revocation.standing(&id).await == Standing::Deleted
+                        && self.close_deleted(&id)
+                    {
                         deleted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        tracing::info!(sandbox = %id, closed, "closed the tunnels of a sandbox the platform deleted");
                     }
                 }
             })
             .await;
         deleted.into_inner()
+    }
+
+    // Closes every tunnel of a sandbox the platform deleted; answers whether any was held.
+    fn close_deleted(&self, id: &str) -> bool {
+        let close = Close {
+            code: DELETED_CODE,
+            reason: "this sandbox was deleted".into(),
+        };
+        let closed = self.registry.close_id(id, &close);
+        if closed > 0 {
+            tracing::info!(sandbox = %id, closed, "closed the tunnels of a sandbox the platform deleted");
+        }
+        closed > 0
     }
 
     // Which verdict a miss answers: a sandbox the platform no longer knows is gone, any other is not connected, hosted or

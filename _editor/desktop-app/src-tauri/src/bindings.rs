@@ -240,6 +240,7 @@ mod tests {
                     name: "Local".to_string(),
                     place: "own".to_string(),
                     shared: false,
+                    image: None,
                 })
                 .collect(),
         }

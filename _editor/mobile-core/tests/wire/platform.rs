@@ -36,7 +36,19 @@ fn platform_calls() {
     samples.checked::<PushGrant>("push.register:output");
     samples.checked::<PushDeviceId>("push.unregister:input");
     samples.checked::<Done>("push.unregister:output");
-    samples.decoded::<RpcError>("RpcError");
+    let refusals = samples.decoded::<RpcError>("RpcError");
+    // The refusal that signs the app out names its case, which a page in front of the api never does.
+    assert!(refusals.iter().any(|(_, refusal)| refusal.status == 401
+        && intentic_mobile::net::refusal_names(
+            &serde_json::to_string(refusal).unwrap(),
+            &["code"]
+        )));
+    // `/api/identity` is an ingress route, outside the procedures api.schema.json holds.
+    let identities = samples.decoded::<PlatformIdentity>("PlatformIdentity");
+    assert_eq!(
+        identities[0].1.identity,
+        "3f9c2a7e-5b1d-4e8a-9c0f-6d2b8a1e4f70"
+    );
     samples.finish();
     for (name, route) in [
         ("me.get", platform::ME),

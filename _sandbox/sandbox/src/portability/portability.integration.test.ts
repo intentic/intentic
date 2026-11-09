@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Services } from "../composition.js";
+import type { PresentationMirror } from "../system/presentation/presentation-mirror.js";
+import { unstubbed } from "@intentic/testing";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
@@ -73,6 +75,9 @@ const arrive = async (
     await dropSpool(held.spool);
     return { plan: items, report };
 };
+
+// The sandbox's name and logo as an export asks for them, and nothing else of the mirror (system/presentation).
+const exporting = (forExport: PresentationMirror["forExport"]): PresentationMirror => unstubbed<PresentationMirror>("presentation", { forExport });
 
 const bundleOf = async (
     source: { work: string; history: string },
@@ -503,7 +508,7 @@ test("a sandbox's display name and logo ride along, since no volume holds them",
     const logo = "data:image/webp;base64,UklGRg==";
 
     const target = await makeRoots();
-    const bundle = await bundleOf(source, false, [], { presentation: async () => ({ name: "radarsu-intentic", image: logo }) });
+    const bundle = await bundleOf(source, false, [], { presentation: exporting(async () => ({ name: "radarsu-intentic", image: logo })) });
     const { report } = await arrive(bundle, target);
 
     // Handed back rather than applied: they are platform rows, and the daemon holds no owner session to write them.
@@ -516,7 +521,7 @@ test("presentation is withheld when nothing landed, so a failed arrival cannot r
     await writeFile(join(source.work, "keep.md"), "# real content\n");
 
     const target = await makeRoots();
-    const bundle = await bundleOf(source, false, [], { presentation: async () => ({ name: "radarsu-intentic" }) });
+    const bundle = await bundleOf(source, false, [], { presentation: exporting(async () => ({ name: "radarsu-intentic" })) });
     const { report } = await arrive(bundle, target, { pick: () => false });
 
     expect(report.applied).toEqual([]);
@@ -530,9 +535,9 @@ test("an export survives a platform that cannot say how the sandbox presents its
 
     const target = await makeRoots();
     const bundle = await bundleOf(source, false, [], {
-        presentation: async () => {
+        presentation: exporting(async () => {
             throw new Error("the platform did not respond in time");
-        },
+        }),
     });
     const { report } = await arrive(bundle, target);
 

@@ -5,13 +5,16 @@ import { t } from "@intentic/ui/i18n";
 import { nothingToOpen } from "../app/environments/nothingToOpen";
 import { openOnProject } from "../app/projectScope";
 import { useAuth } from "../client/auth/useAuth";
-import { ownsMissingSandboxes } from "../client/directory/deviceDirectory";
+import { ownsMissingSandboxes, rememberedAccount } from "../client/directory/deviceDirectory";
+import { directMode } from "../client/directory/directState";
+import { platformHealth } from "../lib/platform/platformHealth";
+import { enterFromMemory } from "../features/sandbox/recovery/directMode";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import { routeSegment, segmentOf, toHome, toTop } from "../lib/routes/links";
 import { routeChoosesSandbox, sandboxEntryPath } from "../models/sandbox/sandboxScreen";
 import { useNotifications } from "../workbench/notifications/notifications";
 import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
-import { unavailable } from "./sessionGuard";
+import { memoryChoice, unavailable } from "./sessionGuard";
 import { readSetupRedirect } from "./setupGate";
 
 // THE WORKSPACE SHELL'S ENTRY GUARDS, after sign-in (sessionGuard.ts): whether there is a workspace to open, and which
@@ -23,13 +26,28 @@ import { readSetupRedirect } from "./setupGate";
 // that offers nothing to open while this device remembers sandboxes of the account's own goes to recovery rather than
 // onboarding (2026-10-02): a platform answering from a database that forgot them looks exactly like a new account.
 export const requireSetup = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
-    // allow(silent-catch): any failure to list means the same thing here, the platform could not be asked; the outage
-    // screen says so and retries.
     const asked = (to.redirectedFrom ?? to).path;
-    const result = await readSetupRedirect(useSandbox(), to.path, useAuth().user.value !== null, asked).then(
-        (redirect) => ({ redirect }),
-        () => undefined,
-    );
+    const read = () =>
+        withinBudget(readSetupRedirect(useSandbox(), to.path, useAuth().user.value !== null, asked), LIST_BUDGET_MS).then(
+            (redirect) => ({ redirect }),
+            // allow(silent-catch): any failure to list means the same thing here, the platform could not be asked.
+            (error: Error) => {
+                // A list that hung past the budget is the one failure no platform call reported, and the session's answer
+                // just now read the platform as up: told here, so a window opened from memory on it still finds its way
+                // back when the platform answers again (directMode.ts `onRecovered`).
+                if (error instanceof ListTimeout) {
+                    platformHealth.noteUnreachable();
+                }
+                return undefined;
+            },
+        );
+    let result = await read();
+    // The session answered but the list did not (a platform half up, or one that hangs): a device that remembers this
+    // very account opens what it remembers, as it would with no session answer at all (sessionGuard.ts), and the outage
+    // screen is for one that remembers nothing of it.
+    if (result === undefined && enteredFromMemory(to)) {
+        result = await read();
+    }
     if (result === undefined) {
         return unavailable(to);
     }
@@ -39,6 +57,29 @@ export const requireSetup = async (to: RouteLocationNormalized): Promise<boolean
     }
     const account = useAuth().user.value;
     return account !== null && ownsMissingSandboxes(account.email) ? toTop(`recover`) : setup;
+};
+
+// A list the platform does not give within this long is one it could not give: before, a platform that hung rather than
+// refused held the first paint on the splash with no end, the session check's own budget (sessionGuard.ts) long spent.
+const LIST_BUDGET_MS = 10_000;
+
+class ListTimeout extends Error {}
+
+const withinBudget = <T>(work: Promise<T>, budgetMs: number): Promise<T> =>
+    Promise.race([work, new Promise<T>((_resolve, reject) => setTimeout(() => reject(new ListTimeout(`the platform did not list in time`)), budgetMs))]);
+
+// Whether the window could open on what this device remembers of the signed-in account. Not for another account than
+// the one signed in, and not for a window already open that way, whose list is the remembered one already.
+const enteredFromMemory = (to: RouteLocationNormalized): boolean => {
+    const account = useAuth().user.value;
+    if (account === null || directMode.value) {
+        return false;
+    }
+    const remembered = rememberedAccount(account.email);
+    if (platformHealth.state.value !== `up`) {
+        platformHealth.noteUnreachable();
+    }
+    return enterFromMemory(remembered, memoryChoice(to)) !== undefined;
 };
 
 // The reader is told when a sandbox an address named is not one this account lists.

@@ -5,6 +5,7 @@ import { OpenAPILink } from "@orpc/openapi-client/fetch";
 import { environment } from "../app/environments/environment";
 import { accountExpectation, assertAccountCurrent, checkAnswerAccount } from "./accounts/accountBoundary";
 import { invalidatePlatformAuth } from "./authLifecycle";
+import { reportedFetch } from "./platform/platformHealth";
 
 // Single typed client for the whole app, derived from the SAME apiContract the server implements. The
 // browser calls the API directly at its origin; credentials: include so the Better Auth session cookie
@@ -26,8 +27,11 @@ export const apiClient: ContractRouterClient<typeof apiContract> = createORPCCli
                     sent.headers.set(name, value);
                 }
             }
-            const response = await globalThis.fetch(sent, { credentials: `include` });
-            if (response.status === 401) {
+            // Every answer, and every call nothing answered, is reported to the one reading of the platform's health.
+            const response = await reportedFetch(() => globalThis.fetch(sent, { credentials: `include` }));
+            // The api's own refusal is JSON (oRPC's error body); a 401 from anything in front of it (a proxy's page, a
+            // captive portal's) is not the platform saying the session ended, and must not tear the window down.
+            if (response.status === 401 && (response.headers.get(`content-type`) ?? ``).includes(`json`)) {
                 await invalidatePlatformAuth();
             }
             await checkAnswerAccount(response);

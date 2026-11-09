@@ -1,5 +1,6 @@
 import "@intentic/testing/dom";
 import type { User } from "@intentic/api-contract";
+import { ref } from "vue";
 import { directMode } from "../../../client/directory/directState";
 import type { RememberedAccount, RememberedSandbox } from "../../../client/directory/deviceDirectory";
 
@@ -7,18 +8,20 @@ import type { RememberedAccount, RememberedSandbox } from "../../../client/direc
 // it, and the platform is not asked for a list again until a session check it answers ends direct mode.
 
 // The account switch is useAuth's; this suite stands in for it, the way the router does not need it to.
+const authUser = ref<User | null>(null);
 const enterDirect = jest.fn((account: User) => {
     directMode.value = true;
+    authUser.value = account;
     return account;
 });
-jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ enterDirect, user: { value: null } }) }));
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ enterDirect, user: authUser }) }));
 // The platform is down: any list it is asked for fails, which is what direct mode must never trip over.
 const list = jest.fn(async () => {
     throw new Error(`the platform cannot be reached`);
 });
 jest.mock(`../../../lib/useApi`, () => ({ apiClient: { sandbox: { list } } }));
 
-const { accountFromProof, enterDirectMode, sandboxAt, summaryOf } = await import(`./directMode`);
+const { accountFromProof, enterDirectMode, enterFromMemory, pickRemembered, sandboxAt, summaryOf } = await import(`./directMode`);
 const { useSandbox } = await import(`../../../client/sandbox/useSandbox`);
 const { queryClient } = await import(`../../../lib/queryPersistence`);
 
@@ -38,6 +41,7 @@ const account: RememberedAccount = { user, savedAt: `2026-10-02T12:00:00.000Z`, 
 
 beforeEach(() => {
     directMode.value = false;
+    authUser.value = null;
     enterDirect.mockClear();
     list.mockClear();
     queryClient.clear();
@@ -93,6 +97,42 @@ describe(`opening a sandbox directly`, () => {
         const linked = sandboxAt(`https://sandbox-8a8171848c91.sbx.intentic.dev`);
         enterDirectMode(account, linked);
         expect((await useSandbox().list()).map((row) => row.id)).toEqual([`s1`, `s2`, `direct:sandbox-8a8171848c91.sbx.intentic.dev`]);
+    });
+});
+
+// (2026-11-09) The platform not answering a session check opens the window on what the device remembers, unasked.
+describe(`opening from memory without asking`, () => {
+    // `intentic` is one the last list lacked (missingSince); `fresh` was listed but never checked in; `seen` was both.
+    const { missingSince: _listed, ...listedEntry } = notes;
+    const fresh: RememberedSandbox = { ...listedEntry, id: `s2`, name: `fresh`, lastSeenAt: null };
+    const seen: RememberedSandbox = { ...listedEntry, id: `s3`, name: `seen`, lastSeenAt: `2026-10-01T10:00:00.000Z` };
+    const three: RememberedAccount = { ...account, sandboxes: [intentic, fresh, seen] };
+
+    it(`opens the sandbox the window had open, even one the last list lacked`, () => {
+        expect(pickRemembered(three, { activeId: `s1` })?.id).toBe(`s1`);
+    });
+
+    it(`else the first still listed that has checked in, else the first still listed`, () => {
+        expect(pickRemembered(three, {})?.id).toBe(`s3`);
+        expect(pickRemembered({ ...account, sandboxes: [intentic, fresh] }, { activeId: `gone` })?.id).toBe(`s2`);
+    });
+
+    it(`opens only the sandbox an address names, and nothing for one it does not remember`, () => {
+        expect(pickRemembered(three, { activeId: `s1`, daemonUrl: fresh.daemonUrl })?.id).toBe(`s2`);
+        expect(pickRemembered(three, { daemonUrl: `https://sandbox-000000000000.sbx.intentic.dev` })).toBeUndefined();
+    });
+
+    it(`signs in as the remembered account and seeds its list`, async () => {
+        expect(enterFromMemory(three, {})).toEqual(user);
+        expect((await useSandbox().list()).map((row) => row.id)).toEqual([`s1`, `s2`, `s3`]);
+        expect(useSandbox().activeSandboxId.value).toBe(`s3`);
+        expect(list).not.toHaveBeenCalled();
+    });
+
+    it(`does nothing for a device that remembers no account, or nothing that fits`, () => {
+        expect(enterFromMemory(undefined, {})).toBeUndefined();
+        expect(enterFromMemory({ ...account, sandboxes: [] }, {})).toBeUndefined();
+        expect(enterDirect).not.toHaveBeenCalled();
     });
 });
 

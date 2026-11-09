@@ -23,7 +23,11 @@ export interface MachineFace {
 
 export interface MachineSandbox {
     readonly slug: string;
+    // What its owner called it, from the nearest copy that has it (machine_face.rs `names_of`: the sandbox's own, the
+    // app's, the workspace's last roster), else its slug.
     readonly name: string;
+    // Its logo, a `data:image/…` URL, from the same copies; null where none of them holds one.
+    readonly image: string | null;
     // The platform's id for its row, when its announce said one (the editor keys everything by it); else null.
     readonly platformId: string | null;
     // Its 12-hex id, from its connect token; null for a container that has none.
@@ -45,13 +49,14 @@ export const sandboxKeyOf = (sandbox: Pick<MachineSandbox, "platformId" | "sandb
 // The sandboxes a page can open: each one with a loopback port to dial. Without one there is nowhere to send a call.
 const reachable = (face: MachineFace): readonly MachineSandbox[] => face.sandboxes.filter((sandbox) => sandbox.localPort !== null);
 
-// A sandbox as the platform's list row would describe it, pointed at its loopback port. No connect token: the editor
-// dials the row's address as is (endpoint.ts), and the session seeded for it is what opens it. A last-seen time only
-// for one running now, since an epoch one reads as a setup still to finish (router/setupGate.ts).
+// A sandbox as the platform's list row would describe it, pointed at its loopback port, under the name and logo its
+// owner gave it, so an outage does not turn their sandboxes into hex. No connect token: the editor dials the row's
+// address as is (endpoint.ts), and the session seeded for it is what opens it. A last-seen time only for one running
+// now, since an epoch one reads as a setup still to finish (router/setupGate.ts).
 const rowOf = (sandbox: MachineSandbox, now: Date): SandboxSummary => ({
     id: sandboxKeyOf(sandbox),
     name: sandbox.name,
-    image: null,
+    image: sandbox.image,
     daemonUrl: `http://127.0.0.1:${String(sandbox.localPort)}`,
     lastSeenAt: now.toISOString(),
     setupCodeClaimedAt: null,

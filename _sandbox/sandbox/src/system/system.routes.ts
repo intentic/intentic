@@ -2,6 +2,8 @@ import { noteAudit } from "../audit/audit-http.js";
 import { type Fence, fenceReaches } from "@intentic/sandbox-contract/policy/fence-paths";
 import type { Hello, RosterFrames, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import type { TerminalsList } from "@intentic/sandbox-contract/schemas/terminal";
+import type { SandboxPresentation } from "@intentic/sandbox-contract/schemas/system";
+import type { HeldPresentation } from "./presentation/presentation-store.js";
 import type { UsageAccount } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { RAW_ROUTE_NAMES, SANDBOX_ROUTE_NAMES, sandboxRouteSurface } from "@intentic/sandbox-contract";
 import { systemContract } from "@intentic/sandbox-contract/contracts/system.contract";
@@ -342,6 +344,10 @@ const listTerminals = async (services: Services): Promise<TerminalsList> => {
     return { sessions: [...sessions, ...serviceRows] };
 };
 
+// The copy as the wire carries it: a logo null rather than absent, and the digest kept to the daemon, which compares it.
+const shownPresentation = (held: HeldPresentation | undefined): SandboxPresentation | null =>
+    held === undefined ? null : { name: held.name, image: held.image ?? null, at: held.at };
+
 export const createSystemRoutes = (services: Services) => {
     const i = implement(systemContract).$context<OrpcContext>();
     const terminalsWave = cachedAsync<number, TerminalsList>({ ttlMs: TERMINALS_WAVE_MS, maxEntries: 1 });
@@ -384,6 +390,14 @@ export const createSystemRoutes = (services: Services) => {
                 ...opt("skippedVersion", skippedVersion),
                 ...opt("autoUpdate", autoUpdate),
             };
+        }),
+        // The sandbox's copy of its name and logo (presentation-mirror.ts), read from /history on every ask: small, and
+        // asked for once per window rather than with every /info.
+        presentation: i.presentation.handler(async () => ({ presentation: shownPresentation(await services.presentation.held()) })),
+        // Asks the platform now; a platform that cannot be reached leaves the copy, which is answered with `refreshed` false.
+        presentationRefresh: i.presentationRefresh.handler(async () => {
+            const { presentation, refreshed } = await services.presentation.refresh();
+            return { presentation: shownPresentation(presentation), refreshed };
         }),
         // The owner's "not this one" for the update card, kept until they ask for the newest release again; a release
         // newer than the skipped one is offered as usual.

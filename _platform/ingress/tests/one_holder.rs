@@ -5,20 +5,18 @@
 
 mod support;
 
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 
-use http::{Request, Response, StatusCode};
+use http::Request;
 use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use intentic_ingress::body;
 use intentic_ingress::edge::EdgeOptions;
 use intentic_ingress::registry::Slot;
 use intentic_ingress::revocation::Revocation;
-use intentic_ingress::serve;
 use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{Connection, Endpoint};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -26,8 +24,8 @@ use tunnel::quic::{Greeting, Hello};
 use tunnel::{DELETED_CODE, DISPLACED_CODE, Ended, Identity};
 
 use support::{
-    Door, Keys, SANDBOX_ID, ZONE, daemon_host, dial, dial_as, door, get, lone, serving, start,
-    wait_for,
+    DELETION_RECORD, Door, Keys, SANDBOX_ID, ZONE, daemon_host, dial, dial_as, door, get, lone,
+    platform, serving, start, wait_for,
 };
 
 fn named(instance: &str, host: &str) -> Identity {
@@ -302,33 +300,20 @@ async fn a_request_a_stalled_quic_carrier_does_not_answer_is_carried_by_the_sock
     }
 }
 
-// A platform whose answer for the sandbox can change: 200 until told otherwise.
-async fn changing_platform() -> (String, Arc<AtomicU16>, serve::Listening) {
-    let status = Arc::new(AtomicU16::new(200));
-    let answering = status.clone();
-    let listening = serve::listen("127.0.0.1:0", move |_request, _| {
-        let status = answering.load(Ordering::Relaxed);
-        async move {
-            let mut response = Response::new(body::full("{}"));
-            *response.status_mut() = StatusCode::from_u16(status).unwrap();
-            response
-        }
-    })
-    .await
-    .unwrap();
-    (
-        format!("http://127.0.0.1:{}", listening.address.port()),
-        status,
-        listening,
-    )
-}
-
+// A held sandbox is closed only on the platform's own deletion record, said twice, the second after the revocation's
+// wait: a 404 from something in front of the api, or one record the platform takes back, closes nothing (2026-11-09).
 #[tokio::test]
 async fn a_held_sandbox_the_platform_deleted_is_closed_and_refused_with_the_verdict() {
+    const EXISTS: &str = r#"{"ok":true,"lane":"tunnel"}"#;
+    const CONFIRM: Duration = Duration::from_millis(400);
     let keys = Keys::default();
-    let (url, status, _platform) = changing_platform().await;
+    let platform = platform(HashMap::from([(
+        SANDBOX_ID.to_owned(),
+        (200, EXISTS.to_owned()),
+    )]))
+    .await;
     let running = start(EdgeOptions {
-        revocation: Revocation::keeping(&url, Duration::ZERO),
+        revocation: Revocation::keeping(&platform.url, Duration::ZERO).confirming_after(CONFIRM),
         ..lone(&keys)
     })
     .await;
@@ -338,10 +323,37 @@ async fn a_held_sandbox_the_platform_deleted_is_closed_and_refused_with_the_verd
         .unwrap();
     wait_for("the tunnel", || running.edge.registry().size() == 1).await;
     assert_eq!(running.edge.recheck_once().await, 0, "it still exists");
+
+    platform.answer(SANDBOX_ID, 404, "<html><body>Not Found</body></html>");
+    assert_eq!(
+        running.edge.recheck_once().await,
+        0,
+        "a 404 that is not the platform's record"
+    );
     assert!(!held.ended.is_finished());
 
-    status.store(404, Ordering::Relaxed);
+    // The record once, then an answer that it exists before the wait is over.
+    platform.answer(SANDBOX_ID, 404, DELETION_RECORD);
+    let asked = platform.asked.lock().unwrap().len();
+    let pass = tokio::spawn({
+        let edge = running.edge.clone();
+        async move { edge.recheck_once().await }
+    });
+    wait_for("the first word", || {
+        platform.asked.lock().unwrap().len() > asked
+    })
+    .await;
+    platform.answer(SANDBOX_ID, 200, EXISTS);
+    assert_eq!(pass.await.unwrap(), 0, "the platform took it back");
+    assert!(!held.ended.is_finished());
+
+    platform.answer(SANDBOX_ID, 404, DELETION_RECORD);
+    let started = std::time::Instant::now();
     assert_eq!(running.edge.recheck_once().await, 1);
+    assert!(
+        started.elapsed() >= CONFIRM,
+        "asked again only after the wait"
+    );
     assert_eq!(held.ended.await.unwrap(), Ended::Closed(Some(DELETED_CODE)));
     wait_for("the tunnel to go", || running.edge.registry().size() == 0).await;
 

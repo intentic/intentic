@@ -2,6 +2,7 @@ import { within } from "@intentic/base/async";
 import type { RouteLocationNormalized, RouteLocationRaw } from "vue-router";
 import { useAuth } from "./useAuth";
 import { returnPath } from "../../lib/routes/signIn";
+import { rememberedAccount } from "../directory/deviceDirectory";
 
 // One more ask of the platform, answering with where the reader belongs: once it answers at all, the page they were headed
 // for, whose own guards then rule on the session as they would have if the first ask had been answered (requireAuth,
@@ -30,5 +31,17 @@ const withinBudget = <T>(work: Promise<T>): Promise<T | undefined> => within(wor
 // screen is drawn, so refreshing the page recovers exactly like pressing "Try again" — otherwise the URL pins the
 // reader to a dead screen no reload can leave. A redirect from a check that just failed carries `redirectedFrom`
 // and skips the duplicate ask; it also cannot loop, since this only ever redirects on an answer.
-export const retryOnEntry = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> =>
-    to.redirectedFrom === undefined ? ((await withinBudget(platformRetry(to.query[`returnTo`]))) ?? true) : true;
+//
+// (2026-11-09) A reload onto the screen that still can't reach the platform goes on to the page it was headed for when
+// this device remembers an account: that page's guard opens the workspace on what it remembers (sessionGuard.ts), and it
+// sends back here only if nothing remembered fits, carrying `redirectedFrom`, so this cannot loop.
+export const retryOnEntry = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
+    if (to.redirectedFrom !== undefined) {
+        return true;
+    }
+    const answered = await withinBudget(platformRetry(to.query[`returnTo`]));
+    if (answered !== undefined) {
+        return answered;
+    }
+    return (rememberedAccount()?.sandboxes.length ?? 0) > 0 ? returnPath(to.query[`returnTo`]) : true;
+};

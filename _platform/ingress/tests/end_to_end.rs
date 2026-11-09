@@ -331,8 +331,14 @@ async fn a_tunnel_for_a_sandbox_the_platform_deleted_is_refused() {
     )]))
     .await;
     let mut options = lone(&keys);
-    options.revocation = Revocation::new(&platform.url);
+    options.revocation = Revocation::new(&platform.url).confirming_after(Duration::ZERO);
     let edge = start(options).await;
+    // One deletion record is doubted, and the tunnel held meanwhile; the record again refuses it.
+    assert!(
+        dial(edge.port, &keys.grant(SANDBOX_ID), serving("x"))
+            .await
+            .is_ok()
+    );
     assert_eq!(
         dial(edge.port, &keys.grant(SANDBOX_ID), serving("x"))
             .await
@@ -373,7 +379,7 @@ mod hosted {
         ]))
         .await;
         let mut options = lone(&keys);
-        options.revocation = Revocation::new(&platform.url);
+        options.revocation = Revocation::new(&platform.url).confirming_after(Duration::ZERO);
         options.build = "turbo-testbuild".into();
         (start(options).await, platform)
     }
@@ -401,6 +407,9 @@ mod hosted {
         assert_eq!(off.status, 502);
         assert!(off.body.contains(&format!("sandbox-{SANDBOX_ID}")));
         assert_eq!(off.headers[VERDICT_HEADER], "no-tunnel");
+        // The first deletion record is doubted, so the first miss is still only not connected.
+        let doubted = get(edge.port, &daemon_host(GONE_ID), "/").await;
+        assert_eq!(doubted.headers[VERDICT_HEADER], "no-tunnel");
         let gone = get(edge.port, &daemon_host(GONE_ID), "/").await;
         assert_eq!(gone.status, 502);
         assert_eq!(gone.headers[VERDICT_HEADER], "unknown-sandbox");

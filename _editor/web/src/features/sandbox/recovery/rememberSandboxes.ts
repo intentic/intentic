@@ -9,6 +9,7 @@ import { SANDBOX_LIST_KEY } from "../../../client/sandbox/useSandbox";
 import { sandboxIdOfDaemonUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { forgetSandbox, type LocalIds, missingSandboxes, noteUnknown, rememberListed } from "../../../client/directory/deviceDirectory";
 import { sandboxIdOf } from "../../../client/endpoint/endpoint";
+import { rememberedLogoOf } from "../../../client/directory/logoThumbnail";
 import { directMode } from "../../../client/directory/directState";
 
 // Keeps the device's memory (deviceDirectory.ts) up with every list the platform answers, and asks the platform about
@@ -81,8 +82,10 @@ export const startRememberingSandboxes = (): void => {
             return;
         }
         const rows = queryClient.getQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY) ?? [];
-        void Promise.all([platformIdentity(), localIdsOf(rows)]).then(async ([held, localIds]) => {
-            rememberListed(account, rows, held, new Date(), localIds);
+        // Each logo as a thumbnail (client/directory/logoThumbnail.ts): the memory must fit where it is kept.
+        const thumbnailed = Promise.all(rows.map(async (row) => ({ ...row, image: await rememberedLogoOf(row.image) })));
+        void Promise.all([platformIdentity(), localIdsOf(rows), thumbnailed]).then(async ([held, localIds, remembered]) => {
+            rememberListed(account, remembered, held, new Date(), localIds);
             await askAboutMissing(account.email);
         });
     });

@@ -741,7 +741,8 @@ describe(`POST /sandbox/presentation`, () => {
         const res = await presentation(fakePrisma({ sandbox: { findUnique } }), `tok`);
 
         expect(res.status).toBe(200);
-        expect(await res.json()).toEqual({ name: `radarsu-intentic`, image: `data:image/webp;base64,AA==` });
+        // With the digest an announce carries for the same pair, which the daemon keeps beside its copy (ingress-schemas.ts).
+        expect(await res.json()).toEqual({ name: `radarsu-intentic`, image: `data:image/webp;base64,AA==`, digest: `02b432befa9d920e3ee21b6ef5d0a5e6` });
         // Narrower than the row on purpose: no token, no daemonUrl, nothing another lane could reuse.
         expect(findUnique).toHaveBeenCalledWith({
             where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
@@ -751,7 +752,7 @@ describe(`POST /sandbox/presentation`, () => {
 
     it(`omits the logo rather than sending null when the row has none`, async () => {
         const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ name: `workspace`, image: null }) } });
-        expect(await (await presentation(prisma, `tok`)).json()).toEqual({ name: `workspace` });
+        expect(await (await presentation(prisma, `tok`)).json()).toEqual({ name: `workspace`, digest: `d2e9f563419699d12f7be092973f94a2` });
     });
 
     it(`refuses a missing token before touching the database, and 404s an unknown one`, async () => {
@@ -914,7 +915,9 @@ describe(`POST /sandbox/announce`, () => {
     it(`answers an accepted announce with the identity of the database that took it, and the row's id`, async () => {
         const prisma = fakePrisma({
             sandbox: {
-                findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null }),
+                findUnique: jest
+                    .fn()
+                    .mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null, name: `workspace`, image: null }),
                 updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
             platformIdentity: {
@@ -927,6 +930,34 @@ describe(`POST /sandbox/announce`, () => {
             identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`,
             platformId: `s1`,
             identityKey: identityKeyOf(config),
+            presentationDigest: `d2e9f563419699d12f7be092973f94a2`,
+        });
+    });
+
+    // The daemon keeps a copy of the name and logo and asks for them again only when this moves, so a rename and a new
+    // logo each move it, and the logo itself never rides the hourly announce.
+    it(`answers an accepted announce with the digest of the row's name and logo as they stand`, async () => {
+        const answerFor = async (row: { name: string; image: string | null }): Promise<Response> => {
+            const prisma = fakePrisma({
+                sandbox: {
+                    findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null, ...row }),
+                    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+                },
+                platformIdentity: { findUnique: jest.fn().mockResolvedValue(null) },
+            });
+            return announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
+        };
+        expect(await (await answerFor({ name: `radarsu-intentic`, image: `data:image/webp;base64,AA==` })).json()).toEqual({
+            ok: true,
+            platformId: `s1`,
+            identityKey: identityKeyOf(config),
+            presentationDigest: `02b432befa9d920e3ee21b6ef5d0a5e6`,
+        });
+        expect(await (await answerFor({ name: `workspace`, image: null })).json()).toEqual({
+            ok: true,
+            platformId: `s1`,
+            identityKey: identityKeyOf(config),
+            presentationDigest: `d2e9f563419699d12f7be092973f94a2`,
         });
     });
 
@@ -936,7 +967,9 @@ describe(`POST /sandbox/announce`, () => {
         const keys = generateKeyPairSync(`ed25519`, { publicKeyEncoding: { type: `spki`, format: `pem` }, privateKeyEncoding: { type: `pkcs8`, format: `pem` } });
         const prisma = fakePrisma({
             sandbox: {
-                findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null }),
+                findUnique: jest
+                    .fn()
+                    .mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null, name: `workspace`, image: null }),
                 updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
             platformIdentity: { findUnique: jest.fn().mockResolvedValue(null) },
@@ -946,20 +979,27 @@ describe(`POST /sandbox/announce`, () => {
             headers: { "content-type": `application/json`, "x-intentic-connect": `tok` },
             body: JSON.stringify({ daemonUrl: `https://sandbox-abc.intentic.dev` }),
         });
-        expect(await res.json()).toEqual({ ok: true, identityKey: keys.publicKey, platformId: `s1` });
+        expect(await res.json()).toEqual({ ok: true, identityKey: keys.publicKey, platformId: `s1`, presentationDigest: `d2e9f563419699d12f7be092973f94a2` });
     });
 
     it(`still accepts the announce when the database cannot say which it is`, async () => {
         const prisma = fakePrisma({
             sandbox: {
-                findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null }),
+                findUnique: jest
+                    .fn()
+                    .mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null, name: `workspace`, image: null }),
                 updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
             platformIdentity: { findUnique: jest.fn().mockRejectedValue(new Error(`relation "platform_identity" does not exist`)) },
         });
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
         expect(res.status).toBe(200);
-        expect(await res.json()).toEqual({ ok: true, platformId: `s1`, identityKey: identityKeyOf(config) });
+        expect(await res.json()).toEqual({
+            ok: true,
+            platformId: `s1`,
+            identityKey: identityKeyOf(config),
+            presentationDigest: `d2e9f563419699d12f7be092973f94a2`,
+        });
     });
 
     it(`404s an unknown token with no oracle`, async () => {
@@ -1166,8 +1206,8 @@ describe(`POST /api/auth/one-tap/callback`, () => {
     });
 });
 
-// The edge's one question back: a grant carries no expiry, so revocation has to be something the edge can ask, and 404
-// is the only answer that matters.
+// The edge's one question back: a grant carries no expiry, so revocation has to be something the edge can ask, and a
+// 404 carrying the deletion record is the only answer that matters.
 describe(`GET /api/reachability/:sandboxId`, () => {
     const ask = (prisma: PrismaClient, sandboxId: string) => createApp(config, prisma, logger).app.request(`/api/reachability/${sandboxId}`);
     const id = `abcdef012345`;
@@ -1190,15 +1230,17 @@ describe(`GET /api/reachability/:sandboxId`, () => {
         expect(await own.json()).toEqual({ ok: true, lane: `tunnel` });
     });
 
-    // The one refusal: a deletion record. 404 is what the edge refuses a tunnel on, so it means exactly this.
-    it(`404s a sandbox whose id has a deletion record`, async () => {
+    // The one refusal: a deletion record, saying so in its body. The edge refuses a tunnel only on a 404 that carries
+    // `deleted: true` (or this error text, for an edge's reading from before it), never on a bare 404 something in
+    // front of the api could answer.
+    it(`404s a sandbox whose id has a deletion record, with the record's own body`, async () => {
         const tombstone = jest.fn().mockResolvedValue({ tunnelId: id });
         const res = await ask(
             fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxTombstone: { findUnique: tombstone } }),
             id,
         );
         expect(res.status).toBe(404);
-        expect(await res.json()).toEqual({ error: `deleted sandbox` });
+        expect(await res.json()).toEqual({ error: `deleted sandbox`, deleted: true });
         expect(tombstone).toHaveBeenCalledWith({ where: { tunnelId: id }, select: { tunnelId: true } });
     });
 

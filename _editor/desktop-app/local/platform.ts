@@ -1,5 +1,6 @@
 import { parseJsonWith } from "@intentic/base/json";
-import { apiContract, type SandboxSummary, type User } from "@intentic/api-contract";
+import { apiContract, type SandboxSummary, SandboxSummarySchema, type User, UserSchema } from "@intentic/api-contract";
+import { deviceKey, removeStoredValue, storedJson, storeJson } from "@intentic/ui/storage";
 import { type LocalFace, localFace, localSandboxId } from "@intentic/web/local";
 import type { AccountAnswer, AccountAsk } from "../src/desktop";
 import { LOCAL_PLATFORM_ORIGIN } from "./origin";
@@ -115,27 +116,121 @@ type SandboxList = OutputOf<typeof apiContract.sandbox.list>;
 // The contract's own reader of the list, so a row the page takes in is a row the editor would have taken from the platform.
 const SANDBOX_LIST_SCHEMA = apiContract.sandbox.list[`~orpc`].outputSchema;
 
+export type PlatformRelay = (ask: AccountAsk) => Promise<AccountAnswer>;
+
+// THE LAST LIST THE PLATFORM GAVE (2026-11-09). The platform stays the authority on which sandboxes the account has,
+// but a window keeps what it last said: when the app cannot reach it (the relay rejects, the platform answers an error
+// or something out of shape), the switcher lists that copy after the folder instead of shrinking to the folder alone,
+// which read as every sandbox gone. Only the platform's own clear answers change the copy: a list, an empty one
+// included, replaces it, and nobody signed in (401) forgets it. Kept in this window's memory for its life, and in this
+// origin's storage for the next window, under the account the app says is signed in (`roster.json`, which a sign-out
+// and an account switch empty), and shown only while that is still the account: a copy is never another person's list,
+// and one the app can name nobody for is not kept. A device key rather than an account one, since which of the
+// editor's drawers a folder window opens follows whatever page of this origin signed in last (folderSession.ts), and
+// the account it belongs to rides beside it instead. No connect token is kept, in memory or on disk: a token is the
+// owner's key to a sandbox, and a window on a folder never dials one with it (picking another sandbox opens the
+// workspace on it, the web's switcherPlace.ts).
+
+// The contract's own readers: the account by the address it signs in with, each row as the platform's list holds it,
+// so a copy read back is a list the editor would have taken from the platform.
+const KEPT_LIST_SCHEMA = UserSchema.pick({ email: true }).extend({ sandboxes: SandboxSummarySchema.array() });
+
+/** The account's last list as a window keeps it: whose it was (the address the app named as signed in) and its rows,
+ *  each without its connect token. */
+export interface KeptList {
+    readonly email: string;
+    readonly sandboxes: readonly SandboxSummary[];
+}
+
+/** Where a window keeps the last list and asks whose it may show: this origin's storage and the app's roster in a
+ *  window, a test's own beside it. */
+export interface ListKeeping {
+    /** Who the app says is signed in now (`local_roster`'s account), or null for nobody named. */
+    readonly whose: () => Promise<string | null>;
+    readonly read: () => KeptList | undefined;
+    /** Undefined forgets it. */
+    readonly write: (kept: KeptList | undefined) => void;
+}
+
+const KEPT_LIST_KEY = deviceKey(`intentic.local.accountSandboxes`);
+
+/** The last list in this origin's storage, under the account `whose` names. */
+export const storedListKeeping = (whose: () => Promise<string | null>): ListKeeping => ({
+    whose,
+    read: () => storedJson(KEPT_LIST_KEY, KEPT_LIST_SCHEMA),
+    write: (kept) => (kept === undefined ? removeStoredValue(KEPT_LIST_KEY) : storeJson(KEPT_LIST_KEY, kept)),
+});
+
+// Nothing outlives the window, and nobody is named: a page with no app behind it.
+const KEPT_NOWHERE: ListKeeping = { whose: () => Promise.resolve(null), read: () => undefined, write: () => undefined };
+
+// Who the app names, or nobody when it cannot say: a copy is then neither kept nor shown, never shown to the wrong one.
+const named = async (keeping: ListKeeping): Promise<string | null> => {
+    try {
+        return await keeping.whose();
+    } catch (error) {
+        console.warn(`[local] who is signed in could not be read for the sandbox list:`, error);
+        return null;
+    }
+};
+
+/** The window's copy of the last list: written on the platform's every clear answer, read when it gave none. */
+interface LastList {
+    readonly took: (sandboxes: readonly SandboxSummary[]) => Promise<void>;
+    readonly forget: () => void;
+    readonly shown: () => Promise<readonly SandboxSummary[]>;
+}
+
+const lastList = (keeping: ListKeeping): LastList => {
+    let held: KeptList | undefined;
+    return {
+        took: async (sandboxes) => {
+            const email = await named(keeping);
+            if (email === null) {
+                return;
+            }
+            held = { email, sandboxes: sandboxes.map((row) => ({ ...row, token: null })) };
+            keeping.write(held);
+        },
+        forget: () => {
+            held = undefined;
+            keeping.write(undefined);
+        },
+        // What another window kept since is newer than this one's memory, which still stands where storage is off or full.
+        shown: async () => {
+            const email = await named(keeping);
+            return [keeping.read(), held].find((kept) => kept !== undefined && kept.email === email)?.sandboxes ?? [];
+        },
+    };
+};
+
 // THE SANDBOX LIST: the folder's own row, which is the sandbox this window shows, and the account's sandboxes after it,
 // which its switcher lists, removes and opens the workspace on. The account's half is the platform's, through the app,
 // but never on a window's first ask: that one is the boot guard's (router/index.ts `requireSetup`), and a platform that
 // is slow or out of reach must not hold the first paint, so it is the folder alone, at once. Every later ask (the
-// switcher opening, a removal settling) goes to the platform, and anything short of its list (nobody signed in, no
-// network, an answer out of shape) is the folder alone again, as it was before the account was there to ask.
-const accountList = async (face: LocalFace, relay: PlatformRelay): Promise<Response> => {
+// switcher opening, a removal settling) goes to the platform. Nobody signed in is the folder alone, as it was before
+// the account was there to ask; anything else short of its list (no network, an error, an answer out of shape) is the
+// folder and the last list it gave (above).
+const accountList = async (face: LocalFace, relay: PlatformRelay, last: LastList): Promise<Response> => {
     const own = rowOf(face);
+    const after = (rows: readonly SandboxSummary[]): Response => json<SandboxList>({ sandboxes: [own, ...rows.filter((row) => row.id !== own.id)] });
     try {
         const answer = await relay({ method: `GET`, path: SANDBOX_LIST });
+        if (answer.status === 401) {
+            last.forget();
+            return after([]);
+        }
         const body = answer.status === 200 && SANDBOX_LIST_SCHEMA !== undefined ? parseJsonWith(answer.body, SANDBOX_LIST_SCHEMA) : undefined;
         if (body !== undefined) {
-            return json<SandboxList>({ sandboxes: [own, ...body.sandboxes.filter((row) => row.id !== own.id)] });
+            await last.took(body.sandboxes);
+            return after(body.sandboxes);
         }
+        console.warn(`[local] the platform gave no sandbox list (${String(answer.status)}); the last one it gave stands`);
     } catch (error) {
-        console.warn(`[local] the account's sandboxes could not be listed:`, error);
+        console.warn(`[local] the account's sandboxes could not be listed; the last list the platform gave stands:`, error);
     }
-    return json<SandboxList>({ sandboxes: [own] });
+    return after(await last.shown());
 };
-
-export type PlatformRelay = (ask: AccountAsk) => Promise<AccountAnswer>;
 
 // Statuses a Response must be built without a body for.
 const BODILESS: ReadonlySet<number> = new Set([101, 204, 205, 304]);
@@ -154,11 +249,12 @@ const relayed = async (relay: PlatformRelay, request: Request): Promise<Response
 const isRelayed = (url: URL, method: string): boolean => RELAYED.has(url.pathname) && (method === `GET` || method === `POST`);
 
 // Routes the page's platform calls to the answers above, the account's own through `relay` where the app is there to
-// carry them; every other request goes where it was going.
-export const installPlatform = (face: LocalFace, relay?: PlatformRelay): void => {
+// carry them, the last list the platform gave kept where `keeping` says; every other request goes where it was going.
+export const installPlatform = (face: LocalFace, relay?: PlatformRelay, keeping: ListKeeping = KEPT_NOWHERE): void => {
     const original = globalThis.fetch;
     // The boot guard's ask comes first and is answered in the page (`accountList`).
     let listedOnce = false;
+    const last = lastList(keeping);
     const passThrough = original.bind(globalThis);
     const routed = (...[input, init]: Parameters<typeof fetch>): Promise<Response> => {
         const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
@@ -171,7 +267,7 @@ export const installPlatform = (face: LocalFace, relay?: PlatformRelay): void =>
             const first = !listedOnce;
             listedOnce = true;
             if (!first) {
-                return accountList(localFace() ?? face, relay);
+                return accountList(localFace() ?? face, relay, last);
             }
         }
         if (relay === undefined || !isRelayed(url, method)) {

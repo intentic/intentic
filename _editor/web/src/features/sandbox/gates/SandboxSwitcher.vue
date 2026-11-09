@@ -19,7 +19,9 @@ import { useSortableDrag } from "../../../components/sortable/sortableDrag";
 import SortableLift from "../../../components/sortable/SortableLift.vue";
 import { useRequestAddSandbox, warmAddSandbox } from "../../../models/sandbox/addSandbox";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
-import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { SANDBOX_LIST_KEY, useSandbox } from "../../../client/sandbox/useSandbox";
+import { queryClient } from "../../../lib/queryPersistence";
+import { rememberedAccount } from "../../../client/directory/deviceDirectory";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { operationRunning } from "../../../workbench/operations/operations";
 import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
@@ -241,20 +243,33 @@ const toThisComputer = (): void => {
 // The app's local windows list these same sandboxes in their own switcher and show this account at their rail's foot,
 // and can learn either only from this page (desktop.ts `announceDesktopRoster`): told on mount and again whenever a
 // row, its mark or the account changes.
+// (2026-11-09) Each row carries the logo thumbnail this device remembers (client/directory/logoThumbnail.ts), and a list
+// the platform never gave is not told as an empty one: a cold load whose list failed has no rows yet, which the app
+// would otherwise take for an account with none left (setup_link.rs keeps its rows for an empty list too).
 const { user } = useAuth();
 if (inDesktopApp) {
+    const rememberedLogo = (id: string): string | undefined => {
+        const email = user.value?.email;
+        const image = email === undefined ? undefined : rememberedAccount(email)?.sandboxes.find((entry) => entry.id === id)?.image;
+        return image ?? undefined;
+    };
     watch(
         () =>
             [
-                switchable.value.map((option) => ({
-                    id: option.id,
-                    name: option.name,
-                    place: placementFor(option).kind,
-                    shared: option.role !== `owner`,
-                })),
+                switchable.value.map((option) => {
+                    const image = rememberedLogo(option.id);
+                    const row = { id: option.id, name: option.name, place: placementFor(option).kind, shared: option.role !== `owner` };
+                    return image === undefined ? row : { ...row, image };
+                }),
                 user.value === null ? undefined : { email: user.value.email, name: user.value.name, image: user.value.image },
             ] as const,
-        ([rows, account]) => announceDesktopRoster(rows, account),
+        ([rows, account]) => {
+            const listed = queryClient.getQueryState(SANDBOX_LIST_KEY)?.status === `success`;
+            if (rows.length === 0 && account !== undefined && !listed) {
+                return;
+            }
+            announceDesktopRoster(rows, account);
+        },
         { immediate: true },
     );
 }

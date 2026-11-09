@@ -1,4 +1,5 @@
 import { freshImport } from "@intentic/testing/bun";
+import { type DesktopRosterEntry, desktopRosterLink, ROSTER_IMAGE_MAX, ROSTER_IMAGES_BUDGET } from "./desktopRoster";
 
 /* The page's window, as the module reads it: a browser's until a test marks it as the app's (`__INTENTIC_DESKTOP__`). */
 interface FakeWindow {
@@ -186,7 +187,6 @@ test("the look the reader keeps is announced beside the scheme", async () => {
 
 /* THE ACCOUNT'S SANDBOXES, handed to the app for its local windows: one row each, in a shape the app takes whole. */
 test("the roster link carries each sandbox's id, name, place and whether it is shared, and nothing else", async () => {
-    const { desktopRosterLink } = await load();
     const link = new URL(
         desktopRosterLink([
             { id: `cm9x_01`, name: `Shop & API`, place: `cloud`, shared: false },
@@ -200,9 +200,40 @@ test("the roster link carries each sandbox's id, name, place and whether it is s
     ]);
 });
 
+// (2026-11-09) A logo rides as the small thumbnail the device remembers; a large one, or anything that is not an image
+// data URL, is left out of its row, and so is every logo past the link's budget.
+test("the roster link carries small logos within its budget, and leaves the rest out", async () => {
+    const small = `data:image/webp;base64,${`A`.repeat(1_000)}`;
+    const half = `data:image/webp;base64,${`B`.repeat(ROSTER_IMAGE_MAX - 30)}`;
+    const many = Array.from({ length: Math.ceil(ROSTER_IMAGES_BUDGET / half.length) + 1 }, (_, index) => ({
+        id: `fill-${index}`,
+        name: `Fill`,
+        place: `own`,
+        shared: false,
+        image: half,
+    }));
+    const sent: DesktopRosterEntry[] = JSON.parse(
+        new URL(
+            desktopRosterLink([
+                { id: `small`, name: `Small`, place: `own`, shared: false, image: small },
+                { id: `huge`, name: `Huge`, place: `own`, shared: false, image: `data:image/png;base64,${`C`.repeat(ROSTER_IMAGE_MAX)}` },
+                { id: `remote`, name: `Remote`, place: `own`, shared: false, image: `https://example.com/logo.png` },
+                ...many,
+            ]),
+        ).searchParams.get(`list`) ?? ``,
+    );
+    expect(sent.slice(0, 3)).toEqual([
+        { id: `small`, name: `Small`, place: `own`, shared: false, image: small },
+        { id: `huge`, name: `Huge`, place: `own`, shared: false },
+        { id: `remote`, name: `Remote`, place: `own`, shared: false },
+    ]);
+    const carried = sent.filter((row) => row.image !== undefined);
+    expect(carried.reduce((total, row) => total + (row.image?.length ?? 0), 0)).toBeLessThanOrEqual(ROSTER_IMAGES_BUDGET);
+    expect(sent.at(-1)).toEqual({ id: `fill-${many.length - 1}`, name: `Fill`, place: `own`, shared: false });
+});
+
 // The app drops a whole list for one row it cannot take (setup_link.rs `is_roster_entry`), so the page meets its rules.
 test("a row the app would refuse is mended or left out, never sent as it is", async () => {
-    const { desktopRosterLink } = await load();
     const ZS = `ż`.repeat(199);
     const rows: unknown = JSON.parse(
         new URL(
@@ -225,7 +256,6 @@ test("a row the app would refuse is mended or left out, never sent as it is", as
 // Who is signed in rides beside the list, for the local window's rail: an address always, a name and an https avatar
 // when there are any; an uploaded avatar (a data URL) and an address the app would refuse are not sent.
 test("the account rides beside the sandboxes, in the shape the app takes", async () => {
-    const { desktopRosterLink } = await load();
     const accountOf = (link: string): string | null => new URL(link).searchParams.get(`account`);
     expect([
         accountOf(desktopRosterLink([], { email: `ada@example.com`, name: ` Ada\tL `, image: `https://lh3.example.com/a.png` })),

@@ -41,6 +41,8 @@ import { memoryOwnerGrants } from "../personas/owner-grants.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import { sessionsSliceFake } from "../sessions/sessions-slice.testing.js";
 import { createAnnouncer } from "../system/boot/announce.js";
+import { createPresentationMirror } from "../system/presentation/presentation-mirror.js";
+import { memoryPresentationStore } from "../system/presentation/presentation-store.testing.js";
 import { createOrgPolicyHolder } from "../org/org-policy.js";
 import { createBootTracker } from "../system/boot/boot.js";
 import { createReachReporter } from "../system/listeners/reach-report.js";
@@ -120,7 +122,9 @@ const inertOwnMembers = () =>
         platformTunnel: { url: () => undefined, ready: Promise.resolve(), close: () => {} },
         // No platform to ask, which is the ordinary state under test and the one an export has to survive: a bundle
         // packed here simply carries no display name or logo. A test that cares overrides this.
-        presentation: async () => undefined,
+        // Nothing heard yet and no platform to ask, in memory: a refresh answers no copy, not refreshed. A suite about the
+        // copy builds its own mirror over memoryPresentationStore.
+        presentation: createPresentationMirror({ store: memoryPresentationStore(), ask: async () => undefined, logger: createLogger(testConfig) }),
         // Nothing on record, and an append is dropped.
         activity: { append: async () => {}, list: async () => [] },
         // The audit trail, in memory: what a request recorded is kept on `recorded`, reads are not recorded, and the trail

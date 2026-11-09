@@ -660,6 +660,10 @@ jobs:
           KOMODO_URL: ${{ secrets.KOMODO_URL }}
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
           KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          # The editor's copy at the edge (_editor/web/edge/deploy-edge.sh), refreshed once the origin serves the
+          # release: a token that can edit Workers scripts. Unset, that step says so and the copy stays where it was.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash _tools/scripts/platform/ship-web.sh "$PLANNED_RELEASE_VERSION"
 
       # The registries. Everything semantic-release just did lives on GitHub — the tag, the Release, the

@@ -5,6 +5,7 @@ import { CONNECT_TOKEN_HEADER } from "./headers.js";
 import { ingressPath, PLATFORM_INGRESS, TRIAL_MODEL_API_PATH } from "./routes.js";
 import {
     AdoptionBodySchema,
+    AnnounceAcceptedSchema,
     AnnounceBodySchema,
     BootReportBodySchema,
     FarewellBodySchema,
@@ -15,6 +16,8 @@ import {
     LocalDnsBodySchema,
     OrgPolicyAnswerSchema,
     OrgPolicyFetchBodySchema,
+    PresentationSchema,
+    presentationDigest,
     SetupClaimFormSchema,
     SetupReportBodySchema,
 } from "./ingress-schemas.js";
@@ -83,6 +86,27 @@ describe("bodies an older machine sends still parse", () => {
 
 // (2026-10-19) A wakes ask may name how long the platform may hold it, and the answer says whether it did. Both sides
 // of every release keep talking: an `ic` from before names no wait, and a platform from before answers with no `held`.
+// The daemon keeps a copy of its name and logo and asks for them again only when an announce's digest differs from its
+// copy's, so both ends must reach the same value for the same pair, and an answer from either side of the change parses.
+describe("a sandbox's presentation", () => {
+    it("digests to the first 32 hex characters of SHA-256 over the name, a newline and the logo", async () => {
+        expect(await presentationDigest("radarsu-intentic", "data:image/webp;base64,AA==")).toBe("02b432befa9d920e3ee21b6ef5d0a5e6");
+        // No logo, an empty one and a null column are one pair: the platform's row says null, a daemon's copy leaves it out.
+        expect(await presentationDigest("workspace", undefined)).toBe("d2e9f563419699d12f7be092973f94a2");
+        expect(await presentationDigest("workspace", null)).toBe("d2e9f563419699d12f7be092973f94a2");
+        expect(await presentationDigest("workspace", "")).toBe("d2e9f563419699d12f7be092973f94a2");
+    });
+
+    it("parses an older platform's answers, which carry no digest", () => {
+        expect(AnnounceAcceptedSchema.parse({ ok: true, platformId: "s1" })).toEqual({ ok: true, platformId: "s1" });
+        expect(PresentationSchema.parse({ name: "workspace" })).toEqual({ name: "workspace" });
+        expect(PresentationSchema.parse({ name: "workspace", digest: "d2e9f563419699d12f7be092973f94a2" })).toEqual({
+            name: "workspace",
+            digest: "d2e9f563419699d12f7be092973f94a2",
+        });
+    });
+});
+
 describe("a wakes ask", () => {
     const asks = [{ sandbox: "abc123def456", key: "k".repeat(64) }];
 

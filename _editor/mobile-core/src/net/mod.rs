@@ -106,15 +106,17 @@ impl Http {
                 body: String::from_utf8_lossy(&bytes).into_owned(),
             });
         }
-        // An empty body reads as JSON null, for calls that answer nothing.
-        let text = if bytes.is_empty() {
-            &b"null"[..]
-        } else {
-            &bytes[..]
-        };
+        // An empty body reads as JSON null, for calls that answer nothing; `empty` says so, for a caller to whom null
+        // is a statement (`Platform::me`).
+        let empty = bytes.is_empty();
+        let text = if empty { &b"null"[..] } else { &bytes[..] };
         let value =
             serde_json::from_slice(text).map_err(|error| HttpError::Decode(error.to_string()))?;
-        Ok(Answer { value, cookies })
+        Ok(Answer {
+            value,
+            cookies,
+            empty,
+        })
     }
 
     /// Opens an oRPC event iterator and hands each frame to `each` until the stream ends, goes quiet, or `each`
@@ -176,6 +178,25 @@ impl Http {
 pub struct Answer<T> {
     pub value: T,
     pub cookies: Vec<String>,
+    /// The body was empty, and `value` is what JSON null reads as.
+    pub empty: bool,
+}
+
+/// Whether a refusal's body is the server's own JSON error: an object naming its case, as a non-empty string, under one
+/// of `fields`. That is what tells a server refusing a credential from a page something in front of it answered (a
+/// proxy's sign-in wall, a placeholder, an outage notice), which says nothing about the credential and must never end
+/// a session or forget a token. Pure.
+pub fn refusal_names(body: &str, fields: &[&str]) -> bool {
+    let Ok(serde_json::Value::Object(refusal)) = serde_json::from_str::<serde_json::Value>(body)
+    else {
+        return false;
+    };
+    fields.iter().any(|field| {
+        refusal
+            .get(*field)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|case| !case.is_empty())
+    })
 }
 
 fn set_cookies(response: &reqwest::Response) -> Vec<String> {
@@ -188,4 +209,34 @@ fn set_cookies(response: &reqwest::Response) -> Vec<String> {
         .map(|pair| pair.trim().to_owned())
         .filter(|pair| !pair.is_empty())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_servers_own_json_error_names_its_refusal() {
+        let rpc =
+            r#"{"defined":false,"code":"UNAUTHORIZED","status":401,"message":"Unauthorized"}"#;
+        assert!(refusal_names(rpc, &["code"]));
+        assert!(refusal_names(
+            r#"{"error":"session expired"}"#,
+            &["code", "error"]
+        ));
+        for page in [
+            "",
+            "Unauthorized",
+            "<!DOCTYPE html><html><body>Sign in to continue</body></html>",
+            "null",
+            "{}",
+            r#"{"code":""}"#,
+            r#"{"code":401}"#,
+            r#"["UNAUTHORIZED"]"#,
+        ] {
+            assert!(!refusal_names(page, &["code", "error"]), "{page}");
+        }
+        // A field the caller does not take is not its server's word.
+        assert!(!refusal_names(r#"{"error":"Forbidden"}"#, &["code"]));
+    }
 }

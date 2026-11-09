@@ -82,9 +82,11 @@ flowchart LR
 - Reachability is a signed grant. The api holds the Ed25519 private key (`INGRESS_SIGNING_KEY`), the edge holds only
   the public half, and a deletion record revokes it (`src/sandbox/reachability.ts`). A trigger on `sandbox` records
   the tunnel id of every deleted row and every rotated token (`SandboxTombstone`), and `GET /api/reachability/:id`
-  answers 404 for those alone; an id with neither a row nor a record answers 200 with `known: false`. (2026-10-02)
-  Deleting the row used to be the revocation, which made a database that forgot a sandbox (a restore, a wrong
-  `DATABASE_URL`) take every sandbox off the edge within a minute.
+  answers 404 for those alone, with `{ "error": "deleted sandbox", "deleted": true }`; an id with neither a row nor a
+  record answers 200 with `known: false`. (2026-10-02) Deleting the row used to be the revocation, which made a database
+  that forgot a sandbox (a restore, a wrong `DATABASE_URL`) take every sandbox off the edge within a minute.
+  (2026-11-09) The edge refuses a tunnel only on that body, said twice some 30 s apart, never on a bare 404, which
+  something in front of the api answers too.
 - When the platform forgets ([platform.md](../../docs/architecture/platform.md#when-the-platform-forgets),
   `src/sandbox/recovery.ts`): every database carries a random identity (`platform_identity`), logged at boot and served
   at `GET /api/identity`. Set `DATABASE_EXPECTED_IDENTITY` and the api refuses to start on any other, before a reaper
@@ -210,6 +212,13 @@ flowchart LR
   change went on.
 - A daemon's announce may name its `version` (semver, at most 64 characters). It is stored on the sandbox row
   (`daemonVersion`), and an announce that names none, or something else, clears it.
+- (2026-11-09) An accepted announce answers `presentationDigest`, and `POST /sandbox/presentation` a `digest` beside the
+  name and logo: api-contract `presentationDigest` over the row's name and image. The daemon keeps a copy of both and
+  asks again only when the digest moves, so the sandbox still shows them while this platform is down.
+- The push relay's `send` marks the three refusals that end a channel (unknown device, rotated secret, a device its
+  push service says is gone) with `data: { channel: "gone" }` (sandbox-contract `RELAY_CHANNEL_GONE`). The daemon
+  forgets a relay channel only on that, never on a bare status a proxy could answer; a platform with no credential
+  for the push service refuses unmarked.
 - (2026-10-05) A daemon announces again every hour once registered (`_sandbox/sandbox` `announce.ts`), and every
   accepted announce moves `lastSeenAt`, so it is the sandbox's heartbeat rather than its registration. A 410 is still
   final. An announce may also name which copy it is (`AnnounceBodySchema`: `instance`, minted once per container

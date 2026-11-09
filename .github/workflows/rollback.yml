@@ -60,8 +60,11 @@ jobs:
           ROLLBACK_VERSION: ${{ inputs.version }}
           ROLLBACK_DOOR: ${{ inputs.door }}
           ROLLBACK_REASON: ${{ inputs.reason }}
-          # The hosted editor goes back with stable (ship-web.sh), which rolls the platform stack.
+          # The hosted editor goes back with stable (ship-web.sh), which rolls the platform stack and then its copy
+          # at the edge (_editor/web/edge/deploy-edge.sh, skipped without the token).
           PLATFORM_DEPLOY_STACK: intentic-platform
           KOMODO_URL: ${{ secrets.KOMODO_URL }}
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
           KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

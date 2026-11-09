@@ -108,19 +108,33 @@ describe(`send`, () => {
         expect(apns.send).toHaveBeenCalledWith(`tok-1`, replacement, { app: `editor`, sandbox: `` });
     });
 
-    it(`answers 404 for an unknown device: the daemon prunes and never retries`, async () => {
+    // The daemon forgets a channel only on the relay's own marker (sandbox-contract RELAY_CHANNEL_GONE), never on a
+    // status a proxy in front of a platform that is down could answer too.
+    it(`answers 404 for an unknown device, marked gone: the daemon prunes and never retries`, async () => {
         const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(null) } }) });
         await expect(
             call(pushRelayRoutes(() => forwarder(`delivered`)).send, { deviceId: `dx`, secret: `s`, notification }, { context: ctx }),
-        ).rejects.toMatchObject({ code: `NOT_FOUND` });
+        ).rejects.toMatchObject({ code: `NOT_FOUND`, status: 404, data: { channel: `gone` } });
     });
 
-    it(`answers 403 for a rotated secret: the old daemon row is permanently dead`, async () => {
+    it(`answers 403 for a rotated secret, marked gone: the old daemon row is permanently dead`, async () => {
         const { hash } = await minted();
         const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(row(hash)) } }) });
         await expect(
             call(pushRelayRoutes(() => forwarder(`delivered`)).send, { deviceId: `d1`, secret: `wrong`, notification }, { context: ctx }),
-        ).rejects.toMatchObject({ code: `FORBIDDEN` });
+        ).rejects.toMatchObject({ code: `FORBIDDEN`, status: 403, data: { channel: `gone` } });
+    });
+
+    // Missing credentials are this platform's state, which a fixed config ends: the device row is still good.
+    it(`answers a send on a platform with no credential for the device's push service unmarked, so the daemon keeps it`, async () => {
+        const { secret, hash } = await minted();
+        const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(row(hash)) } }) });
+        const refusal = await call(pushRelayRoutes(() => ({ enabled: false, send: jest.fn() })).send, { deviceId: `d1`, secret, notification }, { context: ctx }).then(
+            () => undefined,
+            (error: unknown) => error,
+        );
+        expect(refusal).toBeInstanceOf(ORPCError);
+        expect(refusal).toMatchObject({ code: `NOT_FOUND`, status: 404, data: undefined });
     });
 
     it(`deletes the row and answers 410 when Apple says the device is gone: both halves of the channel die together`, async () => {
@@ -133,7 +147,7 @@ describe(`send`, () => {
 
         await expect(
             call(pushRelayRoutes(() => forwarder(`dead`)).send, { deviceId: `d1`, secret, notification }, { context: ctx }),
-        ).rejects.toMatchObject({ status: 410 });
+        ).rejects.toMatchObject({ status: 410, data: { channel: `gone` } });
         expect(remove).toHaveBeenCalledWith({ where: { id: `d1`, secretHash: hash } });
     });
 

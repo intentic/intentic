@@ -12021,6 +12021,11 @@
             "portsPublic": "Port {port} publiczny | {count} porty publiczne | {count} portów publicznych",
             "vpn": "VPN"
         },
+        "platformStatus": {
+            "label": "Intentic offline",
+            "detail": "Serwery Intentic nie odpowiadają. Twoje sandboxy działają dalej; udostępnianie, płatności i nowe sandboxy wrócą, gdy znów odpowiedzą.",
+            "note": "Twoje sandboxy działają dalej."
+        },
         "useProjectCommands": {
             "showOnly": "Pokaż tylko {project}"
         },

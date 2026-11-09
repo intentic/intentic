@@ -1,0 +1,27 @@
+{
+    // The editor's failover at the edge (worker.ts says what it does, README.md how it ships). Deployed by
+    // deploy-edge.sh, which builds the copy it serves and names it with --assets; a bare `wrangler deploy` here has
+    // nothing to serve and is refused for it.
+    "name": "intentic-app-edge",
+    /* The account holding intentic.dev; the token stays in the environment (CLOUDFLARE_API_TOKEN). */
+    "account_id": "14aaba5ad087e7ed506d1470b14489ab",
+    "main": "./worker.ts",
+    "compatibility_date": "2026-10-01",
+    // NO ROUTES HERE YET. app.intentic.dev/* is attached by hand (README.md), and a deploy from a config that names
+    // none leaves an attached route where it is. Once it is attached, name it here too so the config says the truth.
+    "workers_dev": true,
+    // No per-version preview addresses: nothing here is reviewed that way, and each is one more public door.
+    "preview_urls": false,
+    "assets": {
+        "binding": "ASSETS",
+        // Every request reaches the Worker, which asks the origin first; the copy answers only through it.
+        "run_worker_first": true,
+        // The Worker decides what a miss is and when the shell answers (nginx.conf's rules), so the asset layer does
+        // neither: no index.html for a missing path, no redirect from /index.html to /.
+        "html_handling": "none",
+        "not_found_handling": "none",
+    },
+    // Where a request that did not arrive on app.intentic.dev (the workers.dev address) is passed (worker.ts).
+    "vars": { "UPSTREAM": "https://app.intentic.dev" },
+    "observability": { "enabled": true },
+}

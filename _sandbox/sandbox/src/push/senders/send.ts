@@ -14,7 +14,9 @@ export interface SendOutcome {
 
 export type ChannelSend<C extends PushChannel = PushChannel> = (channel: C, notification: PushNotification) => Promise<SendOutcome>;
 
-// Statuses both transports treat as permanent:
+// Statuses web push treats as permanent, straight from the browser's push service (webpush.ts):
 // 404/410: the device is gone (uninstalled, permission revoked, endpoint rotated).
-// 403: the credential can never work again (retired VAPID key, revoked relay secret).
+// 403: the credential can never work again (a retired VAPID key).
+// The relay is not read by status: it answers behind the platform's proxy, so only its own marker forgets a channel
+// (relay.ts `relaySaysGone`).
 export const DEAD = new Set([403, 404, 410]);

@@ -397,6 +397,7 @@ mod tests {
                 name: "My work; exec bad".into(),
                 place: "own".into(),
                 shared: false,
+                image: None,
             }],
         }
     }

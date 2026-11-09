@@ -123,6 +123,12 @@ export const HISTORY_FILES_WITHOUT_DOCUMENT: readonly StateFile[] = [
     // The platform's id for this sandbox's row, as its announce last said (system/boot/platform-row.ts): the target is
     // its own row, and learns its own id at its first announce.
     { path: "platform-row.json", portability: "identity", note: "The target learns its own platform id when it first announces." },
+    // The copy of this sandbox's name and logo the platform last answered (system/presentation/presentation-store.ts): a bundle carries the
+    // platform's own answer in its manifest instead, and the target hears its row's when it first announces.
+    { path: "presentation.json", portability: "identity" },
+    // The platform's identity key as an announce last taught it (auth/platform/platform-identity-key.ts): the target
+    // learns its own platform's at its first announce.
+    { path: "platform-identity-key.pem", portability: "identity" },
     {
         path: "browser-access-disabled",
         portability: "identity",

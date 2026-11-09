@@ -1,9 +1,10 @@
 import { faceOf, LOCAL_REPOINT_EVENT, type LocalFace } from "@intentic/web/local";
 import { windowRelay } from "../src/account";
+import { localRoster } from "../src/desktop";
 import { installHost } from "../src/host";
 import { registerDesktopCatalog } from "../src/i18n";
 import { seedFolderSession, seedFolderWindow } from "./folderSession";
-import { installPlatform } from "./platform";
+import { installPlatform, storedListKeeping } from "./platform";
 import { editorChunk, FACE_EVENT, faceArrives, warmModule } from "./warm";
 
 // The local face's entry: what must be true before the editor's own entry runs, the way the demo prepares it
@@ -72,7 +73,12 @@ const boot = async (face: LocalFace): Promise<void> => {
     window.addEventListener(LOCAL_REPOINT_EVENT, seedPointedSession);
     await standInForTheApp();
     // The account's calls ride the app (platform.ts `RELAYED`), when there is an app: a page in a test's browser has none.
-    installPlatform(face, `__TAURI_INTERNALS__` in window ? windowRelay : undefined);
+    // The last sandbox list the platform gave is kept in this origin's storage, under the account the app names.
+    if (`__TAURI_INTERNALS__` in window) {
+        installPlatform(face, windowRelay, storedListKeeping(async () => (await localRoster()).account?.email ?? null));
+    } else {
+        installPlatform(face);
+    }
     // The app's own words (This device, the tile it adds), registered before the editor starts its languages, and its
     // half of the shell, on the window before the router reads it (src/host.ts).
     await registerDesktopCatalog();

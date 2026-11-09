@@ -11,7 +11,11 @@ A sandbox publishes its loopback listener on `127.0.0.1:<port>` (the run contrac
 where the port derives from its 12-hex id, which derives from its connect token (@intentic/sandbox-run
 `localDaemonPort`, `sandboxIdOfToken`). The editor keys a sandbox by the platform's own id for it, which only an
 announce tells the daemon (the daemon's system/boot/platform-row.ts). `ic sandbox list --json` carries all three, so
-the desktop app's offline face and `ic sandbox attention` dial a sandbox without asking the platform anything. */
+the desktop app's offline face and `ic sandbox attention` dial a sandbox without asking the platform anything.
+
+The owner's name for the sandbox and its logo are the platform's too, and the daemon keeps its last word on them beside
+the row's id (`PRESENTATION_FILE`), so a listing still shows them while the platform is down (2026-11-09: an outage of
+the api took every sandbox's name and logo off the desktop app). */
 
 /// The container side of the loopback listener: @intentic/constants `LOCAL_PORT`, never the tunnel's `DAEMON_PORT`.
 pub const LOCAL_PORT: u16 = 8788;
@@ -22,6 +26,14 @@ const LOCAL_PORT_SPAN: u32 = 4000;
 
 /// Where the daemon keeps the platform's id for its row, relative to its HISTORY_ROOT.
 pub const PLATFORM_ROW_FILE: &str = "platform-row.json";
+
+/// Where the daemon keeps the owner's name and logo for its sandbox, beside `PLATFORM_ROW_FILE`:
+/// `{ "name", "image"?, "digest"?, "at" }`, the image a `data:image/…` URL.
+pub const PRESENTATION_FILE: &str = "presentation.json";
+
+/// What a logo must start with to be listed: the daemon keeps a data URL, and anything else (a link, a path) would have
+/// the desktop app fetch something no one vetted.
+const LOGO_PREFIX: &str = "data:image/";
 
 /// The loopback port a sandbox with this 12-hex id publishes on, by the run contract's formula. None for an id that
 /// is not hex. Pure.
@@ -77,48 +89,96 @@ pub fn platform_id_from(file: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
-/// The platform's id for the sandbox in `container`, off its history volume (works on a stopped container, as every
-/// `docker cp` does). None before any announce named one, and when docker would not say.
-pub fn platform_id(container: &str, inspected: Option<&Value>) -> Option<String> {
-    let history = inspected
+/// The owner's name and logo out of the daemon's presentation file: the name when it is a non-empty string, the image
+/// when it is a `data:image/` URL, each None otherwise. Pure.
+pub fn presentation_from(file: &Value) -> (Option<String>, Option<String>) {
+    let name = file["name"]
+        .as_str()
+        .filter(|name| !name.trim().is_empty())
+        .map(str::to_string);
+    let logo = file["image"]
+        .as_str()
+        .filter(|image| image.starts_with(LOGO_PREFIX))
+        .map(str::to_string);
+    (name, logo)
+}
+
+// The sandbox's HISTORY_ROOT as its container was created with it, the daemon's default when it names none.
+fn history_of(inspected: Option<&Value>) -> &str {
+    inspected
         .and_then(|inspected| env_of(inspected, "HISTORY_ROOT"))
         .unwrap_or("/history")
-        .trim_end_matches('/');
-    match inside::read(container, &format!("{history}/{PLATFORM_ROW_FILE}")) {
-        Read::Found(file) => platform_id_from(&file),
+        .trim_end_matches('/')
+}
+
+// One of the daemon's files off the history volume; None when it is missing, unreadable or docker would not say.
+fn history_file(container: &str, inspected: Option<&Value>, file: &str) -> Option<Value> {
+    match inside::read(container, &format!("{}/{file}", history_of(inspected))) {
+        Read::Found(found) => Some(found),
         Read::Missing | Read::Unreadable(_) => None,
     }
 }
 
-/// Every listed container's platform id, read side by side: one `docker cp` each, so a machine of five sandboxes waits
-/// for the slowest rather than the sum.
-pub fn platform_ids(
+/// The platform's id for the sandbox in `container`, off its history volume (works on a stopped container, as every
+/// `docker cp` does). None before any announce named one, and when docker would not say.
+pub fn platform_id(container: &str, inspected: Option<&Value>) -> Option<String> {
+    history_file(container, inspected, PLATFORM_ROW_FILE)
+        .as_ref()
+        .and_then(platform_id_from)
+}
+
+/// What a listing row says of a sandbox off its history volume, each None when its file is missing, unreadable or
+/// says nothing: never an error, since the rest of the row stands without it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct VolumeFacts {
+    pub platform_id: Option<String>,
+    pub display_name: Option<String>,
+    pub logo: Option<String>,
+}
+
+/// Every listed container's facts off its volume, read side by side: one `docker cp` per file, a container's two files
+/// at once and every container at once, so a machine of five sandboxes waits for the slowest copy rather than the sum.
+/// `docker cp` takes one path, so the presentation file is a second copy, never a second wait.
+pub fn volume_facts(
     containers: &[String],
     inspected: &HashMap<String, Value>,
-) -> HashMap<String, String> {
+) -> HashMap<String, VolumeFacts> {
     std::thread::scope(|scope| {
         let reads: Vec<_> = containers
             .iter()
             .map(|container| {
-                scope.spawn(move || {
-                    platform_id(container, inspected.get(container))
-                        .map(|id| (container.clone(), id))
-                })
+                let inspected = inspected.get(container);
+                let row = scope.spawn(move || platform_id(container, inspected));
+                let presentation = scope.spawn(move || {
+                    history_file(container, inspected, PRESENTATION_FILE)
+                        .map(|file| presentation_from(&file))
+                        .unwrap_or_default()
+                });
+                (container, row, presentation)
             })
             .collect();
         reads
             .into_iter()
-            .filter_map(|read| read.join().ok().flatten())
+            .map(|(container, row, presentation)| {
+                let (display_name, logo) = presentation.join().unwrap_or_default();
+                let facts = VolumeFacts {
+                    platform_id: row.join().ok().flatten(),
+                    display_name,
+                    logo,
+                };
+                (container.clone(), facts)
+            })
             .collect()
     })
 }
 
-/// The listing's rows with `sandboxId`, `localPort` and `platformId` added, each null when unknown. A row whose
-/// container was not inspected gets none of them: nothing is known, which is not the same as known to be absent. Pure.
+/// The listing's rows with `sandboxId`, `localPort`, `platformId`, `displayName` and `logo` added, each null when
+/// unknown. A row whose container was not inspected gets none of them: nothing is known, which is not the same as known
+/// to be absent. Pure.
 pub fn with_addressing(
     listing: Value,
     inspected: &HashMap<String, Value>,
-    platform_ids: &HashMap<String, String>,
+    facts: &HashMap<String, VolumeFacts>,
 ) -> Value {
     let Value::Array(rows) = listing else {
         return listing;
@@ -131,9 +191,12 @@ pub fn with_addressing(
                     (inspected.get(&container), row.as_object_mut())
                 {
                     let (sandbox_id, port) = addressing(found);
+                    let read = facts.get(&container).cloned().unwrap_or_default();
                     fields.insert("sandboxId".into(), json!(sandbox_id));
                     fields.insert("localPort".into(), json!(port));
-                    fields.insert("platformId".into(), json!(platform_ids.get(&container)));
+                    fields.insert("platformId".into(), json!(read.platform_id));
+                    fields.insert("displayName".into(), json!(read.display_name));
+                    fields.insert("logo".into(), json!(read.logo));
                 }
                 row
             })
@@ -219,14 +282,53 @@ mod tests {
                 json!({ "Config": { "Env": [] }, "HostConfig": { "PortBindings": {} } }),
             ),
         ]);
-        let ids = HashMap::from([("intentic-sandbox-work".to_string(), "cm1".to_string())]);
+        let facts = HashMap::from([(
+            "intentic-sandbox-work".to_string(),
+            VolumeFacts {
+                platform_id: Some("cm1".to_string()),
+                display_name: Some("Work".to_string()),
+                logo: Some("data:image/png;base64,iVBORw0KGgo=".to_string()),
+            },
+        )]);
         assert_eq!(
-            with_addressing(listing, &inspected, &ids),
+            with_addressing(listing, &inspected, &facts),
             json!([
-                { "slug": "work", "container": "intentic-sandbox-work", "running": true, "sandboxId": "3c469e9d6c58", "localPort": 30238, "platformId": "cm1" },
+                { "slug": "work", "container": "intentic-sandbox-work", "running": true, "sandboxId": "3c469e9d6c58", "localPort": 30238, "platformId": "cm1", "displayName": "Work", "logo": "data:image/png;base64,iVBORw0KGgo=" },
                 { "slug": "gone", "container": "intentic-sandbox-gone", "running": false },
-                { "slug": "new", "container": "intentic-sandbox-new", "running": true, "sandboxId": null, "localPort": null, "platformId": null },
+                { "slug": "new", "container": "intentic-sandbox-new", "running": true, "sandboxId": null, "localPort": null, "platformId": null, "displayName": null, "logo": null },
             ])
         );
+    }
+
+    #[test]
+    fn the_owners_name_and_logo_are_read_only_when_the_file_says_them() {
+        let logo = "data:image/svg+xml;base64,PHN2Zy8+";
+        assert_eq!(
+            presentation_from(
+                &json!({ "name": "Work", "image": logo, "digest": "abc", "at": "2026-11-09T10:00:00.000Z" })
+            ),
+            (Some("Work".to_string()), Some(logo.to_string()))
+        );
+        // A name alone, with no logo chosen.
+        assert_eq!(
+            presentation_from(&json!({ "name": "Work", "at": "2026-11-09T10:00:00.000Z" })),
+            (Some("Work".to_string()), None)
+        );
+        // An empty name is none, and so is a logo that is not a data URL of an image.
+        assert_eq!(
+            presentation_from(&json!({ "name": "  ", "image": "https://example.com/logo.png" })),
+            (None, None)
+        );
+        assert_eq!(
+            presentation_from(&json!({ "name": "", "image": "data:text/html;base64,PGgxPg==" })),
+            (None, None)
+        );
+        // A file of another shape says nothing.
+        assert_eq!(
+            presentation_from(&json!({ "name": 7, "image": true })),
+            (None, None)
+        );
+        assert_eq!(presentation_from(&json!(["Work"])), (None, None));
+        assert_eq!(presentation_from(&json!(null)), (None, None));
     }
 }

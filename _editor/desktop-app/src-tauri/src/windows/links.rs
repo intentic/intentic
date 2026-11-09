@@ -109,9 +109,12 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         }
         // The workspace's account and sandboxes, for the local windows to show (state.rs `remember_roster`). Nothing
         // is shown now: the page sends it whenever either changes, not because the reader asked for anything.
-        Some(Link::Roster(roster)) => {
+        Some(Link::Roster(told)) => {
             // A sandbox the account lists no more: its folders' records and this machine's sync of it go (project.rs).
+            // An empty list for the account already named is no proof of that, and keeps the rows held, in the file
+            // and in every window (project.rs `roster_to_keep`).
             let before = app.state::<AppState>().roster();
+            let roster = crate::project::roster_to_keep(&before, told);
             crate::project::roster_changed(app, before, roster.clone());
             app.state::<AppState>().remember_roster(roster.clone());
             let _ = tauri::Emitter::emit(app, "desktop://roster", &roster);

@@ -1,7 +1,14 @@
+import { unstubbed } from "@intentic/testing";
+import { call } from "@orpc/server";
+import type { OrpcContext } from "../app-env.js";
+import type { Services } from "../composition.js";
+import { memoryPresentationStore } from "./presentation/presentation-store.testing.js";
+import type { PresentationAnswer } from "./platform-client.js";
+import { createPresentationMirror } from "./presentation/presentation-mirror.js";
 import { DOCKER_PANEL_KEY, LOCAL_MODEL_PREFIX } from "../ports/panel-keys.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { SHELL } from "../terminal/pane-state.js";
-import { panelState } from "./system.routes.js";
+import { createSystemRoutes, panelState } from "./system.routes.js";
 
 /* What the terminals list calls a `panel-*` session. Three unrelated things share the prefix, and the difference
  * matters to the tab strip: a dev server is a place the user keeps, while a run that ended is a record they open
@@ -38,4 +45,59 @@ test("dockerd and local models stay processes: watched services, never a tab to 
 
     const model = `${LOCAL_MODEL_PREFIX}qwen`;
     expect(panelState(processes([model]), model, "llama-server")).toEqual({ kind: "process", running: true });
+});
+
+/* The sandbox's copy of its name and logo (presentation-mirror.ts), as a client that reaches it while the platform is
+ * down reads it. The wire carries a missing logo as null, and keeps the digest, which only the daemon compares. */
+
+const signedIn: OrpcContext = {
+    headers: new Headers(),
+    method: "GET",
+    url: "/system/presentation",
+    identity: { email: "ada@example.com", role: "viewer", methods: ["google"] },
+};
+const heard = { name: "radarsu-intentic", digest: "1f2e", at: "2026-11-08T09:00:00.000Z" };
+
+const presentationRoutes = (ask: () => Promise<PresentationAnswer | undefined>) =>
+    createSystemRoutes(
+        unstubbed<Services>("services", {
+            presentation: createPresentationMirror({
+                store: memoryPresentationStore(heard),
+                ask,
+                logger: { warn: () => {} },
+                now: () => new Date("2026-11-09T12:00:00.000Z"),
+            }),
+        }),
+    );
+
+test("the presentation is the copy held, its missing logo null and its digest left out", async () => {
+    const routes = presentationRoutes(async () => undefined);
+    expect(await call(routes.presentation, undefined, { context: signedIn })).toEqual({
+        presentation: { name: "radarsu-intentic", image: null, at: "2026-11-08T09:00:00.000Z" },
+    });
+});
+
+test("a refresh the platform cannot answer answers the copy held, unrefreshed", async () => {
+    const routes = presentationRoutes(async () => undefined);
+    expect(await call(routes.presentationRefresh, undefined, { context: signedIn })).toEqual({
+        presentation: { name: "radarsu-intentic", image: null, at: "2026-11-08T09:00:00.000Z" },
+        refreshed: false,
+    });
+});
+
+test("a refresh the platform answers keeps and answers the new name and logo", async () => {
+    const logo = "data:image/webp;base64,AA==";
+    const routes = presentationRoutes(async () => ({ name: "renamed", image: logo, digest: "9a8b" }));
+    expect(await call(routes.presentationRefresh, undefined, { context: signedIn })).toEqual({
+        presentation: { name: "renamed", image: logo, at: "2026-11-09T12:00:00.000Z" },
+        refreshed: true,
+    });
+    expect(await call(routes.presentation, undefined, { context: signedIn })).toEqual({
+        presentation: { name: "renamed", image: logo, at: "2026-11-09T12:00:00.000Z" },
+    });
+});
+
+test("a refresh that hears there is no name and no logo answers none, refreshed", async () => {
+    const routes = presentationRoutes(async () => ({ name: "", digest: "0000" }));
+    expect(await call(routes.presentationRefresh, undefined, { context: signedIn })).toEqual({ presentation: null, refreshed: true });
 });

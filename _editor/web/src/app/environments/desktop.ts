@@ -8,6 +8,7 @@ import { isTypingTarget } from "@intentic/ui/event-target";
 import { noteReload } from "@intentic/ui/reload-reason";
 import { z } from "zod";
 import { inAppPath } from "./inAppPath";
+import { type DesktopRosterAccount, type DesktopRosterEntry, desktopRosterLink } from "./desktopRoster";
 
 // What the app tells the page about the webview (not about the app): whether this window skips the loopback gate
 // (loopback/loopbackPermission.ts). Optional since the SPA ships continuously and the app doesn't; undefined reads as "ask
@@ -112,79 +113,6 @@ export const announceDesktopMode = (scheme: `light` | `dark`, look?: `system` | 
 };
 
 /* WHO IS SIGNED IN, AND THE SANDBOXES THIS PAGE'S SWITCHER LISTS, handed to the app for its local windows. */
-
-// A local window cannot ask the platform (it holds no session, and its page reaches nothing but loopback and the app),
-// so the account its rail shows and the sandboxes its switcher lists are what this page last told the app. One row per
-// sandbox in the switcher's order, and nothing a row is not drawn from: no address, token or logo (a logo is an inline
-// data URL, too long to ride a link). The app takes this only from its own windows (setup_link.rs `roster`).
-export interface DesktopRosterEntry {
-    readonly id: string;
-    readonly name: string;
-    /** Where it runs, as the switcher marks it (placement.ts `SandboxPlacementKind`). */
-    readonly place: string;
-    /** Somebody else's sandbox, shared with this account. */
-    readonly shared: boolean;
-}
-
-/** The signed-in account as the rail's account control shows it. */
-export interface DesktopRosterAccount {
-    readonly email: string;
-    readonly name?: string | null;
-    readonly image?: string | null;
-}
-
-// What the app holds a row and the account to (setup_link.rs `is_roster_entry`, `is_roster_account`), met here rather
-// than refused there: the whole link is dropped for one value it cannot take. Text is cut by characters, never inside
-// one, and a control character is a space; an account with no usable address is not sent, and an avatar only as an
-// https address (an uploaded one is an inline data URL).
-const ROSTER_ID = /^[A-Za-z0-9_-]{1,64}$/;
-const ROSTER_NAME_MAX = 200;
-const CONTROL = /\p{Cc}/gu;
-const EMAIL = /^[^\s@]+@[^\s@]+$/;
-const IMAGE_MAX = 2048;
-const shownText = (text: string): string => Array.from(text.replace(CONTROL, ` `).trim()).slice(0, ROSTER_NAME_MAX).join(``);
-const rosterRow = (entry: DesktopRosterEntry): DesktopRosterEntry | undefined => {
-    if (!ROSTER_ID.test(entry.id)) {
-        return undefined;
-    }
-    const name = shownText(entry.name);
-    return { id: entry.id, name: name === `` ? entry.id : name, place: entry.place, shared: entry.shared };
-};
-const httpsImage = (image: string | null | undefined): string | undefined =>
-    image !== null && image !== undefined && image.length <= IMAGE_MAX && URL.canParse(image) && new URL(image).protocol === `https:`
-        ? image
-        : undefined;
-// The account as the link carries it (setup_link.rs `RosterAccount`): a name and an avatar only where there are any.
-interface SentAccount {
-    email: string;
-    name?: string;
-    image?: string;
-}
-const rosterAccount = (account: DesktopRosterAccount): SentAccount | undefined => {
-    if (account.email.length > 320 || !EMAIL.test(account.email)) {
-        return undefined;
-    }
-    const sent: SentAccount = { email: account.email };
-    const name = shownText(account.name ?? ``);
-    if (name !== ``) {
-        sent.name = name;
-    }
-    const image = httpsImage(account.image);
-    if (image !== undefined) {
-        sent.image = image;
-    }
-    return sent;
-};
-
-export const desktopRosterLink = (entries: readonly DesktopRosterEntry[], account?: DesktopRosterAccount): string => {
-    const rows = entries.map(rosterRow).filter((row): row is DesktopRosterEntry => row !== undefined);
-    const params = new URLSearchParams({ list: JSON.stringify(rows) });
-    const signedIn = account === undefined ? undefined : rosterAccount(account);
-    if (signedIn !== undefined) {
-        params.set(`account`, JSON.stringify(signedIn));
-    }
-    return `intentic://roster?${params.toString()}`;
-};
 
 // The last link handed over, so a switcher re-rendering with the same rows and account sends nothing.
 let rosterSent: string | undefined;

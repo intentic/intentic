@@ -14,6 +14,8 @@ import { apiClient } from "../../lib/useApi";
 import { forgetAccount } from "../directory/deviceDirectory";
 import { noteAppAccount } from "./appAccounts";
 import { directMode } from "../directory/directState";
+import { z } from "zod";
+import { platformHealth, reportedFetch } from "../../lib/platform/platformHealth";
 import { markBoot } from "../../app/perf/boot";
 import {
     accountExpectation,
@@ -35,6 +37,9 @@ const client = createAuthClient({
     baseURL: environment.api.url,
     plugins: [emailOTPClient(), multiSessionClient()],
     fetchOptions: {
+        // Every answer the session check and the sign-in calls get, and every call nothing answered, is reported to the
+        // one reading of the platform's health (lib/platform/platformHealth.ts).
+        customFetchImpl: (input, init) => reportedFetch(() => globalThis.fetch(input, init)),
         onRequest: (context) => {
             assertAccountCurrent();
             for (const [name, value] of Object.entries(accountExpectation(context.method))) {
@@ -111,6 +116,9 @@ onPlatformAuthInvalidated(async () => {
     }
 });
 
+// What the session check answers when the platform itself answers: a session object, or null for none.
+const SessionAnswerSchema = z.union([z.null(), z.looseObject({ user: z.looseObject({}), session: z.looseObject({}) })]);
+
 const refresh = async (): Promise<User | null> => {
     const pending = (refreshing ??= (async () => {
         const { data, error } = await client.getSession();
@@ -118,6 +126,13 @@ const refresh = async (): Promise<User | null> => {
         markBoot(`session`);
         if (error) {
             throw new Error(error.message ?? t(`auth.useAuth.sessionCheckFailed`));
+        }
+        // Only the platform's own word is an answer: a session, or `null` for none. Anything else that came back 200 (a
+        // captive portal's or a proxy's page, text where JSON belongs) is no answer at all, and must not sign the window
+        // out and throw away its daemon sessions as an authoritative "no session" would (2026-11-09).
+        if (!SessionAnswerSchema.safeParse(data).success) {
+            platformHealth.noteUnreachable();
+            throw new Error(t(`auth.useAuth.sessionCheckFailed`));
         }
         if (data?.user === undefined) {
             // Only tears down when there was a session to lose; invalidating on a cold signed-out load would cancel

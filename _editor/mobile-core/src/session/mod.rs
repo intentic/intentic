@@ -3,15 +3,15 @@
 //! is the daemon's own 30-day token, minted from a proof the platform vouches for (an identity assertion) and renewed
 //! with itself inside its last week, the way the web client keeps it (`sandboxSession.ts`).
 
-use crate::net::{Auth, Http, HttpError};
+use crate::net::{Answer, Auth, Http, HttpError, refusal_names};
 use crate::wire::auth::{
     EmailCodeKind, EmailCodeRequest, EmailCodeSignIn, GOOGLE_SIGN_IN, GoogleSignIn, OneTimeToken,
     SEND_EMAIL_CODE, SESSION_COOKIE, SIGN_IN_EMAIL_CODE, SIGN_OUT, SignedIn, VERIFY_ONE_TIME_TOKEN,
     Verified,
 };
 use crate::wire::platform::{
-    DESKTOP_REDEEM, HandoffRedeem, IDENTITY_ASSERTION, ME, MintedProof, Redeemed, SANDBOX_LIST,
-    SandboxId, SandboxList, SandboxSummary, User, WAKE,
+    DESKTOP_REDEEM, HandoffRedeem, IDENTITY, IDENTITY_ASSERTION, ME, MintedProof, PlatformIdentity,
+    Redeemed, SANDBOX_LIST, SandboxId, SandboxList, SandboxSummary, User, WAKE,
 };
 use crate::wire::session::{CONNECT_TOKEN_HEADER, DaemonSession, SESSION, SessionRefusal};
 use crate::wire::{Endpoint, Method, Millis};
@@ -20,6 +20,9 @@ use serde::de::DeserializeOwned;
 
 /// A daemon session is renewed once it has less than this left: the web client's seven days.
 const RENEW_WITHIN_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
+/// How long the platform gets to say which database it reads, the web client's five seconds: a refresh waits on it.
+const IDENTITY_PATIENCE: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
@@ -57,12 +60,15 @@ pub struct Platform<'a> {
 }
 
 impl Platform<'_> {
-    async fn call<O: DeserializeOwned>(
+    /// One call, its answer whole. Signed out only on a 401 whose body is the platform's own error, oRPC's and Better
+    /// Auth's alike naming its `code`: a 401 page from something in front of the api (a proxy's sign-in wall, an outage
+    /// page) stays an error like a 5xx, since signing out forgets everything the app keeps.
+    async fn answer<O: DeserializeOwned>(
         &self,
         endpoint: &Endpoint,
         cookie: Option<&str>,
         body: Option<&impl Serialize>,
-    ) -> Result<(O, Vec<String>), SessionError> {
+    ) -> Result<Answer<O>, SessionError> {
         let url = format!("{}{}", self.api, endpoint.path);
         // Better Auth refuses a cookie-carrying POST without an Origin it trusts; the web origin is the one it does.
         let headers = [("origin", self.web)];
@@ -72,10 +78,22 @@ impl Platform<'_> {
             .json(method(endpoint), &url, auth, &headers, body)
             .await
         {
-            Ok(answer) => Ok((answer.value, answer.cookies)),
-            Err(HttpError::Status { status: 401, .. }) => Err(SessionError::SignedOut),
+            Ok(answer) => Ok(answer),
+            Err(HttpError::Status { status: 401, body }) if refusal_names(&body, &["code"]) => {
+                Err(SessionError::SignedOut)
+            }
             Err(error) => Err(error.into()),
         }
+    }
+
+    async fn call<O: DeserializeOwned>(
+        &self,
+        endpoint: &Endpoint,
+        cookie: Option<&str>,
+        body: Option<&impl Serialize>,
+    ) -> Result<(O, Vec<String>), SessionError> {
+        let answer = self.answer(endpoint, cookie, body).await?;
+        Ok((answer.value, answer.cookies))
     }
 
     async fn signed_in(
@@ -142,15 +160,42 @@ impl Platform<'_> {
         Ok(())
     }
 
-    /// Whose session `cookie` is; `None` once it has ended.
+    /// Whose session `cookie` is; `None` once it has ended, which the caller acts on by forgetting everything. So only
+    /// the platform's own two words for that are `None`: a 200 whose body is JSON `null`, and a 401 carrying its own
+    /// error. Better Auth and the api answer 500 when their database fails, never `null`; an empty 200, a page, a body
+    /// that is not a user, a 5xx or no answer at all is an error, which keeps the session and everything kept with it.
     pub async fn me(&self, cookie: &str) -> Result<Option<User>, SessionError> {
         match self
-            .call::<Option<User>>(&ME, Some(cookie), None::<&()>)
+            .answer::<Option<User>>(&ME, Some(cookie), None::<&()>)
             .await
         {
-            Ok((user, _)) => Ok(user),
+            Ok(answer) if answer.empty => Err(SessionError::Http(HttpError::Decode(
+                "an empty answer says nothing about the session".into(),
+            ))),
+            Ok(answer) => Ok(answer.value),
             Err(SessionError::SignedOut) => Ok(None),
             Err(error) => Err(error),
+        }
+    }
+
+    /// Which database the platform reads (`GET /api/identity`, no session): random per database, so a different one
+    /// than a kept list came from means that list's rows were not deleted, only not found. `None` when it cannot say.
+    pub async fn identity(&self) -> Option<String> {
+        let url = format!("{}{}", self.api, IDENTITY.path);
+        let asked = self.http.json::<PlatformIdentity>(
+            method(&IDENTITY),
+            &url,
+            Auth::None,
+            &[],
+            None::<&()>,
+        );
+        match tokio::time::timeout(IDENTITY_PATIENCE, asked).await {
+            Ok(Ok(answer)) => Some(answer.value.identity).filter(|identity| !identity.is_empty()),
+            Ok(Err(error)) => {
+                log::info!("identity: {error}");
+                None
+            }
+            Err(_) => None,
         }
     }
 
@@ -254,6 +299,139 @@ fn session_cookie(cookies: &[String]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wiremock::matchers::{method as with_method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    const UNAUTHORIZED: &str =
+        r#"{"defined":false,"code":"UNAUTHORIZED","status":401,"message":"Unauthorized"}"#;
+
+    // A platform answering `route` with `status` and `body` as JSON (or HTML, when it starts with `<`).
+    async fn answering(route: &str, status: u16, body: &str) -> MockServer {
+        let server = MockServer::start().await;
+        let kind = if body.starts_with('<') {
+            "text/html"
+        } else {
+            "application/json"
+        };
+        Mock::given(with_method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(status).set_body_raw(body.to_owned(), kind))
+            .mount(&server)
+            .await;
+        server
+    }
+
+    fn platform<'a>(http: &'a Http, api: &'a str) -> Platform<'a> {
+        Platform {
+            http,
+            api,
+            web: "https://app.test",
+        }
+    }
+
+    // Ending the session forgets everything the app keeps, so only the platform's own two words for it end it.
+    #[tokio::test]
+    async fn only_a_null_or_the_platforms_own_401_ends_the_session() {
+        let http = Http::new();
+        for (status, body) in [(200, "null"), (401, UNAUTHORIZED)] {
+            let server = answering(ME.path, status, body).await;
+            let me = platform(&http, &server.uri()).me("session=abc").await;
+            assert!(matches!(me, Ok(None)), "{status} {body}: {me:?}");
+        }
+        let user = r#"{"id":"usr_1","email":"ada@example.com","name":"Ada","image":null}"#;
+        let server = answering(ME.path, 200, user).await;
+        let me = platform(&http, &server.uri()).me("session=abc").await;
+        assert_eq!(me.unwrap().unwrap().email, "ada@example.com");
+    }
+
+    #[tokio::test]
+    async fn an_outage_or_a_page_in_front_of_the_api_keeps_the_session() {
+        let http = Http::new();
+        for (status, body) in [
+            (200, ""),
+            (
+                200,
+                "<!DOCTYPE html><html><body>We'll be right back</body></html>",
+            ),
+            (200, "{}"),
+            (200, r#""null""#),
+            (401, "<html><body>Sign in to continue</body></html>"),
+            (401, ""),
+            (401, r#"{"message":"Unauthorized"}"#),
+            (
+                500,
+                r#"{"code":"INTERNAL_SERVER_ERROR","message":"Failed to get session"}"#,
+            ),
+            (502, "<html>Bad Gateway</html>"),
+            (503, ""),
+        ] {
+            let server = answering(ME.path, status, body).await;
+            let me = platform(&http, &server.uri()).me("session=abc").await;
+            assert!(me.is_err(), "{status} {body}: {me:?}");
+            assert!(
+                !matches!(me, Err(SessionError::SignedOut)),
+                "{status} {body}"
+            );
+        }
+        // Nothing listening at all.
+        let me = platform(&http, "http://127.0.0.1:1")
+            .me("session=abc")
+            .await;
+        assert!(
+            matches!(me, Err(SessionError::Http(HttpError::Network(_)))),
+            "{me:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_list_signs_out_only_on_the_platforms_own_401() {
+        let http = Http::new();
+        let server = answering(SANDBOX_LIST.path, 401, UNAUTHORIZED).await;
+        let listed = platform(&http, &server.uri())
+            .sandboxes("session=abc")
+            .await;
+        assert!(matches!(listed, Err(SessionError::SignedOut)), "{listed:?}");
+        for (status, body) in [
+            (401, "<html><body>Sign in to continue</body></html>"),
+            (200, "<html><body>Sign in to continue</body></html>"),
+            (200, ""),
+            (500, UNAUTHORIZED),
+        ] {
+            let server = answering(SANDBOX_LIST.path, status, body).await;
+            let listed = platform(&http, &server.uri())
+                .sandboxes("session=abc")
+                .await;
+            assert!(
+                matches!(listed, Err(SessionError::Http(_))),
+                "{status} {body}: {listed:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn the_platform_names_its_database_or_nothing() {
+        let http = Http::new();
+        let named = r#"{"identity":"db-1","since":"2026-10-02T08:00:00.000Z"}"#;
+        let server = answering(IDENTITY.path, 200, named).await;
+        assert_eq!(
+            platform(&http, &server.uri()).identity().await.as_deref(),
+            Some("db-1")
+        );
+        for (status, body) in [
+            (200, "<html>placeholder</html>"),
+            (200, r#"{"identity":""}"#),
+            (200, r#"{"identity":"","since":"2026-10-02T08:00:00.000Z"}"#),
+            (404, r#"{"error":"Not Found"}"#),
+            (503, ""),
+        ] {
+            let server = answering(IDENTITY.path, status, body).await;
+            assert_eq!(
+                platform(&http, &server.uri()).identity().await,
+                None,
+                "{status} {body}"
+            );
+        }
+    }
 
     #[test]
     fn keeps_the_session_cookie_whole_and_only_it() {

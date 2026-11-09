@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { platformHealth } from "../../../lib/platform/platformHealth";
+import { directMode } from "../../../client/directory/directState";
 import {
     AnchoredOverlay,
     Button,
@@ -59,7 +61,10 @@ const { info, installed, latest, updateAvailable } = useSandboxVersion();
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 // The name and the logo are the owner's and Full access's to change (the platform's `requireFullAccess`).
-const canEditIdentity = computed(() => isOwner.value || sandbox.active.value?.role === `maintainer`);
+// (2026-11-09) Both live on the platform, so neither is offered while it isn't answering or the window is open without
+// it: the name and logo show as they are, and the status bar's offline chip says why (PlatformStatusChip.vue).
+const platformAnswering = computed(() => !platformHealth.down.value && !directMode.value);
+const canEditIdentity = computed(() => platformAnswering.value && (isOwner.value || sandbox.active.value?.role === `maintainer`));
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
 // Platform-hosted (starter) sandbox; the upgrade card below keys on this.
 const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);

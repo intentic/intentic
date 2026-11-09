@@ -12619,6 +12619,11 @@
             "portsPublic": "Puerto {port} público | {count} puertos públicos",
             "vpn": "VPN"
         },
+        "platformStatus": {
+            "label": "Intentic sin conexión",
+            "detail": "Los servidores de Intentic no responden. Tus sandboxes siguen funcionando; compartir, la facturación y los sandboxes nuevos vuelven cuando respondan.",
+            "note": "Tus sandboxes siguen funcionando."
+        },
         "useProjectCommands": {
             "showOnly": "Mostrar solo {project}"
         },

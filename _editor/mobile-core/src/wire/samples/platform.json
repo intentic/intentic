@@ -168,6 +168,18 @@
             "code": "NOT_FOUND",
             "status": 404,
             "message": "sandbox not found"
+        },
+        "a session that ended": {
+            "defined": false,
+            "code": "UNAUTHORIZED",
+            "status": 401,
+            "message": "Unauthorized"
+        }
+    },
+    "unschemed:PlatformIdentity": {
+        "this database": {
+            "identity": "3f9c2a7e-5b1d-4e8a-9c0f-6d2b8a1e4f70",
+            "since": "2026-10-02T08:00:00.000Z"
         }
     }
 }

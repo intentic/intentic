@@ -2,6 +2,7 @@
 import { toneWash } from "@intentic/ui";
 import { here } from "../../lib/routes/links";
 import RailIcon from "../rail/RailIcon.vue";
+import PlatformStatusChip from "./PlatformStatusChip.vue";
 import type { RuntimeChip } from "./runtimeChips";
 import type { RuntimeChips } from "./useRuntimeChips";
 
@@ -65,5 +66,7 @@ const countClass = (chip: RuntimeChip): string => (chip.tone === undefined ? `bg
                 }}</span>
             </button>
         </template>
+        <!-- Intentic's servers not answering: the one place an outage is said (PlatformStatusChip.vue). -->
+        <PlatformStatusChip />
     </div>
 </template>

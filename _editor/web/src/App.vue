@@ -9,6 +9,7 @@ import { HANDOFF_ROUTE } from "./features/auth/handoffSpent";
 import { useSandbox } from "./client/sandbox/useSandbox";
 import { startNotificationSources } from "./shell/notifications/notificationSources";
 import { startRememberingSandboxes } from "./features/sandbox/recovery/rememberSandboxes";
+import { startPresentationSync } from "./client/presentation/presentationSync";
 import NotificationHost from "./workbench/notifications/NotificationHost.vue";
 import SignInWall from "./features/sandbox/gates/SignInWall.vue";
 import SignInDialog from "./features/auth/SignInDialog.vue";
@@ -34,6 +35,7 @@ const workspaceTab = computed(() => route.name !== HANDOFF_ROUTE);
 startNotificationSources();
 // What this device remembers of the account's sandboxes, for when the platform cannot list them (features/sandbox/recovery).
 startRememberingSandboxes();
+startPresentationSync();
 
 // The desktop app's workspace asks for a sign-in in a dialog over the view rather than on /login (features/auth/signInDialog.ts).
 const signsInInPlace = desktopWorkspace();

@@ -32,7 +32,7 @@ import { type AppPasskeys, createAppPasskeys } from "./passkeys/app-origins.js";
 import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, passkeysDocument, type PasskeyStore } from "./passkeys/passkey-store.js";
 import { fencedMembers } from "../org/org-roster.js";
 import type { OrgPolicyHolder } from "../org/org-policy.js";
-import { createPlatformIdentityKey, type PlatformIdentityKey } from "./platform/platform-identity-key.js";
+import { createPlatformIdentityKey, fileIdentityKey, type PlatformIdentityKey } from "./platform/platform-identity-key.js";
 import { createSessions, type MintedSession } from "./session.js";
 import { type ControlTokens, controlTokensDocument, fileControlTokens, minterBound } from "./tokens/control-tokens.js";
 import { type DoorTokens, doorTokensDocument, fileDoorTokens } from "./tokens/door-tokens.js";
@@ -213,7 +213,8 @@ export const createAuthSlice = (
     const sessions = createSessions(join(config.historyRoot, "session-secret"));
     const authConnections = createAuthConnections();
     const browserAccess = fileBrowserAccess(join(config.historyRoot, "browser-access-disabled"));
-    const platformIdentityKey = createPlatformIdentityKey(config.platform.identityKey);
+    // The env's key, else the newest an announce taught before a restart, kept on /history (platform-identity-key.ts).
+    const platformIdentityKey = createPlatformIdentityKey(config.platform.identityKey, { stored: fileIdentityKey(config.historyRoot), logger });
     const sandboxId = sandboxIdFromToken(config.connectToken) ?? "";
     const authorizer = authEnabled(config)
         ? createAuthorizer({

@@ -125,9 +125,9 @@ fn entries_of(json: &str) -> Option<Vec<String>> {
 }
 
 /// One sandbox of the account, as the workspace's sandbox switcher lists it (`intentic://roster`): what a local
-/// window's switcher draws a row from and opens the workspace on (`/?sandbox=<id>`). No address, token or logo: the
-/// row needs a name and a mark, and the workspace drops an id its account no longer lists (sandboxArrival.ts), so a
-/// stale entry costs a notice there, never access.
+/// window's switcher draws a row from and opens the workspace on (`/?sandbox=<id>`). No address or token: the row
+/// needs a name and a mark, and the workspace drops an id its account no longer lists (sandboxArrival.ts), so a stale
+/// entry costs a notice there, never access.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RosterEntry {
@@ -139,6 +139,12 @@ pub struct RosterEntry {
     pub place: String,
     /// Somebody else's sandbox, shared with this account.
     pub shared: bool,
+    /// Its logo as a small thumbnail the workspace drew for the row, a `data:image/…` URL ([`is_roster_image`]): the
+    /// platform holds the logo itself, and this copy is what the local windows and the machine face (machine_face.rs)
+    /// show while the platform cannot be asked (2026-11-09). Absent where the sandbox has none, and in a `roster.json`
+    /// written before rows carried one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
 }
 
 /// Who is signed in to the workspace, as its account control shows them: what a local window's rail foot draws. The
@@ -193,13 +199,27 @@ fn is_roster_entry(entry: &RosterEntry) -> bool {
         && entry.place.bytes().all(|byte| byte.is_ascii_lowercase())
 }
 
+/// The most a row's logo may weigh as it rides: the workspace sends thumbnails of a few tens of kilobytes, and this
+/// bounds what one row can make the app keep in `roster.json` and hand every window.
+const ROSTER_IMAGE_MAX: usize = 64 * 1024;
+
+/// A row's logo as the app keeps one: an inline image, so a window draws it with no network and no address of anyone's
+/// to fetch, and small. Pure.
+pub(crate) fn is_roster_image(image: &str) -> bool {
+    image.len() <= ROSTER_IMAGE_MAX && image.starts_with("data:image/")
+}
+
 /// `roster`'s `list`, a JSON array of [`RosterEntry`] (empty for an account with none, or none any more: a sign-out),
 /// and its `account`, a [`RosterAccount`] (absent after a sign-out). One malformed row, or an account out of shape,
-/// drops the whole link rather than drawing the rest as if it were all of it.
+/// drops the whole link rather than drawing the rest as if it were all of it. A logo out of shape drops only itself:
+/// the row is whole without it, and a list held back for its decoration would leave the windows on an older one.
 fn roster_of(list: &str, account: Option<&str>) -> Option<Roster> {
-    let sandboxes: Vec<RosterEntry> = serde_json::from_str(list).ok()?;
+    let mut sandboxes: Vec<RosterEntry> = serde_json::from_str(list).ok()?;
     if sandboxes.len() > ROSTER_MAX || !sandboxes.iter().all(is_roster_entry) {
         return None;
+    }
+    for entry in &mut sandboxes {
+        entry.image = entry.image.take().filter(|image| is_roster_image(image));
     }
     let account = match account {
         Some(json) => Some(
@@ -1527,12 +1547,15 @@ mod tests {
                         name: "Shop: API".into(),
                         place: "cloud".into(),
                         shared: false,
+                        image: None,
                     },
+                    // A logo that is not an inline image is no logo.
                     RosterEntry {
                         id: "b2".into(),
                         name: "Kasia's".into(),
                         place: "shared".into(),
                         shared: true,
+                        image: None,
                     },
                 ],
             }))
@@ -1598,6 +1621,50 @@ L"}"#,
             r#"{"email":"ada@example.com","image":"http://lh3.example.com/a.png"}"#,
         ] {
             assert_eq!(parse_link(&with(account), APP), None, "{account}");
+        }
+    }
+
+    /// A row's logo rides as the inline thumbnail the workspace drew, and is kept only as one: anything else, or one
+    /// past the bound, goes alone, and the row and the list with it stay.
+    #[test]
+    fn a_rows_logo_rides_as_an_inline_image_and_goes_alone_when_it_is_not_one() {
+        let thumbnail =
+            "data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA";
+        let row = |image: &str| {
+            roster_link(&format!(
+                r#"[{{"id":"a","name":"Shop","place":"own","shared":false,"image":{image:?}}},{{"id":"b","name":"Lab","place":"device","shared":false}}]"#
+            ))
+        };
+        let logos = |link: &str| match parse_link(link, APP) {
+            Some(Link::Roster(roster)) => Some(
+                roster
+                    .sandboxes
+                    .into_iter()
+                    .map(|entry| entry.image)
+                    .collect::<Vec<_>>(),
+            ),
+            _ => None,
+        };
+        assert_eq!(
+            logos(&row(thumbnail)),
+            Some(vec![Some(thumbnail.to_string()), None])
+        );
+        let largest = format!(
+            "data:image/png;base64,{}",
+            "A".repeat(ROSTER_IMAGE_MAX - 22)
+        );
+        assert_eq!(largest.len(), ROSTER_IMAGE_MAX);
+        assert_eq!(
+            logos(&row(&largest)),
+            Some(vec![Some(largest.clone()), None])
+        );
+        for not_kept in [
+            format!("{largest}A"),
+            "https://cdn.example.com/logo.png".to_string(),
+            "data:text/html;base64,PHNjcmlwdD4=".to_string(),
+            "".to_string(),
+        ] {
+            assert_eq!(logos(&row(&not_kept)), Some(vec![None, None]), "{not_kept}");
         }
     }
 

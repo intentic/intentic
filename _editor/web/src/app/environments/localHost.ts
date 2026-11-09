@@ -97,6 +97,8 @@ export interface LocalSandbox {
     readonly place: string;
     /** Somebody else's sandbox, shared with this account. */
     readonly shared: boolean;
+    /** Its logo as a small `data:image/` URL, when the workspace sent one (desktopRoster.ts `DesktopRosterEntry`). */
+    readonly image?: string;
 }
 
 /** Who is signed in to the workspace, as it last told the app (the app's setup_link.rs `RosterAccount`). */

@@ -1,9 +1,11 @@
-import type { SandboxSummary } from "@intentic/api-contract";
+import type { SandboxSummary, User } from "@intentic/api-contract";
 import { queryClient } from "../../../lib/queryPersistence";
 import { idTokenClaims } from "../../../client/auth/googleToken";
 import { useAuth } from "../../../client/auth/useAuth";
 import { SANDBOX_LIST_KEY, useSandbox } from "../../../client/sandbox/useSandbox";
 import type { RememberedAccount, RememberedSandbox } from "../../../client/directory/deviceDirectory";
+import { directMode } from "../../../client/directory/directState";
+import { platformHealth } from "../../../lib/platform/platformHealth";
 
 // OPENING A SANDBOX WITHOUT THE PLATFORM (README.md). All the workspace needs from the platform once it is open is the
 // account and the list: the account is the one this device last saw list, whole, and the list is what it remembers.
@@ -70,3 +72,64 @@ export const sandboxAt = (daemonUrl: string): RememberedSandbox => {
     const host = new URL(daemonUrl).hostname;
     return { id: `direct:${host}`, name: host, image: null, daemonUrl, role: `owner`, hosted: false, lastSeenAt: null };
 };
+
+// WITHOUT ASKING (2026-11-09). A device that remembers the account no longer stops at the outage screen when the session
+// check cannot be answered: it opens the workspace as that account, on what it remembers, at once, and the status bar's
+// chip is all that says so (shell/status-bar/PlatformStatusChip.vue). The screen stays for a device that remembers
+// nothing, and for an address (`/open?url=`) naming a sandbox this device does not remember, which only it can offer.
+
+// What an automatic entry is asked to open: the sandbox an address names (its normalized address), or the one this window
+// had open.
+export interface MemoryChoice {
+    readonly activeId?: string;
+    readonly daemonUrl?: string;
+}
+
+// The remembered sandbox an automatic entry opens: the one an address names, else the one this window had open, else
+// the first still listed that has checked in, else the first.
+export const pickRemembered = (account: RememberedAccount, choice: MemoryChoice): RememberedSandbox | undefined => {
+    if (choice.daemonUrl !== undefined) {
+        return account.sandboxes.find((entry) => entry.daemonUrl === choice.daemonUrl);
+    }
+    const open = account.sandboxes.find((entry) => entry.id === choice.activeId);
+    const listed = account.sandboxes.filter((entry) => entry.missingSince === undefined);
+    const pool = listed.length > 0 ? listed : account.sandboxes;
+    return open ?? pool.find((entry) => entry.lastSeenAt !== null) ?? pool[0];
+};
+
+// Opens the window as the remembered account when the platform could not be asked; the account it opened as, or
+// undefined where nothing remembered fits (the caller shows the outage screen then). `daemonUrl` is the sandbox an
+// address names, normalized.
+export const enterFromMemory = (account: RememberedAccount | undefined, choice: MemoryChoice): User | undefined => {
+    if (account === undefined) {
+        return undefined;
+    }
+    const sandbox = pickRemembered(account, choice);
+    if (sandbox === undefined) {
+        return undefined;
+    }
+    enterDirectMode(account, sandbox);
+    // The way back is the health reading turning up again, which only a down reading probes for: whatever sent the window
+    // here (a refusal, a page that was not the platform's), it asks from now on until the platform answers.
+    platformHealth.noteUnreachable();
+    return useAuth().user.value ?? undefined;
+};
+
+// THE QUIET WAY BACK. The platform answering again (lib/platform/platformHealth.ts) ends a window opened without it
+// the way a session check always has: the session it answers takes the window back, and the list it answers replaces
+// the remembered one, with nothing for the reader to press. A session it no longer has signs the window out as before.
+platformHealth.onRecovered(() => {
+    if (!directMode.value) {
+        return;
+    }
+    void (async () => {
+        try {
+            if ((await useAuth().refresh()) !== null) {
+                await useSandbox().refresh();
+            }
+        } catch (error) {
+            // Still not answering after all: the reading turns down again and the next recovery tries again.
+            console.warn(`[direct] the platform answered, but not the session check:`, error);
+        }
+    })();
+});

@@ -66,6 +66,7 @@ beforeEach(() => {
     // HOST_ENV): every case starts without them, and the ones about them set their own.
     delete process.env["INTENTIC_INSTANCE"];
     delete process.env["HOST_ENV"];
+    delete process.env["HOST_ENGINE"];
     outcomes.length = 0;
     calls.length = 0;
     requestMock.mockClear();
@@ -293,6 +294,28 @@ describe("createAnnouncer", () => {
             expect(named).toEqual(["cm1row"]);
         });
 
+        // The daemon keeps a copy of its name and logo and asks for them again only when this digest moves
+        // (system/presentation/presentation-mirror.ts); a platform from before it sends none, and nothing is asked.
+        it("hands on the digest of the sandbox's name and logo, and nothing from a platform too old to send it", async () => {
+            const digests: string[] = [];
+            outcomes.push({ status: 200, body: `{"ok":true,"presentationDigest":"02b432befa9d920e3ee21b6ef5d0a5e6"}` }, { status: 200, body: `{"ok":true}` });
+            const announcer = createAnnouncer(config, logger, { presentationDigest: (digest) => digests.push(digest) });
+            announcer.start();
+            await settle();
+            await advanceTimersByTimeAsync(HEARTBEAT_MS * 1.1);
+            expect(calls.map((call) => call.path)).toEqual(["/sandbox/announce", "/sandbox/announce"]);
+            expect(digests).toEqual(["02b432befa9d920e3ee21b6ef5d0a5e6"]);
+        });
+
+        it("hands on nothing from an announce the platform refused, whatever its body says", async () => {
+            const digests: string[] = [];
+            outcomes.push({ status: 409, body: `{"ok":true,"presentationDigest":"02b432befa9d920e3ee21b6ef5d0a5e6"}` });
+            const announcer = createAnnouncer(config, logger, { presentationDigest: (digest) => digests.push(digest) });
+            announcer.start();
+            await settle();
+            expect(digests).toEqual([]);
+        });
+
         it("reports registered without an identity from a platform too old to send one", async () => {
             outcomes.push({ status: 200, body: `{"ok":true}` });
             const announcer = createAnnouncer(config, logger);
@@ -385,7 +408,8 @@ describe("createAnnouncer", () => {
         });
 
         it("has a platform with no record of the sandbox adopt it, then registers", async () => {
-            const announcer = createAnnouncer(config, logger);
+            const adopted: object[] = [];
+            const announcer = createAnnouncer(config, logger, { adopted: (sent) => adopted.push(sent) });
             failForever({ status: 404 });
             announcer.start();
             await settle();
@@ -400,6 +424,8 @@ describe("createAnnouncer", () => {
                 announce: { state: "registered", identity: "id-2", at: Date.now() },
                 adoption: { status: 200, detail: "adopted" },
             });
+            // What the adoption sent the platform is the sandbox's copy of its name and logo once the platform took it.
+            expect(adopted).toEqual([{ name: "intentic" }]);
             expect(calls.map((call) => call.path)).toEqual(["/sandbox/announce", "/sandbox/adopt", "/sandbox/announce"]);
             expect(calls[1]?.body).toEqual({
                 ticket: "at1.ticket",
@@ -412,7 +438,8 @@ describe("createAnnouncer", () => {
         });
 
         it("passes on the platform's refusal of the adoption, and keeps the registration's verdict", async () => {
-            const announcer = createAnnouncer(config, logger);
+            const adopted: object[] = [];
+            const announcer = createAnnouncer(config, logger, { adopted: (sent) => adopted.push(sent) });
             failForever({ status: 404 });
             announcer.start();
             await settle();
@@ -428,6 +455,8 @@ describe("createAnnouncer", () => {
                 detail: "this sandbox was deleted from intentic: restore it from the trash, or set up a new one",
             });
             expect(answer.announce).toMatchObject({ state: "rejected", reason: "unknown", retrying: true });
+            // A refused adoption left the platform's row as it was, so what it sent is no copy of anything.
+            expect(adopted).toEqual([]);
         });
 
         it("asks for no adoption when the platform knows the sandbox after all", async () => {

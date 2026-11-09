@@ -88,6 +88,8 @@ pub struct Account {
 pub struct MachineSandbox {
     pub slug: String,
     pub name: String,
+    /// Its logo, a `data:image/…` URL the page draws with no network ([`names_of`]); none where nothing here holds one.
+    pub image: Option<String>,
     pub platform_id: Option<String>,
     pub sandbox_id: Option<String>,
     pub local_port: Option<u16>,
@@ -105,13 +107,55 @@ pub struct Session {
     pub email: String,
 }
 
-/// One `ic sandbox list --json` row as the face lists it, before any session: its names and where it answers. A row
-/// from an ic too old to say where it answers has no port, and the page leaves it out. Pure.
-pub fn sandbox_of(row: &Value, name: Option<String>) -> Option<MachineSandbox> {
+/* WHAT A SANDBOX IS CALLED, AND ITS LOGO, with the platform out of reach (2026-11-09). The platform holds both, and
+ * the face is up exactly when it cannot be asked. Before, a sandbox here was named by what this app remembered for its
+ * slug (`sandboxes.json`, only the ones it made or renamed) or by the slug itself, with no logo, so an outage turned the
+ * owner's sandboxes into hex. Now each is told by the nearest copy that has it: the sandbox's own copy of its
+ * owner-given name and logo (`ic sandbox list --json`'s `displayName` and `logo`, absent from an older ic), then this
+ * app's, then the workspace's last roster for its platform row (`roster.json`, whose rows carry a thumbnail of the
+ * logo), then the slug and no logo. */
+
+/// The name and logo of the sandbox `row` lists, from the nearest copy that has each (above): `known` is what this app
+/// remembers for its slug, `roster` the workspace's last rows. A logo is taken only as an inline image, which the page
+/// draws without fetching anyone's address. Pure.
+pub fn names_of(
+    row: &Value,
+    known: Option<String>,
+    roster: &[crate::setup_link::RosterEntry],
+) -> (Option<String>, Option<String>) {
+    let own_text = |key: &str| {
+        row[key]
+            .as_str()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+    };
+    let listed = row["platformId"]
+        .as_str()
+        .and_then(|id| roster.iter().find(|entry| entry.id == id));
+    let name = own_text("displayName")
+        .or_else(|| known.filter(|name| !name.trim().is_empty()))
+        .or_else(|| listed.map(|entry| entry.name.clone()));
+    let image = own_text("logo")
+        .filter(|logo| logo.starts_with("data:image/"))
+        .or_else(|| listed.and_then(|entry| entry.image.clone()));
+    (name, image)
+}
+
+/// One `ic sandbox list --json` row as the face lists it, before any session: its name and logo ([`names_of`], else its
+/// slug and none) and where it answers. A row from an ic too old to say where it answers has no port, and the page
+/// leaves it out. Pure.
+pub fn sandbox_of(
+    row: &Value,
+    known: Option<String>,
+    roster: &[crate::setup_link::RosterEntry],
+) -> Option<MachineSandbox> {
     let slug = row["slug"].as_str()?.to_string();
     let text = |key: &str| row[key].as_str().map(str::to_string);
+    let (name, image) = names_of(row, known, roster);
     Some(MachineSandbox {
         name: name.unwrap_or_else(|| slug.clone()),
+        image,
         platform_id: text("platformId"),
         sandbox_id: text("sandboxId"),
         local_port: row["localPort"]
@@ -213,12 +257,13 @@ fn facts(app: &AppHandle) -> Result<MachineFace, String> {
         crate::commands::list_script(crate::scripts::Host::current(), crate::commands::VERSION),
     )?;
     let state = app.state::<AppState>();
+    let roster = state.roster();
     let sandboxes = std::thread::scope(|scope| {
         let minting: Vec<_> = rows
             .iter()
             .filter_map(|row| {
-                let name = row["slug"].as_str().and_then(|slug| state.name_of(slug));
-                sandbox_of(row, name)
+                let known = row["slug"].as_str().and_then(|slug| state.name_of(slug));
+                sandbox_of(row, known, &roster.sandboxes)
             })
             .map(|sandbox| scope.spawn(move || with_session(sandbox)))
             .collect();
@@ -227,7 +272,7 @@ fn facts(app: &AppHandle) -> Result<MachineFace, String> {
             .filter_map(|minted| minted.join().ok())
             .collect()
     });
-    let account = state.roster().account.map(|account| Account {
+    let account = roster.account.map(|account| Account {
         email: account.email,
         name: account.name,
         image: account.image,
@@ -357,10 +402,11 @@ mod tests {
     fn a_listing_row_becomes_a_sandbox_the_face_can_dial() {
         let row = json!({ "slug": "3c469e9d6c58", "running": true, "asleep": false, "sandboxId": "3c469e9d6c58", "localPort": 30238, "platformId": "cm1" });
         assert_eq!(
-            sandbox_of(&row, Some("Lab".to_string())),
+            sandbox_of(&row, Some("Lab".to_string()), &[]),
             Some(MachineSandbox {
                 slug: "3c469e9d6c58".to_string(),
                 name: "Lab".to_string(),
+                image: None,
                 platform_id: Some("cm1".to_string()),
                 sandbox_id: Some("3c469e9d6c58".to_string()),
                 local_port: Some(30238),
@@ -374,13 +420,78 @@ mod tests {
         let old = sandbox_of(
             &json!({ "slug": "lab", "running": false, "asleep": true }),
             None,
+            &[],
         )
         .unwrap();
         assert_eq!(
             (old.name.as_str(), old.local_port, old.asleep),
             ("lab", None, true)
         );
-        assert_eq!(sandbox_of(&json!({ "running": true }), None), None);
+        assert_eq!(sandbox_of(&json!({ "running": true }), None, &[]), None);
+    }
+
+    /// (2026-11-09) With the platform out of reach, a sandbox is still called what its owner called it and wears its
+    /// logo: the sandbox's own copy first, then this app's name for its slug, then the workspace's last row for its
+    /// platform id, and only then its slug, with no logo.
+    #[test]
+    fn a_sandbox_is_named_and_pictured_by_the_nearest_copy_that_has_it() {
+        let roster = vec![crate::setup_link::RosterEntry {
+            id: "cm1".to_string(),
+            name: "Shop (roster)".to_string(),
+            place: "device".to_string(),
+            shared: false,
+            image: Some("data:image/webp;base64,ROSTER".to_string()),
+        }];
+        let named = |row: Value, known: Option<&str>| {
+            let sandbox = sandbox_of(&row, known.map(str::to_string), &roster).unwrap();
+            (sandbox.name, sandbox.image)
+        };
+        let own = json!({ "slug": "3c469e9d6c58", "platformId": "cm1", "displayName": "Shop", "logo": "data:image/png;base64,OWN" });
+        assert_eq!(
+            named(own, Some("Shop (app)")),
+            (
+                "Shop".to_string(),
+                Some("data:image/png;base64,OWN".to_string())
+            )
+        );
+        // An ic from before the sandbox kept its own copy, or a sandbox with none: null and absent alike.
+        let unsaid = json!({ "slug": "3c469e9d6c58", "platformId": "cm1", "displayName": null, "logo": null });
+        assert_eq!(
+            named(unsaid.clone(), Some("Shop (app)")),
+            (
+                "Shop (app)".to_string(),
+                Some("data:image/webp;base64,ROSTER".to_string())
+            )
+        );
+        assert_eq!(
+            named(unsaid, None),
+            (
+                "Shop (roster)".to_string(),
+                Some("data:image/webp;base64,ROSTER".to_string())
+            )
+        );
+        let older_ic = json!({ "slug": "3c469e9d6c58", "platformId": "cm1" });
+        assert_eq!(
+            named(older_ic, None),
+            (
+                "Shop (roster)".to_string(),
+                Some("data:image/webp;base64,ROSTER".to_string())
+            )
+        );
+        // A blank name is none, and a logo that is not an inline image is none: the next copy speaks.
+        let blank = json!({ "slug": "3c469e9d6c58", "platformId": "cm1", "displayName": "  ", "logo": "https://cdn.example.com/a.png" });
+        assert_eq!(
+            named(blank, None),
+            (
+                "Shop (roster)".to_string(),
+                Some("data:image/webp;base64,ROSTER".to_string())
+            )
+        );
+        // Nothing anywhere: the slug, and no logo.
+        let unknown = json!({ "slug": "82789f4106b4", "platformId": "cm-other" });
+        assert_eq!(named(unknown, None), ("82789f4106b4".to_string(), None));
+        let unannounced = json!({ "slug": "82789f4106b4" });
+        assert_eq!(named(unannounced, None), ("82789f4106b4".to_string(), None));
     }
 
     #[test]
@@ -388,12 +499,14 @@ mod tests {
         let asleep = sandbox_of(
             &json!({ "slug": "nap", "running": false, "asleep": true, "localPort": 30000 }),
             None,
+            &[],
         )
         .unwrap();
         assert_eq!(with_session(asleep.clone()), asleep);
         let unpublished = sandbox_of(
             &json!({ "slug": "dev", "running": true, "localPort": null }),
             None,
+            &[],
         )
         .unwrap();
         assert_eq!(with_session(unpublished.clone()), unpublished);

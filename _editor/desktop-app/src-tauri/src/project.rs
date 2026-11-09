@@ -971,6 +971,7 @@ pub(crate) fn with_row(mut roster: Roster, id: &str, name: &str) -> Roster {
             name: name.to_string(),
             place: "own".to_string(),
             shared: false,
+            image: None,
         });
     }
     roster
@@ -1066,14 +1067,40 @@ pub(crate) fn release_folder(app: &AppHandle, folder: &Path) {
  * removed here, or dropped from the account's own listing (the workspace's roster, read from the platform, for the same
  * account as before). A folder's binding is its pairing (bindings.rs), so it goes when the agent lets go of the sandbox,
  * and nothing of this app's is left to say otherwise (2026-10-20). The account listing a sandbox no more is the
- * platform's record of it, not an absence guessed here; a roster with nobody signed in decides nothing. */
+ * platform's record of it, not an absence guessed here; a roster with nobody signed in decides nothing, and neither
+ * does one that lists no sandbox at all (2026-11-09): the workspace's list is empty as often because the platform
+ * could not be asked (a cold load while it was down) as because the account has none, and read as the platform's word
+ * it had this machine let go of every folder the account synced, and `roster.json` forget every row the local windows
+ * and the machine face draw from. What that costs is the account's very last sandbox going elsewhere: the roster no
+ * longer says so, and its sync here is let go of by the removal itself (Devices' Remove, commands.rs `sandbox_remove`;
+ * a removal elsewhere through the sandbox's machine, [`REREAD_AFTER_REMOVAL`]), while a local window that opens its
+ * stale row meets the workspace's notice for an id the account no longer lists. */
+
+/// The roster to keep once the workspace has told `told`, with `held` kept now: the same account listing no sandbox
+/// at all keeps the rows held, under the account as told (a new name or avatar is still news), since an empty list is
+/// no proof anything went (above). A list with rows replaces them, as does a sign-out or another account, whose
+/// sandboxes these never were. Pure.
+pub(crate) fn roster_to_keep(held: &Roster, told: Roster) -> Roster {
+    let same_account = match (&held.account, &told.account) {
+        (Some(held), Some(told)) => held.email.eq_ignore_ascii_case(&told.email),
+        _ => false,
+    };
+    if same_account && told.sandboxes.is_empty() && !held.sandboxes.is_empty() {
+        return Roster {
+            account: told.account,
+            sandboxes: held.sandboxes.clone(),
+        };
+    }
+    told
+}
 
 /// The projects whose sandbox the account no longer lists, read off a roster that names who is signed in: only the
 /// ones that account was seen to hold (`owners`, state.rs `learn_owners`). Another account's sandbox is not listed
 /// because it is not this account's, not because it went: reading it as gone had an account switch unpair every folder
 /// the other account synced (2026-10-25). One whose account was never seen goes only when the same account's listing
 /// drops it ([`dropped_sandboxes`]). Never a sandbox a folder's setup made moments ago (`kept`, folder_setup.rs), which
-/// the workspace may not list yet, nor an entry with no sandbox id. Pure.
+/// the workspace may not list yet, nor an entry with no sandbox id, and nothing at all off a roster that lists no
+/// sandbox (above). Pure.
 pub(crate) fn stale_projects(
     projects: &[Project],
     roster: &Roster,
@@ -1083,6 +1110,9 @@ pub(crate) fn stale_projects(
     let Some(account) = &roster.account else {
         return Vec::new();
     };
+    if roster.sandboxes.is_empty() {
+        return Vec::new();
+    }
     projects
         .iter()
         .filter(|project| {
@@ -1099,13 +1129,13 @@ pub(crate) fn stale_projects(
 }
 
 /// The sandboxes the account listed before and lists no more, when both listings are the same account's: a sign-out or
-/// another account signing in is not a sandbox going. Pure.
+/// another account signing in is not a sandbox going, and neither is a listing with no sandbox in it (above). Pure.
 pub(crate) fn dropped_sandboxes(before: &Roster, after: &Roster) -> Vec<String> {
     let same_account = match (&before.account, &after.account) {
         (Some(before), Some(after)) => before.email == after.email,
         _ => false,
     };
-    if !same_account {
+    if !same_account || after.sandboxes.is_empty() {
         return Vec::new();
     }
     before
@@ -2213,6 +2243,7 @@ mod tests {
                     name: (*id).to_string(),
                     place: "own".into(),
                     shared: false,
+                    image: None,
                 })
                 .collect(),
         }
@@ -2265,8 +2296,64 @@ mod tests {
             project(Some("cm-mine")),
         ];
         let owners = owners_of(&[("cm-ada", "ada@example.com"), ("cm-mine", "ME@example.com")]);
-        let stale = stale_projects(&projects, &roster_of(&[], true), &owners, &[]);
+        let stale = stale_projects(&projects, &roster_of(&["cm-other"], true), &owners, &[]);
         assert_eq!(stale, vec![project(Some("cm-mine"))]);
+    }
+
+    /// (2026-11-09) A list with no sandbox in it is no proof any went: the workspace sends one as readily when the
+    /// platform could not be asked. For the account already named it unpairs nothing and keeps the rows held, under
+    /// the account as told; a list with rows still says which went, and a sign-out or another account still replaces
+    /// the rows.
+    #[test]
+    fn an_empty_roster_for_the_signed_in_account_unpairs_and_erases_nothing() {
+        let projects = vec![project(Some("cm-a")), project(Some("cm-b"))];
+        let owners = owners_of(&[("cm-a", "me@example.com"), ("cm-b", "me@example.com")]);
+        let held = roster_of(&["cm-a", "cm-b"], true);
+        let empty = roster_of(&[], true);
+
+        assert_eq!(
+            stale_projects(&projects, &empty, &owners, &[]),
+            Vec::<Project>::new()
+        );
+        assert_eq!(dropped_sandboxes(&held, &empty), Vec::<String>::new());
+
+        let mut renamed = empty.clone();
+        renamed.account.as_mut().unwrap().name = Some("Me".into());
+        renamed.account.as_mut().unwrap().email = "ME@example.com".into();
+        let kept = roster_to_keep(&held, renamed.clone());
+        assert_eq!(
+            kept,
+            Roster {
+                account: renamed.account.clone(),
+                sandboxes: held.sandboxes.clone(),
+            }
+        );
+        // The rows kept are read as before: nothing went.
+        assert_eq!(
+            stale_projects(&projects, &kept, &owners, &[]),
+            Vec::<Project>::new()
+        );
+        assert_eq!(dropped_sandboxes(&held, &kept), Vec::<String>::new());
+
+        // A sandbox missing from a list that has rows is gone, as it always was.
+        let fewer = roster_of(&["cm-b"], true);
+        assert_eq!(roster_to_keep(&held, fewer.clone()), fewer);
+        assert_eq!(
+            stale_projects(&projects, &fewer, &owners, &[]),
+            vec![project(Some("cm-a"))]
+        );
+        assert_eq!(dropped_sandboxes(&held, &fewer), vec!["cm-a".to_string()]);
+
+        // A sign-out, another account, or nothing held: the list as told.
+        assert_eq!(roster_to_keep(&held, Roster::default()), Roster::default());
+        let mut other = roster_of(&[], true);
+        other.account.as_mut().unwrap().email = "someone@example.com".into();
+        assert_eq!(roster_to_keep(&held, other.clone()), other);
+        assert_eq!(roster_to_keep(&roster_of(&[], true), empty.clone()), empty);
+        assert_eq!(
+            roster_to_keep(&roster_of(&["cm-a"], false), empty.clone()),
+            empty
+        );
     }
 
     /// Whose a folder's sandbox is: the signed-in account's when it lists it or was seen to hold it, another account's
@@ -2395,7 +2482,8 @@ mod tests {
                 id: "cm-new".into(),
                 name: "test-remove-me".into(),
                 place: "own".into(),
-                shared: false
+                shared: false,
+                image: None,
             }
         );
         assert_eq!(

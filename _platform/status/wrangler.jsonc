@@ -1,0 +1,22 @@
+{
+    // The status page (worker.ts says what it watches, README.md how it is deployed). Deployed by hand:
+    // `wrangler deploy --config _platform/status/wrangler.jsonc`, with CLOUDFLARE_API_TOKEN in the environment.
+    "name": "intentic-status",
+    /* The account holding intentic.dev; the token stays in the environment. */
+    "account_id": "14aaba5ad087e7ed506d1470b14489ab",
+    "main": "./worker.ts",
+    "compatibility_date": "2026-10-01",
+    // The public address, attached 2026-11-09 (the custom domain made its DNS record). Named here so a deploy keeps it.
+    "routes": [{ "pattern": "status.intentic.dev", "custom_domain": true }],
+    "workers_dev": true,
+    // No per-version preview addresses: nothing here is reviewed that way, and each is one more public door.
+    "preview_urls": false,
+    // Every minute: the three probes, the sample, and an alert on a confirmed change.
+    "triggers": { "crons": ["* * * * *"] },
+    "durable_objects": { "bindings": [{ "name": "STATUS", "class_name": "StatusLog" }] },
+    // SQLite-backed, the only storage this account's token can create (KV is refused) and all a day of samples needs.
+    "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StatusLog"] }],
+    // Linked from alerts. ALERT_WEBHOOK_URL is a secret (`wrangler secret put ALERT_WEBHOOK_URL`), never a var here.
+    "vars": { "PAGE_URL": "https://status.intentic.dev" },
+    "observability": { "enabled": true },
+}

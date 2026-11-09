@@ -352,7 +352,7 @@ provide(CARD_METRICS_KEY, useCardMetrics(liveMetrics));
 const runtimeChips = useRuntimeChips();
 // The wake word's chip keeps the bar up while this device listens, so where listening stands is always in sight.
 const wakeListener = useWakeListener();
-const statusBarShown = computed(() => runtimeChips.chips.value.length > 0 || wakeListener.enabled.value);
+const statusBarShown = computed(() => runtimeChips.chips.value.length > 0 || wakeListener.enabled.value || runtimeChips.offline.value);
 
 // ONE PANEL ABOVE THE BAR AT A TIME. The docked terminal and the metrics panel both open at the foot of the window, and
 // the two stacked leave the page a sliver: opening either closes the other. A terminal in a window of its own takes no

@@ -107,11 +107,14 @@ const verdictOf = (answer: IngressAnswer<IngressOutput<"announce">>, at: number)
 };
 
 // What the announcer hands on from an accepted announce besides the verdict: the platform's identity key, which the
-// authorizer verifies identity assertions with (auth/platform/platform-identity-key.ts), and the platform's own id for
-// this sandbox's row (store/platform-row.ts).
+// authorizer verifies identity assertions with (auth/platform/platform-identity-key.ts), the platform's own id for
+// this sandbox's row (store/platform-row.ts), and the digest of the sandbox's name and logo as the platform holds them
+// (system/presentation/presentation-mirror.ts). And from an adoption the platform took, the name and logo it was sent.
 export interface AnnounceListeners {
     readonly identityKey?: (pem: string) => void;
     readonly platformId?: (id: string) => void;
+    readonly presentationDigest?: (digest: string) => void;
+    readonly adopted?: (presentation: Presentation) => void;
 }
 
 // What an accepted announce carries besides its verdict, to whoever listens for it.
@@ -122,6 +125,9 @@ const handOn = (answer: IngressAnswer<IngressOutput<"announce">>, listeners: Ann
     }
     if (accepted?.platformId !== undefined) {
         listeners.platformId?.(accepted.platformId);
+    }
+    if (accepted?.presentationDigest !== undefined) {
+        listeners.presentationDigest?.(accepted.presentationDigest);
     }
 };
 
@@ -259,13 +265,16 @@ export const createAnnouncer = (config: Config, logger: Logger, listeners: Annou
             }
             const adopted = await adopt(adoption, run);
             logger.info({ status: adopted.status, detail: adopted.detail }, "platform adoption answered");
+            if (adopted.status === 200) {
+                listeners.adopted?.(adoptionPresentation(adoption));
+            }
             return { announce: settle(adopted.status === 200 ? await register(run) : first, run, mine), adoption: adopted };
         },
     };
 };
 
 // What the owner's browser remembers of the sandbox, sent only when it remembers something.
-interface Presentation {
+export interface Presentation {
     name?: string;
     image?: string;
 }

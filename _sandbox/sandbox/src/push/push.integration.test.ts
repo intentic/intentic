@@ -9,6 +9,7 @@ import { createPushSender } from "./push.js";
 import { OPERATORS } from "./push-audience.js";
 import { filePushStore } from "./push-store.js";
 import { turnAwaiting, turnFinished } from "./notifications.js";
+import { proxyPage, type RelayAnswer, relayRefusal } from "./senders/relay.testing.js";
 
 const tempDirs: string[] = [];
 afterEach(async () => {
@@ -200,11 +201,13 @@ test("one dead endpoint does not stop the others being notified", async () => {
     expect(idsOf(await store.list())).toEqual(["https://push.example/live"]);
 });
 
-// Stubs the relay's answer for every deviceId; the daemon only ever sees an HTTP status.
-const stubRelay = (statuses: Record<string, number>): ReturnType<typeof jest.spyOn> =>
+// Stubs the relay's answer for every deviceId, a success for any not named: its status and its body, which is what says
+// whether the relay itself refused (relay.testing.ts).
+const stubRelay = (answers: Record<string, RelayAnswer>): ReturnType<typeof jest.spyOn> =>
     jest.spyOn(globalThis, "fetch").mockImplementation((async (_url: URL | RequestInfo, init?: RequestInit) => {
         const { deviceId } = JSON.parse(String(init?.body)) as { deviceId: string };
-        return new Response("{}", { status: statuses[deviceId] ?? 200 });
+        const answer = answers[deviceId] ?? { status: 200, body: `{"delivered":true}` };
+        return new Response(answer.body, { status: answer.status });
     }) as unknown as typeof fetch);
 
 test("a relay channel is posted to its recorded url with the send capability and the notification", async () => {
@@ -222,23 +225,34 @@ test("a relay channel is posted to its recorded url with the send capability and
     );
 });
 
-test("a relay 410 drops the channel: an uninstalled app must not be retried forever", async () => {
+test("the relay's own gone answer drops the channel: an uninstalled app must not be retried forever", async () => {
     const path = await storePath();
     const store = filePushStore(path);
     await store.add(relayChannel("gone"));
     await store.add(relayChannel("live"));
-    stubRelay({ gone: 410 });
+    stubRelay({ gone: relayRefusal(410, "GONE", true) });
 
     await createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS);
 
     expect(idsOf(await store.list())).toEqual(["live"]);
 });
 
+// A platform that is down answers through its proxy, and a 404 page there says nothing about the phone.
+test("a proxy's 404 in front of the relay keeps the channel, and counts as a failed send", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    await store.add(relayChannel("phone"));
+    stubRelay({ phone: proxyPage(404) });
+
+    await expect(createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS)).resolves.toEqual({ delivered: 0, failed: 1 });
+    expect(idsOf(await store.list())).toEqual(["phone"]);
+});
+
 test("a relay 500 keeps the channel and does not fail the caller", async () => {
     const path = await storePath();
     const store = filePushStore(path);
     await store.add(relayChannel("flaky"));
-    stubRelay({ flaky: 500 });
+    stubRelay({ flaky: relayRefusal(500, "INTERNAL_SERVER_ERROR", false) });
 
     await expect(createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS)).resolves.toEqual({ delivered: 0, failed: 1 });
     expect(await store.list()).toHaveLength(1);

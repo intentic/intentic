@@ -5,6 +5,9 @@ import { createMemoryHistory, createRouter, type RouteLocationNormalized } from 
 
 const refresh = jest.fn<() => Promise<{ id: string } | null>>();
 jest.mock(`./useAuth`, () => ({ useAuth: () => ({ refresh }) }));
+// What this device remembers of the account (deviceDirectory.ts): nothing, unless a test says otherwise.
+let remembered: { sandboxes: readonly unknown[] } | undefined;
+jest.mock(`../directory/deviceDirectory`, () => ({ rememberedAccount: () => remembered }));
 
 const { ENTRY_BUDGET_MS, platformRetry, retryOnEntry } = await import(`./platformRetry`);
 
@@ -13,6 +16,7 @@ const entry = (returnTo: string, redirected = false): RouteLocationNormalized =>
 
 beforeEach(() => {
     refresh.mockReset();
+    remembered = undefined;
 });
 
 afterEach(() => {
@@ -58,6 +62,22 @@ it(`retries on a reload onto the screen, exactly like the button`, async () => {
 
 it(`draws the screen when a reload finds the platform still down`, async () => {
     refresh.mockRejectedValue(new Error(`offline`));
+
+    await expect(retryOnEntry(entry(`/workspace`))).resolves.toBe(true);
+});
+
+// (2026-11-09) A device that remembers the account has somewhere to go without the platform: the page it was headed for,
+// whose guard opens the workspace on what it remembers (sessionGuard.ts).
+it(`goes on to the page when a reload finds the platform down but the device remembers sandboxes`, async () => {
+    refresh.mockRejectedValue(new Error(`offline`));
+    remembered = { sandboxes: [{ id: `s1` }] };
+
+    await expect(retryOnEntry(entry(`/workspace`))).resolves.toBe(`/workspace`);
+});
+
+it(`draws the screen when the device remembers the account but no sandbox of it`, async () => {
+    refresh.mockRejectedValue(new Error(`offline`));
+    remembered = { sandboxes: [] };
 
     await expect(retryOnEntry(entry(`/workspace`))).resolves.toBe(true);
 });

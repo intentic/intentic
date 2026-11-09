@@ -11,6 +11,9 @@ What the editor does when the platform is down or has forgotten an account's san
   owned sandbox that may run on its owner's computer it also keeps where it answers there: the 12-hex id its loopback
   port derives from, read off the connect token when listed (`rememberSandboxes.ts` `localIdsOf`; the token itself is
   still never kept), and the certified loopback name the list gave.
+  (2026-11-09) A logo is remembered as a thumbnail (`client/directory/logoThumbnail.ts`: kept as it is up to 16 KB,
+  else redrawn at 96 px), since the memory lives in localStorage, whose writes over quota the browser drops silently:
+  a few full-size logos stopped it being written at all. A dropped write is now reported (`directory.dropped`).
 - **Which database.** Each list is remembered with the platform's identity (`GET /api/identity`). A list from another
   database than the one remembered is a reset, and the recovery screen says so.
 - **Never empty** (`router/index.ts` `requireSetup`): a list that offers nothing to open while this device remembers
@@ -23,6 +26,16 @@ What the editor does when the platform is down or has forgotten an account's san
   relink (`POST /platform/relink`), which has the platform make the row again from the daemon's own token and grant. A
   daemon too old to relink, or a platform that cannot vouch (no reachability grants), is recorded by its address alone
   (the setup screen's attach). A share is its owner's to bring back; a deleted sandbox stays deleted.
+- **Without asking** (2026-11-09, `directMode.ts` `enterFromMemory`): a session check that fails or takes more than ten
+  seconds, or a list that does the same after the session answered (`router/shellGates.ts`, ten seconds too), no longer
+  stops at the outage screen on a device that remembers the account. The window opens in direct mode at once, on the
+  sandbox it had open (or the one a `/open` address names), and the status bar's chip is all that says so
+  (`shell/status-bar/PlatformStatusChip.vue`, fed by `lib/platform/platformHealth.ts`, the one reading of whether the
+  platform answers). The outage screen stays for a device that remembers nothing of the account, and for an address
+  naming a sandbox it does not remember; a reload onto the screen goes on to its page when there is memory to open.
+  When the platform answers again, the session it answers and its list take the window back with nothing pressed.
+  Rejected: keeping the screen with an "open anyway" button, which is what users met during the outage that lost them
+  their names and logos.
 - **Direct mode** (`directMode.ts`, `DirectSandboxes.vue` on the outage screen): a remembered sandbox opens without
   the platform. The window signs in as the remembered account, whole, so presence, analytics and the persisted cache
   read as before, and the remembered list is seeded into the list's own cache entry, which every reader of the list

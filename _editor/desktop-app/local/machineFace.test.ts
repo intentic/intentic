@@ -23,6 +23,7 @@ const NOW = new Date(`2026-10-16T12:00:00.000Z`);
 const sandbox = (slug: string, extra: Partial<MachineSandbox> = {}): MachineSandbox => ({
     slug,
     name: slug,
+    image: null,
     platformId: null,
     sandboxId: null,
     localPort: 30_238,
@@ -33,10 +34,13 @@ const sandbox = (slug: string, extra: Partial<MachineSandbox> = {}): MachineSand
     ...extra,
 });
 
+// The logo the app found for it (machine_face.rs `names_of`), drawn with no network.
+const LAB_LOGO = `data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA`;
+
 const FACE: MachineFace = {
     account: { email: `ada@example.com`, name: `Ada`, image: null },
     sandboxes: [
-        sandbox(`lab`, { name: `Lab`, platformId: `cm1lab`, sandboxId: `3c469e9d6c58` }),
+        sandbox(`lab`, { name: `Lab`, image: LAB_LOGO, platformId: `cm1lab`, sandboxId: `3c469e9d6c58` }),
         sandbox(`nap`, { sandboxId: `ceec11462653`, localPort: 29_000, running: false, asleep: true, session: null }),
         // Publishes no loopback port: nowhere to send a call, so never listed.
         sandbox(`dev`, { localPort: null }),
@@ -69,14 +73,14 @@ describe(`the rows the editor lists`, () => {
         expect(sandboxKeyOf(sandbox(`dev`))).toBe(`machine-dev`);
     });
 
-    it(`lists every sandbox with a loopback port, owned, dialled there with no connect token`, async () => {
+    it(`lists every sandbox with a loopback port, owned, under its own name and logo, dialled there with no connect token`, async () => {
         const { status, body } = await answer(`/rpc/sandbox/list`);
         expect(status).toBe(200);
         const parsed = outputSchemaOf(apiContract.sandbox.list).parse(body);
         const lab: SandboxSummary = {
             id: `cm1lab`,
             name: `Lab`,
-            image: null,
+            image: LAB_LOGO,
             daemonUrl: `http://127.0.0.1:30238`,
             lastSeenAt: NOW.toISOString(),
             setupCodeClaimedAt: null,
@@ -91,7 +95,7 @@ describe(`the rows the editor lists`, () => {
             localHostname: null,
             hosted: null,
         };
-        expect(parsed.sandboxes).toEqual([lab, { ...lab, id: `machine-ceec11462653`, name: `nap`, daemonUrl: `http://127.0.0.1:29000` }]);
+        expect(parsed.sandboxes).toEqual([lab, { ...lab, id: `machine-ceec11462653`, name: `nap`, image: null, daemonUrl: `http://127.0.0.1:29000` }]);
         expect(rowsOf(FACE, NOW).map((row) => row.id)).toEqual([`cm1lab`, `machine-ceec11462653`]);
     });
 });

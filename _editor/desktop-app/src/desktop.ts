@@ -417,6 +417,9 @@ export interface LocalSandbox {
     // Where it runs, as the workspace's switcher marked it (placement.ts `SandboxPlacementKind`).
     place: string;
     shared: boolean;
+    // Its logo as the small `data:image/…` thumbnail the workspace drew for the row, to draw while the platform cannot be
+    // asked; absent where it has none, and in a roster kept from before rows carried one.
+    image?: string;
 }
 export interface LocalAccount {
     email: string;

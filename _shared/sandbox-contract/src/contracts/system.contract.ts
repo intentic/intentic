@@ -22,7 +22,14 @@ import {
     StorageReportSchema,
 } from "../schemas/metrics.js";
 import { OkSchema } from "../schemas/shared.js";
-import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema, ManifestRepairSchema } from "../schemas/system.js";
+import {
+    DaemonSessionSchema,
+    InfoSchema,
+    ManifestProblemsSchema,
+    ManifestRepairSchema,
+    PresentationReadSchema,
+    PresentationRefreshSchema,
+} from "../schemas/system.js";
 import { AutoUpdateInputSchema, AutoUpdateSchema, SkipUpdateInputSchema } from "../schemas/updates.js";
 import {
     BrowserNameParamSchema,
@@ -56,6 +63,31 @@ export const systemContract = {
         })
         .meta({ guest: true })
         .output(InfoSchema),
+    // (2026-11-09) The sandbox's copy of its name and logo, which only the platform decides. Its own route, never a field
+    // on /info: /info is read often, and a logo is up to 150 KB. A file read, so it answers while the boot chain runs, for
+    // a switcher drawing the sandbox meanwhile; any member reads it, a guest does not.
+    presentation: systemRoute
+        .route({
+            method: "GET",
+            path: "/system/presentation",
+            summary: "The sandbox's name and logo",
+            description:
+                "What the owner calls this sandbox and its logo, as the sandbox last heard them from the platform, which holds them. The sandbox keeps this copy so you can still show them while the platform cannot be reached. Null until it has heard them once.",
+        })
+        .meta({ beforeBoot: true })
+        .output(PresentationReadSchema),
+    // Any member may ask: it only makes the sandbox ask the platform again, whose word it keeps. The editor calls it right
+    // after a rename or a new logo, rather than waiting for the next announce to say they changed.
+    presentationRefresh: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/presentation/refresh",
+            summary: "Ask the platform for the sandbox's name and logo again",
+            description:
+                "Makes the sandbox ask the platform for its name and logo now and keep what it answers, typically right after they were changed. When the platform cannot be reached or refuses, the copy the sandbox already held is answered unchanged and `refreshed` is false.",
+        })
+        .meta({ beforeBoot: true, floor: "viewer" })
+        .output(PresentationRefreshSchema),
     // The owner's "not this one" for the update card; /info's `skippedVersion` reads it back.
     skipUpdate: systemRoute
         .route({

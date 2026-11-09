@@ -10,6 +10,13 @@ primary_region = "iad"
   # Built and pushed by the `docker:release` turbo task, never by Fly. See Dockerfile.
   image = "ghcr.io/intentic/ingress:latest"
 
+# THE CERTIFICATE KEPT ACROSS A RESTART (README.md, "The certificate kept on disk"). Each machine has its own 1 GB
+# `ingress_state` volume in its region (created 2026-11-09), so an edge that restarts while the api is down still
+# presents the last certificate it held instead of none. A machine added by hand needs a volume of its own first.
+[mounts]
+  source = "ingress_state"
+  destination = "/var/lib/intentic-ingress"
+
 # HTTPS and the tunnels' WSS: raw TCP, TLS terminated by the process.
 [[services]]
   internal_port = 8443

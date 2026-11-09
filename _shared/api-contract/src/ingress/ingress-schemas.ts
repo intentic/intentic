@@ -271,11 +271,16 @@ export const WakeAlarmBodySchema = z.object({
 // `platformId` is this platform's own id for the sandbox's row: the daemon keeps it on its history volume, so the machine
 // that runs it can open it by the same id with no network (`ic sandbox session`, the desktop app's offline face). Absent
 // from a platform older than it.
+// `presentationDigest` (2026-11-09) is `presentationDigest` below over the row's name and logo as they stand: the daemon
+// keeps a copy of both, so a client that reaches the sandbox while the platform is down still shows them, and asks for
+// them again (`presentation`) only when this differs from the digest of the copy it holds. Absent from a platform older
+// than it, which an older daemon ignores in turn.
 export const AnnounceAcceptedSchema = z.object({
     ok: z.literal(true),
     identity: z.string().min(1).optional(),
     identityKey: z.string().min(1).optional(),
     platformId: z.string().min(1).optional(),
+    presentationDigest: z.string().min(1).optional(),
 });
 
 // `POST /sandbox/adopt`: the owner's adoption ticket the browser handed the daemon, the grant this platform signed for
@@ -301,8 +306,21 @@ export const FarewellBodySchema = z.object({
         .catch(undefined),
 });
 
-// The owner's name for the sandbox and its switcher logo, which only the platform holds (an export bundle asks).
-export const PresentationSchema = z.object({ name: z.string(), image: z.string().optional() });
+// The owner's name for the sandbox and its switcher logo, which the platform holds and the daemon keeps a copy of (an
+// export bundle asks too). `digest` (2026-11-09) is the same value an accepted announce's `presentationDigest` carries
+// for this name and logo; absent from an older platform.
+export const PresentationSchema = z.object({ name: z.string(), image: z.string().optional(), digest: z.string().min(1).optional() });
+
+// What says a sandbox's name and logo changed, without carrying a logo of up to 150 KB on every hourly announce: the
+// first 32 hex characters of SHA-256 over the name, a newline and the logo's data URL (empty for none). Shared, so the
+// platform that answers it and the daemon that keeps a copy compute the same value for the same pair. WebCrypto rather
+// than node:crypto, since the editor imports this entry point too.
+export const presentationDigest = async (name: string, image: string | null | undefined): Promise<string> => {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${name}\n${image ?? ""}`));
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0"))
+        .join("")
+        .slice(0, 32);
+};
 
 // The loopback certificate's DNS-01 relay: `challenge` published as the sandbox's record, or withdrawn when absent.
 export const LocalDnsBodySchema = z.object({ challenge: z.string().max(128).optional() });
@@ -311,10 +329,17 @@ export const LocalDnsAnswerSchema = z.object({ ok: z.literal(true), hostname: z.
 export const LocalDnsConfirmBodySchema = z.object({ challenge: z.string().max(128) });
 export const LocalDnsConfirmedSchema = z.object({ confirmed: z.boolean() });
 
-// Whether a sandbox may hold a tunnel, for the edge (GET /api/reachability/{sandboxId}); a 404 is a deletion record and
-// only that. `known: false` is an id the registry has no record of. `lane` stays for an edge build from before replay
-// went, which replays a sandbox not named `tunnel`.
+// Whether a sandbox may hold a tunnel, for the edge (GET /api/reachability/{sandboxId}). The platform answers 404 for a
+// deletion record alone, with `ReachabilityDeletedSchema`'s body; `known: false` (a 200) is an id the registry has no
+// record of. `lane` stays for an edge build from before replay went, which replays a sandbox not named `tunnel`.
+// (2026-11-09) The edge refuses a tunnel only on that body, said twice some 30 s apart (ingress revocation.rs), never on
+// a bare 404: something in front of the api answers 404 too (a misrouted hostname, a placeholder page), and one such
+// answer used to close every tunnel it was asked about.
 export const ReachabilitySchema = z.object({ ok: z.literal(true), lane: z.enum(["tunnel", "hosted"]), known: z.literal(false).optional() });
+// The deletion record as the reachability lookup answers it: the refusal every ingress route speaks, with `deleted:
+// true` beside it. An edge from before `deleted` reads the error's text, which stays as it was.
+export const ReachabilityDeletedSchema = z.object({ error: z.literal("deleted sandbox"), deleted: z.literal(true) });
+export type ReachabilityDeleted = z.infer<typeof ReachabilityDeletedSchema>;
 
 // The edge's TLS certificate and key, to an edge presenting the platform token.
 export const EdgeCertificateSchema = z.object({ certificate: z.string(), privateKey: z.string() });

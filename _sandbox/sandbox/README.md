@@ -165,7 +165,8 @@ flowchart LR
   never over the tunnel, and lasts a week rather than a month, since its token is kept on the machine's disk. Each
   mint is an `auth.sign_in` record with `methods: ["host"]`: the trail has one writer, so the script leaves a note in `/history/audit/inbox/`
   that the audit tick records and deletes. The platform's own id for the sandbox's row, which its announce answers,
-  is kept in `/history/platform-row.json` for the same reader (`store/platform-row.ts`).
+  is kept in `/history/platform-row.json` for the same reader (`store/platform-row.ts`), and so is the sandbox's name
+  and logo in `/history/presentation.json` (below).
 - On the loopback port, and only there, CORS also admits the desktop app's bundled page (`tauri://localhost`,
   `http://tauri.localhost`): netd marks a request that arrived on that port (`x-intentic-listener: loopback`, stripped
   from anything arriving from outside), so no sandbox needs recreating with a wider `WEB_ORIGIN`
@@ -194,6 +195,17 @@ flowchart LR
   with the ticket the owner's browser got and the grant the daemon holds. A browser opening the sandbox's own address
   is sent to the app's `/open` on it (`GET /`, `system/boot/open-in-app.ts`). (2026-10-02) It used to give up after
   ten minutes and wait for a restart, which nobody knew to do while the platform said the sandbox did not exist.
+- (2026-11-09) The sandbox keeps a copy of the name and logo the platform holds for it, so a client that reaches it
+  while the platform is down still shows them (`system/presentation/presentation-mirror.ts`). It lives in
+  `/history/presentation.json` as `{ name, image?, digest?, at }` (`system/presentation/presentation-store.ts`, a plain file `ic` reads like
+  `platform-row.json`). An accepted announce carries `presentationDigest`, and the daemon asks the platform's
+  `presentation` route again only when that differs from its copy's digest. It also keeps what an export's ask hears
+  and what an adoption the platform took sent. Only the platform's own 200 changes the copy; an unreachable or refusing
+  platform never removes it. `GET /system/presentation` reads it (any member, not a guest; never on `/info`, which is
+  read often while a logo is up to 150 KB), and `POST /system/presentation/refresh` asks the platform now, answering
+  the copy held with `refreshed: false` when it cannot. The newest identity key an announce taught is kept in
+  `/history/platform-identity-key.pem` and read at boot when `PLATFORM_IDENTITY_KEY` is unset, so a daemon restarted
+  during an outage still verifies email-code sign-ins (`auth/platform/platform-identity-key.ts`).
 - (2026-11-03) A run on one of the owner's computers (`bin/devices run`, the Run dialog's Run on <device>) builds
   in the owner's own tree, the tree every land writes into, so while its build runs it holds that repository's lands
   (`hosts/runs/run-builds.ts`): a land into it waits (`conversations/land/turn-landing.ts` and `land-by-hand.ts` call
@@ -1032,8 +1044,10 @@ flowchart LR
   it a dataset's values.
 
 - Push (`push/`) tells a member's registered devices when the agent wants them: a browser over web push, encrypted to
-  it end to end, and a native app through the platform's relay. Apple is handed the words, after the privacy shield's
-  redaction. An Android app is handed only the tag, the in-app path and which sandbox, and reads the words back over its
+  it end to end, and a native app through the platform's relay. A web push channel is dropped on its push service's
+  403, 404 or 410; a relay channel only on the relay's own marker that it is gone (sandbox-contract
+  `RELAY_CHANNEL_GONE`, `push/senders/relay.ts`), since a proxy in front of a platform that is down answers 403s and
+  404s too. Apple is handed the words, after the privacy shield's redaction. An Android app is handed only the tag, the in-app path and which sandbox, and reads the words back over its
   own session from `GET /push/notification?tag=`, which answers only a member the notification was sent to. They are
   kept in memory (`push/sent-notifications.ts`), the newest 200 tags for a day, so after a restart the route answers
   not found and the app draws its own words.

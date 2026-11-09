@@ -7,6 +7,7 @@ import { requireUser } from "../guards.js";
 import type { PushApp, PushPlatform } from "@intentic/api-contract";
 import { createApnsForwarder } from "./apns.js";
 import { createFcmForwarder, type PushForwarder } from "./fcm.js";
+import { RELAY_CHANNEL_GONE } from "@intentic/sandbox-contract/schemas/push";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
@@ -47,6 +48,11 @@ const requireRelay = (forwarder: PushForwarder): void => {
         throw new ORPCError("NOT_FOUND", { message: "this platform has no push relay" });
     }
 };
+
+// What the three refusals that end a channel for good carry (sandbox-contract RELAY_CHANNEL_GONE): the daemon forgets the
+// channel on this and never on a status alone, which a proxy in front of a platform that is down answers too. A relay
+// with no credential for the platform (requireRelay) does not carry it: that is this platform's state, not the device's.
+const GONE = { channel: RELAY_CHANNEL_GONE } as const;
 
 // A row's platform as stored; one written before Android existed is iOS.
 const platformOf = (stored: string): PushPlatform => (stored === "android" ? "android" : "ios");
@@ -97,19 +103,19 @@ export const pushRelayRoutes = (
         send: os.push.send.handler(async ({ input, context }) => {
             const row = await context.prisma.pushDevice.findUnique({ where: { id: input.deviceId } });
             if (row === null) {
-                throw new ORPCError("NOT_FOUND", { message: "unknown device" });
+                throw new ORPCError("NOT_FOUND", { message: "unknown device", data: GONE });
             }
             const forwarder = forwarderFor(context.config, builders, platformOf(row.platform));
             requireRelay(forwarder);
             if (!secretsMatch(input.secret, row.secretHash)) {
-                throw new ORPCError("FORBIDDEN", { message: "this send capability has been rotated" });
+                throw new ORPCError("FORBIDDEN", { message: "this send capability has been rotated", data: GONE });
             }
             const outcome = await forwarder.send(row.token, input.notification, { app: appOf(row.app), sandbox: row.sandbox });
             if (outcome.verdict === "dead") {
                 // Drop only the capability that was sent: register may have renewed this same row during the request.
                 // deleteMany also tolerates an unregister or another dead send removing it first.
                 await context.prisma.pushDevice.deleteMany({ where: { id: row.id, secretHash: row.secretHash } });
-                throw new ORPCError("GONE", { status: 410, message: "the device is no longer reachable" });
+                throw new ORPCError("GONE", { status: 410, message: "the device is no longer reachable", data: GONE });
             }
             if (outcome.verdict === "transient") {
                 // Our problem or a passing one, never the device's; the daemon keeps the channel, and only this log says which.

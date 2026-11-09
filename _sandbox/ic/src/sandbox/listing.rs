@@ -485,7 +485,8 @@ pub fn list_json() -> Result<()> {
     let listed = listing(&rows, &inspected, &records, &leases, &|image| {
         docker::image_exists(image)
     });
-    // How this machine reaches each one with no network (loopback.rs): its id, its loopback port, the platform's id.
+    // How this machine reaches each one with no network (loopback.rs): its id, its loopback port, the platform's id,
+    // and the owner's name and logo the daemon kept.
     let containers: Vec<String> = listed
         .as_array()
         .into_iter()
@@ -505,12 +506,9 @@ pub fn list_json() -> Result<()> {
             .into_iter()
             .collect();
     let listed = with_swap_bounds(listed, &readings);
-    let platform_ids = loopback::platform_ids(&containers, &inspected);
+    let facts = loopback::volume_facts(&containers, &inspected);
     // allow(terminal-output): the --json answer, one line of JSON the desktop app and the machine agent read.
-    println!(
-        "{}",
-        loopback::with_addressing(listed, &inspected, &platform_ids)
-    );
+    println!("{}", loopback::with_addressing(listed, &inspected, &facts));
     Ok(())
 }
 
