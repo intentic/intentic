@@ -1,4 +1,4 @@
-import type { OffloadKind, SessionsPlacement } from "@intentic/sandbox-contract/schemas/offload";
+import { OFFLOAD_ANY_RUNNER, type OffloadKind, type SessionsPlacement } from "@intentic/sandbox-contract/schemas/offload";
 import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { PickerOption } from "@intentic/ui";
@@ -38,10 +38,11 @@ export const kindDetail = (kind: OffloadKind): string => KIND_DETAILS[kind.id]?.
 // The machine a runner sits on, the word the owner knows it by; a runner started by hand has only its id.
 export const runnerName = (runner: Pick<RunnerSummary, `id` | `host`>): string => runner.host ?? runner.id;
 
-// This sandbox first, then every runner, an offline one still offered (a choice made now binds once it is back) but
-// saying so.
+// This sandbox first, then whichever runner has room, then every runner by name, an offline one still offered (a choice
+// made now binds once it is back) but saying so.
 export const targetOptions = (runners: readonly RunnerSummary[]): PickerOption<string>[] => [
     { value: HERE, label: t(`sandbox.agentOffload.here`), icon: `server` },
+    { value: OFFLOAD_ANY_RUNNER, label: t(`sandbox.agentOffload.anyRunner`), icon: `sparkles`, description: t(`sandbox.agentOffload.anyRunnerDetail`) },
     ...runners.map((runner) => ({
         value: runner.id,
         label: runnerName(runner),
@@ -65,6 +66,10 @@ export const withCommandTarget = (offload: Offload, kind: string, runner: string
 export const unavailableRunner = (runner: string | undefined, runners: readonly RunnerSummary[]): string | undefined => {
     if (runner === undefined || runner === HERE) {
         return undefined;
+    }
+    // Any machine with room needs only one to exist; which one is decided as each command starts.
+    if (runner === OFFLOAD_ANY_RUNNER) {
+        return runners.length === 0 ? t(`sandbox.agentOffload.anyRunnerNone`) : undefined;
     }
     const known = runners.find((entry) => entry.id === runner);
     if (known === undefined) {

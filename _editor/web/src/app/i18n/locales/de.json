@@ -9594,6 +9594,9 @@
         },
         "agentOffload": {
             "here": "Diese Sandbox",
+            "anyRunner": "Jeder Rechner mit freier Kapazität",
+            "anyRunnerDetail": "Läuft hier, solange diese Sandbox ruhig ist; ist sie ausgelastet, auf dem Runner mit der meisten freien Kapazität in diesem Moment.",
+            "anyRunnerNone": "Läuft hier, bis auf einem Ihrer Rechner ein Runner eingerichtet ist.",
             "intro": "Tests, Typprüfungen und volle Checks laufen auf einem Runner auf deinem Rechner statt hier; Ausgabe und geänderte Dateien synchronisieren zurück, oder laufen hier, wenn er offline oder ausgelastet ist.",
             "kindBunTest": "Testläufe (bun test)",
             "kindBunTestDetail": "bun test und der eigene Test-Runner jedes Pakets.",
@@ -10395,6 +10398,10 @@
             "spokenReply": {
                 "label": "Gesprochene Antworten",
                 "blurb": "Die wenigen Sätze, die Sie beim freihändigen Gespräch mit dem Agenten hören: was er getan hat und was er von Ihnen braucht. Die vollständige Antwort bleibt auf dem Bildschirm."
+            },
+            "subagentSizing": {
+                "label": "Größe von Subagenten",
+                "blurb": "Ob die Aufgabe eines Subagenten schwer (Builds, Tests) oder leicht wirkt, wenn die letzten freien Plätze eines Runners an die schwerere Arbeit gehen sollen."
             },
             "workflowFix": {
                 "label": "Workflow-Korrekturen",

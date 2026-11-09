@@ -1,3 +1,4 @@
+import type { FleetPressure } from "@intentic/sandbox-contract/schemas/offload";
 import type { HostDeviceReach } from "../../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../../phones/phone-peer.js";
@@ -97,6 +98,8 @@ export interface GuidanceFacts {
     readonly ownBrowsers: OwnBrowserReach | undefined;
     // Optional so a caller that predates phones composes the same block it always did.
     readonly ownPhones?: OwnPhoneReach | undefined;
+    // Set only while this sandbox is full and a runner is calm (runners/fleet-advice.ts fleetPressure).
+    readonly fleetPressure?: FleetPressure | undefined;
 }
 
 // One MCP tool as this turn's tool list spells it, in backticks.

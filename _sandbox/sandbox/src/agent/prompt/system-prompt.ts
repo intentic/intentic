@@ -1,3 +1,4 @@
+import type { FleetPressure } from "@intentic/sandbox-contract/schemas/offload";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
@@ -174,6 +175,8 @@ export interface SdkSystemPromptInput {
     readonly ownBrowsers?: OwnBrowserReach | undefined;
     // The owner's own phones granted this turn: `phones` get the connected paragraph, `unlisted` the unpaired one.
     readonly ownPhones?: OwnPhoneReach | undefined;
+    // While this sandbox is full and a runner is calm, the machines with room: one volatile paragraph, absent otherwise.
+    readonly fleetPressure?: FleetPressure | undefined;
     // What the model's window will not pay for; carried this far so the composed prompt and the disclosed one shed the
     // same pieces.
     readonly trim?: PromptTrim;
@@ -190,7 +193,7 @@ export interface SdkSystemPromptInput {
 export interface PromptRequest {
     readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "search" | "stablePrompt">;
     readonly policy: Pick<TurnPolicy, "unattended" | "night" | "toolSearch">;
-    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "browserPorts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones" | "pages">;
+    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "browserPorts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones" | "fleetPressure" | "pages">;
 }
 
 // Whether the routed browser has any account behind it, deciding if the system prompt names that server at all.
@@ -220,6 +223,7 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
     hostDevices: tools.hostDevices,
     ownBrowsers: tools.ownBrowsers,
     ownPhones: tools.ownPhones,
+    ...opt("fleetPressure", tools.fleetPressure),
     ...(spec.contextTrim === undefined ? {} : { trim: spec.contextTrim }),
     ...(spec.search === undefined ? {} : { search: spec.search }),
     stable: spec.stablePrompt === true,
@@ -245,6 +249,7 @@ export const harnessGuidance = ({
     hostDevices,
     ownBrowsers,
     ownPhones,
+    fleetPressure,
     stable = false,
     deferredTools = true,
 }: Omit<SdkSystemPromptInput, "mode" | "model" | "custom">): string[] => [
@@ -266,6 +271,7 @@ export const harnessGuidance = ({
                       hostDevices,
                       ownBrowsers,
                       ownPhones,
+                      ...opt("fleetPressure", fleetPressure),
                   },
                   search,
                   stable,

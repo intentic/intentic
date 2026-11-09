@@ -1,3 +1,4 @@
+import type { FleetPressure } from "@intentic/sandbox-contract/schemas/offload";
 import type { HookTimer } from "../run/hook-timing.js";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
@@ -195,6 +196,8 @@ export interface TurnTools {
     readonly ownBrowsers?: OwnBrowserReach | undefined;
     // The owner's own phones this turn carries servers for, so the prompt can say one is in their pocket.
     readonly ownPhones?: OwnPhoneReach | undefined;
+    // While this sandbox is full and a runner is calm, the machines with room (runners/fleet-advice.ts fleetPressure).
+    readonly fleetPressure?: FleetPressure | undefined;
     // Directory for browser tool artifacts (the `--output-dir` value); the router places every file a browser tool
     // writes there (browser-router.ts), and the chat reads screenshots back from it.
     readonly browserOutputDir?: string;

@@ -182,6 +182,19 @@ const waitingText = (facts: EntryFacts): string => {
 };
 
 const hasDevices = ({ hostDevices }: GuidanceFacts): boolean => hostDevices !== undefined && hostDevices.ids.length > 0;
+
+// Said only while this sandbox is full and a runner is calm, so it costs nothing on a quiet fleet. Named machines, since
+// "a runner" tells a model nothing it can weigh; the spawn sentence only where the turn holds the spawn tool.
+const fleetFull = (facts: EntryFacts): string => {
+    const roomy = facts.fleetPressure?.roomy ?? [];
+    const machines = roomy.length === 1 ? `${roomy[0]} has` : `${roomy.slice(0, -1).join(", ")} and ${roomy.at(-1)} have`;
+    const spawn =
+        facts.subagents === false
+            ? ""
+            : ` Subagents you start with ${toolName(facts, "subagents", "spawn")} and leave \`on\` out go there by themselves; the ` +
+              "ones your runtime runs in-process stay here and add to the load, so start work that builds or tests with the spawn tool.";
+    return `This sandbox is full right now (memory or CPU), while ${machines} room.${spawn}`;
+};
 const devicesOf = ({ hostDevices }: GuidanceFacts): HostDeviceReach => hostDevices ?? { ids: [] };
 const browsersOf = ({ ownBrowsers }: GuidanceFacts): OwnBrowserReach => ownBrowsers ?? { browsers: [], unlisted: [] };
 const phonesOf = ({ ownPhones }: GuidanceFacts): OwnPhoneReach => ownPhones ?? { phones: [], unlisted: [] };
@@ -403,6 +416,7 @@ const ENTRIES: readonly GuidanceEntry[] = [
     { id: "unlisted-browser", volatile: true, when: (facts) => browsersOf(facts).unlisted.length > 0, text: (facts) => unlistedFull(facts, browsersOf(facts)) },
     { id: "own-phone", volatile: true, when: (facts) => phonesOf(facts).phones.length > 0, text: (facts) => ownPhoneFull(facts, phonesOf(facts)) },
     { id: "unlisted-phone", volatile: true, when: (facts) => phonesOf(facts).unlisted.length > 0, text: (facts) => unlistedPhones(facts, phonesOf(facts)) },
+    { id: "fleet", volatile: true, when: ({ fleetPressure }) => fleetPressure !== undefined, text: fleetFull },
 ];
 
 const textOf = (entry: GuidanceEntry, facts: GuidanceFacts, search: SearchTool): string | undefined => {
@@ -431,11 +445,12 @@ const SURROUNDINGS_HEADER = `## ${SURROUNDINGS_TITLE}`;
 // What a turn says when an earlier note under this heading named something that no longer holds, and nothing does now.
 export const SURROUNDINGS_CLEARED =
     `${SURROUNDINGS_HEADER}\n\nNothing an earlier note under this heading named holds any more: none of the owner's own ` +
-    "computers, browsers or phones is connected to this turn, a person is at the composer, and it is not the owner's night.";
+    "computers, browsers or phones is connected to this turn, a person is at the composer, it is not the owner's night, and this " +
+    "sandbox is not full.";
 
 // The facts the volatile entries read, and the runtime they spell tools for; every other fact is the session's own and
 // stays in the system block.
-export type SurroundingsFacts = Pick<GuidanceFacts, "runtime" | "unattended" | "night" | "hostDevices" | "ownBrowsers" | "ownPhones">;
+export type SurroundingsFacts = Pick<GuidanceFacts, "runtime" | "unattended" | "night" | "hostDevices" | "ownBrowsers" | "ownPhones" | "fleetPressure" | "subagents">;
 
 // The note's text for these facts, under its heading; undefined when no volatile entry applies.
 export const surroundingsText = (facts: SurroundingsFacts): string | undefined => {

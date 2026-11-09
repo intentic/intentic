@@ -8,7 +8,7 @@ import type { SubagentSession } from "@intentic/sandbox-contract/schemas/termina
 import type { MemoryReading } from "@intentic/constants/memory-room";
 import { listSubagentSessions, noteSubagentTask, resetSubagents, type SubagentWaitOutcome, waitForSubagent } from "../subagents.js";
 import type { Services } from "../../../composition.js";
-import { spawnServices } from "../../../harness/spawn-services.testing.js";
+import { HERE_CALM, spawnServices } from "../../../harness/spawn-services.testing.js";
 import { startTurnRun } from "../../run/turn/turn-runs.js";
 import { classifyFailure } from "../../run/frames/classify-failure.js";
 import { conversationIdentity, mainTreePlacement, placedTurn } from "../../run/placement/turn-placement.js";
@@ -1130,6 +1130,12 @@ describe("placing a child on the fleet", () => {
         ).toEqual({ kind: "runner", id: "rig" });
     });
 
+    // A calm sandbox keeps its children: moving one would cost a sync and the tools only this sandbox has, for nothing.
+    it("keeps a child nobody placed here while this sandbox is calm, however ready the runner", async () => {
+        const services = spawnServices({}, [{ id: "rig", online: true }], actors, undefined, HERE_CALM);
+        expect(await placementOf(services, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" })).toBeUndefined();
+    });
+
     it("keeps the work here when there is no fleet", async () => {
         expect(await placementOf(spawnServices({}, [], actors), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" })).toBeUndefined();
     });
@@ -1193,7 +1199,7 @@ describe("placing a child on the fleet", () => {
             on: "rig",
         });
         expect(result).toMatchObject({ ok: false });
-        expect(!result.ok && result.message).toContain(`on: "here"`);
+        expect(!result.ok && result.message).toContain("Leave `on` out");
     });
 
     it("`here` pins a child to this sandbox even with a fleet standing by", async () => {

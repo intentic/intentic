@@ -11,9 +11,10 @@ describe(`where heavy work runs`, () => {
         expect(runnerName({ id: `runner-x` })).toBe(`runner-x`);
     });
 
-    test(`this sandbox comes first, then every runner, an offline one still offered`, () => {
+    test(`this sandbox comes first, then any machine with room, then every runner, an offline one still offered`, () => {
         expect(targetOptions([omen, asleep]).map(({ value, label }) => [value, label])).toEqual([
             [HERE, `This sandbox`],
+            [`auto`, `Any machine with room`],
             [`runner-omen`, `omen`],
             [`runner-rog`, `rog`],
         ]);
@@ -48,5 +49,11 @@ describe(`where heavy work runs`, () => {
         expect(unavailableRunner(`runner-omen`, [omen])).toBeUndefined();
         expect(unavailableRunner(`runner-rog`, [asleep])).toBe(`rog is offline, so this runs here until it's back.`);
         expect(unavailableRunner(`runner-gone`, [omen])).toBe(`The runner "runner-gone" is no longer set up, so this runs here.`);
+    });
+
+    // Which runner is decided as each command starts, so only a fleet with none at all is worth a word.
+    test(`any machine with room says nothing while there is a runner, and that the work runs here while there is none`, () => {
+        expect(unavailableRunner(`auto`, [asleep])).toBeUndefined();
+        expect(unavailableRunner(`auto`, [])).toBe(`Runs here until a runner is set up on one of your machines.`);
     });
 });

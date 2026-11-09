@@ -1,5 +1,5 @@
 import type { OffloadFrame, OffloadRun } from "@intentic/sandbox-contract/schemas/offload";
-import { offloadRef, type RunnerCommandFrame } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { offloadRef, type RunnerCommandFrame,type RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { call } from "@orpc/server";
 import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";
@@ -7,6 +7,7 @@ import type { OffloadDeps } from "./offload.routes.js";
 import { createOffloadRoutes } from "./offload.routes.js";
 import { failureOf, orpcLink } from "../peers/orpc-link.testing.js";
 import { mergeHeavyRules } from "@intentic/constants/heavy-rules";
+import { measureHereForTest } from "../runners/fleet-advice.js";
 
 // This sandbox's side of an offloaded command: whether a runner can take it, the runner's frames relayed unchanged, and
 // every way a runner cannot take it after all answering with one refusal, which sends the line back here.
@@ -19,7 +20,11 @@ interface FakeRunner {
     readonly cancelled: string[];
 }
 
-const world = (runners: Record<string, FakeRunner | "offline">) => {
+// How full each machine is, for a kind sent to any machine with room; absent facts are a runner never measured.
+const QUIET: RunnerFacts = { cpus: 8, memoryMb: 32_768, freeDiskMb: 100_000, load: 0.1, memoryFreeMb: 28_000 };
+const SWAMPED: RunnerFacts = { ...QUIET, cpus: 16, load: 2 };
+
+const world = (runners: Record<string, FakeRunner | "offline">, facts: Record<string, RunnerFacts> = {}) => {
     const deps: OffloadDeps = {
         runners: unstubbed<OffloadDeps["runners"]>("runners", {
             list: async () => Object.keys(runners).map((id) => ({ id, host: id === "runner-omen" ? "omen" : undefined })) as never,
@@ -45,11 +50,14 @@ const world = (runners: Record<string, FakeRunner | "offline">) => {
                     },
                 } as never;
             },
+            refresh: async () => undefined,
+            // SAFETY: the fleet reading touches only `online` and `facts` of a runner's state.
+            state: (id: string) => (runners[id] === undefined || runners[id] === "offline" ? { online: false } : { online: true, facts: facts[id] }) as never,
         }),
         logger: unstubbed<OffloadDeps["logger"]>("logger", { warn: () => undefined }),
         heavyCommands: unstubbed<OffloadDeps["heavyCommands"]>("heavyCommands", { read: async () => mergeHeavyRules() }),
-        // The fleet advice's seams, which no case here reaches (runners/fleet-advice.test.ts covers it).
-        conversations: unstubbed<OffloadDeps["conversations"]>("conversations", {}),
+        // What the fleet reading counts: no turn running anywhere, so only the facts decide.
+        conversations: unstubbed<OffloadDeps["conversations"]>("conversations", { inFlightByRunner: () => new Map(), activeTurnCount: () => 0 }),
         resources: unstubbed<OffloadDeps["resources"]>("resources", {}),
         privacyShield: unstubbed<OffloadDeps["privacyShield"]>("privacyShield", {}),
         sandboxSettings: unstubbed<OffloadDeps["sandboxSettings"]>("sandboxSettings", {}),
@@ -98,6 +106,31 @@ describe("whether a runner can take a command", () => {
         const routes = world({ "runner-omen": "offline" });
         expect(await call(routes.target, { runner: "runner-omen" }, { context })).toMatchObject({ ready: false, why: expect.stringContaining("omen is offline") });
         expect(await call(routes.target, { runner: "runner-gone" }, { context })).toMatchObject({ ready: false, why: expect.stringContaining("no runner") });
+    });
+});
+
+// "Any machine with room" (settings `offload.commands` set to "auto"): decided as each command starts.
+describe("whether any machine with room can take a command", () => {
+    afterEach(() => measureHereForTest(undefined));
+
+    test("is no, with no reason to print, while this sandbox is calm", async () => {
+        measureHereForTest(async () => QUIET);
+        const routes = world({ "runner-omen": { cancelled: [] } }, { "runner-omen": QUIET });
+        expect(await call(routes.target, { runner: "auto" }, { context })).toEqual({ runner: "auto", name: "this sandbox", ready: false });
+    });
+
+    test("is the roomiest runner while this sandbox is busy, by its own id and its machine's name", async () => {
+        measureHereForTest(async () => SWAMPED);
+        const routes = world({ "runner-omen": { cancelled: [] }, "runner-z440": { cancelled: [] } }, { "runner-omen": QUIET, "runner-z440": { ...QUIET, load: 1 } });
+        expect(await call(routes.target, { runner: "auto" }, { context })).toEqual({ runner: "runner-omen", name: "omen", ready: true });
+    });
+
+    test("stays here in silence when no runner is better off, or none is online", async () => {
+        measureHereForTest(async () => SWAMPED);
+        expect(await call(world({ "runner-omen": { cancelled: [] } }, { "runner-omen": SWAMPED }).target, { runner: "auto" }, { context })).toMatchObject({ ready: false });
+        const offline = await call(world({ "runner-omen": "offline" }).target, { runner: "auto" }, { context });
+        expect(offline).toMatchObject({ ready: false });
+        expect(offline.why).toBeUndefined();
     });
 });
 

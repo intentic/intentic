@@ -9594,6 +9594,9 @@
         },
         "agentOffload": {
             "here": "This sandbox",
+            "anyRunner": "Any machine with room",
+            "anyRunnerDetail": "Runs here while this sandbox is calm; while it is busy, on whichever runner has the most room at that moment.",
+            "anyRunnerNone": "Runs here until a runner is set up on one of your machines.",
             "intro": "Run tests, typechecks and full checks on a runner on your machine instead of here; output and changed files sync back, or run here when it's offline or busy.",
             "kindBunTest": "Test runs (bun test)",
             "kindBunTestDetail": "bun test, and each package's own test runner.",
@@ -10395,6 +10398,10 @@
             "spokenReply": {
                 "label": "Spoken replies",
                 "blurb": "The few sentences you hear when you talk to the agent hands-free: what it did and what it needs from you, while the full reply stays on screen."
+            },
+            "subagentSizing": {
+                "label": "Subagent sizing",
+                "blurb": "Whether a subagent's task reads as heavy (builds, tests) or light, when a runner's last free slots should go to the heavier work."
             },
             "workflowFix": {
                 "label": "Workflow fixes",

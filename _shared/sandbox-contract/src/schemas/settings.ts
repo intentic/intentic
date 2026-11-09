@@ -547,7 +547,8 @@ export const SandboxSettingsSchema = z.object({
             "Whether each workspace repo keeps up with the remote branch it tracks. Every couple of minutes it is fetched, and what arrived is brought into the main tree: a fast-forward when you have no commits of your own, else a merge commit. Only while it is quiet (no turn working in the main tree, no merge or rebase of yours open), and never half-way: a conflict, or an uncommitted file in the way, leaves the repo exactly as it was until the next try. Following never pushes; the back-up rule does that, when you switch it on. Off, nothing is fetched.",
         ),
     // Where heavy work runs: a runner (the same image, on one of the owner's machines) instead of this sandbox. Keyed by
-    // the heavy-command rule an agent's command matched (workload/heavy-commands.ts), each naming a runner id. A
+    // the heavy-command rule an agent's command matched (workload/heavy-commands.ts), each naming a runner id, or "auto"
+    // (OFFLOAD_ANY_RUNNER) for whichever runner has the most room while this sandbox is busy. A
     // runner that is offline, outdated or full hands the work back here, which the command's output says. Never pushed
     // to a runner itself (definition/definition.ts), which must not pass work on again.
     // `sessions`: what a new conversation is told when this machine is busy and a runner has room
@@ -560,7 +561,7 @@ export const SandboxSettingsSchema = z.object({
         })
         .default({ commands: {}, sessions: "suggest" })
         .describe(
-            "Which work runs on a runner on one of your machines instead of this sandbox. `commands`: agents' heavy commands by the kind the heavy-command rules sort them into (tests, typechecks, verify…); the code travels as it stands, uncommitted work included, the output streams back, and any file the command changed comes back with it, while a machine that is offline, outdated or busy hands the work back to this sandbox, and the output says so. `sessions`: what happens to a new conversation while this machine is busy and one of your runners has room: `suggest` offers that machine above the composer, `auto` starts it there unless you keep it here, `off` says nothing.",
+            "Which work runs on a runner on one of your machines instead of this sandbox. `commands`: agents' heavy commands by the kind the heavy-command rules sort them into (tests, typechecks, verify…), each sent to one runner, or to `auto`: whichever runner has the most room at the moment the command starts, and only while this sandbox is busy (while it is calm the command runs here as usual). The code travels as it stands, uncommitted work included, the output streams back, and any file the command changed comes back with it, while a machine that is offline, outdated or busy hands the work back to this sandbox, and the output says so. `sessions`: what happens to a new conversation while this machine is busy and one of your runners has room: `suggest` offers that machine above the composer, `auto` starts it there unless you keep it here, `off` says nothing.",
         ),
     // A person answering a need is exactly the moment they want the work to go on (docs/architecture/needs.md), unlike a
     // restart nobody watched, so this one is on to begin with.

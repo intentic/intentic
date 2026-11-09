@@ -50,7 +50,7 @@ import type { TurnInput } from "../../seams/turn-starter.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import { opt } from "../../opt.js";
 import { dispatchOf, placementOf } from "../../runners/child-placement.js";
-import { childPlacement } from "./child-placement-live.js";
+import { childPlacementRefusal, placeStartingChild } from "./child-placement-live.js";
 import type { DelegateAsk } from "../../links/linked-children.js";
 import type { LinkListing } from "../../links/link-listing.js";
 import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, wearingParent, withRun } from "./child-spec.js";
@@ -1077,7 +1077,7 @@ const startChild = async (
     let handedOff = false;
     try {
         composeRuntimeFloor(parent.conversationId, provider, capabilitiesOf(provider, harness));
-        const placed = await childPlacement(services, governed.spec);
+        const placed = await placeStartingChild(services, governed.spec, { id, parent: parent.conversationId });
         if (placed.kind === "refused") {
             return { ok: false, message: placed.message };
         }
@@ -1230,9 +1230,9 @@ export const spawnChild = async (services: Services, parent: ChildParent, ask: C
         return { ok: false, message: verdict.message };
     }
     // A machine it cannot run on is said now, before a seat or an owner's card, not as a failure after it started.
-    const placed = await childPlacement(services, asked);
-    if (placed.kind === "refused") {
-        return { ok: false, message: placed.message };
+    const refused = await childPlacementRefusal(services, asked);
+    if (refused !== undefined) {
+        return { ok: false, message: refused };
     }
     const start: ChildStart = { asked, depth, id: `sub-${newConversationId()}` };
     if (verdict.kind === "proceed") {

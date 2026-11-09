@@ -8,7 +8,7 @@ import type {
     MachineLoad,
     MachineStanding,
     MachineStrain,
-    SessionsPlacement,
+    SessionsPlacement,FleetPressure
 } from "@intentic/sandbox-contract/schemas/offload";
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { Services } from "../composition.js";
@@ -22,6 +22,9 @@ import { credentialsTravel, runnerSlots } from "./runner-scheduler.js";
 // the composer's suggestion, the placement menu and an automatic placement read the same verdict. A runner is
 // suggested only when this machine is busy, that one is strictly better off, and the session could actually start
 // there: the turn would refuse otherwise (stream-agent.ts), and a suggestion that ends in a refusal is worse than none.
+// The same reading and the same rule place a spawned child nobody placed (child-placement.ts) and a heavy command sent
+// to "any machine with room" (`roomierRunner`), so a session, a subagent and a test run never disagree about which
+// machine has room.
 
 const MB = 1_048_576;
 // What one more agent takes, the figure the turn door and the fan-out's slots reserve per agent.
@@ -190,34 +193,108 @@ const fitOf = async (
     travels: credentialsTravel(session.agent, session.harness),
 });
 
-// Every enrolled runner as the hub knows it after a refresh, the word the owner knows its machine by, and the
-// conversations running a turn on it.
-const readRunners = async (deps: FleetAdviceDeps, inFlight: ReadonlyMap<string, number>): Promise<RunnerReading[]> => {
+// Work this daemon has already sent somewhere that no measurement shows yet: a child placed a moment ago whose turn has
+// not registered. Counted as the agent it is about to be and the memory it is about to hold, so a burst of siblings placed
+// one after another does not read the same empty machine each time (child-placement-live.ts keeps the book).
+export interface PendingWork {
+    readonly here: number;
+    readonly runners: ReadonlyMap<string, number>;
+}
+
+const NOTHING_PENDING: PendingWork = { here: 0, runners: new Map() };
+
+const lessPending = (facts: RunnerFacts, pending: number): RunnerFacts =>
+    pending === 0 || facts.memoryFreeMb === undefined ? facts : { ...facts, memoryFreeMb: Math.max(0, facts.memoryFreeMb - pending * AGENT_MB) };
+
+export type FleetReadDeps = Pick<Services, "runners" | "runnerHub" | "conversations" | "resources" | "workspace">;
+
+// This machine, by the ruler every runner is measured with. Swapped in tests: the load of the box a suite happens to run
+// on says nothing about the case under test.
+const realHere = async (deps: Pick<Services, "workspace" | "resources">): Promise<RunnerFacts> =>
+    await machineFacts(deps.workspace.root, { budget: deps.resources });
+let measureHere = realHere;
+export const measureHereForTest = (fake: ((deps: Pick<Services, "workspace" | "resources">) => Promise<RunnerFacts>) | undefined): void => {
+    measureHere = fake ?? realHere;
+};
+
+/** How full this sandbox is: every registered turn runs from here, except the ones dispatched to a runner. */
+export const readHere = async (deps: FleetReadDeps, pending: PendingWork = NOTHING_PENDING): Promise<MachineLoad> => {
+    const elsewhere = [...deps.conversations.inFlightByRunner().values()].reduce((sum, count) => sum + count, 0);
+    const facts = await measureHere(deps);
+    return machineLoad(lessPending(facts, pending.here), Math.max(0, deps.conversations.activeTurnCount() - elsewhere) + pending.here);
+};
+
+/**
+ * Every enrolled runner as the hub knows it, the word the owner knows its machine by, and the conversations running a
+ * turn on it. `refresh` asks each one again first (at most once per FACTS_FRESH_MS, and never longer than its timeout);
+ * without it the last answer stands, for a reader that must not wait on the fleet.
+ */
+export const readRunners = async (deps: FleetReadDeps, options: { readonly refresh: boolean; readonly pending?: PendingWork }): Promise<RunnerReading[]> => {
     const enrolled = await deps.runners.list();
-    await refreshRunnerFacts(
-        deps.runnerHub,
-        enrolled.map((runner) => runner.id),
-    );
+    if (options.refresh) {
+        await refreshRunnerFacts(
+            deps.runnerHub,
+            enrolled.map((runner) => runner.id),
+        );
+    }
+    const inFlight = deps.conversations.inFlightByRunner();
+    const pending = options.pending ?? NOTHING_PENDING;
     return enrolled.map((runner) => {
         const state = deps.runnerHub.state(runner.id);
-        return { id: runner.id, name: runner.host ?? runner.id, online: state.online, facts: state.facts, agents: inFlight.get(runner.id) ?? 0 };
+        const waiting = pending.runners.get(runner.id) ?? 0;
+        return {
+            id: runner.id,
+            name: runner.host ?? runner.id,
+            online: state.online,
+            facts: state.facts === undefined ? undefined : lessPending(state.facts, waiting),
+            agents: (inFlight.get(runner.id) ?? 0) + waiting,
+        };
     });
+};
+
+// A heavy command carries no model and no sign-in, so nothing but a machine's room decides whether it may go there.
+const COMMAND_FIT: SessionFit = { areas: false, shielded: false, travels: true };
+
+/**
+ * The runner a heavy command should run on instead of here (settings `offload.commands` set to "any machine with room"):
+ * none while this machine is calm, so a quiet sandbox never pays for a snapshot and a round trip, and otherwise the
+ * runner the session advice would suggest, strictly better off by standing and by headroom.
+ */
+export const roomierRunner = async (deps: FleetReadDeps): Promise<{ readonly runner: string; readonly name: string } | undefined> => {
+    const here = await readHere(deps);
+    if (here.standing === "calm") {
+        return undefined;
+    }
+    const runners = await readRunners(deps, { refresh: true });
+    return suggestionFor("auto", here, runners.map((runner) => fleetMachine(runner, COMMAND_FIT)));
+};
+
+/**
+ * The machines with room while this sandbox is full, by the word the owner knows each by: what a turn is told so that
+ * work it can send elsewhere goes there (agent/prompt/guidance.ts `fleet`). Undefined while this sandbox is anything
+ * but full, or no runner is calm. Read off the last answers the runners gave, so a turn never waits on the fleet.
+ */
+export const fleetPressure = async (deps: FleetReadDeps): Promise<FleetPressure | undefined> => {
+    const here = await readHere(deps);
+    if (here.standing !== "full") {
+        return undefined;
+    }
+    const roomy = (await readRunners(deps, { refresh: false }))
+        .filter((runner) => runner.online && runner.facts !== undefined && machineLoad(runner.facts, runner.agents).standing === "calm")
+        .map((runner) => runner.name);
+    return roomy.length === 0 ? undefined : { roomy };
 };
 
 // The advice for one draft. `areas` is the caller's own limit (auth/principal.ts areasOf).
 export const fleetAdvice = async (deps: FleetAdviceDeps, input: FleetAdviceInput, areas: readonly string[] | undefined): Promise<FleetAdvice> => {
     const session = withRuntimeDefaults(input);
-    const inFlight = deps.conversations.inFlightByRunner();
-    const elsewhere = [...inFlight.values()].reduce((sum, count) => sum + count, 0);
-    const [settings, hereFacts, runners, fit] = await Promise.all([
+    const [settings, here, runners, fit] = await Promise.all([
         deps.sandboxSettings.get(),
-        machineFacts(deps.workspace.root, { budget: deps.resources }),
-        readRunners(deps, inFlight),
+        readHere(deps),
+        readRunners(deps, { refresh: true }),
         fitOf(deps, session, areas),
     ]);
     const mode = settings.offload.sessions;
-    // Every registered turn runs from here; the ones dispatched to a runner run there, so they count there instead.
-    const here = machineLoad(hereFacts, Math.max(0, deps.conversations.activeTurnCount() - elsewhere));
     const machines = runners.map((runner) => fleetMachine(runner, fit));
     return { mode, here, machines, ...opt("suggestion", suggestionFor(mode, here, machines)) };
 };

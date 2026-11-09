@@ -1,17 +1,18 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { OffloadFrame, OffloadRecord, OffloadTarget } from "@intentic/sandbox-contract/schemas/offload";
+import { OFFLOAD_ANY_RUNNER, type OffloadFrame, type OffloadRecord, type OffloadTarget } from "@intentic/sandbox-contract/schemas/offload";
 import { offloadContract } from "@intentic/sandbox-contract/contracts/offload.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { areasOf } from "../auth/principal.js";
-import { type FleetAdviceDeps, fleetAdvice } from "../runners/fleet-advice.js";
+import { type FleetAdviceDeps, fleetAdvice, roomierRunner } from "../runners/fleet-advice.js";
 
 /* THIS SANDBOX'S SIDE OF AN OFFLOADED COMMAND (settings `offload`). The in-sandbox `offload-run` command asks whether the
    runner a kind of heavy work goes to can take it, snapshots the tree, then runs the line through here, which relays it
    to that runner (runners/runner-command.ts) and streams its frames back unchanged. Nothing here decides WHAT goes where:
    the Bash hook already put `offload-run --to <runner>` in front of the line from the setting. A runner that cannot take
-   it answers with one refusal, and `offload-run` runs the line here instead. */
+   it answers with one refusal, and `offload-run` runs the line here instead. The one decision made here is for a kind
+   sent to "any machine with room" (OFFLOAD_ANY_RUNNER): which runner, if any, at the moment the line starts. */
 
 export type OffloadDeps = Pick<Services, "runners" | "runnerHub" | "logger" | "heavyCommands"> & FleetAdviceDeps;
 
@@ -25,7 +26,23 @@ const nameOf = async (deps: OffloadDeps, runner: string): Promise<string> => {
     return enrolled?.host ?? runner;
 };
 
+// "Any machine with room": the runner the fleet reading picks, else here without a word, since a calm sandbox running its
+// own tests is not news. A pick that fails the checks below by the time it is asked is said like any other.
+const anyTarget = async (deps: OffloadDeps): Promise<OffloadTarget> => {
+    let picked: Awaited<ReturnType<typeof roomierRunner>>;
+    try {
+        picked = await roomierRunner(deps);
+    } catch (error) {
+        deps.logger.warn({ err: error }, "offload: the fleet could not be read, the line runs here");
+        picked = undefined;
+    }
+    return picked === undefined ? { runner: OFFLOAD_ANY_RUNNER, name: "this sandbox", ready: false } : await offloadTarget(deps, picked.runner);
+};
+
 export const offloadTarget = async (deps: OffloadDeps, runner: string): Promise<OffloadTarget> => {
+    if (runner === OFFLOAD_ANY_RUNNER) {
+        return await anyTarget(deps);
+    }
     const name = await nameOf(deps, runner);
     const enrolled = (await deps.runners.list()).some((entry) => entry.id === runner);
     if (!enrolled) {

@@ -35,7 +35,8 @@ const SpawnBodySchema = z.object({
     model: z.string().min(1),
     harness: AgentHarnessSchema.optional(),
     effort: z.string().min(1).optional(),
-    // Which machine runs it: a runner's name, or "here" for this sandbox; absent lets the fleet scheduler pick.
+    // Which machine runs it: a runner's name, or "here" for this sandbox; absent lets the fleet place it where there is
+    // room (runners/child-placement.ts), the answer to prefer.
     on: z.string().min(1).optional(),
 });
 

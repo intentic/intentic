@@ -6,7 +6,9 @@ import { AgentHarnessSchema, AgentProviderSchema } from "./agent.js";
 // sandbox hands a runner on one of the owner's machines instead of running it itself.
 
 // Whether a runner can take a line right now, asked before the tree is snapshotted, so a machine that is asleep costs
-// nothing. `name` is the machine the runner sits on, the word the owner picked it by.
+// nothing. `name` is the machine the runner sits on, the word the owner picked it by. Asked for OFFLOAD_ANY_RUNNER, it
+// answers with the runner it picked, or not ready with no `why` when this sandbox has room, which runs the line here
+// in silence.
 export const OffloadTargetSchema = z.object({
     runner: z.string().min(1),
     name: z.string().min(1),
@@ -15,6 +17,11 @@ export const OffloadTargetSchema = z.object({
     why: z.string().optional(),
 });
 export type OffloadTarget = z.infer<typeof OffloadTargetSchema>;
+
+// What settings `offload.commands` names instead of one runner: whichever has the most room at the moment the command
+// starts, and only while this sandbox is busy (runners/fleet-advice.ts `roomierRunner`). While this sandbox is calm the
+// command runs here without a word. Reserved: no runner is ever enrolled under it.
+export const OFFLOAD_ANY_RUNNER = "auto";
 
 export const OffloadRunSchema = RunnerCommandSchema.extend({ runner: z.string().min(1) });
 export type OffloadRun = z.infer<typeof OffloadRunSchema>;
@@ -118,3 +125,8 @@ export const FleetAdviceSchema = z.object({
     suggestion: z.object({ runner: z.string().min(1), name: z.string().min(1) }).optional(),
 });
 export type FleetAdvice = z.infer<typeof FleetAdviceSchema>;
+
+// While this sandbox is full and at least one runner is calm, the machines with room by the word the owner knows each by:
+// what a turn is told so that work it can send elsewhere goes there. Absent otherwise.
+export const FleetPressureSchema = z.object({ roomy: z.array(z.string().min(1)).min(1) });
+export type FleetPressure = z.infer<typeof FleetPressureSchema>;

@@ -9594,6 +9594,9 @@
         },
         "agentOffload": {
             "here": "Ce sandbox",
+            "anyRunner": "N'importe quelle machine qui a de la place",
+            "anyRunnerDetail": "S'exécute ici tant que ce sandbox est calme ; quand il est chargé, sur le runner qui a le plus de place à ce moment-là.",
+            "anyRunnerNone": "S'exécute ici jusqu'à ce qu'un runner soit configuré sur l'une de vos machines.",
             "intro": "Lancez tests, vérifications de types et contrôles complets sur un runner sur votre machine plutôt qu'ici ; la sortie et les fichiers modifiés se synchronisent, ou s'exécutent ici si la machine est hors ligne ou occupée.",
             "kindBunTest": "Exécutions de tests (bun test)",
             "kindBunTestDetail": "bun test, et le lanceur de tests propre à chaque paquet.",
@@ -10395,6 +10398,10 @@
             "spokenReply": {
                 "label": "Réponses vocales",
                 "blurb": "Les quelques phrases que vous entendez quand vous parlez à l'agent en mains libres : ce qu'il a fait et ce qu'il attend de vous, pendant que la réponse complète reste à l'écran."
+            },
+            "subagentSizing": {
+                "label": "Taille des sous-agents",
+                "blurb": "Si la tâche d'un sous-agent semble lourde (builds, tests) ou légère, quand les dernières places libres d'un runner doivent aller au travail le plus lourd."
             },
             "workflowFix": {
                 "label": "Corrections du flux de travail",

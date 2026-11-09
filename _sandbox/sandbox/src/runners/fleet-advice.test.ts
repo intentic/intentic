@@ -1,6 +1,18 @@
 import type { FleetMachine, MachineLoad } from "@intentic/sandbox-contract/schemas/offload";
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
-import { fleetMachine, machineLoad, type RunnerReading, type SessionFit, suggestionFor } from "./fleet-advice.js";
+import { unstubbed } from "@intentic/testing";
+import {
+    type FleetReadDeps,
+    fleetMachine,
+    fleetPressure,
+    machineLoad,
+    measureHereForTest,
+    readHere,
+    readRunners,
+    type RunnerReading,
+    type SessionFit,
+    suggestionFor,
+} from "./fleet-advice.js";
 
 // Which machine a new session should start on. The verdicts are read by a person deciding where their work goes, so
 // each case is a moment they would recognise: a box filling up, a quiet machine across the room, a suggestion that
@@ -137,5 +149,37 @@ describe("which machine a new session is pointed at", () => {
         const fleet = machines(["zeta", idle()], ["crowded", idle(), 3], ["alpha", idle()]);
         expect(suggestionFor("suggest", busyHere, fleet)?.runner).toBe("alpha");
         expect(suggestionFor("suggest", busyHere, machines(["quiet", idle({ load: 0.05 })], ["noisy", idle({ load: 0.5 })]))?.runner).toBe("quiet");
+    });
+});
+
+// The reading every placement shares, with what this daemon placed a moment ago and no measurement shows yet.
+describe("the fleet as one reading", () => {
+    const deps = (runners: Record<string, RunnerFacts>, running = 0): FleetReadDeps =>
+        unstubbed<FleetReadDeps>("fleet", {
+            // SAFETY: the reading touches only a runner's `id` and `host` in the enrolment list.
+            runners: unstubbed<FleetReadDeps["runners"]>("runners", { list: async () => Object.keys(runners).map((id) => ({ id, host: `${id}-pc` })) as never }),
+            // SAFETY: the reading touches only `online` and `facts` of a runner's state.
+            runnerHub: unstubbed<FleetReadDeps["runnerHub"]>("runnerHub", { refresh: async () => undefined, state: (id: string) => ({ online: true, facts: runners[id] }) as never }),
+            conversations: unstubbed<FleetReadDeps["conversations"]>("conversations", { inFlightByRunner: () => new Map(), activeTurnCount: () => running }),
+        });
+    afterEach(() => measureHereForTest(undefined));
+
+    // A fan-out's fourth child is placed before the first three register: without the book it reads an empty machine.
+    test("counts children placed a moment ago as the agents and memory they are about to be", async () => {
+        measureHereForTest(async () => idle());
+        const pending = { here: 3, runners: new Map([["omen", 2]]) };
+        expect(await readHere(deps({}, 1), pending)).toMatchObject({ agents: 4, memoryFreeMb: 28_000 - 3 * 1024 });
+        const [omen] = await readRunners(deps({ omen: idle() }), { refresh: false, pending });
+        expect(omen).toMatchObject({ name: "omen-pc", agents: 2, facts: { memoryFreeMb: 28_000 - 2 * 1024 } });
+    });
+
+    test("names the calm machines only while this sandbox is full", async () => {
+        const fleet = deps({ omen: idle(), z440: idle({ load: 1 }) });
+        measureHereForTest(async () => idle({ memoryFreeMb: 500 }));
+        expect(await fleetPressure(fleet)).toEqual({ roomy: ["omen-pc"] });
+        measureHereForTest(async () => idle({ load: 1 }));
+        expect(await fleetPressure(fleet)).toBeUndefined();
+        measureHereForTest(async () => idle({ memoryFreeMb: 500 }));
+        expect(await fleetPressure(deps({ z440: idle({ load: 1 }) }))).toBeUndefined();
     });
 });

@@ -96,6 +96,16 @@ export const MODEL_ROLES = [
         setup: "low",
     },
     {
+        // Asked only when a spawned subagent nobody placed could take one of a runner's last free slots while this
+        // sandbox still has room for light work (runners/child-placement.ts roomContested); never on a quiet fleet.
+        id: "subagent-sizing",
+        label: "Subagent sizing",
+        blurb: "Whether a subagent's task reads as heavy (builds, tests) or light, when a runner's last free slots should go to the heavier work.",
+        kind: "helper",
+        icon: "server",
+        setup: "low",
+    },
+    {
         id: "pipeline-fix",
         label: "Pipeline fixes",
         blurb: "The agent started by Fix on a failed pipeline.",

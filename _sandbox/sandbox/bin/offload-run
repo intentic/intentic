@@ -7,8 +7,9 @@
 // output streams as it comes, the exit code is the command's, a stop stops it on the runner, and every file the command
 // changed comes back into this tree, as if it had run here.
 //
-// 1. Asks the daemon whether the runner can take it (connected, able); if not, runs the command HERE, behind the local
-//    heavy queue it was handed (--here), after one line saying why.
+// 1. Asks the daemon whether the runner can take it (connected, able), or which one has room when <runner> is "auto"
+//    (settings `offload.commands` set to any machine with room); if not, runs the command HERE, behind the local
+//    heavy queue it was handed (--here), after one line saying why (none for "auto" while this sandbox has room).
 // 2. Snapshots this repository's working tree as one commit, uncommitted and untracked work included, ignored files not,
 //    under refs/intentic-offload/<run>, which the runner fetches through the daemon's git door. The ref goes once the
 //    run ends.
@@ -209,6 +210,20 @@ const main = async () => {
         runHere("no runner named");
         return;
     }
+    // Asked first: for a kind sent to "any machine with room" the answer is usually that this sandbox has room, and then
+    // the line runs here as if nothing stood in front of it, with no word and no git work. A refusal with no `why` is
+    // exactly that answer; any other carries its reason.
+    let target;
+    try {
+        const answer = await call("GET", `/offload/runners/${encodeURIComponent(options.to)}`);
+        target = answer.status === 200 ? JSON.parse(answer.text) : undefined;
+    } catch {
+        target = undefined;
+    }
+    if (target === undefined || !target.ready) {
+        runHere(target === undefined ? "the daemon could not say whether the runner is there" : target.why);
+        return;
+    }
     let toplevel;
     let repo;
     try {
@@ -221,17 +236,6 @@ const main = async () => {
     }
     if (repo === undefined) {
         runHere("this repository is not one the runner can fetch");
-        return;
-    }
-    let target;
-    try {
-        const answer = await call("GET", `/offload/runners/${encodeURIComponent(options.to)}`);
-        target = answer.status === 200 ? JSON.parse(answer.text) : undefined;
-    } catch {
-        target = undefined;
-    }
-    if (target === undefined || !target.ready) {
-        runHere(target?.why ?? "the daemon could not say whether the runner is there");
         return;
     }
 
@@ -284,7 +288,8 @@ const main = async () => {
             "POST",
             "/offload/runs",
             {
-                runner: options.to,
+                // The runner the daemon answered with: the one named, or the one it picked for "any machine with room".
+                runner: target.runner ?? options.to,
                 runId,
                 repo,
                 ref,

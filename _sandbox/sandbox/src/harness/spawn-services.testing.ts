@@ -12,6 +12,9 @@ import { memoryFleet } from "../conversations/registry/agents-registry.testing.j
 import type { MemoryReading } from "@intentic/constants/memory-room";
 import { budgetOn, ROOMY_READING } from "../agent/run/turn/turn-plan.testing.js";
 import { privacySliceFake } from "../privacy/privacy-slice.testing.js";
+import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { measureHereForTest } from "../runners/fleet-advice.js";
+import { resetChildPlacementForTest } from "../agent/subagents/child-placement-live.js";
 
 // The daemon as a child spawn sees it (agent/subagents/children.ts): the settings it budgets by, the transcript a child
 // turn appends to, the fleet it may be placed onto, and the actors its records, cards and runs are held by. Anything
@@ -35,13 +38,21 @@ export interface FakeRunner {
 // `conversations` are the actors the spawn's records, cards and runs are held by; a fresh fleet's unless the suite reads
 // them itself. `memory` is the box a child waits on for room, roomy unless the suite makes it short; read afresh on every
 // look, so a suite frees memory by changing what it returns.
+// How this sandbox measures, for the fleet's placement (runners/fleet-advice.ts): full by default, so a child nobody
+// placed goes to any runner with room, as the cases that name a fleet expect; `HERE_CALM` keeps one here.
+const HERE_FULL: RunnerFacts = { cpus: 16, memoryMb: 32_768, freeDiskMb: 100_000, load: 2, memoryFreeMb: 512 };
+export const HERE_CALM: RunnerFacts = { cpus: 16, memoryMb: 32_768, freeDiskMb: 100_000, load: 0.1, memoryFreeMb: 28_000 };
+
 export const spawnServices = (
     over: Partial<SandboxSettings> = {},
     fleet: readonly FakeRunner[] = [],
     conversations: ConversationActors = memoryFleet().conversations,
     memory: () => MemoryReading = () => ROOMY_READING,
-): Services =>
-    unstubbed<Services>("services", {
+    here: RunnerFacts = HERE_FULL,
+): Services => {
+    measureHereForTest(async () => here);
+    resetChildPlacementForTest();
+    return unstubbed<Services>("services", {
         // Off, as a fresh sandbox has it: a child is placed by the scheduler alone.
         privacyShield: privacySliceFake().privacyShield,
         resources: budgetOn(memory, { waitDeadlineMs: 10_000 }),
@@ -101,3 +112,4 @@ export const spawnServices = (
         // Heard by nobody: what reacts to a child's settled run is composition's to subscribe.
         events: createDomainEvents(() => {}),
     });
+};

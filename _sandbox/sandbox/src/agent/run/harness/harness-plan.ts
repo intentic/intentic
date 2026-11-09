@@ -1,3 +1,4 @@
+import { type FleetReadDeps, fleetPressure } from "../../../runners/fleet-advice.js";
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { profileOf, type RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
@@ -40,6 +41,7 @@ export type HarnessPlanDeps = HarnessCredentialDeps &
     HarnessHooksDeps &
     HarnessServersDeps &
     TurnToolsDeps &
+    FleetReadDeps &
     Pick<Services, "agent" | "capabilities" | "files" | "heavyCommands" | "hostReach" | "perf" | "phoneReach" | "sandboxSettings" | "webextReach">;
 
 // The schema's own defaults, so an untouched setting can be told from one the owner set to the same value; not restated
@@ -162,7 +164,7 @@ const surroundingsOf = (
     deps: HarnessPlanDeps,
     input: RoutedAgentTurn,
     context: TurnContext,
-    tools: Pick<TurnTools, "hostDevices" | "ownBrowsers" | "ownPhones">,
+    tools: Pick<TurnTools, "hostDevices" | "ownBrowsers" | "ownPhones" | "fleetPressure">,
 ): TurnNote | undefined =>
     context.base.spec.stablePrompt === true
         ? surroundingsNote(
@@ -176,6 +178,7 @@ const surroundingsOf = (
                   hostDevices: tools.hostDevices,
                   ownBrowsers: tools.ownBrowsers,
                   ownPhones: tools.ownPhones,
+                  fleetPressure: tools.fleetPressure,
               },
           )
         : undefined;
@@ -213,6 +216,9 @@ export const planHarnessTurn = async (
     const hostDevices = await deps.hostReach(granted);
     const ownBrowsers = await deps.webextReach(granted);
     const ownPhones = await deps.phoneReach(granted);
+    // Said only while this sandbox is full and a runner is calm; a reading that fails says nothing.
+    // allow(silent-catch): the paragraph is advice; a fleet that cannot be read leaves the turn as it was.
+    const pressure = await fleetPressure(deps).catch(() => undefined);
     // Resolved by planTurn and already applied to `granted`; the open, attended fallback is only for the bench.
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
     // Resolved once and read twice (the plugin list and `iqAvailable`), so the notice and the load can't disagree.
@@ -233,6 +239,7 @@ export const planHarnessTurn = async (
         hostDevices,
         ownBrowsers,
         ownPhones,
+        ...opt("fleetPressure", pressure),
         iqAvailable: iqLoaded,
         ...harnessAccounts(deps, input, context, granted),
         ...shellTools(deps, settings),

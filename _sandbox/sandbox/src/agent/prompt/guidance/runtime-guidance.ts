@@ -1,3 +1,5 @@
+import { type FleetReadDeps, fleetPressure } from "../../../runners/fleet-advice.js";
+import { opt } from "../../../opt.js";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ANONYMOUS_BROWSER_SERVER, ROUTED_BROWSER_SERVER } from "../../../browser/tools/browser-servers.js";
@@ -20,7 +22,7 @@ import { tmuxRunEnabled } from "../../tools/agent-terminals.js";
    server names it mounted are the facts, read the same way for every runtime, so nothing reaches one loop and is kept
    from another. */
 
-export type RuntimeGuidanceDeps = Pick<Services, "hostReach" | "webextReach" | "phoneReach" | "workspace" | "conversations">;
+export type RuntimeGuidanceDeps = Pick<Services, "hostReach" | "webextReach" | "phoneReach" | "workspace" | "conversations"> & FleetReadDeps;
 
 // The daemon's own servers a turn may hold (runtimes/daemon-tools/daemon-servers.ts).
 const UI_SERVER = "ui";
@@ -54,7 +56,13 @@ const runtimeGuidanceFacts = async (deps: RuntimeGuidanceDeps, turn: RuntimeGuid
     const { capabilities, request, granted } = turn;
     const mounted = new Set((request.tools.remote ?? []).map((tool) => tool.name));
     const browsers = mounted.has(ANONYMOUS_BROWSER_SERVER) || mounted.has(ROUTED_BROWSER_SERVER);
-    const [hostDevices, ownBrowsers, ownPhones] = await Promise.all([deps.hostReach(granted), deps.webextReach(granted), deps.phoneReach(granted)]);
+    const [hostDevices, ownBrowsers, ownPhones, pressure] = await Promise.all([
+        deps.hostReach(granted),
+        deps.webextReach(granted),
+        deps.phoneReach(granted),
+        // allow(silent-catch): the paragraph is advice; a fleet that cannot be read leaves the turn as it was.
+        fleetPressure(deps).catch(() => undefined),
+    ]);
     return {
         // How this runtime's tool list spells an MCP tool, as its arm said (TurnTools.mcpToolPrefix); absent is `mcp__<server>__<tool>`.
         runtime: otherRuntime(capabilities.secrets, request.tools.mcpToolPrefix, filesShellJobs(capabilities, request)),
@@ -74,6 +82,7 @@ const runtimeGuidanceFacts = async (deps: RuntimeGuidanceDeps, turn: RuntimeGuid
         hostDevices,
         ownBrowsers,
         ownPhones,
+        ...opt("fleetPressure", pressure),
     };
 };
 

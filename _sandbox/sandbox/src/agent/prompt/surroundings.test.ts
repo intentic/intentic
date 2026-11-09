@@ -107,3 +107,17 @@ test("the owner's night is said as it begins, and says what a question gets", ()
     // Morning: the night is over, and the turn is told so.
     expect(surroundingsNote(actors, "c1", RESUMED, UNWATCHED)?.text).toContain("Nobody is watching this turn");
 });
+
+// While this sandbox is full and a runner is calm, the turn hears where its work can go; on a quiet fleet, nothing.
+test("a full sandbox is said with the machines that have room, and the spawn tool only where the turn holds it", () => {
+    const pressed = { ...QUIET, fleetPressure: { roomy: ["omen", "z440"] } };
+    const note = surroundingsNote(fleet(), "c1", FRESH, pressed)?.text ?? "";
+    expect(note).toContain("This sandbox is full right now (memory or CPU), while omen and z440 have room.");
+    expect(note).toContain("`mcp__subagents__spawn`");
+    expect(surroundingsNote(fleet(), "c1", FRESH, { ...pressed, subagents: false })?.text).not.toContain("spawn");
+    expect(surroundingsNote(fleet(), "c1", FRESH, QUIET)).toBeUndefined();
+    // Said once, then cleared in words that say the sandbox has room again.
+    const actors = fleet();
+    sent(actors, "c2", surroundingsNote(actors, "c2", FRESH, pressed), true);
+    expect(surroundingsNote(actors, "c2", RESUMED, QUIET)?.text).toContain("this sandbox is not full");
+});

@@ -224,8 +224,8 @@ const SPAWN_FIELDS = {
         .string()
         .optional()
         .describe(
-            'Which machine runs it: a runner\'s name, or "here" to keep it in this sandbox. Leave it out and the fleet ' +
-                "decides, which is what spreads a fan-out over every machine you have connected.",
+            "Leave it out: the fleet places it where there is room (here while calm, else a runner) and the result says where. Name a " +
+                'runner only when the task needs that machine (its hardware, OS, files), "here" only when it needs what only this sandbox has.',
         ),
     fallbacks: FALLBACKS_FIELD,
     schema: SCHEMA_FIELD,
