@@ -210,22 +210,38 @@ describe(`the browser's other accounts`, () => {
         expect(failure()).toBe(`The sign-in for ada@company.example has ended.`);
     });
 
-    test(`offers signing out of all of them only beside another account`, async () => {
-        await mountPanel();
-        expect(found(`sign-out-all`)).toBeNull();
-        app?.unmount();
+    test(`signing out beside another account asks which: this one, or all of them`, async () => {
         others.value = [WORK];
         await mountPanel();
+        await pressSignOut();
+        expect([signOut.mock.calls.length, signOutAll.mock.calls.length, found(`sign-out-all`) !== null]).toEqual([0, 0, true]);
         found(`sign-out-all`)?.click();
         await settle();
         expect([signOutAll.mock.calls.length, signOut.mock.calls.length]).toEqual([1, 0]);
+    });
+
+    test(`answering "this one" signs out of only the account in front of the reader`, async () => {
+        others.value = [WORK];
+        await mountPanel();
+        await pressSignOut();
+        const confirm = document.body.querySelector<HTMLButtonElement>(`.ui-dialog-confirm button[autofocus]`);
+        confirm?.click();
+        await settle();
+        expect([signOut.mock.calls.length, signOutAll.mock.calls.length]).toEqual([1, 0]);
+    });
+
+    test(`the menu itself has no row for signing out of all of them`, async () => {
+        others.value = [WORK];
+        await mountPanel();
+        expect(found(`sign-out-all`)).toBeNull();
     });
 
     test(`a sign-out that carried on as another account goes nowhere else and says nothing`, async () => {
         others.value = [WORK];
         signOut.mockImplementation(async () => `switched`);
         await mountPanel();
-        found(`sign-out`)?.click();
+        await pressSignOut();
+        document.body.querySelector<HTMLButtonElement>(`.ui-dialog-confirm button[autofocus]`)?.click();
         await settle();
         expect([signOut.mock.calls.length, failure(), pushed]).toEqual([1, undefined, []]);
     });

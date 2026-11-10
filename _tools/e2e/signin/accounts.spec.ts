@@ -212,6 +212,14 @@ const signInByCode = async (context: BrowserContext, email: string): Promise<Pag
 
 const byTest = (scope: Page | Locator, name: string): Locator => scope.locator(`[data-test="${name}"]`);
 
+/** Signing out beside another account asks which: this one (the dialog's accent button) or all of them (`sign-out-all`). */
+const askedToSignOut = async (page: Page, menu: Locator): Promise<Locator> => {
+    await byTest(menu, `sign-out`).click();
+    const dialog = page.getByRole(`dialog`).filter({ has: byTest(page, `sign-out-all`) });
+    await expect(dialog).toBeVisible();
+    return dialog;
+};
+
 /** Opens the rail's account menu, pinned, and returns it; one already open is returned as it is. */
 const openAccountMenu = async (page: Page): Promise<Locator> => {
     const menu = page.getByRole(`dialog`).filter({ has: byTest(page, `sign-out`) });
@@ -367,16 +375,18 @@ test(`a change a page asks for as one account is refused once the browser has mo
 test(`signing out of one account carries on as the other, and signing out of all of them leaves nobody signed in`, async ({ browser }) => {
     const { context, page, first, second } = await twoAccounts(browser, `sign-out`);
     const menu = await expectMenuFor(page, second);
-    await pressToLeave(page, byTest(menu, `sign-out`));
+    const asked = await askedToSignOut(page, menu);
+    await pressToLeave(page, asked.getByRole(`button`, { name: `Sign out`, exact: true }));
     // On as the account still signed in, never to the sign-in screen.
     await expectHomeAs(page, first);
     expect(await signedInHere(context)).toEqual([first]);
 
-    // "Sign out of all accounts" is offered only beside another account, so a third joins first.
+    // "Sign out of all" is offered only beside another account, so a third joins first.
     const third = newEmailPerson(`sign-out-third`);
     await addAccountByCode(page, third, first);
     const thirdMenu = await expectHomeAs(page, third);
-    await pressToLeave(page, byTest(thirdMenu, `sign-out-all`));
+    const askedAgain = await askedToSignOut(page, thirdMenu);
+    await pressToLeave(page, byTest(askedAgain, `sign-out-all`));
     await expect(page).toHaveURL(LOGIN);
     expect(await signedInAs(context)).toBeUndefined();
     expect(await signedInHere(context)).toEqual([]);
