@@ -22,7 +22,7 @@ const session = store(`sessionStorage`);
 const activeSandboxId = ref<string | undefined>(`sb1`);
 jest.mock("../../app/storage/activeSandbox", () => ({ activeSandboxId }));
 
-const { activateTab, closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, openBeside, setSplit, sideTabId, useSidePanel } =
+const { activateTab, closeAllTabs, closeOtherTabs, closeTab, closeTabs, cycleTab, keepTab, openBeside, reopenClosedTab, setSplit, sideTabId, useSidePanel } =
     await import("./sideTabs");
 
 const panel = useSidePanel();
@@ -165,6 +165,49 @@ describe(`closing`, () => {
         expect(panel.active.value).toBe(idOf(`a.ts`));
         cycleTab(-1);
         expect(panel.active.value).toBe(idOf(`c.ts`));
+    });
+});
+
+describe(`reopening a closed tab`, () => {
+    beforeEach(() => {
+        for (const path of [`a.ts`, `b.ts`, `c.ts`]) {
+            openBeside(`file`, file(path), { keep: true });
+        }
+    });
+
+    it(`brings the last close back in its place, focused`, () => {
+        activateTab(idOf(`b.ts`));
+        closeTab(idOf(`b.ts`));
+        expect(panel.canReopen.value).toBe(true);
+
+        reopenClosedTab();
+
+        expect(paths()).toEqual([`a.ts`, `b.ts`, `c.ts`]);
+        expect(panel.active.value).toBe(idOf(`b.ts`));
+        expect(panel.canReopen.value).toBe(false);
+    });
+
+    it(`undoes a bulk close as one`, () => {
+        closeOtherTabs(idOf(`a.ts`));
+        reopenClosedTab();
+
+        expect(paths()).toEqual([`a.ts`, `b.ts`, `c.ts`]);
+    });
+
+    it(`does not remember a tab closed for it, which the reader never closed`, () => {
+        closeTabs(new Set([idOf(`c.ts`)]));
+
+        expect(panel.canReopen.value).toBe(false);
+        reopenClosedTab();
+        expect(paths()).toEqual([`a.ts`, `b.ts`]);
+    });
+
+    it(`leaves a tab already open again where it is`, () => {
+        closeTab(idOf(`a.ts`));
+        openBeside(`file`, file(`a.ts`), { keep: true });
+        reopenClosedTab();
+
+        expect(paths()).toEqual([`b.ts`, `c.ts`, `a.ts`]);
     });
 });
 

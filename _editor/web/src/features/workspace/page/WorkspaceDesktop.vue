@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { Button, clipboardOf, ui, ContextMenu, type IconName, ResizeSeam, SegmentedControl, type Tip, useNarrow } from "@intentic/ui";
+import { Button, ui, ContextMenu, type IconName, ResizeSeam, SegmentedControl, type Tip, useNarrow } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { type BuiltinCommand, registerBuiltin } from "../../../workbench/commands/builtinCommands";
 import { commandShortcut, type CommandRegistration } from "../../../workbench/commands/useCommands";
+import { fileTabMenu, type TabStripActions, tabStripMenu } from "../../../workbench/commands/tabMenu";
 import { publishContextKey } from "../../../workbench/commands/contextKeys";
 import { fileUndoable } from "../../../models/workspace/tree/deleteUndo";
 import { UNDO_DELETE, useDeleteUndo } from "../explorer/undo/useDeleteUndo";
@@ -454,29 +455,14 @@ const allTabs = computed(() => [...strip.value.main.tabs, ...strip.value.side.ta
 // edits, the editor's own or an extension editor's, waits for the reader's word, a lone × included. The store keeps the
 // closed tabs for Reopen Closed Tab; the guard forgets their edits and dirty flags.
 const { question: closeQuestion, asking: askingToClose, closeTab, closeTabs: requestClose, closeAnyway, keepOpen } = useCloseGuard();
-// The strip-wide rows (shared with chat/terminal menus); Reopen survives an empty strip, since a mis-close
-// leaves nothing else to right-click.
-const stripItems = computed<MenuItem[]>(() => [
-    ...(allTabs.value.length === 0
-        ? []
-        : [
-              {
-                  label: t(`workspace.workspaceDesktop.closeAll`),
-                  shortcut: commandShortcut(`workspace.closeAllTabs`),
-                  command: () => requestClose(new Set(allTabs.value.map((tab) => tab.id))),
-              },
-          ]),
-    ...(closedTabs.value.length === 0
-        ? []
-        : [
-              {
-                  label: t(`workspace.workspaceDesktop.reopenClosedTab`),
-                  shortcut: commandShortcut(`workspace.reopenClosedTab`),
-                  command: () => reopenClosedTab(),
-              },
-          ]),
-]);
+// The strip-wide rows; Reopen survives an empty strip, since a mis-close leaves nothing else to right-click.
+const stripActions = computed<TabStripActions>(() => ({
+    closeAll: allTabs.value.length === 0 ? undefined : () => requestClose(new Set(allTabs.value.map((tab) => tab.id))),
+    reopen: closedTabs.value.length === 0 ? undefined : () => reopenClosedTab(),
+}));
+const stripItems = computed<MenuItem[]>(() => tabStripMenu(`workspace`, stripActions.value));
 
+// The file-tab menu every strip shares (tabMenu.ts), with the Workspace's own way to the side: its other pane.
 const tabMenuItems = computed<MenuItem[]>(() => {
     const id = menuTabId.value;
     if (id === undefined) {
@@ -492,51 +478,26 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     }
     const others = new Set(paneTabs.filter((tab) => tab.id !== id).map((tab) => tab.id));
     const toRight = new Set(paneTabs.slice(index + 1).map((tab) => tab.id));
-    return [
-        // Promotes the preview tab, mirroring the double-click that does the same thing.
-        ...(id === strip.value[home].preview ? [{ label: t(`ui.action.keepOpen`), command: () => keepTab(id) }, { separator: true }] : []),
-        // The way into a split for pairings nothing can guess: a README beside its code, a test beside its subject.
-        ...(canSplit.value
-            ? [
-                  {
-                      label: home === `side` ? t(`workspace.workspaceDesktop.moveBack`) : t(`workspace.workspaceDesktop.openToSide`),
-                      icon: `split-columns`,
-                      shortcut: commandShortcut(`workspace.splitEditor`),
-                      command: () => openToSide(id),
-                  },
-                  { separator: true },
-              ]
-            : []),
-        { label: t(`ui.action.close`), icon: `times`, shortcut: commandShortcut(`workspace.closeTab`), command: () => closeTab(id) },
-        {
-            label: t(`workspace.workspaceDesktop.closeOthers`),
-            disabled: others.size === 0,
-            shortcut: commandShortcut(`workspace.closeOtherTabs`),
-            command: () => requestClose(others),
-        },
-        {
-            label: t(`ui.action.closeToRight`),
-            disabled: toRight.size === 0,
-            shortcut: commandShortcut(`workspace.closeTabsToRight`),
-            command: () => requestClose(toRight),
-        },
-        { separator: true },
-        ...stripItems.value, // Close All: the one row the empty-space menu shows on its own
+    return fileTabMenu(`workspace`, {
+        ...stripActions.value,
+        keep: id === strip.value[home].preview ? () => keepTab(id) : undefined,
+        // The way into a split for pairings nothing can guess: a README beside its code, a test beside its subject. A move,
+        // so a tab alone in the main pane has nothing to stand beside: the empty pane would fold it straight back.
+        place: canSplit.value
+            ? {
+                  label: home === `side` ? t(`workspace.workspaceDesktop.moveBack`) : t(`workspace.workspaceDesktop.openToSide`),
+                  icon: `split-columns`,
+                  command: `workspace.splitEditor`,
+                  disabled: home === `main` && others.size === 0,
+                  run: () => openToSide(id),
+              }
+            : undefined,
+        close: () => closeTab(id),
+        closeOthers: others.size === 0 ? undefined : () => requestClose(others),
+        closeToRight: toRight.size === 0 ? undefined : () => requestClose(toRight),
         // Only file/diff tabs have a path to copy; clipboard write goes through this view's root (see clipboardOf).
-        ...(menuTab.kind === `file` || menuTab.kind === `diff`
-            ? [
-                  { separator: true },
-                  {
-                      label: t(`workspace.workspaceDesktop.copyPath`),
-                      icon: `copy`,
-                      command: () =>
-                          void clipboardOf(rootEl.value)
-                              .writeText(menuTab.path)
-                              .catch(() => undefined),
-                  },
-              ]
-            : []),
-    ];
+        copyPath: menuTab.kind === `file` || menuTab.kind === `diff` ? { path: menuTab.path, root: () => rootEl.value } : undefined,
+    });
 });
 // `id` is undefined for a right-click on empty strip space; an empty strip has no rows, so the browser's own
 // menu is left alone.

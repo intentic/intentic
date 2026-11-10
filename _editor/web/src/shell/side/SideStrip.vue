@@ -24,7 +24,8 @@ const emit = defineEmits<{
     select: [id: string];
     keep: [id: string];
     close: [id: string];
-    contextmenu: [id: string, event: MouseEvent];
+    // `id` undefined: the strip's empty space, past the last tab.
+    contextmenu: [id: string | undefined, event: MouseEvent];
 }>();
 
 const t = useT();
@@ -120,7 +121,7 @@ watch(
 
 <template>
     <!-- allow(substitutes): the side panel's open documents, each closable: documents, not the parts of one view -->
-    <div ref="scroller" class="scrollbar-none flex min-w-0 flex-1 items-stretch overflow-x-auto" role="tablist" :aria-label="t(`shell.sidePanel.label`)" @wheel="onWheel">
+    <div ref="scroller" class="scrollbar-none flex min-w-0 flex-1 items-stretch overflow-x-auto" role="tablist" :aria-label="t(`shell.sidePanel.label`)" @wheel="onWheel" @contextmenu.self="emit('contextmenu', undefined, $event)">
         <!-- The tab and its close press side by side in one box: a role="tab" makes its children presentational, so a
              button inside it would be no button at all to a screen reader. The box carries the pointer gestures. -->
         <!-- allow(substitutes): one of the documents above -->

@@ -8,6 +8,7 @@ import { type Component, computed, defineAsyncComponent, onBeforeUnmount, onMoun
 import { useSandboxLiveness } from "../../client/sandbox/freshness/queryFreshness";
 import { chatInSidePanel } from "../../models/conversations/panel/chatPanelLayout";
 import { registerBuiltin } from "../../workbench/commands/builtinCommands";
+import { fileTabMenu, type TabStripActions, tabStripMenu } from "../../workbench/commands/tabMenu";
 import { chatSlot } from "../../workbench/window/panelSlots";
 import { toAppPx, toScreenPx, uiLength } from "../../workbench/window/uiScale";
 import {
@@ -22,7 +23,21 @@ import {
     useLayout,
 } from "../../workbench/window/useLayout";
 import { besideChat, besideFills } from "./sideLayout";
-import { closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, activateTab, setSplit, type SideTab, useSidePanel } from "../../workbench/side/sideTabs";
+import { FILE_SIDE_VIEW, FileSideInputSchema } from "../../workbench/side/sideFileInput";
+import {
+    activateTab,
+    closeAllTabs,
+    closeOtherTabs,
+    closeTab,
+    closeTabs,
+    closeTabsByReader,
+    cycleTab,
+    keepTab,
+    reopenClosedTab,
+    setSplit,
+    type SideTab,
+    useSidePanel,
+} from "../../workbench/side/sideTabs";
 import { describeTab, homeOf, shownSideActive, shownSideTabs, type SideViewEntry, type SideViewLabel, sideViewOf } from "../../workbench/side/sideViews";
 import SideStrip, { type SideStripItem } from "./SideStrip.vue";
 import SideUnavailable from "./SideUnavailable.vue";
@@ -172,39 +187,62 @@ const sharedBodies = computed<readonly SideBody[]>(() => {
 const activeTab = computed(() => shownSideTabs.value.find((tab) => tab.id === shownSideActive.value));
 const activeHome = computed(() => (activeTab.value === undefined ? undefined : homeOf(activeTab.value)));
 
-// "Open in …" moves the thing into the main area, so its tab has nothing left to show beside it.
+// "Open in …" moves the thing into the main area, so its tab has nothing left to show beside it: a move, not a close, so
+// Reopen Closed Tab does not bring it back here.
 const openHome = (tab: SideTab): void => {
     const home = homeOf(tab);
     if (home !== undefined) {
         home.open();
-        closeTab(tab.id);
+        closeTabs(new Set([tab.id]));
     }
 };
 
-// The tab's right-click: its own verbs, then the strip's.
-const tabMenu = ref<{ show: (event: Event) => void }>();
+// The tabs right of one, among those on screen.
+const toRightOf = (id: string): ReadonlySet<string> => {
+    const at = shownSideTabs.value.findIndex((tab) => tab.id === id);
+    return new Set(at === -1 ? [] : shownSideTabs.value.slice(at + 1).map((tab) => tab.id));
+};
+
+// The panel's root, so Copy Path writes to the clipboard of the window it is drawn in (a popped-out chat's, too).
+const rootEl = ref<HTMLElement>();
+
+// The file-tab menu every strip shares (tabMenu.ts), with the side panel's own way out: into the tab's section.
+const tabMenuRef = ref<{ show: (event: Event) => void }>();
+// The tab right-clicked; undefined for the strip's empty space, which shows the strip-wide rows alone.
 const menuTab = ref<SideTab>();
+const stripActions = computed<TabStripActions>(() => ({
+    closeAll: shownSideTabs.value.length === 0 ? undefined : closeAllTabs,
+    reopen: panel.canReopen.value ? reopenClosedTab : undefined,
+}));
 const menuItems = computed<MenuItem[]>(() => {
     const tab = menuTab.value;
     if (tab === undefined) {
-        return [];
+        return tabStripMenu(`side`, stripActions.value);
     }
     const home = homeOf(tab);
-    const own: MenuItem[] = [
-        ...(tab.id === panel.peek.value ? [{ label: t(`ui.action.keepOpen`), command: (): void => keepTab(tab.id) }] : []),
-        ...(home === undefined ? [] : [{ label: t(`shell.sidePanel.openIn`, { section: home.label }), command: (): void => openHome(tab) }]),
-    ];
-    return [
-        ...own,
-        ...(own.length > 0 ? [{ separator: true }] : []),
-        { label: t(`ui.action.close`), command: (): void => closeTab(tab.id) },
-        { label: t(`shell.sidePanel.closeOthers`), disabled: shownSideTabs.value.length < 2, command: (): void => closeOtherTabs(tab.id) },
-        { label: t(`shell.sidePanel.closeAll`), command: closeAllTabs },
-    ];
+    const path = tab.view === FILE_SIDE_VIEW ? FileSideInputSchema.safeParse(tab.input).data?.path : undefined;
+    const toRight = toRightOf(tab.id);
+    return fileTabMenu(`side`, {
+        ...stripActions.value,
+        keep: tab.id === panel.peek.value ? () => keepTab(tab.id) : undefined,
+        place:
+            home === undefined
+                ? undefined
+                : { label: t(`shell.sidePanel.openIn`, { section: home.label }), icon: `expand`, command: `side.openInSection`, run: () => openHome(tab) },
+        close: () => closeTab(tab.id),
+        closeOthers: shownSideTabs.value.length < 2 ? undefined : () => closeOtherTabs(tab.id),
+        closeToRight: toRight.size === 0 ? undefined : () => closeTabsByReader(toRight),
+        copyPath: path === undefined ? undefined : { path, root: () => rootEl.value },
+    });
 });
-const onTabMenu = (id: string, event: MouseEvent): void => {
-    menuTab.value = shownSideTabs.value.find((tab) => tab.id === id);
-    tabMenu.value?.show(event);
+// `id` is undefined for the strip's empty space; with nothing to offer there the browser's own menu is left alone.
+const onTabMenu = (id: string | undefined, event: MouseEvent): void => {
+    menuTab.value = id === undefined ? undefined : shownSideTabs.value.find((tab) => tab.id === id);
+    if (menuTab.value === undefined && tabStripMenu(`side`, stripActions.value).length === 0) {
+        return;
+    }
+    event.preventDefault();
+    tabMenuRef.value?.show(event);
 };
 
 let commandDisposables: readonly Disposable[] = [];
@@ -219,7 +257,9 @@ onMounted(() => {
         registerBuiltin(`side.previousTab`, () => cycleTab(-1, shownSideTabs.value)),
         registerBuiltin(`side.closeTab`, acting((tab) => closeTab(tab.id))),
         registerBuiltin(`side.closeOtherTabs`, acting((tab) => closeOtherTabs(tab.id))),
+        registerBuiltin(`side.closeTabsToRight`, acting((tab) => closeTabsByReader(toRightOf(tab.id)))),
         registerBuiltin(`side.closeAllTabs`, closeAllTabs),
+        registerBuiltin(`side.reopenClosedTab`, reopenClosedTab),
         registerBuiltin(`side.keepTab`, acting((tab) => keepTab(tab.id))),
         registerBuiltin(`side.openInSection`, acting(openHome)),
         registerBuiltin(`side.toggleSplit`, () => setSplit(fills.value)),
@@ -236,6 +276,7 @@ onBeforeUnmount(() => {
 <template>
     <!-- `flex-row`: with the chat here too, the two stand side by side rather than one over the other. -->
     <div
+        ref="rootEl"
         :id="fills ? `main-content` : undefined"
         :role="fills ? `main` : `complementary`"
         :tabindex="fills ? -1 : undefined"
@@ -369,6 +410,6 @@ onBeforeUnmount(() => {
             :title="t(`ui.resizeSeam.doubleClickResets`)"
         />
 
-        <ContextMenu ref="tabMenu" :model="menuItems" :min-width="12" />
+        <ContextMenu ref="tabMenuRef" :model="menuItems" :min-width="12" />
     </div>
 </template>

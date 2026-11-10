@@ -173,6 +173,7 @@ export const activateTab = (id: string): void => {
     }
 };
 
+// Closes tabs without remembering them: a tab whose thing went away, or one moved into the main area whole.
 export const closeTabs = (ids: ReadonlySet<string>): void => {
     const current = state.value;
     const tabs = current.tabs.filter((tab) => !ids.has(tab.id));
@@ -193,11 +194,54 @@ export const closeTabs = (ids: ReadonlySet<string>): void => {
     set({ tabs, active, peek, split: tabs.length === 0 ? false : current.split });
 };
 
-export const closeTab = (id: string): void => closeTabs(new Set([id]));
+// --- Reopen closed tab -------------------------------------------------------------------------------------------
+// The workspace strip's undo stack, for the side panel: one entry per close the reader made, so a bulk close comes back
+// as one, each tab in its old place, the one that had the focus focused again. In memory and bounded, like the
+// workspace's: a reload starts with no history.
+const MAX_CLOSED = 20;
 
-export const closeOtherTabs = (id: string): void => closeTabs(new Set(state.value.tabs.filter((tab) => tab.id !== id).map((tab) => tab.id)));
+interface SideClose {
+    readonly entries: readonly { readonly tab: SideTab; readonly index: number }[];
+    readonly focus: string;
+}
 
-export const closeAllTabs = (): void => closeTabs(new Set(state.value.tabs.map((tab) => tab.id)));
+const closed = sandboxRef<readonly SideClose[]>(() => []);
+
+// The reader's closes (×, middle-click, the menu, the chords): remembered for reopenClosedTab.
+export const closeTabsByReader = (ids: ReadonlySet<string>): void => {
+    const entries = state.value.tabs.flatMap((tab, index) => (ids.has(tab.id) ? [{ tab, index }] : []));
+    const last = entries.at(-1);
+    if (last === undefined) {
+        return;
+    }
+    const focus = entries.find(({ tab }) => tab.id === state.value.active)?.tab.id ?? last.tab.id;
+    closed.value = [...closed.value, { entries, focus }].slice(-MAX_CLOSED);
+    closeTabs(ids);
+};
+
+export const closeTab = (id: string): void => closeTabsByReader(new Set([id]));
+
+export const closeOtherTabs = (id: string): void => closeTabsByReader(new Set(state.value.tabs.filter((tab) => tab.id !== id).map((tab) => tab.id)));
+
+export const closeAllTabs = (): void => closeTabsByReader(new Set(state.value.tabs.map((tab) => tab.id)));
+
+// Undoes the last close. A tab already open again by other means is left where it is; the entry still leaves the stack.
+// Reopened tabs come back kept, never as the peek: the reader asked for them by name.
+export const reopenClosedTab = (): void => {
+    const last = closed.value.at(-1);
+    if (last === undefined) {
+        return;
+    }
+    closed.value = closed.value.slice(0, -1);
+    const tabs = [...state.value.tabs];
+    for (const { tab, index } of last.entries) {
+        if (!tabs.some((open) => open.id === tab.id)) {
+            // The strip may have shrunk since, so the remembered place can lie past its end.
+            tabs.splice(Math.min(index, tabs.length), 0, tab);
+        }
+    }
+    set({ tabs, active: tabs.some((tab) => tab.id === last.focus) ? last.focus : state.value.active });
+};
 
 // Every tab showing a view, e.g. when an extension goes and takes its side view with it.
 export const tabsOfView = (view: string): readonly SideTab[] => state.value.tabs.filter((tab) => tab.view === view);
@@ -226,5 +270,6 @@ export const useSidePanel = () => ({
     peek: computed(() => state.value.peek),
     split: computed(() => state.value.split),
     jumps: computed(() => jumps.value),
+    canReopen: computed(() => closed.value.length > 0),
     neighbourOf: (id: string) => neighbourOf(state.value.tabs, id),
 });

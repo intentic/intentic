@@ -145,7 +145,18 @@ export const BUILTIN_COMMANDS = {
     "side.previousTab": { title: () => t(`shell.sidePanel.previous`), category: SIDE_PANEL, ...PREVIOUS_TAB, when: onSurface(`side`) },
     "side.closeTab": { title: () => t(`ui.action.close`), category: SIDE_PANEL, icon: `times`, ...CLOSE_TAB, when: onSurface(`side`) },
     "side.closeOtherTabs": { title: () => t(`shell.sidePanel.closeOthers`), category: SIDE_PANEL, icon: `times`, keybinding: `Ctrl+Shift+,`, when: onSurface(`side`) },
+    "side.closeTabsToRight": { title: () => t(`ui.action.closeToRight`), category: SIDE_PANEL, icon: `times`, keybinding: `Ctrl+Shift+.`, when: onSurface(`side`) },
     "side.closeAllTabs": { title: () => t(`shell.sidePanel.closeAll`), category: SIDE_PANEL, icon: `times`, keybinding: `Ctrl+Shift+Backspace`, when: onSurface(`side`) },
+    // The workspace's chords, so a mis-close beside the chat comes back the way one in the Workspace does.
+    "side.reopenClosedTab": {
+        title: () => t(`workspace.workspaceDesktop.reopenClosedTab`),
+        category: SIDE_PANEL,
+        icon: `undo`,
+        keybinding: `Ctrl+Shift+O`,
+        mac: `Ctrl+Shift+T`,
+        macApp: `Mod+Shift+T`,
+        when: onSurface(`side`),
+    },
     "side.keepTab": { title: () => t(`ui.action.keepOpen`), category: SIDE_PANEL, icon: `pin` },
     "side.openInSection": { title: () => t(`shell.sidePanel.openInSection`), category: SIDE_PANEL, icon: `expand` },
     "side.toggleSplit": { title: () => t(`shell.sidePanel.toggleSplit`), category: SIDE_PANEL, icon: `split-columns`, when: onSurface(`side`) },
