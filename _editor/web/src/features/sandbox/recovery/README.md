@@ -29,8 +29,8 @@ What the editor does when the platform is down or has forgotten an account's san
 - **Without asking** (2026-11-09, `directMode.ts` `enterFromMemory`): a session check that fails or takes more than ten
   seconds, or a list that does the same after the session answered (`router/shellGates.ts`, ten seconds too), no longer
   stops at the outage screen on a device that remembers the account. The window opens in direct mode at once, on the
-  sandbox it had open (or the one a `/open` address names), and the status bar's chip is all that says so
-  (`shell/status-bar/PlatformStatusChip.vue`, fed by `lib/platform/platformHealth.ts`, the one reading of whether the
+  sandbox it had open (or the one a `/open` address names), and the rail's offline tile is all that says so
+  (`shell/rail/tools/RailSignals.vue`, fed by `lib/platform/platformHealth.ts`, the one reading of whether the
   platform answers). The outage screen stays for a device that remembers nothing of the account, and for an address
   naming a sandbox it does not remember; a reload onto the screen goes on to its page when there is memory to open.
   When the platform answers again, the session it answers and its list take the window back with nothing pressed.

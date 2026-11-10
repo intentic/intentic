@@ -80,8 +80,8 @@ export const sandboxAt = (daemonUrl: string): RememberedSandbox => {
 };
 
 // WITHOUT ASKING (2026-11-09). A device that remembers the account no longer stops at the outage screen when the session
-// check cannot be answered: it opens the workspace as that account, on what it remembers, at once, and the status bar's
-// chip is all that says so (shell/status-bar/PlatformStatusChip.vue). The screen stays for a device that remembers
+// check cannot be answered: it opens the workspace as that account, on what it remembers, at once, and the rail's offline
+// tile is all that says so (shell/rail/tools/RailSignals.vue). The screen stays for a device that remembers
 // nothing, and for an address (`/open?url=`) naming a sandbox this device does not remember, which only it can offer.
 
 // What an automatic entry is asked to open: the sandbox an address names (its normalized address), or the one this window

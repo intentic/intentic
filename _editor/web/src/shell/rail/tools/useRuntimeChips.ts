@@ -1,28 +1,28 @@
 import { computed, type ComputedRef, type Ref } from "vue";
 import { useRoute } from "vue-router";
-import { here, linkOf, page, pageCovers, type PageLink } from "../../lib/routes/links";
-import { useAudience } from "../../app/useAudience";
-import { useRole } from "../../client/sandbox/useRole";
-import { useSandbox } from "../../client/sandbox/useSandbox";
-import { directMode } from "../../client/directory/directState";
-import { platformHealth } from "../../lib/platform/platformHealth";
-import { useBrowsersQuery } from "../../features/browsers/browsersQuery";
-import { useDesktopQuery } from "../../features/desktop/desktopQuery";
-import { usePanels } from "../../models/extensions/usePanels";
-import { previewHealthyCount, previewOpenCount } from "../../models/preview/previewModel";
-import { useLiveLinks } from "../../models/sandbox/devices/useLiveLinks";
-import { usePorts } from "../../models/sandbox/environment/usePorts";
-import { useTerminalActivity } from "../../features/terminal/useTerminalActivity";
-import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
-import { usePublicOutbox } from "../../models/workspace/push/usePublicOutbox";
-import { commandShortcut } from "../../workbench/commands/useCommands";
-import { sectionReachable } from "../../workbench/views/registry";
-import { useVocabulary } from "../../workbench/views/vocabulary";
-import { browsersPinned } from "../../workbench/browsers/browsersSurface";
+import { here, linkOf, page, pageCovers, type PageLink } from "../../../lib/routes/links";
+import { useAudience } from "../../../app/useAudience";
+import { useRole } from "../../../client/sandbox/useRole";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { directMode } from "../../../client/directory/directState";
+import { platformHealth } from "../../../lib/platform/platformHealth";
+import { useBrowsersQuery } from "../../../features/browsers/browsersQuery";
+import { useDesktopQuery } from "../../../features/desktop/desktopQuery";
+import { usePanels } from "../../../models/extensions/usePanels";
+import { previewHealthyCount, previewOpenCount } from "../../../models/preview/previewModel";
+import { useLiveLinks } from "../../../models/sandbox/devices/useLiveLinks";
+import { usePorts } from "../../../models/sandbox/environment/usePorts";
+import { useTerminalActivity } from "../../../features/terminal/useTerminalActivity";
+import { useTerminalPanel } from "../../../models/terminal/useTerminalPanel";
+import { usePublicOutbox } from "../../../models/workspace/push/usePublicOutbox";
+import { commandShortcut } from "../../../workbench/commands/useCommands";
+import { sectionReachable } from "../../../workbench/views/registry";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
+import { browsersPinned } from "../../../workbench/browsers/browsersSurface";
 import { browsersChip, portsChip, type RuntimeChip, terminalChip, vpnChip } from "./runtimeChips";
 
-// The facts behind the status bar's runtime chips (runtimeChips.ts), read once for the desktop shell. Always-on and
-// loosely polled like the rail tiles they replace, so a chip arrives mid-turn.
+// The facts behind the rail's tool tiles (runtimeChips.ts, drawn by RailTools.vue at the folded rail's foot). Always-on
+// and loosely polled, so a tile's dot arrives mid-turn.
 
 export interface RuntimeChips {
     /** Left to right: the terminal first, which stays, so the chips that come and go never move it. */

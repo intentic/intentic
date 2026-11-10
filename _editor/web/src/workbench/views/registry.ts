@@ -98,7 +98,7 @@ export const DEVICES_VIEW_ID = `devices`;
 // (core-views/coreViews.ts).
 export const RUN_VIEW_ID = `run`;
 // The sandbox's own desktop, watched and taken over by the owner. Not a band's tile: a live surface, drawn by the shell
-// in the status bar beside Browsers and the terminal (shell/status-bar/), while there is a window on it to watch.
+// behind the Browsers tool at the rail's foot (shell/rail/tools/), counted on it while there is a window to watch.
 export const DESKTOP_VIEW_ID = `desktop`;
 
 // Every tile here badges when it needs the owner, and lights while a run of its own is in flight; being
@@ -128,8 +128,8 @@ const know = (): RailGroup => ({
 // natively on one of the owner's computers, is part of the loop the band serves, not news. Devices closes it: the machines this sandbox reaches, a place to go as This computer is in a local
 // window. A signal tile a reader pins to keep: it comes onto the rail by itself while one of the machines is being worked
 // on (its turning mark) or a port is held, which is exactly when it has to be in sight. The live app, Browsers and the
-// sandbox's own Desktop are not in any band: they are live surfaces, not places, so they are chips in the status bar
-// beside the terminal (shell/status-bar/), there while they are live.
+// sandbox's own Desktop are not in any band: they are live surfaces, not places, so they are behind the one Browsers tool
+// at the rail's foot beside the terminal (shell/rail/tools/), its dot saying while they are live.
 // The project scope (app/projectScope.ts) has no tile: it is chosen where the files are, from a repository's menu in the
 // tree or the palette's Project commands, and said by the chips of the surfaces it narrows. A Projects tile at the head
 // of this band read as a second place to start, when the place to start is the chat.

@@ -410,7 +410,7 @@ flowchart LR
   Android app's WebView, which keeps the board it draws itself (`lib/routes/firstScreens.ts` `rootLanding`). `/home` alone
   also opens signed out, with its first run and no account registry or plan reads. Its Add sandbox action asks for
   sign-in and returns to `/home?add=sandbox`, the address of Home's new sandbox (below). The shell renders `ShellDesktop.vue`
-  (rail, side panel, terminal and status bar) or `ShellMobile.vue` (one screen at a time). An account with nothing to
+  (rail, side panel and terminal) or `ShellMobile.vue` (one screen at a time). An account with nothing to
   open lands on Home's first run rather than on setup (which used to start a machine the moment it arrived), in the
   desktop app too (`app/environments/nothingToOpen.ts`). An unfinished setup of the reader's own is offered by name on
   that first run and finished in place, in a tile of Home's rail, in a browser and the desktop app alike. A link naming a sandbox (`/?sandbox=<id>`, the
@@ -445,21 +445,28 @@ flowchart LR
   (rename, add a reaction, review) are rows in that menu. A touch screen too wide to count as a phone, such as a
   tablet, shows the ⋯ without hover. _2026-10-15: three columns from 48rem, with a hidden 30px seat per press, left a
   card's title some 60px on a small laptop._
-- **The rail and the status bar.** The rail holds places a reader goes. What the sandbox is running sits in the
-  status bar at the foot of the window instead (`shell/status-bar/`): the terminal's toggle, always there for a
-  developer, then a chip for each live thing (Browsers, counting the live apps that answer, the agents' open browsers and the
-  windows on the sandbox's desktop, since all three are tabs of one view; a port open to the internet; a connected
-  tunnel), each there only
-  while it is live or its page is in front, so a chip arriving is news and the rail never moves for it. Geek metrics
-  (Settings ▸ Appearance) add CPU, memory and disk at the bar's far end, whose panel and the docked terminal take turns
-  above the bar. Resource sizes use binary units (MiB/GiB). The panel separates the sandbox's counted working set
+- **The rail and its tools.** The rail's tiles are places a reader goes. What the sandbox is running sits at the folded
+  rail's foot instead, over the account, as small tool tiles quieter and shorter than a section's
+  (`shell/rail/tools/`): the terminal's toggle (always there for a developer) and Browsers (always there; behind it the
+  live apps that answer, the agents' open browsers and the windows on the sandbox's desktop, since all three are tabs
+  of one view). Neither moves: what changes is one dot in the corner, grey while something is live, amber while an agent
+  waits on the reader; the count and the words are the hover card's. A standing state (a port open to the internet, a
+  connected tunnel, the sandbox near a limit with geek metrics on) is a tile above them only while it holds, and the
+  foot grows upward, so its arriving moves nothing else. The wake word and an Intentic outage are the device's and the
+  platform's, not a sandbox's, so they stay above the account when the rail unrolls (`RailSignals.vue`); the sandbox's
+  own tools fly into the bookmark with its sections. Geek metrics (Settings ▸ Appearance) draw CPU, memory and disk at
+  the foot of the Agents board only (`features/agents/metrics/MetricsStrip.vue`), whose panel opens above them inside
+  the board and takes turns with the docked terminal. Resource sizes use binary units (MiB/GiB). The panel separates
+  the sandbox's counted working set
   (daemon, counted file cache and kernel memory included) from process RSS grouped by kind or session: those groups
   overlap and are not an additive breakdown. Optional cgroup accounting shows measured categories and the inactive
   file cache excluded from the total; scope explanations stay in tooltips, including for older daemons without invented readings.
-  _2026-10-08: the terminal, Browsers and the live app left the rail. As tiles they were always on (a
-  closed browser still listed, a repo with a panel counted as running), and tightening them would have made the rail
-  move with every agent turn 2026-10-13: the live app, Browsers and Desktop chips became one Browsers chip, as all three
-  opened the same view; its hover card says what is behind the count._
+  _2026-10-08: the terminal, Browsers and the live app left the rail for a status bar at the foot of the window. As
+  tiles they were always on (a closed browser still listed, a repo with a panel counted as running), and tightening
+  them would have made the rail move with every agent turn. 2026-10-13: the live app, Browsers and Desktop chips became
+  one Browsers chip. 2026-11-10: the status bar went: a full-width line under the page and the chat, mostly empty, for
+  two chips and three gauges. The tools came back to the rail as fixed tiles whose dot is the only thing that moves,
+  and the gauges went to the one view they are about._
 - **The side panel.** The rail owns the main area; the side panel (`shell/side/`, its tabs and views registered in
   `workbench/side/`) is where the reader looks at another section's
   things without leaving the one they picked. A reference (a file a chat names, a server a turn left running, an
@@ -566,7 +573,8 @@ One word per idea on screen and in code. The retired spellings are refused by
 | slot | An empty element a mounted surface publishes for a panel to teleport into (`workbench/window/panelSlots.ts`) |
 | pin | A Browsers tab that is the reader's own rather than a web page of one of the open windows: a live app, the desktop, a window on it (`workbench/browsers/browsersSurface.ts`) |
 | docked | A panel living in the main window, as opposed to floating in a window of its own (`floating.ts`) |
-| status bar | The line at the foot of the desktop window: the runtime chips (`shell/status-bar/`) and, opted in, the geek metrics' segment, which opens its panel above the bar (`features/agents/status-bar/`). A phone has none, and draws no geek metrics |
+| rail tools | The small tiles at the folded rail's foot, over the account: the terminal and Browsers always, a standing state (a public port, a tunnel, a figure near its limit) while it holds, the wake word and an outage in either rail (`shell/rail/tools/`). Not a status bar: there is none since 2026-11-10 |
+| metrics strip | The geek metrics' line at the foot of the Agents board, which opens their panel above it (`features/agents/metrics/MetricsStrip.vue`). A phone draws none |
 | subagent | Any agent another agent started: in-process by its runtime's own Agent tool, or spawned by the sandbox as a conversation of its own. Drawn one way wherever it shows, on the card of the call that started it (`features/chat/tools/subagentCard.ts`) and in its parent card's tray; how it was started changes only what else it offers, such as its own conversation. Not "child agent" |
 | tray | The rows hung under a board card, and under a card in the chat's list (`features/chat/tabs/chatTrays.ts`), for every subagent it started: the ones it spawned, which are conversations of their own, and the ones its runtime ran in-process, from the roster (`models/fleet/subagentRoster.ts`). Open only under the card the reader is on, a card whose subagent is on screen, and every card while a filter is on, folding open and shut with what stands below sliding to make room, on the compositor (`features/agents/board/view/foldMotion.ts`); every other card counts its subagents on itself instead (`parts/fleet/ChildCount.vue`) and keeps only a subagent asking the reader in sight. Open, asks and working ones in sight, stopped ones one row per thing they stopped on, settled ones folded behind a count (`models/fleet/board/childFold.ts`). A row shows its subagent in the chat: a spawned one's own chat, an in-process one's transcript in its parent's column (`models/conversations/panel/subagentView.ts`) |
 | quick bar | The parked chat's pill that opens into a scratch pad: the composer alone, open while the reader is in it (`ChatQuickBar.vue`). Open, a header names the chat and its last words and leads to /chat; it draws no transcript |
@@ -582,7 +590,7 @@ One word per idea on screen and in code. The retired spellings are refused by
 | cover | One file name read in every folder (README.md, package.json): the explorer tree lists folders alone and marks those holding it, and the home shows the current folder's copy in place of its tiles (`features/workspace/home/homeCover.ts`); on screen, "Show README.md in every folder" |
 | gallery | The home drawing a folder's pictures and videos as themselves, in justified rows: each keeps its proportions, every row but the last fills the pane, and the name stays under each (`features/workspace/home/gallery/homeGallery.ts`). A selected picture wears a ring round the picture itself, not a card round picture and name; a caption too narrow for its name gives up the start every name in the group shares first, then is cut in its middle, and a video's says no extension, its play badge saying what it is. The folders above it are the home's one-line chips (`HomeChip.vue`), as in every folder: there a folder or a file with nothing inside to show is a chip, a file read from its start is a card with a miniature of that start (`HomeCard.vue`), and a picture shows itself. On by itself where two of every three files are pictures or videos, and the reader's to switch per folder on the home's bar, beside a size slider (`galleryChoice.ts`). Rows are laid out from each file's box read off its header by the daemon (`workspace.dimensions`), and a video shows a frame the daemon cut with ffmpeg rather than its first, so a film opening on a fade is not a white card |
 
-The status bar still stores its panel under `ui-board-dock-*` in local storage: renaming a stored key would close
+The metrics strip still stores its panel under `ui-board-dock-*` in local storage: renaming a stored key would close
 every reader's open panel.
 
 Plan answers are pinned above the composer (`ChatWaitingBar.vue`). With text or files staged, **Approve with notes**
@@ -716,9 +724,10 @@ shared link keep the rail as it was. Three rules hold it together (`models/sandb
 - **A press on another sandbox's tile shows the same view of that one** (`sameViewPath`): the section the page belongs
   to (`lib/routes/homeSection.ts` `sectionOfPage`), on the screen that sandbox was last left on in it. Around Home's own
   chat or an account page it opens where Home opens: the view last picked in the bookmark, else the home conversation.
-- **Nothing beside the rail depends on the rail** (`sandboxBeside`): the status bar, the quick bar, the side column and
-  the chat's home are the same folded and unrolled. Until this date the unrolled rail hid the status bar and docked the
-  chat to the side whatever the reader kept.
+- **Nothing beside the rail depends on the rail** (`sandboxBeside`): the quick bar, the side column and the chat's home
+  are the same folded and unrolled. Until this date the unrolled rail hid the status bar (gone since 2026-11-10) and
+  docked the chat to the side whatever the reader kept. The rail's own tools are a sandbox's, so unrolled they are in
+  the bookmark with its sections.
 
 The bookmark lists the home conversation, every section the folded rail offers on it or behind More, the Chat and
 Capabilities, each with the badge its tile wears, and marks the view on screen. A pick shows that view and is kept on
@@ -733,8 +742,6 @@ somebody picked), Send is disabled and its Enter shakes that press, and the comp
 than offering a second door (`features/chat/accounts/ChatAccountPanel.vue`).
 The shared composer offers model selection to non-guest members in either audience mode. Effort appears when the
 selected model and runtime support it, and stays hidden under Auto or on the free trial.
-The desktop status bar is drawn wherever a sandbox's page is on screen, the rail folded or unrolled; Home's own page and
-the account's pages opened from it have none.
 Home and personal settings need only a signed-in account: an unfinished, offline or incompatible sandbox never gates
 them or redirects them to setup, including a direct visit to `/settings`.
 Home also opens from the logo menu in This computer before any sandbox exists. In the desktop app, the account menu

@@ -1,13 +1,13 @@
 import type { BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import { page, type PageLink } from "../../lib/routes/links";
+import { page, type PageLink } from "../../../lib/routes/links";
 
-// THE STATUS BAR'S RUNTIME CHIPS: the machinery agents work with, said at the foot of the window rather than tiled on the
-// rail, which is kept for places a reader goes. Each chip is there only while its thing is live (a browser, an app or a
-// desktop window open, a port open to the internet, a tunnel up) or while its page is the one in front,
-// so a chip arriving is news and the rail never moves for it. The terminal is the one exception: nothing else opens a
-// developer's first shell, so its chip stays.
+// THE RAIL'S TOOL TILES (2026-11-10): the machinery agents work with, as small quiet tiles at the folded rail's foot, over
+// the account (RailTools.vue). The terminal and Browsers are always there, so the foot never moves for them: what changes
+// is a dot, grey while something is live, amber while an agent waits on the reader. The standing states (a port open to the
+// internet, a tunnel up) are tiles only while they hold, and the foot grows upward from the fixed pair, so their arriving
+// moves nothing else. The words each chip carries are its hover card and accessible name; the rail draws only the glyph.
 //
 // Pure: the facts come in, the chips go out (useRuntimeChips.ts reads the facts).
 
@@ -123,15 +123,12 @@ const browsersTarget = (facts: BrowsersFacts, desktop: number): PageLink => {
     return page.browsers(window === undefined ? `desktop` : window.name);
 };
 
-export const browsersChip = (facts: BrowsersFacts): RuntimeChip | undefined => {
+export const browsersChip = (facts: BrowsersFacts): RuntimeChip => {
     const live = facts.sessions.filter((session) => session.running).length;
     const helping = facts.sessions.filter((session) => session.help !== undefined).length;
     const desktop = facts.desktopWindows ?? 0;
     // The number is what the view has open; an app answering with no tab on it keeps the chip without adding to it.
     const total = facts.appsOpen + live + desktop;
-    if (total === 0 && facts.apps === 0 && helping === 0 && !facts.here) {
-        return undefined;
-    }
     const label = t(`shared.browsers`);
     const rows = browsersRows(facts, live, desktop);
     const base = { id: `browsers`, label, to: browsersTarget(facts, desktop), active: facts.here } as const;

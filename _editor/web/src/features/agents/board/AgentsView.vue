@@ -13,7 +13,7 @@ import {
     ui,
     useDevice,
 } from "@intentic/ui";
-import { computed, onMounted, provide, ref } from "vue";
+import { computed, inject, onMounted, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { usePanels } from "../../../models/extensions/usePanels";
@@ -61,6 +61,8 @@ import { useArchiveDoor } from "./view/archiveDoor";
 import { useBoardCommands } from "./view/boardCommands";
 import { laneHeads, useBoardLanes } from "./view/boardLanes";
 import NoMatchesNote from "./NoMatchesNote.vue";
+import MetricsStrip from "../metrics/MetricsStrip.vue";
+import { LIVE_METRICS_KEY } from "../../../models/sandbox/liveMetrics";
 import { usePhoneLanes } from "./view/phoneLanes";
 import { useBoardLaunches } from "./view/boardLaunches";
 import { useAttentionAsk } from "./view/attentionAsk";
@@ -85,12 +87,14 @@ const t = useT();
 
 const router = useRouter();
 const { mobile, coarse } = useDevice();
+// The geek metrics are the desktop's: its shell reads them once (ShellDesktop.vue) for this board's foot and its cards
+// (liveMetrics.ts), undefined while they are off. A phone reads none, whatever Settings says: its board has no foot to
+// spare from the floating New agent.
+const liveMetrics = inject(LIVE_METRICS_KEY, undefined);
 const agents = useAgents();
 const { archived, archiveLoading, archiveFailure, archive, restore, notice, dismissNotice } = agents;
 // A refused press is said as a toast in the app's notification lane (boardNotices.ts).
 useNoticeToasts(notice, dismissNotice);
-// The geek metrics are the desktop's: its shell reads them for its status bar and hands them down to the cards
-// (liveMetrics.ts). A phone reads none, whatever Settings says: its board has no foot to spare from the floating New agent.
 const drag = useAgentDrag();
 const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
 const { resolveNow, keepDeletedNow, restoreDeletedNow, pressLand, pendingLand, confirmLand, cancelLand, unwatchNow } = drag;
@@ -642,6 +646,9 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             @menu="(agent, event) => openCardMenu(agent, event, {})"
             @open-session="openSession"
         />
+        <!-- The geek metrics, the board's own foot and nowhere else on a desktop: the gauges while the reader opted in, and
+             the full readout above them when pressed (MetricsStrip.vue). A phone draws no gauges. -->
+        <MetricsStrip v-if="!mobile" :metrics="liveMetrics" />
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"

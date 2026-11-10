@@ -2,8 +2,8 @@ import { page } from "@intentic/sandbox-contract/app-routes";
 import type { BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { browsersChip, portsChip, terminalChip, vpnChip } from "./runtimeChips";
 
-// The rules that decide when each runtime chip is in the status bar: there while its thing is live or its page is in
-// front, gone otherwise, so a chip arriving is news. The terminal alone stays.
+// The rules behind the rail's tool tiles: the terminal and Browsers always there, counted while something is live; the
+// standing states (ports, a tunnel) there only while they hold.
 
 const browser = (overrides: Partial<BrowserSession> = {}): BrowserSession => ({
     name: `b1`,
@@ -40,31 +40,32 @@ describe(`the browsers' chip`, () => {
     it(`is one chip for everything the Browsers view shows: live apps, web windows and the desktop`, () => {
         const chip = browsersChip(facts({ apps: 1, appsOpen: 1, sessions: [browser(), browser({ name: `b2` })], desktopWindows: 1 }));
         expect(chip).toMatchObject({ label: `Browsers`, count: 4, to: page.browsers() });
-        expect(chip?.tip?.rows).toEqual([
+        expect(chip.tip?.rows).toEqual([
             { label: `Live app`, value: `1 running` },
             { label: `Browsers`, value: `2 open` },
             { label: `Desktop`, value: `1 window open` },
         ]);
     });
 
-    it(`shows only while something is live, or while its page is in front`, () => {
-        expect(browsersChip(facts())).toBeUndefined();
+    it(`is always there, counted only while something is live, and lit while its page is in front`, () => {
+        expect(browsersChip(facts())).toMatchObject({ active: false, to: page.browsers() });
+        expect(browsersChip(facts()).count).toBeUndefined();
         expect(browsersChip(facts({ here: true }))).toMatchObject({ active: true });
-        expect(browsersChip(facts({ here: true }))?.count).toBeUndefined();
+        expect(browsersChip(facts({ here: true })).count).toBeUndefined();
         // A desktop this reader may not drive is not counted.
-        expect(browsersChip(facts({ desktopWindows: undefined }))).toBeUndefined();
+        expect(browsersChip(facts({ desktopWindows: undefined })).count).toBeUndefined();
     });
 
     it(`counts an app only while a tab shows it, and stays, uncounted, while its server answers with the tab closed`, () => {
         const closed = browsersChip(facts({ apps: 1, appsOpen: 0 }));
         expect(closed).toMatchObject({ to: page.browsers(undefined, { query: { preview: `1` } }) });
-        expect(closed?.count).toBeUndefined();
-        expect(closed?.tip?.rows).toEqual([{ label: `Live app`, value: `1 running` }]);
-        expect(browsersChip(facts({ apps: 2, appsOpen: 1, sessions: [browser()] }))?.count).toBe(2);
+        expect(closed.count).toBeUndefined();
+        expect(closed.tip?.rows).toEqual([{ label: `Live app`, value: `1 running` }]);
+        expect(browsersChip(facts({ apps: 2, appsOpen: 1, sessions: [browser()] })).count).toBe(2);
     });
 
     it(`ignores browsers that have closed: the daemon's record of them is the Browsers page's`, () => {
-        expect(browsersChip(facts({ sessions: [browser({ running: false, finishedAt: 2 })] }))).toBeUndefined();
+        expect(browsersChip(facts({ sessions: [browser({ running: false, finishedAt: 2 })] })).count).toBeUndefined();
         expect(browsersChip(facts({ sessions: [browser({ running: false, finishedAt: 2 })], here: true }))).toMatchObject({ active: true });
     });
 
@@ -81,7 +82,7 @@ describe(`the browsers' chip`, () => {
         const help = { requestId: `r1`, message: `captcha`, requestedAt: 1 };
         const chip = browsersChip(facts({ apps: 1, sessions: [browser({ name: `b2` }), browser({ help })] }));
         expect(chip).toMatchObject({ count: 1, tone: `warning`, to: page.browsers(browser().name) });
-        expect(chip?.aria).toBe(`Browsers, Needs your help`);
+        expect(chip.aria).toBe(`Browsers, Needs your help`);
     });
 });
 

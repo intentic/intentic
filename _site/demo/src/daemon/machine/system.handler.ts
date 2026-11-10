@@ -25,7 +25,7 @@ export const systemDoors = {
     session: () => ({ token: `demo-session`, expiresAt: Date.now() + 30 * 24 * 3_600_000, email: `ada@acme.dev` }),
     presence: () => ({ ok: true }),
     usage: () => ({ accounts: [] }),
-    // Asked only while geek metrics are on (the status bar's gauges); it drifts per request, so the polling is visible.
+    // Asked only while geek metrics are on (the board's gauges); it drifts per request, so the polling is visible.
     metrics: () => demoMetrics(Date.now(), roster.agents),
     // The Overview's Disk card: a scan already on hand, a rescan on request, and a clean that frees its category.
     storage: () => demoStorageReport(),

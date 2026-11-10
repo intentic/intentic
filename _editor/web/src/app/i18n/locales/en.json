@@ -878,7 +878,7 @@
             "couldntStop": "Couldn't stop keeping this chat's cache warm."
         },
         "statusBar": {
-            "label": "Status bar",
+            "label": "Sandbox metrics",
             "close": "Close {title}"
         },
         "stamps": {
@@ -11624,9 +11624,9 @@
                 "showToolCallsHint": "Display individual tool calls in transcript."
             },
             "statusBar": {
-                "group": "Status bar",
+                "group": "Agents board",
                 "liveMetrics": "Geek metrics",
-                "liveMetricsHint": "CPU, memory and disk at the end of the status bar, and on each agent's card its share and what it has cost. Nothing is measured while this is off."
+                "liveMetricsHint": "CPU, memory and disk at the foot of the Agents board, and on each agent's card its share and what it has cost. Elsewhere, a small tile on the rail only when one nears its limit. Nothing is measured while this is off."
             },
             "explorer": {
                 "colorful": "Colorful",
@@ -12040,7 +12040,7 @@
             "iconRail": "sidebar, side bar, activity bar, rail size",
             "changesList": "diff, review, changed files",
             "toolCalls": "transcript, agent steps, details, tools",
-            "statusBar": "cpu, memory, ram, metrics, gauges, footer, cost, spend, dollars",
+            "statusBar": "cpu, memory, ram, metrics, gauges, footer, cost, spend, dollars, status bar, board",
             "pushNotifications": "phone, mobile, notify, alerts, web push",
             "statusBadge": "badge, tray, taskbar, favicon, tab title, icon",
             "sounds": "chime, audio, sound, beep, ding",
@@ -12667,6 +12667,9 @@
         "shortcutSheet": {
             "change": "Change in Settings",
             "general": "General"
+        },
+        "railTools": {
+            "nearLimit": "Near a limit"
         }
     },
     "terminal": {

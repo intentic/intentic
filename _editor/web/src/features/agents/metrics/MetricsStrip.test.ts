@@ -3,7 +3,7 @@ import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics"
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick } from "vue";
 
-// The seam's dragging is the kit's own suite; here only what the status bar draws and when.
+// The seam's dragging is the kit's own suite; here only what the board's metrics strip draws and when.
 jest.mock("@intentic/ui", async () => {
     const vue = await import("vue");
     return {
@@ -22,27 +22,22 @@ jest.mock("@intentic/ui", async () => {
 jest.mock("../../../models/fleet/useAgents", () => ({ useAgents: () => ({ agentById: (_id: string) => undefined }) }));
 jest.mock("../../../models/fleet/useAgents-actions", () => ({ openById: () => undefined }));
 
-const { default: StatusBar } = await import("./StatusBar.vue");
-const { openPanel, panelHeight } = await import("./statusBarState");
+const { default: MetricsStrip } = await import("./MetricsStrip.vue");
+const { openPanel, panelHeight } = await import("./metricsStripState");
 const { showLiveMetrics } = await import("../../../models/sandbox/liveMetrics");
 
 const GIB = 2 ** 30;
 
 let app: App | undefined;
 
-// The bar's memory is the window's (two preferences), so a case that starts with the panel open sets it there.
-const mount = (options: { metrics?: SandboxMetrics; open?: `metrics`; persistent?: boolean; start?: string } = {}): HTMLElement => {
+// The strip's memory is the window's (two preferences), so a case that starts with the panel open sets it there.
+const mount = (options: { metrics?: SandboxMetrics; open?: `metrics` } = {}): HTMLElement => {
     openPanel.value = options.open;
     panelHeight.value = 240;
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
-        render: () =>
-            h(
-                StatusBar,
-                { metrics: options.metrics, persistent: options.persistent },
-                options.start === undefined ? {} : { start: () => h(`a`, { "data-chip": `terminal` }, options.start) },
-            ),
+        render: () => h(MetricsStrip, { metrics: options.metrics }),
     });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -88,8 +83,8 @@ afterEach(() => {
     showLiveMetrics.value = false;
 });
 
-describe(`the status bar`, () => {
-    it(`draws nothing while the metrics are off, whatever was left open, unless its host keeps it`, () => {
+describe(`the board's metrics strip`, () => {
+    it(`draws nothing while the metrics are off, whatever was left open`, () => {
         const element = mount({ open: `metrics` });
         expect(element.querySelector(`[role="region"]`)).toBeNull();
         expect(element.querySelector(`[data-status-panel]`)).toBeNull();
@@ -97,28 +92,10 @@ describe(`the status bar`, () => {
         expect(openPanel.value).toBe(`metrics`);
     });
 
-    // The desktop shell's bar: always there at one height, its start the host's, and no metrics segment while they're off.
-    it(`keeps a persistent bar with its host's start and no metrics segment while they are off`, () => {
-        const element = mount({ persistent: true, start: `Terminal`, open: `metrics` });
-        expect(element.querySelector(`[role="region"]`)?.getAttribute(`aria-label`)).toBe(`Status bar`);
-        expect(wordsOf(element.querySelector(`[data-chip="terminal"]`))).toBe(`Terminal`);
-        expect(element.querySelector(`[data-segment]`)).toBeNull();
-        expect(element.querySelector(`[data-status-panel]`)).toBeNull();
-    });
-
-    it(`draws the host's start before the metrics segment, which sits at the far end`, () => {
-        const element = mount({ persistent: true, start: `Terminal`, metrics: metrics() });
-        const controls = [...element.querySelectorAll<HTMLElement>(`[data-chip], [data-segment]`)].map(
-            (control) => control.dataset[`chip`] ?? control.dataset[`segment`],
-        );
-        expect(controls).toEqual([`terminal`, `metrics`]);
-        expect(segment(element).className).toContain(`ml-auto`);
-    });
-
-    // The bar carries the metrics and nothing else: no segment of any check.
+    // The strip carries the metrics and nothing else: no segment of any check.
     it(`carries the geek metrics and nothing else, and opens their panel above it`, async () => {
         const element = mount({ metrics: metrics() });
-        expect(element.querySelector(`[role="region"]`)?.getAttribute(`aria-label`)).toBe(`Status bar`);
+        expect(element.querySelector(`[role="region"]`)?.getAttribute(`aria-label`)).toBe(`Sandbox metrics`);
         const segments = [...element.querySelectorAll<HTMLElement>(`[data-segment]`)].map((control) => control.dataset[`segment`]);
         expect(segments).toEqual([`metrics`]);
         expect([...element.querySelectorAll<HTMLElement>(`a, button`)].map((control) => control.dataset[`segment`])).toEqual([`metrics`]);

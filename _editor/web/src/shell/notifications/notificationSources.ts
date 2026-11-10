@@ -32,7 +32,6 @@ import { useRouter } from "vue-router";
 import { toTop } from "../../lib/routes/links";
 import { useDeviceDirectory } from "../../client/directory/deviceDirectory";
 import { directMode } from "../../client/directory/directState";
-import { masterRail } from "../../models/home/masterRail";
 import { diagnosisEvidence } from "../../features/sandbox/diagnosis/useDiagnosis";
 import { openThisComputersSandboxes, thisComputerOffered } from "../../app/environments/thisComputer";
 
@@ -269,12 +268,11 @@ const holdOutageNotices = (): void => {
     const thisComputer = thisComputerOffered()
         ? [{ label: t(`setup.platformUnavailable.useThisComputer`), tier: `boring` as const, run: openThisComputersSandboxes }]
         : [];
-    // Under a pointer the status bar's offline chip says this already (shell/status-bar/PlatformStatusChip.vue), so the
-    // card stays where there is no status bar (the phone, and Home's master rail on a desktop) and for the desktop app's
-    // offer of this computer's sandboxes.
+    // Under a pointer the rail's offline tile says this already, folded or unrolled (shell/rail/tools/RailSignals.vue), so
+    // the card stays where there is no rail (the phone) and for the desktop app's offer of this computer's sandboxes.
     const { mobile } = useDevice();
     hold(`direct-mode`, () =>
-        directMode.value && (mobile.value || masterRail.value || thisComputer.length > 0)
+        directMode.value && (mobile.value || thisComputer.length > 0)
             ? {
                   kind: `condition`,
                   tone: `info`,

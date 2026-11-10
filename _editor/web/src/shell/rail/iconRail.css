@@ -56,6 +56,27 @@
     font-size: var(--icon-rail-mark-size);
 }
 
+/* THE TOOLS AT THE FOOT (tools/ToolTile.vue): the terminal, Browsers and the standing states, quieter than a section's
+   tile, since they are tools at hand rather than places to go. Full width, so a press lands as easily, but three quarters
+   of a tile's height with a smaller glyph, so the cluster reads as one small group over the account rather than more
+   sections. They are `.icon-rail-tile` too, so a skin's hover and carving reach them; these rules, written after, take
+   the height and the glyph down. Their one mark is a dot in the corner, cut out of the rail's ground like a badge's plate. */
+.icon-rail-tool {
+    height: calc(var(--icon-rail-tile-size) * 0.75);
+}
+
+.icon-rail-tool-glyph {
+    font-size: calc(var(--icon-rail-glyph-size) * 0.85);
+}
+
+.icon-rail-dot {
+    width: calc(var(--icon-rail-tile-size) * 0.13);
+    height: calc(var(--icon-rail-tile-size) * 0.13);
+    top: 18%;
+    right: 26%;
+    box-shadow: 0 0 0 calc(var(--icon-rail-tile-size) * 0.035) var(--ui-tile-ground);
+}
+
 .icon-rail-tile:focus-visible {
     outline: 2px solid var(--color-primary-500);
     outline-offset: -2px;

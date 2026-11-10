@@ -18,12 +18,9 @@ import { useTerminalPanel } from "../models/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../features/terminal/terminalFloating";
 import { CARD_METRICS_KEY, LIVE_METRICS_KEY, showLiveMetrics, useLiveMetrics } from "../models/sandbox/liveMetrics";
 import { useCardMetrics } from "../models/fleet/board/metricsCards";
-import StatusBar from "../features/agents/status-bar/StatusBar.vue";
-import { openPanel } from "../features/agents/status-bar/statusBarState";
-import RuntimeChips from "./status-bar/RuntimeChips.vue";
-import WakeStatusChip from "../features/chat/wake/WakeStatusChip.vue";
-import { useWakeListener } from "../models/voice/useWakeListener";
-import { useRuntimeChips } from "./status-bar/useRuntimeChips";
+import { openPanel } from "../features/agents/metrics/metricsStripState";
+import RailSignals from "./rail/tools/RailSignals.vue";
+import RailTools from "./rail/tools/RailTools.vue";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
 import { useProjectCommands } from "./commands/useProjectCommands";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
@@ -322,21 +319,14 @@ watch(
     (open) => open && showSection(),
 );
 
-// The geek metrics, read once here for the status bar and handed down to the board's cards (LIVE_METRICS_KEY), so one
-// reading serves both. Off, nothing is measured at all (liveMetrics.ts).
+// The geek metrics, read once here and handed down (LIVE_METRICS_KEY) to the board's strip and cards and to the rail's
+// near-a-limit tile, so one reading serves all three. Off, nothing is measured at all (liveMetrics.ts).
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
 // The same reading folded into the board's cards, so a card and the panel's list say what a whole family holds.
 provide(CARD_METRICS_KEY, useCardMetrics(liveMetrics));
-// The runtime chips, read here so the bar knows whether it has anything to say: a developer's terminal chip keeps it
-// drawn for good, but a maker's chips all come and go, and with no chip and no metrics the bar would be an empty strip.
-const runtimeChips = useRuntimeChips();
-// The wake word's chip keeps the bar up while this device listens, so where listening stands is always in sight.
-const wakeListener = useWakeListener();
-const statusBarShown = computed(() => runtimeChips.chips.value.length > 0 || wakeListener.enabled.value || runtimeChips.offline.value);
-
-// ONE PANEL ABOVE THE BAR AT A TIME. The docked terminal and the metrics panel both open at the foot of the window, and
-// the two stacked leave the page a sliver: opening either closes the other. A terminal in a window of its own takes no
+// ONE PANEL AT THE FOOT AT A TIME. The docked terminal opens under the section and the metrics panel at the foot of the
+// board, and the two stacked leave the board a sliver: opening either closes the other. A terminal in a window of its own takes no
 // room here. Immediate, so a window reopened with both remembered open comes back with the terminal alone.
 const terminalFloat = useTerminalFloating();
 const terminalDocked = computed(() => terminal.open.value && !terminalFloat.floats.value);
@@ -393,7 +383,7 @@ useGettingStarted();
             <!-- `my-1`, as on the other hairline: with `mb-1` alone this one sat off-centre in its own air. -->
             <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
-            <!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: the one hairline marks the real boundary, identity above the sections. What the sandbox is running is the status bar's, not the rail's. -->
+            <!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: the one hairline marks the real boundary, identity above the sections. What the sandbox is running is the tools' at the foot, not a band's. -->
             <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
                 <template v-for="(band, at) in tileBands" :key="band.group.id">
                     <!-- Air where a hairline used to be; aria-hidden, since the tiles already carry their own labels. -->
@@ -500,8 +490,16 @@ useGettingStarted();
                 <RailIcon section="capabilities" class="icon-rail-glyph" />
             </RouterLink>
 
-            <!-- The account control: avatar opening a popover with account identity and actions. -->
-            <AccountPanel />
+            <!-- The foot, held together at the bottom and growing upward: what this device and Intentic are doing, the
+                 sandbox's tools (the terminal and Browsers fixed, a standing state over them only while it holds), then the
+                 account, an avatar opening its identity and actions. A tile arriving here moves nothing else on the rail. -->
+            <div class="mt-auto flex flex-col items-center" style="gap: var(--icon-rail-gap)">
+                <div class="flex flex-col items-center">
+                    <RailSignals />
+                    <RailTools />
+                </div>
+                <AccountPanel />
+            </div>
           </template>
         </nav>
 
@@ -527,14 +525,6 @@ useGettingStarted();
                 <div ref="terminalSlot" class="contents"></div>
             </SandboxGate>
         </main>
-
-        <!-- The foot of the window, under the section and the side panel: what the sandbox is running, the terminal first,
-             and with geek metrics on, how full it is. Outside the gate, like the chat column: a stalled sandbox still says
-             what it had going, and the terminal's chip goes inert until it answers. Wherever a sandbox's page is on
-             screen, the rail folded or unrolled (sandboxBeside): only Home's own chat and the account's pages have none. -->
-        <StatusBar v-if="sandboxBeside" :persistent="statusBarShown" :metrics="liveMetrics" style="grid-area: status">
-            <template #start><RuntimeChips :runtime="runtimeChips" /><WakeStatusChip /></template>
-        </StatusBar>
 
         <!-- The parked chat's scratch pad, floating in the section's own cell: opening it must not reflow the page the reader
              opened it to talk about. Outside the gate, like the chat column: a stalled sandbox is a thing to ask about. -->
@@ -562,12 +552,10 @@ useGettingStarted();
 .shell {
     /* Floor is 0, not the stored width, which was clamped at drag time and could push past a shrunk window. */
     grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--side-width, 22rem));
-    /* Explicit rows, so a stray element landing in an implicit row can't starve 1fr to zero height. The rail runs the
-       full height; the status bar spans the section and the side panel under them. */
-    grid-template-rows: minmax(0, 1fr) auto;
-    grid-template-areas:
-        "rail workspace side"
-        "rail status status";
+    /* An explicit row, so a stray element landing in an implicit row can't starve 1fr to zero height. No status bar: what
+       the sandbox runs is the rail's foot (rail/tools/), its metrics the board's foot (MetricsStrip.vue). */
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "rail workspace side";
 }
 
 /* The rail's own rules (tiles, glyphs, marks, bands) are the shared stylesheet's, shell/rail/iconRail.css. */

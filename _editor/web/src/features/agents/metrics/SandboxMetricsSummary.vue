@@ -3,9 +3,9 @@ import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics"
 import { Meter } from "@intentic/ui";
 import { useSandboxReadout } from "./sandboxFigures";
 
-// The geek metrics at rest, inside their status-bar segment: three small gauges (CPU, memory, disk) and nothing
+// The geek metrics at rest, inside the board's metrics strip: three small gauges (CPU, memory, disk) and nothing
 // else until something nears a limit, when that figure joins the line tinted. The rest (load, processes, pressure, the
-// daemon, memory by kind) is the panel the segment opens above the status bar for as long as the reader keeps it.
+// daemon, memory by kind) is the panel the strip opens above itself for as long as the reader keeps it.
 
 const props = defineProps<{
     metrics: SandboxMetrics;

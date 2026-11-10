@@ -1,11 +1,11 @@
 import { definePreference } from "@intentic/ui/preference";
 import { computed, ref } from "vue";
 
-// THE BOARD'S STATUS BAR, REMEMBERED. Whether the reader left the metrics panel open and how tall they made it, so a
+// THE BOARD'S METRICS STRIP, REMEMBERED (MetricsStrip.vue). Whether the reader left the metrics panel open and how tall they made it, so a
 // panel opened to watch something is still open after a reload, a trip to another view, or a click anywhere else.
-// Nothing is open until the reader opens it: the bar says enough at rest.
+// Nothing is open until the reader opens it: the strip says enough at rest.
 
-// The bar's one segment, which opens its panel above the bar. The main tree's check once had one too, so a panel left
+// The strip's one segment, which opens its panel above it. The main tree's check once had one too, so a panel left
 // open under its name reads back as closed.
 export type StatusSegment = `metrics`;
 

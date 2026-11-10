@@ -3,20 +3,21 @@ import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics"
 import { ResizeSeam, SectionHeader, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, useId } from "vue";
-import SandboxMetricsDetails from "../metrics/SandboxMetricsDetails.vue";
-import SandboxMetricsSummary from "../metrics/SandboxMetricsSummary.vue";
-import { openPanel, PANEL_DEFAULT_HEIGHT, PANEL_MIN_HEIGHT, panelHeight, panelMaxHeight } from "./statusBarState";
+import SandboxMetricsDetails from "./SandboxMetricsDetails.vue";
+import SandboxMetricsSummary from "./SandboxMetricsSummary.vue";
+import { openPanel, PANEL_DEFAULT_HEIGHT, PANEL_MIN_HEIGHT, panelHeight, panelMaxHeight } from "./metricsStripState";
 
-// Bottom bar: host runtime chips at the start, opt-in metrics at the end. persistent keeps it visible with metrics off.
-// Without persistent it disappears when metrics are off. The opaque metrics panel takes layout space above the bar.
-// Only the reader closes it (segment, × or Escape); its open state and resized height persist in statusBarState.ts.
+// THE GEEK METRICS, AT THE FOOT OF THE AGENTS BOARD (AgentsView.vue) and nowhere else: one quiet line of three gauges,
+// drawn only while the reader opted in. Pressed, it opens the full readout above it, inside the board, which takes layout
+// space rather than covering cards. Only the reader closes it (the line, × or Escape); its open state and resized height
+// persist in metricsStripState.ts. Away from the board the rail says only when a figure nears its limit
+// (shell/rail/tools/MetricsAlertTile.vue).
 
 const t = useT();
 
 const props = defineProps<{
     // Read only while the reader opted in (useLiveMetrics).
     metrics?: SandboxMetrics | undefined;
-    persistent?: boolean;
 }>();
 
 const uid = useId();
@@ -24,7 +25,6 @@ const panelId = `${uid}-panel-metrics`;
 const headingId = `${uid}-heading-metrics`;
 const segmentId = `${uid}-segment-metrics`;
 
-const drawn = computed(() => props.persistent || props.metrics !== undefined);
 // Left open while the metrics are off, it stays open in memory, so it comes back as it was left.
 const open = computed(() => openPanel.value === `metrics` && props.metrics !== undefined);
 // The height the reader chose, drawn no taller than this window allows; the seam drags only within it too.
@@ -43,7 +43,7 @@ const close = (): void => {
 
 <template>
     <div
-        v-if="drawn"
+        v-if="metrics !== undefined"
         role="region"
         :aria-label="t(`agents.statusBar.label`)"
         data-lane-floor
@@ -83,18 +83,15 @@ const close = (): void => {
                 </button>
             </section>
         </div>
-        <!-- One line, never two: a chip arriving or a long figure is cut, not wrapped, so the bar keeps its height. -->
+        <!-- One line, never two: a long figure is cut, not wrapped, so the strip keeps its height. -->
         <div class="flex h-7 min-w-0 items-center gap-1 px-1.5" :class="open ? `border-t border-line-subtle` : ``">
-            <slot name="start" />
-            <!-- The metrics sit at the bar's far end. -->
             <button
-                v-if="metrics !== undefined"
                 :id="segmentId"
                 type="button"
                 data-segment="metrics"
                 :aria-expanded="open"
                 :aria-controls="open ? panelId : undefined"
-                class="ml-auto flex h-6 min-w-0 shrink items-center gap-2 overflow-hidden rounded-md px-1.5 text-left transition-colors"
+                class="flex h-6 min-w-0 shrink items-center gap-2 overflow-hidden rounded-md px-1.5 text-left transition-colors"
                 :class="open ? `bg-content/8 text-content` : `text-muted hover:bg-content/5 hover:text-content`"
                 @click="toggle"
             >

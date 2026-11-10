@@ -76,7 +76,7 @@ const copyImage = async (): Promise<void> => {
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 // The name and the logo are the owner's and Full access's to change (the platform's `requireFullAccess`).
 // (2026-11-09) Both live on the platform, so neither is offered while it isn't answering or the window is open without
-// it: the name and logo show as they are, and the status bar's offline chip says why (PlatformStatusChip.vue).
+// it: the name and logo show as they are, and the rail's offline tile says why (RailSignals.vue).
 const platformAnswering = computed(() => !platformHealth.down.value && !directMode.value);
 const canEditIdentity = computed(() => platformAnswering.value && (isOwner.value || sandbox.active.value?.role === `maintainer`));
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);

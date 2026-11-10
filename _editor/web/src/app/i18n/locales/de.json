@@ -878,7 +878,7 @@
             "couldntStop": "Das Warmhalten des Caches dieses Chats konnte nicht beendet werden."
         },
         "statusBar": {
-            "label": "Statusleiste",
+            "label": "Sandbox-Messwerte",
             "close": "{title} schließen"
         },
         "stamps": {
@@ -11624,9 +11624,9 @@
                 "showToolCallsHint": "Einzelne Werkzeugaufrufe im Transkript anzeigen."
             },
             "statusBar": {
-                "group": "Statusleiste",
+                "group": "Agenten-Board",
                 "liveMetrics": "Geek-Metriken",
-                "liveMetricsHint": "CPU, Arbeitsspeicher und Festplatte am Ende der Statusleiste, dazu auf der Karte jedes Agenten sein Anteil und was er gekostet hat. Solange dies aus ist, wird nichts gemessen."
+                "liveMetricsHint": "CPU, Arbeitsspeicher und Festplatte am Fuß des Agenten-Boards, dazu auf der Karte jedes Agenten sein Anteil und was er gekostet hat. Anderswo nur eine kleine Kachel in der Leiste, wenn sich ein Wert seinem Limit nähert. Solange dies aus ist, wird nichts gemessen."
             },
             "explorer": {
                 "colorful": "Farbig",
@@ -12040,7 +12040,7 @@
             "iconRail": "Seitenleiste, Aktivitätsleiste, Leistengröße",
             "changesList": "Diff, Review, geänderte Dateien",
             "toolCalls": "Verlauf, Agentenschritte, Details, Werkzeuge",
-            "statusBar": "CPU, Speicher, RAM, Messwerte, Anzeigen, Fußzeile, Kosten, Ausgaben",
+            "statusBar": "CPU, Speicher, RAM, Messwerte, Anzeigen, Fußzeile, Kosten, Ausgaben, Statusleiste, Board",
             "pushNotifications": "Handy, Smartphone, mobil, benachrichtigen, Hinweise, Web-Push",
             "statusBadge": "Badge, Symbol, Taskleiste, Infobereich, Favicon, Tab-Titel",
             "sounds": "Signalton, Audio, Ton, Klang, Piepton",
@@ -12667,6 +12667,9 @@
         "shortcutSheet": {
             "change": "In den Einstellungen ändern",
             "general": "Allgemein"
+        },
+        "railTools": {
+            "nearLimit": "Nahe am Limit"
         }
     },
     "terminal": {

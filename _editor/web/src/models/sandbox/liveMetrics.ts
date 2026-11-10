@@ -5,7 +5,7 @@ import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { supportsRoute } from "../../client/sandbox/useDaemonRoutes";
 
-// The sandbox's opt-in CPU, memory and disk readout ("geek metrics"), in the status bar and on the board's cards. Off
+// The sandbox's opt-in CPU, memory and disk readout ("geek metrics"), at the foot of the board and on its cards. Off
 // means never asked for: the daemon measures only inside a request, so with the query disabled nothing anywhere is
 // collected, not merely hidden.
 
@@ -23,7 +23,7 @@ export const LIVE_METRICS_POLL_MS = 3_000;
 // share and nothing is measured for it (features/agents/board/AgentsView.vue).
 export const LIVE_METRICS_KEY: InjectionKey<ComputedRef<SandboxMetrics | undefined>> = Symbol(`liveMetrics`);
 
-// Called once per window, by the desktop shell for its status bar. A hidden tab is never polled. A refused read (a guest, an older daemon) stops
+// Called once per window, by the desktop shell for the board's strip and the rail's near-a-limit tile. A hidden tab is never polled. A refused read (a guest, an older daemon) stops
 // asking until the reader comes back to it.
 export function useLiveMetrics(): ComputedRef<SandboxMetrics | undefined> {
     const { query } = useSandboxQuery({

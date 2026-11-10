@@ -19,6 +19,7 @@ import { useRole } from "../../client/sandbox/useRole";
 import HomeSectionPicker from "./HomeSectionPicker.vue";
 import AccountPanel from "../AccountPanel.vue";
 import RailProcesses from "./RailProcesses.vue";
+import RailSignals from "./tools/RailSignals.vue";
 
 const t = useT();
 const { user } = useAuth();
@@ -46,8 +47,11 @@ const choosesSection = computed(() => tiled.value.size > 0 && !homeOnly.value);
         <!-- The account's empty place, as LocalAccountTile.vue draws it: an arrow into a door reads as leaving here. -->
         <Icon name="user" class="icon-rail-glyph" aria-hidden="true" />
     </RouterLink>
-    <!-- The foot, held together at the bottom: the bookmark over the account, whose own top margin finds no room inside it. -->
+    <!-- The foot, held together at the bottom: what this device and Intentic are doing (the wake word, an outage), the
+         bookmark, then the account, whose own top margin finds no room inside it. The sandbox's own tools flew into the
+         bookmark with its sections (tools/RailTools.vue) and fly back out when the rail folds. -->
     <div v-else class="mt-auto flex flex-col items-center" style="gap: var(--icon-rail-gap)">
+        <div class="flex flex-col items-center empty:hidden"><RailSignals /></div>
         <HomeSectionPicker v-if="choosesSection" />
         <AccountPanel />
     </div>

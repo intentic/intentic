@@ -878,7 +878,7 @@
             "couldntStop": "Impossible d'arrêter de garder le cache de ce chat au chaud."
         },
         "statusBar": {
-            "label": "Barre d'état",
+            "label": "Métriques du sandbox",
             "close": "Fermer {title}"
         },
         "stamps": {
@@ -11624,9 +11624,9 @@
                 "showToolCallsHint": "Afficher chaque appel d'outil dans la transcription."
             },
             "statusBar": {
-                "group": "Barre d'état",
+                "group": "Tableau des agents",
                 "liveMetrics": "Métriques pour geeks",
-                "liveMetricsHint": "CPU, mémoire et disque au bout de la barre d'état, et sur la carte de chaque agent sa part et ce qu'il a coûté. Rien n'est mesuré tant que l'option est désactivée."
+                "liveMetricsHint": "CPU, mémoire et disque au pied du tableau des agents, et sur la carte de chaque agent sa part et ce qu'il a coûté. Ailleurs, une petite tuile dans la barre latérale seulement quand l'un approche de sa limite. Rien n'est mesuré tant que l'option est désactivée."
             },
             "explorer": {
                 "colorful": "Coloré",
@@ -12040,7 +12040,7 @@
             "iconRail": "barre latérale, barre d'activité, taille de la barre",
             "changesList": "diff, relecture, fichiers modifiés",
             "toolCalls": "transcription, étapes de l'agent, détails, outils",
-            "statusBar": "CPU, mémoire, RAM, métriques, jauges, pied de page, coût, dépenses",
+            "statusBar": "CPU, mémoire, RAM, métriques, jauges, pied de page, coût, dépenses, barre d'état, tableau",
             "pushNotifications": "téléphone, mobile, notifier, alertes, push web",
             "statusBadge": "badge, zone de notification, barre des tâches, favicon, titre de l'onglet, icône",
             "sounds": "signal sonore, audio, son, bip",
@@ -12667,6 +12667,9 @@
         "shortcutSheet": {
             "change": "Modifier dans les réglages",
             "general": "Général"
+        },
+        "railTools": {
+            "nearLimit": "Proche de la limite"
         }
     },
     "terminal": {

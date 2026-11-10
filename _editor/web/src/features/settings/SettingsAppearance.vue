@@ -393,9 +393,9 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- The status bar's CPU, memory and disk gauges, and each card's share and cost; off means the sandbox measures
-             nothing for them, not that they are hidden. The bar itself is always there on a desktop, carrying what the sandbox runs. A
-             phone has no status bar and draws no gauges, so it offers no switch for them. -->
+        <!-- The CPU, memory and disk gauges at the foot of the Agents board, the rail's tile when one nears its limit, and each
+             card's share and cost; off means the sandbox measures nothing for them, not that they are hidden. A phone draws no
+             gauges, so it offers no switch for them. -->
         <RowGroup v-if="!maker && !mobile" data-setting="status-bar" :label="t(`settings.appearance.statusBar.group`)">
             <Row
                 as="label"

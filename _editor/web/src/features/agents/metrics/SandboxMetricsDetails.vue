@@ -10,14 +10,14 @@ import { openById } from "../../../models/fleet/useAgents-actions";
 import { CARD_METRICS_KEY, HEAVY_SESSION_SHARE } from "../../../models/sandbox/liveMetrics";
 import { useSandboxReadout } from "./sandboxFigures";
 
-// The panel the status bar's metrics segment opens above it: every figure the bar leaves out, grouped by
+// The panel the board's metrics strip opens above it: every figure the strip leaves out, grouped by
 // what it answers. The gauges again with their capacity, then the machine's other readings, then which kinds of process
 // hold the memory, one kind a row with the small ones folded (sandboxFigures.ts decides which), since a row of
 // side-by-side kinds reads as a puzzle rather than a list. Last, which cards hold it, heaviest first, each counting the
 // sessions grouped under it as the card itself does (CARD_METRICS_KEY): where the memory went, in one look rather than a
 // scan across every card, and each row opens its conversation, so the one eating the box is a press from being stopped. Every figure explains itself on hover, since "load" or "pressure" is a number
 // only a reader who already knows it can read bare; a figure past its limit wears the warning dot there too. Its heading
-// is the status bar panel's header (StatusBar.vue).
+// is the metrics strip panel's header (MetricsStrip.vue).
 
 const t = useT();
 
