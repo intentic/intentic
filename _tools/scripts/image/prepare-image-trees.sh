@@ -109,6 +109,11 @@ done
 # condition the image's node never sets.
 rm -rf "$out/sandbox/src"
 
+# The build's tsBuildInfo cache (.cache/): pnpm deploy copies it from the content-addressed store, but the image
+# never type-checks, and a layer that carries it can fail containerd's overlay extraction when a snapshot loses the
+# directory mid-unpack (the core smoke on 7e7b6f1e).
+rm -rf "$out/sandbox/.cache"
+
 # THE EXTENSION TREES SHARE THE DAEMON'S PACKAGES. Each gateway is its own `pnpm deploy`, so each carried its own copy of
 # what the daemon's tree already holds: 15 MiB of @intentic/sandbox-contract apiece, zod, and the rest. A package
 # directory that is byte-for-byte the daemon's (same name in pnpm's store, which names the exact version and peers,

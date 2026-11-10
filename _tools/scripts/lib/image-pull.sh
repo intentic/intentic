@@ -23,7 +23,9 @@ set -o pipefail
 # has one to name, and the content digest when a blob was collected instead — and both are state that a fresh
 # unpack rebuilds from bytes the registry still has. The third is the same store one step earlier: a blob that
 # finished downloading, whose ingest file was gone when containerd went to move it into blobs/ (1.398.1's core
-# half, on z440 with every layer downloaded, read as the registry's refusal and released nothing).
+# half, on z440 with every layer downloaded, read as the registry's refusal and released nothing). The fifth is
+# the overlay extraction losing a directory mid-unpack (the core smoke on 7e7b6f1e, where /opt/sandbox/.cache
+# was gone when containerd tried to set its timestamps): same class of snapshot-chain corruption, same fix.
 #
 # NOTHING ELSE BELONGS HERE. A full disk fails the unpack too ("failed to register layer: write ...: no space
 # left on device") and must fail AT ONCE: re-pulling 5 GB onto a disk with no room for it is twenty minutes
@@ -37,6 +39,7 @@ image_pull_unpack_fault() {
         -e 'failed to prepare extraction snapshot.*(does not exist|not found)' \
         -e 'content digest [^ ]+: not found' \
         -e 'failed commit on ref [^ ]+: commit failed: rename [^ ]+/ingest/[^ ]+ [^ ]+: no such file or directory' \
+        -e 'failed to extract layer .* to overlayfs .* no such file or directory' \
         -- "$1"
 }
 

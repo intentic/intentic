@@ -227,6 +227,10 @@ rm -f "$landed"
                 "a downloaded blob whose ingest file went missing before its commit, which 1.398.1's core half printed",
                 'failed commit on ref "attestation-sha256:453c942e3b2e786bb5958b6ae54fbc8c2dac785516b4edf3589ccc52006d7f05": commit failed: rename /var/lib/containerd/io.containerd.content.v1.content/ingest/6423e00bf5d5f47c7e8c4096353ce9f7ed225626e5a1853f72092441f14059e2/data /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/453c942e3b2e786bb5958b6ae54fbc8c2dac785516b4edf3589ccc52006d7f05: no such file or directory',
             ],
+            [
+                "an overlay extraction that lost a directory mid-unpack, which the core smoke on 7e7b6f1e printed",
+                'failed to extract layer (application/vnd.oci.image.layer.v1.tar+zstd sha256:762ee29874ef33780098e67c7a48212813ca5c982246cc823a4ab5261a30d190) to overlayfs as "extract-492761203-kmsW sha256:7cb19efd9d0e020798239c794e4845c5264c3f7762981fc6fd6fa6a771d42a84": failed call to UtimesNanoAt for /var/lib/desktop-containerd/daemon/io.containerd.snapshotter.v1.overlayfs/snapshots/149094/fs/opt/sandbox/.cache: no such file or directory',
+            ],
         ],
         // A pull is not re-run for anything re-running cannot fix: a disk with no room for 5 GB stays that way, and
         // every verdict the registry reaches is registry-retry.sh's to judge one layer in.
