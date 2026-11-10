@@ -32,6 +32,7 @@ import { answerNote } from "./switcherRows";
 import { answerOf, sleepingOn } from "../../../client/sandbox/wake/sandboxAnswer";
 import { removalKey } from "./removal/removalPlan";
 import { slotChord, useSwitchCommands } from "./useSwitchCommands";
+import { commandShortcut } from "../../../workbench/commands/useCommands";
 import { useT } from "@intentic/ui/i18n";
 
 // Shared workspace/local-window place switcher: a pick retargets sandbox views/probes; the active sandbox hub is opened from here.
@@ -236,13 +237,18 @@ const openSettings = (option: SandboxSummary): void => {
 
 // THIS COMPUTER, the desktop app's other face: its own window on a folder of this computer, with This device beside it
 // (the app's local shell). The app swaps the two in one frame. An app older than the local shell opens its
-// own card for the same link, which is this computer too. Not a row here: the account menu offers it (AccountPanel.vue),
-// and Alt+0 goes there from the keyboard.
+// own card for the same link, which is this computer too. A place of the same rank as the sandboxes, so it is the first
+// row of this same list in both faces (2026-11-10, the owner: switching between the two must feel like switching
+// sandboxes): in the workspace a row to pick, on Alt+0; in a local window the row the reader is on. Not in the account
+// menu, where it sat for four days (2026-11-06) and switching meant hunting at the other end of the rail.
 const inDesktopApp = desktopApp() !== undefined && !local;
+const listsThisComputer = inDesktopApp || local;
 const toThisComputer = (): void => {
     open.value = false;
     openThisComputer();
 };
+// In a local window the row is where the reader already is: pressing it only closes the panel, as the active sandbox's row would.
+const pickThisComputer = (): void => (local ? void (open.value = false) : toThisComputer());
 
 // The app's local windows list these same sandboxes in their own switcher and show this account at their rail's foot,
 // and can learn either only from this page (desktop.ts `announceDesktopRoster`): told on mount and again whenever a
@@ -350,23 +356,37 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
          to the logo only when a press opened it: a panel the pointer raised never took the keyboard's place. -->
     <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start" :restore-focus="pressed" menu>
         <div ref="panel" class="flex min-h-0 w-80 max-w-[calc(100vw-5rem)] flex-col gap-0.5 overflow-y-auto overscroll-contain p-1" v-on="menu.panel">
-            <!-- In a local window, the place this window already is heads the panel: the folder it shows and its path.
-                 Not a row to pick, being the place on screen. In the workspace, This computer is in the account menu
-                 (shell/AccountPanel.vue) and on Alt+0, so this list holds only the sandboxes. -->
-            <template v-if="folder">
-                <div class="ui-row-select-on ui-row-select-horizontal flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs" aria-current="true">
-                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-content/5 text-link">
-                        <Icon name="desktop" class="text-sm" />
-                    </span>
-                    <span class="flex min-w-0 flex-1 flex-col">
-                        <span class="truncate font-medium text-link">{{ folder.name }}</span>
-                        <span class="truncate font-mono text-2xs text-subtle" :title="folder.path">{{ folder.path }}</span>
-                    </span>
-                </div>
-                <div class="my-1 border-t border-line-subtle"></div>
-            </template>
-
             <SectionHeader :label="t(`shared.sandboxes`)" density="dense" class="px-2 py-1.5" />
+
+            <!-- THIS COMPUTER, first and always one row, so the sandboxes growing under it never move it: drawn as a
+                 sandbox's row is, its picture the computer, its second line the folder a local window shows (the path on
+                 hover) or what it is for. Lit in a local window, being the place on screen; never dragged, its place
+                 and its Alt+0 being fixed. -->
+            <button
+                v-if="listsThisComputer"
+                type="button"
+                data-menu-row
+                :data-current="local || undefined"
+                :aria-current="local || undefined"
+                class="ui-row-select ui-row-select-horizontal flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs"
+                :class="{ 'ui-row-select-on': local }"
+                @click="pickThisComputer"
+            >
+                <span class="flex size-7 shrink-0 items-center justify-center" :class="local ? 'text-link' : 'text-muted'" aria-hidden="true">
+                    <Icon name="desktop" class="text-base" />
+                </span>
+                <span class="flex min-w-0 flex-1 flex-col">
+                    <span class="truncate font-medium" :class="local ? 'text-link' : 'text-content'">{{ t(`sandbox.sandboxSwitcher.thisComputer`) }}</span>
+                    <span class="truncate text-2xs text-subtle" :title="folder?.path">{{ folder ? folder.name : t(`sandbox.sandboxSwitcher.thisComputerNote`) }}</span>
+                </span>
+                <span class="flex min-w-9 shrink-0 items-center justify-end">
+                    <kbd
+                        v-if="!local && commandShortcut(`sandbox.thisComputer`)"
+                        class="rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle"
+                        >{{ commandShortcut(`sandbox.thisComputer`) }}</kbd
+                    >
+                </span>
+            </button>
 
             <!-- A local window with nobody signed in: what agents need, and the sign-in that brings the workspace. -->
             <template v-if="signedOut">

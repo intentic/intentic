@@ -4,7 +4,7 @@ import { useGettingStarted } from "../features/gettingStarted/useGettingStarted"
 import CommunityInvite from "../features/community/CommunityInvite.vue";
 import { useCommunityInvite } from "../features/community/useCommunityInvite";
 import type { Disposable } from "@intentic/extension-api";
-import { AnchoredOverlay, Avatar, browserOwnsClick, Notice, StatusBadge, useDevice, useHoverMenu, vAction } from "@intentic/ui";
+import { AnchoredOverlay, Avatar, browserOwnsClick, Button, ConfirmDialog, Notice, StatusBadge, useDevice, useHoverMenu, vAction } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
@@ -14,14 +14,13 @@ import type { DeviceSession } from "../client/auth/useAuth";
 import { MAX_DEVICE_ACCOUNTS } from "@intentic/api-contract";
 import { useHostedPlan } from "../models/hosted-plan/useHostedPlan";
 import { leaveAfterSignOut } from "../app/environments/afterSignOut";
-import { desktopApp, openThisComputer } from "../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { here, isPage, page } from "../lib/routes/links";
 import { useDeletedCount } from "../models/home/sandboxTrash";
 
 // The rail's bottom account control: an avatar opening a popover with account identity (email, name,
-// plan) and actions (Settings, Recently deleted while a sandbox can come back, This computer in the desktop app, Sign out). It opens as the sandbox logo at the rail's top does (useHoverMenu): resting
+// plan) and actions (Settings, Recently deleted while a sandbox can come back, Sign out). This computer is not one: it is a place, the first row of the sandbox switcher at the rail's top (2026-11-10). It opens as the sandbox logo at the rail's top does (useHoverMenu): resting
 // on it raises the panel, a passing pointer raises nothing, and a press pins it. The rail's two end controls are the
 // same kind of thing, an identity with a short menu under it, so they answer the pointer the same way. The sandbox switcher lives above; theme lives in the account's settings. The same control at
 // the foot of a desktop window on a folder of this computer (local/LocalShell.vue), drawn and pressed the same: there the
@@ -87,14 +86,6 @@ watch(comingToMenu, (coming) => {
 });
 const canAddAccount = computed(() => account.add !== undefined && account.canAdd.value);
 const switchingTo = ref<string | undefined>(undefined);
-
-// Computer tools are an occasional destination, reached here rather than among Home's sandbox tiles. A local window
-// is already on this computer, so it needs no link back to itself.
-const hasThisComputer = desktopApp() !== undefined && !account.local;
-const showThisComputer = (): void => {
-    open.value = false;
-    openThisComputer();
-};
 
 const avatarImage = computed<string | null>(() => (avatarFailed.value ? null : (user.value?.image ?? null)));
 
@@ -179,6 +170,27 @@ const logoutAll = async (): Promise<void> => {
     }
 };
 
+// With another account signed in here, Sign out is a question rather than an act: "this one, or all of them?" The menu
+// carries one plain row (a second one beside it read as the same thing, a few words apart), and the palette's own
+// "Sign out of all accounts" goes straight through logoutAll. With one account there is nothing to ask.
+const askingSignOut = ref(false);
+const askSignOut = (): void => {
+    if (others.value.length === 0) {
+        void logout();
+        return;
+    }
+    open.value = false;
+    askingSignOut.value = true;
+};
+const signOutThis = async (): Promise<void> => {
+    askingSignOut.value = false;
+    await logout();
+};
+const signOutEverywhere = async (): Promise<void> => {
+    askingSignOut.value = false;
+    await logoutAll();
+};
+
 const logout = async (): Promise<void> => {
     signOutFailure.value = undefined;
     let ended: SignedOutAs;
@@ -212,7 +224,7 @@ let commands: Disposable[] = [];
 
 onMounted(() => {
     commands = [
-        registerBuiltin(`account.signOut`, logout),
+        registerBuiltin(`account.signOut`, askSignOut),
         registerBuiltin(`account.signOutAll`, logoutAll),
         registerBuiltin(`account.add`, addAccount),
         registerBuiltin(`account.joinCommunity`, () => invite.open(`palette`)),
@@ -375,16 +387,6 @@ const communityPressed = (): void => {
                 <span class="min-w-0 flex-1 truncate">{{ t(`sandbox.words.recentlyDeleted`) }}</span>
                 <span class="shrink-0 text-2xs tabular-nums text-subtle">{{ deletedCount }}</span>
             </RouterLink>
-            <button
-                v-if="hasThisComputer"
-                type="button"
-                data-menu-row
-                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
-                @click="showThisComputer"
-            >
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="desktop" class="text-base text-muted" /></span>
-                {{ t(`sandbox.sandboxSwitcher.thisComputer`) }}
-            </button>
             <a
                 :href="invite.url"
                 target="_blank"
@@ -403,26 +405,36 @@ const communityPressed = (): void => {
                 data-menu-row
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
                 data-test="sign-out"
-                v-action="logout"
+                v-action="askSignOut"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>
                 {{ t(`shell.words.signOut`) }}
             </button>
-            <!-- Only with another account here: Sign out above ends this one and carries on as the next. -->
-            <button
-                v-if="others.length > 0"
-                type="button"
-                data-menu-row
-                data-test="sign-out-all"
-                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
-                v-action="logoutAll"
-            >
-                <span class="h-5 w-5 shrink-0" aria-hidden="true"></span>
-                {{ t(`auth.accounts.signOutAll`) }}
-            </button>
             <Notice v-if="signOutFailure" tone="danger" class="m-1 text-2xs" data-test="sign-out-failure">{{ signOutFailure }}</Notice>
         </div>
     </AnchoredOverlay>
+
+    <!-- Only with another account here. Signing out of this one carries on as the next, so the dialog names who ends and who
+         stays; "all" is the second way, a tier below the first, which is what a press without reading is most likely to mean. -->
+    <ConfirmDialog
+        :open="askingSignOut"
+        :header="t(`auth.accounts.signOutTitle`, { email: user?.email ?? `` })"
+        :description="others.length === 1 ? t(`auth.accounts.signOutStay`, { email: others[0]?.user.email ?? `` }) : t(`auth.accounts.signOutStayMany`)"
+        header-icon="sign-out"
+        :confirm-label="t(`auth.accounts.signOutThis`)"
+        :destructive="false"
+        @cancel="askingSignOut = false"
+        @confirm="signOutThis"
+    >
+        <template #actions>
+            <Button
+                tier="boring"
+                :label="t(`auth.accounts.signOutAllCount`, { count: others.length + 1 }, others.length + 1)"
+                data-test="sign-out-all"
+                @click="signOutEverywhere"
+            />
+        </template>
+    </ConfirmDialog>
 </template>
 
 <style scoped>

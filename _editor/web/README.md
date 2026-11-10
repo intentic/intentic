@@ -381,7 +381,7 @@ flowchart LR
   window's folder and lists the account's sandboxes, the only other places the window goes, in the order the reader
   arranged them on Home (the workspace's, as it last told the app: the window's own storage never saw that drag, so
   rows are not dragged there), with the same digits for the same places as the workspace's switcher: Alt+0 this
-  computer (in the workspace offered by the account menu, not a switcher row), Alt+1–9 the sandboxes. With none listed, Add sandbox is its one row. What only the desktop app can answer (the recent places, whether there is an
+  computer (the first row of the switcher in both windows, drawn as a sandbox's row and lit in the local window, where it is the place on screen), Alt+1–9 the sandboxes. With none listed, Add sandbox is its one row. What only the desktop app can answer (the recent places, whether there is an
   account, who is signed in and the sandboxes as the workspace last told it, its Devices view, and the account itself)
   comes from the host it installs before the editor runs (`app/environments/localHost.ts`); a page without one gets
   the link-only host. The account is `client/auth/useAccount.ts`: in the workspace the editor's own session, in a local
@@ -742,8 +742,8 @@ The shared composer offers model selection to non-guest members in either audien
 selected model and runtime support it, and stays hidden under Auto or on the free trial.
 Home and personal settings need only a signed-in account: an unfinished, offline or incompatible sandbox never gates
 them or redirects them to setup, including a direct visit to `/settings`.
-Home also opens from the logo menu in This computer before any sandbox exists. In the desktop app, the account menu
-offers This computer beside Settings; the Home rail holds the sandboxes, Add and the processes under way (below; 2026-10-26). Computer tools stay
+Home also opens from the logo menu in This computer before any sandbox exists. In the desktop app, This computer is the first row of the
+sandbox switcher, a place like the sandboxes under it (not the account menu, since 2026-11-10); the Home rail holds the sandboxes, Add and the processes under way (below; 2026-10-26). Computer tools stay
 available without becoming a primary destination during onboarding. Before the first sandbox, Home is the first run (`HomeNoSandbox.vue`): what a sandbox
 is, three steps, and Create, which opens the new sandbox's dialog and then its tile and run in its place; a setup of the reader's own that never
 finished is offered first, and signed out it also offers sign-in, at the rail's foot too. The rail's + wears a beacon.

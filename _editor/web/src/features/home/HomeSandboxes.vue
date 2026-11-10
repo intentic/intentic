@@ -29,6 +29,8 @@ import { sandboxRunOf } from "../../models/processes/processTiles";
 import { processNote } from "../../models/processes/processWords";
 import type { ViewBadge } from "@intentic/extension-api";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
+import { desktopApp, openThisComputer } from "../../app/environments/desktop";
+import { commandShortcut } from "../../workbench/commands/useCommands";
 import NewSandboxTile from "./newSandbox/NewSandboxTile.vue";
 import { newSandbox, newSandboxPageShown, readySandboxes, seenReady } from "./newSandbox/newSandbox";
 
@@ -155,6 +157,15 @@ const selected = (id: string): boolean =>
     !newSandboxPageShown(route, newSandbox.value) &&
     processAskedBy(route) === undefined;
 const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`, { name, count: readings.value.get(id)?.needsYou ?? `—` });
+// THIS COMPUTER, in the desktop app: a place of the same rank as the sandboxes, first on this rail as it is first in the
+// switcher (SandboxSwitcher.vue), so the way there is where the way to every sandbox is. One press, since there is
+// nothing to select first: the app shows it in this window's place. Never dragged, its place and its Alt+0 being fixed.
+const inDesktopApp = desktopApp() !== undefined;
+const thisComputerTip = computed(() => ({
+    title: t(`sandbox.sandboxSwitcher.thisComputer`),
+    note: t(`sandbox.sandboxSwitcher.thisComputerNote`),
+    keys: commandShortcut(`sandbox.thisComputer`),
+}));
 // The same add action everywhere: signed in opens the dialog here; signed out returns to it after sign-in.
 const add = useRequestAddSandbox();
 let last: { id: string; at: number } | undefined;
@@ -256,6 +267,16 @@ const choose = (id: string, input: `click` | `enter`): void => {
         class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain"
         :class="{ 'cursor-grabbing select-none': drag.carried.value !== undefined }"
     >
+        <button
+            v-if="inDesktopApp"
+            type="button"
+            class="icon-rail-tile ui-row-select ui-row-select-horizontal flex shrink-0 items-center justify-center rounded-lg text-muted hover:text-content"
+            :aria-label="t(`sandbox.sandboxSwitcher.thisComputer`)"
+            v-tooltip.right="thisComputerTip"
+            @click="openThisComputer"
+        >
+            <Icon name="desktop" class="icon-rail-glyph" aria-hidden="true" />
+        </button>
         <!-- Drag a tile to arrange them; the others slide aside rather than jump. -->
         <TransitionGroup move-class="motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out">
             <!-- The carried tile's own place is the slot it will land in: empty and dashed, inside the tile's box so the
