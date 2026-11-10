@@ -5,6 +5,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { retry } from "@intentic/base/async";
 import { isAppDir, readTemplateManifest, type AppInstanceInput, type TemplateManifest } from "./template-manifest.js";
 
 const exec = promisify(execFile);
@@ -128,14 +129,45 @@ export const templateArchiveUrl = (source: string, ref: string): string | undefi
     return `${source.slice(0, end).replace(/\.git$/, "")}/archive/${ref}.tar.gz`;
 };
 
+// A server error, unlike a 4xx refusal, is a blip worth another try.
+class ArchiveServerError extends Error {}
+
+const ARCHIVE_ATTEMPTS = 4;
+
+// The archive's bytes, or undefined when the host refuses it (4xx: private repo, non-GitHub). A dropped connection or a
+// 5xx is tried again, since one failed a release image build (`fetch failed`, run 42764659767); a 5xx that outlasts the
+// tries also answers undefined, so the caller falls back to git.
+const fetchTemplateArchive = async (url: string): Promise<Buffer | undefined> => {
+    try {
+        return await retry(
+            async () => {
+                const response = await fetch(url, { redirect: "follow" });
+                if (response.status >= 500) {
+                    throw new ArchiveServerError(`${url} answered ${response.status}`);
+                }
+                if (!response.ok) {
+                    return undefined;
+                }
+                // Inside the try: a body cut off mid-download is the same blip as a refused connection.
+                return Buffer.from(await response.arrayBuffer());
+            },
+            { attempts: ARCHIVE_ATTEMPTS, delayMs: (attempt) => 1_000 * 2 ** (attempt - 1) },
+        );
+    } catch (error) {
+        if (error instanceof ArchiveServerError) {
+            return undefined;
+        }
+        throw new Error(`fetching the template archive ${url} failed after ${ARCHIVE_ATTEMPTS} tries`, { cause: error });
+    }
+};
+
 // Unpacks a source archive into `dir`; false means the host won't serve one (private repo, non-GitHub), so the caller
 // falls back to git. Piped to tar's stdin rather than staged to disk.
 const extractTemplateArchive = async (url: string, dir: string): Promise<boolean> => {
-    const response = await fetch(url, { redirect: "follow" });
-    if (!response.ok) {
+    const archive = await fetchTemplateArchive(url);
+    if (archive === undefined) {
         return false;
     }
-    const archive = Buffer.from(await response.arrayBuffer());
     const tar = spawn("tar", ["-xz", "-C", dir, "--strip-components=1"], { stdio: ["pipe", "ignore", "pipe"] });
     const stderr: string[] = [];
     tar.stderr.on("data", (chunk: Buffer) => stderr.push(chunk.toString()));
