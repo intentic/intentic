@@ -1,4 +1,4 @@
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { sandboxPageInHome } from "../../lib/routes/homeSection";
 import { currentRoute, frameOf } from "../../lib/routes/links";
 
@@ -18,3 +18,10 @@ export const masterRail = computed(() => {
 // on this alone, never on the rail's state, so unrolling the rail moves nothing but the rail. Home's own page has its
 // one chat as its page, and the account's pages there are no sandbox's.
 export const sandboxBeside = computed(() => !masterRail.value || sandboxPageInHome.value);
+
+// THE SAME RAIL IN A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER (local/LocalShell.vue), unrolled onto every sandbox
+// (local/LocalMasterRail.vue) or folded onto This computer. That window has no Home frame for an address to say it, and
+// every sandbox it lists opens in the workspace, so its rail's state is the window's own: the cluster under the logo and
+// Mod+Alt+H unroll it, and a press on This computer's tile (or the shortcut again) folds it back. A new window opens folded.
+// allow(module-state): the one rail of a local window
+export const localRailUnrolled = ref(false);

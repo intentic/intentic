@@ -5708,9 +5708,10 @@
             "trash": "Déplacé dans la corbeille"
         },
         "placeSwitcher": {
-            "switchPlace": "{name} : passer à un sandbox",
             "putAgentsToWork": "Mettre les agents au travail",
-            "signInLead": "Connectez-vous pour configurer un sandbox"
+            "signInLead": "Connectez-vous pour configurer un sandbox",
+            "openFailed": "Impossible d'ouvrir {name}",
+            "signInFailed": "Impossible de lancer la connexion"
         },
         "agentsTile": {
             "putAgentsToWork": "Mettre les agents au travail",
@@ -9014,14 +9015,11 @@
             "cleanupCommand": "Commande de retrait",
             "leftStillListed": "Vous avez quitté « {name} » sur votre compte, mais il était injoignable pour vous retirer de sa propre liste de membres. Vous y restez donc jusqu'à ce que son propriétaire vous retire sous Accès. ({reason})",
             "leftStillListedHeader": "Quitté, mais toujours répertorié",
-            "needsYou": "Vous attend",
             "asleep": "en veille : s’ouvre lorsque vous le sélectionnez",
             "starting": "démarrage : prêt dans un instant",
             "notAnswering": "Ne répond pas",
             "sandboxes": "Sandboxes",
             "settingsOf": "Paramètres de {name}",
-            "status": "État",
-            "switchSandbox": "Changer de sandbox : {switcherLabel}",
             "lookingOnMachines": "Recherche sur vos ordinateurs connectés…",
             "notOnMachines": "Il ne se trouve sur aucun de vos ordinateurs connectés ({machines}).",
             "neverCameUpNotOn": "Il n'a jamais démarré, et aucun de vos ordinateurs ({machines}) ne le contient : il n'y a rien à supprimer là-bas.",
@@ -9093,8 +9091,7 @@
             "openDeleted": "Supprimés récemment",
             "emptyLog": "En attente de {machine}…",
             "showLog": "Afficher la sortie",
-            "hideLog": "Masquer la sortie",
-            "rowRemoving": "suppression…"
+            "hideLog": "Masquer la sortie"
         },
         "sandboxSyncToggles": {
             "setUp": "Configurer…",

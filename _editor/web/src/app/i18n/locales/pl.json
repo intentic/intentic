@@ -8542,14 +8542,11 @@
             "cleanupCommand": "Polecenie usunięcia",
             "leftStillListed": "Opuszczono „{name}” na twoim koncie, ale nie udało się z nim połączyć, żeby usunąć cię z jego własnej listy członków, więc nadal cię wymienia, dopóki właściciel nie usunie cię w zakładce Dostęp. ({reason})",
             "leftStillListedHeader": "Opuszczono, ale nadal na liście",
-            "needsYou": "Czeka na ciebie",
             "asleep": "uśpiona: otworzy się po wybraniu",
             "starting": "uruchamia się: za chwilę gotowa",
             "notAnswering": "Nie odpowiada",
             "sandboxes": "Sandboksy",
             "settingsOf": "Ustawienia: {name}",
-            "status": "Stan",
-            "switchSandbox": "Przełącz sandbox: {switcherLabel}",
             "lookingOnMachines": "Szukam jej na podłączonych komputerach…",
             "notOnMachines": "Nie ma jej na żadnym z podłączonych komputerów ({machines}).",
             "neverCameUpNotOn": "Nigdy nie wystartowała, a żaden z podłączonych komputerów ({machines}) nie ma jej kontenera, więc nie ma tam czego usuwać.",
@@ -8621,8 +8618,7 @@
             "openDeleted": "Ostatnio usunięte",
             "emptyLog": "Czekam na odpowiedź {machine}…",
             "showLog": "Pokaż wyjście",
-            "hideLog": "Ukryj wyjście",
-            "rowRemoving": "usuwanie…"
+            "hideLog": "Ukryj wyjście"
         },
         "sandboxSyncToggles": {
             "setUp": "Skonfiguruj…",
@@ -13934,9 +13930,10 @@
             "trash": "Przeniesiono do Kosza"
         },
         "placeSwitcher": {
-            "switchPlace": "{name}: przejdź do sandboxa",
             "putAgentsToWork": "Zaprzęgnij agentów do pracy",
-            "signInLead": "Zaloguj się, żeby utworzyć sandbox"
+            "signInLead": "Zaloguj się, żeby utworzyć sandbox",
+            "openFailed": "Nie udało się otworzyć {name}",
+            "signInFailed": "Nie udało się rozpocząć logowania"
         },
         "agentsTile": {
             "putAgentsToWork": "Zaprzęgnij agentów do pracy",

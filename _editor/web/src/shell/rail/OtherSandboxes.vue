@@ -4,7 +4,12 @@
      where it is (sandboxScreen.ts `unrolledPath`). Not a Home tile (the owner turned one down twice): it says something
      a tile could not, which other sandboxes there are and which of them waits for the reader, the reason to unroll at
      all. For a reader with no other sandbox it is the add tile instead, so a first extra sandbox is always one press away
-     (the unrolled rail ends in the same tile, HomeSandboxes.vue). -->
+     (the unrolled rail ends in the same tile, HomeSandboxes.vue).
+     The same part under This computer's logo in the desktop app's window on a folder (local/LocalShell.vue), where every
+     sandbox is another: its press unrolls that window's rail (local/LocalMasterRail.vue, models/home/masterRail.ts
+     `localRailUnrolled`), in the order the workspace last told the app, and its add tile is that window's own add (the
+     sign-in first, while nobody is signed in). It asks no sandbox what waits there: a folder window dials no daemon but
+     its folder's. -->
 <script setup lang="ts">
 import { SandboxLogo, type Tip, ui } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
@@ -12,6 +17,9 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useSandbox } from "../../client/sandbox/useSandbox";
+import { useFolderPlace } from "../../features/sandbox/gates/switcherPlace";
+import type { AttentionReading } from "../../models/home/homeFacts";
+import { localRailUnrolled } from "../../models/home/masterRail";
 import { identityHue } from "../../lib/identityHue";
 import { clusterOf } from "../../models/home/otherSandboxes";
 import { sandboxOrder } from "../../models/home/sandboxOrder";
@@ -24,11 +32,21 @@ import { badgeClass } from "../../workbench/views/viewBadge";
 
 const t = useT();
 const sandbox = useSandbox();
+// The desktop app's window on a folder (switcherPlace.ts): its sandboxes' order, and its own add.
+const place = useFolderPlace();
+const { local } = place;
 // Home's own count of what waits for the reader in each box, so the point here and the chip on Home's tile agree. At the
-// across-sandboxes store's ambient pace, and never the box the shell is in: its own tiles count that one.
-const readings = useHomeAttention({ everyMs: 45_000, skip: () => sandbox.activeSandboxId.value });
+// across-sandboxes store's ambient pace, and never the box the shell is in: its own tiles count that one. None in a
+// folder window, which reaches no sandbox's daemon.
+const nothingRead = computed<ReadonlyMap<string, AttentionReading>>(() => new Map());
+const readings = local ? nothingRead : useHomeAttention({ everyMs: 45_000, skip: () => sandbox.activeSandboxId.value });
 const cluster = computed(() =>
-    clusterOf(switchableSandboxes(sandbox.sandboxes.value), sandbox.activeSandboxId.value, readings.value, sandboxOrder.value),
+    clusterOf(
+        switchableSandboxes(sandbox.sandboxes.value),
+        sandbox.activeSandboxId.value,
+        readings.value,
+        local ? place.arranged.value : sandboxOrder.value,
+    ),
 );
 
 // Where each circle sits, in circle diameters (iconRail.css `--cluster-d`): a pair on top and one below between them, the
@@ -65,15 +83,27 @@ const tint = (id: string) => {
 const route = useRoute();
 const home = computed(() => unrolledPath(route));
 
-// The same add action everywhere: signed in opens the dialog here; signed out returns to it after sign-in.
-const add = useRequestAddSandbox();
+// The same add action everywhere: signed in opens the dialog here; signed out returns to it after sign-in. A folder
+// window's own (switcherPlace.ts): made in that window, or the sign-in while nobody is signed in.
+const requestAdd = local ? place.addSandbox : useRequestAddSandbox();
+const add = (): void => requestAdd();
+const addLabel = computed(() => (place.signedOut.value ? t(`local.placeSwitcher.putAgentsToWork`) : t(`sandbox.words.addSandbox`)));
+const addTip = computed<Tip | string>(() =>
+    place.signedOut.value ? { title: t(`local.placeSwitcher.putAgentsToWork`), note: t(`local.placeSwitcher.signInLead`) } : t(`sandbox.words.addSandbox`),
+);
+
+// A folder window has no Home frame: its rail unrolls in place (models/home/masterRail.ts `localRailUnrolled`).
+const unrollHere = (): void => {
+    localRailUnrolled.value = true;
+};
 
 const needy = computed(() => cluster.value.slots.filter((slot) => slot.needsYou > 0));
 const tip = computed<Tip>(() => ({
     title: t(`home.open`),
     keys: commandShortcut(`view.home`),
     rows: needy.value.map((slot) => ({ label: slot.name, value: slot.needsYou })),
-    note: needy.value.length > 0 ? t(`home.otherSandboxes.waiting`) : t(`home.otherSandboxes.quiet`),
+    // A folder window counts nothing, so it says nothing about what waits.
+    note: local ? undefined : needy.value.length > 0 ? t(`home.otherSandboxes.waiting`) : t(`home.otherSandboxes.quiet`),
 }));
 const label = computed(() =>
     [
@@ -86,13 +116,16 @@ const label = computed(() =>
 </script>
 
 <template>
-    <RouterLink
+    <!-- A link to the page in Home's frame in the workspace; a press that unrolls the rail in place in a folder window. -->
+    <component
+        :is="local ? `button` : RouterLink"
         v-if="cluster.slots.length > 0"
-        :to="home"
+        v-bind="local ? { type: `button` } : { to: home }"
         class="icon-rail-cluster ui-row-select ui-row-select-horizontal flex items-center justify-center rounded-lg"
         data-rail-holds="sandboxes"
         :aria-label="label"
         v-tooltip.right="tip"
+        @click="local && unrollHere()"
     >
         <span class="icon-rail-cluster-box relative" aria-hidden="true">
             <span
@@ -116,14 +149,14 @@ const label = computed(() =>
                 >+{{ cluster.more }}</span
             >
         </span>
-    </RouterLink>
+    </component>
     <button
         v-else-if="sandbox.sandboxes.value.length > 0"
         type="button"
         :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
         data-rail-key="rail:add-sandbox"
-        :aria-label="t(`sandbox.words.addSandbox`)"
-        v-tooltip.right="t(`sandbox.words.addSandbox`)"
+        :aria-label="addLabel"
+        v-tooltip.right="addTip"
         @click="add"
         @pointerenter="warmAddSandbox"
         @focus="warmAddSandbox"

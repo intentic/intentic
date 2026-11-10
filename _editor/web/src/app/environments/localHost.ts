@@ -128,6 +128,11 @@ export interface LocalView {
     /** What its tile carries (a setup running here, an update waiting), when it carries anything. */
     readonly badge?: Readonly<Ref<ViewBadge | undefined>>;
     /**
+     * This computer's own page: opened by the rail's top tile, This computer's logo, as a sandbox's logo opens its
+     * settings, so it has no tile of its own and its badge is worn on the logo (SandboxSwitcher.vue). One view at most.
+     */
+    readonly logo?: boolean;
+    /**
      * False for a view that is routed but has no rail tile, opened from where it is needed. Drawn when absent.
      * A ref for a tile that comes and goes (Passwords, on the rail once this computer has it set up); a view the reader
      * is on keeps its tile either way.

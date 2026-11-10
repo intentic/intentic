@@ -2,13 +2,16 @@
 import type { ViewBadge,Disposable } from "@intentic/extension-api";
 import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onMounted, onUnmounted, unref } from "vue";
+import { computed, onMounted, onUnmounted, ref, unref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { LOCAL_NAVIGATE_EVENT, LOCAL_PROJECT_ASK_EVENT, localFace } from "../app/environments/local";
 import { type LocalView, localHost } from "../app/environments/localHost";
 import { useAccount } from "../client/auth/useAccount";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
+import { localRailUnrolled } from "../models/home/masterRail";
+import OtherSandboxes from "../shell/rail/OtherSandboxes.vue";
+import { useRailMorph } from "../shell/rail/railMorph";
 import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
 import AccountPanel from "../shell/AccountPanel.vue";
 import SkipToContent from "../shell/SkipToContent.vue";
@@ -24,17 +27,24 @@ import { useKeybindings } from "../workbench/commands/useKeybindings";
 import { navigatedPath } from "./appEvents";
 import { takeFolderSwitches } from "./folderSwitch";
 import LocalAccountTile from "./LocalAccountTile.vue";
+import LocalMasterRail from "./LocalMasterRail.vue";
+import LocalSectionPicker from "./LocalSectionPicker.vue";
 import { repairBadgeOf, repairHoldsRail } from "./repair/repairSession";
 import { SANDBOX_SETUP_PATH } from "./setup/setupPath";
 import { useUnsavedGuard } from "./unsaved/useUnsavedGuard";
 import { useLocalProject } from "./useLocalProject";
 
 // THE SHELL OF A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER: the sandbox shell's rail and page, holding what needs no
-// sandbox and no account. At the top, the place this window shows and every other one, the account's sandboxes
-// included (the workspace's own SandboxSwitcher, standing on this folder); under it Files, the folder itself, then every view the app adds (Devices, the same
-// tile and the same page the sandbox shell has for its machines, localHost.ts); at the foot, the account, the sandbox shell's own control (AccountPanel: Settings open in
-// this window, Sign out leaves it on its folder), or the sign-in before there is one (LocalAccountTile). The tiles are
-// the sandbox shell's own (shell/rail/iconRail.css), so signing in changes what the rail holds, never what it is.
+// sandbox and no account, and behaving as the sandbox shell's rail does (2026-11-10, the owner: This computer is viewed
+// as a sandbox is). At the top, This computer's logo (the workspace's own SandboxSwitcher, a door to This computer's own
+// page, Devices, as a sandbox's logo is a door to its settings) and under it the account's other sandboxes folded into
+// the workspace's own cluster (shell/rail/OtherSandboxes.vue), or the add tile while there are none; then Files, the
+// folder itself, and every other view the app adds (Passwords, localHost.ts); at the foot, the account, the sandbox
+// shell's own control (AccountPanel: Settings open in this window, Sign out leaves it on its folder), or the sign-in
+// before there is one (LocalAccountTile). The cluster and Mod+Alt+H unroll the rail onto every sandbox
+// (LocalMasterRail.vue), the sections going into the bookmark at its foot (LocalSectionPicker.vue), the change played
+// as the workspace plays its own (shell/rail/railMorph.ts). The tiles are the sandbox shell's own
+// (shell/rail/iconRail.css), so signing in changes what the rail holds, never what it is.
 
 const t = useT();
 const host = localHost();
@@ -91,11 +101,12 @@ const repairTile = computed<Tile | undefined>(() => {
     const badge = repairBadgeOf(repair.session.value);
     return badge === undefined ? tile : { ...tile, badge };
 });
+// This computer's own page (the view the app marks `logo`, Devices) has no tile: the logo above is its door.
 const tiles = computed<readonly Tile[]>(() => [
     { section: `workspace`, to: localPath(`files`), label: t(`shared.files`) },
     ...(setupTile.value === undefined ? [] : [setupTile.value]),
     ...(repairTile.value === undefined ? [] : [repairTile.value]),
-    ...host.views.filter((view) => unref(view.inRail) !== false || isActive(`/${view.path}`)).map(viewTile),
+    ...host.views.filter((view) => view.logo !== true && (unref(view.inRail) !== false || isActive(`/${view.path}`))).map(viewTile),
 ]);
 // THE PROCESSES UNDER WAY, the same group Home's rail wears (parts/processes/ProcessTiles.vue): this PC's setup, a sandbox's,
 // a sign-in, Docker, another folder's sandbox, a machine of ours started from Home. Each opens its page here, in this window
@@ -128,9 +139,22 @@ const cycleSection = (delta: number): void => {
         void router.push(next.to);
     }
 };
+// ALL SANDBOXES, the cluster's press by keyboard as in the workspace (shell/commands/useHomeCommand.ts): it unrolls the
+// rail around the page on screen, and pressed again folds it back onto This computer.
+const toggleRail = (): void => {
+    localRailUnrolled.value = !localRailUnrolled.value;
+};
+// One rail, folded or unrolled, played as the workspace's is: each sandbox flies out of the cluster to its tile and each
+// section into the bookmark, or back.
+const railNav = ref<HTMLElement | null>(null);
+useRailMorph(() => railNav.value, localRailUnrolled);
 let sectionCommands: readonly Disposable[] = [];
 onMounted(() => {
-    sectionCommands = [registerBuiltin(`view.previousSection`, () => cycleSection(-1)), registerBuiltin(`view.nextSection`, () => cycleSection(1))];
+    sectionCommands = [
+        registerBuiltin(`view.previousSection`, () => cycleSection(-1)),
+        registerBuiltin(`view.nextSection`, () => cycleSection(1)),
+        registerBuiltin(`view.home`, toggleRail),
+    ];
 });
 onUnmounted(() => {
     for (const command of sectionCommands) {
@@ -176,29 +200,44 @@ onUnmounted(() => stopTaking?.());
 <template>
     <div class="local-shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
         <SkipToContent />
-        <nav class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
-            <!-- Top of the rail: the place this window shows, and the account's sandboxes, the workspace's own switcher (other folders are Files' folder menu). -->
-            <SandboxSwitcher />
-            <span class="my-1 icon-rail-divider h-px bg-line"></span>
+        <nav
+            ref="railNav"
+            class="icon-rail flex flex-col items-center border-r border-line bg-card"
+            :data-rail="localRailUnrolled ? `unrolled` : `folded`"
+            style="grid-area: rail"
+        >
+            <!-- Unrolled: This computer, then every sandbox, as the workspace's unrolled rail wears them. -->
+            <LocalMasterRail v-if="localRailUnrolled" />
+            <template v-else>
+                <!-- Top of the rail, as the sandbox shell's: the place this window shows (a door to its own page), and the
+                     account's other sandboxes folded under it (other folders are Files' folder menu). -->
+                <SandboxSwitcher />
+                <OtherSandboxes />
+                <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
-            <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
-                <!-- The sandbox shell's corners, drawn the same: a badge for news, a spinning mark for work in flight. -->
-                <RailTile
-                    v-for="tile in tiles"
-                    :key="tile.to"
-                    :section="tile.section"
-                    :to="tile.to"
-                    :label="tileLabel(tile)"
-                    :badge="tile.badge"
-                    :active="isActive(tile.to)"
-                />
-            </div>
+                <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
+                    <!-- The sandbox shell's corners, drawn the same: a badge for news, a spinning mark for work in flight. -->
+                    <RailTile
+                        v-for="tile in tiles"
+                        :key="tile.to"
+                        :section="tile.section"
+                        :to="tile.to"
+                        :label="tileLabel(tile)"
+                        :badge="tile.badge"
+                        :active="isActive(tile.to)"
+                        :data-rail-key="`section:${tile.to}`"
+                        data-rail-into="sections"
+                    />
+                </div>
+            </template>
 
             <!-- What runs meanwhile, the group Home's rail wears too; each opens its page in this window. -->
             <ProcessTiles :tiles="processTiles" :selected="processShown" @open="openProcess" />
 
-            <!-- At the foot, where the sandbox shell keeps the account: the same control, or the sign-in that brings one. -->
-            <div class="mt-auto flex flex-col items-center">
+            <!-- At the foot, where the sandbox shell keeps the account: the same control, or the sign-in that brings one;
+                 above it while unrolled, the bookmark the sections went into. -->
+            <div class="mt-auto flex flex-col items-center" style="gap: var(--icon-rail-gap)">
+                <LocalSectionPicker v-if="localRailUnrolled" :sections="tiles" :active="isActive" />
                 <AccountPanel v-if="user !== null" />
                 <LocalAccountTile v-else />
             </div>

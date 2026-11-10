@@ -64,7 +64,8 @@ const badge = computed(() => {
 
 /**
  * Devices: this computer's page, as the workspace's Devices view draws one machine (device/DeviceView.vue), with the app's
- * work on it. Named and tiled as the sandbox shell's Devices is, so one glyph on the rail never carries two names.
+ * work on it. This computer's own page, so the rail's top tile (This computer's logo) opens it, as a sandbox's logo opens
+ * that sandbox's settings, and wears its badge; it has no tile of its own, which drew the logo's glyph a second time.
  */
 const DEVICE_VIEW: LocalView = {
     path: `device`,
@@ -72,6 +73,7 @@ const DEVICE_VIEW: LocalView = {
     title: () => t(`desktop.device.title`),
     load: () => import(`./device/DeviceView.vue`),
     badge,
+    logo: true,
 };
 
 /** Passwords: this computer's vault, its requests and its settings, the app @intentic/ext-passwords/app mounts. */

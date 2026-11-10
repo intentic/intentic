@@ -5708,9 +5708,10 @@
             "trash": "Moved to the Trash"
         },
         "placeSwitcher": {
-            "switchPlace": "{name}: switch to a sandbox",
             "putAgentsToWork": "Put agents to work",
-            "signInLead": "Sign in to set up a sandbox"
+            "signInLead": "Sign in to set up a sandbox",
+            "openFailed": "Couldn't open {name}",
+            "signInFailed": "Couldn't start the sign-in"
         },
         "agentsTile": {
             "putAgentsToWork": "Put agents to work",
@@ -9014,14 +9015,11 @@
             "cleanupCommand": "Remove command",
             "leftStillListed": "You left \"{name}\" on your account, but it could not be reached to take you off its own member list, so it still lists you until its owner removes you under Access. ({reason})",
             "leftStillListedHeader": "Left, but still listed",
-            "needsYou": "Needs you",
             "asleep": "asleep: opens when you select it",
             "starting": "starting: ready in a moment",
             "notAnswering": "Not answering",
             "sandboxes": "Sandboxes",
             "settingsOf": "{name} settings",
-            "status": "Status",
-            "switchSandbox": "Switch sandbox: {switcherLabel}",
             "lookingOnMachines": "Looking for it on your connected computers…",
             "notOnMachines": "It isn't on any computer you've connected ({machines}).",
             "neverCameUpNotOn": "It never started, and none of your computers ({machines}) holds it: there is nothing to delete out there.",
@@ -9093,8 +9091,7 @@
             "openDeleted": "Recently deleted",
             "emptyLog": "Waiting for {machine} to answer…",
             "showLog": "Show output",
-            "hideLog": "Hide output",
-            "rowRemoving": "removing…"
+            "hideLog": "Hide output"
         },
         "sandboxSyncToggles": {
             "setUp": "Set up…",

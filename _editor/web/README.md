@@ -350,9 +350,12 @@ flowchart LR
   button opens in its own window, keeping this one's unsaved edits. A document's own window takes no drop. A refused call says the feature is not there for a folder rather than
   asking for an update, and a recording plays from its bytes over `/workspace/raw` where no media ticket is minted.
   `local/` holds the window's own parts: its shell (`LocalShell.vue`, the sandbox shell's rail from
-  `shell/rail/iconRail.css`, holding the workspace's own sandbox switcher standing on the folder (`features/sandbox/gates/SandboxSwitcher.vue`
-  with `switcherPlace.ts`: the account's sandboxes come through the app, so a row, or its cog, opens the workspace on
-  that sandbox or on its settings, where it is removed or left), Files with the folder menu on the folder's
+  `shell/rail/iconRail.css`, behaving as the sandbox shell's rail does: the workspace's own logo (`features/sandbox/gates/SandboxSwitcher.vue`),
+  standing on This computer and a door to its own page as a sandbox's is to its settings, the workspace's cluster of
+  the other sandboxes under it (`shell/rail/OtherSandboxes.vue`), which unrolls the rail onto every sandbox
+  (`LocalMasterRail.vue`, the sections in the bookmark `LocalSectionPicker.vue`), all reading `switcherPlace.ts`: the
+  account's sandboxes come through the app, so a tile, or its menu's Settings, opens the workspace on that sandbox or
+  on its settings, where it is removed or left), Files with the folder menu on the folder's
   name (`LocalFolderMenu.vue`: open a folder, and the folders opened lately; one opened in the window's place is moved
   to in place by `folderSwitch.ts`, as the editor's own sandbox switch to `local-<id>`, crossfaded with no reload), the views the app adds, and at
   the foot the sandbox shell's own account control `shell/AccountPanel.vue`, or the sign-in `LocalAccountTile.vue`
@@ -377,11 +380,14 @@ flowchart LR
   (`localHost.ts`); the shell's own Agents view that held it was removed on 2026-10-12. The folder's own button at the
   foot of the window says what the sandbox is doing while it is doing it, or what it waits for ("Waiting for Docker",
   "Sign in to continue"), and its press shows the page, where that is done (`setup/setupView.ts` `folderButtonOf`,
-  `setupAction.ts`). The place chip names the
-  window's folder and lists the account's sandboxes, the only other places the window goes, in the order the reader
-  arranged them on Home (the workspace's, as it last told the app: the window's own storage never saw that drag, so
-  rows are not dragged there), with the same digits for the same places as the workspace's switcher: Alt+0 this
-  computer (the first row of the switcher in both windows, drawn as a sandbox's row and lit in the local window, where it is the place on screen), Alt+1–9 the sandboxes. With none listed, Add sandbox is its one row. What only the desktop app can answer (the recent places, whether there is an
+  `setupAction.ts`). The rail's top holds
+  the account's sandboxes, the only other places the window goes, in the order the reader arranged them on Home (the
+  workspace's, as it last told the app: the window's own storage never saw that drag, so tiles are not dragged there),
+  with the same digits for the same places as the workspace: Alt+1–9 the sandboxes, Alt+0 this computer from the
+  workspace, and Mod+Alt+H unrolling the rail onto all of them and folding it back. Unrolled, This computer is its first
+  tile, lit, being the place on screen. With none listed, the add tile stands where the cluster would, the sign-in
+  first while nobody is signed in. Until 2026-11-10 the logo raised a list of the sandboxes on hover, which only this
+  window had. What only the desktop app can answer (the recent places, whether there is an
   account, who is signed in and the sandboxes as the workspace last told it, its Devices view, and the account itself)
   comes from the host it installs before the editor runs (`app/environments/localHost.ts`); a page without one gets
   the link-only host. The account is `client/auth/useAccount.ts`: in the workspace the editor's own session, in a local
@@ -414,7 +420,7 @@ flowchart LR
   open lands on Home's first run rather than on setup (which used to start a machine the moment it arrived), in the
   desktop app too (`app/environments/nothingToOpen.ts`). An unfinished setup of the reader's own is offered by name on
   that first run and finished in place, in a tile of Home's rail, in a browser and the desktop app alike. A link naming a sandbox (`/?sandbox=<id>`, the
-  desktop app's, for a synced folder or a sandbox picked on a local window's place chip) opens the shell inside it, on
+  desktop app's, for a synced folder or a sandbox picked on a local window's rail) opens the shell inside it, on
   the screen it was last left on or its board (`sandboxEntry`), if the account lists it, and otherwise says that
   sandbox is not on the account any more; the id leaves the address either way (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is
   `local/LocalShell.vue`, with `workspace/:path*` (the folder), one route per view the app adds (`device`) and
@@ -742,8 +748,9 @@ The shared composer offers model selection to non-guest members in either audien
 selected model and runtime support it, and stays hidden under Auto or on the free trial.
 Home and personal settings need only a signed-in account: an unfinished, offline or incompatible sandbox never gates
 them or redirects them to setup, including a direct visit to `/settings`.
-Home also opens from the logo menu in This computer before any sandbox exists. In the desktop app, This computer is the first row of the
-sandbox switcher, a place like the sandboxes under it (not the account menu, since 2026-11-10); the Home rail holds the sandboxes, Add and the processes under way (below; 2026-10-26). Computer tools stay
+In the desktop app, This computer is the first tile of the unrolled rail in both windows and Alt+0 in the workspace, a
+place like the sandboxes beside it (not the account menu, since 2026-11-10), and its own window's rail behaves as a
+sandbox's does; the Home rail holds the sandboxes, Add and the processes under way (below; 2026-10-26). Computer tools stay
 available without becoming a primary destination during onboarding. Before the first sandbox, Home is the first run (`HomeNoSandbox.vue`): what a sandbox
 is, three steps, and Create, which opens the new sandbox's dialog and then its tile and run in its place; a setup of the reader's own that never
 finished is offered first, and signed out it also offers sign-in, at the rail's foot too. The rail's + wears a beacon.

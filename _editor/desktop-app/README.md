@@ -110,10 +110,14 @@ flowchart LR
   site on the loopback port (netd routes preview hosts there, the editor does not dial them yet), a panel floated out
   of the face, and a sandbox asleep when the workspace cannot be reached, which the face lists but nothing wakes.
 - **The main window.** The editor's shell with the sandbox shell's rail, holding what needs no sandbox and no
-  account: at the top the place chip (the folder this window shows, and the account's sandboxes, each opening the
-  workspace on itself at `/?sandbox=<id>` and picked from anywhere in the window by Alt+1–9 as in the workspace, or
-  the sign-in before an account), then Files (the folder's tree and documents, `/workspace`), then Devices
-  (`/device`), then Passwords (`/passwords`) once this computer has it set up or an agent's request waits on it. Until
+  account, and behaving as the sandbox shell's rail does (2026-11-10): at the top This computer's logo, a door to
+  Devices (`/device`, the view `src/host.ts` marks `logo`), lit there and wearing Devices' badge, as a sandbox's logo
+  is a door to its settings, with no tile of its own and no menu on hover; under it the account's other sandboxes
+  folded into the workspace's cluster, which unrolls the rail onto them (This computer first, then each sandbox,
+  opening the workspace on itself at `/?sandbox=<id>` as Alt+1–9 do from anywhere in the window, then Add sandbox, the
+  sections put away in a bookmark at the foot), or the add tile while there is no other sandbox (the sign-in before an
+  account); then Files (the folder's tree and documents, `/workspace`), then Passwords (`/passwords`) once this
+  computer has it set up or an agent's request waits on it. Until
   then Passwords has no tile, so a new owner doesn't meet a password manager, and a quiet "Set up Passwords" card at
   the foot of Devices (`src/passwords/PasswordsOffer.vue`) is the way in. Passwords checks that the running keyring
   understands its app requests before loading. A keyring left on an older release offers **Update Passwords**, through
@@ -132,7 +136,7 @@ flowchart LR
   platform last answered (below): the workspace's switcher hands both over on `intentic://roster` whenever either
   changes, a sign-out empties them, and the app keeps them in `roster.json` (`local_roster`), with no address or token, so a row carries a name, its logo as a small inline thumbnail (`image`, a `data:image/…` URL of at most 64 KB; 2026-11-09), where it runs and
   whether it is shared, and no count or state, and the account an address, a name and an `https` avatar. Before the
-  workspace has listed any, Add sandbox is the place chip's one row; the account menu shows the named account at once
+  workspace has listed any, the add tile stands where the cluster would; the account menu shows the named account at once
   and then what the platform answers (below). It opens on the folder it was last
   pointed at (`home-folder.json`), or on `~/intentic/local`, which its first opening creates: nothing is asked before
   the first screen. A folder picked in the system's dialog from an empty folder's page, or one of the folders that page
@@ -255,7 +259,7 @@ flowchart LR
   `account`, `updateAccount`, `signOut`, `deviceAccounts`, `switchAccount`, `revokeAccount`) and
   `local/platform.ts` routes the plan, token and export calls of the editor's API client; who is signed in for the
   page's own session check stays the folder's placeholder, so a platform out of reach never holds the first paint.
-- **The workspace, opened somewhere.** A press that opens the workspace at a path (a sandbox on the place chip,
+- **The workspace, opened somewhere.** A press that opens the workspace at a path (a sandbox on a local window's rail,
   deleting the account from a local window's Settings) draws the workspace face in the frame and, when its page is already loaded, tells
   that page the path instead of loading it again (`open_in_place` in `windows.rs`): a script the app runs in the page
   calls the opener the page registered (`__INTENTIC_OPEN__`, the web's `installDesktopOpener`), which selects the

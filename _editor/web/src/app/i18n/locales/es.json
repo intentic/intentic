@@ -5708,9 +5708,10 @@
             "trash": "Movido a la papelera"
         },
         "placeSwitcher": {
-            "switchPlace": "{name}: cambiar a un sandbox",
             "putAgentsToWork": "Poner a los agentes a trabajar",
-            "signInLead": "Inicia sesión para configurar un sandbox"
+            "signInLead": "Inicia sesión para configurar un sandbox",
+            "openFailed": "No se pudo abrir {name}",
+            "signInFailed": "No se pudo iniciar el inicio de sesión"
         },
         "agentsTile": {
             "putAgentsToWork": "Poner a los agentes a trabajar",
@@ -9014,14 +9015,11 @@
             "cleanupCommand": "Comando para quitar",
             "leftStillListed": "Has dejado «{name}» en tu cuenta, pero no se pudo acceder a él para sacarte de su propia lista de miembros, así que te seguirá listando hasta que su propietario te quite en Acceso. ({reason})",
             "leftStillListedHeader": "Has salido, pero sigues en la lista",
-            "needsYou": "Te necesita",
             "asleep": "en reposo: se abre al seleccionarlo",
             "starting": "iniciándose: listo en un momento",
             "notAnswering": "No responde",
             "sandboxes": "Sandboxes",
             "settingsOf": "Ajustes de {name}",
-            "status": "Estado",
-            "switchSandbox": "Cambiar de sandbox: {switcherLabel}",
             "lookingOnMachines": "Buscándolo en tus ordenadores conectados…",
             "notOnMachines": "No está en ninguno de los ordenadores que has conectado ({machines}).",
             "neverCameUpNotOn": "Nunca llegó a iniciarse, y ninguno de tus ordenadores ({machines}) lo tiene: no hay nada que eliminar ahí fuera.",
@@ -9093,8 +9091,7 @@
             "openDeleted": "Eliminados recientemente",
             "emptyLog": "Esperando respuesta de {machine}…",
             "showLog": "Mostrar salida",
-            "hideLog": "Ocultar salida",
-            "rowRemoving": "eliminando…"
+            "hideLog": "Ocultar salida"
         },
         "sandboxSyncToggles": {
             "setUp": "Configurar…",

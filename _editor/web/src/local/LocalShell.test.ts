@@ -18,6 +18,9 @@ const Nothing = defineComponent({ render: () => null });
 jest.mock(`../shell/AccountPanel.vue`, () => ({ default: Nothing }));
 jest.mock(`./LocalAccountTile.vue`, () => ({ default: Nothing }));
 jest.mock(`../features/sandbox/gates/SandboxSwitcher.vue`, () => ({ default: Nothing }));
+jest.mock(`../shell/rail/OtherSandboxes.vue`, () => ({ default: Nothing }));
+jest.mock(`./LocalMasterRail.vue`, () => ({ default: Nothing }));
+jest.mock(`./LocalSectionPicker.vue`, () => ({ default: Nothing }));
 // A tile as its section and the corner it carries, so the rail's contents can be read.
 jest.mock(`../shell/rail/RailTile.vue`, () => ({
     default: defineComponent({
@@ -185,4 +188,27 @@ test(`Repair's tile is on the rail while it is open or at work, and leaves once 
     seen.push(tile());
 
     expect(seen).toEqual([undefined, ``, `running`, `warning`, undefined]);
+});
+
+// This computer's own page (the view the app marks `logo`, Devices) is the logo's to open, as a sandbox's settings are its
+// logo's: it has no tile of its own. Unrolled onto every sandbox, the rail puts its sections away (LocalMasterRail.vue).
+test(`This computer's own page has no tile, and the unrolled rail puts the section tiles away`, async () => {
+    const { localRailUnrolled } = await import("../models/home/masterRail");
+    const load = async () => ({ default: ThisComputer });
+    window.__INTENTIC_LOCAL_HOST__ = {
+        ...localHost(),
+        views: [
+            { path: `device`, section: `devices`, title: () => `Devices`, load, logo: true },
+            { path: `passwords`, section: `passwords`, title: () => `Passwords`, load },
+        ],
+    };
+    await mountShell();
+    const tiles = (): string[] => [...(el?.querySelectorAll(`[data-tile]`) ?? [])].map((tile) => tile.getAttribute(`data-tile`) ?? ``);
+    const folded = tiles();
+    localRailUnrolled.value = true;
+    await nextTick();
+    const unrolled = tiles();
+    localRailUnrolled.value = false;
+    await nextTick();
+    expect({ folded, unrolled, refolded: tiles() }).toEqual({ folded: [`workspace`, `passwords`], unrolled: [], refolded: [`workspace`, `passwords`] });
 });

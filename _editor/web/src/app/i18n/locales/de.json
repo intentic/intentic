@@ -5708,9 +5708,10 @@
             "trash": "In den Papierkorb verschoben"
         },
         "placeSwitcher": {
-            "switchPlace": "{name}: Zu einer Sandbox wechseln",
             "putAgentsToWork": "Agenten an die Arbeit schicken",
-            "signInLead": "Anmelden, um eine Sandbox einzurichten"
+            "signInLead": "Anmelden, um eine Sandbox einzurichten",
+            "openFailed": "{name} konnte nicht geöffnet werden",
+            "signInFailed": "Die Anmeldung konnte nicht gestartet werden"
         },
         "agentsTile": {
             "putAgentsToWork": "Agenten an die Arbeit schicken",
@@ -9014,14 +9015,11 @@
             "cleanupCommand": "Befehl zum Entfernen",
             "leftStillListed": "Sie haben „{name}“ aus Ihrem Konto entfernt, aber sie war nicht erreichbar, um Sie von ihrer eigenen Mitgliederliste zu nehmen; daher führt sie Sie weiter, bis ihr Eigentümer Sie unter Zugriff entfernt. ({reason})",
             "leftStillListedHeader": "Verlassen, aber noch aufgeführt",
-            "needsYou": "Braucht Sie",
             "asleep": "im Ruhezustand: öffnet sich beim Auswählen",
             "starting": "startet: gleich bereit",
             "notAnswering": "Antwortet nicht",
             "sandboxes": "Sandboxes",
             "settingsOf": "Einstellungen von {name}",
-            "status": "Status",
-            "switchSandbox": "Sandbox wechseln: {switcherLabel}",
             "lookingOnMachines": "Sie wird auf Ihren verbundenen Computern gesucht…",
             "notOnMachines": "Sie ist auf keinem Computer, den Sie verbunden haben ({machines}).",
             "neverCameUpNotOn": "Sie ist nie gestartet, und keiner Ihrer Computer ({machines}) hat sie: Dort gibt es nichts zu löschen.",
@@ -9093,8 +9091,7 @@
             "openDeleted": "Kürzlich gelöscht",
             "emptyLog": "Warte auf Antwort von {machine}…",
             "showLog": "Ausgabe zeigen",
-            "hideLog": "Ausgabe ausblenden",
-            "rowRemoving": "wird entfernt…"
+            "hideLog": "Ausgabe ausblenden"
         },
         "sandboxSyncToggles": {
             "setUp": "Einrichten…",

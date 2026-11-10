@@ -1,6 +1,5 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
-import { computed } from "vue";
 import { fleetAttention } from "../../agent-status/agentStatus-lanes";
 import { withNext } from "../../agent-status/agentStatus-standing";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -73,7 +72,3 @@ export const markSeenAcross = (sandboxId: string, agentId: string): void => {
     void sandboxRpc.agents.seen({ id: agentId }, { context: { at: sandboxId, background: true } }).catch(() => undefined);
 };
 
-// The same count keyed by sandbox id, for the surfaces that hold a row rather than a box (the switcher).
-export const attentionByBox = computed<ReadonlyMap<string, number | undefined>>(
-    () => new Map(otherBoxes.value.map((box) => [box.sandbox.id, boxAttention(box)])),
-);

@@ -3,17 +3,11 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import { useT } from "@intentic/ui/i18n";
 import { onMounted, onUnmounted, type Ref, watch, type WatchStopHandle } from "vue";
 import { registerBuiltin, SANDBOX_SWITCH_COMMANDS } from "../../../workbench/commands/builtinCommands";
-import { commandShortcut } from "../../../workbench/commands/useCommands";
 
 // THE SWITCHER'S CHORDS (SandboxSwitcher.vue): Alt+1…9 for the sandboxes in the order its list draws them, and Alt+0 for
 // this computer inside the desktop app. Registered while the switcher is mounted, which is the whole session.
 
 // Alt+1…9 picks the Nth switchable sandbox; a digit past the end does nothing rather than clamping.
-/** Reads the chord from the registry rather than a literal "Alt+N", so a remap or unbind shows correctly. */
-export const slotChord = (at: number): string | undefined => {
-    const command = SANDBOX_SWITCH_COMMANDS[at];
-    return command === undefined ? undefined : commandShortcut(command);
-};
 
 /** `switchable` is the switcher's list in popover order (unfinished setups are not in it); `thisComputer` is undefined
  *  outside the desktop app, the one place this computer is a place. */

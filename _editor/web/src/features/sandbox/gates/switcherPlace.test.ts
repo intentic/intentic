@@ -4,15 +4,16 @@ import { createApp, defineComponent, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, useRouter } from "vue-router";
 import { LINK_HOST, type LocalHost } from "../../../app/environments/localHost";
 
-// Pins the one place the sandbox switcher differs between the workspace and the desktop app's window on a folder: what
-// a pick, the setup and the recently deleted do from each, that a folder's window asks the platform for the account's
-// sandboxes once it is up and each time the panel opens, and that its remove dialog's door is this computer, through
-// the app, when this computer holds the sandbox.
+// Pins the one place the rail's top differs between the workspace and the desktop app's window on a folder: what a pick,
+// the setup and the recently deleted do from each, that a folder's window asks the platform for the account's sandboxes
+// once its rail is up and again each time it unrolls, and that its remove dialog's door is this computer, through the
+// app, when this computer holds the sandbox.
 
 const refreshed: string[] = [];
 const user = ref<{ email: string } | null>({ email: `ada@example.com` });
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({
+        sandboxes: { value: [] },
         refresh: () => {
             refreshed.push(`list`);
             return Promise.resolve([]);
@@ -22,6 +23,7 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({
 jest.mock(`../../../client/auth/useAccount`, () => ({ useAccount: () => ({ user }) }));
 
 const opened: string[] = [];
+const signIns: string[] = [];
 let refuse: string | undefined;
 let held: readonly string[] = [];
 let rosterIds: readonly string[] = [];
@@ -35,7 +37,10 @@ const host: LocalHost = {
         opened.push(path ?? `/`);
         return Promise.resolve();
     },
-    signIn: () => Promise.resolve(),
+    signIn: () => {
+        signIns.push(`sign-in`);
+        return Promise.resolve();
+    },
     roster: () => Promise.resolve({ account: null, sandboxes: rosterIds.map((id) => ({ id, name: id, place: `cloud`, shared: false })) }),
     machine: {
         holds: (slug: string) => Promise.resolve(held.includes(slug)),
@@ -46,7 +51,8 @@ const host: LocalHost = {
     },
 };
 
-const { openWorkspacePath, useFolderPlace } = await import("./switcherPlace");
+const { openWorkspacePath, resetFolderPlace, useFolderPlace } = await import("./switcherPlace");
+const { useNotifications } = await import("../../../workbench/notifications/notifications");
 const { useRemovalDoor } = await import("./removal/useRemovalDoor");
 
 const FACE = { daemonUrl: `http://127.0.0.1:47148`, token: `t`, id: `f1`, name: `Taxes`, path: `/home/ada/Taxes` };
@@ -79,6 +85,9 @@ const mount = <T>(use: () => T): Mounted<T> => {
 beforeEach(() => {
     refreshed.length = 0;
     opened.length = 0;
+    signIns.length = 0;
+    resetFolderPlace();
+    useNotifications().dismissReceipt();
     removed.length = 0;
     refuse = undefined;
     held = [];
@@ -96,7 +105,7 @@ describe(`in the workspace`, () => {
         let going: Promise<void> | undefined;
         const mounted = mount(() => {
             going = openWorkspacePath(useRouter(), `/setup`);
-            return useFolderPlace(ref(false));
+            return useFolderPlace();
         });
         await going;
         expect({ local: mounted.value.local, signedOut: mounted.value.signedOut.value, refreshed, opened, path: mounted.path() }).toEqual({
@@ -115,78 +124,72 @@ describe(`in a local window`, () => {
         window.__INTENTIC_LOCAL__ = FACE;
     });
 
-    it(`wears the order the workspace last told the app, read again each time the panel opens`, async () => {
+    it(`wears the order the workspace last told the app, read again when the rail unrolls`, async () => {
         rosterIds = [`b`, `a`];
-        const open = ref(false);
-        const mounted = mount(() => useFolderPlace(open));
+        const clock = jest.spyOn(Date, `now`).mockReturnValue(1_000_000);
+        const rail = mount(() => useFolderPlace());
         await new Promise((resolve) => setTimeout(resolve, 0));
-        const first = mounted.value.arranged.value;
+        const first = rail.value.arranged.value;
         rosterIds = [`a`, `b`, `c`];
-        open.value = true;
-        await nextTick();
+        clock.mockReturnValue(1_060_000);
+        const unrolled = mount(() => useFolderPlace());
         await new Promise((resolve) => setTimeout(resolve, 0));
-        expect({ first, reopened: mounted.value.arranged.value }).toEqual({ first: [`b`, `a`], reopened: [`a`, `b`, `c`] });
-        mounted.unmount();
+        clock.mockRestore();
+        expect({ first, unrolled: rail.value.arranged.value }).toEqual({ first: [`b`, `a`], unrolled: [`a`, `b`, `c`] });
+        rail.unmount();
+        unrolled.unmount();
     });
 
-    it(`stands on its folder and asks for the account's sandboxes once up and each time the panel opens`, async () => {
-        const open = ref(false);
-        const mounted = mount(() => useFolderPlace(open));
-        open.value = true;
-        await nextTick();
-        expect({ local: mounted.value.local, folder: mounted.value.folder.value, refreshed }).toEqual({
+    it(`stands on its folder and asks for the account's sandboxes once for the parts mounting together, and again later`, () => {
+        const clock = jest.spyOn(Date, `now`).mockReturnValue(1_000_000);
+        const logo = mount(() => useFolderPlace());
+        const cluster = mount(() => useFolderPlace());
+        const together = [...refreshed];
+        clock.mockReturnValue(1_060_000);
+        const unrolled = mount(() => useFolderPlace());
+        clock.mockRestore();
+        expect({ local: logo.value.local, folder: logo.value.folder.value, together, later: refreshed }).toEqual({
             local: true,
             folder: { name: `Taxes`, path: `/home/ada/Taxes` },
-            refreshed: [`list`, `list`],
+            together: [`list`],
+            later: [`list`, `list`],
         });
-        mounted.unmount();
+        for (const mounted of [logo, cluster, unrolled]) {
+            mounted.unmount();
+        }
     });
 
-    it(`opens a sandbox and the add dialog as the workspace, through the app`, async () => {
-        const open = ref(true);
-        const mounted = mount(() => useFolderPlace(open));
+    it(`opens a sandbox and the add as the workspace, through the app`, async () => {
+        const mounted = mount(() => useFolderPlace());
         await mounted.value.openFromFolder(`sbx-work`);
-        const event = new MouseEvent(`click`, { cancelable: true });
-        mounted.value.addSandbox(event);
+        mounted.value.addSandbox();
         await nextTick();
-        expect({
-            opened,
-            closed: !open.value,
-            prevented: event.defaultPrevented,
-            stayed: mounted.path(),
-        }).toEqual({
-            opened: [`/?sandbox=sbx-work`, `/?add=sandbox`],
-            closed: true,
-            prevented: true,
-            stayed: `/`,
-        });
+        expect({ opened, stayed: mounted.path() }).toEqual({ opened: [`/?sandbox=sbx-work`, `/?add=sandbox`], stayed: `/` });
         mounted.unmount();
     });
 
     it(`opens a sandbox's settings as the workspace on that sandbox, through the app`, async () => {
-        const open = ref(true);
-        const mounted = mount(() => useFolderPlace(open));
+        const mounted = mount(() => useFolderPlace());
         await mounted.value.openSettingsFromFolder(`sbx-work`, `/sandbox`);
-        expect({ opened, closed: !open.value }).toEqual({ opened: [`/sandbox?sandbox=sbx-work`], closed: true });
+        expect(opened).toEqual([`/sandbox?sandbox=sbx-work`]);
         mounted.unmount();
     });
 
-    it(`says why a sandbox did not open, by its row, and keeps the panel up`, async () => {
+    it(`says why a sandbox did not open in the window's notification lane, in the app's own words`, async () => {
         refuse = `The workspace window could not be opened.`;
-        const open = ref(true);
-        const mounted = mount(() => useFolderPlace(open));
+        const mounted = mount(() => useFolderPlace());
         await mounted.value.openFromFolder(`sbx-work`);
-        expect({ failure: mounted.value.failure.value, open: open.value }).toEqual({
-            failure: { id: `sbx-work`, message: `The workspace window could not be opened.` },
-            open: true,
-        });
+        const said = useNotifications().receipt.value;
+        expect({ tone: said?.tone, detail: said?.detail, opened }).toEqual({ tone: `problem`, detail: `The workspace window could not be opened.`, opened: [] });
         mounted.unmount();
     });
 
-    it(`offers the sign-in in place of the sandboxes while nobody is signed in`, () => {
+    it(`signs in first when Add sandbox is pressed while nobody is signed in`, async () => {
         user.value = null;
-        const mounted = mount(() => useFolderPlace(ref(false)));
-        expect(mounted.value.signedOut.value).toBe(true);
+        const mounted = mount(() => useFolderPlace());
+        mounted.value.addSandbox();
+        await nextTick();
+        expect({ signedOut: mounted.value.signedOut.value, signIns, opened }).toEqual({ signedOut: true, signIns: [`sign-in`], opened: [] });
         mounted.unmount();
     });
 
