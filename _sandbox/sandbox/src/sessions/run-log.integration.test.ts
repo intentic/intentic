@@ -11,10 +11,10 @@ import { openRunLog, readRunLog, removeRunLog, unrecordedRuns } from "./run-log.
 const opening: TranscriptRow[] = [{ role: "user", text: "port the parser", sentAt: 1 }];
 
 // A run whose every patch goes to a log in `dir`, as startTurnRun wires a journalled one; flushed by hand here.
-const loggedRun = (dir: string, id = "run-1") => {
+const loggedRun = (dir: string, id = "run-1", startedAt?: number) => {
     const run = new TurnRun(opening, 1, id);
     const warned: string[] = [];
-    const log = openRunLog(dir, { run: run.id, startedAt: run.startedAt, rows: [...run.rows] }, (message) => warned.push(message), 60_000);
+    const log = openRunLog(dir, { run: run.id, startedAt: startedAt ?? run.startedAt, rows: [...run.rows] }, (message) => warned.push(message), 60_000);
     run.tap = log.append;
     return { run, log, warned };
 };
@@ -93,10 +93,11 @@ describe("a run's log", () => {
     // The record refused the settled rows: whoever writes this conversation's record next writes them first.
     it("is kept under its run's name when the record refused the turn, oldest first among those", async () => {
         const dir = await unit();
-        const first = loggedRun(dir, "run-a");
+        // Distinct start times: two runs opened back to back can share a millisecond, and then age cannot order them.
+        const first = loggedRun(dir, "run-a", 1_000);
         first.run.push({ kind: "delta", text: "first" });
         await first.log.close(false);
-        const second = loggedRun(dir, "run-b");
+        const second = loggedRun(dir, "run-b", 2_000);
         second.run.push({ kind: "delta", text: "second" });
         await second.log.close(false);
         const kept = await unrecordedRuns(dir);

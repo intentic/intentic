@@ -41,10 +41,12 @@ const expandGlob = (repoDir: string, glob: string): string[] => {
     }
     return readdirSync(parent, { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
-        .map((entry) => `${prefix}/${entry.name}`);
+        .map((entry) => `${prefix}/${entry.name}`)
+        .toSorted();
 };
 
-// expandGlob's reading without blocking: a missing parent expands to nothing.
+// expandGlob's reading without blocking: a missing parent expands to nothing. Both sort by name: readdir's order is the
+// filesystem's, so without it which dir keeps a name two claim, and the order every reader lists, would vary by host.
 const expandGlobAsync = async (repoDir: string, glob: string): Promise<string[]> => {
     if (glob.includes("**")) {
         return [];
@@ -54,7 +56,10 @@ const expandGlobAsync = async (repoDir: string, glob: string): Promise<string[]>
     }
     const prefix = glob.slice(0, -2);
     const entries = (await readdir(join(repoDir, prefix), { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
-    return entries.filter((entry) => entry.isDirectory()).map((entry) => `${prefix}/${entry.name}`);
+    return entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => `${prefix}/${entry.name}`)
+        .toSorted();
 };
 
 // A `!dir` line excludes a dir pnpm itself does not install (this repo's two store shells, built by Xcode/Bubblewrap).

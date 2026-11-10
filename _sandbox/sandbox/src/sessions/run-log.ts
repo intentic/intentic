@@ -206,5 +206,6 @@ export const unrecordedRuns = async (dir: string): Promise<{ readonly head: RunL
     const read = await Promise.all(names.map(async (name) => ({ name, head: await readLog(join(dir, name)) })));
     return read
         .flatMap(({ name, head }) => (head === undefined ? [] : [{ head, remove: () => rm(join(dir, name), { force: true }) }]))
-        .toSorted((left, right) => left.head.startedAt - right.head.startedAt);
+        // Runs started in one millisecond fall back to their names, not readdir's filesystem-dependent order.
+        .toSorted((left, right) => left.head.startedAt - right.head.startedAt || left.head.run.localeCompare(right.head.run));
 };
