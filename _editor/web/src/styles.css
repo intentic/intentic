@@ -136,14 +136,28 @@
         --card-border: transparent;
 /* The resting fill is the GROUND'S to decide, since only the ground knows whether the card would vanish into it; hover and selection override the fill outright. */
         --card-fill: var(--card-rest, var(--color-card));
-        --card-accent: inset 0 0 #0000;
+        --card-mark: linear-gradient(#0000, #0000), linear-gradient(#0000, #0000), linear-gradient(#0000, #0000);
+/* Where each layer of `--card-mark` sits, then the tint and the ground's gradient, which fill the card: image layers, so a longhand per layer rather than the `background` shorthand the index row's mark is written in. */
+        background-position:
+            left calc(50% - 6.5px),
+            left calc(50% + 6.5px),
+            left center,
+            0 0,
+            0 0;
+        background-size:
+            3px 3px,
+            3px 3px,
+            3px 13px,
+            auto,
+            auto;
+        background-repeat: no-repeat;
         --card-ring: inset 0 0 #0000;
         --card-ledge: inset 0 0 #0000;
         --card-lift: 0 0 #0000;
         --card-drop: 0 0 #0000;
 /* The wash a selected card lays OVER whatever its ground paints, rather than a fill that replaces it: a skin that repaints the card (Sanctum's gradient) would otherwise paint straight over the selection. */
         --card-tint: transparent;
-        box-shadow: var(--card-accent), var(--card-ring), var(--card-ledge), var(--card-lift), var(--card-drop);
+        box-shadow: var(--card-ring), var(--card-ledge), var(--card-lift), var(--card-drop);
 /* The selection's blade (::before) lies under the card's words and over its fill, inside the card's own stacking context. */
         position: relative;
         isolation: isolate;
@@ -168,14 +182,18 @@
         --card-fill: var(--color-overlay);
         transition: none;
     }
-/* Selection owns a soft wash, the left edge and a blade of light that crosses it now and then; attention is already
+/* Selection owns a soft wash, the leading-edge mark and a blade of light that crosses it now and then; attention is already
    named by its lane and status. The wash is a layer over the card's own fill, so hovering or pressing an open session
    moves the fill under it and never replaces its selected appearance. */
     .session-card.session-card-on {
         color: var(--color-content);
         --card-tint: color-mix(in oklab, var(--color-selection-edge) 7%, transparent);
-        --card-accent: inset 1px 0 0 0 var(--color-selection-edge);
-        background-image: linear-gradient(var(--card-tint), var(--card-tint));
+        /* The picked mark the settings index draws on its picked row (`--ui-row-select-mark`, utilities.css): the same 3px capsule at the leading edge, as background layers so a rounded card never bends it into a bracket. */
+        --card-mark:
+            radial-gradient(circle closest-side, var(--color-selection-edge) 96%, transparent),
+            radial-gradient(circle closest-side, var(--color-selection-edge) 96%, transparent),
+            linear-gradient(var(--color-selection-edge) 0 0);
+        background-image: var(--card-mark), linear-gradient(var(--card-tint), var(--card-tint));
     }
 /* THE BLADE: a slanted band of the selection's hue sweeps across the card the moment it is selected, then every 8s, so the
    open session catches the eye where the click put it. Drawn like the skeleton's sheen (utilities.css says why): the band
@@ -246,7 +264,7 @@
 }
 :is(.agents-board, .ground-card, .ground-canvas) .session-card {
     /* The selection's wash (`--card-tint`, transparent at rest) rides over the ground's gradient as its own layer. */
-    --session-card-paint: linear-gradient(var(--card-tint), var(--card-tint)), linear-gradient(145deg, var(--session-card-fill-hi), var(--session-card-fill-lo));
+    --session-card-paint: var(--card-mark), linear-gradient(var(--card-tint), var(--card-tint)), linear-gradient(145deg, var(--session-card-fill-hi), var(--session-card-fill-lo));
     background-color: transparent;
     background-image: var(--session-card-paint);
     transition:
@@ -312,7 +330,7 @@
     padding: 0.5rem 0.625rem;
     /* The paint itself, not the property: the panel the sheet hangs in is a card ground, whose (and Sanctum's) rules
        draw `--session-card-paint` with more specificity than this one has. */
-    --session-card-paint: linear-gradient(var(--card-tint), var(--card-tint));
+    --session-card-paint: var(--card-mark), linear-gradient(var(--card-tint), var(--card-tint));
     background-image: var(--session-card-paint);
     --card-ledge: inset 0 0 #0000;
     --card-lift: 0 0 #0000;
