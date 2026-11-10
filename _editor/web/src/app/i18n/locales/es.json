@@ -13946,9 +13946,7 @@
             "clickToLook": "Clic para ver otra",
             "sharedAria": "Espacio de trabajo compartido, en {name}",
             "branchAria": "Rama: {name}",
-            "newAgentFromHere": "Nuevo agente desde aquí",
-            "newAgentFromHereNote": "Su trabajo vuelve aquí",
-            "newAgentTip": "Nuevo agente"
+            "backTo": "Volver a {name}"
         },
         "workspaceScopeGone": {
             "backToSharedWorkspace": "Volver al espacio de trabajo compartido",

@@ -5,10 +5,7 @@ import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useScopeTitle } from "../health/scopeTitle";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { useChanges } from "../../../models/changes/useChanges";
-import { draftFromBranch } from "../../../models/fleet/branches/branchStart";
-import { draftFreshSession } from "../../../models/fleet/freshSession";
-import { useAgents } from "../../../models/fleet/useAgents";
-import { isShared, type ViewScope, workspaceView } from "../../../app/workspaceScope";
+import { isShared, SHARED_SCOPE, type ViewScope, workspaceView } from "../../../app/workspaceScope";
 import { useT } from "@intentic/ui/i18n";
 import WorkspaceScopePicker from "../../../parts/workspace/scope/WorkspaceScopePicker.vue";
 
@@ -19,13 +16,12 @@ const t = useT();
 // shared checkout stays on ("main"), quietly; on anything else it is accented. A press
 // opens the switcher (WorkspaceScopePicker): a searchable list of branches and conversations' copies, not a menu, since a
 // busy sandbox has dozens. A per-person view: nothing changes on disk, and nobody else's Workspace moves.
-// Scoped, it is joined by the way to change what is on screen: a new agent started from that copy or that branch.
+// Scoped, it is joined by a one-press way back to the shared workspace, so leaving a copy never needs the switcher.
 
 const { error } = useWorkspaceTree();
 const title = useScopeTitle();
 const { mobile } = useDevice();
 const { repos } = useChanges();
-const { agentById } = useAgents();
 
 const open = ref(false);
 const anchor = ref<HTMLElement>();
@@ -72,18 +68,9 @@ const pick = (scope: ViewScope): void => {
     workspaceView.value = scope;
 };
 
-// A new agent on what is on screen: a branch's own start, or a fresh session on a conversation's copy with the reader's
-// own ask. Either opens a composer; nothing runs until Send.
-const origin = computed(() => (workspaceView.value.agent === undefined ? undefined : agentById(workspaceView.value.agent)));
-const startable = computed(() => !broken.value && (branch.value !== undefined || origin.value !== undefined));
-const startHere = (): void => {
-    const { agent, repo, branch: from } = workspaceView.value;
-    if (from !== undefined) {
-        draftFromBranch({ repo, branch: from });
-    } else if (agent !== undefined && origin.value !== undefined) {
-        void draftFreshSession(origin.value, `ask`);
-    }
-};
+// The way home: one press back to the shared workspace, named by the main line it stands on.
+const backLabel = computed(() => t(`workspace.workspaceScopeChip.backTo`, { name: mainLine.value ?? t(`workspace.workspaceScopeChip.sharedWorkspace`) }));
+const goShared = (): void => pick(SHARED_SCOPE);
 </script>
 
 <template>
@@ -104,16 +91,16 @@ const startHere = (): void => {
     </button>
     <!-- Its words on a desktop's bar, its glyph alone on a phone's, where the chip beside it already takes the width. -->
     <Button
-        v-if="startable"
+        v-if="!shared"
         size="small"
         tier="boring"
         class="shrink-0 whitespace-nowrap"
-        :label="mobile ? undefined : t(`workspace.workspaceScopeChip.newAgentFromHere`)"
-        :aria-label="t(`workspace.workspaceScopeChip.newAgentFromHere`)"
-        v-tooltip.bottom="{ title: t(`workspace.workspaceScopeChip.newAgentTip`), note: t(`workspace.workspaceScopeChip.newAgentFromHereNote`) }"
-        @click="startHere"
+        :label="mobile ? undefined : backLabel"
+        :aria-label="backLabel"
+        v-tooltip.bottom="{ title: backLabel, note: t(`workspace.workspaceScopeChip.sharedHint`) }"
+        @click="goShared"
     >
-        <template #icon><Icon name="plus" /></template>
+        <template #icon><Icon name="arrow-left" /></template>
     </Button>
     <ResponsiveOverlay
         v-model="open"
