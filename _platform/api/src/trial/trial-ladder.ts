@@ -1,5 +1,6 @@
 import type { Config } from "../config.js";
 import { listed, type TrialPool } from "./trial-pool.js";
+import { googleCompatible } from "./trial-signatures.js";
 
 // Which real models a trial message may land on, in try order. The trial publishes one id (`TRIAL_MODEL_ID`), picked
 // from a curated ladder here; discovery only vetoes rungs it can prove don't work, it never adds new ones.
@@ -13,7 +14,7 @@ const TRIAL_LADDER: readonly string[] = [`gemini-flash-latest`, `gemini-flash-li
 // default).
 export const nativeModelsUrl = (config: Config): string | undefined => {
     const compat = config.trial.baseUrl.replace(/\/+$/, ``);
-    return compat.endsWith(`/openai`) ? `${compat.slice(0, -`/openai`.length)}/models?pageSize=1000` : undefined;
+    return googleCompatible(compat) ? `${compat.slice(0, -`/openai`.length)}/models?pageSize=1000` : undefined;
 };
 
 // Google prefixes ids with `models/` on its listing surfaces; the harness uses the bare id.

@@ -148,6 +148,33 @@ describe(`Repair turn`, () => {
         expect(fetched).toBe(0);
     });
 
+    // The desktop app keeps a call's id, name and arguments, never the thought signature Google gave it, and Gemini 3
+    // refuses the history it sends back at a turn's second step without one (trial-signatures.ts).
+    it(`signs the tool calls a turn sends back to Google`, async () => {
+        const { prisma } = fakePrisma(1);
+        const bodies: string[] = [];
+        const fetchFn: typeof fetch = Object.assign(
+            (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+                bodies.push(String(init?.body));
+                return Promise.resolve(new Response(`{"choices":[{"message":{"content":"done"}}]}`, { status: 200 }));
+            },
+            { preconnect: (): void => undefined },
+        );
+        const response = await serve({ prisma, fetchFn }).request(`/api/repair/turn`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({
+                messages: [
+                    { role: `user`, content: `help` },
+                    { role: `assistant`, content: ``, toolCalls: [{ id: `c1`, name: `doctor`, arguments: `{}` }] },
+                    { role: `tool`, toolCallId: `c1`, content: `ok` },
+                ],
+            }),
+        });
+        expect(response.status).toBe(200);
+        expect(bodies[0]).toContain(`"extra_content":{"google":{"thought_signature":"skip_thought_signature_validator"}}`);
+    });
+
     it(`is off when no model keys are configured`, async () => {
         const { prisma } = fakePrisma(0);
         const config = { ...baseConfig, repair: { ...baseConfig.repair, keys: `` }, trial: { ...baseConfig.trial, keys: `` } };

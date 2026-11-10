@@ -90,6 +90,33 @@ test(`takes the providers this box adds from the daemon's own answer`, async () 
     expect(endpointsLoaded.value).toBe(true);
 });
 
+// The race a new sandbox met (PostHog, 2026-11-06..10: every new account's first chat opened on "Claude Code, not
+// connected"): the daemon's boot probe of the platform's trial had not landed when the list was read, so the trial was
+// missing from it, and the allowance read just after re-probed and found it. Without a second look the trial was
+// "available" with no endpoint to run on, and nothing could send until the picker was opened and read the list again.
+test(`reads the list again when the allowance read finds a trial the list was read without`, async () => {
+    serves([`auto`]);
+    const trialEndpoint = { id: `endpoint/free-trial`, label: `Free trial`, kind: `endpoint` };
+    providersList.mockResolvedValueOnce({ native: [], agents: [], endpoints: [] }).mockResolvedValue({ native: [], agents: [], endpoints: [trialEndpoint] });
+    trial.mockResolvedValue(TrialStatusSchema.parse({ available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` }));
+
+    await loadRunnableProviders().settled;
+
+    expect(endpointProviders.value).toEqual([trialEndpoint]);
+    expect(endpointModels).toHaveBeenCalledWith({ id: `free-trial` });
+    expect(endpointsLoaded.value).toBe(true);
+});
+
+// A sandbox with no trial, or one the list already names, is read once.
+test(`reads the list once where the allowance agrees with it`, async () => {
+    serves([`auto`]);
+    answers({ native: [], agents: [], endpoints: [] });
+
+    await loadRunnableProviders().settled;
+
+    expect(providersList).toHaveBeenCalledTimes(1);
+});
+
 // The loops a chat may name are the daemon's to say; an older one says nothing, and the editor keeps to what every daemon ran.
 test(`keeps the loops the daemon advertised, and none from a daemon older than the field`, async () => {
     serves([OPUS]);

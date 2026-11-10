@@ -248,6 +248,15 @@ const loadEndpointHalf = async (endpoints: RunnableProviders["endpoints"]): Prom
     const current = sandboxScopeGuard();
     await Promise.all(endpoints.map((endpoint) => loadProviderModels(endpoint.id)));
     await loadTrialStatus();
+    // The allowance read re-probes the platform and the list's read does not, so a trial the daemon's boot probe had not
+    // found yet is missing from the list and found by this read: available, with no endpoint to run on, and a new chat
+    // left on a model that is not connected until the picker read the list again (2026-11-06..10, every new account).
+    if (current() && trialStatus.value.available && !endpoints.some((endpoint) => isTrialProvider(endpoint.id))) {
+        const trial = (await readRunnableProviders())?.find((endpoint) => isTrialProvider(endpoint.id));
+        if (trial !== undefined) {
+            await loadProviderModels(trial.id);
+        }
+    }
     if (current()) {
         endpointsLoaded.value = true;
     }

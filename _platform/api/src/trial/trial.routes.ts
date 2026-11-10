@@ -9,7 +9,8 @@ import { ingressServer } from "../ingress.js";
 import { freeLaneOpen } from "../sandbox/hosted/free-lane.js";
 import { withImagesInUserMessages } from "./trial-images.js";
 import { createTrialLadder } from "./trial-ladder.js";
-import { createTrialPool, type Fetcher, poolRefused, trialEnabled } from "./trial-pool.js";
+import { createTrialPool, type Fetcher, poolRefused, trialEnabled, type UpstreamAttempt } from "./trial-pool.js";
+import { googleCompatible, withSignedToolCalls } from "./trial-signatures.js";
 import {
     closeTrialTurn,
     openTrialTurn,
@@ -42,6 +43,34 @@ const withModel = (body: string, model: string | undefined): string => {
     } catch {
         return body;
     }
+};
+
+// Images are moved into a user message before anything upstream reads the body: the harness's translator hands a tool
+// result's image to a `tool` message, which Google refuses outright. Its tool calls come back without the thought
+// signatures Google gave them, which Google refuses as well (trial-signatures.ts).
+const forUpstream = (config: Config, body: string): string => {
+    const images = withImagesInUserMessages(body);
+    return googleCompatible(config.trial.baseUrl) ? withSignedToolCalls(images) : images;
+};
+
+// The upstream's answer, streamed through untouched, since owning this wire format means re-shipping the service on every
+// upstream change. Remaining-allowance stays off it deliberately; the translator would mangle it, so the daemon reads it
+// from /status instead. A refusal is read whole, an error being a short body: its words are the one trace of why a turn
+// was refused, which until 2026-11-10 reached only the chat that showed them.
+const passedOn = async (attempt: UpstreamAttempt, remaining: number, logger: Logger): Promise<Response> => {
+    const refusal = attempt.response.ok ? undefined : await attempt.response.text();
+    if (refusal !== undefined) {
+        logger.warn({ status: attempt.response.status, model: attempt.model, said: refusal.slice(0, 500) }, `trial: upstream refused the request`);
+    }
+    return new Response(refusal ?? attempt.response.body, {
+        status: attempt.response.status,
+        headers: {
+            "content-type": attempt.response.headers.get(`content-type`) ?? `application/json`,
+            // Advisory only, for anything reading this API directly; nothing in the product depends on it.
+            "x-intentic-trial-remaining": String(remaining),
+            ...(attempt.model === undefined ? {} : { "x-intentic-trial-model": attempt.model }),
+        },
+    });
 };
 
 export interface TrialDeps {
@@ -161,9 +190,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         if (!(await freeLaneOpen(prisma, ownerId))) {
             return c.json(GOOGLE_REQUIRED, 403);
         }
-        // Images are moved into a user message before anything upstream reads the body: the harness's translator hands
-        // a tool result's image to a `tool` message, which Google refuses outright.
-        const body = withImagesInUserMessages(await c.req.text());
+        const body = forUpstream(config, await c.req.text());
         const at = now();
         const spend = await spendTrialMessage(prisma, config, ownerId, at);
         // Past the allowance, a turn that started within it finishes on the grace rather than stopping mid-edit.
@@ -197,22 +224,11 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         if (!attempt.response.ok) {
             await refundTrialMessage(prisma, c.get(`logger`), ownerId, at, { grace });
         }
-        // Body streamed through untouched, since owning this wire format means re-shipping the service on every
-        // upstream change. Remaining-allowance stays off it deliberately; the translator would mangle it, so the daemon
-        // reads it from /status instead.
         // Not awaited: a database round trip here would delay the user's first token for a label.
         if (attempt.model !== undefined) {
             void recordServedModel(prisma, c.get(`logger`), ownerId, at, attempt.model);
         }
-        return new Response(attempt.response.body, {
-            status: attempt.response.status,
-            headers: {
-                "content-type": attempt.response.headers.get(`content-type`) ?? `application/json`,
-                // Advisory only, for anything reading this API directly; nothing in the product depends on it.
-                "x-intentic-trial-remaining": String(spend.remaining),
-                ...(attempt.model === undefined ? {} : { "x-intentic-trial-model": attempt.model }),
-            },
-        });
+        return passedOn(attempt, spend.remaining, c.get(`logger`));
     });
 
     return app;

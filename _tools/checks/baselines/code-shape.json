@@ -1099,12 +1099,8 @@
         "count": 172,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_platform/api/src/trial/trial.routes.ts#trialRoutes.<anonymous>#cognitive": {
-        "count": 22,
-        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
-    },
     "_platform/api/src/trial/trial.routes.ts#trialRoutes#lines": {
-        "count": 129,
+        "count": 114,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/wallet/wallet.routes.ts#walletHttpRoutes.<anonymous>#cognitive": {

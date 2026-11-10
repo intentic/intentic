@@ -268,10 +268,15 @@ describe("the free trial", () => {
 
         const response = await chat(baseConfig, prisma);
 
-        // Preserves the actionable upstream response, but never charges for a completion that never happened.
+        // Preserves the actionable upstream response, but never charges for a completion that never happened, and says
+        // in the platform's own log why it was refused.
         expect(response.status).toBe(404);
         expect(JSON.parse(await response.text())).toEqual({ error: { message: `model not supported` } });
         expect(spent()).toBe(0);
+        expect(logger.warn).toHaveBeenCalledWith(
+            expect.objectContaining({ status: 404, said: `{"error":{"message":"model not supported"}}` }),
+            `trial: upstream refused the request`,
+        );
         unstubAllGlobals();
     });
 
@@ -404,6 +409,32 @@ describe("the free trial", () => {
         // The image still reaches the model, and only from the one role that may carry it.
         expect(withImages).toHaveLength(1);
         expect(withImages.every((message) => message.role === `user`)).toBe(true);
+        unstubAllGlobals();
+    });
+
+    // The body the translator sends at a turn's second step: the call Google signed comes back unsigned, which Gemini 3
+    // refuses with a 400, so every trial turn that used a tool failed there (trial-signatures.ts).
+    it("signs a tool call the translator sent back without its thought signature", async () => {
+        const { prisma } = fakePrisma();
+        const fetchFn = upstream([`gemini-flash-latest`]);
+        stubGlobal(`fetch`, fetchFn);
+        const body = JSON.stringify({
+            model: `auto`,
+            messages: [
+                { role: `user`, content: `read the readme` },
+                { role: `assistant`, content: ``, tool_calls: [{ id: `call_1`, type: `function`, function: { name: `Read`, arguments: `{}` } }] },
+                { role: `tool`, tool_call_id: `call_1`, content: `hello` },
+            ],
+        });
+
+        const response = await call(baseConfig, prisma, `/trial/v1/chat/completions`, { method: `POST`, body });
+
+        expect(response.status).toBe(200);
+        // SAFETY: the one POST is the chat body this test built, rewritten by the route; every field read is optional.
+        const sent = JSON.parse(String(fetchFn.mock.calls.find(([, init]) => init?.method === `POST`)?.[1]?.body)) as {
+            messages: { tool_calls?: { extra_content?: { google?: { thought_signature?: string } } }[] }[];
+        };
+        expect(sent.messages[1]?.tool_calls?.[0]?.extra_content?.google?.thought_signature).toBe(`skip_thought_signature_validator`);
         unstubAllGlobals();
     });
 

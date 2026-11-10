@@ -8,7 +8,8 @@ import type { Config } from "../config.js";
 import { freeLaneOpen } from "../sandbox/hosted/free-lane.js";
 import { createTrialLadder } from "../trial/trial-ladder.js";
 import { createTrialPool, poolRefused, type Fetcher,listed } from "../trial/trial-pool.js";
-import { asOpenAiMessages, repairToolDefinitions, repairTurnBodySchema } from "./repair-turn-schema.js";
+import { googleCompatible, signedToolCalls } from "../trial/trial-signatures.js";
+import { asOpenAiMessages, repairToolDefinitions, type RepairTurnBody, repairTurnBodySchema } from "./repair-turn-schema.js";
 import { refundRepairTurn, repairStatus, spendRepairTurn } from "./repair-usage.js";
 
 export interface RepairDeps {
@@ -48,6 +49,13 @@ const parseAssistant = (
         // allow(silent-catch): upstream JSON is untrusted; a bad body becomes a generic 502 below.
         return undefined;
     }
+};
+
+// The desktop app sends its history back without the thought signatures Google gave each tool call, which Google
+// refuses at a turn's second step (trial-signatures.ts).
+const upstreamMessages = (config: Config, body: RepairTurnBody): readonly unknown[] => {
+    const messages = asOpenAiMessages(body);
+    return googleCompatible(config.repair.baseUrl) ? (signedToolCalls(messages) ?? messages) : messages;
 };
 
 export const repairRoutes = ({ config, prisma, auth, fetchFn = fetch, now = () => new Date() }: RepairDeps) => {
@@ -105,7 +113,7 @@ export const repairRoutes = ({ config, prisma, auth, fetchFn = fetch, now = () =
         const candidates = await ladder.candidates();
         const payload = JSON.stringify({
             model: candidates[0],
-            messages: asOpenAiMessages(body),
+            messages: upstreamMessages(config, body),
             tools: repairToolDefinitions(),
             max_tokens: config.repair.maxTokensPerTurn,
         });
