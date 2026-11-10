@@ -315,9 +315,14 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
      unoptimized — every slotted child, closed dialogs included, redraws on every board render. -->
 <template>
     <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col overflow-x-clip">
-        <!-- Size the groups by their controls so the header wraps before they overlap the search field. -->
-        <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
-            <div class="flex min-w-0 max-w-full flex-auto flex-wrap items-center gap-2">
+        <!-- Wide, three columns, the outer two of equal share, so the search sits in the middle of the board whatever stands
+             either side of it (the owner filters on the left, the geek metrics and New agent on the right). Narrow, the
+             groups are sized by their controls and the search takes a row of its own, so nothing overlaps it. -->
+        <div
+            class="view-header view-header-wrap items-center gap-x-2 gap-y-1 px-3 py-1"
+            :class="narrow ? 'flex flex-wrap' : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'"
+        >
+            <div class="col-start-1 flex min-w-0 max-w-full flex-auto flex-wrap items-center gap-2">
                 <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, and on a first run, with no sessions to split. -->
                 <SegmentedControl
                     v-if="user !== null && sharedAccess && !first"
@@ -342,11 +347,11 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 :busy="searching"
                 :aria-label="t(`agents.agentsView.filterAgentsByMessages`)"
                 :placeholder="t(`agents.words.filterByMessages`)"
-                class="mx-auto max-w-full shrink-0"
+                class="col-start-2 mx-auto max-w-full shrink-0"
                 :class="narrow ? 'order-last basis-full' : 'w-72'"
                 @keydown.enter="onFieldEnter"
             />
-            <div class="flex min-w-0 max-w-full flex-auto flex-wrap items-center justify-end gap-2">
+            <div class="col-start-3 flex min-w-0 max-w-full flex-auto flex-wrap items-center justify-end gap-2">
                 <!-- Filtering shows a searching state while lane counts are partial. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
                 <!-- The geek metrics, while the reader opted in: three small meters beside New agent, the full readout a
