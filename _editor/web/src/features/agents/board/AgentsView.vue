@@ -351,13 +351,17 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 :class="narrow ? 'order-last basis-full' : 'w-72'"
                 @keydown.enter="onFieldEnter"
             />
-            <div class="col-start-3 flex min-w-0 max-w-full flex-auto flex-wrap items-center justify-end gap-2">
+            <!-- One row, never two: what is here gives way inside it (the metrics step down with this container's width,
+                 SandboxMetricsSummary.vue) rather than pushing New agent under the rest. -->
+            <div
+                class="col-start-3 flex min-w-0 max-w-full flex-auto items-center justify-end gap-2"
+                :class="narrow ? 'flex-wrap' : '@container/tools flex-nowrap'"
+            >
                 <!-- Filtering shows a searching state while lane counts are partial. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
                 <!-- The geek metrics, while the reader opted in: three small meters beside New agent, the full readout a
-                     popover off them (BoardMetrics.vue). In the header, so they take none of the board's height; meters alone
-                     below three lanes' width, so the header keeps to one row. -->
-                <BoardMetrics v-if="!mobile && liveMetrics !== undefined" :metrics="liveMetrics" :compact="narrow || paired" />
+                     popover off them (BoardMetrics.vue). In the header, so they take none of the board's height. -->
+                <BoardMetrics v-if="!mobile && liveMetrics !== undefined" :metrics="liveMetrics" :compact="narrow" />
                 <!-- Appears exactly when two or more chats sit side by side (the panes are the selection); opens a draft composed from their transcripts but not sent. -->
                 <Button
                     v-if="chatStrip.panes.length >= 2"
@@ -371,7 +375,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     {{ chatStrip.panes.length }}
                 </Button>
                 <!-- A phone floats it over the board instead (below), where the thumb is and the filters get the row. -->
-                <Button tier="boring" v-if="!mobile && starts" size="small" thumb @click="startAgent()">
+                <Button tier="boring" v-if="!mobile && starts" size="small" thumb class="shrink-0" @click="startAgent()">
                     <Icon name="plus" />{{ words.newAgent }}
                 </Button>
             </div>
