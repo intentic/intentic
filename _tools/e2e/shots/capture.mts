@@ -3,7 +3,7 @@ import { closeSync, createReadStream, existsSync, mkdirSync, openSync, readSync,
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { homePath, insidePath, page as pages, type PageLink } from "@intentic/sandbox-contract/app-routes";
+import { insidePath, page as pages, type PageLink } from "@intentic/sandbox-contract/app-routes";
 import { chromium, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { DEMO_SANDBOX } from "../fixtures/demo-pages.ts";
 
@@ -171,10 +171,10 @@ const inDemo = (link: PageLink): string => insidePath(DEMO_SANDBOX, link);
 const SHOTS: Shot[] = [
     {
         name: "hero-home",
-        path: homePath(),
+        path: inDemo(pages.agents()),
         mode: "hero",
         viewport: { width: 1280, height: 720 },
-        waitFor: "text=I'll walk through it in the browser",
+        waitFor: "text=ACTIVE",
         settleMs: 1400,
         fullHeight: true,
     },

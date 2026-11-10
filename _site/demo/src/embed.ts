@@ -26,7 +26,7 @@ const LIGHT_SUFFIX = `:light`;
 const READY_MESSAGE = `intentic-demo:ready`;
 
 /** Whether this page load is the landing page's hero. */
-export const embedded = window.name === EMBED_NAME || window.name === `${EMBED_NAME}${LIGHT_SUFFIX}`;
+const embedded = window.name === EMBED_NAME || window.name === `${EMBED_NAME}${LIGHT_SUFFIX}`;
 
 // What the hero is: the home view the poster was taken of, in the look the page around it wears, as the screenshots
 // take it (_tools/e2e/shots/capture.mts): the site's dark skin is the app in Sanctum, its light one the app unskinned in
