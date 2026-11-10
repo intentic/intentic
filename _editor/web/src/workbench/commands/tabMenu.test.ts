@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { fileTabMenu, tabStripMenu } from "./tabMenu";
 
@@ -7,6 +8,9 @@ const rows = (items: readonly MenuItem[]): string[] =>
 
 const noop = (): void => undefined;
 
+
+// Labels go through the same `t`: whether a key reads as itself or as its English depends on whether an earlier
+// file in this test process registered the app's catalog.
 describe(`the file-tab menu`, () => {
     it(`draws every strip's tab in one order: keep, place, close group, strip rows, copy path`, () => {
         const items = fileTabMenu(`side`, {
@@ -21,18 +25,18 @@ describe(`the file-tab menu`, () => {
         });
 
         expect(rows(items)).toEqual([
-            `ui.action.keepOpen`,
+            t(`ui.action.keepOpen`),
             `---`,
             `Open in Workspace`,
             `---`,
-            `ui.action.close`,
-            `workspace.workspaceDesktop.closeOthers`,
-            `ui.action.closeToRight`,
+            t(`ui.action.close`),
+            t(`workspace.workspaceDesktop.closeOthers`),
+            t(`ui.action.closeToRight`),
             `---`,
-            `workspace.workspaceDesktop.closeAll`,
-            `workspace.workspaceDesktop.reopenClosedTab`,
+            t(`workspace.workspaceDesktop.closeAll`),
+            t(`workspace.workspaceDesktop.reopenClosedTab`),
             `---`,
-            `workspace.workspaceDesktop.copyPath`,
+            t(`workspace.workspaceDesktop.copyPath`),
         ]);
     });
 
@@ -46,18 +50,18 @@ describe(`the file-tab menu`, () => {
         expect(rows(items)).toEqual([
             `Open to the Side (disabled)`,
             `---`,
-            `ui.action.close`,
-            `workspace.workspaceDesktop.closeOthers (disabled)`,
-            `ui.action.closeToRight (disabled)`,
+            t(`ui.action.close`),
+            `${t(`workspace.workspaceDesktop.closeOthers`)} (disabled)`,
+            `${t(`ui.action.closeToRight`)} (disabled)`,
             `---`,
-            `workspace.workspaceDesktop.closeAll`,
+            t(`workspace.workspaceDesktop.closeAll`),
         ]);
     });
 
     it(`gives the strip's empty space only the strip-wide rows, and nothing on an empty strip`, () => {
         expect(rows(tabStripMenu(`side`, { closeAll: noop, reopen: noop }))).toEqual([
-            `workspace.workspaceDesktop.closeAll`,
-            `workspace.workspaceDesktop.reopenClosedTab`,
+            t(`workspace.workspaceDesktop.closeAll`),
+            t(`workspace.workspaceDesktop.reopenClosedTab`),
         ]);
         expect(tabStripMenu(`workspace`, {})).toEqual([]);
     });
