@@ -35,13 +35,12 @@ const machineFull = ({ id, environments }: MachineReach): string => {
     const paths = pathsOf(native, distros);
     const crossings = distros.map((environment) => `\`in: "wsl:${environment.distro ?? ""}"\` runs it in that distro`);
     return (
-        `\`${id}\` is ONE computer with ${environments.length} environments on it: ${environments.map(sideOf).join("; ")}. Its tools are the ` +
-        `machine's, and \`run_command\`'s \`in\` picks the side: omitted it runs on ${native === undefined ? `the side the card is named after` : `the metal`}, ` +
-        `${crossings.join("; ")}${native === undefined ? `` : `, and \`in: "windows"\` from inside a distro runs PowerShell on the Windows side`} — ` +
-        `argv built on the machine, with no quoting through the first shell. One Docker engine serves every environment, ` +
-        `so \`list_sandboxes\` answers the same whichever side a command lands in.` +
-        `${paths.length === 0 ? "" : ` The same files have two names: ${paths.join("; ")}.`} Pick the side by the job — Linux shell work in ` +
-        `the distro, anything on screen on Windows — and never treat them as two machines to keep in step.`
+        `\`${id}\` is ONE computer with ${environments.length} environments on it, never two machines to keep in step: ` +
+        `${environments.map(sideOf).join("; ")}. \`run_command\`'s \`in\` picks the side: omitted it runs on ` +
+        `${native === undefined ? `the side the card is named after` : `the metal`}, ` +
+        `${crossings.join("; ")}${native === undefined ? `` : `, and \`in: "windows"\` from inside a distro runs PowerShell on the Windows side`}. ` +
+        `One Docker engine serves every environment.` +
+        `${paths.length === 0 ? "" : ` The same files have two names: ${paths.join("; ")}.`}`
     );
 };
 
@@ -60,13 +59,12 @@ export const devicesFull = (facts: Facts, { ids, self, slug, machines }: HostDev
     return (
         `The owner's own computers are connected to this turn: ${ids.map((id) => `\`${id}\``).join(", ")}, each ` +
         `${behind(facts, ids[0] ?? "device")}. ${which} When something has to happen out ` +
-        `there, DO IT and report what came back: \`run_command\` takes a working directory and a deadline of up to ten ` +
-        `minutes, \`read_file\`/\`write_file\`/\`list_dir\` reach that machine's own tree, and \`list_sandboxes\`, ` +
+        `there, DO IT and report what came back, never write a command out for the owner to run on a machine you can ` +
+        `reach: \`run_command\` takes a working directory and a deadline of up to ten minutes, ` +
+        `\`read_file\`/\`write_file\`/\`list_dir\` reach that machine's own tree, and \`list_sandboxes\`, ` +
         `\`manage_sandbox\`, \`swap_sandbox\` and \`sandbox_logs\` act on this sandbox's own container; ` +
-        `\`inspect_sandbox\` reads another sandbox's conversations and logs there, never \`docker exec\`. Do not write a ` +
-        `command out for the owner to run on a machine you can reach — the editor already drives that box for port ` +
-        `mirroring, file syncing and container management, and they are reading your message rather than sitting at its ` +
-        `terminal. Two limits ride with it: anything that restarts, updates, rebuilds or removes THIS sandbox ends your ` +
+        `\`inspect_sandbox\` reads another sandbox's conversations and logs there, never \`docker exec\`. ` +
+        `Two limits ride with it: anything that restarts, updates, rebuilds or removes THIS sandbox ends your ` +
         `own turn mid-sentence, so say so and get a yes first; and a call refused for a switch that is off is the owner's ` +
         `decision, never routed around: ask for it on a card with \`capabilities request <device> --set <switch>=on --why "…"\`.${(machines ?? []).map((machine) => ` ${machineFull(machine)}`).join("")}`
     );
@@ -85,11 +83,9 @@ export const ownBrowserFull = (facts: Facts, reach: OwnBrowserReach): string =>
     `do what has to be THEM and no sandbox account covers — a site behind their login, a passkey, a page a datacentre ` +
     `IP cannot load — and its skill holds the rules for acting in one. It is NOT for a site the sandbox holds its own ` +
     `signed-in account on (${toolName(facts, "accounts", "roster")} lists them): that site goes through the \`browser\` ` +
-    `server with its \`account\`, even when the owner is signed in here too, and asking this browser for it is refused ` +
-    `with the account to use. Reach for it BEFORE a browser on a connected machine: a machine's \`browser_*\` tools open ` +
-    `a separate automation profile signed into nothing, so using one for a page that needs the owner ends in asking ` +
-    `them to sign in again somewhere they are already signed in. When a call answers that the browser is closed, that ` +
-    `is a shut laptop and an honest answer: say so, rather than opening a browser somewhere else.`;
+    `server with its \`account\`, and asking this browser for it is refused. Reach for it BEFORE a browser on a ` +
+    `connected machine, whose \`browser_*\` tools open a separate profile signed into nothing. When a call answers ` +
+    `that the browser is closed, that is a shut laptop: say so, rather than opening a browser somewhere else.`;
 
 const unlistedNames = (ids: readonly string[]): string => ids.map((id) => `\`${id}\``).join(", ");
 
@@ -148,9 +144,8 @@ export const browserFull = (facts: GuidanceFacts): string => {
 export const desktopFull = (facts: Facts): string =>
     "This sandbox has a desktop of its own: a 1280×800 virtual screen for programs with a window and no other " +
     `way in, an app you are building, a GUI tool, an installer.${loadedWith(facts, "it", "+mcp__desktop__")} ` +
-    `${toolsOf(facts, "desktop", ["screenshot"])} to see it, \`input\` to click and type in that screenshot's pixels (pass its id ` +
-    "as `frame`), `list_windows`, `focus_window`, `open` and `clipboard`. Start a program on it from your own shell with the " +
-    "`DISPLAY` a screenshot names. The owner can watch it and take it over; while they drive, your input is " +
+    `${toolsOf(facts, "desktop", ["screenshot"])} shows it and the rest of the \`desktop\` tools act on it; start a ` +
+    "program there from your own shell with the `DISPLAY` a screenshot names. While the owner drives it your input is " +
     "refused, so wait and look again. Web pages still belong to the browser tools, which act on named elements.";
 
 export const diagnosticsFull = (facts: Facts): string =>
@@ -167,6 +162,6 @@ export const terminalFull = (facts: Facts): string =>
     "When a command you started is sitting at a prompt only a person can answer (a one-time password, a " +
     "security-key touch, a confirmation you cannot give) and Bash has handed the turn back saying it is still " +
     `running, hand the terminal to the owner: ${facts.runtime.deferredTools ? "load " : "call "}${toolName(facts, "terminal", "request_help")}` +
-    `${facts.runtime.deferredTools ? " with ToolSearch (`+terminal`)" : ""} and say precisely what needs typing. ` +
-    "The call waits while they type into that very pane and returns what the terminal says afterwards. Do not write the " +
+    `${facts.runtime.deferredTools ? " with ToolSearch (`+terminal`)" : ""} and say precisely what needs typing, ` +
+    "rather than writing the " +
     "command out for them to run in their own shell next to a pane that is already waiting for them.";

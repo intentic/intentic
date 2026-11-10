@@ -15,8 +15,10 @@ export const WORKSPACE_MAP_NOTE_HEADER = "## Map of this project";
 export const WORKSPACE_MAP_NOTE_TITLE = "Map of this project";
 
 // Hard ceiling in characters (~4/token); detail sheds to hold it — purpose lines first, then whole areas, never a
-// mid-structure truncation.
-const MAX_NOTE_CHARS = 2_800;
+// mid-structure truncation. Half what it was until 2026-11-10: against no map at all, the 2,800-character map's one
+// measured effect was fewer opening listings (0.19 a conversation against 0.37, 658 conversations), and a
+// 1,100-character form measured against it in October moved that no differently (0.20 against 0.26).
+const MAX_NOTE_CHARS = 1_400;
 
 // A purpose line longer than this is a paragraph, not a label. Cut at a word boundary.
 const MAX_PURPOSE_CHARS = 100;
@@ -432,8 +434,7 @@ const render = (map: WorkspaceMap, exactPaths: string): string => {
     const head = [
         WORKSPACE_MAP_NOTE_HEADER,
         "",
-        `This is current filesystem context. It maps project areas, not file locations; use ${exactPaths} for exact paths.`,
-        "Do not `ls` or `tree` the workspace root to orient yourself — the map above is that orientation.",
+        `Project areas as they are on disk now, so do not \`ls\` or \`tree\` the workspace root to orient yourself; use ${exactPaths} for exact paths.`,
         "",
         map.cwd === map.project ? `You are at the top of ${project}.` : `You are here: \`${map.cwd}\``,
         "",

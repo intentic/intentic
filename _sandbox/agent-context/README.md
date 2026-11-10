@@ -17,7 +17,7 @@ flowchart LR
 - Runtime-neutral on purpose: nothing here knows the daemon's event shapes, settings or state paths. The daemon adapts
   its frames onto `createTurnMetrics`; the plugin does the same from hook payloads and
   `~/.claude/projects`.
-- `workspace-map` recomputes a project's areas from the filesystem every time (2,800-character ceiling): every area
+- `workspace-map` recomputes a project's areas from the filesystem every time (1,400-character ceiling): every area
   by size with its languages, the biggest opened up, and each one's purpose (a README's or manifest's first sentence,
   markup stripped and cut at a clause). The plugin and the daemon send the same note; the daemon measures it against
   no map at all.
