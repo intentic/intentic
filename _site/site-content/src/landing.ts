@@ -110,7 +110,7 @@ export const landingContent: LandingContent = {
         demo: {
             poster: {
                 name: "hero-home",
-                alt: "The real intentic agents board: agents at work and finished, each card showing its model, its branch and what it has cost, with the chat docked beside it.",
+                alt: "The real intentic agents board: nothing waiting in Attention, one agent at work in Active and two finished, each card showing its model, its branch and its diff stats, with an empty chat docked beside it.",
             },
             frameTitle: "intentic, live: the real app on a recorded workspace",
             startLabel: "Try it live",
