@@ -9,6 +9,7 @@ import { useToolCalls } from "../../../../models/conversations/tools/useToolCall
 import { summarizeRun, type RunKind } from "../../tools/toolRun";
 import { useT } from "@intentic/ui/i18n";
 import { useAudience } from "../../../../app/useAudience";
+import type { MergedSteps } from "../steps/stepGroups";
 
 const t = useT();
 
@@ -23,13 +24,16 @@ const props = defineProps<{
     tools?: readonly TranscriptTool[];
     // Whether the turn is still being written: the only state in which its band may breathe.
     live: boolean;
+    // The band of a step group above stands for this run (steps/stepGroups.ts): shut, nothing is drawn here; open, the
+    // thought and the calls are drawn inline, under that group's mark rather than one of their own.
+    merged?: MergedSteps | undefined;
 }>();
 
 const { showToolCalls } = useToolCalls();
 const { maker } = useAudience();
 
 const thought = computed(() => (props.thinking === undefined || props.thinking === `` ? undefined : props.thinking));
-const run = computed(() => (showToolCalls.value ? undefined : summarizeRun(props.tools ?? [])));
+const run = computed(() => (showToolCalls.value || props.merged !== undefined ? undefined : summarizeRun(props.tools ?? [])));
 
 // A thought is a step like any call: it stands under the same shut band and opens only when the reader asks, live or
 // not, so no row of the transcript unfolds itself while the reader is reading another.
@@ -78,7 +82,7 @@ const KIND_LABELS = {
 const WASH_CAP = 16;
 // The thought counts as one step of the band, so a row that only thought still has one to press.
 const steps = computed(() => (run.value?.count ?? 0) + (thought.value === undefined ? 0 : 1));
-const calls = computed(() => (steps.value === 0 ? undefined : Math.min(steps.value, WASH_CAP)));
+const calls = computed(() => (steps.value === 0 || props.merged !== undefined ? undefined : Math.min(steps.value, WASH_CAP)));
 
 // For the screen reader and for a node the pointer has not reached: what a press opens.
 const label = computed(() => {
@@ -177,6 +181,21 @@ const tip = computed((): TooltipValue => {
                 </button>
             </div>
         </Transition>
+    </div>
+    <!-- A step group's band stands for this run: opened, the run is drawn where the words start, with no mark of its own. -->
+    <div v-if="merged !== undefined && merged !== `shut` && (thought !== undefined || tools?.length)" class="chat-spine-material flex flex-col gap-1">
+        <div v-if="thought !== undefined" class="chat-inset max-h-64 overflow-auto">
+            <pre class="px-2.5 py-1.5 font-sans text-2xs leading-relaxed whitespace-pre-wrap text-muted italic">{{ thought }}</pre>
+        </div>
+        <ChatToolRows v-if="tools?.length" :tools="tools" :live="live" />
+        <button
+            v-if="merged === `open-last` && !maker"
+            type="button"
+            class="touch-target self-start text-2xs text-subtle transition-colors hover:text-content"
+            @click="setShowToolCalls(true)"
+        >
+            {{ t(`chat.chatTurnAsides.alwaysShowSteps`) }}
+        </button>
     </div>
     <!-- Shown inline, the run is what it always was: one row per call, with the open run's mark in the gutter, which folds
          every run again. -->

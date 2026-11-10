@@ -1,25 +1,44 @@
 import "@intentic/testing/dom";
 import { IconStub } from "@intentic/ui/testing";
-import type { TranscriptBackgroundJob } from "@intentic/sandbox-contract/events/transcript";
 import type { AgentJob } from "@intentic/sandbox-contract/schemas/agents";
 import { type App, createApp, h, nextTick, reactive } from "vue";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import { useToolCalls } from "../../../../models/conversations/tools/useToolCalls";
 import { shownText } from "../../../../testing/shownText";
-import ChatJobGroup from "./ChatJobGroup.vue";
+import ChatStepGroup from "./ChatStepGroup.vue";
+import { type StepGroup, stepsFold } from "./stepGroups";
 
-const jobs: readonly TranscriptBackgroundJob[] = [1, 2, 3].map((id) => ({
-    id: `job-${id}`, label: `Check ${id}`, command: `check ${id}`, startedAt: id * 1000,
+const jobRows: readonly ChatMessage[] = [1, 2, 3].map((id) => ({
+    id, role: `notice`, text: ``,
+    backgroundJob: { id: `job-${id}`, label: `Check ${id}`, command: `check ${id}`, startedAt: id * 1000 },
 }));
-const finished = (): AgentJob[] => jobs.map((job) => ({
-    id: job.id, label: job.label, session: `session`, startedAt: job.startedAt, endedAt: job.startedAt + 52_000, exitCode: 0,
+const callRow = (id: number, text = ``): ChatMessage => ({
+    id, role: `assistant`, text,
+    tools: [
+        { id: `read-${id}`, name: `Read`, category: `read`, status: `completed` },
+        { id: `bash-${id}`, name: `Bash`, category: `execute`, status: `failed` },
+    ],
+});
+const finished = (): AgentJob[] => jobRows.map((row) => ({
+    id: row.backgroundJob!.id, label: row.backgroundJob!.label, session: `session`, startedAt: row.backgroundJob!.startedAt,
+    endedAt: row.backgroundJob!.startedAt + 52_000, exitCode: 0,
 }));
 let app: App | undefined;
-const mount = (live: AgentJob[] = finished()) => {
-    const state = reactive({ live });
+// The pane's part, played here: it holds whether the group is open and whether it folds (useStepGroups).
+const mount = (live: AgentJob[] = finished(), group: StepGroup = { head: 1, members: jobRows }) => {
+    const state = reactive({ live, open: false });
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
-        render: () => h(ChatJobGroup, { jobs, live: state.live }, {
+        render: () => h(ChatStepGroup, {
+            group,
+            live: state.live,
+            folds: stepsFold(group, state.live, useToolCalls().showToolCalls.value),
+            open: state.open,
+            "onUpdate:open": (open: boolean) => {
+                state.open = open;
+            },
+        }, {
             default: ({ inspect }: { inspect: () => void }) => [h(`button`, { onClick: inspect }, `Inspect command`), h(`input`, { defaultValue: `Command detail` })],
         }),
     });
@@ -53,6 +72,29 @@ it(`uses one counted disclosure for three ended jobs and retains inspected conte
     await nextTick();
     expect(band(element)!.getAttribute(`aria-expanded`)).toBe(`false`);
     expect(shownText(element)).not.toContain(`Inspect command`);
+});
+
+it(`counts jobs, calls and a reply's leading calls as one run of steps`, async () => {
+    const { element } = mount(finished(), { head: 1, members: [jobRows[0]!, callRow(2), jobRows[1]!], tail: callRow(3, `Done.`) });
+    expect(element.querySelectorAll(`.chat-spine-wash`)).toHaveLength(1);
+    // Two jobs and four calls, two of them failed.
+    expect(band(element)!.getAttribute(`aria-label`)).toBe(`Show 6 steps · 2 failed`);
+    expect(band(element)!.classList.contains(`chat-spine-wash-failed`)).toBe(true);
+    band(element)!.click();
+    await nextTick();
+    // The tail's own opened run carries the press that keeps every run open, not the group.
+    expect(shownText(element)).not.toContain(`Always show steps`);
+});
+
+it(`offers to keep every run open where a group without a tail is opened`, async () => {
+    const { element } = mount(finished(), { head: 1, members: [jobRows[0]!, callRow(2)] });
+    band(element)!.click();
+    await nextTick();
+    const always = [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `Always show steps`);
+    always!.click();
+    await nextTick();
+    expect(useToolCalls().showToolCalls.value).toBe(true);
+    expect(band(element)).toBeNull();
 });
 
 it(`keeps a failure visible in the folded band's colour and accessible name`, () => {

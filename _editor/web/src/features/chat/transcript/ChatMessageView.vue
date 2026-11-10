@@ -57,6 +57,7 @@ import type { ChatIncident } from "../../../models/conversations/transcript/chat
 import { sandboxNoticeOf } from "@intentic/sandbox-contract/events/sandbox-notice";
 import { useAudience } from "../../../app/useAudience";
 import ChatPromptAuthor from "./ChatPromptAuthor.vue";
+import type { MergedSteps } from "./steps/stepGroups";
 import { useT } from "@intentic/ui/i18n";
 
 // Renders one transcript entry (user bubble, notice line, or assistant turn stack). Card answers go through the pane's
@@ -80,6 +81,8 @@ const props = defineProps<{
     notesAbove?: boolean;
     // The refusal incident this row stands for, the rows before it folded away (chatIncidents.ts).
     incident?: ChatIncident | undefined;
+    // A step group's band stands for this row's own run (steps/stepGroups.ts), and how it is drawn here.
+    steps?: MergedSteps | undefined;
 }>();
 
 // A snapshot that moved nothing is not a checklist event, so it draws no line at all — not an empty one.
@@ -607,8 +610,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         </div>
         <template v-else>
             <!-- Live marks the bubble currently receiving streamed text. -->
-            <ChatTurnAsides :thinking="message.thinking" :tools="message.tools" :live="live" />
-
+            <ChatTurnAsides :thinking="message.thinking" :tools="message.tools" :live="live" :merged="steps" />
             <ChatTodoList v-if="showsTodos" :todos="message.todos!" :live="live" :view="checklistView" />
 
             <!-- Markdown parts preserve settled DOM while the live tail updates. The read-aloud press sits in the bubble's

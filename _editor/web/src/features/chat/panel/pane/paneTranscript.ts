@@ -84,6 +84,8 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
         turnShots,
         repeatedChecklists,
         incidents,
+        // The bubble currently being streamed into, by id.
+        liveRow: computed(() => (streaming.value ? liveBubble.value?.id : undefined)),
         // True for the assistant bubble currently being streamed into.
         isStreaming: (message: ChatMessage): boolean => streaming.value && liveBubble.value?.id === message.id,
         // Rows follow the live bubble, so its status line is drawn at the column's foot instead (statusBelow).

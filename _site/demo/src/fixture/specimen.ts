@@ -257,6 +257,8 @@ const messages: TranscriptRow[] = [
             return { id: job.id, label: job.label, command: job.command, startedAt: job.startedAt };
         })(),
     },
+    // A row of calls alone between two job starts: the jobs, it and the next row's calls stand as one band (stepGroups.ts).
+    { role: `assistant`, text: ``, tools: [grep] },
     {
         role: `notice`,
         text: `Background job: ${SOFT_DELETES_JOBS(Date.now()).find((job) => job.id === SOFT_E2E_JOB)!.label}`,

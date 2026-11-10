@@ -17,7 +17,7 @@ const { showToolCalls } = useToolCalls();
 
 let app: App | undefined;
 let tips: unknown[] = [];
-const mount = (props: { tools?: readonly TranscriptTool[]; thinking?: string; live?: boolean }): HTMLElement => {
+const mount = (props: { tools?: readonly TranscriptTool[]; thinking?: string; live?: boolean; merged?: `shut` | `open` | `open-last` }): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatTurnAsides, { live: false, ...props }) });
@@ -274,5 +274,28 @@ describe(`ChatTurnAsides thought on the node`, () => {
         nodes(element)[0]!.click();
         await settle();
         expect(shownText(element)).not.toContain(thinking);
+    });
+});
+
+// A step group's band above stands for the run (steps/stepGroups.ts): the row draws no band or mark of its own.
+describe(`ChatTurnAsides merged into a step group`, () => {
+    it(`draws nothing while the group is shut, and the run inline once it is opened`, () => {
+        const shut = mount({ thinking: `First a look.`, tools: [read(`a.ts`)], merged: `shut` });
+        expect(controls(shut)).toHaveLength(0);
+        expect(shownText(shut)).toBe(``);
+        app?.unmount();
+
+        const open = mount({ thinking: `First a look.`, tools: [read(`a.ts`)], merged: `open` });
+        expect(controls(open)).toHaveLength(0);
+        expect(open.textContent).toContain(`First a look.`);
+        expect(open.textContent).toContain(`a.ts`);
+        expect(open.textContent).not.toContain(`Always show steps`);
+    });
+
+    it(`carries the press that keeps every run open on the group's last run`, async () => {
+        const element = mount({ tools: [read(`a.ts`)], merged: `open-last` });
+        [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `Always show steps`)?.click();
+        await settle();
+        expect(showToolCalls.value).toBe(true);
     });
 });

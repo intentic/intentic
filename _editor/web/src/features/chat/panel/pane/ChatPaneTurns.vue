@@ -12,8 +12,8 @@ import ChatForkLine from "../../transcript/ChatForkLine.vue";
 import ChatFreshLine from "../../transcript/ChatFreshLine.vue";
 import ChatMessageView from "../../transcript/ChatMessageView.vue";
 import ChatJobRow from "../../transcript/ChatJobRow.vue";
-import ChatJobGroup from "../../transcript/jobs/ChatJobGroup.vue";
-import { jobGroupsOf } from "../../transcript/jobs/jobGroups";
+import ChatStepGroup from "../../transcript/steps/ChatStepGroup.vue";
+import { useStepGroups } from "../../transcript/steps/useStepGroups";
 import ChatTranscriptSkeleton from "../../transcript/ChatTranscriptSkeleton.vue";
 import { QUIET_TRANSCRIPT_WAIT } from "../../../../models/conversations/transcript/transcriptWait";
 import ChatTurnStatus from "../../transcript/ChatTurnStatus.vue";
@@ -68,6 +68,7 @@ const {
     repeatedChecklists,
     incidents,
     isStreaming,
+    liveRow,
     showTurnStatus,
     statusBelow,
     stripOf,
@@ -115,8 +116,18 @@ const showsPrompt = computed(() => !conversation.value.transcript.historyMore.va
 // reads it out (ChatSystemPrompt) and that message draws no paperclip of its own.
 const opening = computed(() => (showsPrompt.value ? messages.value.find((message) => message.role === `user`) : undefined));
 const doomed = computed(() => conversation.value.transcript.doomed.value);
-const jobGroups = computed(() => jobGroupsOf(shownTurns.value, cutsAbove.value, doomed.value));
 const backgroundJobs = computed(() => agentById(conversation.value.conversationId)?.jobs);
+// Rows that each fold to a band, run together, stand as one band (stepGroups.ts).
+const steps = useStepGroups({
+    turns: shownTurns,
+    cuts: cutsAbove,
+    doomed,
+    live: liveRow,
+    jobs: backgroundJobs,
+    showToolCalls,
+    conversationId: computed(() => conversation.value.conversationId),
+});
+const stepGroups = steps.groups;
 // This window's own error line: what the transcript cannot say (a send the sandbox refused, a stream that broke, where to
 // install an engine). A turn's failure is never on it: the daemon's notice row is the one place that says one
 // (turnFailures.ts), so the two can no longer say the same failure twice, or say it raw.
@@ -207,28 +218,42 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                             checklistViews.get(message.id),
                             heldRow === message.id,
                             opening?.id === message.id,
-                            jobGroups.heads.get(message.id),
-                            jobGroups.folded.has(message.id),
-                            jobGroups.heads.has(message.id) ? backgroundJobs : undefined,
+                            stepGroups.heads.get(message.id),
+                            stepGroups.folded.has(message.id),
+                            stepGroups.heads.has(message.id) ? backgroundJobs : undefined,
+                            steps.headState(message.id),
+                            steps.tailSteps(message.id),
                         ]"
                         class="chat-row contents"
                         :class="cutsAbove.get(message.id) !== undefined && !props.subagent && `chat-cut-row`"
                     >
                         <!-- Fork marks sit between message rows because row overflow clips marks above a row. -->
                         <ChatForkCut v-if="cutsAbove.get(message.id) !== undefined && !props.subagent" :cut="cutsAbove.get(message.id)!" />
-                        <ChatJobGroup
-                            v-if="jobGroups.heads.has(message.id)"
-                            :jobs="jobGroups.heads.get(message.id)!"
+                        <ChatStepGroup
+                            v-if="stepGroups.heads.has(message.id)"
+                            :group="stepGroups.heads.get(message.id)!"
                             :live="backgroundJobs"
+                            :folds="steps.folds(stepGroups.heads.get(message.id)!)"
+                            :open="steps.isOpen(stepGroups.heads.get(message.id)!)"
                             :class="{ 'chat-doomed': doomed.has(message.id) }"
+                            @update:open="steps.setOpen(stepGroups.heads.get(message.id)!, $event)"
                         >
-                            <template #default="{ jobs, inspect }">
-                                <ChatJobRow v-for="job in jobs" :key="job.id" :job="job" unfolded @inspect="inspect" />
+                            <template #default="{ inspect }">
+                                <template v-for="member in stepGroups.heads.get(message.id)!.members" :key="member.id">
+                                    <ChatJobRow v-if="member.backgroundJob" :job="member.backgroundJob" unfolded @inspect="inspect" />
+                                    <ChatMessageView
+                                        v-else
+                                        :message="member"
+                                        :streaming="false"
+                                        :doomed="doomed.has(member.id)"
+                                        :steps="steps.memberSteps(stepGroups.heads.get(message.id)!)"
+                                    />
+                                </template>
                             </template>
-                        </ChatJobGroup>
+                        </ChatStepGroup>
                         <!-- A row folded into the incident drawn after it is not drawn (chatIncidents.ts). -->
                         <ChatMessageView
-                            v-else-if="!jobGroups.folded.has(message.id) && (!repeatedChecklists.has(message.id) || isStreaming(message)) && heldRow !== message.id && !incidents.folded.has(message.id)"
+                            v-else-if="!stepGroups.folded.has(message.id) && (!repeatedChecklists.has(message.id) || isStreaming(message)) && heldRow !== message.id && !incidents.folded.has(message.id)"
                             :message="message"
                             :incident="incidents.drawn.get(message.id)"
                             :streaming="isStreaming(message)"
@@ -237,6 +262,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                             :doomed="doomed.has(message.id)"
                             :checklist-view="checklistViews.get(message.id)"
                             :notes-above="opening?.id === message.id"
+                            :steps="steps.tailSteps(message.id)"
                         />
                     </div>
                     <!-- The documents the turn made or changed, for a person to open (ChatTurnDeliverables). -->
