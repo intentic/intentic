@@ -182,17 +182,13 @@ const placementTip = (option: SandboxSummary): Tip => {
 };
 
 // THE LOGO, IN THE WORKSPACE: a door to this sandbox's settings (the tile already lights up on that page). Its tooltip is
-// what the panel's active row used to say: the name, where it runs and whether that answers, and the cog's own word.
+// just the cog's own word.
 const settingsHere = (): void => {
     const active = sandbox.active.value;
     if (active !== undefined) {
         void router.push(hereIn(active.id, page.sandboxSettings(active.role === `guest` ? GUEST_SECTION : undefined)));
     }
 };
-const doorTip = computed<Tip | undefined>(() => {
-    const active = sandbox.active.value;
-    return active === undefined ? undefined : { ...placementTip(active), title: active.name, note: t(`shared.settings`) };
-});
 const doorLabel = computed(() =>
     t(`sandbox.sandboxSwitcher.settingsOf`, { name: sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`) }) +
     switcherLabel.value.slice((sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`)).length),
@@ -307,7 +303,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
             "
             :aria-haspopup="local ? `dialog` : undefined"
             :aria-expanded="local ? open : undefined"
-            v-tooltip.right="!local && doorTip"
+            v-tooltip.right="!local && t(`shared.settings`)"
             v-on="local ? hoverTrigger : {}"
             @click="local ? undefined : settingsHere()"
         >
