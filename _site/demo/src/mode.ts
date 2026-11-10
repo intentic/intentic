@@ -129,20 +129,18 @@ const HOME: DemoMode = {
     homeRecording: true,
 };
 
-// What the landing page's hero runs live (src/embed.ts): it opens on the home view the hero's poster was taken of, and a
-// visitor who steps inside a sandbox finds a calm board rather than an empty one: one agent at work on the checkout, one
-// that finished, nothing asking for them. The showcase's seven cards in every state were a wall to someone who had only
-// just arrived (the owner's, 2026-10-28). No chats open, so the first frame matches the poster.
+// What the landing page's hero runs live (src/embed.ts): the fleet board, kept as calm as a board can be. One agent at
+// work on the checkout and one that finished, nothing asking for the visitor, no home conversation card, no chats open.
+// The showcase's seven cards in every state were a wall to someone who had only just arrived (the owner's, 2026-10-28).
 const HERO: DemoMode = {
     id: `hero`,
     label: `Hero`,
-    note: `The home view, with a calm board behind it: what the landing page runs live.`,
+    note: `A calm board, one agent at work and one finished: what the landing page runs live.`,
     agents: [FEATURED_AGENT_ID, RELEASE_NOTES_AGENT_ID],
     extensions: [],
     teammate: false,
     openChats: false,
     quiet: true,
-    homeRecording: true,
 };
 
 // Before the first sandbox, which every other mode is past: Home's first run, what a new account opens on. Signed in it
