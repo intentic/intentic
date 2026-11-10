@@ -415,11 +415,11 @@
         background: var(--silver-wash-strong);
     }
     @media (hover: hover) {
-        [data-skin="silver"] .ui-row-select:hover:not(:disabled) {
+        [data-skin="silver"] .ui-row-select:where(:not(.ui-row-select-on)):hover:not(:disabled) {
             background: rgb(255 255 255 / 0.04);
         }
     }
-    [data-skin="silver"] .ui-row-select:active:not(:disabled) {
+    [data-skin="silver"] .ui-row-select:where(:not(.ui-row-select-on)):active:not(:disabled) {
         background: rgb(255 255 255 / 0.06);
     }
 

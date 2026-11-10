@@ -635,12 +635,12 @@
 
     /* A pointer's hover only (utilities.css says why); the press is the same wash, at once. */
     @media (hover: hover) {
-        [data-skin="sanctum"] .ui-row-select:hover:not(:disabled) {
+        [data-skin="sanctum"] .ui-row-select:where(:not(.ui-row-select-on)):hover:not(:disabled) {
             background: rgba(201, 160, 92, 0.055);
         }
     }
 
-    [data-skin="sanctum"] .ui-row-select:active:not(:disabled) {
+    [data-skin="sanctum"] .ui-row-select:where(:not(.ui-row-select-on)):active:not(:disabled) {
         background: rgba(201, 160, 92, 0.055);
     }
 
