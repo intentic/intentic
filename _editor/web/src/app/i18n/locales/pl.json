@@ -4711,10 +4711,10 @@
             "couldNotStop": "Nie udało się zatrzymać obserwacji."
         },
         "chatCapacityLane": {
-            "inDayHours": "za 1 d {hours} godz.",
+            "inDayHours": "za 1 d {hours} h",
             "inDays": "za {days} d",
-            "inHours": "za {hours} godz.",
-            "inHoursMinutes": "za {hours} godz. {minutes} min",
+            "inHours": "za {hours} h",
+            "inHoursMinutes": "za {hours} h {minutes} min",
             "inMinutes": "za {minutes} min"
         },
         "toolPresentation": {

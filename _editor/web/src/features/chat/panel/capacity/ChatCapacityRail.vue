@@ -287,7 +287,9 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                                 :data-mine="row.mine || undefined"
                                 data-reveal
                             >
-                                <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1" aria-hidden="true">
+                                <!-- The bar keeps a floor and the figure column gives first: a long reset ("za 4 godz. 59 min") once took every
+                                     pixel but the bars' own, leaving slivers no one could read. -->
+                                <div class="grid grid-cols-[auto_minmax(2.5rem,1fr)_minmax(0,auto)] items-center gap-x-2 gap-y-1" aria-hidden="true">
                                     <span v-if="row.label !== undefined || row.mine" class="col-span-3 flex min-w-0 items-baseline gap-2 text-2xs">
                                         <span class="min-w-0 flex-1 truncate" :class="row.mine ? `text-content` : `text-muted`">{{ row.label }}</span>
                                         <span v-if="row.mine" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>

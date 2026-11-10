@@ -1,3 +1,4 @@
+import { setLocale } from "@intentic/ui/i18n";
 import type { AccountUsage, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { CAPACITY_RAIL_PX, chatCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
@@ -541,6 +542,34 @@ describe(`the allowances behind one account`, () => {
             [`wk`, `Opus`, 1],
             [`wk`, `Fable`, 1],
         ]);
+    });
+
+    // The labels are translated, the period words are English: a Polish "Tygodniowo · Fable" once read as no period, so
+    // the lane was named by its whole label, lost its scope and fell out from under the week.
+    it(`reads each pool's period and scope the same in another language`, async () => {
+        providerAccounts.value = {
+            claude: [
+                claude({
+                    id: `a`,
+                    usage: pools(
+                        { kind: `seven_day`, utilization: 12 },
+                        { kind: `seven_day_opus`, utilization: 84, gates: { models: [`opus`] } },
+                        { kind: `model:Fable`, label: `Fable`, utilization: 30, gates: { models: [`Fable`] } },
+                    ),
+                }),
+            ],
+        };
+        await setLocale(`pl`);
+        try {
+            const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
+            expect(row?.lanes.map((lane) => [lane.short, lane.scope, lane.depth])).toEqual([
+                [`wk`, undefined, 0],
+                [`wk`, `Opus`, 1],
+                [`wk`, `Fable`, 1],
+            ]);
+        } finally {
+            await setLocale(`en`);
+        }
     });
 
     it(`leaves out a model's own pool with nothing spent, beside a pool that gates every model`, () => {

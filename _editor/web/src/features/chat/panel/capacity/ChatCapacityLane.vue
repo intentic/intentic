@@ -131,11 +131,12 @@ const reset = computed(() => (props.lane.capped ? undefined : laneReset(props.la
         />
         <span class="ui-meter-fill relative block h-full rounded-full" :class="tone" :style="{ width: `${fill}%`, ...tint }" />
     </span>
-    <div class="flex items-baseline justify-end gap-1 whitespace-nowrap text-right">
-        <span class="text-2xs font-medium tabular-nums" :class="tone" :style="tint">
+    <!-- The figure never truncates; the reset after it does, before it can squeeze the bar (the rail's grid floors it). -->
+    <div class="flex min-w-0 items-baseline justify-end gap-1 whitespace-nowrap text-right">
+        <span class="shrink-0 text-2xs font-medium tabular-nums" :class="tone" :style="tint">
             {{ figure }}
         </span>
         <!-- A held lane's own reset is moot: it opens when its holder does, dated on the holder's line. -->
-        <span v-if="reset" class="text-3xs text-subtle">·&nbsp;{{ reset }}</span>
+        <span v-if="reset" class="min-w-0 truncate text-3xs text-subtle" :title="reset">·&nbsp;{{ reset }}</span>
     </div>
 </template>

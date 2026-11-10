@@ -984,9 +984,11 @@ describe(`plan-limit aggregates`, () => {
 });
 
 describe(`nestPools`, () => {
+    // The label stands for the provider's own name too, the one the period is read from.
     const pool = (kind: string, percent: number, gates: PlanLimitPool[`gates`] = `all`, label = kind): PlanLimitPool => ({
         kind,
         label,
+        name: label,
         percent,
         resetsAt: undefined,
         gates,

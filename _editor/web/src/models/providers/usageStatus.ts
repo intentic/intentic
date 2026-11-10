@@ -113,6 +113,9 @@ export const usageStatusFor = (provider: AgentProvider, account: string | undefi
 export interface PlanLimitPool {
     readonly kind: string;
     readonly label: string;
+    // The provider's own name, untranslated (UsageWindow.label): what poolPeriod and poolScope read, since their period
+    // words are English and the translated label ("Tygodniowo · Fable") would read as no period at all.
+    readonly name?: string | undefined;
     // Unrounded: any utilization below the spent line still has room.
     readonly percent: number;
     readonly resetsAt: number | undefined;
@@ -132,6 +135,7 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
     orderedWindows(usage).map((window) => ({
         kind: window.kind,
         label: usageWindowLabel(window),
+        name: window.label,
         percent: window.utilization,
         resetsAt: window.resetsAt,
         gates: window.gates,
@@ -145,8 +149,11 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
 // published reset by the same window length this column names it by.
 export type PoolPeriod = WindowPeriod;
 
-/** Window length behind a pool, and the short token a narrow column names it by. */
-export const poolPeriod = (pool: Pick<PlanLimitPool, `kind` | `label`>): PoolPeriod | undefined => windowPeriod(pool);
+/** Window length behind a pool, and the short token a narrow column names it by. A model's or surface's own pool is a
+ * weekly slice (usageWindowLabel names it so), though neither its key nor its name says so. */
+export const poolPeriod = (pool: Pick<PlanLimitPool, `kind` | `name`>): PoolPeriod | undefined =>
+    windowPeriod({ kind: pool.kind, label: pool.name }) ??
+    (SCOPED_KINDS.some((prefix) => pool.kind.startsWith(prefix)) ? { seconds: 7 * 86_400, short: `wk` } : undefined);
 
 // Words that name only the period, not scope; used to strip them so poolScope can find a pool's actual name.
 const PERIOD_WORDS = new Set([
@@ -181,21 +188,24 @@ const isPeriodOnly = (part: string): boolean => {
     return words.length > 0 && words.every((word) => PERIOD_WORDS.has(word) || /^\d+$/u.test(word));
 };
 
-export const poolScope = (pool: Pick<PlanLimitPool, `label` | `gates`>): string | undefined => {
+// Read off the provider's own name; with none, off our own label, which reads "<period> · <scope>" in every language
+// (windowNames), so the scope is what follows the period.
+export const poolScope = (pool: Pick<PlanLimitPool, `label` | `name` | `gates`>): string | undefined => {
     if (pool.gates === `all` || pool.gates === `none`) {
         return undefined;
     }
-    const named = pool.label
+    const parts = (pool.name ?? pool.label)
         .split(`·`)
         .map((part) => part.trim())
-        .find((part) => part !== `` && !isPeriodOnly(part));
+        .filter((part) => part !== ``);
+    const named = pool.name === undefined ? parts.slice(1).join(` · `) || undefined : parts.find((part) => !isPeriodOnly(part));
     return (named ?? pool.gates.models.join(`, `)).replace(/\s+models?$/iu, ``);
 };
 
 // Whether every turn that spends `inner` also spends `outer`: `outer` gates at least the same models and runs on a
 // clock at least as long. On equal clocks, only an all-models pool holds a scoped slice ("Weekly · Opus" sits inside
 // "Weekly · all models"), so two pools of the same shape never contain each other.
-const containsPool = (outer: Pick<PlanLimitPool, `kind` | `label` | `gates`>, inner: Pick<PlanLimitPool, `kind` | `label` | `gates`>): boolean => {
+const containsPool = (outer: Pick<PlanLimitPool, `kind` | `name` | `gates`>, inner: Pick<PlanLimitPool, `kind` | `name` | `gates`>): boolean => {
     if (outer.gates === `none` || inner.gates === `none` || outer.kind === inner.kind) {
         return false;
     }

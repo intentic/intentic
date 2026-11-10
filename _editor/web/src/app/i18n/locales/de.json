@@ -4711,11 +4711,11 @@
             "couldNotStop": "Die Beobachtung konnte nicht gestoppt werden."
         },
         "chatCapacityLane": {
-            "inDayHours": "in 1 T {hours} Std.",
+            "inDayHours": "in 1 T {hours} h",
             "inDays": "in {days} T",
-            "inHours": "in {hours} Std.",
-            "inHoursMinutes": "in {hours} Std. {minutes} Min.",
-            "inMinutes": "in {minutes} Min."
+            "inHours": "in {hours} h",
+            "inHoursMinutes": "in {hours} h {minutes} min",
+            "inMinutes": "in {minutes} min"
         },
         "toolPresentation": {
             "interrupted": "unterbrochen",
