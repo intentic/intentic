@@ -13,7 +13,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { FOUND_QUERY, foundAfterSetup, landingAfterSetup } from "../../../lib/foundOnComputer";
 import { HOME_PATH } from "../../../lib/routes/firstScreens";
-import { switchableSandboxes, unfinishedSandboxes } from "../../../models/sandbox/live/roster";
+import { finishableSandboxes, switchableSandboxes } from "../../../models/sandbox/live/roster";
 import { HOSTED } from "../../setup/add/useAddSandbox";
 import { useAddSandboxHere } from "../../setup/add/useAddSandboxHere";
 import {
@@ -158,15 +158,15 @@ const run: NewSandboxRun = {
 };
 newSandbox.value = run;
 
-// Asked by the address to finish a row: pressed for the reader once the account's list names it as theirs and unfinished.
-// A row the list does not offer (a stale link, someone else's) asks nothing, and Home's chat comes back.
+// Asked by the address to finish a row: pressed for the reader once the account's list names it as theirs and unfinished,
+// or as theirs and removed from its machine (the removed notice's "Set it up again"). A row the list does not offer (a stale link, someone else's) asks nothing, and Home's chat comes back.
 watch(
     () => [finishAskedBy(route), sandbox.sandboxes.value] as const,
     ([asked, rows]) => {
         if (asked === undefined || pressed.value) {
             return;
         }
-        const row = unfinishedSandboxes(rows).find((entry) => entry.id === asked);
+        const row = finishableSandboxes(rows).find((entry) => entry.id === asked);
         if (row !== undefined) {
             void run.resume(row, machineAskedBy(route));
         } else {

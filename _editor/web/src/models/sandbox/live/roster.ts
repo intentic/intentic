@@ -19,3 +19,11 @@ export const switchableSandboxes = (rows: readonly SandboxSummary[]): readonly S
 // not finished is not an errand its members can run.
 export const unfinishedSandboxes = (rows: readonly SandboxSummary[]): readonly SandboxSummary[] =>
     rows.filter((entry) => entry.lastSeenAt === null && entry.role === `owner`);
+
+// THE ROWS HOME MAY FINISH IN PLACE (`?finish=<id>`): a setup left unfinished, and a sandbox of the reader's own whose
+// container its machine reported deleted (`removedAt`). The second is the removed notice's "Set it up again"
+// (connectionNotice.ts): it has checked in before, so it is not unfinished, and Home used to find nothing to finish and
+// put its own chat back, which left the press doing nothing. Its row is resumed like an unfinished one, a fresh setup
+// code under the same name and address (the platform mints one for any row its owner holds, removed or not).
+export const finishableSandboxes = (rows: readonly SandboxSummary[]): readonly SandboxSummary[] =>
+    rows.filter((entry) => entry.role === `owner` && (entry.lastSeenAt === null || (entry.removedAt ?? null) !== null));

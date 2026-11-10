@@ -1,6 +1,6 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { type LocalFace, localSandboxId } from "../../../app/environments/local";
-import { connectedSandboxes, switchableSandboxes, unfinishedSandboxes } from "./roster";
+import { connectedSandboxes, finishableSandboxes, switchableSandboxes, unfinishedSandboxes } from "./roster";
 
 /* The partition every sandbox list draws itself from. */
 
@@ -73,4 +73,14 @@ it(`leaves a folder window's own folder out of the places to go`, () => {
     } finally {
         delete window.__INTENTIC_LOCAL__;
     }
+});
+
+// The removed notice's "Set it up again" asks Home to finish the row; it has checked in before, so it is not unfinished,
+// and Home used to find nothing to finish and put its chat back: a press that did nothing.
+it(`lets Home finish the owner's sandbox whose container was removed, alongside an unfinished setup`, () => {
+    const draft = row({ id: `draft` });
+    const removed = row({ id: `removed`, lastSeenAt: SEEN, removedAt: SEEN });
+    const live = row({ id: `live`, lastSeenAt: SEEN });
+    const sharedRemoved = row({ id: `shared`, role: `maintainer`, lastSeenAt: SEEN, removedAt: SEEN });
+    expect(finishableSandboxes([draft, removed, live, sharedRemoved])).toEqual([draft, removed]);
 });
