@@ -2,6 +2,7 @@ import type { NetdiskConfig } from "@intentic/sandbox-contract/schemas/netdisk";
 import { netdiskDrivers } from "../../netdisk/netdisk-drivers.js";
 import { mountNetdisk, netdiskLink, unmountNetdisk } from "../../netdisk/netdisk-links.js";
 import { MOUNT_ROOT } from "../../netdisk/netdisk-paths.js";
+import { opt } from "../../opt.js";
 import { tunnelHandler, tunnelStatus } from "../../tunnel/tunnel-handler.js";
 
 // Stores a network disk (server, share, credential, access, mount on boot); mounting lives in netdisk/ behind a
@@ -44,6 +45,11 @@ Notes:
   stopped matching its entry.
 - A mount that fails with "no route", "did not answer" or "not reachable" usually means the server is behind a VPN
   that is down: \`vpn list\` shows what is up, and \`vpn connect <name>\` brings it back.
+- A disk whose \`netdisk list\` line says \`through <computer>\` is reached through one of the owner's computers: that
+  computer dials the server itself (its LAN, its own VPN client, its DNS), so it must be connected for the disk to
+  mount or answer. A failure through it says what the computer said; \`devices reach --list\` shows the tunnel. A
+  share the owner opens from their PC but the sandbox cannot reach (a private name that does not resolve here, an
+  address that times out) is what this is for: suggest setting "Reach it through" on the disk's card.
 - A command that hangs on a mounted disk means the server went away (a dropped tunnel): \`netdisk unmount <name>\`
   frees it; reconnect the VPN, then mount again.
 - You cannot read a disk's credentials, and you do not need to: \`netdisk mount\` uses the stored ones.
@@ -71,15 +77,16 @@ export const netdiskHandler = tunnelHandler<NetdiskConfig>({
             hasPassword: disk.password !== undefined,
             ...(disk.path === undefined ? {} : { path: disk.path }),
             ...(disk.domain === undefined ? {} : { domain: disk.domain }),
+            ...opt("via", disk.via),
         };
     },
     fragment: () => [NETDISK_FRAGMENT],
     driverOf: (config) => netdiskDrivers[config.provider],
     wanted: (config) => config.autoMount === "on",
-    up: mountNetdisk,
-    down: unmountNetdisk,
-    status: async (entry) => {
-        const link = await netdiskLink(entry);
+    up: (entry, ctx) => mountNetdisk(entry, ctx.deviceTunnels),
+    down: (entry, ctx) => unmountNetdisk(entry, ctx.deviceTunnels),
+    status: async (entry, ctx) => {
+        const link = await netdiskLink(entry, ctx.deviceTunnels);
         // A live mount that disagrees with its entry outranks raw state: it is the one thing the access switch promised.
         if (link.state === "mounted" && link.writable === true && link.access === "read") {
             return { state: "error", detail: "mounted read-write, but the entry says read-only: unmount and mount again" };

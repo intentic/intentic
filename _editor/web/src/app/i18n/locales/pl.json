@@ -2019,13 +2019,14 @@
             "netdisk": {
                 "name": "Dysk sieciowy",
                 "description": "Udział na NAS-ie lub serwerze plików, montowany tylko do odczytu albo z zapisem.",
-                "hint": "Montowany w /mnt/netdisk/{'<'}nazwa>. Montuj i odmontowuj tutaj, przy dodanym dysku (agent też to potrafi). Za VPN-em? Najpierw dodaj i połącz ten VPN.",
+                "hint": "Montowany w /mnt/netdisk/{'<'}nazwa>. Montuj i odmontowuj tutaj, przy dodanym dysku (agent też to potrafi). Twój PC go otwiera, a sandbox nie? Sięgnij do niego przez ten PC.",
                 "guide": {
                     "steps": {
                         "0": "Pola Serwer i Udział to dwie części ścieżki `\\\\\\\\server\\share`.",
                         "1": "Tylko do odczytu: montowany jako `ro`; daj mu też na serwerze konto tylko do odczytu.",
                         "2": "Za VPN-em: najpierw dodaj kafelek VPN; przy każdym restarcie dysk montuje się dopiero po zestawieniu tunelu.",
-                        "3": "Zamontuj go w jego wierszu poniżej; agent znajdzie pliki w `/mnt/netdisk/{'<'}nazwa>`."
+                        "3": "Zamontuj go w jego wierszu poniżej; agent znajdzie pliki w `/mnt/netdisk/{'<'}nazwa>`.",
+                        "4": "Już otwarty na Twoim PC (przez jego VPN, jako dysk sieciowy)? Wpisz ten komputer w `Dostęp przez`."
                     }
                 },
                 "fields": {
@@ -2037,7 +2038,7 @@
                         }
                     },
                     "autoMount": {
-                        "hint": "Montowany, gdy VPN-y sandboxa połączą się ponownie, więc dysk za tunelem też wraca.",
+                        "hint": "Montowany, gdy VPN-y sandboxa połączą się ponownie albo gdy wróci komputer, przez który jest dostępny, więc dysk za tunelem też wraca.",
                         "label": "Montuj przy starcie"
                     },
                     "domain": {
@@ -2076,6 +2077,11 @@
                             "1_0": "1.0 (stare oprogramowanie NAS)",
                             "auto": "Automatycznie (3.1.1 → 2.1)"
                         }
+                    },
+                    "via": {
+                        "label": "Dostęp przez",
+                        "placeholder": "własna sieć sandboxa",
+                        "hint": "Połączony komputer, który sam otwiera ten udział, np. PC, na którym go mapujesz: wtedy obowiązują jego LAN, jego VPN i jego nazwy. Jego nazwa jak w Urządzeniach (rog). Musi być online, z włączonym „Uruchamianiem poleceń” lub „Uruchamianiem programów”."
                     }
                 }
             },
@@ -5178,6 +5184,7 @@
             "mountsAutomaticallyAfterSandbox": "Podłącza się automatycznie po restarcie sandboksa, gdy wróci jego VPN.",
             "readOnly": "tylko do odczytu",
             "readWrite": "odczyt i zapis",
+            "through": "przez {device}",
             "unmount": "Odmontuj"
         },
         "reviewStat": {

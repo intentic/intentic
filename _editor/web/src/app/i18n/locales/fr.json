@@ -2070,13 +2070,14 @@
             "netdisk": {
                 "name": "Disque réseau",
                 "description": "Un partage sur un NAS ou un serveur de fichiers, monté en lecture seule ou en lecture-écriture.",
-                "hint": "Monté sous /mnt/netdisk/{'<'}name>. Montez et démontez directement ici, sur le disque que vous avez ajouté (l'agent le peut aussi). Derrière un VPN ? Ajoutez et connectez d'abord ce VPN.",
+                "hint": "Monté sous /mnt/netdisk/{'<'}name>. Montez et démontez directement ici, sur le disque que vous avez ajouté (l'agent le peut aussi). Votre PC l'ouvre mais pas le sandbox ? Passez par ce PC.",
                 "guide": {
                     "steps": {
                         "0": "Serveur et partage sont les deux parties de `\\\\\\\\server\\share`.",
                         "1": "Lecture seule : monté en `ro`, et donnez-lui aussi un compte en lecture seule sur le serveur.",
                         "2": "Derrière un VPN : ajoutez d'abord la tuile VPN ; le disque est monté après le tunnel à chaque redémarrage.",
-                        "3": "Montez-le sur sa ligne ci-dessous ; l'agent trouve les fichiers sous `/mnt/netdisk/{'<'}name>`."
+                        "3": "Montez-le sur sa ligne ci-dessous ; l'agent trouve les fichiers sous `/mnt/netdisk/{'<'}name>`.",
+                        "4": "Déjà ouvert sur votre PC (par son VPN, en lecteur réseau) ? Indiquez cet ordinateur dans `Passer par`."
                     }
                 },
                 "fields": {
@@ -2088,7 +2089,7 @@
                         }
                     },
                     "autoMount": {
-                        "hint": "Monté après la reconnexion des VPN du sandbox, pour qu'un disque derrière un tunnel revienne aussi.",
+                        "hint": "Monté après la reconnexion des VPN du sandbox, ou au retour de l'ordinateur par lequel il passe, pour qu'un disque derrière un tunnel revienne aussi.",
                         "label": "Monter au démarrage"
                     },
                     "domain": {
@@ -2127,6 +2128,11 @@
                             "1_0": "1.0 (ancien firmware de NAS)",
                             "auto": "Auto (3.1.1 → 2.1)"
                         }
+                    },
+                    "via": {
+                        "label": "Passer par",
+                        "placeholder": "le réseau propre du sandbox",
+                        "hint": "Un ordinateur connecté qui ouvre lui-même ce partage, comme le PC sur lequel vous le montez : son réseau local, son VPN et ses noms s'appliquent alors. Son nom tel que dans Appareils (rog). Il doit être en ligne, avec « Exécuter des commandes » ou « Exécuter des programmes » activé."
                     }
                 }
             },
@@ -5178,6 +5184,7 @@
             "mountsAutomaticallyAfterSandbox": "Se monte automatiquement après un redémarrage du sandbox, dès que son VPN est revenu.",
             "readOnly": "lecture seule",
             "readWrite": "lecture et écriture",
+            "through": "via {device}",
             "unmount": "Démonter"
         },
         "reviewStat": {

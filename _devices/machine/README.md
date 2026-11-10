@@ -77,6 +77,14 @@ flowchart LR
   Run pressed again there, Ctrl+C in a run's terminal, `devices stop` or `app_stop` from a named conversation), and the
   run's record says "stopped by <by>" ever after; a stop with none says "stopped by app_stop". It replaced "stopped by
   the agent" for every stop, which once sent an agent hunting another conversation for a stop its own Run job made.
+- (2026-11-10) **A `devices reach` tunnel can end at a host this machine reaches, not only at its loopback**
+  ([`tools/programs/device-tunnel.ts`](src/device/tools/programs/device-tunnel.ts)). Given a `host`, `dialLoopback`
+  dials that host the way any program here would, so this machine's routes, its own VPN client and its resolvers
+  (a VPN's DNS, NetBIOS and `.local` names, the hosts file) all apply. That is how a sandbox opens a NAS or a server
+  only the owner's PC can reach, and how a network disk is reached through this PC. It sits behind the same switches
+  as the loopback ("Run commands" or "Run programs this sandbox sends"), since either already lets the sandbox reach
+  whatever this machine reaches. A failed dial says why in words (a name it cannot resolve, a refused port, no route,
+  no answer within 10 s), and the agent advertises `reach-network` so an older one is never sent a host.
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
   `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
   logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). The "Manage sandboxes"

@@ -73,3 +73,10 @@ test("server and share are single names, and the folder inside stays inside", ()
     expect(SmbNetdiskConfigSchema.safeParse({ ...smb, path: "/2026" }).success).toBe(false);
     expect(SmbNetdiskConfigSchema.safeParse({ ...smb, path: "../etc" }).success).toBe(false);
 });
+
+test("a network disk is reached by the sandbox itself unless it names a computer to reach it through", () => {
+    expect(SmbNetdiskConfigSchema.parse(smb).via).toBeUndefined();
+    expect(SmbNetdiskConfigSchema.parse({ ...smb, via: "rog" }).via).toBe("rog");
+    expect(SmbNetdiskConfigSchema.safeParse({ ...smb, via: "my pc" }).success).toBe(false);
+    expect(SmbNetdiskConfigSchema.safeParse({ ...smb, via: "" }).success).toBe(false);
+});

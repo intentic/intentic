@@ -287,6 +287,11 @@ more than once.
 - **Its ports, from the sandbox:** \`devices reach \${id} <port>\` makes this machine's \`127.0.0.1:<port>\` (the app's
   local API, a server only it runs) answer at the same port in the sandbox, so a test there can call it.
   \`devices reach --list\` shows what is open, \`--off\` closes one.
+- **What only this machine reaches, from the sandbox:** \`devices reach \${id} <host>:<port> [--as <port>]\` has this
+  machine dial \`<host>:<port>\` itself (a NAS on its LAN, a server behind the VPN client running here, a name only
+  its DNS knows) and answers at \`127.0.0.1:<as|port>\` in the sandbox. Reach for it when a private address or name
+  the owner opens from this computer times out or does not resolve in the sandbox. A network disk takes this machine
+  as its "Reach it through" instead, so \`netdisk mount\` does it by itself.
 
 \`devices push\` and starting a pushed program need this device's "Run programs this sandbox sends" switch, which is
 off unless the owner turned it on: a refusal names it, and the way on is \`capabilities request \${id} --set programs=on

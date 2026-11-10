@@ -77,23 +77,39 @@ export const PushedArtifactSchema = z.object({
 });
 export type PushedArtifact = z.infer<typeof PushedArtifactSchema>;
 
-// A DEVICE'S LOOPBACK PORT, REACHED FROM THE SANDBOX (`devices reach`, hosts/device-tunnels.ts). The sandbox listens on
-// its own 127.0.0.1:<localPort>; each connection asks the device to dial its own 127.0.0.1:<devicePort> and open a
-// WebSocket back to /system/hosts/tunnel carrying the ticket below, and the two are pumped together.
+// A PORT THE DEVICE REACHES, REACHED FROM THE SANDBOX (`devices reach`, hosts/device-tunnels.ts). The sandbox listens on
+// its own 127.0.0.1:<localPort>; each connection asks the device to dial <port> and open a WebSocket back to
+// /system/hosts/tunnel carrying the ticket below, and the two are pumped together. Without `host` the device dials its
+// own loopback; with one (2026-11-10) it dials that host as any program on it would, so its LAN, its own VPN client,
+// its resolvers (a VPN's DNS, NetBIOS and mDNS names, its hosts file) all apply: how a sandbox reaches a NAS or a
+// server that only the owner's computer can. Sent only to an agent advertising `reach-network`: an older one's strict
+// schema refuses the field. The procedure keeps its name, which older agents answer for loopback.
+// A hostname, an IPv4 address or a bare IPv6 address: one token, nothing a resolver would read as two.
+export const DialHostSchema = z
+    .string()
+    .min(1)
+    .max(253)
+    .regex(/^[A-Za-z0-9._:-]+$/, "a hostname or an address: letters, digits, dots, dashes, underscores and colons");
 export const DialLoopbackSchema = z
     .object({
         ticket: z.string().regex(/^[0-9a-f]{48}$/),
         port: z.int().min(1).max(65535),
+        host: DialHostSchema.optional(),
     })
     .strict();
 export type DialLoopback = z.infer<typeof DialLoopbackSchema>;
 
 export const DeviceTunnelSchema = z.object({
     device: z.string(),
+    // The host the device dials, absent for its own loopback.
+    host: z.string().optional(),
     devicePort: z.int().min(1).max(65535),
     localPort: z.int().min(1).max(65535),
     // What a program in the sandbox opens to reach the device's port.
     url: z.string(),
     openedAt: z.string(),
+    // What the device said the last time it could not dial (a name it cannot resolve, a host that does not answer from
+    // there), absent once a connection went through: why a program in the sandbox saw its connection cut.
+    failure: z.string().optional(),
 });
 export type DeviceTunnel = z.infer<typeof DeviceTunnelSchema>;

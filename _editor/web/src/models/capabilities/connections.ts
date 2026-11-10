@@ -47,14 +47,18 @@ export const vpnFacts = (id: string, links: readonly VpnLink[]): string | undefi
         .join(` · `);
 };
 
-// A mounted disk's live facts: where it is and whether it takes writes, as the kernel has it; undefined while
-// unmounted, since the row's status already says that.
+// A mounted disk's live facts: where it is, whether it takes writes as the kernel has it, and the computer it is reached
+// through when it is; undefined while unmounted, since the row's status already says that.
 export const netdiskFacts = (id: string, links: readonly NetdiskLink[]): string | undefined => {
     const link = links.find((candidate) => candidate.id === id);
     if (link === undefined || link.state !== `mounted`) {
         return undefined;
     }
-    return `${link.mountPoint} · ${link.writable === true ? t(`common.netdiskMounts.readWrite`) : t(`common.netdiskMounts.readOnly`)}`;
+    const facts = [link.mountPoint, link.writable === true ? t(`common.netdiskMounts.readWrite`) : t(`common.netdiskMounts.readOnly`)];
+    if (link.via !== undefined) {
+        facts.push(t(`common.netdiskMounts.through`, { device: link.via }));
+    }
+    return facts.join(` · `);
 };
 
 export interface ConnectionState {

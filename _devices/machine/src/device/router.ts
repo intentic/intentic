@@ -323,7 +323,8 @@ export const createHostRouter = (runtime: HostRuntime) => {
         deliverProject: os.deliverProject.handler(async ({ input }) => await deliverOverLink(runtime, input)),
         // A program the sandbox built, carried in pieces into this sandbox's runs folder (tools/programs/artifacts.ts). Behind
         // "Run programs this sandbox sends", read per piece; only a commit is audited, since a build is fifty pieces.
-        // One connection of a `devices reach` tunnel: dial this machine's own port, then back to the sandbox (tunnel.ts).
+        // One connection of a `devices reach` tunnel: dial this machine's own port, or a host its network reaches, then back
+        // to the sandbox (device-tunnel.ts).
         dialLoopback: os.dialLoopback.handler(async ({ input }) => {
             try {
                 return await dialLoopback(input, runtime.scopes(), runtime.linkBase?.());

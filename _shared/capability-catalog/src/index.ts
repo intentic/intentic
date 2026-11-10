@@ -634,21 +634,32 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 ],
                 when: "provider == 'smb'",
             },
+            // (2026-11-10) A share the owner's PC opens (its LAN, its own VPN client, a name only its DNS knows) that the
+            // sandbox cannot reach from behind Docker's NAT: that computer's agent dials the server for it.
+            {
+                key: "via",
+                label: "Reach it through",
+                optional: true,
+                placeholder: "the sandbox's own network",
+                hint: "A connected computer that opens this share itself, such as the PC you map it on: its LAN, its VPN and its names then apply. Its name as on Devices (rog). It must be online, with Run commands or Run programs on.",
+                when: "provider == 'smb'",
+            },
             {
                 key: "autoMount",
                 label: "Mount on start",
                 default: "on",
                 boolean: true,
-                hint: "Mounted after the sandbox's VPNs reconnect, so a disk behind a tunnel comes back too.",
+                hint: "Mounted after the sandbox's VPNs reconnect, or once the computer it is reached through is back, so a disk behind a tunnel comes back too.",
             },
         ],
-        hint: "Mounts at /mnt/netdisk/<name>. Mount and unmount right here, on the disk you added (the agent can too). Behind a VPN? Add and connect that VPN first.",
+        hint: "Mounts at /mnt/netdisk/<name>. Mount and unmount right here, on the disk you added (the agent can too). Your PC opens it but the sandbox can't? Reach it through that PC.",
         guide: {
             steps: [
                 "Server and share are the two parts of `\\\\server\\share`.",
                 "Read-only: mounted `ro`, and give it a read-only account on the server too.",
                 "Behind a VPN: add the VPN tile first; the disk mounts after the tunnel on every restart.",
                 "Mount it on its row below; the agent finds the files under `/mnt/netdisk/<name>`.",
+                "Already open on your PC (its VPN, a mapped drive)? Put that computer in `Reach it through`.",
             ],
         },
     },

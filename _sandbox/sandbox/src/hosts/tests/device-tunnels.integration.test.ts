@@ -43,13 +43,14 @@ const stand = async (device: { online?: boolean; features?: string[]; refuse?: s
     const dialled: DialLoopback[] = [];
     let daemonPort = 0;
     const client = {
-        // What the machine does: dial its own port, then the daemon's tunnel route with the ticket, and pump.
+        // What the machine does: dial its own port (or the host it was named), then the daemon's tunnel route with the
+        // ticket, and pump.
         dialLoopback: async (input: DialLoopback): Promise<{ ok: true }> => {
             dialled.push(input);
             if (device.refuse !== undefined) {
                 throw new Error(device.refuse);
             }
-            const local: Socket = connect(input.port, "127.0.0.1");
+            const local: Socket = connect(input.port, input.host ?? "127.0.0.1");
             await once(local, "connect");
             const ws = new WebSocket(`ws://127.0.0.1:${daemonPort}/system/hosts/tunnel`, { headers: { "x-intentic-tunnel": input.ticket } });
             await once(ws, "open");
@@ -151,7 +152,7 @@ test("an offline device, one too old, and a busy sandbox port are refused before
     busy.close();
 });
 
-test("a device that refuses to dial costs that one connection, which is closed", async () => {
+test("a device that refuses to dial costs that one connection, which is closed, and the tunnel says what it said", async () => {
     const stood = await stand({ refuse: "Run commands is off" });
     try {
         const free = await freePort();
@@ -160,6 +161,7 @@ test("a device that refuses to dial costs that one connection, which is closed",
         await once(socket, "connect");
         await once(socket, "close");
         expect(stood.dialled).toHaveLength(1);
+        expect(stood.tunnels.list()[0]?.failure).toBe("Run commands is off");
     } finally {
         await stood.close();
     }
@@ -181,6 +183,54 @@ test("closing a tunnel with a connection still open returns at once and cuts tha
         expect(closed).toBe(true);
         await cut;
         expect(stood.tunnels.list()).toEqual([]);
+    } finally {
+        await stood.close();
+    }
+});
+
+// (2026-11-10) A host the device's network reaches: the device is asked to dial that host, the sandbox end takes any free
+// port when asked for 0, and the tunnel is its own beside a loopback tunnel to the same port.
+test("a host target asks the device to dial that host, on a sandbox port of the daemon's own choosing", async () => {
+    const stood = await stand({ features: ["programs", "reach-network"] });
+    try {
+        const free = await freePort();
+        await stood.tunnels.open("pc", deviceProgramPort, free);
+        const tunnel = await stood.tunnels.open("pc", deviceProgramPort, 0, { host: "127.0.0.1" });
+        expect(tunnel).toMatchObject({ device: "pc", host: "127.0.0.1", devicePort: deviceProgramPort, url: `http://127.0.0.1:${tunnel.localPort}` });
+        expect(tunnel.localPort).not.toBe(0);
+        expect(tunnel.localPort).not.toBe(free);
+        expect(await ask(tunnel.localPort, "share")).toBe("SHARE");
+        expect(stood.dialled.at(-1)).toMatchObject({ port: deviceProgramPort, host: "127.0.0.1" });
+        // Asked again, the same tunnel; closed by its host, the loopback one stays.
+        expect((await stood.tunnels.open("pc", deviceProgramPort, 0, { host: "127.0.0.1" })).localPort).toBe(tunnel.localPort);
+        expect(await stood.tunnels.close("pc", deviceProgramPort, "127.0.0.1")).toBe(true);
+        expect(stood.tunnels.list().map((each) => each.host)).toEqual([undefined]);
+    } finally {
+        await stood.close();
+    }
+});
+
+test("an agent too old for a host is refused before anything listens", async () => {
+    const old = await stand({ features: ["programs"] });
+    try {
+        await expect(old.tunnels.open("pc", deviceProgramPort, 0, { host: "127.0.0.1" })).rejects.toThrow("too old to reach a host on its network");
+        expect(old.tunnels.list()).toEqual([]);
+    } finally {
+        await old.close();
+    }
+});
+
+test("a standing tunnel listens while the device is away, refuses its connections until it is back, then carries them", async () => {
+    const device = { online: false, features: ["programs", "reach-network"] };
+    const stood = await stand(device);
+    try {
+        const tunnel = await stood.tunnels.open("pc", deviceProgramPort, 0, { host: "127.0.0.1", standing: true });
+        const early = connect(tunnel.localPort, "127.0.0.1");
+        await once(early, "connect");
+        await once(early, "close");
+        expect(stood.dialled).toEqual([]);
+        device.online = true;
+        expect(await ask(tunnel.localPort, "back")).toBe("BACK");
     } finally {
         await stood.close();
     }

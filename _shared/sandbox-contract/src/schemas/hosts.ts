@@ -186,6 +186,9 @@ export const DeviceFeatureSchema = z.enum([
     "reachable-ways-back",
     // (2026-10-27) The `set-egress` op and the `egress` field on its sandbox rows: an ic with `ic sandbox egress`.
     "egress",
+    // (2026-11-10) `dialLoopback` with a `host`: the agent dials a host on its own network, not only its loopback
+    // (`devices reach <device> <host>:<port>`, a network disk reached through a computer).
+    "reach-network",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -199,6 +202,7 @@ export const DEVICE_FEATURE_KEYRING: DeviceFeature = "keyring";
 export const DEVICE_FEATURE_SLEEP: DeviceFeature = "sleep";
 export const DEVICE_FEATURE_EGRESS: DeviceFeature = "egress";
 export const DEVICE_FEATURE_REACHABLE_WAYS_BACK: DeviceFeature = "reachable-ways-back";
+export const DEVICE_FEATURE_REACH_NETWORK: DeviceFeature = "reach-network";
 // What `ic features --json` answers (_sandbox/ic/src/features.rs, golden/ic-features.json): the optional ops that ic
 // implements, as strings, since a newer ic's word means nothing to an older agent.
 export const IcFeaturesAnswerSchema = z.object({ features: z.array(z.string()) });

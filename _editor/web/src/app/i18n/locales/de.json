@@ -2070,13 +2070,14 @@
             "netdisk": {
                 "name": "Netzlaufwerk",
                 "description": "Eine Freigabe auf einem NAS oder Dateiserver, schreibgeschützt oder mit Lese- und Schreibzugriff eingehängt.",
-                "hint": "Wird unter /mnt/netdisk/{'<'}name> eingehängt. Einhängen und aushängen direkt hier, am hinzugefügten Laufwerk (der Agent kann das auch). Hinter einem VPN? Fügen Sie zuerst dieses VPN hinzu und verbinden Sie es.",
+                "hint": "Wird unter /mnt/netdisk/{'<'}name> eingehängt. Einhängen und aushängen direkt hier, am hinzugefügten Laufwerk (der Agent kann das auch). Ihr PC öffnet es, die Sandbox aber nicht? Erreichen Sie es über diesen PC.",
                 "guide": {
                     "steps": {
                         "0": "Server und Freigabe sind die beiden Teile von `\\\\\\\\server\\share`.",
                         "1": "Schreibgeschützt: als `ro` eingehängt; geben Sie ihm auch auf dem Server ein Konto mit reinem Lesezugriff.",
                         "2": "Hinter einem VPN: Fügen Sie zuerst die VPN-Kachel hinzu; das Laufwerk wird bei jedem Neustart nach dem Tunnel eingehängt.",
-                        "3": "Hängen Sie es in seiner Zeile unten ein; der Agent findet die Dateien unter `/mnt/netdisk/{'<'}name>`."
+                        "3": "Hängen Sie es in seiner Zeile unten ein; der Agent findet die Dateien unter `/mnt/netdisk/{'<'}name>`.",
+                        "4": "Schon auf Ihrem PC geöffnet (über sein VPN, als verbundenes Laufwerk)? Tragen Sie diesen Computer unter `Erreichen über` ein."
                     }
                 },
                 "fields": {
@@ -2088,7 +2089,7 @@
                         }
                     },
                     "autoMount": {
-                        "hint": "Wird eingehängt, nachdem sich die VPNs der Sandbox neu verbunden haben, damit auch ein Laufwerk hinter einem Tunnel zurückkommt.",
+                        "hint": "Wird eingehängt, nachdem sich die VPNs der Sandbox neu verbunden haben oder der Computer, über den es erreicht wird, wieder da ist, damit auch ein Laufwerk hinter einem Tunnel zurückkommt.",
                         "label": "Beim Start einhängen"
                     },
                     "domain": {
@@ -2127,6 +2128,11 @@
                             "1_0": "1.0 (alte NAS-Firmware)",
                             "auto": "Automatisch (3.1.1 → 2.1)"
                         }
+                    },
+                    "via": {
+                        "label": "Erreichen über",
+                        "placeholder": "das eigene Netz der Sandbox",
+                        "hint": "Ein verbundener Computer, der diese Freigabe selbst öffnet, etwa der PC, auf dem Sie sie verbinden: Dann gelten sein LAN, sein VPN und seine Namen. Sein Name wie unter Geräte (rog). Er muss online sein, mit „Befehle ausführen“ oder „Programme ausführen“ an."
                     }
                 }
             },
@@ -5178,6 +5184,7 @@
             "mountsAutomaticallyAfterSandbox": "Wird nach einem Sandbox-Neustart automatisch eingehängt, sobald das VPN wieder da ist.",
             "readOnly": "nur lesen",
             "readWrite": "lesen und schreiben",
+            "through": "über {device}",
             "unmount": "Aushängen"
         },
         "reviewStat": {

@@ -85,6 +85,8 @@ describe("what the cards suggest", () => {
             { id: "nas-ssh", kind: "ssh", config: { auth: "password", host: "192.168.1.5", port: 2222, user: "me", password: "x" } },
             { id: "public-ssh", kind: "ssh", config: { auth: "password", host: "example.com", port: 22, user: "me", password: "x" } },
             { id: "photos", kind: "netdisk", config: { provider: "smb", server: "nas.lan", share: "photos", username: "me" } },
+            // Reached through a computer, which dials it itself: nothing to let through the fence here.
+            { id: "work", kind: "netdisk", config: { provider: "smb", server: "files.corp", share: "team", username: "me", via: "rog" } },
             { id: "office", kind: "vpn", config: { provider: "wireguard", config: "[Peer]\nEndpoint = 10.1.0.1:51820\n", autoConnect: "off" } },
         ].map((card) => CapabilitySchema.parse(card));
         expect(egressSuggestionsOf(cards)).toEqual([

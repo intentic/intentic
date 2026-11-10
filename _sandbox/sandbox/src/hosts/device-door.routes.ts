@@ -2,6 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Context } from "hono";
 import { z } from "zod";
 import { MAX_STOP_GRACE_SECONDS, RunBuiltFromSchema } from "@intentic/sandbox-contract/schemas/run-targets";
+import { DialHostSchema } from "@intentic/sandbox-contract/schemas/device-artifacts";
 import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { soleLiveConversation } from "../conversations/actor/conversation-holdings.js";
@@ -77,7 +78,8 @@ const StartSchema = z
     })
     .strict();
 
-const TunnelSchema = z.object({ port: z.int().min(1).max(65535), as: z.int().min(1).max(65535).optional() }).strict();
+// `host`: a host the device's own network reaches, dialled by the device (device-tunnels.ts); absent, its loopback.
+const TunnelSchema = z.object({ port: z.int().min(1).max(65535), as: z.int().min(1).max(65535).optional(), host: DialHostSchema.optional() }).strict();
 
 export const bodyOf = async <T>(c: Context<AppEnv>, schema: z.ZodType<T>): Promise<{ ok: true; value: T } | { ok: false; error: string }> => {
     // A body that is not JSON is read as none, which the schema then refuses by name; any other failure is not the caller's.
@@ -134,7 +136,8 @@ const createDeviceDoorRoutes = (services: DeviceDoorServices) => ({
             return c.json({ error: errorMessage(error) }, 502);
         }
     },
-    // POST /devices/{name}/tunnels {port, as?}: the device's 127.0.0.1:<port> at the sandbox's 127.0.0.1:<as ?? port>.
+    // POST /devices/{name}/tunnels {port, as?, host?}: the device's 127.0.0.1:<port>, or <host>:<port> as the device reaches
+    // it, at the sandbox's 127.0.0.1:<as ?? port>.
     openTunnel: async (c: Context<AppEnv>): Promise<Response> => {
         const device = c.req.param("name") ?? "";
         const refused = refusalFor(services, c, device);
@@ -146,12 +149,12 @@ const createDeviceDoorRoutes = (services: DeviceDoorServices) => ({
             return c.json({ error: body.error }, 400);
         }
         try {
-            return c.json(await services.deviceTunnels.open(device, body.value.port, body.value.as));
+            return c.json(await services.deviceTunnels.open(device, body.value.port, body.value.as, { host: body.value.host }));
         } catch (error) {
             return c.json({ error: errorMessage(error) }, 409);
         }
     },
-    // DELETE /devices/{name}/tunnels/{port}
+    // DELETE /devices/{name}/tunnels/{port}?host=<host>
     closeTunnel: async (c: Context<AppEnv>): Promise<Response> => {
         const device = c.req.param("name") ?? "";
         const refused = refusalFor(services, c, device);
@@ -159,7 +162,7 @@ const createDeviceDoorRoutes = (services: DeviceDoorServices) => ({
             return c.json({ error: refused.error }, refused.status);
         }
         const port = Number(c.req.param("port"));
-        return c.json({ closed: await services.deviceTunnels.close(device, port) });
+        return c.json({ closed: await services.deviceTunnels.close(device, port, c.req.query("host") || undefined) });
     },
     // GET /devices/tunnels: every tunnel open now.
     listTunnels: (c: Context<AppEnv>): Response => c.json({ tunnels: services.deviceTunnels.list() }),

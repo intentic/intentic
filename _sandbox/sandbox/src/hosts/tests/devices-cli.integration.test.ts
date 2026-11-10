@@ -16,6 +16,8 @@ const CLI = join(packageRoot(import.meta.url), "bin", "devices");
 interface Asked {
     readonly method: string;
     readonly path: string;
+    // With its query string, which `path` leaves off.
+    readonly url: string;
     readonly body: Record<string, unknown> | undefined;
     // Whether the build's output existed when the daemon was asked: a renew asked mid-build sees none yet.
     readonly built: boolean;
@@ -53,6 +55,8 @@ const fakeDaemon = async (repo: string, runs: readonly Record<string, unknown>[]
             ],
         },
         "POST /devices/rog/apps": { device: "rog", text: "Started server as server-abc123 (pid 1) in C:\\runs.", id: "server-abc123", ended: false },
+        "POST /devices/rog/tunnels": { device: "rog", host: "nas.corp", devicePort: 445, localPort: 14450, url: "http://127.0.0.1:14450", openedAt: "x" },
+        "DELETE /devices/rog/tunnels/445": { closed: true },
     }));
     const server: Server = createServer((request, response) => {
         void (async () => {
@@ -62,7 +66,7 @@ const fakeDaemon = async (repo: string, runs: readonly Record<string, unknown>[]
                 () => true,
                 () => false,
             );
-            asked.push({ method: request.method ?? "", path, body, built });
+            asked.push({ method: request.method ?? "", path, url: request.url ?? "", body, built });
             const key = `${request.method ?? ""} ${path}`;
             // The push's probe: this computer already holds the build.
             const answer = path === "/devices/rog/artifacts" ? { path: "C:\\runs\\server\\abc" } : answers.get(key);
@@ -173,4 +177,21 @@ test("devices ports says whose each port is, and which stay off the owner's comp
             '7878   cargo  · conversation wise-cinder-95ng, job "Scratch server" · stays in the sandbox',
         ],
     ]);
+});
+
+test("devices reach takes a host as <host>:<port>, which the computer dials on its own network, and closes it by the same words", async () => {
+    const { root, token } = await project("true");
+    const daemon = await fakeDaemon(root, []);
+    cleanups.push(daemon.close, () => rm(root, { recursive: true, force: true }), () => rm(token, { force: true }));
+
+    const opened = await devices(root, token, daemon.port, ["reach", "rog", "nas.corp:445", "--as", "14450"]);
+    expect([opened.code, opened.out.trim()]).toEqual([0, "nas.corp:445, as rog reaches it, answers here at http://127.0.0.1:14450 (until the daemon restarts, or --off)."]);
+    expect(daemon.asked.at(-1)).toMatchObject({ method: "POST", path: "/devices/rog/tunnels", body: { port: 445, as: 14450, host: "nas.corp" } });
+
+    const closed = await devices(root, token, daemon.port, ["reach", "rog", "[fd00::20]:445", "--off"]);
+    expect([closed.code, closed.out.trim()]).toEqual([0, "Closed [fd00::20]:445 through rog."]);
+    expect(daemon.asked.at(-1)).toMatchObject({ method: "DELETE", url: `/devices/rog/tunnels/445?host=${encodeURIComponent("fd00::20")}` });
+
+    const wrong = await devices(root, token, daemon.port, ["reach", "rog", "nas.corp"]);
+    expect([wrong.code, wrong.out]).toEqual([2, expect.stringContaining("reach takes a device and a port, or a host and a port as <host>:<port>")]);
 });

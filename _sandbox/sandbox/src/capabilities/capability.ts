@@ -31,6 +31,8 @@ export interface CapabilityCtx {
     // User's own devices, passed whole: the hub is the live subject, the store's enrollment is the only status here.
     readonly hosts: HostStore;
     readonly hostHub: HostHub;
+    // Tunnels to what those devices reach (`devices reach`): how a network disk is reached through one of them.
+    readonly deviceTunnels: Services["deviceTunnels"];
     // Same pair for the user's browsers, same reason: hub is the live subject, store enrollment is the status.
     readonly webexts: WebExtStore;
     readonly webextHub: WebExtHub;
@@ -110,6 +112,7 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         capabilities: services.capabilities,
         hosts: services.hosts,
         hostHub: services.hostHub,
+        deviceTunnels: services.deviceTunnels,
         webexts: services.webexts,
         webextHub: services.webextHub,
         phones: services.phones,

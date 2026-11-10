@@ -110,7 +110,8 @@ export const vpnHandler = tunnelHandler<VpnConfig>({
     fragment: () => [VPN_FRAGMENT, TUN_PRIVILEGES_FRAGMENT],
     driverOf: (config) => vpnDrivers[config.provider],
     wanted: (config) => config.autoConnect === "on",
-    up: connectVpn,
+    // Wrapped: the handler passes its context second, and connectVpn takes its dial options there.
+    up: (entry) => connectVpn(entry),
     down: disconnectVpn,
     status: async (entry) => tunnelStatus(await vpnLink(entry), { active: "connected", pending: "connecting" }),
     stored: (id) => `Stored ${id}. Connect it from its row on the VPN entry, or ask the agent to.`,

@@ -37,6 +37,18 @@ export const SmbNetdiskConfigSchema = z.object({
     domain: z.string().optional().describe("The Windows domain or workgroup, only where the server asks for one."),
     access: NetdiskAccessSchema.default("read").describe("Whether the agent may write to it. Read-only is the default."),
     version: SmbVersionSchema.default("auto").describe("The SMB dialect to insist on. Leave on auto unless the server refuses."),
+    // (2026-11-10) The owner's computer whose own network reaches the server. The sandbox's packets leave through
+    // Docker's NAT and its names resolve on public DNS, so a share the PC opens through its VPN client, or by a name only
+    // the PC's resolvers know, is out of the sandbox's reach; through `via` the computer's agent dials the server itself
+    // (a `devices reach` relay) and the kernel mounts through the relay's port here. Absent: the sandbox dials it.
+    via: z
+        .string()
+        .min(1)
+        .refine((value) => !/\s/.test(value), { message: "Reach it through is one computer's name, without spaces." })
+        .optional()
+        .describe(
+            "A connected computer of the owner's (its name as its tools are mounted, mcp__<name>__…) whose own network reaches the server: its LAN, its VPN client, its name resolution. The disk is reached through it. Leave empty when the sandbox reaches the server itself.",
+        ),
     autoMount,
 });
 export const NetdiskConfigSchema = z.discriminatedUnion("provider", [SmbNetdiskConfigSchema]);
@@ -62,6 +74,7 @@ export const NetdiskLinkSchema = z.object({
     target: z.string().describe("What it mounts, as //server/share. For display only, and never a credential."),
     mountPoint: z.string().describe("Where its files appear inside the sandbox."),
     access: NetdiskAccessSchema.describe("What the card asked for: read, or read and write."),
+    via: z.string().optional().describe("The computer the share is reached through, absent when the sandbox reaches it itself."),
     // What the kernel actually enforces on the live mount; absent unless mounted. Disagreeing with `access` is the
     // invariant the daemon patrols.
     writable: z.boolean().optional().describe("Whether the live mount accepts writes, as the kernel has it. Absent unless mounted."),

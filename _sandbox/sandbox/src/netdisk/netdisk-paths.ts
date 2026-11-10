@@ -10,6 +10,9 @@ export const netdiskDir = (): string => join(homeDir(), ".intentic-netdisk");
 export const credentialsPath = (id: string): string => join(netdiskDir(), `${id}.cred`);
 // Touched on mount success, removed on unmount; a missing marker costs the uptime label, not the state.
 export const upMarkerPath = (id: string): string => join(netdiskDir(), `${id}.up`);
+// The tunnel a disk reached through a computer mounted through (netdisk-relay.ts): which computer, host and port, and the
+// sandbox port the kernel mounted, so a restarted daemon reopens that same port. Removed on unmount.
+export const relayPath = (id: string): string => join(netdiskDir(), `${id}.relay`);
 
 // Every disk mounts under one root, so the agent's skill can say where files are without reading the manifest, and the
 // invariant can ask what is mounted there that the manifest never asked for.

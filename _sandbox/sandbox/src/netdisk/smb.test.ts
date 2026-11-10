@@ -59,3 +59,23 @@ test("a mount.cifs failure is explained by its errno, and an unknown one is pass
     expect(explainMountFailure("something else entirely")).toBe("something else entirely");
     expect(explainMountFailure("")).toBe("mount.cifs failed without a message");
 });
+
+// (2026-11-10) Through a computer, the kernel dials the tunnel on the sandbox's loopback while the UNC keeps the server's
+// own name, and a share that does not answer is said to not answer through that computer, not through a VPN here.
+test("a disk reached through a computer dials the tunnel's address and port, its UNC unchanged", () => {
+    const reach = { address: "127.0.0.1", port: 41234, through: "rog" };
+    const options = smbMountOptions(disk(), "/root/.intentic-netdisk/x.cred", reach).split(",");
+    expect(options).toEqual(expect.arrayContaining(["ip=127.0.0.1", "port=41234", "ro"]));
+    expect(smbMountOptions(disk(), "/root/.intentic-netdisk/x.cred")).not.toMatch(/(^|,)(ip|port)=/);
+    expect(smbTarget(disk())).toBe("//nas.local/projects");
+});
+
+test("a share that does not answer through a computer points at that computer, not at a VPN here", () => {
+    const through = explainMountFailure("mount error(112): Host is down", "rog");
+    expect(through).toContain("did not answer through rog");
+    expect(through).toContain("devices reach --list");
+    expect(through).not.toContain("vpn list");
+    // A refusal that is the server's own (its credentials) reads the same either way.
+    expect(explainMountFailure("mount error(13): Permission denied", "rog")).toContain("refused the credentials");
+    expect(explainMountFailure("mount error(112): Host is down")).toContain("vpn list");
+});

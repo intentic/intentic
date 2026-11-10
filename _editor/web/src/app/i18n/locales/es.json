@@ -2070,13 +2070,14 @@
             "netdisk": {
                 "name": "Disco de red",
                 "description": "Un recurso compartido en un NAS o servidor de archivos, montado en solo lectura o en lectura y escritura.",
-                "hint": "Se monta en /mnt/netdisk/{'<'}name>. Móntalo y desmóntalo aquí mismo, en el disco que añadiste (el agente también puede). ¿Detrás de una VPN? Añade y conecta esa VPN primero.",
+                "hint": "Se monta en /mnt/netdisk/{'<'}name>. Móntalo y desmóntalo aquí mismo, en el disco que añadiste (el agente también puede). ¿Tu PC lo abre pero el sandbox no? Llega a él a través de ese PC.",
                 "guide": {
                     "steps": {
                         "0": "Servidor y recurso compartido son las dos partes de `\\\\\\\\server\\share`.",
                         "1": "Solo lectura: se monta `ro`; dale también una cuenta de solo lectura en el servidor.",
                         "2": "Detrás de una VPN: añade primero la tarjeta de VPN; el disco se monta tras el túnel en cada reinicio.",
-                        "3": "Móntalo en su fila de abajo; el agente encuentra los archivos en `/mnt/netdisk/{'<'}name>`."
+                        "3": "Móntalo en su fila de abajo; el agente encuentra los archivos en `/mnt/netdisk/{'<'}name>`.",
+                        "4": "¿Ya lo abres en tu PC (por su VPN, como unidad asignada)? Pon ese equipo en `Llegar a través de`."
                     }
                 },
                 "fields": {
@@ -2088,7 +2089,7 @@
                         }
                     },
                     "autoMount": {
-                        "hint": "Se monta cuando las VPN del sandbox se reconectan, así que un disco detrás de un túnel también vuelve.",
+                        "hint": "Se monta cuando las VPN del sandbox se reconectan, o cuando vuelve el equipo a través del que se llega a él, así que un disco detrás de un túnel también vuelve.",
                         "label": "Montar al iniciar"
                     },
                     "domain": {
@@ -2127,6 +2128,11 @@
                             "1_0": "1.0 (firmware de NAS antiguo)",
                             "auto": "Automática (3.1.1 → 2.1)"
                         }
+                    },
+                    "via": {
+                        "label": "Llegar a través de",
+                        "placeholder": "la red propia del sandbox",
+                        "hint": "Un equipo conectado que abre este recurso compartido por sí mismo, como el PC en el que lo asignas: valen entonces su LAN, su VPN y sus nombres. Su nombre como en Dispositivos (rog). Debe estar en línea, con «Ejecutar comandos» o «Ejecutar programas» activado."
                     }
                 }
             },
@@ -5178,6 +5184,7 @@
             "mountsAutomaticallyAfterSandbox": "Se monta automáticamente tras reiniciar el sandbox, en cuanto su VPN vuelve.",
             "readOnly": "solo lectura",
             "readWrite": "lectura y escritura",
+            "through": "a través de {device}",
             "unmount": "Desmontar"
         },
         "reviewStat": {

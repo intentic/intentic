@@ -6,6 +6,7 @@ import {
     DEVICE_FEATURE_LOOPBACK_CATCH,
     DEVICE_FEATURE_PROGRAMS,
     DEVICE_FEATURE_PROJECT_DELIVERY,
+    DEVICE_FEATURE_REACH_NETWORK,
     type DeviceFacts,
 } from "@intentic/sandbox-contract/schemas/hosts";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -108,13 +109,15 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         ...(distros === undefined ? {} : { wslDistros: distros }),
         ...(links === undefined ? {} : { links }),
         // What this agent and the ic under it implement: the ic's asked of that ic rather than written down here, and
-        // the agent's own (the loopback catch, landed work delivered into an attached folder) always, since this build
-        // answers both. The keyring only while one is installed here and answers (keyring/feature.ts).
+        // the agent's own (the loopback catch, landed work delivered into an attached folder, a `devices reach` tunnel to
+        // a host on this machine's network) always, since this build answers them. The keyring only while one is
+        // installed here and answers (keyring/feature.ts).
         features: [
             ...features,
             DEVICE_FEATURE_LOOPBACK_CATCH,
             DEVICE_FEATURE_PROJECT_DELIVERY,
             DEVICE_FEATURE_PROGRAMS,
+            DEVICE_FEATURE_REACH_NETWORK,
             ...(keyring ? [DEVICE_FEATURE_KEYRING] : []),
         ],
     };

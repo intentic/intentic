@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import type { NetdiskConfig, SmbNetdiskConfig } from "@intentic/sandbox-contract/schemas/netdisk";
 import { toolMissing } from "../tunnel/net-probe.js";
 import { isReadOnly, mountAt, readMountinfo } from "./mountinfo.js";
-import type { NetdiskDriver, NetdiskProbe } from "./netdisk-driver.js";
+import type { NetdiskDriver, NetdiskProbe, NetdiskReach } from "./netdisk-driver.js";
 import { credentialsPath, mountPoint, netdiskDir } from "./netdisk-paths.js";
 
 // SMB/CIFS through the kernel's cifs client, driven by mount.cifs (cifs-utils). The password reaches it through a 0600
@@ -22,7 +22,8 @@ export const smbTarget = (raw: SmbNetdiskConfig): string => `//${raw.server}/${r
 // `soft`: with the server gone (a VPN dropped), I/O returns EIO instead of hanging every shell that touches the mount
 // forever, which is what the default `hard` does to an agent's `ls`.
 // `uid=0,gid=0`: every process in the container is root, so ownership maps to the one user there is.
-export const smbMountOptions = (raw: SmbNetdiskConfig, credentials: string): string =>
+// `ip=`/`port=` with a reach: the kernel dials the tunnel instead of resolving the server, whose name the UNC keeps.
+export const smbMountOptions = (raw: SmbNetdiskConfig, credentials: string, reach?: NetdiskReach): string =>
     [
         raw.password === undefined || raw.password === "" ? "guest" : `credentials=${credentials}`,
         ...(raw.password === undefined || raw.password === "" ? [`username=${raw.username}`, ...(raw.domain === undefined || raw.domain === "" ? [] : [`domain=${raw.domain}`])] : []),
@@ -34,6 +35,7 @@ export const smbMountOptions = (raw: SmbNetdiskConfig, credentials: string): str
         "dir_mode=0755",
         "iocharset=utf8",
         ...(raw.version === "auto" ? [] : [`vers=${raw.version}`]),
+        ...(reach === undefined ? [] : [`ip=${reach.address}`, `port=${reach.port}`]),
     ].join(",");
 
 // The file mount.cifs reads; one key per line, its own format. A password holding a newline cannot be expressed in it.
@@ -53,9 +55,15 @@ const MOUNT_ADVICE: Readonly<Record<number, string>> = {
     113: "there is no route to that server from this sandbox. Is it behind a VPN that is not connected? `vpn list` shows what is up.",
 };
 
-export const explainMountFailure = (stderr: string): string => {
+// Through a computer, every way of not getting an answer means the same thing: that computer did not get one either.
+const UNANSWERED = new Set([110, 111, 112, 113]);
+const throughAdvice = (through: string): string =>
+    `the server did not answer through ${through}, which dials it itself. Check that ${through} is connected, with "Run commands" or "Run programs this sandbox sends" on, and that it reaches the server (its VPN connected, the name right); \`devices reach --list\` shows the tunnel and what ${through} last said.`;
+
+export const explainMountFailure = (stderr: string, through?: string): string => {
     const match = /mount error\((\d+)\)/.exec(stderr);
-    const advice = match === null ? undefined : MOUNT_ADVICE[Number(match[1])];
+    const code = match === null ? undefined : Number(match[1]);
+    const advice = code === undefined ? undefined : through !== undefined && UNANSWERED.has(code) ? throughAdvice(through) : MOUNT_ADVICE[code];
     const raw = stderr.trim() === "" ? "mount.cifs failed without a message" : stderr.trim();
     return advice === undefined ? raw : `${raw}\n${advice}`;
 };
@@ -80,7 +88,7 @@ export const smbDriver: NetdiskDriver = {
         await rm(credentialsPath(id), { force: true });
     },
     missingTool: smbMissing,
-    async *mount(id, raw) {
+    async *mount(id, raw, reach) {
         const smb = config(raw);
         const where = mountPoint(id);
         const live = await probe(id);
@@ -91,12 +99,14 @@ export const smbDriver: NetdiskDriver = {
         // Re-write before mounting so a password rotated through /secrets takes effect on the next mount.
         await smbDriver.write(id, raw);
         await mkdir(where, { recursive: true });
-        yield { kind: "log", message: `Mounting ${smbTarget(smb)} at ${where} ${smb.access === "read" ? "read-only" : "read-write"}…` };
+        const through = reach === undefined ? "" : ` through ${reach.through}`;
+        yield { kind: "log", message: `Mounting ${smbTarget(smb)}${through} at ${where} ${smb.access === "read" ? "read-only" : "read-write"}…` };
         try {
-            await exec("mount", ["-t", "cifs", smbTarget(smb), where, "-o", smbMountOptions(smb, credentialsPath(id))], { timeout: MOUNT_TIMEOUT_MS });
+            await exec("mount", ["-t", "cifs", smbTarget(smb), where, "-o", smbMountOptions(smb, credentialsPath(id), reach)], { timeout: MOUNT_TIMEOUT_MS });
         } catch (error) {
             const failure = error as NodeJS.ErrnoException & { stderr?: string; killed?: boolean };
-            throw new Error(failure.killed === true ? `mount.cifs gave up after ${MOUNT_TIMEOUT_MS / 1000}s: ${MOUNT_ADVICE[110]}` : explainMountFailure(failure.stderr ?? failure.message), { cause: error });
+            const gaveUp = `mount.cifs gave up after ${MOUNT_TIMEOUT_MS / 1000}s: ${reach === undefined ? MOUNT_ADVICE[110] : throughAdvice(reach.through)}`;
+            throw new Error(failure.killed === true ? gaveUp : explainMountFailure(failure.stderr ?? failure.message, reach?.through), { cause: error });
         }
         yield { kind: "log", message: `Mounted ${id}. Its files are under ${where}.` };
     },

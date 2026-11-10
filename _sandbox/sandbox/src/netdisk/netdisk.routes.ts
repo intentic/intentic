@@ -9,7 +9,7 @@ import { mountNetdisk, netdiskLink, netdiskLinks, unmountNetdisk } from "./netdi
 // operation performed many times over one stored disk, by the operator from the card and by the agent through the
 // `netdisk` CLI, which calls these same routes. Both therefore observe one implementation.
 
-export type NetdiskRoutesDeps = Pick<Services, "capabilities">;
+export type NetdiskRoutesDeps = Pick<Services, "capabilities" | "deviceTunnels">;
 
 export const createNetdiskRoutes = (services: NetdiskRoutesDeps) => {
     const i = implement(netdiskContract).$context<OrpcContext>();
@@ -18,22 +18,22 @@ export const createNetdiskRoutes = (services: NetdiskRoutesDeps) => {
     const entryOf = (id: string) => tunnelEntryOr404(services.capabilities, "netdisk", id);
 
     return {
-        list: i.list.handler(async () => ({ links: await netdiskLinks(services.capabilities) })),
+        list: i.list.handler(async () => ({ links: await netdiskLinks(services.capabilities, services.deviceTunnels) })),
         mount: i.mount.handler(async function* ({ input }) {
             const entry = await entryOf(input.id);
             yield* heldStream(
                 mounting,
                 entry.id,
                 "mounting",
-                () => mountNetdisk(entry),
+                () => mountNetdisk(entry, services.deviceTunnels),
                 async () => {
-                    const link = await netdiskLink(entry);
+                    const link = await netdiskLink(entry, services.deviceTunnels);
                     return `${link.id}: ${link.state}${link.state === "mounted" ? ` · ${link.mountPoint} · ${link.writable === true ? "read-write" : "read-only"}` : ""}`;
                 },
             );
         }),
         unmount: i.unmount.handler(async ({ input }) => {
-            await unmountNetdisk(await entryOf(input.id));
+            await unmountNetdisk(await entryOf(input.id), services.deviceTunnels);
             return { ok: true } as const;
         }),
     };

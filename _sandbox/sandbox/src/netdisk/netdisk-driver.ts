@@ -14,6 +14,14 @@ export interface NetdiskProbe {
     readonly detail?: string | undefined;
 }
 
+// Where the kernel connects instead of the server's own address: a tunnel on the sandbox's loopback that one of the
+// owner's computers dials the server through (netdisk-relay.ts). `through` names that computer, for the words a failure says.
+export interface NetdiskReach {
+    readonly address: string;
+    readonly port: number;
+    readonly through: string;
+}
+
 export interface NetdiskDriver {
     // What a stored disk mounts, for display (//server/share/path); never a secret.
     readonly target: (config: NetdiskConfig) => string;
@@ -23,8 +31,9 @@ export interface NetdiskDriver {
     readonly erase: (id: string, config: NetdiskConfig) => Promise<void>;
     // The executable missing from PATH, if any; reads as unavailable, not an error, pre-rebuild.
     readonly missingTool: () => Promise<string | undefined>;
-    // Mounts the share, streaming progress; throws with the mount helper's own message on failure.
-    readonly mount: (id: string, config: NetdiskConfig) => AsyncGenerator<IntenticLine>;
+    // Mounts the share, streaming progress; throws with the mount helper's own message on failure. With `reach`, the
+    // server is dialled at that address and port, its name still the one the share is mounted by.
+    readonly mount: (id: string, config: NetdiskConfig, reach?: NetdiskReach) => AsyncGenerator<IntenticLine>;
     // Unmounts; must tolerate one already down, since the contract is "make it not be mounted".
     readonly unmount: (id: string, config: NetdiskConfig) => Promise<void>;
     readonly probe: (id: string, config: NetdiskConfig) => Promise<NetdiskProbe>;

@@ -3,7 +3,7 @@
 //
 //   push    carry a build (a file, or a whole folder) to the computer
 //   start   start a program there and keep it running (its app_start tool, for a shell)
-//   reach   open one of the computer's own loopback ports at the same port here
+//   reach   open one of the computer's own loopback ports at the same port here, or a host its network reaches
 //   run     all of it from the repository's `.intentic/run.json`: build, push, reach, start (and, attached, follow it)
 //   stop    stop a program started there, with the ports opened for it
 //   attach  follow a program already running there (Ctrl+C stops it, Ctrl+D leaves it)
@@ -75,7 +75,10 @@ const USAGE = `devices — run a program built here on one of the owner's connec
       owner's computers (desktop sync does not mirror it) unless the job was left running for them.
 
   devices reach <device> <port> [--as <port>]      open the computer's 127.0.0.1:<port> at 127.0.0.1:<as|port> here
-  devices reach <device> <port> --off              close it
+  devices reach <device> <host>:<port> [--as <port>]
+      open <host>:<port> as the computer reaches it (its LAN, its own VPN, names only its DNS knows) at
+      127.0.0.1:<as|port> here: the computer dials it, so what it can open, this sandbox can through it
+  devices reach <device> [<host>:]<port> --off     close it
   devices reach --list                             what is open
 
 Exit 0: done; the last line is what to use next. Exit 1: refused (the computer is offline, this caller may not act on
@@ -294,23 +297,43 @@ const reach = async (args) => {
             return;
         }
         for (const tunnel of tunnels) {
-            say(`${tunnel.device}:${tunnel.devicePort} → ${tunnel.url}  (since ${tunnel.openedAt})`);
+            const target = tunnel.host === undefined ? `${tunnel.device}:${tunnel.devicePort}` : `${tunnel.host}:${tunnel.devicePort} through ${tunnel.device}`;
+            say(`${target} → ${tunnel.url}  (since ${tunnel.openedAt})${tunnel.failure === undefined ? "" : `\n    last refused: ${tunnel.failure}`}`);
         }
         return;
     }
-    const [device, portText] = rest;
-    const port = Number(portText);
+    const [device, targetText] = rest;
+    const { host, port } = reachTarget(targetText ?? "");
     if (device === undefined || !Number.isInteger(port) || port < 1 || port > 65535 || rest.length > 2) {
-        die(`reach takes a device and a port\n\n${USAGE}`);
+        die(`reach takes a device and a port, or a host and a port as <host>:<port>\n\n${USAGE}`);
     }
+    // An IPv6 address keeps its brackets, so the port reads as the port.
+    const shown = host?.includes(":") === true ? `[${host}]` : host;
+    const what = host === undefined ? `${device}:${port}` : `${shown}:${port} through ${device}`;
     if (options.off === true) {
-        const { closed } = await answered("DELETE", deviceRoute(device, `/tunnels/${port}`));
-        say(closed ? `Closed ${device}:${port}.` : `${device}:${port} was not open.`);
+        const query = host === undefined ? "" : `?host=${encodeURIComponent(host)}`;
+        const { closed } = await answered("DELETE", deviceRoute(device, `/tunnels/${port}${query}`));
+        say(closed ? `Closed ${what}.` : `${what} was not open.`);
         return;
     }
     const local = options.as === undefined ? undefined : Number(options.as);
-    const tunnel = await answered("POST", deviceRoute(device, "/tunnels"), { port, ...(local === undefined ? {} : { as: local }) });
-    say(`${device}'s 127.0.0.1:${tunnel.devicePort} answers here at ${tunnel.url} (until the daemon restarts, or --off).`);
+    const tunnel = await answered("POST", deviceRoute(device, "/tunnels"), { port, ...(local === undefined ? {} : { as: local }), ...(host === undefined ? {} : { host }) });
+    say(
+        host === undefined
+            ? `${device}'s 127.0.0.1:${tunnel.devicePort} answers here at ${tunnel.url} (until the daemon restarts, or --off).`
+            : `${shown}:${tunnel.devicePort}, as ${device} reaches it, answers here at ${tunnel.url} (until the daemon restarts, or --off).`,
+    );
+};
+
+// `445`, `nas.corp:445`, `192.168.0.20:445` or `[fd00::20]:445`: the port alone is the computer's own loopback.
+const reachTarget = (text) => {
+    if (/^\d+$/.test(text)) {
+        return { port: Number(text) };
+    }
+    const bracketed = /^\[([^\]]+)\]:(\d+)$/.exec(text);
+    const plain = /^([^:\s]+):(\d+)$/.exec(text);
+    const match = bracketed ?? plain;
+    return match === null ? { port: Number.NaN } : { host: match[1], port: Number(match[2]) };
 };
 
 // Whose each listening port is (the daemon's ports list, ports/ports.routes.ts), one line each.

@@ -1,6 +1,6 @@
 import type { CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
-import type { CapabilityHandler } from "../capabilities/capability.js";
+import type { CapabilityCtx, CapabilityHandler } from "../capabilities/capability.js";
 import { removeLoadedSkill, writeLoadedSkill } from "../store/loaded-skills.js";
 import type { TunnelEntry, TunnelKindName } from "./tunnel-links.js";
 
@@ -25,9 +25,10 @@ export interface TunnelKind<Config> {
     readonly driverOf: (config: Config) => TunnelDriverFiles<Config>;
     // Whether the manifest says this one should be up on its own (auto-connect, auto-start).
     readonly wanted: (config: Config) => boolean;
-    readonly up: (entry: TunnelEntry<Config>) => AsyncGenerator<IntenticLine>;
-    readonly down: (entry: TunnelEntry<Config>) => Promise<void>;
-    readonly status: (entry: TunnelEntry<Config>) => Promise<CapabilityStatus>;
+    // The verbs get the handler's context too, for a kind that reaches past the container (a disk through a computer).
+    readonly up: (entry: TunnelEntry<Config>, ctx: CapabilityCtx) => AsyncGenerator<IntenticLine>;
+    readonly down: (entry: TunnelEntry<Config>, ctx: CapabilityCtx) => Promise<void>;
+    readonly status: (entry: TunnelEntry<Config>, ctx: CapabilityCtx) => Promise<CapabilityStatus>;
     // What an apply says when it stored the entry but dialled nothing: waiting on a click, or on a rebuild.
     readonly stored: (id: string) => string;
     readonly afterRebuild: string;
@@ -61,9 +62,9 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
     // Files are written per name by the driver; a rename only takes the old name down and erases it, since re-apply
     // writes fresh ones under the new name. A `down` that fails stops the move: its files are how the tunnel is found.
     rename: {
-        carry: async (_ctx, from, _to, raw) => {
+        carry: async (ctx, from, _to, raw) => {
             const config = raw as Config;
-            await spec.down({ id: from, config });
+            await spec.down({ id: from, config }, ctx);
             await spec.driverOf(config).erase(from, config);
         },
     },
@@ -75,7 +76,7 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
         await driver.write(id, config);
         await writeLoadedSkill(ctx.files, ctx.workspace.root, spec.skill.name, spec.skill.text, "tunnel");
         // Re-applying must never leave the old instance running: take it down, then bring it back below if wanted.
-        await spec.down(entry);
+        await spec.down(entry, ctx);
         if (!spec.wanted(config)) {
             yield { kind: "log", message: spec.stored(id) };
             return;
@@ -86,13 +87,13 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
             yield { kind: "log", message: `Stored ${id}, this sandbox doesn't carry ${missing} yet. Rebuild it from the Environment card; ${spec.afterRebuild}.` };
             return;
         }
-        yield* spec.up(entry);
+        yield* spec.up(entry, ctx);
     },
-    status: async (_ctx, id, raw) => await spec.status({ id, config: raw as Config }),
+    status: async (ctx, id, raw) => await spec.status({ id, config: raw as Config }, ctx),
     remove: async (ctx, id, raw) => {
         const config = raw as Config;
         // A tunnel that would not come down keeps its entry, or it runs on with no card left to stop it from.
-        await spec.down({ id, config });
+        await spec.down({ id, config }, ctx);
         await spec.driverOf(config).erase(id, config);
         // Skill is shared by the kind, so it goes only with the last entry; the route removes the manifest entry after
         // this handler runs, so `id` still counts here.

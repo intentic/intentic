@@ -245,6 +245,16 @@ flowchart LR
   machine it runs on (`hosts/egress/host-shell.ts`), which reaches past any fence there. While
   `/run/intentic/egress.json` says the fence is enforced, every turn's guidance says so in one line
   (`agent/prompt/guidance/egress-fence.ts`), so an agent asks for an exception instead of debugging a refused connection.
+- (2026-11-10) A network disk can be reached through one of the owner's computers (its card's "Reach it through",
+  `via`). The sandbox's own packets leave through Docker's NAT and its names resolve on public DNS, so a share the PC
+  opens through its own VPN client, or by a name only the PC's resolvers know, does not answer from here. With `via`,
+  mounting opens a `devices reach` tunnel to the server's port 445 that the computer dials itself
+  (`hosts/device-tunnels.ts`), and the kernel mounts `//server/share` with `ip=127.0.0.1` and the tunnel's port, so the
+  server still sees its own name (`netdisk/netdisk-relay.ts`). The tunnel's port is written beside the disk for as long as
+  the kernel can hold the mount, so a daemon that restarts under it reopens the same port, standing, before the
+  computer has reconnected. At boot an auto-mount disk waits up to three minutes for its computer. A failed mount says
+  what the computer said, and `devices reach --list` shows each tunnel and its last refusal. `devices reach <device>
+  <host>:<port>` opens the same kind of tunnel to anything else that computer reaches.
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
   conversation's worktree (or the main tree, or a remote runner), and `conversations/land/land.ts` lands the result as
   uncommitted changes. When an isolated Claude Code turn is about to stop, each repository's own `turn` checks run

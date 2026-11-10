@@ -83,6 +83,8 @@ const renderLink = (link) => {
     const facts = [
         `at ${link.mountPoint}`,
         link.state === "mounted" ? (link.writable ? "read-write" : "read-only") : `${link.access === "read" ? "read-only" : "read-write"} when mounted`,
+        // Reached through one of the owner's computers, which dials the server itself (netdisk/netdisk-relay.ts).
+        link.via ? `through ${link.via}` : undefined,
         ago(link.since) ? `up ${ago(link.since)}` : undefined,
         link.autoMount ? "mounts on start" : undefined,
     ].filter(Boolean);

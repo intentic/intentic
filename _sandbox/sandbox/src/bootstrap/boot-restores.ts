@@ -42,7 +42,7 @@ export const startBootRestores = (phase: BootPhase): void => {
     );
     // Disks after tunnels: a share behind a VPN is unreachable until it is up.
     void reconnectVpns(services.capabilities, services.logger)
-        .then(() => remountNetdisks(services.capabilities, services.logger))
+        .then(() => remountNetdisks(services.capabilities, services.logger, services.deviceTunnels))
         .catch((error: unknown) => logger.warn({ err: error }, "vpn: tunnels and network disks could not be restored at boot"));
     // A tunnel exit's client survives the daemon; only its SOCKS proxy is republished.
     void restoreExits(services.capabilities, services.logger).catch((error: unknown) =>

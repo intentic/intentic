@@ -104,7 +104,8 @@ export const egressSuggestionsOf = (cards: readonly Capability[]): EgressAllow[]
         let found: EgressAllow | undefined;
         if (card.kind === "ssh") {
             found = suggestion(card.config.host, [card.config.port], "tcp", card.id, `SSH host (${card.id})`);
-        } else if (card.kind === "netdisk") {
+        } else if (card.kind === "netdisk" && card.config.via === undefined) {
+            // A disk reached through a computer is dialled by that computer, never from behind the fence.
             found = suggestion(card.config.server, [445], "tcp", card.id, `Network disk (${card.id})`);
         } else if (card.kind === "vpn") {
             found = vpnSuggestion(card);
