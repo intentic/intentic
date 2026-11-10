@@ -219,6 +219,63 @@ test("a conversation target continues that conversation with the watch's notice 
     expect(after.enabled).toBe(false);
 });
 
+test("a conversation target reopens its conversation when it was archived, rather than losing its one wake", async () => {
+    const registry = [conversationEntry({ id: "rapid-ridge" })];
+    const base = fakeServices(tmp(), registry);
+    const turns = fakeTurns({ archived: true });
+    const reopened: string[] = [];
+    const automation = automationConfig("back-on-releases", {
+        guard: "echo v1.338.0",
+        target: { kind: "conversation", conversationId: "rapid-ridge" },
+        until: "first-fire",
+        prompt: "Move omen back to the published agent.",
+    });
+    const { models: _models, ...noModels } = automation;
+    await base.automations.upsert(noModels);
+    const driven = unstubbed<Services>("services", {
+        ...base,
+        turns: unstubbed<Services["turns"]>("turns", turns.turns),
+        agents: unstubbed<Services["agents"]>("agents", {
+            ...base.agents,
+            clearArchived: async (ids) => {
+                reopened.push(...ids);
+                turns.archived = false;
+            },
+        }),
+        conversations: unstubbed<Services["conversations"]>("conversations", {
+            ...base.conversations,
+            archived: (id) => turns.archived && id === "rapid-ridge",
+        }),
+    });
+    const after = await fire(driven, "back-on-releases");
+    expect(reopened).toEqual(["rapid-ridge"]);
+    expect(turns.started).toHaveLength(1);
+    expect(turns.started[0]?.prompt.endsWith("Move omen back to the published agent.")).toBe(true);
+    expect(after.runs[0]).toMatchObject({ outcome: "completed", conversationId: "rapid-ridge" });
+});
+
+test("a conversation target leaves a conversation that is not archived as it is", async () => {
+    const registry = [conversationEntry({ id: "rapid-ridge" })];
+    const base = fakeServices(tmp(), registry);
+    const turns = fakeTurns();
+    const reopened: string[] = [];
+    const { models: _models, ...noModels } = automationConfig("plain", { guard: "echo ok", target: { kind: "conversation", conversationId: "rapid-ridge" } });
+    await base.automations.upsert(noModels);
+    const driven = unstubbed<Services>("services", {
+        ...base,
+        turns: unstubbed<Services["turns"]>("turns", turns.turns),
+        agents: unstubbed<Services["agents"]>("agents", {
+            ...base.agents,
+            clearArchived: async (ids) => {
+                reopened.push(...ids);
+            },
+        }),
+    });
+    await fire(driven, "plain");
+    expect(reopened).toEqual([]);
+    expect(turns.started).toHaveLength(1);
+});
+
 test("a conversation target whose conversation is gone records an error rather than starting something else", async () => {
     const services = fakeServices(tmp());
     const { models: _models, ...automation } = automationConfig("orphan", { target: { kind: "conversation", conversationId: "gone" } });

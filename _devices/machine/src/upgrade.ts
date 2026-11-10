@@ -1,4 +1,4 @@
-import { chmod, readdir, rm } from "node:fs/promises";
+import { chmod, readdir, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
@@ -52,7 +52,25 @@ export interface UpgradeExec {
     readonly discard: (path: string) => Promise<void>;
     // The Windows launcher ships beside the agent there, so it moves with it: both or neither.
     readonly withLauncher: boolean;
+    // How long ago the agent file now installed was written; undefined when it cannot be read. Asked only of a build made
+    // from source, whose lease it measures (SOURCE_BUILD_LEASE_MS).
+    readonly installedAgeMs: () => Promise<number | undefined>;
 }
+
+/* A FROM-SOURCE AGENT IS A LOAN (2026-11-10). A build made from source reports the dev sentinel, which no release can be
+   compared with, so the update round left it alone for good: "Left as it is: this agent was built from source". omen got
+   one on 2026-10-15 to test the start before sign-in; the watch meant to put the release back lost its one wake, and
+   omen's Windows side then kept that build, and the ic beside it (ic-binary.ts fetches none for a dev agent), for four
+   weeks of releases, through every fix to its keeper and ic. Its runner was slept by a sweep a release had already
+   stopped. A source build is somebody trying something, so it now holds the machine for a week from when its file was
+   written: building and installing again starts a new week, and past it the update round puts the release back as
+   `--force` would. */
+export const SOURCE_BUILD_LEASE_MS = 7 * 24 * 60 * 60_000;
+
+const days = (ms: number): string => {
+    const count = Math.max(1, Math.round(ms / (24 * 60 * 60_000)));
+    return `${count} day${count === 1 ? "" : "s"}`;
+};
 
 // One file the upgrade replaces: where its release asset is, where it lands first, where the old one waits for rollback.
 interface Piece {
@@ -222,12 +240,19 @@ const restartOnto = async (exec: UpgradeExec, pieces: readonly Piece[], target: 
 // Never backwards: a machine already on `target` or past it keeps what it has, and a from-source build needs `force`.
 export const runUpgrade = async (exec: UpgradeExec, target: string, installed: string, force: boolean, log: Log): Promise<UpgradeOutcome> => {
     if (installed === DEV_VERSION && !force) {
-        return {
-            kind: "current",
-            version: installed,
-            note: "this agent was built from source, not installed from a release.",
-            later: [`replace it with the published ${target}`, "intentic-machine upgrade --force"],
-        };
+        const age = await exec.installedAgeMs();
+        if (age === undefined || age < SOURCE_BUILD_LEASE_MS) {
+            return {
+                kind: "current",
+                version: installed,
+                note:
+                    age === undefined
+                        ? "this agent was built from source, not installed from a release."
+                        : `this agent was built from source, not installed from a release. It takes releases again once it is a week old, in ${days(SOURCE_BUILD_LEASE_MS - age)}.`,
+                later: [`replace it with the published ${target}`, "intentic-machine upgrade --force"],
+            };
+        }
+        log(`This agent was built from source ${days(age)} ago, past the week a source build holds a machine: putting the published ${target} back.`);
     }
     if (installed !== DEV_VERSION && !isNewer(target, installed)) {
         return await reconcileAgent(exec, installed, log);
@@ -327,6 +352,8 @@ export const realUpgradeExec = (
     restart,
     discard: async (path) => await rm(path, { force: true }).catch(() => undefined),
     withLauncher: process.platform === "win32",
+    // allow(silent-catch): an agent file that cannot be read has no age, and a source build without one is left alone
+    installedAgeMs: async () => await stat(agentPath).then((info) => Math.max(0, Date.now() - info.mtimeMs)).catch(() => undefined),
 });
 
 // What the command prints. One line per outcome, naming what is true now rather than what was attempted.

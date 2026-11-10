@@ -1,5 +1,5 @@
 import { agentAssetName, agentAssetUrl, agentPath, launcherAssetName, launcherAssetUrl, launcherPath } from "./release.js";
-import { runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage, upgradeStop } from "./upgrade.js";
+import { runUpgrade, SOURCE_BUILD_LEASE_MS, type UpgradeExec, type UpgradeOutcome, upgradeMessage, upgradeStop } from "./upgrade.js";
 
 // Records every effect in order, so a test checks the sequence and not just the outcome. Three versions are scripted
 // (downloaded, running, came up) because collapsing them let "upgraded" mean only "bytes on disk".
@@ -39,6 +39,7 @@ const scripted = (overrides: Partial<UpgradeExec> & Scripted = {}) => {
         },
         discard: async (path) => void steps.push(`discard ${path}`),
         withLauncher: false,
+        installedAgeMs: async () => await Promise.resolve(60_000),
         ...overrides,
     };
     return { steps, exec };
@@ -353,5 +354,25 @@ describe("runUpgrade never moves a machine backwards", () => {
     it("replaces a build made from source when asked to", async () => {
         const { exec } = scripted();
         expect(await upgrade(exec, "0.0.0", TARGET, true)).toEqual({ kind: "upgraded", from: "0.0.0", to: TARGET });
+    });
+
+    // omen kept a test build for four weeks of releases (2026-10-15 to 11-10): a source build holds a machine for a week.
+    it("puts the release back over a build made from source once that build is a week old", async () => {
+        const { steps, exec } = scripted({ installedAgeMs: async () => await Promise.resolve(SOURCE_BUILD_LEASE_MS) });
+        expect(await upgrade(exec, "0.0.0")).toEqual({ kind: "upgraded", from: "0.0.0", to: TARGET });
+        expect(steps[0]).toBe(`fetch ${agentAssetUrl(TARGET)} → ${staged}`);
+    });
+
+    it("says when a build made from source younger than a week takes releases again", async () => {
+        const { steps, exec } = scripted({ installedAgeMs: async () => await Promise.resolve(SOURCE_BUILD_LEASE_MS - 2 * 24 * 60 * 60_000) });
+        const outcome = await upgrade(exec, "0.0.0");
+        expect(outcome.kind === "current" && outcome.note).toContain("in 2 days");
+        expect(steps).toEqual([]);
+    });
+
+    it("leaves a build made from source whose age cannot be read alone", async () => {
+        const { steps, exec } = scripted({ installedAgeMs: async () => await Promise.resolve(undefined) });
+        expect((await upgrade(exec, "0.0.0")).kind).toBe("current");
+        expect(steps).toEqual([]);
     });
 });

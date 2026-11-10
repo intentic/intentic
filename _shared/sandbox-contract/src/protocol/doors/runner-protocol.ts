@@ -177,7 +177,9 @@ export const RunnerFactsSchema = z.object({
 export type RunnerFacts = z.infer<typeof RunnerFactsSchema>;
 
 // Whether a runner matches this sandbox's image, channel and approved overlay: `current`, `outdated` (gets an update
-// button), or `unknown` (never connected, or a parent that can't name its own image). Reported, never enforced.
+// button), or `unknown` (never connected, or a parent that can't name its own image). Reported, never enforced; what
+// the parent does act on is a runner on an older release than its own, which it updates while idle (sandbox
+// system/updates/runner-updates.ts).
 export const RunnerParitySchema = z.enum(["current", "outdated", "unknown"]);
 export type RunnerParity = z.infer<typeof RunnerParitySchema>;
 

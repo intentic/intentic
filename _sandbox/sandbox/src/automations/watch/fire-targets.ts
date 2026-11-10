@@ -55,6 +55,14 @@ export const continueConversation = async (
             error: `The conversation ${conversationId} this automation continues no longer exists. Point it at another one, or at a new agent.`,
         };
     }
+    /* REOPENED, NOT REFUSED (2026-11-10). Somebody pointed this automation at this conversation, so its fire is their
+       say-so booked ahead, the way a person's scheduled message is, and it reopens an archived conversation as their
+       words would (turn-admission.ts). Refused instead, a first-fire watch had already retired and its one wake was lost:
+       omen-back-on-releases fired on 2026-10-17 into merry-spruce-t7jg, which the one-day retention had archived, so
+       omen kept a from-source agent that took no releases, and four weeks of fixes to its keeper and ic never reached it. */
+    if (services.conversations.archived(conversationId)) {
+        await services.agents.clearArchived([conversationId]);
+    }
     const now = Date.now();
     const receipt = await deliverWake(
         { turns: services.turns },

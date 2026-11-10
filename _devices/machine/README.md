@@ -736,6 +736,12 @@ whose it is.
   next upgrade pass) and record the release as `skippedAgent` in `machine.json`: neither the auto-upgrade nor an
   `upgrade` moves this environment onto it again until a newer one is published (`upgrade --force` does). A restart
   that throws during an upgrade puts the old binary back too.
+- **A from-source agent holds a machine for a week** ([`upgrade.ts`](src/upgrade.ts) `SOURCE_BUILD_LEASE_MS`). An agent
+  built from source reports `0.0.0`, which no release compares with, so the update round left it alone ("Left as it
+  is"), and the `ic` beside it stayed where it was too. Since 2026-11-10 the round leaves it alone only while its file
+  is younger than seven days, and says when that ends. Past that it puts the newest release back, as
+  `upgrade --force` does. Installing a new source build starts a new week. omen's Windows side ran a test build from
+  2026-10-15 to 2026-11-10 and missed every keeper and `ic` fix in between.
 - **What the agent leaves behind.** Under a systemd user unit the default `KillMode` ended the unit's whole cgroup on
   every `systemctl stop` and every agent exit, `ic` mid-swap included: the unit now says `KillMode=process`, and a
   unit an older build wrote is rewritten at the agent's next start, since a repair now replaces an entry that starts

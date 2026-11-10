@@ -28,6 +28,10 @@ import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-sess
 import { sweepAgedState } from "../workspace/watch/state-janitor.js";
 import type { BootPhase } from "./boot-phase.js";
 import { OPERATORS } from "../push/push-audience.js";
+import { worktreeOf } from "../conversations/registry/agents-store.js";
+import { manageDeviceSandbox } from "../hosts/device-reports.js";
+import { runnerUpdatesChore } from "../system/updates/runner-updates.js";
+import { version } from "../version.js";
 
 // Persist housekeeping cadence in chore-clock.ts across restarts: git maintenance, storage/trash, dockerd and retention sweeps.
 // Log results; git upkeep waits for no running turn, build output is swept per checkout (archive.ts) and dockerd cleanup never starts an idle engine.
@@ -194,8 +198,25 @@ const choresOf = (phase: BootPhase): Chore[] => {
               ]
             : []),
         ...(role.container ? [dockerPruneChore({ processes: services.processes, conversations: services.conversations, logger })] : []),
+        ...(role.roots ? [runnerReleaseChore(phase)] : []),
     ];
 };
+
+// This sandbox's runners, brought up to its own release while nothing of it runs on them (runner-updates.ts).
+const runnerReleaseChore = ({ logger, services }: BootPhase): Chore =>
+    runnerUpdatesChore({
+        own: version,
+        runners: async () =>
+            (await services.runners.list()).map((runner) => {
+                const state = services.runnerHub.state(runner.id);
+                return { id: runner.id, host: runner.host, online: state.online, version: state.announced?.version };
+            }),
+        hostConnected: (host) => services.hostHub.client(host) !== undefined,
+        busy: (runnerId) => services.agents.ids().some((id) => worktreeOf(services.agents.entry(id))?.runner === runnerId && services.conversations.running(id)),
+        update: (host, slug) => manageDeviceSandbox(services, host, { op: "update", slug }),
+        logger,
+        now: Date.now,
+    });
 
 // The history volume looked at once a minute; short of room, settled checkouts' build output goes and the owner is told
 // (system/resources/storage/disk-pressure.ts).

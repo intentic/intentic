@@ -18,7 +18,8 @@ const JITTER_MS = 30 * 60_000;
 export { ticksToSkip };
 
 // Only running sandboxes (a stopped one downloads on its next start) and never runners, whose image is the parent's
-// decision to reconcile. Pinned/dev images aren't filtered here; ic classifies those from the container's own stamps.
+// decision to reconcile: the parent asks for an update of a runner behind its own release (sandbox
+// system/updates/runner-updates.ts). Pinned/dev images aren't filtered here; ic classifies those from the container's own stamps.
 // The other side of this computer's sandboxes are its own agent's to update (ic: sandbox/side.rs).
 export const prepareTargets = (boxes: readonly DeviceSandbox[]): string[] =>
     boxes.filter((box) => box.running && !box.slug.startsWith("runner-") && box.keptElsewhere === undefined).map((box) => box.slug);
