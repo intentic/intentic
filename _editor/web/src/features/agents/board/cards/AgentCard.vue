@@ -818,6 +818,8 @@ const grab = (event: PointerEvent): void => {
                     </button>
                     <!-- After the model and branch facts, before the time, as in the chat rail. ChildCount draws nothing for a card with no children. -->
                     <ChildCount :agent="agent" />
+                    <!-- Opt-in geek metrics: what its processes and those of everything grouped under it hold now, beside the other metadata rather than on a row of its own. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
+                    <SessionMetrics v-if="localOnly" :card="agent.id" />
                 </div>
 
                 <!-- Never replaces the live readout below: this says what the loop is working toward, that says what it's doing right now. -->
@@ -903,7 +905,7 @@ const grab = (event: PointerEvent): void => {
                     @land="emit('land')"
                 />
 
-                <!-- The closing summary line: counted stats (geek metrics), then the drill-in and a reading held to the line's right (see `summary`); with no stats it shares what the land presses or model line leave. A dense row's 8rem is its basis, not its floor: its reading is floored at its whole width (`min-w-max` below), so a floor of 8rem sat it beside the model and hung the reading past the card's edge (from the right-hand lane, a sideways scroll); at `min-width: auto` it wraps onto a line of its own instead. -->
+                <!-- The closing summary line: reactions, then the drill-in and a reading held to the line's right (see `summary`); with no stats it shares what the land presses or model line leave. A dense row's 8rem is its basis, not its floor: its reading is floored at its whole width (`min-w-max` below), so a floor of 8rem sat it beside the model and hung the reading past the card's edge (from the right-hand lane, a sideways scroll); at `min-width: auto` it wraps onto a line of its own instead. -->
                 <div
                     v-if="summary" data-shares
                     class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
@@ -911,8 +913,6 @@ const grab = (event: PointerEvent): void => {
                 >
                     <!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
 
-                    <!-- Opt-in geek metrics: what its processes and those of everything grouped under it hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
-                    <SessionMetrics v-if="localOnly" data-stat :card="agent.id" />
                     <!-- Marks people left, at the end of the counted stats rather than in a row of their own, and drawn only when there are some: a strip that came and went with the pointer would resize every card it is on and flicker the lane around it. The press that adds one is in the header, with the card's other actions. -->
                     <AgentReactions
                         v-if="reactable"
