@@ -877,10 +877,6 @@
             "couldntKeep": "No se pudo mantener caliente la caché de este chat.",
             "couldntStop": "No se pudo dejar de mantener caliente la caché de este chat."
         },
-        "statusBar": {
-            "label": "Métricas del sandbox",
-            "close": "Cerrar {title}"
-        },
         "stamps": {
             "heading": "Comprobaciones",
             "self": "Autocomprobación",
@@ -11626,7 +11622,7 @@
             "statusBar": {
                 "group": "Tablero de agentes",
                 "liveMetrics": "Métricas para geeks",
-                "liveMetricsHint": "CPU, memoria y disco al pie del tablero de agentes, y en la tarjeta de cada agente su parte y lo que ha costado. En otras vistas, solo un pequeño icono en la barra lateral cuando uno se acerca a su límite. No se mide nada mientras esto esté desactivado."
+                "liveMetricsHint": "CPU, memoria y disco en la cabecera del tablero de agentes, y en la tarjeta de cada agente su parte y lo que ha costado. En otras vistas, solo un pequeño icono en la barra lateral cuando uno se acerca a su límite. No se mide nada mientras esto esté desactivado."
             },
             "explorer": {
                 "colorful": "Colorido",

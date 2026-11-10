@@ -877,10 +877,6 @@
             "couldntKeep": "Couldn't keep this chat's cache warm.",
             "couldntStop": "Couldn't stop keeping this chat's cache warm."
         },
-        "statusBar": {
-            "label": "Sandbox metrics",
-            "close": "Close {title}"
-        },
         "stamps": {
             "heading": "Checks",
             "self": "Self-check",
@@ -11626,7 +11622,7 @@
             "statusBar": {
                 "group": "Agents board",
                 "liveMetrics": "Geek metrics",
-                "liveMetricsHint": "CPU, memory and disk at the foot of the Agents board, and on each agent's card its share and what it has cost. Elsewhere, a small tile on the rail only when one nears its limit. Nothing is measured while this is off."
+                "liveMetricsHint": "CPU, memory and disk in the Agents board's header, and on each agent's card its share and what it has cost. Elsewhere, a small tile on the rail only when one nears its limit. Nothing is measured while this is off."
             },
             "explorer": {
                 "colorful": "Colorful",

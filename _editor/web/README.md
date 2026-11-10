@@ -454,9 +454,10 @@ flowchart LR
   connected tunnel, the sandbox near a limit with geek metrics on) is a tile above them only while it holds, and the
   foot grows upward, so its arriving moves nothing else. The wake word and an Intentic outage are the device's and the
   platform's, not a sandbox's, so they stay above the account when the rail unrolls (`RailSignals.vue`); the sandbox's
-  own tools fly into the bookmark with its sections. Geek metrics (Settings ▸ Appearance) draw CPU, memory and disk at
-  the foot of the Agents board only (`features/agents/metrics/MetricsStrip.vue`), whose panel opens above them inside
-  the board and takes turns with the docked terminal. Resource sizes use binary units (MiB/GiB). The panel separates
+  own tools fly into the bookmark with its sections. Geek metrics (Settings ▸ Appearance) draw CPU, memory and disk as
+  three small meters in the Agents board's header only, beside New agent (`features/agents/metrics/BoardMetrics.vue`),
+  their figures beside them on a three-lane board and in the hover otherwise, so the header keeps one row and the
+  board its height; a press opens the full readout as a popover off them. Resource sizes use binary units (MiB/GiB). The panel separates
   the sandbox's counted working set
   (daemon, counted file cache and kernel memory included) from process RSS grouped by kind or session: those groups
   overlap and are not an additive breakdown. Optional cgroup accounting shows measured categories and the inactive
@@ -466,7 +467,7 @@ flowchart LR
   them would have made the rail move with every agent turn. 2026-10-13: the live app, Browsers and Desktop chips became
   one Browsers chip. 2026-11-10: the status bar went: a full-width line under the page and the chat, mostly empty, for
   two chips and three gauges. The tools came back to the rail as fixed tiles whose dot is the only thing that moves,
-  and the gauges went to the one view they are about._
+  and the gauges went to the header of the one view they are about, rather than a strip of their own at its foot._
 - **The side panel.** The rail owns the main area; the side panel (`shell/side/`, its tabs and views registered in
   `workbench/side/`) is where the reader looks at another section's
   things without leaving the one they picked. A reference (a file a chat names, a server a turn left running, an
@@ -574,7 +575,7 @@ One word per idea on screen and in code. The retired spellings are refused by
 | pin | A Browsers tab that is the reader's own rather than a web page of one of the open windows: a live app, the desktop, a window on it (`workbench/browsers/browsersSurface.ts`) |
 | docked | A panel living in the main window, as opposed to floating in a window of its own (`floating.ts`) |
 | rail tools | The small tiles at the folded rail's foot, over the account: the terminal and Browsers always, a standing state (a public port, a tunnel, a figure near its limit) while it holds, the wake word and an outage in either rail (`shell/rail/tools/`). Not a status bar: there is none since 2026-11-10 |
-| metrics strip | The geek metrics' line at the foot of the Agents board, which opens their panel above it (`features/agents/metrics/MetricsStrip.vue`). A phone draws none |
+| board metrics | The geek metrics' three meters in the Agents board's header, whose press opens their readout as a popover (`features/agents/metrics/BoardMetrics.vue`). A phone draws none |
 | subagent | Any agent another agent started: in-process by its runtime's own Agent tool, or spawned by the sandbox as a conversation of its own. Drawn one way wherever it shows, on the card of the call that started it (`features/chat/tools/subagentCard.ts`) and in its parent card's tray; how it was started changes only what else it offers, such as its own conversation. Not "child agent" |
 | tray | The rows hung under a board card, and under a card in the chat's list (`features/chat/tabs/chatTrays.ts`), for every subagent it started: the ones it spawned, which are conversations of their own, and the ones its runtime ran in-process, from the roster (`models/fleet/subagentRoster.ts`). Open only under the card the reader is on, a card whose subagent is on screen, and every card while a filter is on, folding open and shut with what stands below sliding to make room, on the compositor (`features/agents/board/view/foldMotion.ts`); every other card counts its subagents on itself instead (`parts/fleet/ChildCount.vue`) and keeps only a subagent asking the reader in sight. Open, asks and working ones in sight, stopped ones one row per thing they stopped on, settled ones folded behind a count (`models/fleet/board/childFold.ts`). A row shows its subagent in the chat: a spawned one's own chat, an in-process one's transcript in its parent's column (`models/conversations/panel/subagentView.ts`) |
 | quick bar | The parked chat's pill that opens into a scratch pad: the composer alone, open while the reader is in it (`ChatQuickBar.vue`). Open, a header names the chat and its last words and leads to /chat; it draws no transcript |
@@ -589,9 +590,6 @@ One word per idea on screen and in code. The retired spellings are refused by
 | fresh session | A new chat on an agent's work without its conversation, for a code review, a test or the reader's own ask (`models/fleet/freshSession.ts`): started from the card's and the session's menus or the card's **Start one**, its strip over the composer (`ChatFreshDraft.vue`) and its transcript's top line (`ChatFreshLine.vue`). It hangs under the origin's card with a kind tag (`childLook.ts`), and the origin's card carries one marker per kind of check that ran on its work, in words (`parts/fleet/WorkAssurance.vue`, `freshSession.checksOf`); the kinds are one table (`freshKinds.ts`) |
 | cover | One file name read in every folder (README.md, package.json): the explorer tree lists folders alone and marks those holding it, and the home shows the current folder's copy in place of its tiles (`features/workspace/home/homeCover.ts`); on screen, "Show README.md in every folder" |
 | gallery | The home drawing a folder's pictures and videos as themselves, in justified rows: each keeps its proportions, every row but the last fills the pane, and the name stays under each (`features/workspace/home/gallery/homeGallery.ts`). A selected picture wears a ring round the picture itself, not a card round picture and name; a caption too narrow for its name gives up the start every name in the group shares first, then is cut in its middle, and a video's says no extension, its play badge saying what it is. The folders above it are the home's one-line chips (`HomeChip.vue`), as in every folder: there a folder or a file with nothing inside to show is a chip, a file read from its start is a card with a miniature of that start (`HomeCard.vue`), and a picture shows itself. On by itself where two of every three files are pictures or videos, and the reader's to switch per folder on the home's bar, beside a size slider (`galleryChoice.ts`). Rows are laid out from each file's box read off its header by the daemon (`workspace.dimensions`), and a video shows a frame the daemon cut with ffmpeg rather than its first, so a film opening on a fade is not a white card |
-
-The metrics strip still stores its panel under `ui-board-dock-*` in local storage: renaming a stored key would close
-every reader's open panel.
 
 Plan answers are pinned above the composer (`ChatWaitingBar.vue`). With text or files staged, **Approve with notes**
 sends those instructions together with the approval, so execution receives them at the gate. **Keep planning** sends

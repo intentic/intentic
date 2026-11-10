@@ -877,10 +877,6 @@
             "couldntKeep": "Der Cache dieses Chats konnte nicht warm gehalten werden.",
             "couldntStop": "Das Warmhalten des Caches dieses Chats konnte nicht beendet werden."
         },
-        "statusBar": {
-            "label": "Sandbox-Messwerte",
-            "close": "{title} schließen"
-        },
         "stamps": {
             "heading": "Prüfungen",
             "self": "Selbstprüfung",
@@ -11626,7 +11622,7 @@
             "statusBar": {
                 "group": "Agenten-Board",
                 "liveMetrics": "Geek-Metriken",
-                "liveMetricsHint": "CPU, Arbeitsspeicher und Festplatte am Fuß des Agenten-Boards, dazu auf der Karte jedes Agenten sein Anteil und was er gekostet hat. Anderswo nur eine kleine Kachel in der Leiste, wenn sich ein Wert seinem Limit nähert. Solange dies aus ist, wird nichts gemessen."
+                "liveMetricsHint": "CPU, Arbeitsspeicher und Festplatte in der Kopfzeile des Agenten-Boards, dazu auf der Karte jedes Agenten sein Anteil und was er gekostet hat. Anderswo nur eine kleine Kachel in der Leiste, wenn sich ein Wert seinem Limit nähert. Solange dies aus ist, wird nichts gemessen."
             },
             "explorer": {
                 "colorful": "Farbig",

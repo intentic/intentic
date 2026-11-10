@@ -61,7 +61,7 @@ import { useArchiveDoor } from "./view/archiveDoor";
 import { useBoardCommands } from "./view/boardCommands";
 import { laneHeads, useBoardLanes } from "./view/boardLanes";
 import NoMatchesNote from "./NoMatchesNote.vue";
-import MetricsStrip from "../metrics/MetricsStrip.vue";
+import BoardMetrics from "../metrics/BoardMetrics.vue";
 import { LIVE_METRICS_KEY } from "../../../models/sandbox/liveMetrics";
 import { usePhoneLanes } from "./view/phoneLanes";
 import { useBoardLaunches } from "./view/boardLaunches";
@@ -87,7 +87,7 @@ const t = useT();
 
 const router = useRouter();
 const { mobile, coarse } = useDevice();
-// The geek metrics are the desktop's: its shell reads them once (ShellDesktop.vue) for this board's foot and its cards
+// The geek metrics are the desktop's: its shell reads them once (ShellDesktop.vue) for this board's header and its cards
 // (liveMetrics.ts), undefined while they are off. A phone reads none, whatever Settings says: its board has no foot to
 // spare from the floating New agent.
 const liveMetrics = inject(LIVE_METRICS_KEY, undefined);
@@ -349,6 +349,10 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             <div class="flex min-w-0 max-w-full flex-auto flex-wrap items-center justify-end gap-2">
                 <!-- Filtering shows a searching state while lane counts are partial. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
+                <!-- The geek metrics, while the reader opted in: three small meters beside New agent, the full readout a
+                     popover off them (BoardMetrics.vue). In the header, so they take none of the board's height; meters alone
+                     below three lanes' width, so the header keeps to one row. -->
+                <BoardMetrics v-if="!mobile && liveMetrics !== undefined" :metrics="liveMetrics" :compact="narrow || paired" />
                 <!-- Appears exactly when two or more chats sit side by side (the panes are the selection); opens a draft composed from their transcripts but not sent. -->
                 <Button
                     v-if="chatStrip.panes.length >= 2"
@@ -646,9 +650,6 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             @menu="(agent, event) => openCardMenu(agent, event, {})"
             @open-session="openSession"
         />
-        <!-- The geek metrics, the board's own foot and nowhere else on a desktop: the gauges while the reader opted in, and
-             the full readout above them when pressed (MetricsStrip.vue). A phone draws no gauges. -->
-        <MetricsStrip v-if="!mobile" :metrics="liveMetrics" />
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"

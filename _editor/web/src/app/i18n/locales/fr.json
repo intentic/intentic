@@ -877,10 +877,6 @@
             "couldntKeep": "Impossible de garder le cache de ce chat au chaud.",
             "couldntStop": "Impossible d'arrêter de garder le cache de ce chat au chaud."
         },
-        "statusBar": {
-            "label": "Métriques du sandbox",
-            "close": "Fermer {title}"
-        },
         "stamps": {
             "heading": "Vérifications",
             "self": "Auto-vérification",
@@ -11626,7 +11622,7 @@
             "statusBar": {
                 "group": "Tableau des agents",
                 "liveMetrics": "Métriques pour geeks",
-                "liveMetricsHint": "CPU, mémoire et disque au pied du tableau des agents, et sur la carte de chaque agent sa part et ce qu'il a coûté. Ailleurs, une petite tuile dans la barre latérale seulement quand l'un approche de sa limite. Rien n'est mesuré tant que l'option est désactivée."
+                "liveMetricsHint": "CPU, mémoire et disque dans l'en-tête du tableau des agents, et sur la carte de chaque agent sa part et ce qu'il a coûté. Ailleurs, une petite tuile dans la barre latérale seulement quand l'un approche de sa limite. Rien n'est mesuré tant que l'option est désactivée."
             },
             "explorer": {
                 "colorful": "Coloré",

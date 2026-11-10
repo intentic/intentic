@@ -15,10 +15,8 @@ import { askForAttention } from "../models/fleet/board/attentionOutside";
 import { useRole } from "../client/sandbox/useRole";
 import { useHeldDoor } from "../components/heldPlace";
 import { useTerminalPanel } from "../models/terminal/useTerminalPanel";
-import { useTerminalFloating } from "../features/terminal/terminalFloating";
-import { CARD_METRICS_KEY, LIVE_METRICS_KEY, showLiveMetrics, useLiveMetrics } from "../models/sandbox/liveMetrics";
+import { CARD_METRICS_KEY, LIVE_METRICS_KEY, useLiveMetrics } from "../models/sandbox/liveMetrics";
 import { useCardMetrics } from "../models/fleet/board/metricsCards";
-import { openPanel } from "../features/agents/metrics/metricsStripState";
 import RailSignals from "./rail/tools/RailSignals.vue";
 import RailTools from "./rail/tools/RailTools.vue";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
@@ -319,31 +317,12 @@ watch(
     (open) => open && showSection(),
 );
 
-// The geek metrics, read once here and handed down (LIVE_METRICS_KEY) to the board's strip and cards and to the rail's
+// The geek metrics, read once here and handed down (LIVE_METRICS_KEY) to the board's header and cards and to the rail's
 // near-a-limit tile, so one reading serves all three. Off, nothing is measured at all (liveMetrics.ts).
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
 // The same reading folded into the board's cards, so a card and the panel's list say what a whole family holds.
 provide(CARD_METRICS_KEY, useCardMetrics(liveMetrics));
-// ONE PANEL AT THE FOOT AT A TIME. The docked terminal opens under the section and the metrics panel at the foot of the
-// board, and the two stacked leave the board a sliver: opening either closes the other. A terminal in a window of its own takes no
-// room here. Immediate, so a window reopened with both remembered open comes back with the terminal alone.
-const terminalFloat = useTerminalFloating();
-const terminalDocked = computed(() => terminal.open.value && !terminalFloat.floats.value);
-watch(
-    terminalDocked,
-    (docked) => {
-        if (docked && showLiveMetrics.value && openPanel.value !== undefined) {
-            openPanel.value = undefined;
-        }
-    },
-    { immediate: true },
-);
-watch(openPanel, (panel) => {
-    if (panel !== undefined && showLiveMetrics.value && terminalDocked.value) {
-        terminal.setOpen(false);
-    }
-});
 // Which getting-started marks a rail tile carries: the page each step is done on. Only the current one draws (TourMark).
 const RAIL_MARKS: Readonly<Record<string, readonly MarkStep[]>> = { workspace: [`work`], agents: [`agent`, `board`, `land`] };
 const railMarks = (id: string): readonly MarkStep[] => RAIL_MARKS[id] ?? [];
@@ -553,7 +532,7 @@ useGettingStarted();
     /* Floor is 0, not the stored width, which was clamped at drag time and could push past a shrunk window. */
     grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--side-width, 22rem));
     /* An explicit row, so a stray element landing in an implicit row can't starve 1fr to zero height. No status bar: what
-       the sandbox runs is the rail's foot (rail/tools/), its metrics the board's foot (MetricsStrip.vue). */
+       the sandbox runs is the rail's foot (rail/tools/), its metrics the board's header (BoardMetrics.vue). */
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "rail workspace side";
 }

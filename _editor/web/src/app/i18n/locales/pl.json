@@ -877,10 +877,6 @@
             "couldntKeep": "Nie udało się utrzymać pamięci podręcznej tego czatu w cieple.",
             "couldntStop": "Nie udało się przestać utrzymywać pamięci podręcznej tego czatu w cieple."
         },
-        "statusBar": {
-            "label": "Metryki sandboxa",
-            "close": "Zamknij {title}"
-        },
         "stamps": {
             "heading": "Kontrole",
             "self": "Autokontrola",
@@ -11012,7 +11008,7 @@
             "statusBar": {
                 "group": "Tablica agentów",
                 "liveMetrics": "Metryki dla geeków",
-                "liveMetricsHint": "CPU, pamięć i dysk u dołu tablicy agentów, a na karcie każdego agenta jego udział i koszt. W innych widokach tylko mały kafelek na pasku bocznym, gdy któryś zbliża się do limitu. Gdy ta opcja jest wyłączona, nic nie jest mierzone."
+                "liveMetricsHint": "CPU, pamięć i dysk w nagłówku tablicy agentów, a na karcie każdego agenta jego udział i koszt. W innych widokach tylko mały kafelek na pasku bocznym, gdy któryś zbliża się do limitu. Gdy ta opcja jest wyłączona, nic nie jest mierzone."
             },
             "changes": {
                 "diffOpen": "Gdzie otwiera się diff",
