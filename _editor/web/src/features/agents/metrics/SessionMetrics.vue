@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatBinaryBytes, formatPercent } from "@intentic/ui/format";
+import { formatBytes, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, inject } from "vue";
 import { CARD_METRICS_KEY, cardMetricsOf, LIVE_METRICS_KEY, sessionHeavy } from "../../../models/sandbox/liveMetrics";
@@ -23,6 +23,8 @@ const props = defineProps<{
 const metrics = inject(LIVE_METRICS_KEY, undefined);
 const cards = inject(CARD_METRICS_KEY, undefined);
 
+// The figure is as narrow as the card's stats row needs: two-letter units (MB, not MiB; the hover keeps the exact
+// binary ones), a slash between memory and CPU, and no icon.
 // Strings and a flag, so this leaf redraws only when what it says changes rather than on every reading the board takes.
 const figure = computed<{ readonly short: string; readonly hint: Tip; readonly heavy: boolean } | undefined>(() => {
     const reading = metrics?.value;
@@ -31,7 +33,7 @@ const figure = computed<{ readonly short: string; readonly hint: Tip; readonly h
         return undefined;
     }
     return {
-        short: [formatBinaryBytes(session.rssBytes), ...(session.cpuPercent === undefined ? [] : [formatPercent(session.cpuPercent)])].join(` · `),
+        short: [formatBytes(session.rssBytes), ...(session.cpuPercent === undefined ? [] : [formatPercent(session.cpuPercent)])].join(`/`),
         hint: sessionTip(t, session),
         heavy: sessionHeavy(session.rssBytes, reading.sandbox),
     };
@@ -46,7 +48,6 @@ const figure = computed<{ readonly short: string; readonly hint: Tip; readonly h
         class="inline-flex min-w-0 items-center gap-1 font-mono tabular-nums"
         :class="figure.heavy ? `text-warning` : ``"
     >
-        <Icon name="cpu" class="shrink-0 text-2xs" />
         <span class="truncate">{{ figure.short }}</span>
     </span>
 </template>

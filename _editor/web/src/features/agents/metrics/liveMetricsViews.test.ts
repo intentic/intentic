@@ -143,14 +143,14 @@ describe("a card's figure", () => {
     // One figure in the card's stats row, memory first since memory is what runs out; the whole reading is its hover.
     it("says what the conversation's processes hold and use, with the whole reading on hover", () => {
         const figure = mount(SessionMetrics, { card: `a1` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
-        expect(figure.textContent?.trim()).toBe(`412 MiB · 37%`);
+        expect(figure.textContent?.trim()).toBe(`412 MB/37%`);
         expect(figure.dataset[`tip`]).toBe(`Session usage · CPU 37% · Process memory (RSS) 412 MiB · Processes 12 · 100% = 1 core`);
         expect(figure.classList.contains(`text-warning`)).toBe(false);
     });
 
     it("leaves CPU out of a first reading rather than guessing it", () => {
         const figure = mount(SessionMetrics, { card: `fresh` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
-        expect(figure.textContent?.trim()).toBe(`40 MiB`);
+        expect(figure.textContent?.trim()).toBe(`40 MB`);
         expect(figure.dataset[`tip`]?.startsWith(`Session usage · Process memory (RSS) 40 MiB · Processes 1 · `)).toBe(true);
     });
 
@@ -176,17 +176,17 @@ describe("a card's figure", () => {
         const figure = mount(SessionMetrics, { card: `a1` }, metrics, { from: metrics, cardOf: { c1: `a1` } }).querySelector<HTMLElement>(
             `[data-session-metrics]`,
         )!;
-        expect(figure.textContent?.trim()).toBe(`1.2 GiB · 81%`);
+        expect(figure.textContent?.trim()).toBe(`1.2 GB/81%`);
         expect(figure.dataset[`tip`]).toBe(
             `Session usage · CPU 81% · Process memory (RSS) 1.2 GiB · Processes 7 · Grouped sessions 1 · 900 MiB · 100% = 1 core`,
         );
         app?.unmount();
         // A card whose own conversation holds nothing still says what its working children hold.
         const idle = { ...reading(), sessions: { c1: { processes: 5, rssBytes: 900 * MIB, cpuPercent: 80 } } };
-        expect(mount(SessionMetrics, { card: `a1` }, idle, { from: idle, cardOf: { c1: `a1` } }).textContent?.trim()).toBe(`900 MiB · 80%`);
+        expect(mount(SessionMetrics, { card: `a1` }, idle, { from: idle, cardOf: { c1: `a1` } }).textContent?.trim()).toBe(`900 MB/80%`);
         app?.unmount();
         expect(mount(SessionMetrics, { card: runCardKey(`r1`) }, idle, { from: idle, cardOf: { c1: runCardKey(`r1`) } }).textContent?.trim()).toBe(
-            `900 MiB · 80%`,
+            `900 MB/80%`,
         );
     });
 
