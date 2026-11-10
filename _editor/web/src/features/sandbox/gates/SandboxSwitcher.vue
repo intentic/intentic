@@ -2,7 +2,7 @@
 import TourMark from "../../tour/TourMark.vue";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { AnchoredOverlay, Notice, SandboxLogo, SectionHeader, StatusBadge, type Tip, useHoverMenu } from "@intentic/ui";
-import { computed, type ComputedRef, onMounted, onUnmounted, ref, TransitionGroup, watch } from "vue";
+import { computed, type ComputedRef, onMounted, ref, TransitionGroup, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { RUNNING_MARK_CLASS } from "../../../workbench/views/viewBadge";
 import TileMark from "../../../components/TileMark.vue";
@@ -13,11 +13,10 @@ import { hereIn, isPage, page } from "../../../lib/routes/links";
 import { sandboxAvailabilityVisual } from "../overview/availability";
 import type { SandboxPlacement } from "../overview/placement";
 import { rowPlacement, useSandboxPlacement } from "../overview/useSandboxPlacement";
-import { attentionByBox, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
+import { attentionByBox, otherBoxes } from "../../../models/sandbox/live/fleetAcross";
 import { arrangedSandboxes, sandboxOrder } from "../../../models/home/sandboxOrder";
 import { useSortableDrag } from "../../../components/sortable/sortableDrag";
 import SortableLift from "../../../components/sortable/SortableLift.vue";
-import { useRequestAddSandbox, warmAddSandbox } from "../../../models/sandbox/addSandbox";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { SANDBOX_LIST_KEY, useSandbox } from "../../../client/sandbox/useSandbox";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -35,9 +34,12 @@ import { slotChord, useSwitchCommands } from "./useSwitchCommands";
 import { commandShortcut } from "../../../workbench/commands/useCommands";
 import { useT } from "@intentic/ui/i18n";
 
-// Shared workspace/local-window place switcher: a pick retargets sandbox views/probes; the active sandbox hub is opened from here.
-// Hover dwell opens, the pointer corridor preserves it, and a press pins it; keep sandbox rows in stable positions.
-// Local windows use the app's platform proxy and omit daemon attention/reachability and the workspace-only hub.
+// The rail's top tile, shared by the workspace and the desktop app's local windows.
+// In the workspace it is a plain door: its tooltip says which sandbox this is and where it runs, and a press opens that
+// sandbox's settings. Switching is the cluster under it (OtherSandboxes.vue, which also carries the add tile while there is
+// no other sandbox) and Alt+1…9; no panel opens from here.
+// A local window has no cluster, so there the logo still raises the list of the account's sandboxes: hover dwell opens, the
+// pointer corridor preserves it, a press pins it, and its rows open the workspace through the app (switcherPlace.ts).
 // Setup/news/action badges belong to gettingStarted/SandboxErrands.vue, leaving this menu focused on choosing a place.
 
 const t = useT();
@@ -104,29 +106,6 @@ const {
     addSandbox: addFromFolder,
     arranged,
 } = useFolderPlace(open);
-
-// Reads these counts only while the popover is open, since the control is mounted for the whole session; a second
-// open within the freshness window paints instantly from the store's last read. A pointer resting on the logo starts
-// the read before the dwell is out, so the counts are usually there by the time the panel is.
-let releaseBoxes: (() => void) | undefined;
-// Never from a local window, whose page those daemons refuse: every row would read as not answering.
-watch(
-    () => !local && (open.value || menu.hovering.value),
-    (wanted) => {
-        if (wanted) {
-            releaseBoxes ??= watchOtherBoxes();
-            // Its "Add sandbox" lands on a dialog whose chunk is fetched now, not after the press (addSandbox.ts).
-            warmAddSandbox();
-            return;
-        }
-        releaseBoxes?.();
-        releaseBoxes = undefined;
-    },
-);
-onUnmounted(() => {
-    releaseBoxes?.();
-    releaseBoxes = undefined;
-});
 
 // A sandbox that never reported in has no daemon, so switching to it can only paint a connecting gate that never
 // resolves; those rows are unfinished errands on the getting-started ring, not places to switch to.
@@ -202,13 +181,22 @@ const placementTip = (option: SandboxSummary): Tip => {
         : tip;
 };
 
-// Every add is made on Home on a desktop, in the dialog on a phone (models/sandbox/addSandbox.ts); a signed-out reader
-// signs in first and comes back to the same ask.
-const requestAddSandbox = useRequestAddSandbox();
-const addHere = (): void => {
-    open.value = false;
-    requestAddSandbox();
+// THE LOGO, IN THE WORKSPACE: a door to this sandbox's settings (the tile already lights up on that page). Its tooltip is
+// what the panel's active row used to say: the name, where it runs and whether that answers, and the cog's own word.
+const settingsHere = (): void => {
+    const active = sandbox.active.value;
+    if (active !== undefined) {
+        void router.push(hereIn(active.id, page.sandboxSettings(active.role === `guest` ? GUEST_SECTION : undefined)));
+    }
 };
+const doorTip = computed<Tip | undefined>(() => {
+    const active = sandbox.active.value;
+    return active === undefined ? undefined : { ...placementTip(active), title: active.name, note: t(`shared.settings`) };
+});
+const doorLabel = computed(() =>
+    t(`sandbox.sandboxSwitcher.settingsOf`, { name: sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`) }) +
+    switcherLabel.value.slice((sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`)).length),
+);
 
 // A pick is a navigation into the sandbox, where it was last left: its address names it, which selects it
 // (router/shellGates.ts), and Back undoes the switch.
@@ -296,10 +284,11 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
 </script>
 
 <template>
-    <!-- The rail's top control: a live chip for the active sandbox, click to switch. -->
+    <!-- The rail's top control: a live chip for the active sandbox. A press opens its settings; in a local window, where
+         there is no cluster of the others, it raises the list of sandboxes instead. -->
     <span class="relative flex">
-        <!-- No tooltip: resting here opens the panel itself, on the side a tooltip would take, and the facts the
-             tooltip carried are the active row's second line. The joined sentence stays the accessible name. -->
+        <!-- A local window's panel opens on the side a tooltip would take, so only the workspace's door has one. The joined
+             sentence stays the accessible name either way. -->
         <button
             ref="trigger"
             type="button"
@@ -310,11 +299,17 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
                 open && 'opacity-80',
             ]"
             :aria-label="
-                folder ? t(`local.placeSwitcher.switchPlace`, { name: folder.name }) : t(`sandbox.sandboxSwitcher.switchSandbox`, { switcherLabel })
+                !local
+                    ? doorLabel
+                    : folder
+                      ? t(`local.placeSwitcher.switchPlace`, { name: folder.name })
+                      : t(`sandbox.sandboxSwitcher.switchSandbox`, { switcherLabel })
             "
-            aria-haspopup="dialog"
-            :aria-expanded="open"
-            v-on="hoverTrigger"
+            :aria-haspopup="local ? `dialog` : undefined"
+            :aria-expanded="local ? open : undefined"
+            v-tooltip.right="!local && doorTip"
+            v-on="local ? hoverTrigger : {}"
+            @click="local ? undefined : settingsHere()"
         >
             <!-- This computer has one mark, whichever folder the local window shows. -->
             <span class="flex size-full items-center justify-center overflow-hidden rounded-md [&_span]:text-inherit">
@@ -354,7 +349,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
 
     <!-- Zeroed padding: PrimeVue's popover padding reads as a frame around rows with their own inset. Focus goes back
          to the logo only when a press opened it: a panel the pointer raised never took the keyboard's place. -->
-    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start" :restore-focus="pressed" menu>
+    <AnchoredOverlay v-if="local" v-model="open" :anchor="trigger ?? undefined" side="right" cross="start" :restore-focus="pressed" menu>
         <div ref="panel" class="flex min-h-0 w-80 max-w-[calc(100vw-5rem)] flex-col gap-0.5 overflow-y-auto overscroll-contain p-1" v-on="menu.panel">
             <SectionHeader :label="t(`shared.sandboxes`)" density="dense" class="px-2 py-1.5" />
 
@@ -528,7 +523,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
                     type="button"
                     data-menu-row
                     class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
-                    @click="(event: MouseEvent) => (local ? addFromFolder(event) : addHere())"
+                    @click="addFromFolder"
                 >
                     <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-line text-muted">
                         <Icon name="plus" class="text-sm" />

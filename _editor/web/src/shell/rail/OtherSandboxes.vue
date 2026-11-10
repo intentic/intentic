@@ -3,9 +3,11 @@
      out to its tile and the sections go into the bookmark (railMorph.ts, by the marks below), the page on screen staying
      where it is (sandboxScreen.ts `unrolledPath`). Not a Home tile (the owner turned one down twice): it says something
      a tile could not, which other sandboxes there are and which of them waits for the reader, the reason to unroll at
-     all. Draws nothing for a reader with no other sandbox. -->
+     all. For a reader with no other sandbox it is the add tile instead, so a first extra sandbox is always one press away
+     (the unrolled rail ends in the same tile, HomeSandboxes.vue). -->
 <script setup lang="ts">
-import { SandboxLogo, type Tip } from "@intentic/ui";
+import { SandboxLogo, type Tip, ui } from "@intentic/ui";
+import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
@@ -15,6 +17,7 @@ import { clusterOf } from "../../models/home/otherSandboxes";
 import { sandboxOrder } from "../../models/home/sandboxOrder";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
+import { useRequestAddSandbox, warmAddSandbox } from "../../models/sandbox/addSandbox";
 import { unrolledPath } from "../../models/sandbox/sandboxScreen";
 import { commandShortcut } from "../../workbench/commands/useCommands";
 import { badgeClass } from "../../workbench/views/viewBadge";
@@ -61,6 +64,9 @@ const tint = (id: string) => {
 // The page on screen, the rail unrolled around it.
 const route = useRoute();
 const home = computed(() => unrolledPath(route));
+
+// The same add action everywhere: signed in opens the dialog here; signed out returns to it after sign-in.
+const add = useRequestAddSandbox();
 
 const needy = computed(() => cluster.value.slots.filter((slot) => slot.needsYou > 0));
 const tip = computed<Tip>(() => ({
@@ -111,4 +117,17 @@ const label = computed(() =>
             >
         </span>
     </RouterLink>
+    <button
+        v-else-if="sandbox.sandboxes.value.length > 0"
+        type="button"
+        :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
+        data-rail-key="rail:add-sandbox"
+        :aria-label="t(`sandbox.words.addSandbox`)"
+        v-tooltip.right="t(`sandbox.words.addSandbox`)"
+        @click="add"
+        @pointerenter="warmAddSandbox"
+        @focus="warmAddSandbox"
+    >
+        <Icon name="box-plus" class="icon-rail-glyph" aria-hidden="true" />
+    </button>
 </template>
