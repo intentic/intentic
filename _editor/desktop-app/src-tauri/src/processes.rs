@@ -853,9 +853,14 @@ mod tests {
 
     #[test]
     fn only_a_run_that_ended_well_leaves_by_itself() {
-        assert!(leaves_by_itself(&ProcessReport::of("recreate", "shop", "done")));
+        assert!(leaves_by_itself(&ProcessReport::of(
+            "recreate", "shop", "done"
+        )));
         for state in ["running", "waiting", "failed", "stopped"] {
-            assert!(!leaves_by_itself(&ProcessReport::of("recreate", "shop", state)), "{state}");
+            assert!(
+                !leaves_by_itself(&ProcessReport::of("recreate", "shop", state)),
+                "{state}"
+            );
         }
     }
 
