@@ -54,27 +54,38 @@ export const fencedReminder = (root: string): TurnNote => ({
     text: `${WORKTREE_NOTE_HEADER}\n\n\`${root}\` holds only this conversation's areas, and it has no git; your changes are recorded for you.`,
 });
 
-// The whole-workspace jail private conversations put every turn in (turn-sandbox.ts WholeJail), for a turn in its own
-// worktree: git works, but the shared checkout and every other conversation's are off this filesystem. Said once per
-// session, because jailed agents (2026-11-11) pruned and repaired the worktree records they saw as dangling, switched a
-// conversation's checkout to main, and edited their own checkout believing it the shared one.
-export const jailedNote = (root: string): TurnNote => ({
+// A turn in a worktree of its own that the runtime sees AT the workspace root: a namespace runtime's bind mount, or the
+// whole-workspace jail private conversations put every turn in (turn-sandbox.ts WholeJail). Either way the shared
+// checkout is off this filesystem, and nothing else says so: on 2026-11-11 a linked task told to repair
+// `/work/targowisko/.git` rewrote its own checkout's pointer instead, and jailed agents pruned and repaired the worktree
+// records they saw as dangling. The git shim (bin/guard-shims/git) refuses those commands; this says why, so a turn asks
+// the person rather than looking for a way round. `hidden` is the jail, where the other checkouts are gone too.
+export const ownCheckoutNote = (root: string, hidden: boolean): TurnNote => ({
     title: WORKTREE_NOTE_TITLE,
     text:
         `${WORKTREE_NOTE_HEADER}\n\n` +
-        `\`${root}\` here is this conversation's own checkout, on its own branch (\`agent/<conversation id>\`), not the ` +
-        `shared workspace other people and agents use, which this turn cannot see. Other conversations' checkouts are not ` +
-        `on this filesystem, so git lists them as prunable: never run \`git worktree prune\`, \`repair\`, \`move\` or ` +
-        `\`remove\`, which would break them. Never switch this checkout to the workspace's main line either: its work ` +
-        `reaches main by landing. If a land says the workspace is off its main line, tell the person to press Back to ` +
-        `main in the Changes view rather than fixing it with git.`,
+        `\`${root}\` here is this conversation's own checkout, on its own branch; its finished work lands in the shared ` +
+        `workspace, which is not on this filesystem. So nothing run here can repair that workspace (a branch it is stuck on, ` +
+        `a refused land): tell the person to press Back to main in the Changes view. ` +
+        (hidden
+            ? "Other conversations' checkouts are hidden too, so git lists them as prunable; they are not. "
+            : "Other conversations' checkouts are their own: read them, never edit them. ") +
+        `Worktree records and the main line belong to the sandbox: it refuses \`git worktree prune\`, \`repair\`, ` +
+        `\`move\` and \`remove\`, and switching this checkout to the main line.`,
 });
 
-export const jailedReminder = (root: string): TurnNote => ({
+export const ownCheckoutReminder = (root: string): TurnNote => ({
+    title: WORKTREE_NOTE_TITLE,
+    text: `${WORKTREE_NOTE_HEADER}\n\n\`${root}\` is this conversation's own checkout, not the shared workspace; worktree records and the main line belong to the sandbox.`,
+});
+
+// A conversation started with isolation off works in the shared checkout itself; the system block's "lands in the
+// owner's tree" is not true of it, and nothing else says where it is.
+export const sharedTreeNote = (root: string): TurnNote => ({
     title: WORKTREE_NOTE_TITLE,
     text:
-        `${WORKTREE_NOTE_HEADER}\n\n\`${root}\` is this conversation's own checkout, not the shared workspace: never prune, ` +
-        `repair, move or remove git worktrees, nor switch it to the main line.`,
+        `${WORKTREE_NOTE_HEADER}\n\n\`${root}\` here is the shared workspace itself, not a checkout of this ` +
+        `conversation's own: every edit is live for the people and agents working there, with no land in between.`,
 });
 
 // Deliberately no note: the model reliably over-reacted to being told about a routine rebase, re-verifying builds

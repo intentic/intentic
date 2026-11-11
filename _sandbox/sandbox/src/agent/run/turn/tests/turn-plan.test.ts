@@ -14,7 +14,7 @@ import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../../pro
 import { UNATTENDED_ACCOUNTS_TITLE } from "../../../../personas/personas.js";
 import { LANDING_CHECKS_NOTE } from "../../../prompt/checks-note.js";
 import type { AgentRequest, TurnPolicy, TurnSpec } from "../../../providers/agent-request.js";
-import { composeWirePrompt } from "../../../prompt/turn-preamble.js";
+import { composeWirePrompt, ownCheckoutNote, sharedTreeNote } from "../../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../../providers/adapter.js";
 import { experimentArm } from "@intentic/agent-context/experiments";
 import { ruleCommandIn } from "../../harness/harness-hooks.js";
@@ -26,7 +26,7 @@ import { type LiveRun, RUNS } from "../../../../conversations/actor/conversation
 import { opt } from "../../../../opt.js";
 import { base, budgetOn, codexServices, context, harnessServices, memoryReading, ROOT, servicesWith, turn, wire } from "../turn-plan.testing.js";
 import * as harnessCredentialsOriginal from "../../../providers/harness-credentials.js";
-import { LANDING_CHECKS_NOTE_HEADER } from "../../../../sessions/vocabulary/prompt-envelope.js";
+import { LANDING_CHECKS_NOTE_HEADER, WORKTREE_NOTE_HEADER } from "../../../../sessions/vocabulary/prompt-envelope.js";
 
 // What a turn is allowed to run on, and what it's handed once it may; session-resume rules live with the route instead
 // (app.integration.test.ts). A refusal is a value (`ok: false` + code), assertable without a stream.
@@ -561,7 +561,8 @@ test("what checks the work is named on a conversation's opening message", async 
 test("a follow-up is not charged for it again: the note stands in the session's own history", async () => {
     const services = harnessServices({ agents: conversationAt({ turns: 3 }) });
 
-    const plan = await planTurn(services, turn({ conversationId: "conv-1" }), context);
+    // A follow-up resumes the session that heard the opening notes.
+    const plan = await planTurn(services, turn({ conversationId: "conv-1" }), { ...context, base: { ...context.base, spec: { ...context.base.spec, sessionId: "session-1" } } });
 
     // Nothing in front of the user's words: a turn already told everything costs nothing extra.
     expect(wire(plan)).toBe("do the thing");
@@ -997,7 +998,7 @@ test("fast speed is withheld from a runtime that cannot ask for it", async () =>
 // A runtime that can't enter the turn's mount namespace is only cwd'd into its worktree, so an absolute /work path
 // would otherwise reach the shared checkout; the note keeps it inside its own branch, in full once then as compact
 // reminders.
-test("a cwd-isolated runtime gets one worktree explanation, then compact reminders; a namespaced one gets neither", async () => {
+test("a cwd-isolated runtime gets one worktree explanation, then compact reminders; a namespaced one is told its root is its own, once", async () => {
     const isolated: TurnContext = { ...context, localCwd: `${HISTORY_ROOT}/worktrees/abc/work`, effectiveCwd: `${HISTORY_ROOT}/worktrees/abc/work` };
     // OpenCode has no spawn seam of ours, so it stays on the cwd side; Codex runs under the Claude Code loop, whose
     // app-server is a child process nsenter can place in the namespace.
@@ -1024,19 +1025,24 @@ test("a cwd-isolated runtime gets one worktree explanation, then compact reminde
     expect(followupPrompt).toContain(sharedCheckout);
     expect(followupPrompt).not.toContain(`${HISTORY_ROOT}/worktrees/abc/work`);
 
+    // Its root IS its worktree (a bind mount), so the note says the shared checkout is not on this filesystem: on
+    // 2026-11-11 a task told to repair `/work/<repo>/.git` rewrote its own checkout's pointer instead.
     for (const namespaced of [
         await planTurn(harnessServices(), turn(), isolated),
         await planTurn(codexServices(), turn({ agent: "codex" }), isolated),
     ]) {
-        expect(wire(namespaced)).not.toContain("Where this turn's files live");
+        expect(wire(namespaced)).toContain(ownCheckoutNote(sharedCheckout, false).text);
+        expect(wire(namespaced)).not.toMatch(/relative paths/i);
     }
+    const namespacedFollowup = await planTurn(harnessServices(), turn(), { ...isolated, base: { ...isolated.base, spec: { ...isolated.base.spec, sessionId: "session-1" } } });
+    expect(wire(namespacedFollowup)).not.toContain(WORKTREE_NOTE_HEADER);
 });
 
-test("a main-tree turn has no worktree to name, so it says nothing of one", async () => {
+test("a main-tree turn is told its root is the shared checkout, on its opening message only", async () => {
     const plan = await planTurn(codexServices(), turn({ agent: "codex" }), context);
 
-    // The checks note is every opening message's; nothing else stands in front of the user's words.
-    expect(wire(plan)).toBe(composeWirePrompt([LANDING_CHECKS_NOTE], "do the thing"));
+    // Its root is the shared checkout and nothing lands, which the system block no longer claims either way.
+    expect(wire(plan)).toBe(composeWirePrompt([sharedTreeNote("/nowhere/turn-plan"), LANDING_CHECKS_NOTE], "do the thing"));
 });
 
 test("every runtime is told what runs after its work lands, on the main tree or in its own worktree", async () => {

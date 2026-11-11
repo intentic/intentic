@@ -5,7 +5,15 @@ import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store
 import { withRuntimeHistory } from "../../sessions/vocabulary/runtime-history.js";
 import { withAttachmentNote } from "../../sessions/vocabulary/attachment-note.js";
 import { checkpointNote } from "../checkpoints/checkpoint-worktree.js";
-import { composeWirePrompt, jailedNote, jailedReminder, LITERAL_SLASH_NOTE, WORKTREE_NOTE_TITLE, withTurnPreamble } from "./turn-preamble.js";
+import {
+    composeWirePrompt,
+    LITERAL_SLASH_NOTE,
+    ownCheckoutNote,
+    ownCheckoutReminder,
+    sharedTreeNote,
+    WORKTREE_NOTE_TITLE,
+    withTurnPreamble,
+} from "./turn-preamble.js";
 import {
     LEGACY_SPAWN_NOTE_HEADER,
     SPAWN_NOTE_HEADER,
@@ -109,27 +117,30 @@ test("what strip removes, the split hands back: titled, whole, and in the order 
     expect(stripTurnPreamble(sent)).toBe("fix the bug");
 });
 
-// A jailed turn in its own worktree (turn-sandbox.ts WholeJail) has git but sees no other checkout, so git calls every
-// other conversation's prunable: 2026-11-11's agents pruned and repaired those records and moved a checkout to main.
-test("the jailed note says whose checkout the root is and which git commands break the others, once in full, then briefly", () => {
-    const full = jailedNote(WORKSPACE_ROOT);
-    expect(full.title).toBe(WORKTREE_NOTE_TITLE);
-    expect(full.text.startsWith(`${WORKTREE_NOTE_HEADER}\n\n\`${WORKSPACE_ROOT}\` here is this conversation's own checkout`)).toBe(true);
-    for (const said of ["`agent/<conversation id>`", "not the shared workspace", "prunable", "`git worktree prune`", "`repair`", "`move`", "`remove`", "main line", "landing", "Back to main", "Changes view"]) {
-        expect(full.text).toContain(said);
+// A turn whose runtime sees its own worktree at the root (a namespace's bind mount, or the jail) cannot see the shared
+// checkout: 2026-11-11's agents edited their own checkout's `.git` believing it the shared one, and jailed ones pruned and
+// repaired the worktree records they saw as dangling.
+test("the own-checkout note says whose checkout the root is and who keeps worktree records, once in full, then briefly", () => {
+    for (const hidden of [false, true]) {
+        const full = ownCheckoutNote(WORKSPACE_ROOT, hidden);
+        expect(full.title).toBe(WORKTREE_NOTE_TITLE);
+        expect(full.text.startsWith(`${WORKTREE_NOTE_HEADER}\n\n\`${WORKSPACE_ROOT}\` here is this conversation's own checkout`)).toBe(true);
+        for (const said of ["not on this filesystem", "Back to main", "Changes view", "`git worktree prune`", "`repair`", "`move`", "`remove`", "main line"]) {
+            expect(full.text).toContain(said);
+        }
+        expect(full.text.includes("prunable")).toBe(hidden);
     }
 
-    const brief = jailedReminder(WORKSPACE_ROOT);
-    expect(brief.title).toBe(WORKTREE_NOTE_TITLE);
+    const brief = ownCheckoutReminder(WORKSPACE_ROOT);
     expect(brief.text).toBe(
-        `${WORKTREE_NOTE_HEADER}\n\n\`${WORKSPACE_ROOT}\` is this conversation's own checkout, not the shared workspace: never prune, repair, move or remove git worktrees, nor switch it to the main line.`,
+        `${WORKTREE_NOTE_HEADER}\n\n\`${WORKSPACE_ROOT}\` is this conversation's own checkout, not the shared workspace; worktree records and the main line belong to the sandbox.`,
     );
 
     // Under the worktree header, so it comes back off a stored prompt as a note and never as the user's words.
-    for (const jailed of [full, brief]) {
-        const sent = composeWirePrompt([jailed], "carry on");
+    for (const note of [ownCheckoutNote(WORKSPACE_ROOT, true), brief, sharedTreeNote(WORKSPACE_ROOT)]) {
+        const sent = composeWirePrompt([note], "carry on");
         expect(stripTurnPreamble(sent)).toBe("carry on");
-        expect(preambleNotes(sent)).toEqual([jailed]);
+        expect(preambleNotes(sent)).toEqual([note]);
     }
 });
 

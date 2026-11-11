@@ -205,10 +205,11 @@ const ENTRIES: readonly GuidanceEntry[] = [
         // The AGENTS.md sentences: workspace-memory.ts composes those files into the turn, yet Codex turns (whose own loop
         // reads AGENTS.md from where it starts) ran `cat AGENTS.md` or read `/work/AGENTS.md`, at a root that had none,
         // about a hundred times in the month to 2026-10-26, and never opened the repository's own file instead.
+        // Where the turn's files are is not said here: it differs by placement (own checkout, shared tree, fenced, cwd),
+        // and this block is the same for all of them, so honoured.ts treeNotes says it on the message.
         text:
             "You run inside Intentic: a sandbox container serving one workspace, driven from a browser editor, where " +
-            "each conversation is an agent on its own git worktree whose finished delta lands in the owner's tree as " +
-            "uncommitted changes. For a question about USING Intentic (what a panel, setting or card does; how to " +
+            "many conversations, each an agent, work at once (where this one's files are is said on its first message). For a question about USING Intentic (what a panel, setting or card does; how to " +
             "connect, configure, extend or debug this sandbox; whether it can do something) load the `intentic` skill " +
             `(${PRODUCT_GUIDE}, and the references it names) first and answer from it rather than from memory, and never ` +
             "say Intentic cannot do something without checking there. Work on a repository's source is not such a " +

@@ -23,7 +23,15 @@ import { type InstallReach, setupNoticeFor, setupNoticeTitle } from "../../../wo
 import type { SearchTool } from "../../prompt/guidance.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
-import { fencedNote, fencedReminder, jailedNote, jailedReminder, worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
+import {
+    fencedNote,
+    fencedReminder,
+    ownCheckoutNote,
+    ownCheckoutReminder,
+    sharedTreeNote,
+    worktreeNote,
+    worktreeReminder,
+} from "../../prompt/turn-preamble.js";
 import { promptTrim } from "../../prompt/window/context-trim.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import type { TurnBase, TurnPolicy, TurnSpec, TurnTools } from "../../providers/agent-request.js";
@@ -32,7 +40,7 @@ import { nightNow } from "../../night/night-hours.js";
 import { peopleAtEditor } from "../../../system/presence.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import type { AdmittedTurnFacts } from "./turn-facts.js";
-import type { TurnPremise } from "./turn-premise.js";
+import { notesDue, type TurnPremise } from "./turn-premise.js";
 import { SPAWN_NOTE_TITLE, TURN_CONTEXT_NOTE_TITLE } from "../../../sessions/vocabulary/prompt-envelope.js";
 
 // The tool this product's guidance names for finding code: iq wherever the conversation has the iq teaching, so the two
@@ -94,19 +102,51 @@ const installReachOf = (isolated: boolean, capabilities: AgentCapabilities, canI
 const deniedSkillNames = (denied: readonly string[]): ReadonlySet<string> =>
     new Set(denied.flatMap((rule) => /^Skill\((.+)\)$/.exec(rule)?.slice(1, 2) ?? []));
 
-// Where the turn's files live, in full on a session's first turn and as a reminder after.
+// Where the turn's files live, in full on a session's first turn and as a reminder after. Every placement is told one:
+// a turn that guesses takes its own checkout for the shared one, or the reverse.
+type RootKind = "fenced" | "own" | "jailed" | "shared";
+
+// What the workspace root is to this turn. A fenced turn's sandbox holds only its areas and no git. A turn whose runtime
+// sees its own worktree AT the root (a namespace's bind mount, or the whole-workspace jail) cannot see the shared
+// checkout, and in the jail no other conversation's either. A main-tree turn's root is the shared checkout. A cwd
+// runtime's root stays the shared one too, said by its own note below.
+const rootKindOf = (isolation: TurnSpec["isolation"], capabilities: AgentCapabilities, isolated: boolean): RootKind | undefined => {
+    const whole = isolation?.plan.fence?.whole !== undefined;
+    if (isolation?.anchor?.sandbox !== undefined && !whole) {
+        return "fenced";
+    }
+    if (!isolated) {
+        return "shared";
+    }
+    if (whole) {
+        return "jailed";
+    }
+    return capabilities.isolation === "namespace" ? "own" : undefined;
+};
+
+// A fenced or jailed turn is reminded on every turn, as a cwd runtime is: git failing or worktrees listed as prunable
+// keep inviting it to go looking. A namespaced or main-tree turn is told once, and its session's history holds it.
+const rootNote = (kind: RootKind, root: string, first: boolean): TurnNote | undefined => {
+    switch (kind) {
+        case "fenced":
+            return first ? fencedNote(root) : fencedReminder(root);
+        case "jailed":
+            return first ? ownCheckoutNote(root, true) : ownCheckoutReminder(root);
+        case "own":
+            return first ? ownCheckoutNote(root, false) : undefined;
+        case "shared":
+            return first ? sharedTreeNote(root) : undefined;
+    }
+};
+
 const treeNotes = (facts: AdmittedTurnFacts, context: TurnContext, capabilities: AgentCapabilities, isolated: boolean): TurnNote[] => {
-    const first = context.base.spec.sessionId === undefined;
-    const isolation = context.base.spec.isolation;
+    // In full whenever the model's session holds none of it: a fresh session, or a compaction that summarized it away.
+    const first = notesDue(facts.entry?.totals.turns ?? 0, context.base.spec.sessionId, facts.entry);
+    const kind = rootKindOf(context.base.spec.isolation, capabilities, isolated);
+    const said = kind === undefined ? undefined : rootNote(kind, facts.root, first);
     return [
         ...(isolated && capabilities.isolation === "cwd" ? [first ? worktreeNote(context.localCwd, facts.root) : worktreeReminder(facts.root)] : []),
-        // A fenced turn's sandbox holds only its areas and no git. The whole-workspace jail holds both, but a turn in its
-        // own worktree there sees neither the shared checkout nor any other conversation's, which git lists as prunable:
-        // said so it neither prunes them nor takes its own for the shared one. A main-tree turn's root is the shared one.
-        ...(isolation?.anchor?.sandbox !== undefined && isolation.plan.fence?.whole === undefined
-            ? [first ? fencedNote(facts.root) : fencedReminder(facts.root)]
-            : []),
-        ...(isolated && isolation?.plan.fence?.whole !== undefined ? [first ? jailedNote(facts.root) : jailedReminder(facts.root)] : []),
+        ...(said === undefined ? [] : [said]),
     ];
 };
 
