@@ -1,7 +1,17 @@
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import { catalogEntries, contributedTiles, entryHaystack, entryIcon, isDefaultName, openingName, suggestName, withIdentityPicker } from "./tiles";
+import {
+    catalogEntries,
+    contributedTiles,
+    entryHaystack,
+    entryIcon,
+    isDefaultName,
+    openingName,
+    suggestName,
+    withConnectionPickers,
+    withIdentityPicker,
+} from "./tiles";
 
 // Join between a tile and the connections it's answerable for. Each case is one somebody hit: a tile owning two
 // providers, two extensions declaring the same connector, a repeat add that must not overwrite the connection
@@ -122,6 +132,37 @@ test(`offers the identities that exist, and drops the field entirely when none d
     // Every other kind of tile is untouched, including its object identity.
     const cli = tile();
     expect(withIdentityPicker(cli, [`ada`])).toBe(cli);
+});
+
+// A field naming another connection is answered from the connections that exist: their names after the empty choice,
+// which says in the field's own placeholder what leaving it empty means; none to pick leaves it with no options at all.
+test(`makes a field naming another connection a picker of the ones its kind and card allow`, () => {
+    const identity = tile({
+        id: `identity`,
+        kind: `identity`,
+        fields: [
+            { key: `email`, label: `Email` },
+            { key: `mailbox`, label: `Code mailbox`, placeholder: `None`, connection: { kind: `cli`, provider: `imap` } },
+            { key: `exit`, label: `Browse through`, connection: { kind: `exit` } },
+        ],
+    });
+    const live = [instance(`mail`, `cli`, { provider: `imap` }), instance(`github`, `cli`, { provider: `github` })];
+
+    const picked = withConnectionPickers(identity, live);
+
+    expect(picked.fields[1]?.options).toEqual([
+        { value: ``, label: `None` },
+        { value: `mail`, label: `mail` },
+    ]);
+    // No Geo exit is connected: no options, which the row reads as "nothing to pick yet".
+    expect(picked.fields[2]?.options).toEqual([]);
+    expect(picked.fields[0]).toBe(identity.fields[0]);
+    // A tile with no such field is returned as is.
+    const plain = tile();
+    expect(withConnectionPickers(plain, live)).toBe(plain);
+    // The built-in disk's `via` lists the connected computers, through the catalog the page reads.
+    const disk = catalogEntries([], [instance(`rog`, `device`, { platform: `windows` })]).find((entry) => entry.id === `netdisk`);
+    expect(disk?.fields.find((field) => field.key === `via`)?.options?.map((option) => option.value)).toEqual([``, `rog`]);
 });
 
 // First declaration of a kind+id wins (contributionRegistry's precedent); two extensions shipping `github` must not

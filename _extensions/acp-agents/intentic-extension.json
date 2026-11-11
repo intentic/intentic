@@ -21,7 +21,7 @@
                 "fields": [
                     { "key": "command", "label": "Command", "default": "opencode acp" },
                     { "key": "name", "label": "Display name", "default": "OpenCode", "optional": true },
-                    { "key": "env", "label": "Environment (KEY=VALUE per line)", "secret": true, "optional": true, "multiline": true },
+                    { "key": "env", "label": "Environment", "secret": true, "optional": true, "multiline": true, "keyValue": true },
                     { "key": "loginCommand", "label": "Login command", "default": "opencode auth login", "optional": true }
                 ]
             },
@@ -33,20 +33,21 @@
                     "logo": "googlegemini",
                     "description": "Run Google's Gemini CLI as a chat provider.",
                     "category": "extend",
-                    "hint": "Provide GEMINI_API_KEY in the environment, or run the CLI's login in a Terminal once."
+                    "hint": "Sign in opens Gemini in a terminal: choose Sign in with Google, open the link it prints and paste the code back. Or add GEMINI_API_KEY under Environment."
                 },
                 "fields": [
                     { "key": "command", "label": "Command", "default": "gemini --experimental-acp" },
                     { "key": "name", "label": "Display name", "default": "Gemini", "optional": true },
                     {
                         "key": "env",
-                        "label": "Environment (KEY=VALUE per line)",
+                        "label": "Environment",
                         "placeholder": "GEMINI_API_KEY=…",
                         "secret": true,
                         "optional": true,
-                        "multiline": true
+                        "multiline": true,
+                        "keyValue": true
                     },
-                    { "key": "loginCommand", "label": "Login command", "optional": true }
+                    { "key": "loginCommand", "label": "Login command", "default": "NO_BROWSER=true gemini", "optional": true }
                 ]
             },
             {
@@ -62,7 +63,7 @@
                         "linkLabel": "Browse ACP agents",
                         "steps": [
                             "Pick an agent from `agentclientprotocol.com`, note its run command.",
-                            "API key? Add a `KEY=VALUE` line to the environment block.",
+                            "API key? Add it under `Environment`, its name and its value.",
                             "Device-code sign-in? Add its login command and run it after adding.",
                             "The agent then appears as a provider in the chat's model picker."
                         ]
@@ -71,7 +72,7 @@
                 "fields": [
                     { "key": "command", "label": "Command", "placeholder": "npx -y my-acp-agent" },
                     { "key": "name", "label": "Display name", "optional": true },
-                    { "key": "env", "label": "Environment (KEY=VALUE per line)", "secret": true, "optional": true, "multiline": true },
+                    { "key": "env", "label": "Environment", "secret": true, "optional": true, "multiline": true, "keyValue": true },
                     { "key": "loginCommand", "label": "Login command", "optional": true }
                 ]
             }

@@ -13,6 +13,7 @@ import { capabilitySecretsDocument, fileSecretVault, type SecretVault } from "./
 import { dismissalsDocument, type DismissalsStore, fileDismissalsStore } from "./offers/dismissals-store.js";
 import { openBrowserAccount, type OpenAccountInput } from "./open-account.js";
 import { accountSignInUrls } from "./account-sign-in.js";
+import { createMcpSignIns, type McpSignIns } from "./mcp-oauth/mcp-sign-ins.js";
 
 // The capability manifest as turns and routes read it, its vaulted secrets, and the tools every turn carries.
 export interface CapabilitiesSlice {
@@ -28,6 +29,8 @@ export interface CapabilitiesSlice {
     // Where an account signs in (account-sign-in.ts): what type_credential holds a live page's host to.
     readonly accountSignInUrls: (capability: Capability) => Promise<readonly string[]>;
     readonly composeEnvironment: () => Promise<ComposedOverlay | undefined>;
+    // MCP servers' OAuth sign-ins and the upkeep of their tokens (mcp-oauth/mcp-sign-ins.ts).
+    readonly mcpSignIns: McpSignIns;
 }
 
 export interface CapabilitiesDeps {
@@ -94,6 +97,13 @@ export const createCapabilitiesSlice = ({ config, logger, workspaceRoot, authRoo
             openBrowserAccount: (input) => openBrowserAccount(whole(), input),
             accountSignInUrls: (capability) => accountSignInUrls(connectors, capability),
             composeEnvironment: () => composeEnvironment(whole()),
+            mcpSignIns: createMcpSignIns({
+                store: capabilities,
+                // The browser lands on this sandbox's public address; one with none (a local daemon) is reached on loopback.
+                callbackBase: () => config.sandbox.publicUrl || `http://localhost:${config.sandbox.port}`,
+                clientName: () => (config.sandbox.name === "" ? "Intentic" : `Intentic (${config.sandbox.name})`),
+                logger,
+            }),
         },
     };
 };

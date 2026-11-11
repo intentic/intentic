@@ -80,7 +80,7 @@ export const turnToolsOf = async (
         return {
             tools: [
                 ...services.tools,
-                ...mcpToolsOf(granted),
+                ...mcpToolsOf(granted, lease),
                 ...peerToolsOf("device", granted, lease),
                 ...peerToolsOf("webext", granted, lease),
                 ...peerToolsOf("phone", granted, lease),

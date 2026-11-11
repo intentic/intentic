@@ -1483,7 +1483,32 @@
             "optional": " (opcjonalne)",
             "required": "Wymagane.",
             "sandboxContainerLocalhostPoints": "Sandbox to kontener: localhost wskazuje na sam sandbox.",
-            "useHostDockerInternal": "Użyj host.docker.internal"
+            "useHostDockerInternal": "Użyj host.docker.internal",
+            "noneToPick": "Na razie nie ma czego wybrać: najpierw coś podłącz, a pojawi się tutaj.",
+            "notConnected": "{name} (nie ma takiego połączenia)"
+        },
+        "keyValueField": {
+            "name": "Nazwa",
+            "value": "Wartość",
+            "valueOf": "Wartość {name}",
+            "remove": "Usuń {name}",
+            "add": "Dodaj zmienną",
+            "badName": "Nazwa to litery, cyfry i _, i nie zaczyna się od cyfry."
+        },
+        "certificateRequestField": {
+            "generate": "Wygeneruj klucz i żądanie",
+            "generateNew": "Wygeneruj nowy klucz i nowe żądanie",
+            "generating": "Generowanie klucza i żądania certyfikatu…",
+            "couldntGenerate": "Nie udało się wygenerować klucza",
+            "sandboxMakesKey": "Sandbox generuje klucz RSA i go przechowuje. Ty dostajesz tylko żądanie do wysłania wystawcy.",
+            "holdsKey": "To połączenie ma klucz wygenerowany przez sandbox.",
+            "request": "Żądanie certyfikatu (CSR)",
+            "subject": "Podmiot: {subject}",
+            "download": "Pobierz .csr",
+            "keyStays": "Klucz prywatny zostaje w sandboxie.",
+            "replacesOldKey": "Zapisanie zastąpi klucz tego połączenia: certyfikat wydany dla starego przestanie działać.",
+            "fillFirst": "Najpierw wypełnij: {fields}. Żądanie je zawiera.",
+            "generateFirst": "Najpierw wygeneruj klucz i żądanie."
         },
         "capabilityInstanceRow": {
             "finishSetup": "{detail}: Dokończ konfigurację →",
@@ -1652,6 +1677,8 @@
             "startedWithCompose": "Ten sandbox został uruchomiony przez Docker Compose? Uruchom to zamiast tego w folderze z jego docker-compose.yml, żeby Compose zachował swój kontener:"
         },
         "normalize": {
+            "applicationFromToken": "Identyfikator aplikacji odczytany z tokenu: {value}. Z niego powstaje link zaproszenia na połączonej karcie.",
+            "client": "klient {value}",
             "commit": "commit {value}",
             "configCount": "{count} konfiguracja | {count} konfiguracje | {count} konfiguracji",
             "database": "baza danych {value}",
@@ -1661,14 +1688,17 @@
             "passwordSet": "hasło ustawione",
             "peersMissing": "{configs}, ale tylko {count} sekcja [Peer]: konfiguracja bez swojego peera nie połączy się. Sprawdź wklejony tekst. | {configs}, ale tylko {count} sekcje [Peer]: konfiguracja bez swojego peera nie połączy się. Sprawdź wklejony tekst. | {configs}, ale tylko {count} sekcji [Peer]: konfiguracja bez swojego peera nie połączy się. Sprawdź wklejony tekst.",
             "port": "port {value}",
+            "readFromAzureCli": "Odczytane z wyniku Azure CLI: {parts}.",
             "readFromConnectionString": "Odczytane z connection stringa: {parts}.",
             "readFromPaste": "Odczytane z wklejonego tekstu: {parts}.",
             "readSummary": "Odczytano: {parts}.",
             "ref": "ref {value}",
             "repository": "repozytorium {value}",
             "sMailServer993": "Serwer pocztowy {domain} to {host}:993, wypełniliśmy to za Ciebie.",
+            "secretSet": "sekret ustawiony",
             "splitLink": "Rozłożony link: {parts}.",
             "subdirectory": "podkatalog {value}",
+            "tenant": "dzierżawa {value}",
             "user": "użytkownik {value}"
         },
         "pluginRegistryBrowse": {
@@ -1747,6 +1777,50 @@
             "showValue": "Pokaż wartość",
             "storedInSandboxs": "Przechowywane w"
         },
+        "mcpSignInField": {
+            "accessGranted": "Przyznany dostęp: {scopes}",
+            "accessUnstated": "Serwer nie podał, jaki dostęp przyznał.",
+            "addressChanged": "Adres zmienił się od tego logowania. Przed zapisaniem zaloguj się ponownie.",
+            "clientId": "ID klienta",
+            "clientIdHint": "{server} sam nie rejestruje aplikacji. Utwórz w jego ustawieniach aplikację OAuth z adresem przekierowania {redirect} i wpisz powyżej jej ID klienta.",
+            "connectedAs": "Połączono jako {who}",
+            "couldntStart": "Nie udało się rozpocząć logowania.",
+            "holdsToken": "To połączenie ma wklejony token. Zalogowanie się go zastąpi.",
+            "opens": "Otwiera {server} w nowym oknie do zatwierdzenia. Sandbox przechowuje tokeny i je odnawia.",
+            "opensServer": "Otwiera logowanie serwera w nowym oknie. Sandbox przechowuje tokeny i je odnawia.",
+            "pasteInstead": "Wklej token zamiast tego",
+            "popupBlocked": "Przeglądarka zablokowała okno logowania. Zezwól na wyskakujące okna dla tej strony i ponownie kliknij Zaloguj się.",
+            "reconnect": "Połącz ponownie",
+            "savingStores": "Zapisanie karty zachowuje logowanie.",
+            "signIn": "Zaloguj się",
+            "signInFirst": "Przed zapisaniem zaloguj się.",
+            "signInLabel": "Logowanie",
+            "signInTo": "Zaloguj się do {server}",
+            "signedInTo": "Zalogowano do {server}",
+            "stopWaiting": "Przestań czekać",
+            "waiting": "Czekam na zatwierdzenie w {server}…"
+        },
+        "microsoftSignInField": {
+            "changedSince": "Pole {field} zmieniło się po zalogowaniu. Zaloguj się ponownie przed zapisaniem.",
+            "connected": "Połączono z Microsoft",
+            "connectedAs": "Połączono jako {who}",
+            "copyCode": "Skopiuj kod",
+            "couldntFinish": "Nie udało się dokończyć logowania Microsoft.",
+            "couldntStart": "Nie udało się rozpocząć logowania Microsoft.",
+            "gettingCode": "Pobieranie kodu od Microsoft…",
+            "granted": "Przyznano: {permissions}. Zapisanie karty zachowuje logowanie.",
+            "microsoftAccount": "Konto Microsoft",
+            "openPage": "Otwórz logowanie Microsoft",
+            "opensMicrosoft": "Pokazuje kod do wpisania na stronie Microsoft, w nowej karcie.",
+            "reconnect": "Połącz ponownie",
+            "savingStores": "Zapisanie karty zachowuje logowanie.",
+            "signedIn": "Zalogowano. Połącz ponownie, aby zmienić konto lub dostęp.",
+            "signInFirst": "Przed zapisaniem zaloguj się przez Microsoft.",
+            "signInWithMicrosoft": "Zaloguj się przez Microsoft",
+            "stopWaiting": "Przestań czekać",
+            "typeCode": "Wpisz ten kod na stronie Microsoft i zaloguj się tam. Ten formularz zauważy to sam.",
+            "waiting": "Czekam, aż zalogujesz się na stronie Microsoft…"
+        },
         "sshKeyField": {
             "authorizeAs": "Autoryzuj go: uruchom to na serwerze, zalogowany jako {user}",
             "authorizeAsUserAbove": "Autoryzuj go: uruchom to na serwerze, zalogowany jako użytkownik podany wyżej",
@@ -1783,7 +1857,8 @@
             "waitingForGoogle": "Dokończ w oknie Google…"
         },
         "tiles": {
-            "standalone": "Samodzielne"
+            "standalone": "Samodzielne",
+            "noConnection": "Brak"
         },
         "webExtConnectDialog": {
             "connectedAllowOnSite": "jest podłączona. Zezwól jej na stronie w rozszerzeniu, a agent będzie mógł tam pracować od następnej tury.",
@@ -2047,7 +2122,7 @@
                         "1": "Tylko do odczytu: montowany jako `ro`; daj mu też na serwerze konto tylko do odczytu.",
                         "2": "Za VPN-em: najpierw dodaj kafelek VPN; przy każdym restarcie dysk montuje się dopiero po zestawieniu tunelu.",
                         "3": "Zamontuj go w jego wierszu poniżej; agent znajdzie pliki w `/mnt/netdisk/{'<'}nazwa>`.",
-                        "4": "Już otwarty na Twoim PC (przez jego VPN, jako dysk sieciowy)? Wpisz ten komputer w `Dostęp przez`."
+                        "4": "Już otwarty na Twoim PC (przez jego VPN, jako dysk sieciowy)? Wybierz ten komputer w `Dostęp przez`."
                     }
                 },
                 "fields": {
@@ -2101,8 +2176,8 @@
                     },
                     "via": {
                         "label": "Dostęp przez",
-                        "placeholder": "własna sieć sandboxa",
-                        "hint": "Połączony komputer, który sam otwiera ten udział, np. PC, na którym go mapujesz: wtedy obowiązują jego LAN, jego VPN i jego nazwy. Jego nazwa jak w Urządzeniach (rog). Musi być online, z włączonym „Uruchamianiem poleceń” lub „Uruchamianiem programów”."
+                        "placeholder": "Własna sieć sandboxa",
+                        "hint": "Połączony komputer, który sam otwiera ten udział, np. PC, na którym go mapujesz: wtedy obowiązują jego LAN, jego VPN i jego nazwy. Musi być online, z włączonym „Uruchamianiem poleceń” lub „Uruchamianiem programów”."
                     }
                 }
             },
@@ -2165,12 +2240,13 @@
             },
             "custom": {
                 "name": "Własny serwer MCP",
-                "description": "Dowolny zdalny serwer MCP, przez URL i token.",
+                "description": "Dowolny zdalny serwer MCP: zaloguj się albo wklej token.",
                 "guide": {
                     "steps": {
-                        "0": "Wklej URL serwera (Streamable HTTP albo SSE).",
-                        "1": "Serwer wymaga uwierzytelnienia? Wklej token typu bearer.",
-                        "2": "Agent połączy się w następnej turze."
+                        "0": "Wklej URL serwera (Streamable HTTP).",
+                        "1": "Wymaga logowania? Kliknij Zaloguj się i zatwierdź w przeglądarce.",
+                        "2": "Jeśli zamiast tego potrzebuje tokenu, wklej go z jego ustawień.",
+                        "3": "Agent połączy się w następnej turze."
                     }
                 },
                 "fields": {
@@ -2190,8 +2266,9 @@
                     "scopes": "dostępu do odczytu przy prywatnych repozytoriach (np. GitHub `repo`)",
                     "steps": {
                         "0": "Wskaż repozytorium git z wtyczką Claude Code.",
-                        "1": "Prywatne repozytorium: dodaj token z dostępem do odczytu.",
-                        "2": "Albo przejrzyj rejestr powyżej, żeby wstępnie wypełnić ten formularz."
+                        "1": "Prywatne repozytorium na GitHubie lub GitLabie: odczyta je Twoja podłączona karta tej usługi, bez wklejania czegokolwiek.",
+                        "2": "Gdzie indziej: token z dostępem do odczytu w sekcji Zaawansowane.",
+                        "3": "Albo przejrzyj rejestr powyżej, żeby wstępnie wypełnić ten formularz."
                     }
                 },
                 "fields": {
@@ -2202,10 +2279,15 @@
                         "label": "Gałąź, tag albo commit"
                     },
                     "token": {
-                        "label": "Token dostępu"
+                        "label": "Token dostępu",
+                        "hint": "Tylko dla repozytorium, którego nie odczyta żadne Twoje połączenie GitHub lub GitLab: używany zamiast niego."
                     },
                     "url": {
                         "label": "URL repozytorium git"
+                    },
+                    "gitConnection": {
+                        "label": "Połączenie GitHub lub GitLab",
+                        "hint": "Podłączona karta, której token odczytuje prywatne repozytorium na jej hoście. Puste: pierwsza według nazwy."
                     }
                 }
             },
@@ -2216,8 +2298,9 @@
                     "scopes": "dostępu do odczytu przy prywatnych repozytoriach (np. GitHub `repo`)",
                     "steps": {
                         "0": "Wskaż repozytorium z plikiem `intentic-extension.json`.",
-                        "1": "Wybierz gałąź albo wydanie: instalacja zostaje przypięta do jego obecnego commita i nie podąża za późniejszymi zmianami.",
-                        "2": "Po instalacji przeładuj aplikację, żeby wczytać interfejs rozszerzenia."
+                        "1": "Prywatne repozytorium na GitHubie lub GitLabie: odczyta je Twoja podłączona karta; gdzie indziej token w sekcji Zaawansowane.",
+                        "2": "Wybierz gałąź albo wydanie: instalacja zostaje przypięta do jego obecnego commita i nie podąża za późniejszymi zmianami.",
+                        "3": "Po instalacji przeładuj aplikację, żeby wczytać interfejs rozszerzenia."
                     }
                 },
                 "fields": {
@@ -2228,10 +2311,15 @@
                         "label": "Wersja"
                     },
                     "token": {
-                        "label": "Token dostępu"
+                        "label": "Token dostępu",
+                        "hint": "Tylko dla repozytorium, którego nie odczyta żadne Twoje połączenie GitHub lub GitLab: używany zamiast niego."
                     },
                     "url": {
                         "label": "URL repozytorium git"
+                    },
+                    "gitConnection": {
+                        "label": "Połączenie GitHub lub GitLab",
+                        "hint": "Podłączona karta, której token odczytuje prywatne repozytorium na jej hoście. Puste: pierwsza według nazwy."
                     }
                 }
             },
@@ -2277,15 +2365,15 @@
                 "guide": {
                     "scopes": "`provision`: tworzenie sandboxów na tym koncie i wystawianie ich kodów konfiguracyjnych, nic więcej",
                     "steps": {
-                        "0": "Menu Twojego konta → `Ustawienia` → `Tokeny` → `Utwórz token`.",
-                        "1": "Skopiuj go od razu, bo pokazuje się tylko raz. Jest przechowywany jako skrót, więc zgubionego nie da się odzyskać, tylko zastąpić nowym.",
-                        "2": "Wklej go tutaj. Zostaje przy demonie tego sandboxa i nigdy nie trafia do środowiska agenta.",
-                        "3": "Unieważnij go na tej samej stronie; tworzenie sandboxów ustaje w tej samej chwili."
+                        "0": "Naciśnij `Zezwól`: aplikacja tworzy token provisioningu dla tego sandboxa, widoczny pod jego nazwą w `Ustawienia` → `Tokeny`.",
+                        "1": "Zostaje przy demonie tego sandboxa i nigdy nie trafia do środowiska agenta.",
+                        "2": "Usuń tę kartę albo unieważnij tam token, a tworzenie sandboxów ustaje od razu."
                     }
                 },
                 "fields": {
                     "token": {
-                        "label": "Token provisioningu"
+                        "label": "Token provisioningu",
+                        "hint": "Tylko aby użyć tokenu, który utworzysz sam w Ustawienia ▸ Tokeny: Zezwól tworzy go za Ciebie."
                     }
                 }
             },
@@ -2296,9 +2384,9 @@
                 "guide": {
                     "scopes": "Uruchamia przekazane zadania, dopisuje do nich, zatrzymuje je i czyta ich raporty. Nic więcej z tamtego sandboxa: ani plików, ani innych rozmów, ani ustawień",
                     "steps": {
-                        "0": "Otwórz drugi sandbox → `Sandbox` → `Dostęp` → `Połączone sandboxy` → `Nowe połączenie` i nazwij tam ten sandbox.",
-                        "1": "Wybierz, jaką personę noszą jego zadania, czy każde czeka na Ciebie i ile tur na godzinę może uruchomić.",
-                        "2": "Skopiuj token od razu i wklej go tutaj razem z adresem tamtego sandboxa.",
+                        "0": "Wybierz powyżej drugi sandbox, jaką personę noszą jego zadania, czy każde czeka tam na Ciebie i ile tur na godzinę może uruchomić.",
+                        "1": "`Połącz` tworzy połączenie tam, na Twoim własnym logowaniu, i dodaje je tutaj: nic do kopiowania.",
+                        "2": "Dostępne dla sandboxa, którego jesteś właścicielem lub opiekunem. Dla każdego innego jego właściciel tworzy połączenie tam (`Sandbox` → `Dostęp` → `Połączone sandboxy` → `Nowe połączenie`), a jego adres i token trafiają do sekcji Zaawansowane.",
                         "3": "Unieważnij połączenie tam; zadania przestają docierać w tej samej chwili."
                     }
                 },
@@ -2334,16 +2422,16 @@
                     "exit": {
                         "hint": "Podłączone wyjście w innym kraju: każde konto tej tożsamości przegląda strony z tamtego kraju.",
                         "label": "Przeglądaj przez",
-                        "placeholder": "nazwa wyjścia w innym kraju"
+                        "placeholder": "Własny adres tego sandboxa"
                     },
                     "loginUrl": {
                         "hint": "Gdy puste, zgadywana z adresu.",
                         "label": "Strona logowania"
                     },
                     "mailbox": {
-                        "hint": "Podłączony wpis IMAP: agent pobiera kody weryfikacyjne, nigdy całą skrzynkę.",
+                        "hint": "Podłączona skrzynka IMAP: agent pobiera kody weryfikacyjne, nigdy całą skrzynkę.",
                         "label": "Skrzynka na kody",
-                        "placeholder": "nazwa połączenia IMAP"
+                        "placeholder": "Brak"
                     },
                     "openAccounts": {
                         "hint": "Automatyczna rejestracja łamie regulaminy wielu platform: decyzja należy do Ciebie.",
@@ -2542,7 +2630,7 @@
                 "exit": {
                     "hint": "Podłączone wyjście w innym kraju: to konto przegląda wtedy strony z tamtego kraju.",
                     "label": "Przeglądaj przez",
-                    "placeholder": "nazwa wyjścia w innym kraju"
+                    "placeholder": "Własny adres tego sandboxa"
                 },
                 "identity": {
                     "hint": "Korzysta z przeglądarki tej tożsamości, więc „Kontynuuj z” jej dostawcą to jedno kliknięcie.",
@@ -2686,7 +2774,7 @@
         },
         "linkPairing": {
             "title": "Sparuj z jednym ze swoich sandboxów",
-            "explain": "Wybierz sandbox, który przyjmie zadania, i zdecyduj, co mogą tam robić. Ten edytor jest zalogowany do obu, więc tworzy połączenie tam i wypełnia ten formularz; nic nie przechodzi przez serwery intentic.",
+            "explain": "Wybierz sandbox, który przyjmie zadania, i zdecyduj, co mogą tam robić. Ten edytor jest zalogowany do obu, więc tworzy połączenie tam i dodaje je tutaj: nic do kopiowania i nic nie przechodzi przez serwery intentic.",
             "noOthers": "Nie masz jeszcze innego sandboxa do połączenia. Utwórz go na swoim koncie albo kartą Flota sandboxów.",
             "which": "Sandbox",
             "pickOne": "Wybierz sandbox",
@@ -2697,12 +2785,19 @@
             "turnsAnHour": "tur na godzinę",
             "shareRecords": "Udostępniaj tu jego zapisy",
             "shareRecordsHint": "Pozwala temu sandboxowi czytać rozmowy, transkrypcje, logi i diagnostykę tamtego bez rozpoczynania tam tury. Tylko do odczytu; prywatne rozmowy pozostają prywatne.",
-            "pair": "Sparuj",
-            "paired": "Połączono z {name}. Dodaj kartę, aby zakończyć.",
+            "pair": "Połącz",
+            "paired": "Połączono z {name}.",
             "thisSandbox": "ten sandbox",
             "tooOld": "{name} działa na zbyt starym sandboxie dla połączeń. Zaktualizuj go i sparuj ponownie.",
             "couldntPair": "Nie udało się utworzyć połączenia na {name}.",
-            "couldntReadPersonas": "Nie udało się odczytać person tamtego sandboxa."
+            "couldntReadPersonas": "Nie udało się odczytać person tamtego sandboxa.",
+            "cloud": "chmura Intentic",
+            "awake": "aktywny",
+            "asleep": "uśpiony",
+            "starting": "uruchamia się",
+            "down": "nie działa",
+            "machineOff": "uśpiony, jego komputer jest wyłączony",
+            "heard": "ostatni kontakt {ago}"
         },
         "extensionCatalog": {
             "microsoft365": {
@@ -2717,9 +2812,8 @@
                         "1": "Skopiuj z przeglądu `Identyfikator katalogu (dzierżawy)` i `Identyfikator aplikacji (klienta)` do tej karty.",
                         "2": "`Uwierzytelnianie` → `Zezwalaj na przepływy klienta publicznego`: `Tak`. Dzięki temu logowanie działa bez adresu przekierowania i bez sekretu.",
                         "3": "`Uprawnienia interfejsu API` → `Microsoft Graph` → `Uprawnienia delegowane`: dodaj uprawnienia wymienione wyżej, a jeśli dzierżawa tego wymaga, `Udziel zgody administratora`.",
-                        "4": "Zapisz kartę i w czacie, który obserwujesz, poproś agenta o uruchomienie `m365 auth login`. Otwórz podaną stronę Microsoft we własnej przeglądarce, wpisz kod i zaloguj się jako pracownik.",
-                        "5": "Logowanie zapisuje się na tej karcie samo i nigdy nie pojawia się w czacie. Aby z niego skorzystać, zacznij nowy czat albo naciśnij `Testuj`.",
-                        "6": "Zmiana tego, co może agent (tylko odczyt albo odczyt i zapis), wymaga ponownego logowania."
+                        "4": "Naciśnij na tej karcie `Zaloguj się przez Microsoft`, otwórz obok stronę Microsoft, wpisz pokazany tu kod i zaloguj się jako pracownik. Potem zapisz kartę.",
+                        "5": "Logowanie zostaje na tej karcie i nigdy nie jest pokazywane. Aby zmienić użytkownika albo po zmianie tego, co może agent, otwórz kartę i naciśnij `Połącz ponownie`."
                     }
                 },
                 "fields": {
@@ -2746,12 +2840,12 @@
                         }
                     },
                     "refreshToken": {
-                        "label": "Logowanie",
-                        "hint": "Wypełnia je `m365 auth login`; zostaw puste."
+                        "label": "Token odświeżania",
+                        "hint": "Z własnego przepływu kodu autoryzacji aplikacji, dla aplikacji z sekretem klienta. Bez sekretu ta karta loguje się sama."
                     },
                     "clientSecret": {
                         "label": "Sekret klienta (tylko aplikacje poufne)",
-                        "hint": "Tylko dla aplikacji, która loguje się własnym przepływem kodu autoryzacji i wkleja token odświeżania powyżej. Przy zwykłym logowaniu zostaw puste."
+                        "hint": "Tylko dla aplikacji, która loguje się własnym przepływem kodu autoryzacji i wkleja token odświeżania powyżej. Zostaw puste, aby zalogować się tu przez Microsoft."
                     }
                 }
             },
@@ -2763,7 +2857,7 @@
                     "steps": {
                         "0": "Gmail: włącz `Weryfikację dwuetapową`, a potem użyj `hasła aplikacji` (link powyżej).",
                         "1": "Outlook.com: `account.microsoft.com` → `Zabezpieczenia` → `Hasła aplikacji`.",
-                        "2": "Exchange Online (Microsoft 365 w pracy) nie przyjmuje haseł przez IMAP: wybierz `OAuth2`. W Entra ID zarejestruj aplikację z włączonym `Zezwalaj na przepływy klienta publicznego` i delegowanymi uprawnieniami `Office 365 Exchange Online` `IMAP.AccessAsUser.All` oraz `SMTP.Send`, wpisz tu jej identyfikatory dzierżawy i klienta, a potem poproś agenta o `imap login`. Do poczty, kalendarza i plików Outlook naraz lepiej pasuje karta Microsoft 365.",
+                        "2": "Exchange Online (Microsoft 365 w pracy) nie przyjmuje haseł przez IMAP: wybierz `OAuth2`. W Entra ID zarejestruj aplikację z włączonym `Zezwalaj na przepływy klienta publicznego` i delegowanymi uprawnieniami `Office 365 Exchange Online` `IMAP.AccessAsUser.All` oraz `SMTP.Send`, wpisz tu jej identyfikatory dzierżawy i klienta, a potem naciśnij `Zaloguj się przez Microsoft`, wpisz pokazany tu kod na stronie Microsoft i zaloguj się jako właściciel skrzynki. Do poczty, kalendarza i plików Outlook naraz lepiej pasuje karta Microsoft 365.",
                         "3": "Gmail przez OAuth2: klient OAuth z zakresem `https://mail.google.com/`; wklej jego identyfikator, sekret i token odświeżania.",
                         "4": "Gdzie indziej działa zwykłe hasło IMAP.",
                         "5": "Wpisz swój adres w polu `Nazwa użytkownika`: host i port uzupełnią się same."
@@ -2809,7 +2903,7 @@
                     },
                     "oauthRefreshToken": {
                         "label": "Token odświeżania",
-                        "hint": "Exchange Online: zostaw puste, wypełni je `imap login`. Gmail: wklej token z zakresem https://mail.google.com/."
+                        "hint": "Gmail: wklej token z zakresem https://mail.google.com/."
                     },
                     "accessToken": {
                         "label": "Token dostępu",
@@ -2844,14 +2938,13 @@
                 "description": "Witryny, biblioteki dokumentów i listy SharePoint.",
                 "hint": "Dostęp aplikacji zarządzanej przez administratora. Najlepiej z Sites.Selected i dostępem przyznanym do konkretnych witryn. Do poczty Outlook, kalendarza i plików pracownika połącz raczej Microsoft 365. Sekrety klienta wygasają: wymień sekret, gdy Graph odpowie 401.",
                 "guide": {
-                    "linkLabel": "Otwórz rejestracje aplikacji w Entra ID",
+                    "linkLabel": "Otwórz Azure Cloud Shell",
                     "scopes": "uprawnienia aplikacji `Sites.Read.All`, do zapisu `Sites.ReadWrite.All`, a dla wybranych witryn `Sites.Selected`",
                     "steps": {
-                        "0": "`Rejestracje aplikacji` → `Nowa rejestracja`: jedna dzierżawa, bez adresu przekierowania.",
-                        "1": "Skopiuj z przeglądu identyfikator klienta i identyfikator dzierżawy.",
-                        "2": "`Certyfikaty i wpisy tajne` → `Nowy wpis tajny klienta`, skopiuj jego `Wartość` (widać ją tylko raz).",
-                        "3": "`Uprawnienia interfejsu API` → `Microsoft Graph` → `Uprawnienia aplikacji`: dodaj `Sites.Read.All` lub `Sites.Selected`, a potem `Udziel zgody administratora`.",
-                        "4": "`Sites.Selected` nie daje dostępu do niczego, dopóki właściciel witryny nie przyzna tej aplikacji dostępu do każdej z nich."
+                        "0": "Zalogowany jako administrator globalny lub administrator ról uprzywilejowanych, uruchom w Cloud Shell: `app=$(az ad app create --display-name Intentic-SharePoint --sign-in-audience AzureADMyOrg --query appId -o tsv) && az ad sp create --id $app -o none && az ad app permission add --id $app --api 00000003-0000-0000-c000-000000000000 --api-permissions 332a536c-c7ef-4017-ab91-336970924f0d=Role && sleep 20 && az ad app permission admin-consent --id $app; az ad app credential reset --id $app --display-name Intentic -o json`",
+                        "1": "Wklej wypisany JSON w dowolne pole tutaj: dzierżawa, identyfikator klienta i sekret wypełnią się same.",
+                        "2": "Dla `Sites.Selected` wpisz `883ea226-0bf2-4a8f-9f9d-92c9162a727d` w miejsce `332a536c-c7ef-4017-ab91-336970924f0d`; nie daje dostępu do niczego, dopóki właściciel witryny nie przyzna tej aplikacji dostępu do każdej z nich.",
+                        "3": "Ręcznie: w `entra.microsoft.com` `Rejestracje aplikacji` → `Nowa rejestracja`; `Certyfikaty i wpisy tajne` → `Nowy wpis tajny klienta` (skopiuj jego `Wartość`); `Uprawnienia interfejsu API` → `Microsoft Graph` → `Uprawnienia aplikacji` → `Sites.Read.All` → `Udziel zgody administratora`."
                     }
                 },
                 "fields": {
@@ -2974,6 +3067,28 @@
             "ciSynced": "Aktualna",
             "ciOutOfDate": "Nieaktualna",
             "whoChanges": "Zmienić to może właściciel, ktoś z pełnym dostępem albo ktoś, kto zarządza Sekretami."
+        },
+        "fleetAllow": {
+            "title": "Zezwól temu sandboxowi na Twoim koncie",
+            "allows": "Pozwala agentowi tutaj tworzyć sandboxy na Twoim koncie, {email}, wyświetlać je i przenosić je do kosza. Przed każdym utworzeniem lub usunięciem pyta Cię na czacie.",
+            "allowsYours": "Pozwala agentowi tutaj tworzyć sandboxy na Twoim koncie, wyświetlać je i przenosić je do kosza. Przed każdym utworzeniem lub usunięciem pyta Cię na czacie.",
+            "limits": "Nowe sandboxy powstają na podłączonym przez Ciebie komputerze, nigdy na maszynie hostowanej, więc nie zużywa to Twojego planu. Nie może czytać Twoich innych sandboxów ani tworzyć innych tokenów, a token nigdy nie trafia do agenta.",
+            "allow": "Zezwól",
+            "allowAgain": "Zezwól ponownie",
+            "listedAs": "Widoczny w Ustawienia ▸ Tokeny jako „{label}”.",
+            "allowed": "Zezwolono. Jego token jest w Ustawienia ▸ Tokeny pod nazwą tego sandboxa, a usunięcie tej karty go unieważnia.",
+            "pasted": "Połączono wklejonym tokenem. Unieważnij go w Ustawienia ▸ Tokeny.",
+            "ownerOnly": "Zezwolić może tylko właściciel tego sandboxa: token działa na koncie tego, kto go tworzy.",
+            "couldNotAllow": "Nie udało się zezwolić temu sandboxowi na Twoim koncie.",
+            "tokenLabel": "Flota sandboxów: {name}",
+            "tokenLabelUnnamed": "Flota sandboxów: ten sandbox"
+        },
+        "gitConnectionField": {
+            "uses": "Odczytuje je przez Twoje połączenie {provider} „{name}”.",
+            "overrideHint": "Token w sekcji Zaawansowane zostanie użyty zamiast niego, dla repozytorium, którego ono nie odczyta.",
+            "readsWith": "Odczytuje przez",
+            "severalHint": "Do tego hosta prowadzi więcej niż jedno połączenie {provider}: repozytorium odczyta wybrane.",
+            "tokenInstead": "Używa tokenu dostępu z sekcji Zaawansowane zamiast Twojego połączenia {provider}."
         }
     },
     "chat": {
@@ -11392,11 +11507,11 @@
             "mintToken": "Utwórz token",
             "minted": "{scope} · utworzony {date}",
             "neverUsed": "jeszcze nieużyty",
-            "pastePath": "Możliwości → Flota sandboxów → Provisioning token",
+            "pastePath": "Możliwości → Flota sandboxów → Zaawansowane → Provisioning token",
             "readingTokens": "Odczytywanie tokenów…",
             "shownOnceCopyNow": "Pokazywany raz. Skopiuj go teraz: przechowywany jest tylko jego skrót.",
             "used": "użyty {ago}",
-            "whatProvisioningTokensAre": "Token provisioningowy pozwala jednemu z Twoich sandboxów tworzyć sandboxy na tym koncie. Wklej go w możliwość „Flota sandboxów” tego sandboxa; każdy sandbox tworzony przez jego agenta i tak najpierw zapyta Cię na czacie.",
+            "whatProvisioningTokensAre": "Token provisioningowy pozwala jednemu z Twoich sandboxów tworzyć sandboxy na tym koncie. Karta „Flota sandboxów” sandboxa tworzy własny jednym kliknięciem; utwórz go tutaj tylko po to, by wkleić go ręcznie. Każdy sandbox tworzony przez jego agenta i tak najpierw zapyta Cię na czacie.",
             "whereItGoes": "Gdzie go wkleić",
             "unavailable": "Tokeny nie są jeszcze dostępne na tym serwerze.",
             "notAllowed": "Twoje konto nie może tu zarządzać tokenami.",

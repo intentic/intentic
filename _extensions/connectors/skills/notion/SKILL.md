@@ -14,9 +14,10 @@ notion() { local m="$1" p="$2"; shift 2; curl -s -X "$m" -H "Authorization: Bear
   "$NOTION_API_URL/v1/$p" "$@"; }
 ```
 
-The integration only sees pages and databases someone shared with it (page `•••` → `Connections`); sub-pages
-inherit. **A 404 (`object_not_found`) therefore usually means "not shared", not "does not exist"**: report it
-that way and ask the user to share the page rather than concluding it is gone.
+A personal access token sees what the person who made it sees. An internal connection's token sees only the pages
+and databases someone shared with it (page `•••` → `Connections`); sub-pages inherit. **A 404 (`object_not_found`)
+therefore usually means "not shared" (or, for a personal token, not visible to its owner), not "does not exist"**:
+report it that way and ask the user to share the page rather than concluding it is gone.
 
 - Who am I: `notion GET users/me | jq '{name, workspace: .bot.workspace_name}'`
 - Search, titles only, across everything shared: `notion POST search -d '{"query":"<QUERY>","page_size":20}' | jq -c '.results[] | {id, object, url}'` (add `"filter":{"property":"object","value":"page"}` (or `"value":"database"`) to narrow; an empty query lists everything shared)

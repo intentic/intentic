@@ -2,7 +2,7 @@ import type { CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabi
 import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import type { Services } from "../composition.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
-import { fleetWhoami } from "../sandboxes/fleet-client.js";
+import { fleetRelease, fleetWhoami } from "../sandboxes/fleet-client.js";
 import { relayWalletEnsure } from "../wallet/wallet-signer.js";
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";
@@ -55,6 +55,9 @@ export interface CapabilityCtx {
     // Whether a provisioning token still names an account, the `fleet` handler's whole platform reach. Closure-wrapped
     // for the same reason as the wallet's: a handler holds no Config and no platform address of its own.
     readonly fleetWhoami: (token: string) => Promise<{ readonly status: number; readonly body: string }>;
+    // The token revoking itself, for one the editor minted for the card (its `tokenId`): what removing that card, or
+    // replacing its token, does on the platform.
+    readonly fleetRelease: (token: string) => Promise<{ readonly status: number; readonly body: string }>;
     readonly scaffoldNeutralLedger: (session: string) => Promise<void>;
     readonly ensureIntentInstallable: (session: string) => Promise<void>;
     readonly scaffoldMonorepo: (name: string, session: string) => Promise<void>;
@@ -65,6 +68,8 @@ export interface CapabilityCtx {
     // Where an SSH private key goes instead of a file the agent reads: the ssh card's key and a git account's
     // (ssh-key-store.ts), signed with by the sandbox's ssh agent.
     readonly sshKeys: Services["sshKeys"];
+    // An MCP server's sign-in upkeep: what its URL asks for, and a signed-in connection's bearer, renewed when due.
+    readonly mcpSignIns: Pick<Services["mcpSignIns"], "check" | "bearer">;
 }
 
 // A capability kind's behavior: apply is idempotent and streams progress, status is a fast non-blocking probe.
@@ -124,11 +129,13 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         historyRoot: services.config.historyRoot,
         walletEnsure: (network) => relayWalletEnsure(services.config, network),
         fleetWhoami: (token) => fleetWhoami(services.config, token),
+        fleetRelease: (token) => fleetRelease(services.config, token),
         scaffoldNeutralLedger: (session) => scaffoldNeutralLedger(services, session),
         ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
         scaffoldMonorepo: (name, session) => scaffoldAppMonorepo(services, name, session),
         probeAcpAgent: services.probeAcpAgent,
         probePiAgent: services.probePiAgent,
         sshKeys: services.sshKeys,
+        mcpSignIns: services.mcpSignIns,
     };
 };

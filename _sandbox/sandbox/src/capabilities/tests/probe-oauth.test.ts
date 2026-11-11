@@ -44,3 +44,18 @@ test("an authority outside Microsoft's clouds is refused before the network, and
     ).rejects.toThrow("Unsupported");
     await expect(probeOAuth(oauth, "https://graph.microsoft.com/v1.0/me", answering({ error: "invalid_grant" }))).rejects.toThrow("no token");
 });
+
+test("only a refresh token or an app's own secret is traded for a test's bearer, never a password", async () => {
+    const transport = async (): Promise<never> => {
+        throw new Error("must not call network");
+    };
+    await expect(
+        probeOAuth({ ...oauth, form: { grant_type: "password", username: "u", password: "p" } }, "https://graph.microsoft.com/v1.0/me", transport),
+    ).rejects.toThrow("Unsupported OAuth probe grant");
+    const appOnly = { ...oauth, form: { grant_type: "client_credentials", client_id: "c", client_secret: "s", scope: "https://graph.microsoft.com/.default" } };
+    const answer = async () => ({ status: 200, headers: {}, truncated: false, body: Buffer.from(JSON.stringify({ access_token: "app" })) });
+    expect(await probeOAuth(appOnly, "https://graph.microsoft.com/v1.0/sites/root", answer)).toEqual({
+        url: "https://graph.microsoft.com/v1.0/sites/root",
+        token: "app",
+    });
+});

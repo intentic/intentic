@@ -210,6 +210,9 @@ export const RAW_ROUTES = {
     "GET /extension/events": { floor: "maintainer", panel: false, control: "never", stream: true },
     // The CI webhook receiver, gated by the per-sandbox webhook secret.
     "POST /ci/webhook/{host}": { auth: "door" },
+    // Where an MCP server's authorization server sends the browser back (capabilities/mcp-oauth/): gated by the state of
+    // a sign-in this daemon started, and worth nothing without the PKCE verifier only the daemon holds.
+    "GET /oauth/mcp/callback": { auth: "door", control: "never" },
     // Below maintainer a pairing is capped to port-mirror, so a collaborator may mint a preview tunnel.
     "POST /system/sync/pair": { floor: "collaborator", control: "never" },
     // A copy-paste command's short code, redeemed by the install script it was handed to: a device's first contact,

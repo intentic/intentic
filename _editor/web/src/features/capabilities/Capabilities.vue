@@ -32,7 +32,7 @@ import { useLiveLinks } from "../../models/sandbox/devices/useLiveLinks";
 import { useRole } from "../../client/sandbox/useRole";
 import { useBackgroundProcesses, viewProcessLogs } from "../../models/terminal/useBackgroundProcesses";
 import { useCapabilityCatalog } from "./capabilityCatalog";
-import { swallowFileDrag, takenNameWords, useCapabilityForm } from "./capabilityForm";
+import { addsByItself, swallowFileDrag, takenNameWords, useCapabilityForm } from "./capabilityForm";
 import { useCapabilityPairing } from "./capabilityPairing";
 import { useCapabilityProbe } from "./capabilityProbe";
 import { useCapabilityRoute } from "./capabilityRoute";
@@ -42,7 +42,7 @@ import BrowserProfileDialog from "./connect/BrowserProfileDialog.vue";
 import CapabilityConnections from "./connect/CapabilityConnections.vue";
 import CapabilityContext from "./connect/CapabilityContext.vue";
 import CapabilityEffects from "./connect/CapabilityEffects.vue";
-import CapabilityFieldRow from "../../components/CapabilityFieldRow.vue";
+import CapabilityFieldRow from "../../parts/capabilities/CapabilityFieldRow.vue";
 import CatalogDetail from "../../components/CatalogDetail.vue";
 import CatalogTile from "../../components/CatalogTile.vue";
 import CapabilityInstanceRow from "./connect/CapabilityInstanceRow.vue";
@@ -51,6 +51,8 @@ import CapabilityRenameDialog from "./connect/CapabilityRenameDialog.vue";
 import ForticlientImport from "./connect/ForticlientImport.vue";
 import LinkPairing from "../../components/LinkPairing.vue";
 import GitRefField from "./connect/GitRefField.vue";
+import FleetAllow from "./connect/FleetAllow.vue";
+import { useFieldStandIns } from "./model/fieldStandIns";
 import HostConnectDialog from "./connect/hosts/HostConnectDialog.vue";
 import PluginRegistryBrowse from "./connect/PluginRegistryBrowse.vue";
 import SyncOnlyDeviceRow from "./connect/SyncOnlyDeviceRow.vue";
@@ -66,7 +68,6 @@ import { deviceConnections } from "./model/deviceConnections";
 import { advancedLabel, inlineField } from "../../models/capabilities/form";
 import { hostGrantSummary, matchHostPreset } from "./model/previews";
 import { picksVersion } from "./model/refs";
-import { standInOf } from "../../models/capabilities/fieldStandIn";
 import { catalogEntries, entryIcon } from "../../models/capabilities/tiles";
 import { useSetupWalk } from "./setupWalk";
 import FieldStandIn from "./connect/FieldStandIn.vue";
@@ -161,6 +162,7 @@ const { probeResult, finishName, finishField, onFieldInput, onFieldPaste, fieldA
 const { fieldConfSummary, fieldPlaceholder, mainFields, advancedFields, versionToken, formSummary, liveEffects, hostPresetOptions } = form;
 const { applyHostPreset, applyRegistryPick, pickForticlient, pickLinked, auditable, updateFrom, submitLabel, keptSecrets } = form;
 const { probing, canProbe, runProbe, failure: probeFailure, meter: probeMeter } = useCapabilityProbe({ selected, form });
+const standIns = useFieldStandIns({ selected, editing, values, kept: keptSecrets, alarm: fieldAlarm });
 // Has an agent read the pinned code, or what an update changes, before the install is approved.
 const startAudit = (): void => void startAgent(auditPrompt(name.value, values, updateFrom.value));
 
@@ -379,13 +381,14 @@ onBeforeUnmount(() => {
                         <!-- Fills this form from FortiClient's own file; keyed on the tile so switching tiles clears the zone. -->
                         <ForticlientImport v-if="selected.kind === 'vpn'" :key="selected.id" @pick="pickForticlient" @notice="error = $event" />
 
-                        <!-- Pairs this sandbox with another of the reader's and fills this form; the fields stay for doing it by hand. -->
+                        <!-- Pairs this sandbox with another of the reader's and adds the card; the fields under Advanced are the way by hand. -->
                         <LinkPairing
                             v-if="selected.kind === 'link' && editing === undefined"
                             :key="selected.id"
-                            @pick="pickLinked"
+                            @pick="(paired) => (pickLinked(paired), void submit())"
                             @notice="error = $event"
                         />
+                        <FleetAllow v-if="selected.kind === 'fleet'" :instance="soleInstance" :save="add" @notice="error = $event" />
 
                         <!-- Where extensions are found, on the tile people arrive at wanting one. -->
                         <RouterLink
@@ -496,17 +499,12 @@ onBeforeUnmount(() => {
                                 :alarm="fieldAlarm(field)"
                                 @left="finishField(field)"
                             />
-                            <!-- A key the sandbox makes, or a sign-in through the platform's own client, in place of a box to paste into. -->
+                            <!-- A box answered by doing rather than typing: a key, a sign-in, the card a repository is read with. -->
                             <FieldStandIn
-                                v-else-if="standInOf(selected, field, values)"
-                                :kind="standInOf(selected, field, values)!"
-                                :field="field"
-                                :values="values"
-                                :entry="selected.id"
-                                :connection="editing?.id"
-                                :stored="keptSecrets.has(field.key)"
-                                :alarm="fieldAlarm(field)"
+                                v-else-if="standIns.of(field)"
+                                v-bind="standIns.of(field)!"
                                 @left="finishField(field)"
+                                @paste="standIns.paste()"
                             />
                             <CapabilityFieldRow
                                 v-else
@@ -579,7 +577,9 @@ onBeforeUnmount(() => {
                         <!-- What the probe said, and the save or test still running, above the submit (CapabilityFormStatus). -->
                         <CapabilityFormStatus :probe-result="probeResult" :submit-meter="submitMeter" :probe-meter="probeMeter" />
 
+                        <!-- A card whose own press adds it (a pairing, Allow) shows the by-hand Add only once that way is taken. -->
                         <div
+                            v-if="!addsByItself(selected, editing, advancedOpen, values)"
                             :class="[
                                 'sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 px-1 py-3',
                                 auditable ? 'justify-between' : 'justify-end',

@@ -17,6 +17,9 @@ ph() { POSTHOG_HOST=$POSTHOG_HOST POSTHOG_PROJECT_ID=$POSTHOG_PROJECT_ID POSTHOG
 `posthog-cli` reaches PATH when the sandbox is next rebuilt after this card was added. Until then put
 `npx -y @posthog/cli@latest` in place of `posthog-cli` in that line: same tool, slower first call.
 
+An empty `$POSTHOG_PROJECT_ID` is normal: the CLI then works in the project the key is scoped to.
+`ph call project-get '{}'` names that project and its `id`.
+
 ## The loop
 
 `ph --agent-help` is the canonical instruction sheet, generated from the same binary as the tools, so it cannot
@@ -49,7 +52,8 @@ be stale. Read it once per session before anything you have not done here before
    then sits in the single quotes SQL wants. `elements_chain` on an `$autocapture` row is the element the user
    actually clicked.
 4. Hand the owner the replay rather than a description of it:
-   `$POSTHOG_HOST/project/$POSTHOG_PROJECT_ID/replay/<session id>`.
+   `${host}/project/<project id>/replay/<session id>`, the project id being `$POSTHOG_PROJECT_ID` or, when that is
+   empty, `project-get`'s `id`.
 5. From an exception to the session that produced it: `query-error-tracking-issues-list`, then
    `query-error-tracking-issue-events` — each event carries `$session_id`, which is a recording id.
 6. "There is no recording" is a question the events answer: `$recording_status`,

@@ -61,7 +61,7 @@
                         "steps": [
                             "Gmail: turn on `2-Step Verification`, then use an `App Password` (link above).",
                             "Outlook.com: `account.microsoft.com` → `Security` → `App passwords`.",
-                            "Exchange Online (Microsoft 365 at work) accepts no passwords over IMAP: choose `OAuth2`. In Entra ID register an app with `Allow public client flows` on and the delegated `Office 365 Exchange Online` permissions `IMAP.AccessAsUser.All` and `SMTP.Send`, put its tenant and client IDs here, then ask the agent to run `imap login`. For Outlook mail, calendar and files together, the Microsoft 365 card is the better fit.",
+                            "Exchange Online (Microsoft 365 at work) accepts no passwords over IMAP: choose `OAuth2`. In Entra ID register an app with `Allow public client flows` on and the delegated `Office 365 Exchange Online` permissions `IMAP.AccessAsUser.All` and `SMTP.Send`, put its tenant and client IDs here, then press `Sign in with Microsoft`, type the code shown here on Microsoft's page and sign in as the mailbox owner. For Outlook mail, calendar and files together, the Microsoft 365 card is the better fit.",
                             "Gmail with OAuth2: an OAuth client with the `https://mail.google.com/` scope; paste its client ID, secret and a refresh token.",
                             "Anywhere else: your normal IMAP password works.",
                             "Paste your address into `Username`: the host and port fill themselves in."
@@ -135,7 +135,8 @@
                         "secret": true,
                         "optional": true,
                         "when": "authMode == 'oauth2' && oauthProvider != 'token'",
-                        "hint": "Exchange Online: leave it empty, `imap login` fills it in. Gmail: paste one with the https://mail.google.com/ scope."
+                        "signIn": "microsoft",
+                        "hint": "Gmail: paste one with the https://mail.google.com/ scope."
                     },
                     {
                         "key": "accessToken",
@@ -204,9 +205,20 @@
                     "IMAP_OAUTH_REFRESH_TOKEN": "${oauthRefreshToken}",
                     "IMAP_ACCESS_TOKEN": "${accessToken}"
                 },
-                "refreshToken": { "field": "oauthRefreshToken", "boundTo": ["oauthProvider", "oauthTenant", "oauthClientId", "username"] },
+                "refreshToken": {
+                    "field": "oauthRefreshToken",
+                    "boundTo": ["oauthProvider", "oauthTenant", "oauthClientId", "username"],
+                    "deviceCode": {
+                        "when": "authMode == 'oauth2' && oauthProvider == 'microsoft' && !oauthClientSecret",
+                        "authorizeUrl": "https://login.microsoftonline.com/${oauthTenant:uri}/oauth2/v2.0/devicecode",
+                        "tokenUrl": "https://login.microsoftonline.com/${oauthTenant:uri}/oauth2/v2.0/token",
+                        "clientId": "${oauthClientId}",
+                        "scope": "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid profile"
+                    }
+                },
                 "hosts": ["${host}", "${smtpHost}", "login.microsoftonline.com", "oauth2.googleapis.com"],
-                "skill": "skills/imap/SKILL.md"
+                "skill": "skills/imap/SKILL.md",
+                "probe": { "connect": "imap", "host": "${host}", "port": "${port}", "user": "${username}", "password": "${password}" }
             }
         ]
     }

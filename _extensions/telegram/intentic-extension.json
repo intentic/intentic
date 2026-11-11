@@ -94,6 +94,10 @@
                     "TELEGRAM_BOT_TOKEN": "${botToken}"
                 },
                 "skill": "skills/telegram/SKILL.md",
+                "probe": {
+                    "url": "https://api.telegram.org/bot${botToken}/getMe",
+                    "identity": "result.username"
+                },
                 "broker": {
                     "routes": [
                         {

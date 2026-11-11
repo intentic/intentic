@@ -1,8 +1,8 @@
 import { stashedToken } from "@intentic/sandbox-contract/schemas/capabilities";
 import { randomBytes } from "node:crypto";
 
-// Credentials the sandbox made for a form that has not been saved yet (a generated SSH key's private half), held in
-// memory under a one-time token: the browser holds the token, never the value. A token installs its value once, and
+// Credentials the sandbox made for a form that has not been saved yet (a generated SSH key's private half, the refresh
+// token a sign-in on the form got), held in memory under a one-time token: the browser holds the token, never the value. A token installs its value once, and
 // lapses after the TTL whether used or not. Nothing here touches disk, so a restart forgets them, which costs only a
 // fresh key; what an add installs goes where every other credential goes, the vault.
 
@@ -17,6 +17,9 @@ export interface StashedSecret {
     readonly kind: string;
     readonly field: string;
     readonly value: string;
+    // The answers the value is only good for, by field key (a sign-in's tenant, client and access level, and the card
+    // it was made on): a form that changed one since is refused rather than saved with a token made for other settings.
+    readonly binding?: Readonly<Record<string, string>> | undefined;
 }
 
 export interface SecretStash {
@@ -75,13 +78,19 @@ export const unstash = (stash: SecretStash, kind: string, config: Readonly<Recor
         const held = stash.peek(token);
         if (held === undefined) {
             throw new StashRefusal(
-                "that generated key is no longer held: it was already saved, it lapsed after thirty minutes, or the sandbox restarted since. Generate a new one and authorize that one on the server instead",
+                kind === "ssh"
+                    ? "that generated key is no longer held: it was already saved, it lapsed after thirty minutes, or the sandbox restarted since. Generate a new one and authorize that one on the server instead"
+                    : "that sign-in is no longer held: it was already saved, it lapsed after thirty minutes, or the sandbox restarted since. Sign in again",
             );
         }
         if (held.kind !== kind || held.field !== field) {
             throw new StashRefusal(
                 `that generated key was made to be the ${held.field} of a ${held.kind} entry, so it is not used as ${kind} ${field}`,
             );
+        }
+        const moved = Object.entries(held.binding ?? {}).find(([key, bound]) => String(config[key] ?? "") !== bound);
+        if (moved !== undefined) {
+            throw new StashRefusal(`the ${moved[0]} changed after the sign-in, and the sign-in is only good for what it was made with. Sign in again`);
         }
         values[field] = held.value;
     }

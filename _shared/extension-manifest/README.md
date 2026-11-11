@@ -20,9 +20,20 @@ flowchart LR
   the fields it is bound to), so its own CLI and listener can store a new or rotated token through the daemon's
   write-only oauth-token route instead of printing it for someone to paste, and `probe.oauth`, which trades the token
   for an access token before the card's connection test (Microsoft's identity platform only, today).
-- A field declaring `signIn` (`google` today) is that refresh token's field filled by a sign-in button instead of a
-  box: the platform's own OAuth client runs the consent, and the card's CLI and listener get access tokens from the
-  daemon's `oauth-access` route, since the client secret stays on the platform.
+- A field declaring `signIn` is that refresh token's field filled by a sign-in button instead of a box. `google`: the
+  platform's own OAuth client runs the consent, and the card's CLI and listener get access tokens from the daemon's
+  `oauth-access` route, since the client secret stays on the platform. `microsoft`: the sandbox runs the device-code
+  sign-in the card's `refreshToken.deviceCode` declares, against the card's own app.
+- A card's `probe.ok` names a path in the answer that must hold `true`, for a service that answers 200 either way
+  (Slack's `auth.test`). Its `catalog.links` are links a connected card offers on its row (Discord's invite), built
+  in the browser from the connection's non-secret settings, so a template naming a secret field fails the parse. A
+  field's fixed `value` may sit under a `when`, one per arm of a choice (PostHog's region pins each cloud's host).
+- A card for a service not spoken to over HTTP declares `probe.connect` (`tcp`, `postgres`, `mysql`, `imap`) with the
+  host, port and sign-in as templates over its fields, in place of `url`; the daemon dials it as that service's own
+  client would. A field whose answer is not typed is declared on the field (`points/capability-field-shapes.ts`):
+  `connection` makes it a picker of the owner's connections of one kind, storing the chosen one's name; `keyValue`
+  draws a `KEY=VALUE` block as rows of a name and a value, storing the same text; `keyRequest` has the sandbox make a
+  private key and show only a certificate request for it.
 - `sandboxRouteAllowed` is the permission rule: an entry is `"<METHOD> <path-glob>"`, and each `*` stands alone
   between slashes and matches one whole path segment, never a `.` or `..` the URL would resolve away. A malformed entry
   (`**`, a `*` inside a segment, an unknown method, a relative path) fails the manifest parse rather than the first

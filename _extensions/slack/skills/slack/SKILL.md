@@ -14,58 +14,15 @@ message is addressed by its channel plus its `ts`.
 
 ## Setup (do this when the app isn't installed yet)
 
-Slack apps are created from a **manifest**. Give the user this one: it declares exactly the scopes and events
-this integration needs: and walk them through the five steps on the capability card:
+Don't write a manifest for the user: raise the Slack card for them (the `capabilities` skill). Its **Create the Slack
+app** link opens Slack's app creation with this integration's manifest already filled in (the bot scopes, the events,
+Socket Mode and Interactivity), and its steps walk the rest: **Basic Information → App-Level Tokens → Generate** with
+the `connections:write` scope (the `xapp-` token), **Install App → Install to Workspace** (the `xoxb-` token), and
+paste both onto the card, whose Test checks the bot token before saving. Finally the user invites the bot to each
+channel it should see: `/invite @intentic`. For the team to hand the app work by mentioning it, the owner switches on
+the **Team assistant on Slack** automation (Automations, under the suggestions).
 
-```yaml
-display_information:
-  name: intentic
-  description: Your agent, in Slack.
-features:
-  app_home:
-    home_tab_enabled: false
-    messages_tab_enabled: true
-    messages_tab_read_only_enabled: false
-  bot_user:
-    display_name: intentic
-    always_online: true
-oauth_config:
-  scopes:
-    bot:
-      - app_mentions:read
-      - channels:history
-      - channels:read
-      - chat:write
-      - groups:history
-      - groups:read
-      - im:history
-      - im:read
-      - im:write
-      - mpim:history
-      - reactions:read
-      - reactions:write
-      - users:read
-settings:
-  event_subscriptions:
-    bot_events:
-      - message.channels
-      - message.groups
-      - message.im
-      - message.mpim
-      - reaction_added
-      - member_joined_channel
-  interactivity:
-    is_enabled: true
-  socket_mode_enabled: true
-```
-
-Then: **Basic Information → App-Level Tokens → Generate** with the `connections:write` scope (that's the
-`xapp-` token), **Install App → Install to Workspace** (that's the `xoxb-` token), and paste both onto the
-Slack capability. Finally the user must invite the bot to each channel it should see: `/invite @intentic`.
-For the team to hand the app work by mentioning it, the owner switches on the **Team assistant on Slack**
-automation (Automations, under the suggestions).
-
-An app made from an older manifest lacks two things this one has: **Interactivity & Shortcuts** switched on
+An app made from an older manifest lacks two things the card's has: **Interactivity & Shortcuts** switched on
 (without it, the Stop button on a status card shows an error) and the `member_joined_channel` event (the hello
 when it is invited to a channel). Both are toggles on the app's dashboard; Socket Mode needs no request URL.
 

@@ -8,6 +8,7 @@ import { t } from "@intentic/ui/i18n";
 import { getCurrentScope, onScopeDispose, type Ref } from "vue";
 import { dismissOperation, operationsUnder, useOperation } from "../../workbench/operations/operations";
 import { sshKeyScope } from "../../models/capabilities/sshKey";
+import { keyRequestScope } from "../../models/capabilities/keyRequest";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import type { CapabilityForm } from "./capabilityForm";
 import { rememberSecrets } from "./model/devSecrets";
@@ -149,7 +150,7 @@ export const useCapabilitySubmit = (host: SubmitHost) => {
             return;
         }
         // A key made for this form is spent once the connection is saved with it (SshKeyField keeps it until then).
-        for (const made of operationsUnder(sshKeyScope(entry.id))) {
+        for (const made of [...operationsUnder(sshKeyScope(entry.id)), ...operationsUnder(keyRequestScope(entry.id))]) {
             dismissOperation(made.key);
         }
         if (!showing || selected.value?.id !== entry.id) {

@@ -1,4 +1,4 @@
-import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, type CapabilityCategory, contributionEntry } from "@intentic/capability-catalog";
+import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, type CapabilityCategory, connectionChoices, contributionEntry } from "@intentic/capability-catalog";
 import { contributionDiscriminator } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -72,12 +72,32 @@ export const withIdentityPicker = (entry: CapabilityCatalogEntry, identities: re
     return { ...entry, fields: entry.fields.map((field) => (field.key === `identity` ? { ...field, options } : field)) };
 };
 
+// A field naming another connection (its `connection`) answered from the connections that exist: their names as its
+// options, after the empty choice, which says in the field's own placeholder what leaving it empty means. With none to
+// pick it keeps no options, and the row says so (CapabilityFieldRow). A tile with no such field is returned as is.
+export const withConnectionPickers = (entry: CapabilityCatalogEntry, capabilities: readonly CapabilitySummary[]): CapabilityCatalogEntry => {
+    if (!entry.fields.some((field) => field.connection !== undefined)) {
+        return entry;
+    }
+    const pickers = entry.fields.map((field) => {
+        if (field.connection === undefined) {
+            return field;
+        }
+        const names = connectionChoices(field.connection, capabilities);
+        const empty = { value: ``, label: field.placeholder ?? t(`capabilities.tiles.noConnection`) };
+        return { ...field, options: names.length === 0 ? [] : [empty, ...names.map((name) => ({ value: name, label: name }))] };
+    });
+    return { ...entry, fields: pickers };
+};
+
 // Every tile the page offers: the enabled extensions' contributions, then the static core catalog, each with its
-// add-form's words in the reader's language and each browser tile's identity field narrowed to the identities this
-// sandbox actually holds.
+// add-form's words in the reader's language, each browser tile's identity field narrowed to the identities this sandbox
+// actually holds, and each field naming another connection made a picker of the ones it holds.
 export const catalogEntries = (enabled: readonly ExtensionSummary[], capabilities: readonly CapabilitySummary[]): CapabilityCatalogEntry[] => {
     const identities = capabilities.filter((instance) => instance.kind === `identity`).map((instance) => instance.id);
-    return [...contributedTiles(enabled), ...CAPABILITY_CATALOG].map((entry) => withIdentityPicker(withFieldWords(entry), identities));
+    return [...contributedTiles(enabled), ...CAPABILITY_CATALOG].map((entry) =>
+        withConnectionPickers(withIdentityPicker(withFieldWords(entry), identities), capabilities),
+    );
 };
 
 // Which tile a live connection came from (instancesOf run backwards): a kind's tiles pin their own id into the

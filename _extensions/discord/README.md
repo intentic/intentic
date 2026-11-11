@@ -16,8 +16,11 @@ flowchart LR
 ```
 
 - The card is a `cli` capability: the bot token reaches the agent's environment through the credential broker, and
-  [the skill](skills/discord/SKILL.md) teaches it the Discord REST API with `curl`, including the invite link for the
-  owner's server (with the thread, embed and reaction permissions a reply needs).
+  [the skill](skills/discord/SKILL.md) teaches it the Discord REST API with `curl`. Test asks Discord who the token
+  is (`users/@me`). Pasting the token also fills the card's application id (a bot token's first segment is the bot's
+  id in base64, and a bot's user id is its application's), which is all the connected card's **Add to your server**
+  link needs: Discord's invite with the permissions a reply and a call use (threads, embeds, reactions, connect,
+  speak). The skill can build the same link.
 - The gateway is an `autoStart` extension process the daemon supervises while a Discord card or listener automation
   wants it. It holds one discord.js client per bot token and posts each human message to the daemon's listener route.
   The daemon itself holds no Discord connection.

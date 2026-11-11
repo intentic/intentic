@@ -28,6 +28,10 @@ export const fleetProvision = (config: Config, token: string, ask: ProvisionAsk)
 export const fleetRemove = (config: Config, token: string, sandboxId: string): Promise<CliAnswer> =>
     callPlatform(config, { route: "fleetRemove", input: { sandboxId }, bearer: token, unreached: "nothing was removed" });
 
+/** Revokes the presented token itself: the fleet card's removal, for a token the editor minted for that card. */
+export const fleetRelease = (config: Config, token: string): Promise<CliAnswer> =>
+    callPlatform(config, { route: "fleetRelease", bearer: token, unreached: "the token was not revoked" });
+
 /* What the platform answers each of them with, once the body parses. */
 
 export type FleetWho = IngressOutput<"fleetWhoami">;

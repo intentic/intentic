@@ -24,10 +24,12 @@ import { echoConfig, secretField } from "./summary.js";
 import { secretFieldsOf } from "./credentials/secret-fields.js";
 import { createSecretStash, type SecretStash, spendStashed, StashRefusal, unstash } from "./credentials/secret-stash.js";
 import { generateSshKey, keyComment } from "./credentials/ssh-keys.js";
+import { createFormCredentialRoutes } from "./credentials/form-credentials.routes.js";
+import { refuseDanglingConnections } from "./connection-refs.js";
 import { contributionFor, contributionRegistry } from "./contributions.js";
 import { totpCode } from "./credentials/totp.js";
 import { browseMarketplace } from "./marketplace.js";
-import { readRemoteRefs, RemoteRefsError } from "./remote-refs.js";
+import { installRefs, RemoteRefsError } from "./remote-refs.js";
 import { probeCapability } from "./probe.js";
 import { capabilityRecommendations } from "./offers/recommend.js";
 import { registry } from "./registry.js";
@@ -240,7 +242,8 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
     const ctx = capabilityCtx(services);
     // One add per id at once, or a concurrent same-id add interleaves handler runs and races the manifest upsert.
     const adding = new Set<string>();
-    // Generated keys waiting for the add that installs them (sshKey), in memory only.
+    // Generated keys and a form's sign-ins waiting for the add that installs them (sshKey, form-credentials.routes.ts), in
+    // memory only.
     const stash = createSecretStash();
     const statuses = listStatuses(services);
     return {
@@ -276,7 +279,7 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
             if (adding.has(input.id)) {
                 throw new ORPCError("CONFLICT", { message: `"${input.id}" is already being added, wait for it to finish` });
             }
-            await refuseOtherTilesId(services, input);
+            await Promise.all([refuseOtherTilesId(services, input), refuseDanglingConnections(services, input)]);
             // Extensions run trusted code in the browser shell and agent turns; installing one needs the operating
             // tier.
             if (input.kind === "extension" && services.auth !== undefined) {
@@ -345,6 +348,7 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
             const pair = generateSshKey(keyComment(services.config.sandbox.name));
             return { publicKey: pair.publicKey, token: stash.put({ kind: "ssh", field: "privateKey", value: pair.privateKey }) };
         }),
+        ...createFormCredentialRoutes(services, stash, (input) => withKeptSecrets(services, stash, input)),
         // A migration, not a label edit: the id is the agent's handle in its skill file, tool prefix, env var, ssh
         // alias and browser directory; add-and-remove would lose all of it. State moves first, then the manifest, then
         // apply, so a failed apply leaves them agreeing and the Update button retries exactly that step.
@@ -507,7 +511,7 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
         // in the form's own terms rather than a 500 nobody can act on.
         refs: i.refs.handler(async ({ input }) => {
             try {
-                return await readRemoteRefs(services.workspace.root, input.url, await keptToken(services, input.token, input.keeping));
+                return await installRefs(services, { ...input, token: await keptToken(services, input.token, input.keeping) });
             } catch (error) {
                 if (error instanceof RemoteRefsError) {
                     throw new ORPCError("BAD_REQUEST", { message: error.message });

@@ -43,8 +43,12 @@ const chosen = ref<string>();
 
 const target = computed(() => url.trim());
 const readable = computed(() => /^https?:\/\/\S+$/i.test(target.value));
-// Identifies one read. Both halves matter: adding a token to a repository that refused is a different question.
-const question = computed(() => `${target.value}\n${token.trim()}`);
+// The GitHub or GitLab card the install reads with when no token is given (GitConnectionField.vue), so a private
+// repository lists its versions the way it will be cloned.
+const gitConnection = computed(() => values[`gitConnection`] ?? ``);
+// Identifies one read. Every part matters: adding a token, or another card, to a repository that refused is a different
+// question.
+const question = computed(() => `${target.value}\n${token.trim()}\n${gitConnection.value}`);
 const host = computed(() => URL.parse(target.value)?.host ?? target.value);
 
 const selected = computed(() => (refs.value === undefined || chosen.value === undefined ? undefined : refFor(refs.value, chosen.value)));
@@ -72,7 +76,7 @@ const read = async (): Promise<void> => {
     reading.value = true;
     failure.value = undefined;
     try {
-        const answer = await readRemoteRefs(target.value, token.trim() === `` ? undefined : token.trim(), keeping);
+        const answer = await readRemoteRefs(target.value, token.trim() === `` ? undefined : token.trim(), keeping, gitConnection.value);
         if (asked !== asking) {
             return;
         }

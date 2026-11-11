@@ -2961,6 +2961,12 @@ importers:
       jose:
         specifier: 'catalog:'
         version: 6.2.13
+      mysql2:
+        specifier: 3.24.6
+        version: 3.24.6(@types/node@24.19.2)
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
       pino:
         specifier: 'catalog:'
         version: 10.3.1
@@ -3019,6 +3025,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.23.1
       '@types/semver':
         specifier: 'catalog:'
         version: 7.8.0

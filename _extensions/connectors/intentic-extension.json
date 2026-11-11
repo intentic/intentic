@@ -20,12 +20,12 @@
                     "category": "code",
                     "hint": "Any repo-scoped token is enough; the extras only add native ssh and CI webhooks.",
                     "guide": {
-                        "url": "https://github.com/settings/tokens",
+                        "url": "https://github.com/settings/tokens/new?scopes=repo&description=Intentic",
                         "scopes": "`repo` (+ `write:public_key` for native ssh, `admin:repo_hook` for CI webhooks)",
                         "steps": [
-                            "Open `Settings` → `Developer settings` → `Personal access tokens`.",
-                            "Classic: the `repo` scope. Fine-grained: repo `Contents` access.",
-                            "For native `ssh://git` add `write:public_key`; for CI webhooks `admin:repo_hook`.",
+                            "The link opens a classic token named `Intentic` with `repo` already ticked: pick an expiry, then `Generate token`.",
+                            "For native `ssh://git` tick `write:public_key` as well; for CI webhooks `admin:repo_hook`.",
+                            "Fine-grained instead? `Fine-grained tokens` → `Generate new token`, with `Contents`, `Issues` and `Pull requests` on `Read and write`.",
                             "Paste the token here: git works over HTTPS regardless."
                         ]
                     }
@@ -145,13 +145,12 @@
                     "hint": "The api scope covers everything; anything refused falls back to HTTPS git.",
                     "guide": {
                         "urlFromField": "url",
-                        "path": "/-/user_settings/personal_access_tokens",
+                        "path": "/-/user_settings/personal_access_tokens?name=Intentic&scopes=api",
                         "linkLabel": "Create an access token",
                         "scopes": "`api`",
                         "steps": [
                             "Self-hosted: set the `Instance URL` above first.",
-                            "Open `User settings` → `Access tokens`.",
-                            "Add a token with the `api` scope.",
+                            "The link opens a new token named `Intentic` with the `api` scope already ticked: set an expiry, then create it.",
                             "Copy the token and paste it here."
                         ]
                     }
@@ -279,6 +278,13 @@
                 },
                 "hosts": ["registry.npmjs.org"],
                 "skill": "skills/npm/SKILL.md",
+                "probe": {
+                    "url": "https://registry.npmjs.org/-/whoami",
+                    "headers": {
+                        "authorization": "Bearer ${token}"
+                    },
+                    "identity": "username"
+                },
                 "broker": {
                     "routes": [
                         {
@@ -615,23 +621,23 @@
                     "logo": "notion",
                     "description": "Pages and databases in your Notion workspace.",
                     "category": "business",
-                    "hint": "An integration sees nothing on its own: share pages with it and everything nested comes along.",
+                    "hint": "A personal access token acts as you and sees what you see. An internal connection is a bot of its own that sees only the pages shared with it, and everything nested under them.",
                     "guide": {
-                        "url": "https://www.notion.so/profile/integrations",
-                        "linkLabel": "Open your Notion integrations",
-                        "scopes": "Read content, add Update + Insert content for an agent that writes",
+                        "url": "https://www.notion.so/developers/tokens",
+                        "linkLabel": "Create a Notion token",
+                        "scopes": "the `Notion API` capability",
                         "steps": [
-                            "`Settings` → `Connections` → `Develop or manage integrations` → `New integration`, type `Internal`.",
-                            "Grant `Read content`; add `Update`/`Insert` if the agent should write.",
-                            "Copy the `Internal Integration Secret` and paste it here.",
-                            "On each top-level page: `•••` → `Connections` → add the integration, sub-pages inherit."
+                            "The link opens `Personal access tokens`: `New token`, a name, the `Notion API` capability, then `Create token`.",
+                            "Copy the token and paste it here: Notion shows it once.",
+                            "No `New token` on a Business or Enterprise plan? A workspace owner turns it on in `Settings` → `Connections`.",
+                            "A team bot instead: `Internal connections` → `Create a new connection` (workspace owners), its `API token` from `Configuration`, and the pages it may see under `Content access`."
                         ]
                     }
                 },
                 "fields": [
                     {
                         "key": "token",
-                        "label": "Internal integration secret",
+                        "label": "Notion token",
                         "secret": true
                     }
                 ],
@@ -751,15 +757,14 @@
                     "category": "business",
                     "hint": "App-only access for an administrator-managed integration. Prefer Sites.Selected and grant individual sites. For an office user’s Outlook, calendar and files, connect Microsoft 365 instead. Client secrets expire; rotate when Graph answers 401.",
                     "guide": {
-                        "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
-                        "linkLabel": "Open Entra ID app registrations",
+                        "url": "https://shell.azure.com/bash",
+                        "linkLabel": "Open Azure Cloud Shell",
                         "scopes": "application permissions `Sites.Read.All`, or `Sites.ReadWrite.All` to write, `Sites.Selected` to scope per site",
                         "steps": [
-                            "`App registrations` → `New registration`: single tenant, no redirect URI.",
-                            "Copy the client ID and tenant ID from the overview.",
-                            "`Certificates & secrets` → `New client secret`, copy its `Value` (shown once).",
-                            "`API permissions` → `Microsoft Graph` → `Application permissions`: add `Sites.Read.All` or `Sites.Selected`, then `Grant admin consent`.",
-                            "`Sites.Selected` reaches nothing until a site owner grants this app each site."
+                            "Signed in as a Global or Privileged Role Administrator, run this in the Cloud Shell: `app=$(az ad app create --display-name Intentic-SharePoint --sign-in-audience AzureADMyOrg --query appId -o tsv) && az ad sp create --id $app -o none && az ad app permission add --id $app --api 00000003-0000-0000-c000-000000000000 --api-permissions 332a536c-c7ef-4017-ab91-336970924f0d=Role && sleep 20 && az ad app permission admin-consent --id $app; az ad app credential reset --id $app --display-name Intentic -o json`",
+                            "Paste the JSON it prints into any box here: the tenant, client ID and secret fill in by themselves.",
+                            "For `Sites.Selected`, put `883ea226-0bf2-4a8f-9f9d-92c9162a727d` in place of `332a536c-c7ef-4017-ab91-336970924f0d`; it reaches nothing until a site owner grants this app each site.",
+                            "By hand instead: in `entra.microsoft.com`, `App registrations` → `New registration`; `Certificates & secrets` → `New client secret` (copy its `Value`); `API permissions` → `Microsoft Graph` → `Application permissions` → `Sites.Read.All` → `Grant admin consent`."
                         ]
                     }
                 },
@@ -793,6 +798,19 @@
                 },
                 "hosts": ["login.microsoftonline.com", "graph.microsoft.com", "${hostname}"],
                 "skill": "skills/sharepoint/SKILL.md",
+                "probe": {
+                    "url": "https://graph.microsoft.com/v1.0/sites/root",
+                    "identity": "siteCollection.hostname",
+                    "oauth": {
+                        "tokenUrl": "https://login.microsoftonline.com/${tenantId:uri}/oauth2/v2.0/token",
+                        "form": {
+                            "client_id": "${clientId}",
+                            "client_secret": "${clientSecret}",
+                            "scope": "https://graph.microsoft.com/.default",
+                            "grant_type": "client_credentials"
+                        }
+                    }
+                },
                 "broker": {
                     "routes": [
                         {
@@ -873,36 +891,70 @@
                     "hint": "The agent drives PostHog's own agent-first CLI: who did what before a bug, the replay of that session, the exception behind it, HogQL over your events, and the flag that was on at the time. One key, one project: add the card again for a second project.",
                     "guide": {
                         "urlFromField": "host",
-                        "path": "/settings/user-api-keys",
+                        "path": "/settings/user-api-keys?preset=mcp_server",
                         "linkLabel": "Create a personal API key",
                         "scopes": "the `MCP Server` preset covers every tool; reading only needs `session_recording:read` `query:read` `person:read` `feature_flag:read` `error_tracking:read`",
                         "steps": [
-                            "Set the `PostHog host` above first: US cloud, EU cloud, or your own install.",
-                            "Open `Settings` → `Personal API keys` → `Create personal API key`.",
-                            "Scope it to this one project, and pick the `MCP Server` preset unless you want reads only.",
+                            "Pick where your PostHog runs above: US cloud, EU cloud, or your own install.",
+                            "The link opens `Personal API keys` with the `MCP Server` preset picked: scope it to one project, then create it.",
                             "Copy the key here: PostHog shows it once.",
-                            "`Project ID` is the number in the project URL, `12345` in `/project/12345`.",
+                            "The key's own project is used. A key reaching several projects? Put one's number under `Advanced` → `Project ID`, `12345` in `/project/12345`.",
                             "The CLI lands on PATH at the next rebuild; until then the skill says how to run it without one."
                         ]
                     }
                 },
                 "fields": [
                     {
-                        "key": "host",
-                        "label": "PostHog host",
-                        "default": "https://us.posthog.com",
-                        "hint": "`https://eu.posthog.com` for EU cloud, or your self-hosted URL. Not the ingestion host (`i.posthog.com`), which takes events and answers nothing."
+                        "key": "region",
+                        "label": "PostHog region",
+                        "default": "us",
+                        "options": [
+                            {
+                                "value": "us",
+                                "label": "US cloud"
+                            },
+                            {
+                                "value": "eu",
+                                "label": "EU cloud"
+                            },
+                            {
+                                "value": "self",
+                                "label": "Self-hosted"
+                            }
+                        ]
                     },
                     {
-                        "key": "projectId",
-                        "label": "Project ID",
-                        "placeholder": "12345"
+                        "key": "host",
+                        "label": "PostHog host",
+                        "value": "https://us.posthog.com",
+                        "when": "region == 'us'"
+                    },
+                    {
+                        "key": "host",
+                        "label": "PostHog host",
+                        "value": "https://eu.posthog.com",
+                        "when": "region == 'eu'"
+                    },
+                    {
+                        "key": "host",
+                        "label": "PostHog URL",
+                        "placeholder": "https://posthog.example.com",
+                        "when": "region not in ['us', 'eu']",
+                        "hint": "Your install's own address, not its ingestion host, which takes events and answers nothing."
                     },
                     {
                         "key": "apiKey",
                         "label": "Personal API key",
                         "secret": true,
                         "placeholder": "phx_…"
+                    },
+                    {
+                        "key": "projectId",
+                        "label": "Project ID",
+                        "placeholder": "the key's own project",
+                        "optional": true,
+                        "advanced": true,
+                        "hint": "Only for a key that reaches several projects: the number in the project URL. Left empty, the CLI uses the project the key is scoped to."
                     }
                 ],
                 "env": {
@@ -913,11 +965,11 @@
                 "hosts": ["${host}"],
                 "skill": "skills/posthog/SKILL.md",
                 "probe": {
-                    "url": "${host}/api/projects/${projectId}/",
+                    "url": "${host}/api/personal_api_keys/@current/",
                     "headers": {
                         "Authorization": "Bearer ${apiKey}"
                     },
-                    "identity": "name"
+                    "identity": "label"
                 },
                 "fragment": "env/posthog.Dockerfile",
                 "broker": {
@@ -949,13 +1001,13 @@
                     "category": "deploy",
                     "hint": "Use a scoped API token, never the Global API Key: a read-only token is the safe default.",
                     "guide": {
-                        "url": "https://dash.cloudflare.com/profile/api-tokens",
+                        "url": "https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=Intentic",
                         "linkLabel": "Create an API token",
-                        "scopes": "your pick per task, e.g. `Zone: Read` + `DNS: Edit`, or the read-only template",
+                        "scopes": "`Zone: Read` + `DNS: Edit` to start; add `Workers Scripts` or `Cloudflare Pages` for deploys",
                         "steps": [
-                            "`My Profile` → `API Tokens` → `Create Token`.",
-                            "Start from a template: `Read all resources` for read-only, `Edit zone DNS` for DNS work.",
-                            "Include specific zones rather than all of them where you can.",
+                            "The link opens a token named `Intentic` with `Zone: Read` and `DNS: Edit` already picked.",
+                            "Narrow `Zone Resources` to the zones the agent should touch, then `Continue to summary` → `Create Token`.",
+                            "Read-only instead? `Create Token` → the `Read all resources` template.",
                             "Copy the token here: shown once.",
                             "`Account ID`: any zone's `Overview` page. Optional, the agent can list accounts itself."
                         ]
@@ -1147,7 +1199,7 @@
                     "guide": {
                         "steps": [
                             "Use an existing DB user, ideally read-only.",
-                            "The database must be reachable from this sandbox (`pg_hba`, firewall).",
+                            "The database must be reachable from this sandbox (`pg_hba`, firewall): `Test` signs in from here and says which one is in the way.",
                             "Or paste a connection string into any box: it fills the whole form."
                         ]
                     }
@@ -1184,7 +1236,15 @@
                 },
                 "hosts": ["${host}"],
                 "skill": "skills/postgres/SKILL.md",
-                "fragment": "env/postgres.Dockerfile"
+                "fragment": "env/postgres.Dockerfile",
+                "probe": {
+                    "connect": "postgres",
+                    "host": "${host}",
+                    "port": "${port}",
+                    "user": "${user}",
+                    "password": "${password}",
+                    "database": "${database}"
+                }
             },
             {
                 "id": "mysql",
@@ -1198,7 +1258,7 @@
                     "guide": {
                         "steps": [
                             "Use an existing DB user, ideally read-only.",
-                            "The database must be reachable from this sandbox (grants, firewall).",
+                            "The database must be reachable from this sandbox (grants, firewall): `Test` signs in from here and says which one is in the way.",
                             "Or paste a connection string into any box: it fills the whole form."
                         ]
                     }
@@ -1239,7 +1299,15 @@
                 },
                 "hosts": ["${host}"],
                 "skill": "skills/mysql/SKILL.md",
-                "fragment": "env/mysql.Dockerfile"
+                "fragment": "env/mysql.Dockerfile",
+                "probe": {
+                    "connect": "mysql",
+                    "host": "${host}",
+                    "port": "${port}",
+                    "user": "${user}",
+                    "password": "${password}",
+                    "database": "${database}"
+                }
             }
         ],
         "automationTemplates": [

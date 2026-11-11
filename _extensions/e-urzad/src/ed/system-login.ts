@@ -68,6 +68,12 @@ export const edSettings = (values: EdCardValues): EdSettings => {
     const environment = environmentOf(values.environment);
     const defaults = ENVIRONMENTS[environment];
     const missing = (["ade", "systemName", "certificate", "privateKey"] as const).filter((key) => values[key].trim() === "");
+    // A card that generated its key holds it before the certificate issued for its request has been pasted.
+    if (missing.length === 1 && missing[0] === "certificate") {
+        throw new Error(
+            `the e-Doręczenia card "${values.card}" has no certificate yet: paste the one Moduł uprawnień issued for its request into the card's Issued certificate`,
+        );
+    }
     if (missing.length > 0) {
         throw new Error(`the e-Doręczenia card "${values.card}" is missing ${missing.join(", ")}`);
     }

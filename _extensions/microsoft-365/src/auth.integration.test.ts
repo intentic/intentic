@@ -153,6 +153,29 @@ test("device sign-in refuses a confidential client, a foreign verification page,
     ).rejects.toThrow("expired");
 });
 
+// What Microsoft's device endpoint answers today (read off login.microsoftonline.com on 2026-11-11).
+test("device sign-in prints the page Microsoft answers with today", async () => {
+    const today = httpQueue([
+        { body: { device_code: "c", user_code: "L2ACH3MRV", verification_uri: "https://login.microsoft.com/device", expires_in: 300, interval: 1 } },
+        { body: { access_token: "a", refresh_token: "r" } },
+    ]);
+    const output: string[] = [];
+    await deviceLogin(account, async () => {}, (line) => output.push(line), { http: today.http, pause: async () => {} });
+    expect(output[0]).toBe("Open https://login.microsoft.com/device in your own browser, enter the code L2ACH3MRV and sign in with the office account.");
+});
+
+// The card's form signs in with the scopes its manifest declares (refreshToken.deviceCode); a token made there must be
+// one this CLI can refresh, so the two lists are the same list.
+test("the card's own sign-in asks for exactly what the CLI refreshes with, read only and read & write", async () => {
+    // SAFETY: this extension's own manifest, which the daemon's schema parses; only the declared scopes are read here.
+    const manifest = (await Bun.file(new URL("../intentic-extension.json", import.meta.url)).json()) as {
+        contributes: { capabilities: { refreshToken: { deviceCode: { scope: { when?: string; scope: string }[] } } }[] };
+    };
+    const [read, write] = manifest.contributes.capabilities[0]!.refreshToken.deviceCode.scope;
+    expect(read).toEqual({ when: "access == 'read'", scope: scopesFor({ ...account, access: "read" }) });
+    expect(write).toEqual({ scope: scopesFor({ ...account, access: "write" }) });
+});
+
 test("the CLI stores through the daemon with the agent token, naming the card's settings, and tolerates a newer rotation", async () => {
     const root = await mkdtemp(join(tmpdir(), "m365-vault-"));
     const env = { INTENTIC_AGENT_TOKEN_PATH: join(root, "agent.token") };

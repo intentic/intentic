@@ -1483,7 +1483,32 @@
             "optional": " (facultatif)",
             "required": "Obligatoire.",
             "sandboxContainerLocalhostPoints": "Le sandbox est un conteneur : localhost pointe vers le sandbox lui-même.",
-            "useHostDockerInternal": "Utiliser host.docker.internal"
+            "useHostDockerInternal": "Utiliser host.docker.internal",
+            "noneToPick": "Rien à choisir pour l'instant : connectez-en un d'abord, il apparaîtra ici.",
+            "notConnected": "{name} (aucune connexion de ce nom)"
+        },
+        "keyValueField": {
+            "name": "Nom",
+            "value": "Valeur",
+            "valueOf": "Valeur de {name}",
+            "remove": "Retirer {name}",
+            "add": "Ajouter une variable",
+            "badName": "Un nom se compose de lettres, de chiffres et de _, et ne commence pas par un chiffre."
+        },
+        "certificateRequestField": {
+            "generate": "Générer la clé et la demande",
+            "generateNew": "Générer une nouvelle clé et une nouvelle demande",
+            "generating": "Génération d'une clé et d'une demande de certificat…",
+            "couldntGenerate": "Impossible de générer la clé",
+            "sandboxMakesKey": "Le sandbox génère une clé RSA et la garde. Vous n'obtenez que la demande à envoyer à l'émetteur.",
+            "holdsKey": "Cette connexion détient une clé générée par le sandbox.",
+            "request": "Demande de certificat (CSR)",
+            "subject": "Sujet : {subject}",
+            "download": "Télécharger le .csr",
+            "keyStays": "La clé privée reste dans le sandbox.",
+            "replacesOldKey": "Enregistrer remplace la clé de cette connexion : un certificat émis pour l'ancienne cesse de fonctionner.",
+            "fillFirst": "Renseignez d'abord {fields} : la demande les contient.",
+            "generateFirst": "Générez d'abord la clé et la demande."
         },
         "capabilityInstanceRow": {
             "finishSetup": "{detail} : Terminer l'installation →",
@@ -1515,7 +1540,8 @@
             "walletOwnerOnly": "Seul le propriétaire de ce sandbox peut modifier les plafonds de dépense de son portefeuille : le portefeuille qui paie est le sien."
         },
         "tiles": {
-            "standalone": "Autonome"
+            "standalone": "Autonome",
+            "noConnection": "Aucune"
         },
         "cloudflareTokenField": {
             "apiToken": "Jeton d'API",
@@ -1655,6 +1681,8 @@
             "startedWithCompose": "Vous avez lancé ce sandbox avec Docker Compose ? Exécutez plutôt ceci dans le dossier de son docker-compose.yml, pour que Compose garde son conteneur :"
         },
         "normalize": {
+            "applicationFromToken": "ID d'application lu dans le jeton : {value}. Le lien d'invitation de la carte connectée en est tiré.",
+            "client": "client {value}",
             "commit": "commit {value}",
             "configCount": "{count} configuration | {count} configurations",
             "database": "base de données {value}",
@@ -1664,14 +1692,17 @@
             "passwordSet": "mot de passe défini",
             "peersMissing": "{configs}, mais une seule section [Peer] ({count}) : une configuration sans son pair ne peut pas se connecter. Vérifiez ce que vous avez collé. | {configs}, mais seulement {count} sections [Peer] : une configuration sans son pair ne peut pas se connecter. Vérifiez ce que vous avez collé.",
             "port": "port {value}",
+            "readFromAzureCli": "Lu dans la sortie d'Azure CLI : {parts}.",
             "readFromConnectionString": "Lu dans la chaîne de connexion : {parts}.",
             "readFromPaste": "Lu dans le texte collé : {parts}.",
             "readSummary": "Lu : {parts}.",
             "ref": "ref {value}",
             "repository": "dépôt {value}",
             "sMailServer993": "Le serveur de messagerie de {domain} est {host}:993, rempli pour vous.",
+            "secretSet": "secret défini",
             "splitLink": "Lien décomposé : {parts}.",
             "subdirectory": "sous-dossier {value}",
+            "tenant": "tenant {value}",
             "user": "utilisateur {value}"
         },
         "pluginRegistryBrowse": {
@@ -1800,6 +1831,50 @@
             "fromConnector": "Les hôtes propres à son connecteur pour son service.",
             "emptyList": "Aucun hôte pour l'instant : chaque usage demandera.",
             "add": "Ajouter"
+        },
+        "mcpSignInField": {
+            "accessGranted": "Accès accordé : {scopes}",
+            "accessUnstated": "Le serveur n'a pas dit quel accès il a accordé.",
+            "addressChanged": "L'adresse a changé depuis cette connexion. Reconnectez-vous avant d'enregistrer.",
+            "clientId": "ID client",
+            "clientIdHint": "{server} n'enregistre pas d'applications de lui-même. Créez une application OAuth dans ses paramètres avec {redirect} comme adresse de redirection, puis saisissez son ID client ci-dessus.",
+            "connectedAs": "Connecté en tant que {who}",
+            "couldntStart": "Impossible de lancer la connexion.",
+            "holdsToken": "Cette connexion contient un jeton collé. Se connecter le remplace.",
+            "opens": "Ouvre {server} dans une nouvelle fenêtre pour approuver. Le sandbox garde les jetons et les renouvelle.",
+            "opensServer": "Ouvre la connexion du serveur dans une nouvelle fenêtre. Le sandbox garde les jetons et les renouvelle.",
+            "pasteInstead": "Coller un jeton à la place",
+            "popupBlocked": "Le navigateur a bloqué la fenêtre de connexion. Autorisez les fenêtres pop-up pour cette page, puis appuyez de nouveau sur Se connecter.",
+            "reconnect": "Reconnecter",
+            "savingStores": "Enregistrer la carte conserve la connexion.",
+            "signIn": "Se connecter",
+            "signInFirst": "Connectez-vous avant d'enregistrer.",
+            "signInLabel": "Connexion",
+            "signInTo": "Se connecter à {server}",
+            "signedInTo": "Connecté à {server}",
+            "stopWaiting": "Arrêter d'attendre",
+            "waiting": "En attente de votre approbation sur {server}…"
+        },
+        "microsoftSignInField": {
+            "changedSince": "{field} a changé depuis la connexion. Reconnectez-vous avant d'enregistrer.",
+            "connected": "Connecté à Microsoft",
+            "connectedAs": "Connecté en tant que {who}",
+            "copyCode": "Copier le code",
+            "couldntFinish": "Impossible de terminer la connexion Microsoft.",
+            "couldntStart": "Impossible de lancer la connexion Microsoft.",
+            "gettingCode": "Demande d'un code à Microsoft…",
+            "granted": "Accordé : {permissions}. Enregistrer la carte conserve la connexion.",
+            "microsoftAccount": "Compte Microsoft",
+            "openPage": "Ouvrir la connexion Microsoft",
+            "opensMicrosoft": "Affiche un code à saisir sur la page de Microsoft, dans un nouvel onglet.",
+            "reconnect": "Reconnecter",
+            "savingStores": "Enregistrer la carte conserve la connexion.",
+            "signedIn": "Connecté. Reconnectez pour changer de compte ou d'accès.",
+            "signInFirst": "Connectez-vous avec Microsoft avant d'enregistrer.",
+            "signInWithMicrosoft": "Se connecter avec Microsoft",
+            "stopWaiting": "Arrêter d'attendre",
+            "typeCode": "Saisissez ce code sur la page de Microsoft et connectez-vous-y. Ce formulaire s'en aperçoit tout seul.",
+            "waiting": "En attente de vous sur la page de Microsoft…"
         },
         "sshKeyField": {
             "authorizeAs": "Autorisez-la : exécutez ceci sur le serveur, connecté en tant que {user}",
@@ -2098,7 +2173,7 @@
                         "1": "Lecture seule : monté en `ro`, et donnez-lui aussi un compte en lecture seule sur le serveur.",
                         "2": "Derrière un VPN : ajoutez d'abord la tuile VPN ; le disque est monté après le tunnel à chaque redémarrage.",
                         "3": "Montez-le sur sa ligne ci-dessous ; l'agent trouve les fichiers sous `/mnt/netdisk/{'<'}name>`.",
-                        "4": "Déjà ouvert sur votre PC (par son VPN, en lecteur réseau) ? Indiquez cet ordinateur dans `Passer par`."
+                        "4": "Déjà ouvert sur votre PC (par son VPN, en lecteur réseau) ? Choisissez cet ordinateur dans `Passer par`."
                     }
                 },
                 "fields": {
@@ -2152,8 +2227,8 @@
                     },
                     "via": {
                         "label": "Passer par",
-                        "placeholder": "le réseau propre du sandbox",
-                        "hint": "Un ordinateur connecté qui ouvre lui-même ce partage, comme le PC sur lequel vous le montez : son réseau local, son VPN et ses noms s'appliquent alors. Son nom tel que dans Appareils (rog). Il doit être en ligne, avec « Exécuter des commandes » ou « Exécuter des programmes » activé."
+                        "placeholder": "Le réseau propre du sandbox",
+                        "hint": "Un ordinateur connecté qui ouvre lui-même ce partage, comme le PC sur lequel vous le montez : son réseau local, son VPN et ses noms s'appliquent alors. Il doit être en ligne, avec « Exécuter des commandes » ou « Exécuter des programmes » activé."
                     }
                 }
             },
@@ -2216,12 +2291,13 @@
             },
             "custom": {
                 "name": "Serveur MCP personnalisé",
-                "description": "N'importe quel serveur MCP distant, par URL et jeton.",
+                "description": "N'importe quel serveur MCP distant : connexion ou jeton.",
                 "guide": {
                     "steps": {
-                        "0": "Collez l'URL du serveur (Streamable HTTP ou SSE).",
-                        "1": "Authentification requise ? Collez un jeton bearer.",
-                        "2": "L'agent se connecte au tour suivant."
+                        "0": "Collez l'URL du serveur (Streamable HTTP).",
+                        "1": "Il demande une connexion ? Appuyez sur Se connecter et approuvez dans votre navigateur.",
+                        "2": "Sinon, s'il lui faut un jeton, collez-en un depuis ses paramètres.",
+                        "3": "L'agent se connecte au tour suivant."
                     }
                 },
                 "fields": {
@@ -2241,8 +2317,9 @@
                     "scopes": "dépôts privés : accès en lecture (p. ex. GitHub `repo`)",
                     "steps": {
                         "0": "Indiquez un dépôt git contenant un plugin Claude Code.",
-                        "1": "Dépôt privé : ajoutez un jeton avec accès en lecture.",
-                        "2": "Ou parcourez une marketplace ci-dessus pour préremplir ce formulaire."
+                        "1": "Dépôt privé sur GitHub ou GitLab : votre carte connectée pour ce service le lit, sans rien coller.",
+                        "2": "Ailleurs : un jeton d'accès en lecture, sous Avancé.",
+                        "3": "Ou parcourez une marketplace ci-dessus pour préremplir ce formulaire."
                     }
                 },
                 "fields": {
@@ -2253,10 +2330,15 @@
                         "label": "Branche, tag ou commit"
                     },
                     "token": {
-                        "label": "Jeton d'accès"
+                        "label": "Jeton d'accès",
+                        "hint": "Seulement pour un dépôt qu'aucune de vos connexions GitHub ou GitLab ne peut lire : utilisé à leur place."
                     },
                     "url": {
                         "label": "URL git"
+                    },
+                    "gitConnection": {
+                        "label": "Connexion GitHub ou GitLab",
+                        "hint": "La carte connectée dont le jeton lit un dépôt privé sur son hôte. Laissé vide : la première par nom."
                     }
                 }
             },
@@ -2267,8 +2349,9 @@
                     "scopes": "dépôts privés : accès en lecture (p. ex. GitHub `repo`)",
                     "steps": {
                         "0": "Indiquez un dépôt contenant un `intentic-extension.json`.",
-                        "1": "Choisissez une branche ou une version : elle est épinglée à ce commit, et une installation ne la suit jamais.",
-                        "2": "Rechargez l'application après l'installation pour charger son interface."
+                        "1": "Dépôt privé sur GitHub ou GitLab : votre carte connectée le lit ; ailleurs, un jeton sous Avancé.",
+                        "2": "Choisissez une branche ou une version : elle est épinglée à ce commit, et une installation ne la suit jamais.",
+                        "3": "Rechargez l'application après l'installation pour charger son interface."
                     }
                 },
                 "fields": {
@@ -2279,10 +2362,15 @@
                         "label": "Version"
                     },
                     "token": {
-                        "label": "Jeton d'accès"
+                        "label": "Jeton d'accès",
+                        "hint": "Seulement pour un dépôt qu'aucune de vos connexions GitHub ou GitLab ne peut lire : utilisé à leur place."
                     },
                     "url": {
                         "label": "URL git"
+                    },
+                    "gitConnection": {
+                        "label": "Connexion GitHub ou GitLab",
+                        "hint": "La carte connectée dont le jeton lit un dépôt privé sur son hôte. Laissé vide : la première par nom."
                     }
                 }
             },
@@ -2328,15 +2416,15 @@
                 "guide": {
                     "scopes": "`provision` : créer des sandboxes sur ce compte et générer leurs codes d'installation, et rien d'autre",
                     "steps": {
-                        "0": "Menu de votre compte → `Paramètres` → `Jetons` → `Créer le jeton`.",
-                        "1": "Copiez-le une fois. Il est stocké haché : un jeton perdu est donc remplacé, pas récupéré.",
-                        "2": "Collez-le ici. Il reste avec le daemon de ce sandbox et n'est jamais placé dans l'environnement de l'agent.",
-                        "3": "Révoquez-le sur la même page ; le provisionnement s'arrête dès que vous le faites."
+                        "0": "Appuyez sur `Autoriser` : l'application crée un jeton de provisionnement pour ce sandbox, listé sous son nom dans `Paramètres` → `Jetons`.",
+                        "1": "Il reste avec le daemon de ce sandbox et n'est jamais placé dans l'environnement de l'agent.",
+                        "2": "Retirez cette carte, ou révoquez le jeton là-bas, et le provisionnement s'arrête aussitôt."
                     }
                 },
                 "fields": {
                     "token": {
-                        "label": "Jeton de provisionnement"
+                        "label": "Jeton de provisionnement",
+                        "hint": "Seulement pour utiliser un jeton que vous avez créé vous-même dans Paramètres ▸ Jetons : Autoriser en crée un pour vous."
                     }
                 }
             },
@@ -2347,9 +2435,9 @@
                 "guide": {
                     "scopes": "Lance, relance et arrête les tâches qu'il confie, et lit ce qu'elles rapportent. Rien d'autre de ce sandbox : ni ses fichiers, ni ses autres conversations, ni ses réglages",
                     "steps": {
-                        "0": "Ouvrez l'autre sandbox → `Sandbox` → `Accès` → `Sandboxes liés` → `Nouveau lien`, et nommez-y ce sandbox.",
-                        "1": "Choisissez l'identité que portent ses tâches (une persona), si chacune vous attend, et combien de tours par heure il peut lancer.",
-                        "2": "Copiez le jeton une fois, et collez-le ici avec l'adresse de ce sandbox.",
+                        "0": "Choisissez ci-dessus l'autre sandbox, l'identité que portent ses tâches (une persona), si chacune vous attend là-bas, et combien de tours par heure il peut lancer.",
+                        "1": "`Lier` crée le lien de l'autre côté avec votre propre connexion et l'ajoute ici : rien à copier.",
+                        "2": "Proposé pour un sandbox que vous possédez ou administrez. Pour tout autre, son propriétaire crée le lien là-bas (`Sandbox` → `Accès` → `Sandboxes liés` → `Nouveau lien`), et son adresse et son jeton vont sous Avancé.",
                         "3": "Révoquez le lien de l'autre côté ; les tâches cessent de l'atteindre dès que vous le faites."
                     }
                 },
@@ -2385,16 +2473,16 @@
                     "exit": {
                         "hint": "Une sortie géographique connectée : chaque compte de cette identité navigue depuis ce pays.",
                         "label": "Naviguer via",
-                        "placeholder": "le nom de la sortie géographique"
+                        "placeholder": "L'adresse propre de ce sandbox"
                     },
                     "loginUrl": {
                         "hint": "Déduite de l'adresse si vide.",
                         "label": "Page de connexion"
                     },
                     "mailbox": {
-                        "hint": "Une entrée IMAP connectée : l'agent récupère les codes de vérification, jamais la boîte de réception.",
+                        "hint": "Une boîte IMAP connectée : l'agent récupère les codes de vérification, jamais la boîte de réception.",
                         "label": "Boîte aux lettres des codes",
-                        "placeholder": "le nom de la connexion IMAP"
+                        "placeholder": "Aucune"
                     },
                     "openAccounts": {
                         "hint": "L'inscription automatisée est contraire aux conditions de nombreuses plateformes : c'est à vous de décider.",
@@ -2542,7 +2630,7 @@
                 "exit": {
                     "hint": "Une sortie géographique connectée : ce compte navigue alors depuis ce pays.",
                     "label": "Naviguer via",
-                    "placeholder": "le nom de la sortie géographique"
+                    "placeholder": "L'adresse propre de ce sandbox"
                 },
                 "identity": {
                     "hint": "Partage le navigateur de cette identité : « Continuer avec » son fournisseur se fait donc en un clic.",
@@ -2686,7 +2774,7 @@
         },
         "linkPairing": {
             "title": "Associer à l'un de vos sandboxes",
-            "explain": "Choisissez le sandbox qui recevra les tâches et ce qu'elles pourront y faire. Cet éditeur est connecté aux deux : il crée donc le lien là-bas et remplit ce formulaire ; rien ne passe par les serveurs d'intentic.",
+            "explain": "Choisissez le sandbox qui recevra les tâches et ce qu'elles pourront y faire. Cet éditeur est connecté aux deux : il crée donc le lien là-bas et l'ajoute ici ; rien à copier, et rien ne passe par les serveurs d'intentic.",
             "noOthers": "Vous n'avez encore aucun autre sandbox à lier. Créez-en un depuis votre compte, ou avec la carte Flotte de sandboxes.",
             "which": "Sandbox",
             "pickOne": "Choisissez un sandbox",
@@ -2697,12 +2785,19 @@
             "turnsAnHour": "tours par heure",
             "shareRecords": "Partager ses registres ici",
             "shareRecordsHint": "Permet à ce sandbox de lire les conversations, transcriptions, journaux et diagnostics de l'autre, sans y lancer de tour. Lecture seule ; les conversations privées restent privées.",
-            "pair": "Associer",
-            "paired": "Lié à {name}. Ajoutez la carte pour terminer.",
+            "pair": "Lier",
+            "paired": "Lié à {name}.",
             "thisSandbox": "ce sandbox",
             "tooOld": "{name} exécute un sandbox trop ancien pour les liens. Mettez-le à jour, puis associez à nouveau.",
             "couldntPair": "Impossible de créer le lien sur {name}.",
-            "couldntReadPersonas": "Impossible de lire les personas de ce sandbox."
+            "couldntReadPersonas": "Impossible de lire les personas de ce sandbox.",
+            "cloud": "cloud Intentic",
+            "awake": "éveillé",
+            "asleep": "en veille",
+            "starting": "en démarrage",
+            "down": "hors service",
+            "machineOff": "en veille, sa machine est éteinte",
+            "heard": "vu {ago}"
         },
         "extensionCatalog": {
             "microsoft365": {
@@ -2717,9 +2812,8 @@
                         "1": "Copiez le `Directory (tenant) ID` et l'`Application (client) ID` de la page de présentation dans cette carte.",
                         "2": "`Authentication` → `Allow public client flows` : `Yes`. C'est ce qui permet à la connexion de fonctionner sans URI de redirection ni secret.",
                         "3": "`API permissions` → `Microsoft Graph` → `Delegated permissions` : ajoutez les autorisations listées ci-dessus, puis `Grant admin consent` si votre tenant le demande.",
-                        "4": "Enregistrez cette carte, puis demandez à l'agent d'exécuter `m365 auth login` dans un chat que vous suivez. Ouvrez la page Microsoft qu'il affiche dans votre propre navigateur, saisissez le code et connectez-vous en tant qu'utilisateur de bureau.",
-                        "5": "La connexion est stockée d'elle-même sur cette carte, jamais affichée dans le chat. Démarrez un nouveau chat pour l'utiliser, ou appuyez sur `Tester`.",
-                        "6": "Changer ce que l'agent peut faire (lecture seule ou lecture et écriture) nécessite une nouvelle connexion."
+                        "4": "Appuyez sur `Se connecter avec Microsoft` sur cette carte, ouvrez la page de Microsoft à côté, saisissez le code affiché ici et connectez-vous en tant qu'utilisateur de bureau. Enregistrez ensuite la carte.",
+                        "5": "La connexion reste sur cette carte et n'est jamais affichée. Pour changer d'utilisateur, ou après avoir changé ce que l'agent peut faire, ouvrez la carte et appuyez sur `Reconnecter`."
                     }
                 },
                 "fields": {
@@ -2746,12 +2840,12 @@
                         }
                     },
                     "refreshToken": {
-                        "label": "Connexion",
-                        "hint": "Rempli par `m365 auth login` ; laissez-le vide."
+                        "label": "Jeton de renouvellement",
+                        "hint": "Issu du propre flux authorization code de votre application, pour une application avec un secret client. Sans secret, cette carte se connecte d'elle-même."
                     },
                     "clientSecret": {
                         "label": "Secret client (applications confidentielles uniquement)",
-                        "hint": "Uniquement pour une application qui se connecte via son propre flux authorization code et colle son refresh token ci-dessus. Laissez vide pour la connexion habituelle."
+                        "hint": "Uniquement pour une application qui se connecte via son propre flux authorization code et colle son refresh token ci-dessus. Laissez vide pour vous connecter ici avec Microsoft."
                     }
                 }
             },
@@ -2763,7 +2857,7 @@
                     "steps": {
                         "0": "Gmail : activez la `2-Step Verification`, puis utilisez un `App Password` (lien ci-dessus).",
                         "1": "Outlook.com : `account.microsoft.com` → `Security` → `App passwords`.",
-                        "2": "Exchange Online (Microsoft 365 au travail) n'accepte aucun mot de passe via IMAP : choisissez `OAuth2`. Dans Entra ID, inscrivez une application avec `Allow public client flows` activé et les autorisations déléguées `Office 365 Exchange Online` `IMAP.AccessAsUser.All` et `SMTP.Send`, mettez ici ses ID de tenant et de client, puis demandez à l'agent d'exécuter `imap login`. Pour la messagerie, le calendrier et les fichiers Outlook ensemble, la carte Microsoft 365 convient mieux.",
+                        "2": "Exchange Online (Microsoft 365 au travail) n'accepte aucun mot de passe via IMAP : choisissez `OAuth2`. Dans Entra ID, inscrivez une application avec `Allow public client flows` activé et les autorisations déléguées `Office 365 Exchange Online` `IMAP.AccessAsUser.All` et `SMTP.Send`, mettez ici ses ID de tenant et de client, puis appuyez sur `Se connecter avec Microsoft`, saisissez le code affiché ici sur la page de Microsoft et connectez-vous en tant que titulaire de la boîte. Pour la messagerie, le calendrier et les fichiers Outlook ensemble, la carte Microsoft 365 convient mieux.",
                         "3": "Gmail avec OAuth2 : un client OAuth avec le scope `https://mail.google.com/` ; collez son ID client, son secret et un refresh token.",
                         "4": "Partout ailleurs : votre mot de passe IMAP habituel fonctionne.",
                         "5": "Collez votre adresse dans `Nom d'utilisateur` : l'hôte et le port se remplissent d'eux-mêmes."
@@ -2809,7 +2903,7 @@
                     },
                     "oauthRefreshToken": {
                         "label": "Jeton de renouvellement",
-                        "hint": "Exchange Online : laissez vide, `imap login` le remplit. Gmail : collez-en un avec le scope https://mail.google.com/."
+                        "hint": "Gmail : collez-en un avec le scope https://mail.google.com/."
                     },
                     "accessToken": {
                         "label": "Jeton d'accès",
@@ -2844,14 +2938,13 @@
                 "description": "Sites, bibliothèques de documents et listes dans SharePoint.",
                 "hint": "Accès app-only pour une intégration gérée par un administrateur. Préférez Sites.Selected et accordez les sites un par un. Pour l'Outlook, le calendrier et les fichiers d'un utilisateur de bureau, connectez plutôt Microsoft 365. Les secrets client expirent ; renouvelez-les quand Graph répond 401.",
                 "guide": {
-                    "linkLabel": "Ouvrir les inscriptions d'applications Entra ID",
+                    "linkLabel": "Ouvrir Azure Cloud Shell",
                     "scopes": "autorisations d'application `Sites.Read.All`, ou `Sites.ReadWrite.All` pour écrire, `Sites.Selected` pour limiter site par site",
                     "steps": {
-                        "0": "`App registrations` → `New registration` : locataire unique, sans URI de redirection.",
-                        "1": "Copiez l'ID client et l'ID de tenant depuis la page de présentation.",
-                        "2": "`Certificates & secrets` → `New client secret`, copiez sa `Value` (affichée une seule fois).",
-                        "3": "`API permissions` → `Microsoft Graph` → `Application permissions` : ajoutez `Sites.Read.All` ou `Sites.Selected`, puis `Grant admin consent`.",
-                        "4": "`Sites.Selected` n'atteint rien tant qu'un propriétaire de site n'a pas accordé chaque site à cette application."
+                        "0": "Connecté en tant qu'administrateur général ou administrateur de rôle privilégié, exécutez ceci dans Cloud Shell : `app=$(az ad app create --display-name Intentic-SharePoint --sign-in-audience AzureADMyOrg --query appId -o tsv) && az ad sp create --id $app -o none && az ad app permission add --id $app --api 00000003-0000-0000-c000-000000000000 --api-permissions 332a536c-c7ef-4017-ab91-336970924f0d=Role && sleep 20 && az ad app permission admin-consent --id $app; az ad app credential reset --id $app --display-name Intentic -o json`",
+                        "1": "Collez le JSON affiché dans n'importe quel champ ici : le tenant, l'ID client et le secret se remplissent d'eux-mêmes.",
+                        "2": "Pour `Sites.Selected`, mettez `883ea226-0bf2-4a8f-9f9d-92c9162a727d` à la place de `332a536c-c7ef-4017-ab91-336970924f0d` ; il n'atteint rien tant qu'un propriétaire de site n'a pas accordé chaque site à cette application.",
+                        "3": "À la main : dans `entra.microsoft.com`, `App registrations` → `New registration` ; `Certificates & secrets` → `New client secret` (copiez sa `Value`) ; `API permissions` → `Microsoft Graph` → `Application permissions` → `Sites.Read.All` → `Grant admin consent`."
                     }
                 },
                 "fields": {
@@ -2974,6 +3067,28 @@
             "ciSynced": "À jour",
             "ciOutOfDate": "Pas à jour",
             "whoChanges": "Modifiable par le propriétaire, une personne ayant l’accès complet ou une personne qui gère les Secrets."
+        },
+        "fleetAllow": {
+            "title": "Autoriser ce sandbox sur votre compte",
+            "allows": "Permet à l'agent d'ici de créer des sandboxes sur votre compte, {email}, de les lister et d'en mettre un à la corbeille. Il vous demande dans le chat avant chaque création ou suppression.",
+            "allowsYours": "Permet à l'agent d'ici de créer des sandboxes sur votre compte, de les lister et d'en mettre un à la corbeille. Il vous demande dans le chat avant chaque création ou suppression.",
+            "limits": "Les nouveaux sandboxes sont créés sur un ordinateur que vous avez connecté, jamais sur une machine hébergée : cela ne peut donc pas consommer votre forfait. Il ne peut ni lire vos autres sandboxes ni créer d'autres jetons, et le jeton n'atteint jamais l'agent.",
+            "allow": "Autoriser",
+            "allowAgain": "Autoriser à nouveau",
+            "listedAs": "Listé dans Paramètres ▸ Jetons sous « {label} ».",
+            "allowed": "Autorisé. Son jeton figure dans Paramètres ▸ Jetons sous le nom de ce sandbox, et retirer cette carte le révoque.",
+            "pasted": "Connecté avec un jeton que vous avez collé. Révoquez-le dans Paramètres ▸ Jetons.",
+            "ownerOnly": "Seul le propriétaire de ce sandbox peut l'autoriser : le jeton agit sur le compte de qui le crée.",
+            "couldNotAllow": "Impossible d'autoriser ce sandbox sur votre compte.",
+            "tokenLabel": "Flotte de sandboxes : {name}",
+            "tokenLabelUnnamed": "Flotte de sandboxes : ce sandbox"
+        },
+        "gitConnectionField": {
+            "uses": "Utilise votre connexion {provider} « {name} » pour le lire.",
+            "overrideHint": "Un jeton sous Avancé est utilisé à la place, pour un dépôt qu'elle ne peut pas lire.",
+            "readsWith": "Le lit avec",
+            "severalHint": "Plusieurs connexions {provider} atteignent cet hôte : celle choisie lit le dépôt.",
+            "tokenInstead": "Utilise le jeton d'accès sous Avancé au lieu de votre connexion {provider}."
         }
     },
     "chat": {
@@ -11995,11 +12110,11 @@
             "mintToken": "Créer le jeton",
             "minted": "{scope} · créé {date}",
             "neverUsed": "jamais utilisé",
-            "pastePath": "Capacités → Flotte de sandboxes → Jeton d'approvisionnement",
+            "pastePath": "Capacités → Flotte de sandboxes → Avancé → Jeton d'approvisionnement",
             "readingTokens": "Lecture des jetons…",
             "shownOnceCopyNow": "Affiché une seule fois. Copiez-le maintenant : seule son empreinte est conservée.",
             "used": "utilisé {ago}",
-            "whatProvisioningTokensAre": "Un jeton d'approvisionnement permet à l'une de vos sandboxes de créer des sandboxes sur ce compte. Collez-le dans la capacité « Flotte de sandboxes » de cette sandbox ; chaque sandbox créée par son agent vous demandera quand même d'abord dans le chat.",
+            "whatProvisioningTokensAre": "Un jeton d'approvisionnement permet à l'une de vos sandboxes de créer des sandboxes sur ce compte. La carte « Flotte de sandboxes » d'une sandbox crée le sien en un clic ; créez-en un ici seulement pour le coller à la main. Chaque sandbox créée par son agent vous demandera quand même d'abord dans le chat.",
             "whereItGoes": "Où le coller",
             "unavailable": "Les jetons ne sont pas encore disponibles sur ce serveur.",
             "notAllowed": "Votre compte ne peut pas gérer les jetons ici.",

@@ -146,7 +146,9 @@ export const signsInByHand = (kind: CapabilityKind | undefined): boolean => kind
 // while the machine answered read as "needs setup" beside a Devices page acting on it (2026-10-13). Only when nothing
 // of it answers does the status say which way: offline once it has connected, or still to be paired.
 export const connectionState = (kind: CapabilityKind, instance: CapabilitySummary, presence?: MachinePresence): ConnectionState => {
-    if (signsInByHand(kind) && awaitingLogin(instance)) {
+    // An MCP server is pending for one reason only: its sign-in is missing, or its server no longer accepts it
+    // (mcp.handler.ts). Unreachable is its `error`, a different row.
+    if ((signsInByHand(kind) && awaitingLogin(instance)) || (kind === `mcp` && instance.status.state === `pending`)) {
         return needsSignIn();
     }
     const lent = instance.status.state === `active` || instance.status.state === `pending`;

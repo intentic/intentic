@@ -2,6 +2,7 @@
 // them, and what the Capabilities page reads (status, probe, connect/rename/sign-in inputs).
 import { z } from "zod";
 import { ExitConfigSchema } from "./exit.js";
+import { ExtensionConfigSchema, PluginConfigSchema } from "./git-installs.js";
 import { entryId } from "./internal.js";
 import { NetdiskConfigSchema } from "./netdisk.js";
 import { VpnConfigSchema } from "./vpn.js";
@@ -41,7 +42,8 @@ export type CapabilityState = z.infer<typeof CapabilityStateSchema>;
 // Per-kind config. Secrets (an mcp token) live here and are denylisted like tools.json.
 export const McpConfigSchema = z.object({
     url: z.url().describe("Where the tool server answers."),
-    token: z.string().optional().describe("The credential it needs, if any. Stored, never echoed back."),
+    // A sign-in's session (schemas/mcp-sign-in.ts) is one JSON value holding both tokens, which the sandbox renews.
+    token: z.string().optional().describe("The credential it needs, if any: a pasted token, or a sign-in's session. Stored, never echoed back."),
 });
 // Gives the agent an authenticated CLI tool: credential plus any non-secret URL, injected into the agent's env each
 // turn, taught via an .agents/skills/<id> cheatsheet. Provider fields are data in an extension's
@@ -56,61 +58,6 @@ export const CliConfigSchema = z
             ),
     })
     .catchall(z.string());
-// A Claude Code plugin from a git repo; the daemon only owns the checkout, the Agent SDK's plugin loader reads its
-// internals. `path` is a subdirectory for a plugin inside a larger checkout; `token` is https auth for a private repo.
-export const PluginConfigSchema = z.object({
-    url: z.url().describe("The repository to take the plugin from."),
-    // Branch / tag / commit sha to install from; absent = the default branch's HEAD. Either way `commit` pins it.
-    ref: z
-        .string()
-        .min(1)
-        .optional()
-        .describe(
-            "A branch, tag or commit to install from. Leave it out for the default branch. The install pins the commit it names at that moment.",
-        ),
-    path: z
-        .string()
-        .min(1)
-        .refine((value) => !value.split("/").includes(".."), { message: "path must stay inside the checkout" })
-        .optional()
-        .describe("Where inside the repository the plugin lives, for one that sits in a larger checkout."),
-    token: z.string().min(1).optional().describe("A credential for a private repository. Stored, never echoed back."),
-    // Set by the sandbox at install, never by the form: re-applying a stored entry (a rotated token, a migration)
-    // checks this out again, and only adding the plugin anew moves it.
-    commit: z
-        .string()
-        .regex(/^[0-9a-f]{40}$/, "commit must be a full 40-character commit sha")
-        .optional()
-        .describe(
-            "The exact commit installed, in full, resolved from the branch, tag or commit when the plugin was added. Its hooks run inside the agent's session, so it stays at this commit until it is added again.",
-        ),
-});
-// An intentic extension from a git repo (UI bundle + agent contributions + processes). Unlike `plugin`, `ref` must be a
-// full commit sha, since extension code runs trusted in the owner's browser and every update is a deliberate re-add at
-// a new sha.
-export const ExtensionConfigSchema = z.object({
-    url: z.url().describe("The repository to take the extension from."),
-    ref: z
-        .string()
-        .regex(/^[0-9a-f]{40}$/, "ref must be a full 40-character commit sha")
-        .describe(
-            "The exact commit to install, in full. Required rather than optional because extension code runs with your browser's trust: the owner approves precisely the code that runs, and an update is a deliberate re-install at a new commit.",
-        ),
-    path: z
-        .string()
-        .min(1)
-        .refine((value) => !value.split("/").includes(".."), { message: "path must stay inside the checkout" })
-        .optional()
-        .describe("Where inside the repository the extension lives, for one that sits in a larger checkout."),
-    token: z.string().min(1).optional().describe("A credential for a private repository. Stored, never echoed back."),
-    // What update checks and advisories are read against; absent falls back to the official registry.
-    registry: z
-        .url()
-        .optional()
-        .describe(
-            "Which registry this install came from, which is what update checks and security advisories are read against. Absent falls back to the official one.",
-        ),
-});
 // What lets the agent act as an administrator on the machine, the same for every way of signing in. Optional: most
 // machines are reached as a user who needs no more. The password is vaulted like the login one (it is not echoed), so
 // the agent spends it as `{{secret:<alias>/adminPassword}}` and never reads it; `adminPasswordOf` says whose it is,
@@ -389,6 +336,14 @@ export type WalletConfig = z.infer<typeof WalletConfigSchema>;
 // create is only an approval while the agent cannot mint a claim behind it.
 export const FleetConfigSchema = z.object({
     token: z.string().min(1).describe("A provisioning token from Settings ▸ Tokens. Stored, never echoed back."),
+    // (2026-11-11) The platform's id for a token the editor minted for this card (its Allow), which tells it from one
+    // pasted in, perhaps shared with another sandbox: only a minted one is revoked when the card goes or its token is replaced.
+    tokenId: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe("The platform's id for a token minted for this card, revoked when the card is removed or its token replaced."),
 });
 export type FleetConfig = z.infer<typeof FleetConfigSchema>;
 // Another of the owner's sandboxes this one may hand tasks to (schemas/links.ts). The token is an inbound link that
@@ -409,8 +364,6 @@ export const LinkConfigSchema = z.object({
 export type LinkConfig = z.infer<typeof LinkConfigSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type CliConfig = z.infer<typeof CliConfigSchema>;
-export type PluginConfig = z.infer<typeof PluginConfigSchema>;
-export type ExtensionConfig = z.infer<typeof ExtensionConfigSchema>;
 export type SshConfig = z.infer<typeof SshConfigSchema>;
 export type DockerConfig = z.infer<typeof DockerConfigSchema>;
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;

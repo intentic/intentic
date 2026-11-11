@@ -174,6 +174,40 @@ test(`seeds from the tile, then from what is live, then from what the scan read`
     expect(scanned[`nothing`]).toBeUndefined();
 });
 
+// A region choice pins each cloud's host and keeps one box for a host of your own: the PostHog card's shape.
+const regions = tile([
+    {
+        key: `region`,
+        label: `Region`,
+        default: `us`,
+        options: [
+            { value: `us`, label: `US cloud` },
+            { value: `eu`, label: `EU cloud` },
+            { value: `self`, label: `Self-hosted` },
+        ],
+    },
+    { key: `host`, label: `Host`, value: `https://us.posthog.com`, when: `region == 'us'` },
+    { key: `host`, label: `Host`, value: `https://eu.posthog.com`, when: `region == 'eu'` },
+    { key: `host`, label: `URL`, when: `region not in ['us', 'eu']` },
+]);
+
+test(`bakes in only the fixed value whose arm is chosen`, () => {
+    expect(buildConfig(regions, { region: `eu`, host: `https://stale.example` })).toEqual({ region: `eu`, host: `https://eu.posthog.com` });
+    expect(buildConfig(regions, { region: `self`, host: `https://ph.acme.dev` })).toEqual({ region: `self`, host: `https://ph.acme.dev` });
+});
+
+// A connection saved before the card asked for a region holds only its host; opening it must not move it to the default.
+test(`answers a choice the stored settings predate with the option that keeps them`, () => {
+    expect(seedValues(regions, { host: `https://eu.posthog.com` }, {})[`region`]).toBe(`eu`);
+    expect(seedValues(regions, { host: `https://us.posthog.com` }, {})[`region`]).toBe(`us`);
+    const own = seedValues(regions, { host: `https://ph.acme.dev` }, {});
+    expect(own).toEqual({ region: `self`, host: `https://ph.acme.dev` });
+    expect(buildConfig(regions, own)).toEqual({ region: `self`, host: `https://ph.acme.dev` });
+    // A suggestion naming the host lands the same way, and a fresh form keeps the default.
+    expect(seedValues(regions, undefined, { host: `https://eu.posthog.com` })[`region`]).toBe(`eu`);
+    expect(seedValues(regions, undefined, {})[`region`]).toBe(`us`);
+});
+
 // On edit, a blank secret box means "keep the stored value", not "unanswered"; `stored` names which
 // keys are held.
 test(`lets a stored credential be kept, and sends the marker rather than a hole`, () => {
@@ -275,6 +309,29 @@ test(`puts a question beside its label only when the answers fit there`, () => {
     ).toBe(false);
     // A plain text field stacks, and so does anything multiline however short its options are.
     expect(inlineField({ key: `server`, label: `Server` })).toBe(false);
+    // A picker of other connections stacks under its label however short their names, and so do rows of variables.
+    expect(
+        inlineField({ key: `exit`, label: `Browse through`, connection: { kind: `exit` }, options: [{ value: ``, label: `None` }, { value: `pl`, label: `pl` }] }),
+    ).toBe(false);
+    expect(inlineField({ key: `env`, label: `Environment`, keyValue: true })).toBe(false);
+});
+
+// The field a key request keeps its request in is drawn inside that field's own control, never as a box beside it,
+// and only while the key request is itself in play.
+test(`draws a key request's own request field inside it, not as a box of its own`, () => {
+    const card = tile([
+        { key: `credential`, label: `Certificate`, default: `request`, options: [{ value: `request`, label: `Request` }, { value: `own`, label: `Own` }] },
+        { key: `privateKey`, label: `Key`, secret: true, when: `credential == 'request'`, keyRequest: { subject: { CN: `\${commonName}` }, request: `csr` } },
+        { key: `csr`, label: `Request`, optional: true, multiline: true, when: `credential == 'request'` },
+        { key: `privateKey`, label: `Private key`, secret: true, multiline: true, when: `credential == 'own'` },
+    ]);
+
+    expect(shownFields(card, { credential: `request` }).map((field) => field.label)).toEqual([`Certificate`, `Key`]);
+    expect(shownFields(card, { credential: `own` }).map((field) => field.label)).toEqual([`Certificate`, `Private key`]);
+    // Still answered: what the key request wrote there is sent with the rest.
+    expect(buildConfig(card, { credential: `request`, privateKey: `marker`, csr: `-----BEGIN CERTIFICATE REQUEST-----` })).toMatchObject({
+        csr: `-----BEGIN CERTIFICATE REQUEST-----`,
+    });
 });
 
 // How loudly a box objects, by whether it was left and whether a submit was refused: silent before either, a muted

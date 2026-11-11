@@ -38,9 +38,16 @@ const order = [
 
     <h2>Connecting it</h2>
     <ol>
-        <li>Mint a provisioning token at <strong>Settings → Tokens</strong>. It is shown once; only its digest is stored.</li>
-        <li>In the sandbox that should hold it, add the <strong>Sandbox fleet</strong> capability and paste the token in.</li>
+        <li>In the sandbox that should hold it, open the <strong>Sandbox fleet</strong> capability and press <strong>Allow</strong>.</li>
+        <li>
+            The app mints a provisioning token for that sandbox under your own sign-in and saves it to the card. Nothing is copied: it is
+            listed on <strong>Settings → Tokens</strong> under the sandbox's name, and removing the card revokes it.
+        </li>
     </ol>
+    <p>
+        Only the sandbox's owner can press Allow, since the token acts on the account of whoever makes it. A token minted by hand on
+        Settings → Tokens can still be pasted under the card's Advanced; that one is yours to revoke.
+    </p>
     <p>
         That is the whole setup, and it is deliberately one sandbox rather than a switch on your account. The box you connect is the one that
         can provision; every other sandbox you own is unchanged. An agent that needs it and does not have it asks the ordinary way:

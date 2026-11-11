@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ContributionPoint } from "../contribution-point.js";
 import { TOOL_PATH } from "./tools.js";
 import { MARK_FIELDS } from "../mark.js";
+import { ConnectionRefSchema, ConnectProbeSchema, KeyRequestSchema } from "./capability-field-shapes.js";
 import { type EffectMeaning, fieldMeanings, unwrapMeaning } from "../meaning.js";
 
 // A field the install dialog's config form renders (key, label, secret/optional flags, a select, a `when` gate);
@@ -73,14 +74,24 @@ export const CapabilityFieldSchema = z.object({
         .describe(
             "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
         ),
-    // Filled by a sign-in button rather than typed: the platform's own OAuth client for that provider runs the consent
-    // and hands the refresh token to the form, and later trades it for access tokens (the client secret never leaves
-    // the platform). Only on the field the card's `refreshToken` names.
-    signIn: z
-        .enum(["google"])
+    // (2026-11-11) Fields whose answer is not a typed string (capability-field-shapes.ts).
+    connection: ConnectionRefSchema.optional(),
+    keyValue: z
+        .boolean()
         .optional()
         .describe(
-            "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+            "Render it as rows of a name and a value with add and remove, for a block of `KEY=VALUE` lines (an agent's environment). What is stored is those lines, the same text a `multiline` box holds. With `secret: true` the values are masked.",
+        ),
+    keyRequest: KeyRequestSchema.optional(),
+    // Filled by a sign-in button rather than typed. `google`: the platform's own OAuth client runs the consent and hands
+    // the refresh token to the form, and later trades it for access tokens (the client secret never leaves the
+    // platform). `microsoft`: the sandbox runs the card's `refreshToken.deviceCode` sign-in. Only on the field the
+    // card's `refreshToken` names.
+    signIn: z
+        .enum(["google", "microsoft"])
+        .optional()
+        .describe(
+            "Fill this field with a sign-in button instead of a text box, and the refresh token lands here for Save to store, with nobody pasting a token. `google`: the platform's own OAuth client runs the consent screen, and the card's CLI trades the token for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. `microsoft`: the sandbox runs the device-code sign-in the card's `refreshToken.deviceCode` declares, against the card's own app. Only on the secret field the card's `refreshToken` names.",
         ),
 });
 export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
@@ -90,11 +101,18 @@ export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
 export const fieldApplies = (field: CapabilityField, values: Readonly<Record<string, unknown>>): boolean =>
     field.when === undefined || evaluateWhen(parseWhen(field.when), values);
 
+// A condition over the answers already given, in the field `when`'s grammar.
+const WhenConditionSchema = z.string().refine(isWhenExpression, { message: "not a valid `when` condition" });
+
+// The grants a test may trade for its bearer: a delegated sign-in's refresh token, or an app's own secret.
+export const PROBE_GRANTS = ["refresh_token", "client_credentials"] as const;
+
 // One authenticated request the daemon makes on the form's behalf, declared as data since the check is per-service.
 // Worth declaring on any card whose failure is otherwise silent.
 const ProbeSchema = z.object({
-    // A delegated sign-in's card keeps only a refresh token, so its test first trades that for an access token. The
-    // trade is held in memory for this one request; neither token is stored or shown.
+    // A card that keeps a refresh token (a delegated sign-in) or an app's client secret (app-only access) has no bearer
+    // of its own, so its test first trades one for an access token. The trade is held in memory for this one request;
+    // no token is stored or shown.
     oauth: z
         .object({
             tokenUrl: z
@@ -103,11 +121,16 @@ const ProbeSchema = z.object({
                 .describe("The token endpoint, templated like `url`. Only Microsoft identity platform hosts are served today."),
             form: z
                 .record(z.string(), z.string())
-                .describe("The refresh-token grant's form fields, templated like `url`; a field that comes out empty is left out."),
+                .refine((form) => PROBE_GRANTS.some((grant) => grant === form["grant_type"]), {
+                    message: `grant_type must be one of ${PROBE_GRANTS.join(", ")}`,
+                })
+                .describe(
+                    "The grant's form fields, templated like `url`; a field that comes out empty is left out. `grant_type` is `refresh_token` (a delegated sign-in: nothing to test until someone has signed in) or `client_credentials` (an app's own secret, with `scope` naming the resource's `.default`).",
+                ),
         })
         .optional()
         .describe(
-            "Trade the card's refresh token for an access token before the request, sent as `Authorization: Bearer`. For Microsoft's identity platform the request goes to the Graph cloud paired with the token endpoint's host, whatever host `url` names.",
+            "Trade the card's refresh token, or its app's client secret, for an access token before the request, sent as `Authorization: Bearer`. For Microsoft's identity platform the request goes to the Graph cloud paired with the token endpoint's host, whatever host `url` names.",
         ),
     url: z
         .string()
@@ -123,10 +146,47 @@ const ProbeSchema = z.object({
         .string()
         .optional()
         .describe('A dotted path into the JSON answer naming who the caller is ("login", "user.name"), so success can say which account answered.'),
+    // A service that answers every call 200 and says in the body whether it worked (Slack) needs one more read, or a
+    // wrong token passes the test.
+    ok: z
+        .string()
+        .optional()
+        .describe(
+            'A dotted path into the JSON answer that must hold `true` for the answer to count ("ok"), for a service that answers 200 either way and says in the body whether the call worked. Anything else fails the test, naming the answer\'s `error` code.',
+        ),
     insecure: z
         .boolean()
         .optional()
         .describe("Accept a self-signed certificate, for a service whose local install ships one (Obsidian's Local REST API)."),
+});
+
+// What a sign-in asks for when it depends on the answers: the first entry whose `when` holds (or that has none).
+const ScopeChoiceSchema = z.object({
+    when: WhenConditionSchema.optional(),
+    scope: z.string().min(1),
+});
+
+// A sign-in the form runs through the sandbox (RFC 8628): the provider's endpoints answer no browser, so the daemon
+// asks for the code, polls, and hands the form a marker for the token it holds. Declared as data, so another card of a
+// provider the sandbox already serves is a manifest edit. Every value is a template over the fields, like `probe`'s.
+const DeviceCodeSchema = z.object({
+    when: WhenConditionSchema.optional().describe(
+        "Only while this condition over the answers holds does the button stand in for the field (`!clientSecret`: an app with a secret of its own brings its own token). Otherwise the field stays a box to paste into.",
+    ),
+    authorizeUrl: z
+        .string()
+        .min(1)
+        .describe("The device authorization endpoint, templated like `probe.url`: `https://${authority}/${tenantId:uri}/oauth2/v2.0/devicecode`."),
+    tokenUrl: z
+        .string()
+        .min(1)
+        .describe("The token endpoint the sandbox polls until the person finishes, templated the same way. Only Microsoft identity platform hosts are served today."),
+    clientId: z.string().min(1).describe("The public client the sign-in runs as, templated: `${clientId}`."),
+    scope: z
+        .union([z.string().min(1), z.array(ScopeChoiceSchema).min(1)])
+        .describe(
+            "What the sign-in asks for, templated: one string, or a list whose first entry with no `when`, or a `when` that holds, is asked (read permissions alone for a read-only card). On Microsoft's identity platform a scope naming `https://graph.microsoft.com/` is asked of the Graph paired with the token endpoint's cloud.",
+        ),
 });
 
 // How a cli card's credential reaches the services it is for without ever reaching the agent: the sandbox's credential
@@ -241,6 +301,24 @@ const CatalogSchema = z.object({
         })
         .optional()
         .describe("The walkthrough the install dialog renders for getting the credential this card asks for."),
+    // What a connected card still needs done on the service's side (invite the bot to a server). Built in the browser
+    // from what the summary carries, which is why a template may not name a secret field: the browser never holds one.
+    links: z
+        .array(
+            z.object({
+                label: z.string().min(1).describe('What the link says on the connected card: "Add to your server".'),
+                url: z
+                    .string()
+                    .min(1)
+                    .describe(
+                        "The address, templated over the card's non-secret fields like `env`: `${field}` substitutes, `${field:uri}` percent-encodes. Offered only once every field it names holds a value.",
+                    ),
+            }),
+        )
+        .optional()
+        .describe(
+            "Links each connected card of this kind offers on its row, for a step taken on the service's own site after connecting (inviting a bot to a server). A template naming a secret field is refused: the editor is never shown one.",
+        ),
 });
 
 // Every arm carries these: the slug (the card's /capabilities/<id> route and the discriminator value the daemon
@@ -286,9 +364,12 @@ export const CapabilityContributionSchema = z
                     "A sandbox feature pack name (whisper, llamacpp, browser, …) supplying this tool. Preferred over `fragment`: an image that already bakes the pack needs no rebuild, and there is no copy to drift.",
                 )
                 .meta({ effect: "image" }),
-            probe: ProbeSchema.optional().describe(
-                "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards.",
-            ),
+            probe: z
+                .union([ProbeSchema, ConnectProbeSchema])
+                .optional()
+                .describe(
+                    "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards. For a service not spoken to over HTTP, `connect` names the protocol the daemon dials it with instead of `url`.",
+                ),
             // Lets a sign-in on the agent's side store what it got without printing it: the daemon's oauth-token route
             // writes `field` and nothing else, for a caller holding the card's current token, while every `boundTo`
             // field still holds what the sign-in was made against.
@@ -300,6 +381,9 @@ export const CapabilityContributionSchema = z
                         .describe(
                             "Fields a token is only good for as filled in at sign-in (tenant, client, cloud, access level); a token arriving after one of them changed is refused.",
                         ),
+                    deviceCode: DeviceCodeSchema.optional().describe(
+                        "How the form signs in on its own (RFC 8628 device authorization), for the field declaring `signIn: \"microsoft\"`: the sandbox asks for a code, shows it with the provider's page, waits for the person there, and fills the field. The CLI's own sign-in stays for the agent.",
+                    ),
                 })
                 .optional()
                 .describe(
@@ -392,6 +476,14 @@ export const CapabilityContributionSchema = z
         z.object({ ...contributionBase, kind: z.literal("agent") }),
     ])
     .superRefine((spec, ctx) => {
+        const secrets = new Set(spec.fields.filter((field) => field.secret === true).map((field) => field.key));
+        for (const link of spec.catalog.links ?? []) {
+            for (const [, key] of link.url.matchAll(/\$\{([a-zA-Z][a-zA-Z0-9]*)(?::uri)?\}/g)) {
+                if (key !== undefined && secrets.has(key)) {
+                    ctx.addIssue({ code: "custom", message: `catalog.links "${link.label}" names the secret field "${key}", which the editor never holds` });
+                }
+            }
+        }
         // A totp field's env must never be referenced: that would hand the agent the seed itself instead of the
         // daemon's one-time codes.
         if (spec.kind !== "cli") {
@@ -408,6 +500,10 @@ export const CapabilityContributionSchema = z
         }
         for (const field of spec.fields.filter((candidate) => candidate.signIn !== undefined && candidate.key !== spec.refreshToken?.field)) {
             ctx.addIssue({ code: "custom", message: `signIn on "${field.key}" needs refreshToken.field to name it` });
+        }
+        // The sandbox runs a Microsoft sign-in from the card's own declaration; without one the button has nothing to do.
+        if (spec.fields.some((field) => field.signIn === "microsoft") && spec.refreshToken?.deviceCode === undefined) {
+            ctx.addIssue({ code: "custom", message: `signIn "microsoft" needs refreshToken.deviceCode to say how the sandbox signs in` });
         }
         for (const field of spec.fields.filter((candidate) => candidate.totp === true)) {
             if (Object.values(spec.env).some((template) => template.includes(`\${${field.key}}`) || template.includes(`\${${field.key}:uri}`))) {

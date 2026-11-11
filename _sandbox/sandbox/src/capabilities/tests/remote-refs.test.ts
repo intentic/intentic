@@ -112,6 +112,20 @@ describe(`readRemoteRefs`, () => {
         );
     });
 
+    // GitHub answers "not found" for a private repository a token cannot see, so with a card's token the answer names
+    // the card: that is what the reader goes and fixes, not the address.
+    test(`a repository a lending card cannot see, or that refuses its token, names the card`, async () => {
+        const card = { id: "github-ada", provider: "github", host: "github.com" } as const;
+        const unseen = "remote: Repository not found.\nfatal: repository 'https://github.com/owner/private.git/' not found";
+        await expect(readRemoteRefs(WORKSPACE_ROOT, "https://github.com/owner/private.git", "ghp_x", refusing(unseen), card)).rejects.toThrow(
+            `Could not read https://github.com/owner/private.git: your GitHub connection "github-ada" cannot see a repository at that address: if it is private, give that token read access to it, or paste another access token under Advanced.`,
+        );
+        const refused = "fatal: Authentication failed for 'https://github.com/owner/private.git/'";
+        await expect(readRemoteRefs(WORKSPACE_ROOT, "https://github.com/owner/private.git", "ghp_x", refusing(refused), card)).rejects.toThrow(
+            /refused the token of your GitHub connection "github-ada"/,
+        );
+    });
+
     test(`an unrecognised failure still reaches the reader as git's own last fatal line`, async () => {
         const stderr = "warning: something\nfatal: the remote end hung up unexpectedly";
         await expect(readRemoteRefs(WORKSPACE_ROOT, "https://example.com/repo.git", undefined, refusing(stderr))).rejects.toThrow(

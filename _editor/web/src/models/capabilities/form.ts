@@ -169,9 +169,13 @@ export const fieldVerified = (field: CapabilityField, value: string | undefined)
 };
 
 // Fields shown as inputs: const-valued fields are baked in, not rendered; when-gated ones only while
-// `fieldApplies` (the daemon's own install-time check) holds.
-export const shownFields = (entry: CapabilityCatalogEntry, values: FormValues): readonly CapabilityField[] =>
-    entry.fields.filter((field) => field.value === undefined && fieldApplies(field, values));
+// `fieldApplies` (the daemon's own install-time check) holds. A field a key request keeps its request in is drawn inside
+// that one (CertificateRequestField), not as a box of its own.
+export const shownFields = (entry: CapabilityCatalogEntry, values: FormValues): readonly CapabilityField[] => {
+    const applying = entry.fields.filter((field) => field.value === undefined && fieldApplies(field, values));
+    const drawnInside = new Set(applying.flatMap((field) => (field.keyRequest?.request === undefined ? [] : [field.keyRequest.request])));
+    return applying.filter((field) => !drawnInside.has(field.key));
+};
 
 // A field's answer before anyone gives one: its declared default, and a switch's "off" rather than empty, so it's
 // always answered.
@@ -203,7 +207,8 @@ export const inlineField = (field: CapabilityField): boolean => {
     if (field.boolean === true) {
         return true;
     }
-    if (field.options === undefined || field.multiline === true) {
+    // A picker of other connections and a list of rows stack under their label, however short their words.
+    if (field.options === undefined || field.multiline === true || field.connection !== undefined || field.keyValue === true) {
         return false;
     }
     return field.options.reduce((total, option) => total + option.label.length, 0) <= INLINE_OPTIONS_BUDGET;
@@ -266,13 +271,43 @@ export const seedValues = (
     }
     // Never seeds a secret; a prefill for a field the tile doesn't declare, or one the tile fixes, is
     // dropped.
+    const kept: FormValues = Object.fromEntries(Object.entries(live ?? {}).map(([key, value]) => [key, echoedAnswer(value)]));
     for (const [key, value] of Object.entries(prefill)) {
-        const field = entry.fields.find((candidate) => candidate.key === key);
-        if (field !== undefined && field.secret !== true && field.value === undefined) {
+        if (entry.fields.some((field) => field.key === key && field.secret !== true && field.value === undefined)) {
             values[key] = value;
+            kept[key] = value;
         }
     }
+    answerNewChoices(entry, values, kept);
     return values;
+};
+
+// How many of the answers a connection already holds the form would send differently (or not at all) as it stands.
+const changedAnswers = (entry: CapabilityCatalogEntry, values: FormValues, kept: FormValues): number => {
+    const sent = fieldConfig(entry, (field) => (fieldApplies(field, values) ? values[field.key] : undefined), values);
+    return Object.entries(kept).filter(
+        ([key, answer]) => entry.fields.some((field) => field.key === key && field.secret !== true) && sent[key] !== answer,
+    ).length;
+};
+
+// A choice added to a card after a connection was saved (PostHog's region in front of what used to be one URL box) has
+// no stored answer, and its default could hide or replace one the connection does hold: an edit would then quietly move
+// the connection. Such a choice is answered with whichever of its options keeps what is held, or left unanswered.
+const answerNewChoices = (entry: CapabilityCatalogEntry, values: FormValues, kept: FormValues): void => {
+    for (const field of entry.fields) {
+        if (field.value !== undefined || field.default === undefined || Object.hasOwn(kept, field.key)) {
+            continue;
+        }
+        const changed = changedAnswers(entry, values, kept);
+        if (changed === 0) {
+            return;
+        }
+        const answers = [...(field.options ?? []).map((option) => option.value), ``];
+        const best = answers
+            .map((answer) => ({ answer, changed: changedAnswers(entry, { ...values, [field.key]: answer }, kept) }))
+            .reduce((winner, candidate) => (candidate.changed < winner.changed ? candidate : winner), { answer: values[field.key] ?? ``, changed });
+        values[field.key] = best.answer;
+    }
 };
 
 // The fields a user types a credential into: never echoed back by the daemon, never filled in on their behalf.
@@ -320,14 +355,21 @@ export const buildConfig = (entry: CapabilityCatalogEntry, values: FormValues, s
         }
         const value = submittedValue(field, values[field.key]);
         return value.length > 0 ? value : undefined;
-    });
+    }, values);
 
 // Config as capabilityEffects sees it: fixed fields baked in, the rest read from whatever source the
 // caller passes (form values, tile defaults, or an instance's echoed config).
-export const fieldConfig = (entry: CapabilityCatalogEntry, source: (field: CapabilityField) => string | undefined): Record<string, string> => {
+// `answers`, when given, gates a fixed value under a `when` (one per arm of a choice: PostHog's US and EU hosts); without
+// them every fixed value is baked in, as a tile's defaults read it.
+export const fieldConfig = (
+    entry: CapabilityCatalogEntry,
+    source: (field: CapabilityField) => string | undefined,
+    answers?: Readonly<FormValues>,
+): Record<string, string> => {
     const config: Record<string, string> = {};
     for (const field of entry.fields) {
-        const value = field.value ?? source(field);
+        const pinned = answers === undefined || fieldApplies(field, answers) ? field.value : undefined;
+        const value = field.value === undefined ? source(field) : pinned;
         if (value !== undefined) {
             config[field.key] = value;
         }

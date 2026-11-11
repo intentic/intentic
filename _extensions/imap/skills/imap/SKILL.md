@@ -30,8 +30,9 @@ polling schedule.
 
 ## OAuth2 (Exchange Online, Gmail)
 
-A card set to OAuth2 signs in without a password. For **Exchange Online**, once its tenant and client IDs are on the
-card, run `imap --account ${id} login` **with `run_in_background`**: it prints a Microsoft page and a short code for
+A card set to OAuth2 signs in without a password. For **Exchange Online**, the owner can press **Sign in with
+Microsoft** on the card itself (**Reconnect** on a saved card). From the chat instead, once its tenant and client IDs
+are on the card, run `imap --account ${id} login` **with `run_in_background`**: it prints a Microsoft page and a short code for
 the owner to open in their own browser and sign in as the mailbox's user, then stores the sign-in on the card by
 itself. Never ask for or print a token. `Nobody has signed in` or `no longer accepts the mailbox sign-in` means: run
 the login again in a turn the owner is watching. **Gmail** takes a refresh token the owner pastes on the card.

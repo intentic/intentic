@@ -7,7 +7,16 @@ import type { LinkTerms } from "@intentic/sandbox-contract/schemas/links";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { DEFAULT_TERMS, type FarPersona, type PairedLink, pairableSandboxes, pairWith, personasAt, preferredSandbox } from "./linkPairing";
+import {
+    DEFAULT_TERMS,
+    type FarPersona,
+    farSandboxNote,
+    type PairedLink,
+    pairableSandboxes,
+    pairWith,
+    personasAt,
+    preferredSandbox,
+} from "./linkPairing";
 
 const t = useT();
 
@@ -27,7 +36,10 @@ const { sandboxes, active, activeSandboxId, daemonUrl } = useSandbox();
 
 // The reader's other sandboxes they may mint a link on: one they operate, with an address to reach it at.
 const others = computed(() => pairableSandboxes(sandboxes.value, activeSandboxId.value));
-const farOptions = computed<readonly PickerOption<string>[]>(() => others.value.map((sandbox) => ({ value: sandbox.id, label: sandbox.name })));
+// Each by its name, with the machine it runs on and whether it answers now (farSandboxNote).
+const farOptions = computed<readonly PickerOption<string>[]>(() =>
+    others.value.map((sandbox) => ({ value: sandbox.id, label: sandbox.name, description: farSandboxNote(sandbox) })),
+);
 
 const farId = ref<string | undefined>();
 // The named sandbox chosen up front, once the list holds it; the reader may still pick another.

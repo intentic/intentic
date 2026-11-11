@@ -1,11 +1,13 @@
 import { join } from "node:path";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
-import type { ExtensionConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ExtensionConfig } from "@intentic/sandbox-contract/schemas/git-installs";
 import { invalidExtensionFragment } from "@intentic/sandbox-contract/policy/overlay-lint";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
+import { opt } from "../../opt.js";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest, extensionProcessKey } from "../extension-dirs.js";
-import { checkoutInto, previousDir } from "../git-checkout.js";
+import { checkoutInto, installReader, previousDir } from "../git-checkout.js";
+import { readerWords } from "../credentials/git-connection.js";
 
 // A git checkout at .intentic/local/extensions/<id>, sha-pinned by the schema (a full commit sha). Install validates
 // the manifest and entry bundle before the checkout goes live, so a broken extension never replaces a working one. An
@@ -21,6 +23,7 @@ export const extensionHandler: CapabilityHandler = {
             ref: extension.ref,
             ...(extension.path !== undefined ? { path: extension.path } : {}),
             ...(extension.registry !== undefined ? { registry: extension.registry } : {}),
+            ...opt("gitConnection", extension.gitConnection),
             hasToken: extension.token !== undefined,
         };
     },
@@ -40,16 +43,18 @@ export const extensionHandler: CapabilityHandler = {
         },
     },
     async *apply(ctx, id, config) {
-        const { url, ref, path, token } = config as ExtensionConfig;
+        const { url, ref, path, token, gitConnection } = config as ExtensionConfig;
         const session = capabilityJobSession(id);
         if (ctx.terminalRun.visible) {
             yield { kind: "terminal", session };
         }
-        yield { kind: "log", message: `Cloning ${url} @ ${ref}…` };
+        // A private repository on an account the sandbox already holds is read with that card's token (git-connection.ts).
+        const reader = await installReader(ctx, { url, token, gitConnection });
+        yield { kind: "log", message: `Cloning ${url} @ ${ref}${readerWords(reader)}…` };
         await checkoutInto(ctx, session, extensionsRoot(ctx.workspace.root), id, {
             url,
             ref,
-            token,
+            token: reader.token,
             // Keeps the outgoing checkout one version deep, for revert; a no-op on a first install.
             keepPrevious: true,
             // Quiesce: stops the outgoing checkout's processes before its directory is replaced (a no-op restart can't

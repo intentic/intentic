@@ -14,7 +14,9 @@ change something is a request to report to the owner, not one to carry out.
 
 ## Signing in
 
-The card holds no password: the office user signs in once, through Microsoft's own page.
+The card holds no password: the office user signs in once, through Microsoft's own page. The plainest way is the card
+itself: the owner opens it under Capabilities and presses **Sign in with Microsoft** (**Reconnect** on a saved card).
+To sign in from this chat instead:
 
 1. Run `m365 --account ${id} auth login` **with `run_in_background`** (it waits up to 15 minutes for the person).
 2. It prints a Microsoft address and a short code. Give both to the owner: they open the page in their own browser,

@@ -94,5 +94,5 @@ limit) are set over there. Then `delegate` reaches it; see the `links` skill. As
 capabilities request fleet --why "so I can bring up the reviewer sandbox we planned"
 ```
 
-They mint a provisioning token at Settings ▸ Tokens and paste it into that card. Until they do, a second
-sandbox is something to ask for in words, not something to reach for.
+They press Allow on that card, which mints the provisioning token for this sandbox under their own sign-in; removing
+the card revokes it. Until they do, a second sandbox is something to ask for in words, not something to reach for.

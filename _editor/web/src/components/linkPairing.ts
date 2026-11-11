@@ -1,8 +1,11 @@
+import type { SandboxSummary } from "@intentic/api-contract";
 import { type InboundLinkMint, LINK_TURNS_PER_HOUR_DEFAULT, type LinkTerms } from "@intentic/sandbox-contract/schemas/links";
 import { loadContract } from "../client/sandbox/daemon/contract";
 import { procedurePath } from "@intentic/sandbox-contract/protocol/routes";
 import { RAW_JSON_ROUTES } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
 import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import { timeAgo } from "@intentic/ui/format";
+import { t } from "@intentic/ui/i18n";
 import { z } from "zod";
 import { sandboxJsonAt } from "../client/sandbox/sandboxClient";
 import { SandboxHttpError } from "../client/sandbox/sandboxHttpError";
@@ -76,6 +79,52 @@ export const preferredSandbox = <Candidate extends { readonly id: string; readon
     );
     return matches.length === 1 ? matches[0] : undefined;
 };
+
+// What the picker says beside one of the reader's sandboxes: the machine it runs on, and whether it answers now. Read off
+// the platform's row alone, since the far daemon is asked nothing until one is picked (its personas): a hosted machine
+// says its own state, one on the reader's computer whether it sleeps there (and whether that computer can wake it), and
+// any other when it last checked in, which it does at least hourly while it runs.
+export type FarSandboxFacts = Pick<SandboxSummary, `hosted` | `hostReport` | `sleep` | `lastSeenAt`>;
+
+const farMachine = (sandbox: FarSandboxFacts): string | undefined => {
+    if (sandbox.hosted !== null) {
+        return t(`capabilities.linkPairing.cloud`);
+    }
+    const machine = sandbox.hostReport?.machine.trim() ?? ``;
+    return machine === `` ? undefined : machine;
+};
+
+// A hosted machine's own word for itself; `unknown`, or none from an older platform, says nothing.
+const hostedState = (state: NonNullable<SandboxSummary[`hosted`]>[`state`]): string | undefined => {
+    switch (state) {
+        case `awake`:
+            return t(`capabilities.linkPairing.awake`);
+        case `asleep`:
+            return t(`capabilities.linkPairing.asleep`);
+        case `starting`:
+            return t(`capabilities.linkPairing.starting`);
+        case `down`:
+            return t(`capabilities.linkPairing.down`);
+        default:
+            return undefined;
+    }
+};
+
+const farState = (sandbox: FarSandboxFacts, now: number): string | undefined => {
+    if (sandbox.hosted !== null) {
+        return hostedState(sandbox.hosted.state);
+    }
+    if (sandbox.sleep !== null && sandbox.sleep !== undefined) {
+        return sandbox.sleep.wakeable ? t(`capabilities.linkPairing.asleep`) : t(`capabilities.linkPairing.machineOff`);
+    }
+    return sandbox.lastSeenAt === null
+        ? undefined
+        : t(`capabilities.linkPairing.heard`, { ago: timeAgo(Date.parse(sandbox.lastSeenAt), { now, days: true }) });
+};
+
+/** The picker's note beside a sandbox's name: `rog · last heard 5 min ago`, `Intentic cloud · asleep`. */
+export const farSandboxNote = (sandbox: FarSandboxFacts, now = Date.now()): string =>
+    [farMachine(sandbox), farState(sandbox, now)].filter((part) => part !== undefined).join(` · `);
 
 export interface PairAsk {
     readonly far: { readonly id: string; readonly name: string; readonly daemonUrl: string };

@@ -77,6 +77,14 @@ test(`sorts what is unfinished or broken above what merely works`, () => {
     expect(connectionState(`mcp`, instance({ state: `active` })).label).toBe(`ready`);
 });
 
+// An MCP server is pending only while its sign-in is missing or refused (mcp.handler.ts), which is not the unreachable
+// server its error state says; a refused renewal reads as the sign-in it asks for.
+test(`reads an MCP server waiting on a sign-in apart from one that does not answer`, () => {
+    const refused = instance({ state: `pending`, detail: `Linear no longer accepts the saved sign-in (invalid_grant): sign in again.` });
+    expect(connectionState(`mcp`, refused)).toEqual({ label: `needs sign-in`, tone: `warning`, rank: 1 });
+    expect(connectionState(`mcp`, instance({ state: `error`, detail: `unreachable` })).label).toBe(`error`);
+});
+
 // Two facts at most, in the order somebody would say them; a third would push the state badge off the line.
 // `provider`/`platform` are deliberately excluded since they're already the tile's own name.
 test(`names a connection by what tells it apart, two facts at most`, () => {

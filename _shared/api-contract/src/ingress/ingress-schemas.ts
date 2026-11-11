@@ -412,6 +412,9 @@ export const FleetProvisionBodySchema = z.object({
 // delete sends it, and comes back from there until `recoverableUntil`.
 export const FleetRemoveBodySchema = z.object({ sandboxId: z.string().min(1) });
 export const FleetRemovedSchema = z.object({ name: z.string(), recoverableUntil: z.string() });
+// (2026-11-11) The token presented, revoked by itself: what a sandbox does when the fleet card holding a token minted
+// for it is removed. `revoked` is false for one already revoked, which is the same end.
+export const FleetReleasedSchema = z.object({ revoked: z.boolean() });
 export const FleetProvisionedSchema = z.object({
     sandboxId: z.string(),
     name: z.string(),

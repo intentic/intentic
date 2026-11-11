@@ -11,6 +11,7 @@ import {
     FleetProvisionBodySchema,
     FleetProvisionedSchema,
     FleetRemoveBodySchema,
+    FleetReleasedSchema,
     FleetRemovedSchema,
     FleetSandboxesSchema,
     FleetWhoSchema,
@@ -227,6 +228,8 @@ export const PLATFORM_INGRESS = {
         input: FleetRemoveBodySchema,
         output: FleetRemovedSchema,
     },
+    // A token giving itself up: it can only end its own use, never another token's, so it needs no session.
+    fleetRelease: { method: "POST", path: "/fleet/release", auth: "provisioning", body: "none", answer: "json", output: FleetReleasedSchema },
 
     /* The edge, a hosted image's builder, and anyone asking which database this is. */
     reachability: { method: "GET", path: "/api/reachability/{sandboxId}", auth: "none", body: "none", answer: "json", output: ReachabilitySchema },

@@ -15,7 +15,9 @@ Nothing happens until an office connects one of its two cards. `e-urzad verify` 
 **e-Doręczenia** (one card per registered system):
 
 - A system registered for the office's mailbox: Moduł uprawnień → Systemy → Dodaj system. The name given there is the card's system name.
-- That system's X.509 certificate and private key, pasted as PEM. Registration either issues a certificate from a CSR, or takes the office's own qualified certificate or e-seal. On PROD, a public entity gets one free and anyone else needs a qualified one.
+- That system's X.509 certificate and its private key. Registration either issues a certificate from a CSR, or takes the office's own qualified certificate or e-seal. On PROD, a public entity gets one free and anyone else needs a qualified one.
+  - **A certificate issued from a request** (the card's default): the card asks for the subject the registration reads (organization, domain, province, locality, country; department and e-mail optional, in ASCII, as the instructions in Załącznik 1c ask) and the sandbox makes an RSA 2048 key and a CSR for it (`keyRequest` on the key field). Only the CSR reaches the browser, to copy or download and attach in Dodaj system; the card keeps it beside the key, so it can be fetched again. The issued certificate is pasted later, and until then the CLI says the card has no certificate yet.
+  - **The office's own qualified certificate or e-seal**: both pasted as PEM.
 - The mailbox's delivery address (ADE). The choice of INT or PROD. INT admits only the public IP addresses registered with it.
 
 Both cards keep their credentials as Intentic secrets (`secret` fields) and name the hosts those credentials are meant for.

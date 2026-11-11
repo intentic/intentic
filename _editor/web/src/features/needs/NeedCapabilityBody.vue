@@ -1,19 +1,22 @@
 <!-- A capability need's own answer: the connection's form inside the card (a linked sandbox paired in it), a new credential, a setting change, or a removal. -->
 <script setup lang="ts">
-import { type CapabilityCatalogEntry, capabilityEffects, type CapabilityEffect } from "@intentic/capability-catalog";
+import { type AddCapabilityInput, type CapabilityCatalogEntry, capabilityEffects, type CapabilityEffect } from "@intentic/capability-catalog";
 import type { CapabilityNeed, Need } from "@intentic/sandbox-contract/schemas/needs";
 import { type NoticeModel, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, reactive, ref } from "vue";
-import CapabilityFieldRow from "../../components/CapabilityFieldRow.vue";
+import CapabilityFieldRow from "../../parts/capabilities/CapabilityFieldRow.vue";
 import LinkPairing from "../../components/LinkPairing.vue";
+import FleetAllow from "../capabilities/connect/FleetAllow.vue";
 import type { PairedLink } from "../../components/linkPairing";
 import { guideParts, guideTokenUrl } from "../../models/capabilities/credentialGuide";
 import SecretField from "../../parts/capabilities/SecretField.vue";
 import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { buildConfig, cleanName, fieldError, formComplete, inlineField, nameError, seedValues, shownFields } from "../../models/capabilities/form";
 import { generatesKey, sshKeyScope } from "../../models/capabilities/sshKey";
+import { keyRequestScope } from "../../models/capabilities/keyRequest";
 import SshKeyField from "../../parts/capabilities/SshKeyField.vue";
+import CertificateRequestField from "../../parts/capabilities/CertificateRequestField.vue";
 import { catalogEntries, suggestName } from "../../models/capabilities/tiles";
 import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useExtensions } from "../../models/extensions/useExtensions";
@@ -123,7 +126,7 @@ const connect = async (): Promise<void> => {
             // Settled now (2026-10-20): `accept` only marks it working, and nothing else sends `apply` for a connect.
             await applyNow(applyDeps(id), true);
             // A key made on this card (the same one the full form would show) is spent once the connection holds it.
-            for (const made of operationsUnder(sshKeyScope(tile.id))) {
+            for (const made of [...operationsUnder(sshKeyScope(tile.id)), ...operationsUnder(keyRequestScope(tile.id))]) {
                 dismissOperation(made.key);
             }
         },
@@ -149,6 +152,26 @@ const change = async (): Promise<void> => {
             await applyNow(applyDeps(id));
         },
     });
+};
+
+// The fleet's Allow, in the card (FleetAllow.vue): the token is minted under the reader's own session and saved as a
+// connect is. A save that did not end connected throws, so Allow takes back the token it minted.
+const allowingFleet = computed(() => props.subject.mode === `connect` && entry.value?.kind === `fleet`);
+const allowFleet = async (input: AddCapabilityInput): Promise<void> => {
+    const id = props.need.id;
+    const ended = await answer({
+        what: t(`needs.capability.connecting`, { name: props.subject.name }),
+        tag: `connect`,
+        failed: t(`needs.capability.couldNotConnect`),
+        task: async (report) => {
+            await needs.answer.mutateAsync({ id, answer: { kind: `accept` } });
+            await add(input, heard(report));
+            await applyNow(applyDeps(id), true);
+        },
+    });
+    if (ended?.state !== `done`) {
+        throw new Error(t(`needs.capability.couldNotConnect`));
+    }
 };
 
 // A linked sandbox, paired in the card: this editor mints the link over there under the reader's own session, and the
@@ -216,6 +239,17 @@ const guideSteps = computed<readonly string[]>(() => entry.value?.guide?.steps ?
             <Notice v-if="pairingNotice" :of="pairingNotice" />
         </div>
 
+        <!-- The fleet, allowed in one press: nothing to paste. -->
+        <div v-else-if="allowingFleet" class="flex flex-col gap-2">
+            <FleetAllow :save="allowFleet" @notice="pairingNotice = $event" />
+            <div class="flex flex-wrap items-center gap-2">
+                <ChatDecisionButton tone="secondary" icon="external-link" :to="setupAt">{{ t(`needs.capability.fullForm`) }}</ChatDecisionButton>
+                <slot name="decline" />
+            </div>
+            <!-- A refused save is the need's own notice, below; this one is the mint's. -->
+            <Notice v-if="pairingNotice && !notice" :of="pairingNotice" />
+        </div>
+
         <!-- A new connection whose form finishes it: filled in with everything the agent could know, credential empty. -->
         <form v-else-if="subject.mode === `connect` && inline && entry" class="flex flex-col gap-3" @submit.prevent="connect">
             <details v-if="tokenUrl || guideSteps.length > 0" class="text-2xs text-muted">
@@ -243,6 +277,8 @@ const guideSteps = computed<readonly string[]>(() => entry.value?.guide?.steps ?
             <template v-for="field in fields" :key="field.key">
                 <!-- A key the sandbox makes: only its public half and the line that authorizes it, never a box to paste into. -->
                 <SshKeyField v-if="generatesKey(entry, field, values)" :field="field" :values="values" :entry="entry.id" />
+                <!-- A key the sandbox makes for a certificate: only its request, to send the issuer. -->
+                <CertificateRequestField v-else-if="field.keyRequest" :field="field" :values="values" :entry="entry" />
                 <SecretField v-else-if="field.secret" v-model="values[field.key]" :secret-key="field.label" :multiline="field.multiline === true" collect no-hint />
                 <CapabilityFieldRow v-else :field="field" :values="values" :inline="inlineField(field)" :alarm="values[field.key] ? fieldError(field, values[field.key]) : undefined" />
             </template>

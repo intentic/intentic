@@ -576,6 +576,30 @@
                                                     }
                                                 },
                                                 "additionalProperties": false
+                                            },
+                                            "links": {
+                                                "description": "Links each connected card of this kind offers on its row, for a step taken on the service's own site after connecting (inviting a bot to a server). A template naming a secret field is refused: the editor is never shown one.",
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "label": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "What the link says on the connected card: \"Add to your server\"."
+                                                        },
+                                                        "url": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "The address, templated over the card's non-secret fields like `env`: `${field}` substitutes, `${field:uri}` percent-encodes. Offered only once every field it names holds a value."
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "label",
+                                                        "url"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
                                             }
                                         },
                                         "required": [
@@ -663,11 +687,69 @@
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
                                                 },
+                                                "connection": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "kind": {
+                                                            "type": "string",
+                                                            "pattern": "^[a-z][a-z0-9-]*$",
+                                                            "description": "The kind of connection it names: `device`, `exit`, `identity`, `cli`."
+                                                        },
+                                                        "provider": {
+                                                            "description": "For a kind several cards share, the card it was added from: a cli card's `provider` (`imap`), a site's `platform`.",
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "kind"
+                                                    ],
+                                                    "description": "Answer this field by picking one of the owner's existing connections of this kind, by name, instead of typing the name. The empty choice is what leaving the field empty means, labelled with `placeholder`; with none of that kind connected, the field says so. The value stored is the connection's name, and the sandbox refuses a name that is not one.",
+                                                    "additionalProperties": false
+                                                },
+                                                "keyValue": {
+                                                    "description": "Render it as rows of a name and a value with add and remove, for a block of `KEY=VALUE` lines (an agent's environment). What is stored is those lines, the same text a `multiline` box holds. With `secret: true` the values are masked.",
+                                                    "type": "boolean"
+                                                },
+                                                "keyRequest": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "subject": {
+                                                            "type": "object",
+                                                            "propertyNames": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                    "C",
+                                                                    "ST",
+                                                                    "L",
+                                                                    "O",
+                                                                    "OU",
+                                                                    "CN",
+                                                                    "emailAddress"
+                                                                ]
+                                                            },
+                                                            "additionalProperties": {
+                                                                "type": "string"
+                                                            },
+                                                            "description": "The request's subject, attribute by attribute, as templates over the other fields (`${organization}`). An attribute that comes out empty is left out; letters with diacritics are written without them."
+                                                        },
+                                                        "request": {
+                                                            "description": "A non-secret `multiline` field the request itself is kept in, so the card shows it again later; the form draws it inside this one rather than as a box of its own.",
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "subject"
+                                                    ],
+                                                    "description": "This secret field holds a private key the sandbox generates and keeps (RSA 2048): the form shows a PKCS#10 certificate signing request for it to copy or download, and the key itself never reaches the browser. For a service that issues a certificate from a request, which the card then takes in another field.",
+                                                    "additionalProperties": false
+                                                },
                                                 "signIn": {
-                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "description": "Fill this field with a sign-in button instead of a text box, and the refresh token lands here for Save to store, with nobody pasting a token. `google`: the platform's own OAuth client runs the consent screen, and the card's CLI trades the token for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. `microsoft`: the sandbox runs the device-code sign-in the card's `refreshToken.deviceCode` declares, against the card's own app. Only on the secret field the card's `refreshToken` names.",
                                                     "type": "string",
                                                     "enum": [
-                                                        "google"
+                                                        "google",
+                                                        "microsoft"
                                                     ]
                                                 }
                                             },
@@ -711,72 +793,123 @@
                                         "minLength": 1
                                     },
                                     "probe": {
-                                        "description": "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards.",
-                                        "type": "object",
-                                        "properties": {
-                                            "oauth": {
-                                                "description": "Trade the card's refresh token for an access token before the request, sent as `Authorization: Bearer`. For Microsoft's identity platform the request goes to the Graph cloud paired with the token endpoint's host, whatever host `url` names.",
+                                        "description": "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards. For a service not spoken to over HTTP, `connect` names the protocol the daemon dials it with instead of `url`.",
+                                        "anyOf": [
+                                            {
                                                 "type": "object",
                                                 "properties": {
-                                                    "tokenUrl": {
+                                                    "oauth": {
+                                                        "description": "Trade the card's refresh token, or its app's client secret, for an access token before the request, sent as `Authorization: Bearer`. For Microsoft's identity platform the request goes to the Graph cloud paired with the token endpoint's host, whatever host `url` names.",
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "tokenUrl": {
+                                                                "type": "string",
+                                                                "minLength": 1,
+                                                                "description": "The token endpoint, templated like `url`. Only Microsoft identity platform hosts are served today."
+                                                            },
+                                                            "form": {
+                                                                "type": "object",
+                                                                "propertyNames": {
+                                                                    "type": "string"
+                                                                },
+                                                                "additionalProperties": {
+                                                                    "type": "string"
+                                                                },
+                                                                "description": "The grant's form fields, templated like `url`; a field that comes out empty is left out. `grant_type` is `refresh_token` (a delegated sign-in: nothing to test until someone has signed in) or `client_credentials` (an app's own secret, with `scope` naming the resource's `.default`)."
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "tokenUrl",
+                                                            "form"
+                                                        ],
+                                                        "additionalProperties": false
+                                                    },
+                                                    "url": {
                                                         "type": "string",
                                                         "minLength": 1,
-                                                        "description": "The token endpoint, templated like `url`. Only Microsoft identity platform hosts are served today."
+                                                        "description": "The URL to call, as a template over the fields: `${field}` substitutes, `${field:uri}` percent-encodes. Same spelling as `env`."
                                                     },
-                                                    "form": {
+                                                    "method": {
+                                                        "description": "Defaults to GET.",
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "GET",
+                                                            "POST",
+                                                            "HEAD"
+                                                        ]
+                                                    },
+                                                    "headers": {
+                                                        "description": "The request headers, templated the same way: `{\"Authorization\": \"Bearer ${token}\"}`.",
                                                         "type": "object",
                                                         "propertyNames": {
                                                             "type": "string"
                                                         },
                                                         "additionalProperties": {
                                                             "type": "string"
-                                                        },
-                                                        "description": "The refresh-token grant's form fields, templated like `url`; a field that comes out empty is left out."
+                                                        }
+                                                    },
+                                                    "identity": {
+                                                        "description": "A dotted path into the JSON answer naming who the caller is (\"login\", \"user.name\"), so success can say which account answered.",
+                                                        "type": "string"
+                                                    },
+                                                    "ok": {
+                                                        "description": "A dotted path into the JSON answer that must hold `true` for the answer to count (\"ok\"), for a service that answers 200 either way and says in the body whether the call worked. Anything else fails the test, naming the answer's `error` code.",
+                                                        "type": "string"
+                                                    },
+                                                    "insecure": {
+                                                        "description": "Accept a self-signed certificate, for a service whose local install ships one (Obsidian's Local REST API).",
+                                                        "type": "boolean"
                                                     }
                                                 },
                                                 "required": [
-                                                    "tokenUrl",
-                                                    "form"
+                                                    "url"
                                                 ],
                                                 "additionalProperties": false
                                             },
-                                            "url": {
-                                                "type": "string",
-                                                "minLength": 1,
-                                                "description": "The URL to call, as a template over the fields: `${field}` substitutes, `${field:uri}` percent-encodes. Same spelling as `env`."
-                                            },
-                                            "method": {
-                                                "description": "Defaults to GET.",
-                                                "type": "string",
-                                                "enum": [
-                                                    "GET",
-                                                    "POST",
-                                                    "HEAD"
-                                                ]
-                                            },
-                                            "headers": {
-                                                "description": "The request headers, templated the same way: `{\"Authorization\": \"Bearer ${token}\"}`.",
+                                            {
                                                 "type": "object",
-                                                "propertyNames": {
-                                                    "type": "string"
+                                                "properties": {
+                                                    "connect": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "tcp",
+                                                            "postgres",
+                                                            "mysql",
+                                                            "imap"
+                                                        ],
+                                                        "description": "What to dial. `tcp`: only that something accepts a connection there. `postgres` and `mysql`: sign in to the database (TLS when the server offers it, as their command-line clients do) and name the server's version. `imap`: sign in with LOGIN, over implicit TLS on 993 and STARTTLS where offered elsewhere; with no password it only checks the greeting."
+                                                    },
+                                                    "host": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "description": "The host to dial, templated: `${host}`."
+                                                    },
+                                                    "port": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "description": "The port, templated: `${port}`."
+                                                    },
+                                                    "user": {
+                                                        "description": "Who to sign in as, templated.",
+                                                        "type": "string"
+                                                    },
+                                                    "password": {
+                                                        "description": "The password, templated.",
+                                                        "type": "string"
+                                                    },
+                                                    "database": {
+                                                        "description": "The database to open, for `postgres` and `mysql`; the one a success names.",
+                                                        "type": "string"
+                                                    }
                                                 },
-                                                "additionalProperties": {
-                                                    "type": "string"
-                                                }
-                                            },
-                                            "identity": {
-                                                "description": "A dotted path into the JSON answer naming who the caller is (\"login\", \"user.name\"), so success can say which account answered.",
-                                                "type": "string"
-                                            },
-                                            "insecure": {
-                                                "description": "Accept a self-signed certificate, for a service whose local install ships one (Obsidian's Local REST API).",
-                                                "type": "boolean"
+                                                "required": [
+                                                    "connect",
+                                                    "host",
+                                                    "port"
+                                                ],
+                                                "additionalProperties": false
                                             }
-                                        },
-                                        "required": [
-                                            "url"
-                                        ],
-                                        "additionalProperties": false
+                                        ]
                                     },
                                     "refreshToken": {
                                         "description": "This card's credential is a delegated OAuth refresh token the extension's own CLI or process obtains and rotates. They store it through `POST /capabilities/{id}/oauth-token` (an extension process also needs that route in `permissions.daemon`) instead of printing it for someone to paste.",
@@ -792,6 +925,67 @@
                                                     "type": "string"
                                                 },
                                                 "description": "Fields a token is only good for as filled in at sign-in (tenant, client, cloud, access level); a token arriving after one of them changed is refused."
+                                            },
+                                            "deviceCode": {
+                                                "description": "How the form signs in on its own (RFC 8628 device authorization), for the field declaring `signIn: \"microsoft\"`: the sandbox asks for a code, shows it with the provider's page, waits for the person there, and fills the field. The CLI's own sign-in stays for the agent.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "when": {
+                                                        "description": "Only while this condition over the answers holds does the button stand in for the field (`!clientSecret`: an app with a secret of its own brings its own token). Otherwise the field stays a box to paste into.",
+                                                        "type": "string"
+                                                    },
+                                                    "authorizeUrl": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "description": "The device authorization endpoint, templated like `probe.url`: `https://${authority}/${tenantId:uri}/oauth2/v2.0/devicecode`."
+                                                    },
+                                                    "tokenUrl": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "description": "The token endpoint the sandbox polls until the person finishes, templated the same way. Only Microsoft identity platform hosts are served today."
+                                                    },
+                                                    "clientId": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "description": "The public client the sign-in runs as, templated: `${clientId}`."
+                                                    },
+                                                    "scope": {
+                                                        "anyOf": [
+                                                            {
+                                                                "type": "string",
+                                                                "minLength": 1
+                                                            },
+                                                            {
+                                                                "minItems": 1,
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "when": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "scope": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                        }
+                                                                    },
+                                                                    "required": [
+                                                                        "scope"
+                                                                    ],
+                                                                    "additionalProperties": false
+                                                                }
+                                                            }
+                                                        ],
+                                                        "description": "What the sign-in asks for, templated: one string, or a list whose first entry with no `when`, or a `when` that holds, is asked (read permissions alone for a read-only card). On Microsoft's identity platform a scope naming `https://graph.microsoft.com/` is asked of the Graph paired with the token endpoint's cloud."
+                                                    }
+                                                },
+                                                "required": [
+                                                    "authorizeUrl",
+                                                    "tokenUrl",
+                                                    "clientId",
+                                                    "scope"
+                                                ],
+                                                "additionalProperties": false
                                             }
                                         },
                                         "required": [
@@ -1020,6 +1214,30 @@
                                                     }
                                                 },
                                                 "additionalProperties": false
+                                            },
+                                            "links": {
+                                                "description": "Links each connected card of this kind offers on its row, for a step taken on the service's own site after connecting (inviting a bot to a server). A template naming a secret field is refused: the editor is never shown one.",
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "label": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "What the link says on the connected card: \"Add to your server\"."
+                                                        },
+                                                        "url": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "The address, templated over the card's non-secret fields like `env`: `${field}` substitutes, `${field:uri}` percent-encodes. Offered only once every field it names holds a value."
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "label",
+                                                        "url"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
                                             }
                                         },
                                         "required": [
@@ -1106,11 +1324,69 @@
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
                                                 },
+                                                "connection": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "kind": {
+                                                            "type": "string",
+                                                            "pattern": "^[a-z][a-z0-9-]*$",
+                                                            "description": "The kind of connection it names: `device`, `exit`, `identity`, `cli`."
+                                                        },
+                                                        "provider": {
+                                                            "description": "For a kind several cards share, the card it was added from: a cli card's `provider` (`imap`), a site's `platform`.",
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "kind"
+                                                    ],
+                                                    "description": "Answer this field by picking one of the owner's existing connections of this kind, by name, instead of typing the name. The empty choice is what leaving the field empty means, labelled with `placeholder`; with none of that kind connected, the field says so. The value stored is the connection's name, and the sandbox refuses a name that is not one.",
+                                                    "additionalProperties": false
+                                                },
+                                                "keyValue": {
+                                                    "description": "Render it as rows of a name and a value with add and remove, for a block of `KEY=VALUE` lines (an agent's environment). What is stored is those lines, the same text a `multiline` box holds. With `secret: true` the values are masked.",
+                                                    "type": "boolean"
+                                                },
+                                                "keyRequest": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "subject": {
+                                                            "type": "object",
+                                                            "propertyNames": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                    "C",
+                                                                    "ST",
+                                                                    "L",
+                                                                    "O",
+                                                                    "OU",
+                                                                    "CN",
+                                                                    "emailAddress"
+                                                                ]
+                                                            },
+                                                            "additionalProperties": {
+                                                                "type": "string"
+                                                            },
+                                                            "description": "The request's subject, attribute by attribute, as templates over the other fields (`${organization}`). An attribute that comes out empty is left out; letters with diacritics are written without them."
+                                                        },
+                                                        "request": {
+                                                            "description": "A non-secret `multiline` field the request itself is kept in, so the card shows it again later; the form draws it inside this one rather than as a box of its own.",
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "subject"
+                                                    ],
+                                                    "description": "This secret field holds a private key the sandbox generates and keeps (RSA 2048): the form shows a PKCS#10 certificate signing request for it to copy or download, and the key itself never reaches the browser. For a service that issues a certificate from a request, which the card then takes in another field.",
+                                                    "additionalProperties": false
+                                                },
                                                 "signIn": {
-                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "description": "Fill this field with a sign-in button instead of a text box, and the refresh token lands here for Save to store, with nobody pasting a token. `google`: the platform's own OAuth client runs the consent screen, and the card's CLI trades the token for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. `microsoft`: the sandbox runs the device-code sign-in the card's `refreshToken.deviceCode` declares, against the card's own app. Only on the secret field the card's `refreshToken` names.",
                                                     "type": "string",
                                                     "enum": [
-                                                        "google"
+                                                        "google",
+                                                        "microsoft"
                                                     ]
                                                 }
                                             },
@@ -1217,6 +1493,30 @@
                                                     }
                                                 },
                                                 "additionalProperties": false
+                                            },
+                                            "links": {
+                                                "description": "Links each connected card of this kind offers on its row, for a step taken on the service's own site after connecting (inviting a bot to a server). A template naming a secret field is refused: the editor is never shown one.",
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "label": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "What the link says on the connected card: \"Add to your server\"."
+                                                        },
+                                                        "url": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "The address, templated over the card's non-secret fields like `env`: `${field}` substitutes, `${field:uri}` percent-encodes. Offered only once every field it names holds a value."
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "label",
+                                                        "url"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
                                             }
                                         },
                                         "required": [
@@ -1303,11 +1603,69 @@
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
                                                 },
+                                                "connection": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "kind": {
+                                                            "type": "string",
+                                                            "pattern": "^[a-z][a-z0-9-]*$",
+                                                            "description": "The kind of connection it names: `device`, `exit`, `identity`, `cli`."
+                                                        },
+                                                        "provider": {
+                                                            "description": "For a kind several cards share, the card it was added from: a cli card's `provider` (`imap`), a site's `platform`.",
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "kind"
+                                                    ],
+                                                    "description": "Answer this field by picking one of the owner's existing connections of this kind, by name, instead of typing the name. The empty choice is what leaving the field empty means, labelled with `placeholder`; with none of that kind connected, the field says so. The value stored is the connection's name, and the sandbox refuses a name that is not one.",
+                                                    "additionalProperties": false
+                                                },
+                                                "keyValue": {
+                                                    "description": "Render it as rows of a name and a value with add and remove, for a block of `KEY=VALUE` lines (an agent's environment). What is stored is those lines, the same text a `multiline` box holds. With `secret: true` the values are masked.",
+                                                    "type": "boolean"
+                                                },
+                                                "keyRequest": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "subject": {
+                                                            "type": "object",
+                                                            "propertyNames": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                    "C",
+                                                                    "ST",
+                                                                    "L",
+                                                                    "O",
+                                                                    "OU",
+                                                                    "CN",
+                                                                    "emailAddress"
+                                                                ]
+                                                            },
+                                                            "additionalProperties": {
+                                                                "type": "string"
+                                                            },
+                                                            "description": "The request's subject, attribute by attribute, as templates over the other fields (`${organization}`). An attribute that comes out empty is left out; letters with diacritics are written without them."
+                                                        },
+                                                        "request": {
+                                                            "description": "A non-secret `multiline` field the request itself is kept in, so the card shows it again later; the form draws it inside this one rather than as a box of its own.",
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "subject"
+                                                    ],
+                                                    "description": "This secret field holds a private key the sandbox generates and keeps (RSA 2048): the form shows a PKCS#10 certificate signing request for it to copy or download, and the key itself never reaches the browser. For a service that issues a certificate from a request, which the card then takes in another field.",
+                                                    "additionalProperties": false
+                                                },
                                                 "signIn": {
-                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "description": "Fill this field with a sign-in button instead of a text box, and the refresh token lands here for Save to store, with nobody pasting a token. `google`: the platform's own OAuth client runs the consent screen, and the card's CLI trades the token for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. `microsoft`: the sandbox runs the device-code sign-in the card's `refreshToken.deviceCode` declares, against the card's own app. Only on the secret field the card's `refreshToken` names.",
                                                     "type": "string",
                                                     "enum": [
-                                                        "google"
+                                                        "google",
+                                                        "microsoft"
                                                     ]
                                                 }
                                             },
@@ -1405,6 +1763,30 @@
                                                     }
                                                 },
                                                 "additionalProperties": false
+                                            },
+                                            "links": {
+                                                "description": "Links each connected card of this kind offers on its row, for a step taken on the service's own site after connecting (inviting a bot to a server). A template naming a secret field is refused: the editor is never shown one.",
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "label": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "What the link says on the connected card: \"Add to your server\"."
+                                                        },
+                                                        "url": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "The address, templated over the card's non-secret fields like `env`: `${field}` substitutes, `${field:uri}` percent-encodes. Offered only once every field it names holds a value."
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "label",
+                                                        "url"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
                                             }
                                         },
                                         "required": [
@@ -1491,11 +1873,69 @@
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
                                                 },
+                                                "connection": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "kind": {
+                                                            "type": "string",
+                                                            "pattern": "^[a-z][a-z0-9-]*$",
+                                                            "description": "The kind of connection it names: `device`, `exit`, `identity`, `cli`."
+                                                        },
+                                                        "provider": {
+                                                            "description": "For a kind several cards share, the card it was added from: a cli card's `provider` (`imap`), a site's `platform`.",
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "kind"
+                                                    ],
+                                                    "description": "Answer this field by picking one of the owner's existing connections of this kind, by name, instead of typing the name. The empty choice is what leaving the field empty means, labelled with `placeholder`; with none of that kind connected, the field says so. The value stored is the connection's name, and the sandbox refuses a name that is not one.",
+                                                    "additionalProperties": false
+                                                },
+                                                "keyValue": {
+                                                    "description": "Render it as rows of a name and a value with add and remove, for a block of `KEY=VALUE` lines (an agent's environment). What is stored is those lines, the same text a `multiline` box holds. With `secret: true` the values are masked.",
+                                                    "type": "boolean"
+                                                },
+                                                "keyRequest": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "subject": {
+                                                            "type": "object",
+                                                            "propertyNames": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                    "C",
+                                                                    "ST",
+                                                                    "L",
+                                                                    "O",
+                                                                    "OU",
+                                                                    "CN",
+                                                                    "emailAddress"
+                                                                ]
+                                                            },
+                                                            "additionalProperties": {
+                                                                "type": "string"
+                                                            },
+                                                            "description": "The request's subject, attribute by attribute, as templates over the other fields (`${organization}`). An attribute that comes out empty is left out; letters with diacritics are written without them."
+                                                        },
+                                                        "request": {
+                                                            "description": "A non-secret `multiline` field the request itself is kept in, so the card shows it again later; the form draws it inside this one rather than as a box of its own.",
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "subject"
+                                                    ],
+                                                    "description": "This secret field holds a private key the sandbox generates and keeps (RSA 2048): the form shows a PKCS#10 certificate signing request for it to copy or download, and the key itself never reaches the browser. For a service that issues a certificate from a request, which the card then takes in another field.",
+                                                    "additionalProperties": false
+                                                },
                                                 "signIn": {
-                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "description": "Fill this field with a sign-in button instead of a text box, and the refresh token lands here for Save to store, with nobody pasting a token. `google`: the platform's own OAuth client runs the consent screen, and the card's CLI trades the token for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. `microsoft`: the sandbox runs the device-code sign-in the card's `refreshToken.deviceCode` declares, against the card's own app. Only on the secret field the card's `refreshToken` names.",
                                                     "type": "string",
                                                     "enum": [
-                                                        "google"
+                                                        "google",
+                                                        "microsoft"
                                                     ]
                                                 }
                                             },
@@ -1598,6 +2038,30 @@
                                                     }
                                                 },
                                                 "additionalProperties": false
+                                            },
+                                            "links": {
+                                                "description": "Links each connected card of this kind offers on its row, for a step taken on the service's own site after connecting (inviting a bot to a server). A template naming a secret field is refused: the editor is never shown one.",
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "label": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "What the link says on the connected card: \"Add to your server\"."
+                                                        },
+                                                        "url": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "The address, templated over the card's non-secret fields like `env`: `${field}` substitutes, `${field:uri}` percent-encodes. Offered only once every field it names holds a value."
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "label",
+                                                        "url"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
                                             }
                                         },
                                         "required": [
@@ -1684,11 +2148,69 @@
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
                                                 },
+                                                "connection": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "kind": {
+                                                            "type": "string",
+                                                            "pattern": "^[a-z][a-z0-9-]*$",
+                                                            "description": "The kind of connection it names: `device`, `exit`, `identity`, `cli`."
+                                                        },
+                                                        "provider": {
+                                                            "description": "For a kind several cards share, the card it was added from: a cli card's `provider` (`imap`), a site's `platform`.",
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "kind"
+                                                    ],
+                                                    "description": "Answer this field by picking one of the owner's existing connections of this kind, by name, instead of typing the name. The empty choice is what leaving the field empty means, labelled with `placeholder`; with none of that kind connected, the field says so. The value stored is the connection's name, and the sandbox refuses a name that is not one.",
+                                                    "additionalProperties": false
+                                                },
+                                                "keyValue": {
+                                                    "description": "Render it as rows of a name and a value with add and remove, for a block of `KEY=VALUE` lines (an agent's environment). What is stored is those lines, the same text a `multiline` box holds. With `secret: true` the values are masked.",
+                                                    "type": "boolean"
+                                                },
+                                                "keyRequest": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "subject": {
+                                                            "type": "object",
+                                                            "propertyNames": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                    "C",
+                                                                    "ST",
+                                                                    "L",
+                                                                    "O",
+                                                                    "OU",
+                                                                    "CN",
+                                                                    "emailAddress"
+                                                                ]
+                                                            },
+                                                            "additionalProperties": {
+                                                                "type": "string"
+                                                            },
+                                                            "description": "The request's subject, attribute by attribute, as templates over the other fields (`${organization}`). An attribute that comes out empty is left out; letters with diacritics are written without them."
+                                                        },
+                                                        "request": {
+                                                            "description": "A non-secret `multiline` field the request itself is kept in, so the card shows it again later; the form draws it inside this one rather than as a box of its own.",
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "subject"
+                                                    ],
+                                                    "description": "This secret field holds a private key the sandbox generates and keeps (RSA 2048): the form shows a PKCS#10 certificate signing request for it to copy or download, and the key itself never reaches the browser. For a service that issues a certificate from a request, which the card then takes in another field.",
+                                                    "additionalProperties": false
+                                                },
                                                 "signIn": {
-                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "description": "Fill this field with a sign-in button instead of a text box, and the refresh token lands here for Save to store, with nobody pasting a token. `google`: the platform's own OAuth client runs the consent screen, and the card's CLI trades the token for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. `microsoft`: the sandbox runs the device-code sign-in the card's `refreshToken.deviceCode` declares, against the card's own app. Only on the secret field the card's `refreshToken` names.",
                                                     "type": "string",
                                                     "enum": [
-                                                        "google"
+                                                        "google",
+                                                        "microsoft"
                                                     ]
                                                 }
                                             },
@@ -1791,6 +2313,30 @@
                                                     }
                                                 },
                                                 "additionalProperties": false
+                                            },
+                                            "links": {
+                                                "description": "Links each connected card of this kind offers on its row, for a step taken on the service's own site after connecting (inviting a bot to a server). A template naming a secret field is refused: the editor is never shown one.",
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "label": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "What the link says on the connected card: \"Add to your server\"."
+                                                        },
+                                                        "url": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "description": "The address, templated over the card's non-secret fields like `env`: `${field}` substitutes, `${field:uri}` percent-encodes. Offered only once every field it names holds a value."
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "label",
+                                                        "url"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
                                             }
                                         },
                                         "required": [
@@ -1877,11 +2423,69 @@
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
                                                 },
+                                                "connection": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "kind": {
+                                                            "type": "string",
+                                                            "pattern": "^[a-z][a-z0-9-]*$",
+                                                            "description": "The kind of connection it names: `device`, `exit`, `identity`, `cli`."
+                                                        },
+                                                        "provider": {
+                                                            "description": "For a kind several cards share, the card it was added from: a cli card's `provider` (`imap`), a site's `platform`.",
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "kind"
+                                                    ],
+                                                    "description": "Answer this field by picking one of the owner's existing connections of this kind, by name, instead of typing the name. The empty choice is what leaving the field empty means, labelled with `placeholder`; with none of that kind connected, the field says so. The value stored is the connection's name, and the sandbox refuses a name that is not one.",
+                                                    "additionalProperties": false
+                                                },
+                                                "keyValue": {
+                                                    "description": "Render it as rows of a name and a value with add and remove, for a block of `KEY=VALUE` lines (an agent's environment). What is stored is those lines, the same text a `multiline` box holds. With `secret: true` the values are masked.",
+                                                    "type": "boolean"
+                                                },
+                                                "keyRequest": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "subject": {
+                                                            "type": "object",
+                                                            "propertyNames": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                    "C",
+                                                                    "ST",
+                                                                    "L",
+                                                                    "O",
+                                                                    "OU",
+                                                                    "CN",
+                                                                    "emailAddress"
+                                                                ]
+                                                            },
+                                                            "additionalProperties": {
+                                                                "type": "string"
+                                                            },
+                                                            "description": "The request's subject, attribute by attribute, as templates over the other fields (`${organization}`). An attribute that comes out empty is left out; letters with diacritics are written without them."
+                                                        },
+                                                        "request": {
+                                                            "description": "A non-secret `multiline` field the request itself is kept in, so the card shows it again later; the form draws it inside this one rather than as a box of its own.",
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "subject"
+                                                    ],
+                                                    "description": "This secret field holds a private key the sandbox generates and keeps (RSA 2048): the form shows a PKCS#10 certificate signing request for it to copy or download, and the key itself never reaches the browser. For a service that issues a certificate from a request, which the card then takes in another field.",
+                                                    "additionalProperties": false
+                                                },
                                                 "signIn": {
-                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "description": "Fill this field with a sign-in button instead of a text box, and the refresh token lands here for Save to store, with nobody pasting a token. `google`: the platform's own OAuth client runs the consent screen, and the card's CLI trades the token for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. `microsoft`: the sandbox runs the device-code sign-in the card's `refreshToken.deviceCode` declares, against the card's own app. Only on the secret field the card's `refreshToken` names.",
                                                     "type": "string",
                                                     "enum": [
-                                                        "google"
+                                                        "google",
+                                                        "microsoft"
                                                     ]
                                                 }
                                             },

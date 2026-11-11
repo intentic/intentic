@@ -7,25 +7,30 @@ rules say otherwise.
 
 ```mermaid
 flowchart LR
+    form["Card form<br/>Sign in with Microsoft"] -->|"device-code sign-in, then Save"| daemon
     card["Microsoft 365 card<br/>tenant · app · sign-in"] -->|"env per card"| m365(["m365 CLI<br/>bin/m365"])
     agent["Agent"] --> m365
-    m365 -->|"device-code sign-in"| entra["Microsoft sign-in<br/>login.microsoftonline.com"]
+    daemon -->|"code, then asks until signed in"| entra["Microsoft sign-in<br/>login.microsoftonline.com"]
+    m365 -->|"m365 auth login, refresh"| entra
     m365 --> graph["Microsoft Graph"]
     m365 -->|"held send, meeting change, upload"| approvals["Approvals queue"]
-    m365 -->|"new sign-in, rotated token"| daemon["Daemon<br/>oauth-token route"]
+    m365 -->|"new sign-in, rotated token"| daemon["Daemon<br/>device sign-in, oauth-token route"]
     daemon --> card
     watcher["watcher process<br/>node dist/gateway.js"] -->|"inbox delta, every minute"| graph
     watcher -->|"mail"| automations["Daemon<br/>automations"]
 ```
 
 - **Signing in.** The office registers its own app in its own Entra ID tenant and types the tenant and app ids on the
-  card. `m365 auth login` runs Microsoft's device-code sign-in: the person opens Microsoft's page in their own
-  browser, types a short code and signs in there, with their tenant's MFA and Conditional Access applying as usual.
-  No redirect address is needed, which is why it works from a sandbox nothing can reach. The refresh token goes
-  straight onto the card through the daemon's write-only `POST /capabilities/{id}/oauth-token` route, never into the
-  chat, a file or a log. The card's manifest declares which field holds it and which settings it is bound to
-  (`refreshToken`), and the daemon refuses a token for a card whose tenant, app, cloud or access level changed since,
-  or from a caller not holding the card's current token.
+  card. Then **Sign in with Microsoft** on the card's form runs Microsoft's device-code sign-in: the form shows a short
+  code and Microsoft's own page, the person types the code there and signs in, with their tenant's MFA and Conditional
+  Access applying as usual. No redirect address is needed, which is why it works from a sandbox nothing can reach.
+  Microsoft's endpoints answer no browser, so it is the daemon that asks for the code and asks Microsoft, while the
+  form waits, whether the person has finished. The refresh token stays in the daemon: the form saves a marker for it,
+  and Save installs the token on the card, refused if the tenant, app, cloud or access level changed since the sign-in.
+  The card's manifest declares all of it as data (`refreshToken.deviceCode`: the endpoints, the client, the scopes for
+  read only and for read & write). `m365 auth login` runs the same sign-in for an agent and stores its token through
+  the daemon's write-only `POST /capabilities/{id}/oauth-token` route, never into the chat, a file or a log; that route
+  refuses a token for a card whose bound settings changed, or from a caller not holding the card's current token.
 - **Keeping signed in.** Microsoft hands out a new refresh token with every access token. The CLI and the watcher store
   each new one the same way; the older one stays valid, so two processes rotating at once do no harm. The one-hour
   access token is cached `0600` under the extension's runtime directory, keyed by a hash of the credential, so a run of
@@ -73,13 +78,15 @@ Workspace. Nothing talks to Microsoft until someone signs in.
    let users consent to apps themselves, press **Grant admin consent**.
 5. If Conditional Access blocks the device-code flow, allow it for this app (or for the people who will use it). The
    sign-in follows your tenant's policies; it does not get around them.
-6. Save the card. In a chat you are watching, ask the agent to sign in (`m365 auth login`); open the page it gives you,
-   type the code and sign in as the office user. Start a new chat afterwards, or press **Test** on the card, which reads
-   who is signed in (`/me`).
-7. Add the card again for another mailbox. Switching a card between read only and read & write needs a new sign-in.
+6. Press **Sign in with Microsoft** on the card, open Microsoft's page beside it, type the code the card shows and sign
+   in as the office user. The card then says who signed in (it reads `/me`) and which permissions were granted. Save
+   it; the next chat uses it.
+7. Add the card again for another mailbox. To switch user, or after switching a card between read only and read &
+   write, open the card and press **Reconnect**.
 
 An app that cannot use public client flows can instead put its **client secret** on the card (advanced) and a refresh
-token from its own authorization-code sign-in in **Sign-in**; `m365 auth login` is then not used.
+token from its own authorization-code sign-in in **Refresh token**, which is a plain box while a secret is set; the
+card's own sign-in and `m365 auth login` are then not used.
 
 ## Key files
 

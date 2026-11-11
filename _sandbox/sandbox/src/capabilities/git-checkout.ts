@@ -3,6 +3,8 @@ import { keyedLock } from "@intentic/base/async";
 import { gitAuthHeader, gitHeaderEnv } from "@intentic/base/git";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { CapabilityCtx } from "./capability.js";
+import { type GitReader, gitReaderFor, type GitSource } from "./credentials/git-connection.js";
+import { readRemoteRefs } from "./remote-refs.js";
 
 // Dot-prefixed so it can never collide with an id (ids start alphanumeric); cloning lands here so a half-cloned
 // checkout is never visible at the live dir.
@@ -19,6 +21,28 @@ export const previousDir = (root: string, id: string): string => join(root, `.${
 const checkoutLock = keyedLock<string>();
 
 export const withCheckoutLock = <T>(root: string, id: string, task: () => Promise<T>): Promise<T> => checkoutLock(join(root, id), task);
+
+/**
+ * What an install clones with (git-connection.ts), asked of the remote first when a GitHub or GitLab card lends it: a
+ * clone that fails says only that git exited, where `ls-remote` says whether the card's token cannot see the repository,
+ * and the refusal names that card (remote-refs.ts).
+ */
+export const installReader = async (ctx: Pick<CapabilityCtx, "capabilities" | "workspace">, source: GitSource): Promise<GitReader> => {
+    const reader = await gitReaderFor(ctx.capabilities, source);
+    if (reader.connection !== undefined) {
+        await readRemoteRefs(ctx.workspace.root, source.url, reader.token, undefined, reader.connection);
+    }
+    return reader;
+};
+
+/** The header a daemon-side clone (`services.git.clone`) authorizes with, read the way an install reads. */
+export const cloneAuth = async (
+    capabilities: CapabilityCtx["capabilities"],
+    source: GitSource,
+): Promise<{ readonly authHeader: string } | undefined> => {
+    const { token } = await gitReaderFor(capabilities, source);
+    return token === undefined ? undefined : { authHeader: gitAuthHeader(token) };
+};
 
 export interface CheckoutOptions {
     readonly url: string;

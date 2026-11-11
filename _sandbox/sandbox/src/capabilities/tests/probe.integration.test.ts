@@ -75,6 +75,20 @@ test(`says which answer was wrong rather than printing a status code`, async () 
     expect(answer.message).toMatch(/401/);
 });
 
+// Slack answers 200 to a bad token too; the body's `ok` is the verdict, and only its short error code is repeated.
+test(`reads the verdict from the body of a service that answers 200 either way`, async () => {
+    const { url } = await serve(({ auth }) =>
+        auth === "Bearer xoxb-good" ? { status: 200, body: { ok: true, team: "acme" } } : { status: 200, body: { ok: false, error: "invalid_auth" } },
+    );
+    const registry = entry({ url: "${url}/auth.test", headers: { authorization: "Bearer ${token}" }, identity: "team", ok: "ok" });
+
+    const refused = await probeCapability(registry, { id: "example", kind: "cli", config: { provider: "example", url, token: "xoxb-bad" } });
+    const accepted = await probeCapability(registry, { id: "example", kind: "cli", config: { provider: "example", url, token: "xoxb-good" } });
+
+    expect(refused).toEqual({ checked: true, ok: false, message: `Example answered invalid_auth: the credential was refused.` });
+    expect(accepted).toEqual({ checked: true, ok: true, message: `Reached Example, authenticated as acme.`, who: `acme` });
+});
+
 test(`names an address nothing answers at, without a stack trace`, async () => {
     const registry = entry({ url: "${url}/user", headers: {} });
 
@@ -169,5 +183,37 @@ test(`a delegated sign-in card says there is nothing to test before anyone signs
     expect(await probeCapability(registry, { id: "example", kind: "cli", config: card })).toMatchObject({ checked: false, ok: false });
     // A cloud the trade does not serve is refused before any request, in words that never quote an authority's answer.
     const answer = await probeCapability(registry, { id: "example", kind: "cli", config: { ...card, authority: "evil.example", token: "rt" } });
-    expect(answer).toEqual({ checked: true, ok: false, message: "The sign-in was refused: ask the agent to sign in with this connection again." });
+    expect(answer).toEqual({ checked: true, ok: false, message: "The sign-in was refused: sign in with this connection again." });
+});
+
+test(`an app-only card trades its own secret for its test, and a refused one is told to check the app's credentials`, async () => {
+    const oauth = {
+        tokenUrl: "https://login.microsoftonline.com/${tenantId:uri}/oauth2/v2.0/token",
+        form: { client_id: "${clientId}", client_secret: "${token}", scope: "https://graph.microsoft.com/.default", grant_type: "client_credentials" },
+    };
+    const registry = entry({ url: "https://graph.microsoft.com/v1.0/sites/root", identity: "siteCollection.hostname", oauth });
+    // No refresh token is no reason to skip an app-only test: its secret is the credential.
+    const traded: string[] = [];
+    const request = async (url: URL, options?: { body?: unknown; headers?: Readonly<Record<string, string>> }) => {
+        traded.push(url.hostname === "graph.microsoft.com" ? `graph ${options?.headers?.["authorization"]}` : String(options?.body));
+        const body = url.hostname === "graph.microsoft.com" ? { siteCollection: { hostname: "contoso.sharepoint.com" } } : { access_token: "app-access" };
+        return { status: 200, headers: { "content-type": "application/json" }, truncated: false, body: Buffer.from(JSON.stringify(body)) };
+    };
+    const card = { provider: "example", tenantId: "t", clientId: "c", token: "app-secret" };
+
+    expect(await probeCapability(registry, { id: "example", kind: "cli", config: card }, request)).toMatchObject({
+        checked: true,
+        ok: true,
+        who: "contoso.sharepoint.com",
+    });
+    expect(traded).toEqual([
+        "client_id=c&client_secret=app-secret&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default&grant_type=client_credentials",
+        "graph Bearer app-access",
+    ]);
+    const refused = async () => ({ status: 401, headers: {}, truncated: false, body: Buffer.from(`{"error":"invalid_client"}`) });
+    expect(await probeCapability(registry, { id: "example", kind: "cli", config: card }, refused)).toEqual({
+        checked: true,
+        ok: false,
+        message: "The app's credentials were refused: check the tenant ID, the client ID and the client secret's value. A client secret expires.",
+    });
 });

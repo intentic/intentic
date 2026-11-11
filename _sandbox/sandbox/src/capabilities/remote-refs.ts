@@ -1,6 +1,8 @@
 import { stderrOf } from "@intentic/base/errors";
 import { defaultGit, GIT_STALL_GUARD, gitAuthHeader, gitHeaderEnv, type GitRunner } from "@intentic/base/git";
+import type { GitConnection } from "@intentic/sandbox-contract/policy/git/git-connections";
 import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract/schemas/git/remote-refs";
+import { connectionWords, GitConnectionError, type GitReader, gitReaderFor, type GitSource } from "./credentials/git-connection.js";
 
 // What a repository offers, read over the wire without cloning it: `ls-remote` is one round trip and touches no disk,
 // which is what lets an install form resolve a version while someone is still typing the URL into it.
@@ -48,22 +50,37 @@ export const parseRemoteRefs = (stdout: string): RemoteRefs => {
 // git's own words for a refusal are about credentials it was told not to ask for; these are the same refusals said in
 // terms of the form the reader is looking at. Only words: git exits 128 for every one of them, run untranslated by the
 // base runner, so this phrasebook of git ls-remote's and its curl transport's English is the one place they are read.
-const REFUSALS: readonly { readonly words: RegExp; readonly reason: (authenticated: boolean) => string }[] = [
+// What the read presented: nothing, a token typed for it, or a GitHub or GitLab card's token (git-connection.ts), which a
+// refusal names, since that card is what the reader would go and fix.
+type Presented = "nothing" | "token" | GitConnection;
+
+// A private repository a token cannot see is answered as one that does not exist (GitHub and GitLab both say "not
+// found" rather than admit it is there), so with a card's token that answer is said as the card's.
+const unseen = (presented: Presented): string =>
+    presented !== "nothing" && presented !== "token"
+        ? `${connectionWords(presented)} cannot see a repository at that address: if it is private, give that token read access to it, or paste another access token under Advanced.`
+        : "there is no repository at that address.";
+
+const REFUSALS: readonly { readonly words: RegExp; readonly reason: (presented: Presented) => string }[] = [
     {
         words: /terminal prompts disabled|could not read Username|Authentication failed|Invalid username or password/i,
-        reason: (authenticated) =>
-            authenticated ? "that repository refused the access token: check it has read access." : "that repository is private: add an access token with read access.",
+        reason: (presented) =>
+            presented === "nothing"
+                ? "that repository is private: add an access token with read access."
+                : presented === "token"
+                  ? "that repository refused the access token: check it has read access."
+                  : `that repository refused the token of ${connectionWords(presented)}: give it read access there, or paste another access token under Advanced.`,
     },
-    { words: /repository .* not found|Repository not found|not a git repository/i, reason: () => "there is no repository at that address." },
+    { words: /repository .* not found|Repository not found|not a git repository/i, reason: unseen },
     { words: /Could not resolve host/i, reason: () => "that host does not resolve from this sandbox." },
     { words: /timed out|Connection refused|Failed to connect/i, reason: () => "that host did not answer." },
 ];
 
-const refusalReason = (stderr: string, authenticated: boolean): string => {
+const refusalReason = (stderr: string, presented: Presented): string => {
     // allow(dependency-text): git ls-remote and curl (REFUSALS); an unmatched wording shows git's own last fatal line.
     const known = REFUSALS.find(({ words }) => words.test(stderr));
     if (known !== undefined) {
-        return known.reason(authenticated);
+        return known.reason(presented);
     }
     // git's last fatal line is more use than its whole transcript, and is the only part addressed to a person.
     // allow(dependency-text): git's `fatal:` verdict prefix; none found shows a generic sentence.
@@ -73,8 +90,14 @@ const refusalReason = (stderr: string, authenticated: boolean): string => {
 export class RemoteRefsError extends Error {}
 
 // Reads every branch and tag a remote advertises. `dir` is only somewhere for git to stand: the URL is explicit, so no
-// repository is involved on this side.
-export const readRemoteRefs = async (dir: string, url: string, token?: string, git: GitRunner = defaultGit): Promise<RemoteRefs> => {
+// repository is involved on this side. `connection` is the card `token` came from, when it was lent by one.
+export const readRemoteRefs = async (
+    dir: string,
+    url: string,
+    token?: string,
+    git: GitRunner = defaultGit,
+    connection?: GitConnection,
+): Promise<RemoteRefs> => {
     const protocol = URL.parse(url)?.protocol;
     if (protocol !== "http:" && protocol !== "https:") {
         throw new RemoteRefsError("Only http(s) repository URLs can be read: an ssh remote stops on a host-key prompt nobody can answer.");
@@ -89,7 +112,25 @@ export const readRemoteRefs = async (dir: string, url: string, token?: string, g
         return parseRemoteRefs(stdout);
     } catch (error) {
         throw new RemoteRefsError(
-            `Could not read ${url}: ${refusalReason(stderrOf(error) ?? "", token !== undefined)}`,
+            `Could not read ${url}: ${refusalReason(stderrOf(error) ?? "", token === undefined ? "nothing" : (connection ?? "token"))}`,
         );
     }
+};
+
+/**
+ * The versions a repository offers, read with what its install will read it with: the token given, else the token of
+ * the GitHub or GitLab card connected for its host (git-connection.ts). A card that cannot lend one is refused here as a
+ * read that failed, in the form's own terms.
+ */
+export const installRefs = async (
+    services: { readonly capabilities: Parameters<typeof gitReaderFor>[0]; readonly workspace: { readonly root: string } },
+    source: GitSource,
+): Promise<RemoteRefs> => {
+    let reader: GitReader;
+    try {
+        reader = await gitReaderFor(services.capabilities, source);
+    } catch (error) {
+        throw error instanceof GitConnectionError ? new RemoteRefsError(`Could not read ${source.url}: ${error.message}`) : error;
+    }
+    return await readRemoteRefs(services.workspace.root, source.url, reader.token, undefined, reader.connection);
 };

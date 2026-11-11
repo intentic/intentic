@@ -3,8 +3,10 @@
 import type { CapabilityField } from "@intentic/extension-manifest";
 import { SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import type { ConfSummary } from "../models/capabilities/normalize";
+import type { ConfSummary } from "../../models/capabilities/normalize";
 import { useT } from "@intentic/ui/i18n";
+import { computed } from "vue";
+import KeyValueField from "./KeyValueField.vue";
 
 const t = useT();
 
@@ -29,11 +31,37 @@ const { field, values } = defineProps<{
 }>();
 
 const emit = defineEmits<{ edited: []; pasted: [event: ClipboardEvent]; left: []; fix: [] }>();
+
+// A field naming another connection lists the ones it may name (models/capabilities/tiles.ts `withConnectionPickers`),
+// plus the name it already holds when that is none of them (a connection since renamed or removed), so an edit never
+// silently drops it.
+const connectionOptions = computed(() => {
+    const options = field.options ?? [];
+    const held = values[field.key] ?? ``;
+    return held === `` || options.some((option) => option.value === held)
+        ? options
+        : [...options, { value: held, label: t(`capabilities.capabilityFieldRow.notConnected`, { name: held }) }];
+});
+const pickConnection = (event: Event): void => {
+    // SAFETY: only the <select> below binds this handler, so its target is that select.
+    values[field.key] = (event.target as HTMLSelectElement).value;
+    emit(`edited`);
+};
 </script>
 
 <template>
+    <!-- A KEY=VALUE block as rows; it draws its own label and lines. -->
+    <KeyValueField
+        v-if="field.keyValue"
+        :field="field"
+        :values="values"
+        :placeholder="placeholder"
+        :alarm="alarm"
+        @edited="emit('edited')"
+        @left="emit('left')"
+    />
     <!-- Keep answered fields beside their labels at the width of the answers. -->
-    <label v-if="inline" class="flex items-start justify-between gap-4">
+    <label v-else-if="inline" class="flex items-start justify-between gap-4">
         <span class="min-w-0">
             <span class="ui-field-label">{{ field.label }}</span>
             <StatusBadge
@@ -73,8 +101,24 @@ const emit = defineEmits<{ edited: []; pasted: [event: ClipboardEvent]; left: []
             <!-- The check marks a value that passed the field's validation rule. -->
             <Icon v-if="checked" name="check-circle" class="ml-1 text-2xs text-success" />
         </span>
+        <!-- Another connection, picked by name; with none to pick, the line below says so instead of an empty list. -->
+        <template v-if="field.connection">
+            <select
+                v-if="connectionOptions.length > 0"
+                :value="values[field.key] ?? ''"
+                :class="[ui.input(), alarm ? 'ui-field-error-box' : '']"
+                @change="pickConnection"
+                @blur="emit('left')"
+            >
+                <option v-for="option in connectionOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+            <span v-else class="flex items-center gap-1 text-2xs text-subtle">
+                <Icon name="info-circle" class="text-2xs" />
+                {{ t(`capabilities.capabilityFieldRow.noneToPick`) }}
+            </span>
+        </template>
         <SegmentedControl
-            v-if="field.options"
+            v-else-if="field.options"
             wrap
             :model-value="values[field.key] ?? ''"
             :options="[...field.options]"

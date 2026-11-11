@@ -9,7 +9,9 @@ Authenticated with a bot token in `$DISCORD_BOT_TOKEN`. Talk to Discord's REST A
 Base URL: `$DISCORD_API_URL/v10` (it stands in for https://discord.com/api/v10), Auth header: `-H "Authorization: Bot $DISCORD_BOT_TOKEN"`.
 
 ## Setup & invite (do this when the bot isn't in the user's server yet)
-Discord only lets a server admin add a bot via an OAuth consent link: generate that link for them:
+Discord only lets a server admin add a bot via an OAuth consent link. The connected Discord card offers it as
+**Add to your server** (once the card knows the application id: pasting the bot token on its settings fills it in), so
+point the user there first. Otherwise generate the same link for them:
 1. Confirm the token works and get the bot user:
    `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" "$DISCORD_API_URL/v10/users/@me" | jq '{id, username}'`
 2. Get the application id (needed for the invite URL):

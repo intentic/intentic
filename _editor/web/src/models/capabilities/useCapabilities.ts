@@ -37,13 +37,19 @@ export const browseMarketplace = (url: string, token?: string): Promise<Marketpl
 
 // What a repository offers, so a form can pin a commit without anyone reading a sha off a web page: the daemon asks
 // the remote with `git ls-remote`, cloning nothing. POST for the same reason as the marketplace read, the token.
-export const readRemoteRefs = (url: string, token?: string, keeping?: string): Promise<RemoteRefs> =>
-    sandboxRpc.capabilities.refs({
+// Without a token, the daemon reads it with a GitHub or GitLab card's, `gitConnection` the one the form chose.
+export const readRemoteRefs = (url: string, token?: string, keeping?: string, gitConnection?: string): Promise<RemoteRefs> => {
+    const ask: ProcedureInput<`capabilities.refs`> = {
         url,
         ...(token === undefined || token === `` ? {} : { token }),
         // Names the connection whose stored token a VAULTED marker stands for; nothing to resolve on an add.
         ...(keeping === undefined || keeping === `` ? {} : { keeping }),
-    });
+    };
+    if (gitConnection !== undefined && gitConnection !== ``) {
+        ask.gitConnection = gitConnection;
+    }
+    return sandboxRpc.capabilities.refs(ask);
+};
 
 // Dials the service the way the connection would and returns what it said (daemon's capabilities/probe.ts). Nothing
 // is written, so this is a plain call, not a mutation: there's no cache to invalidate.

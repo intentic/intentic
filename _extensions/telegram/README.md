@@ -11,7 +11,7 @@ flowchart LR
     turn -->|"curl Bot API"| tg
 ```
 
-- Three pieces. The capability card takes one token from `@BotFather`. The skill (`skills/telegram/SKILL.md`)
+- Three pieces. The capability card takes one token from `@BotFather`, which its Test checks with `getMe`. The skill (`skills/telegram/SKILL.md`)
   teaches the agent to call the Bot API with `curl` and `$TELEGRAM_BOT_TOKEN`. The gateway is a `processes` entry
   the daemon runs while a Telegram card or Telegram automation exists.
 - The gateway long-polls once per bot, and only while an enabled Telegram automation exists. It uses no SDK, since

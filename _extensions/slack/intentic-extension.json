@@ -52,17 +52,16 @@
                     "icon": "slack",
                     "description": "Read and post in your Slack workspace, and let your team hand the agent work in threads.",
                     "category": "communication",
-                    "hint": "Both tokens come from one Slack app. Ask the agent to \"set yourself up in my Slack\" and it writes the manifest for you. Mention the app and it answers in the message's thread, showing what it is doing while it works, with a Stop button; anyone in the thread can steer it.",
+                    "hint": "Both tokens come from one Slack app, which the link creates from Intentic's manifest with Socket Mode, Interactivity, the bot scopes and the events already set. Mention the app and it answers in the message's thread, showing what it is doing while it works, with a Stop button; anyone in the thread can steer it.",
                     "guide": {
-                        "url": "https://api.slack.com/apps",
-                        "linkLabel": "Open the Slack app dashboard",
+                        "url": "https://api.slack.com/apps?new_app=1&manifest_json=%7B%22display_information%22%3A%7B%22name%22%3A%22intentic%22%2C%22description%22%3A%22Your%20agent%2C%20in%20Slack.%22%7D%2C%22features%22%3A%7B%22app_home%22%3A%7B%22home_tab_enabled%22%3Afalse%2C%22messages_tab_enabled%22%3Atrue%2C%22messages_tab_read_only_enabled%22%3Afalse%7D%2C%22bot_user%22%3A%7B%22display_name%22%3A%22intentic%22%2C%22always_online%22%3Atrue%7D%7D%2C%22oauth_config%22%3A%7B%22scopes%22%3A%7B%22bot%22%3A%5B%22app_mentions%3Aread%22%2C%22channels%3Ahistory%22%2C%22channels%3Aread%22%2C%22chat%3Awrite%22%2C%22groups%3Ahistory%22%2C%22groups%3Aread%22%2C%22im%3Ahistory%22%2C%22im%3Aread%22%2C%22im%3Awrite%22%2C%22mpim%3Ahistory%22%2C%22reactions%3Aread%22%2C%22reactions%3Awrite%22%2C%22users%3Aread%22%5D%7D%7D%2C%22settings%22%3A%7B%22event_subscriptions%22%3A%7B%22bot_events%22%3A%5B%22message.channels%22%2C%22message.groups%22%2C%22message.im%22%2C%22message.mpim%22%2C%22reaction_added%22%2C%22member_joined_channel%22%5D%7D%2C%22interactivity%22%3A%7B%22is_enabled%22%3Atrue%7D%2C%22socket_mode_enabled%22%3Atrue%7D%7D",
+                        "linkLabel": "Create the Slack app",
                         "scopes": "Bot `app_mentions:read`, `channels:history`, `channels:read`, `chat:write`, `groups:history`, `groups:read`, `im:history`, `im:read`, `im:write`, `mpim:history`, `reactions:read`, `reactions:write`, `users:read` · App-level `connections:write`",
                         "steps": [
-                            "`Create New App` → `From an app manifest` (ask the agent for it).",
-                            "`App-Level Tokens` → `Generate`, scope `connections:write`: the `xapp-` token.",
-                            "`Socket Mode` → toggle `Enable Socket Mode` on, and `Interactivity & Shortcuts` on (the Stop button).",
-                            "`Install App` → `Install to Workspace`: the `xoxb-` bot token.",
-                            "Paste both, then `/invite @yourbot` in a channel.",
+                            "The link opens Slack with the app's manifest filled in: pick your workspace, `Next`, then `Create`.",
+                            "`Basic Information` → `App-Level Tokens` → `Generate Token and Scopes`, scope `connections:write`: the `xapp-` token.",
+                            "`Install App` → `Install to Workspace` → `Allow`: the `xoxb-` bot token.",
+                            "Paste both here, then `/invite @intentic` in each channel it should read.",
                             "Under Automations, set up **Team assistant on Slack**: mention the app and it answers in the thread."
                         ]
                     }
@@ -123,6 +122,14 @@
                     "SLACK_BOT_TOKEN": "${botToken}"
                 },
                 "skill": "skills/slack/SKILL.md",
+                "probe": {
+                    "url": "https://slack.com/api/auth.test",
+                    "headers": {
+                        "authorization": "Bearer ${botToken}"
+                    },
+                    "ok": "ok",
+                    "identity": "team"
+                },
                 "broker": {
                     "routes": [
                         {

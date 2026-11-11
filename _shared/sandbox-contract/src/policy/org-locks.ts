@@ -58,6 +58,7 @@ export const ORG_SECTION_ROUTES = {
             "capabilities.rename",
             "capabilities.setSecret",
             "capabilities.sshKey",
+            "capabilities.certificateRequest",
             "capabilities.login",
         ],
         reveals: ["secrets.reveal"],

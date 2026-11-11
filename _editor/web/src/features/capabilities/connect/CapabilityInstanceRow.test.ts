@@ -16,12 +16,16 @@ const { default: CapabilityInstanceRow } = await import("./CapabilityInstanceRow
 const ENTRY = { id: `whatsapp`, kind: `cli`, name: `WhatsApp`, logo: `whatsapp` } as unknown as CapabilityCatalogEntry;
 const STATE: ConnectionState = { label: `needs setup`, tone: `warning`, rank: 1 };
 
-const render = (status: CapabilitySummary[`status`], state: ConnectionState = STATE): string => {
+const render = (
+    status: CapabilitySummary[`status`],
+    state: ConnectionState = STATE,
+    { entry = ENTRY, config = {} }: { entry?: CapabilityCatalogEntry; config?: CapabilitySummary[`config`] } = {},
+): string => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    const instance = { id: `whatsapp`, kind: `cli`, status, config: {} } as unknown as CapabilitySummary;
+    const instance = { id: entry.id, kind: `cli`, status, config } as unknown as CapabilitySummary;
     const app = createApp({
-        render: () => h(CapabilityInstanceRow, { entry: ENTRY, instance, state, facts: `+49 151 12345678` }),
+        render: () => h(CapabilityInstanceRow, { entry, instance, state, facts: `+49 151 12345678` }),
     });
     app.use(PrimeVue);
     // Globally registered in the real app; a bare span is enough for these assertions.
@@ -70,4 +74,20 @@ it("a connected row keeps its one line: nothing outstanding, nothing to show", (
     const html = render({ state: `active` }, { label: `ready`, tone: `success`, rank: 3 });
     expect(html).not.toContain(`tracking-[0.3em]`);
     expect(html).toContain(`+49 151 12345678`);
+});
+
+// Discord's invite: a step on the service's own site the manifest declares, built from what the connection holds.
+it("offers the card's own link on a connected row once the connection holds what it is built from", () => {
+    const connected: ConnectionState = { label: `connected`, tone: `success`, rank: 3 };
+    const discord: CapabilityCatalogEntry = {
+        ...ENTRY,
+        id: `discord`,
+        links: [{ label: `Add to your server`, url: `https://discord.com/oauth2/authorize?client_id=\${applicationId:uri}&scope=bot` }],
+    };
+
+    const html = render({ state: `active` }, connected, { entry: discord, config: { applicationId: `80351110224678912` } });
+
+    expect(html).toContain(`href="https://discord.com/oauth2/authorize?client_id=80351110224678912&amp;scope=bot"`);
+    expect(html).toContain(`Add to your server`);
+    expect(render({ state: `active` }, connected, { entry: discord })).not.toContain(`Add to your server`);
 });

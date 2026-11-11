@@ -12,9 +12,11 @@ flowchart LR
     agent["Agent"] -->|"curl Web API via skill"| slack
 ```
 
-- Three pieces. The capability card takes a bot token (`xoxb-`) and an app-level token (`xapp-`). The skill
-  (`skills/slack/SKILL.md`) teaches the agent Slack's Web API with `curl`, and writes the app manifest for the owner.
-  The gateway is a `processes` entry the daemon runs while a Slack card or Slack automation exists.
+- Three pieces. The capability card takes a bot token (`xoxb-`) and an app-level token (`xapp-`); its guide link opens
+  Slack's app creation with [app-manifest.json](app-manifest.json) filled in (Slack's `manifest_json` link, held equal
+  to the file by `src/app-manifest.test.ts`), and its Test asks `auth.test`, whose answer is 200 either way, so the
+  probe reads `ok`. The skill (`skills/slack/SKILL.md`) teaches the agent Slack's Web API with `curl`. The gateway is a
+  `processes` entry the daemon runs while a Slack card or Slack automation exists.
 - The gateway holds one Socket Mode socket per Slack app, and only while an enabled Slack automation exists; the
   daemon holds no Slack connection. Socket Mode is an outbound WebSocket, so no public URL is needed, for events and
   for button presses alike. A revoked token is fatal and pauses reconnecting for a backoff period.
@@ -55,7 +57,7 @@ flowchart LR
 - [src/card.ts](src/card.ts) — the status card drawn as Block Kit.
 - [src/stream.ts](src/stream.ts) — the opt-in alternative: the work as Slack's own streamed task list.
 - [src/client.ts](src/client.ts) — the socket and Web API pool, and which Slack errors are fatal.
-- [skills/slack/SKILL.md](skills/slack/SKILL.md) — what the agent learns about using Slack, including the app manifest.
+- [skills/slack/SKILL.md](skills/slack/SKILL.md) — what the agent learns about using Slack.
 
 ## Commands
 

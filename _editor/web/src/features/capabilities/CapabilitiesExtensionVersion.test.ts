@@ -169,6 +169,9 @@ it(`sends the token with the read, so a private repository answers on the form i
     const el = start();
 
     await typeUrl(el, `https://github.com/owner/private`);
+    // A token typed on the card is an override of the GitHub or GitLab connection it would borrow: it sits under Advanced.
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Advanced`))!.click();
+    await nextTick();
     const token = boxFor(el, `Access token`);
     token.value = `ghp_secret`;
     token.dispatchEvent(new Event(`input`, { bubbles: true }));

@@ -8,6 +8,7 @@ import type { Services } from "../composition.js";
 import { cardDeps } from "../conversations/actor/card-deps.js";
 import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import { createExtensionMcpEndpoint, createExtensionToolsEndpoint } from "../extensions/backend/extension-mcp.js";
+import { createMcpRemoteEndpoint } from "../capabilities/mcp-oauth/mcp-remote.js";
 import { HOST_PEER, hostPeerRoutes } from "../hosts/host-peer.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 import { createPhonePasswordsRoutes } from "../phones/phone-passwords.routes.js";
@@ -46,7 +47,8 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
         ...createPhonePasswordsRoutes({ phones: services.phones, link: services.keyringLink, pairings: services.phonePairings }),
         ...peerRouteTable(RUNNER_PEER, runnerPeerRoutes(services)),
         // Every MCP server a turn mounted in this daemon, behind one door: its browser routers, the machines and browsers
-        // it was granted (their peer bridges), and its extension cards' endpoints on the backend host.
+        // it was granted (their peer bridges), its extension cards' endpoints on the backend host, and the remote MCP
+        // servers it reaches through a sign-in.
         "ALL /mcp/{mount}": createTurnMountRoute(
             services.turnMounts,
             {
@@ -57,6 +59,7 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
                 phone: phoneRoutes.mcp,
                 tools: createExtensionToolsEndpoint(services),
                 extension: createExtensionMcpEndpoint(services),
+                remote: createMcpRemoteEndpoint({ capabilities: services.capabilities, bearer: services.mcpSignIns.bearer }),
             },
             async (tool, result, conversationId) => {
                 // allow(silent-catch): an unavailable settings store costs cleaning, never an already completed tool call.

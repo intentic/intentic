@@ -46,6 +46,7 @@ const fakePrisma = (seed: Seed = {}) => {
     const created: Record<string, unknown>[] = [];
     const deleted: string[] = [];
     const updates: Record<string, unknown>[] = [];
+    const released: { id: string; at: Date }[] = [];
     const prisma = {
         apiToken: {
             findUnique: jest.fn(async ({ where }: { where: { hash: string } }) =>
@@ -62,6 +63,11 @@ const fakePrisma = (seed: Seed = {}) => {
                     : null,
             ),
             update: jest.fn(async () => ({})),
+            // Revokes by id, and only a row still live: the shape of the release's one write.
+            updateMany: jest.fn(async ({ where, data }: { where: { id: string; revokedAt: null }; data: { revokedAt: Date } }) => {
+                released.push({ id: where.id, at: data.revokedAt });
+                return { count: seed.revoked === true ? 0 : 1 };
+            }),
         },
         sandbox: {
             count: jest.fn(async () => seed.recentSandboxes ?? 0),
@@ -99,7 +105,7 @@ const fakePrisma = (seed: Seed = {}) => {
             }),
         },
     };
-    return { prisma: prisma as unknown as PrismaClient, created, deleted, updates };
+    return { prisma: prisma as unknown as PrismaClient, created, deleted, updates, released };
 };
 
 const trashed: string[] = [];
@@ -215,4 +221,20 @@ it(`refuses a hosted sandbox, one this account does not have, a bad body and a r
     expect((await app(fakePrisma().prisma)(`/remove`, { method: `POST`, body: {} })).status).toBe(400);
     expect((await app(fakePrisma({ revoked: true }).prisma)(`/remove`, { method: `POST`, body: { sandboxId: `sbx-2` } })).status).toBe(401);
     expect(trashed).toEqual([]);
+});
+
+it(`lets a token revoke itself, and only itself, when the card holding it is removed`, async () => {
+    const { prisma, released } = fakePrisma();
+    const response = await app(prisma)(`/release`, { method: `POST` });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ revoked: true });
+    // The presented token's own row, stamped at the platform's now: never one named in a body.
+    expect(released).toEqual([{ id: `tok-1`, at: NOW }]);
+});
+
+it(`refuses a release from a token that is already dead, and writes nothing`, async () => {
+    const { prisma, released } = fakePrisma({ revoked: true });
+    expect((await app(prisma)(`/release`, { method: `POST` })).status).toBe(401);
+    expect((await app(prisma)(`/release`, { method: `POST`, token: `itk_never_existed` })).status).toBe(401);
+    expect(released).toEqual([]);
 });

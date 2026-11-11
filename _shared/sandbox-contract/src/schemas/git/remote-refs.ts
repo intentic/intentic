@@ -17,6 +17,13 @@ export const RemoteRefsRequestSchema = z.object({
         .min(1)
         .optional()
         .describe("Which connection a VAULTED token belongs to. Ignored when a real token is sent."),
+    gitConnection: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+            "The GitHub or GitLab connection, by its id, whose token reads a private repository on its host, as the install will. Used when no token is sent; left out, the first such connection by id is used.",
+        ),
 });
 
 export const RemoteRefSchema = z.object({

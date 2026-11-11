@@ -13,6 +13,7 @@ import {
     setCapabilitySecret,
 } from "./capabilities";
 import { type Doors, okAfter } from "../doors";
+import { certificateRequest, deviceSignInStart, deviceSignInWait, mcpAuthCheck, mcpSignInStart, mcpSignInWait } from "./connectionSignIns";
 
 // The connections, over the capability store (daemon/capabilities.ts): every write the Capabilities page sends changes
 // what its next read says, and an add streams its apply.
@@ -31,4 +32,11 @@ export const capabilitiesDoors = {
     refs: ({ url }) => remoteRefs(url),
     dismiss: ({ entry }) => okAfter(() => dismissRecommendation(entry)),
     login: ({ id }) => loginCapability(id),
+    // A form's own sign-ins and key requests, answered with no provider behind them (connectionSignIns.ts).
+    mcpAuth: ({ url }) => mcpAuthCheck(url),
+    mcpSignIn: ({ url }) => mcpSignInStart(url),
+    mcpSignInWait: ({ flow }) => mcpSignInWait(flow),
+    deviceSignIn: () => deviceSignInStart(),
+    deviceSignInWait: ({ flow }) => deviceSignInWait(flow),
+    certificateRequest: (input) => certificateRequest(input),
 } satisfies Doors<`capabilities`>;

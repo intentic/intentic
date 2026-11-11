@@ -9,7 +9,7 @@ import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, nextTick, ref } from "vue";
-import { swallowFileDrag, takenNameWords, useCapabilityForm } from "./capabilityForm";
+import { addsByItself, swallowFileDrag, takenNameWords, useCapabilityForm } from "./capabilityForm";
 import { seedValues } from "../../models/capabilities/form";
 
 const catalogEntry = (id: string): CapabilityCatalogEntry => CAPABILITY_CATALOG.find((entry) => entry.id === id)!;
@@ -477,4 +477,16 @@ it(`offers GPU access on local machines and explains its absence on hosted machi
     expect(form.mainFields(docker).map((shown) => shown.key)).toContain(`gpu`);
     state.hosted.value = true;
     expect(form.mainFields(docker).map((shown) => shown.key)).not.toContain(`gpu`);
+});
+
+// A linked sandbox pairs and the fleet allows with their own press, so the by-hand Add waits for the by-hand way.
+test(`a card added by its own press hides Add until its fold is opened, a pairing filled it in, or it is an edit`, () => {
+    const link = catalogEntry(`link`);
+    const fleet = catalogEntry(`fleet`);
+    const editing: CapabilitySummary = { id: `ops`, kind: `link`, status: { state: `active` }, config: { url: `https://ops.test` }, secrets: [`token`] };
+    expect([link, fleet].map((entry) => addsByItself(entry, undefined, false, {}))).toEqual([true, true]);
+    expect(addsByItself(link, undefined, true, {})).toBe(false);
+    expect(addsByItself(link, undefined, false, { token: `ilk_paired` })).toBe(false);
+    expect(addsByItself(link, editing, false, {})).toBe(false);
+    expect(addsByItself(PLUGIN, undefined, false, {})).toBe(false);
 });

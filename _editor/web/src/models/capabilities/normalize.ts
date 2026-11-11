@@ -1,6 +1,8 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
+import { parseJsonOr } from "@intentic/base/json";
 import { t } from "@intentic/ui/i18n";
+import { z } from "zod";
 
 // Repairs what a person pastes or types into what the daemon's schema accepts, visibly (the box's
 // value changes, or a one-line summary appears). Pure functions over (field, value); the page runs
@@ -232,6 +234,49 @@ const parseImapAddress = (entry: CapabilityCatalogEntry, values: Readonly<Record
     return { values: expansion, summary: t(`capabilities.normalize.sMailServer993`, { domain, host }) };
 };
 
+// What `az ad app credential reset` prints for an app registration: the tenant, the app's (client) id and the new
+// secret. The SharePoint card's guide ends its Cloud Shell command with it, so the whole answer is one paste.
+const AzureAppCredential = z.object({ tenant: z.string().min(1), appId: z.string().min(1), password: z.string().min(1) });
+
+const parseAzureAppCredential = (entry: CapabilityCatalogEntry, pasted: string): PasteExpansion | undefined => {
+    if (!hasField(entry, `tenantId`) || !hasField(entry, `clientId`) || !hasField(entry, `clientSecret`)) {
+        return undefined;
+    }
+    const credential = AzureAppCredential.safeParse(parseJsonOr(pasted.trim(), undefined)).data;
+    if (credential === undefined) {
+        return undefined;
+    }
+    const parts = [
+        t(`capabilities.normalize.tenant`, { value: credential.tenant }),
+        t(`capabilities.normalize.client`, { value: credential.appId }),
+        t(`capabilities.normalize.secretSet`),
+    ];
+    return {
+        values: { tenantId: credential.tenant, clientId: credential.appId, clientSecret: credential.password },
+        summary: t(`capabilities.normalize.readFromAzureCli`, { parts: parts.join(` · `) }),
+    };
+};
+
+// A Discord bot token is three dot-separated parts, the first the bot's user id in base64, and a bot's user id is its
+// application's: the id the connected card's invite link is built from, read here so nobody has to look it up.
+const DISCORD_ID_RE = /^\d{17,20}$/u;
+
+const parseDiscordBotToken = (entry: CapabilityCatalogEntry, field: CapabilityField, pasted: string): PasteExpansion | undefined => {
+    if (field.secret !== true || !hasField(entry, `applicationId`)) {
+        return undefined;
+    }
+    const token = submittedValue(field, pasted);
+    const [head, ...rest] = token.split(`.`);
+    if (head === undefined || rest.length !== 2 || !/^[\w-]+$/u.test(head) || head.length % 4 === 1) {
+        return undefined;
+    }
+    const id = atob(head.replaceAll(`-`, `+`).replaceAll(`_`, `/`).padEnd(Math.ceil(head.length / 4) * 4, `=`));
+    if (!DISCORD_ID_RE.test(id)) {
+        return undefined;
+    }
+    return { values: { [field.key]: token, applicationId: id }, summary: t(`capabilities.normalize.applicationFromToken`, { value: id }) };
+};
+
 // Routes one paste to whichever expansion recognises it; which field it landed in is part of the
 // meaning (host vs username vs url).
 export const expandPaste = (
@@ -240,6 +285,14 @@ export const expandPaste = (
     values: Readonly<Record<string, string>>,
     pasted: string,
 ): PasteExpansion | undefined => {
+    const azure = parseAzureAppCredential(entry, pasted);
+    if (azure !== undefined) {
+        return azure;
+    }
+    const discord = parseDiscordBotToken(entry, field, pasted);
+    if (discord !== undefined) {
+        return discord;
+    }
     if (entry.kind === `ssh` && (field.key === `host` || field.key === `user`)) {
         return parseSshTarget(pasted);
     }

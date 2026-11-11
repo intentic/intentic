@@ -3,6 +3,8 @@ import type { CapabilitiesSlice } from "./capabilities-slice.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 import type { SecretVault } from "./credentials/secret-vault.js";
 import type { DismissalsStore, DismissedRecommendation } from "./offers/dismissals-store.js";
+import { unstubbed } from "@intentic/testing";
+import type { McpSignIns } from "./mcp-oauth/mcp-sign-ins.js";
 
 // The capabilities slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.
 
@@ -63,4 +65,7 @@ export const capabilitiesSliceFake = () =>
         capabilities: memoryCapabilitiesStore(),
         // Nothing declined by default: every suite wants the catalog answering as on a sandbox nobody's said no on.
         capabilityDismissals: memoryDismissalsStore(),
+        // Every MCP address reads as open to anyone, and nothing is signed in: no route suite reaches a real server.
+        // mcp-oauth/mcp-oauth.testing.ts stands up one that signs in, for the suites about that.
+        mcpSignIns: unstubbed<McpSignIns>("mcpSignIns", { check: async () => ({ auth: "open" }), bearer: async () => ({ bearer: undefined }) }),
     }) satisfies Partial<CapabilitiesSlice>;

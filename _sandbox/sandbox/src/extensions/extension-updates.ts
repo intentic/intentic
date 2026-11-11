@@ -1,7 +1,6 @@
 import { join } from "node:path";
 import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import { gitAuthHeader } from "@intentic/base/git";
 import { oneLine } from "@intentic/base/one-line";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { diffPowers, extensionIdOf, type PowersDiff } from "@intentic/extension-manifest";
@@ -15,12 +14,12 @@ import {
     type ExtensionUpdatePolicy,
     ExtensionUpdateSchema,
 } from "@intentic/sandbox-contract/schemas/extension-updates";
-import type { ExtensionConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ExtensionConfig } from "@intentic/sandbox-contract/schemas/git-installs";
 import { updateBrief } from "@intentic/sandbox-contract/chores";
 import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { extensionDir, extensionRootOf, extensionsRoot, parseExtensionManifest, readExtensionManifest, extensionProcessKey } from "../capabilities/extension-dirs.js";
-import { previousDir, withCheckoutLock } from "../capabilities/git-checkout.js";
+import { cloneAuth, previousDir, withCheckoutLock } from "../capabilities/git-checkout.js";
 import { browseMarketplace } from "../capabilities/marketplace.js";
 import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
@@ -214,7 +213,8 @@ export const previewExtensionUpdate = async (services: Services, id: string, ref
     await services.files.mkdir(parent);
     await services.files.remove(tmp);
     try {
-        await services.git.clone(parent, tmpName, target.url, config.token !== undefined ? { authHeader: gitAuthHeader(config.token) } : undefined);
+        // Read as the install was: its own token, else the GitHub or GitLab card it reads with.
+        await services.git.clone(parent, tmpName, target.url, await cloneAuth(services.capabilities, { url: target.url, token: config.token, gitConnection: config.gitConnection }));
         await services.git.checkout(tmp, target.ref);
         const parsed = await parseExtensionManifest(extensionRootOf(tmp, target.path));
         if ("error" in parsed) {

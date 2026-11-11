@@ -88,8 +88,9 @@ overrides:
   # cursor-events.test.ts still pins that the SDK's discriminated unions are visible, so a regression stays loud.
   # prisma and better-auth both carry mysql2 as an optional driver dependency, and both resolved 3.15.3, which
   # leaks plaintext credentials on an auth-plugin downgrade to mysql_clear_password (GHSA-3f6p-5ww8-9rcr,
-  # fixed in 3.22.0). Nothing here connects to MySQL — the datasource in _platform/prisma/schema.prisma is
-  # postgresql — so this is a tree hygiene bump, not a live exposure; same major, no code of ours touches it.
+  # fixed in 3.22.0). The platform's datasource (_platform/prisma/schema.prisma) is postgresql; what does connect
+  # to MySQL is the daemon's pre-save test of a MySQL card (2026-11-11), on the catalog's copy, which this keeps
+  # every other importer on too.
   mysql2: 3.24.6
   # Better Auth's React bindings bring react-dom into the frontend dependency graph. Pin the pair together:
   # react-dom's peer range requires the corresponding React patch, including in share-view's resolved tree.
@@ -392,6 +393,9 @@ catalog:
   mediaplex: 1.0.0
   mermaid: 12.2.0
   monaco-editor-core: 0.57.0
+  # The daemon's pre-save test of a MySQL card signs in with it (capabilities/probe-databases.ts); the same version the
+  # override below holds the tree on.
+  mysql2: 3.24.6
   # The privacy shield's text reader (_sandbox/ocr) runs PP-OCRv6 with it directly. The same pin as
   # @huggingface/transformers' own, so the daemon carries one runtime, not two.
   onnxruntime-node: 1.30.0

@@ -341,7 +341,7 @@ flowchart LR
 | `src/sandbox/hosted` | Fly client, provisioning, pool, meter, builds, migrations between machines, the Stripe plan |
 | `src/admin` | Operator panel routes behind `ADMIN_EMAILS` and `ADMIN_SIGN_IN`, each call audited |
 | `src/desktop` | Desktop sign-in handoff over the `intentic://` deep link |
-| `src/fleet` | `/fleet`: an API token lets a sandbox create sandboxes for its owner |
+| `src/fleet` | `/fleet`: an API token lets a sandbox create sandboxes for its owner, and give itself up when its card goes |
 | `src/invite` | Emailed invitations to share a sandbox |
 | `src/me` | The caller's profile, their look and reading preferences kept with the account (`/me/preferences`), and the GDPR data export |
 | `src/tokens` | Account-level API tokens |

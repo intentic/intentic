@@ -16,6 +16,7 @@ flowchart LR
 - `hosts` (templated over the fields like `env`, so a self-hosted card names `${url}`) turns the credential's host guard on by default, set to these hosts: its `{{secret:<id>/<field>}}` reference goes without a person's click only there. The owner can change the hosts or turn the guard off on the Secrets view. It does not reach the environment variable the same credential rides in.
 - Most cards are `cli` kind: the daemon injects the credential into the agent's environment each turn, suffixed with the instance id so two accounts of one service coexist, and never writes it to a file. `npmjs` and `website` are `browser` kind: a signed-in session in the sandbox's own browser.
 - Cards that need a client tool (`postgres`, `mysql`, `posthog`) name a Dockerfile fragment in `env/`, restricted to `RUN` and `ENV` and built into the sandbox's image overlay.
+- `postgres` and `mysql` are not spoken to over HTTP, so their `probe` names `connect` instead of a URL: the daemon signs in as their command-line clients would, before the client tool is even installed, and says whether pg_hba, a grant, the password or the network stood in the way.
 - The manifest also offers automation templates tied to these cards: push webhooks for GitHub and GitLab, and Sentry alerts.
 - Baked into every sandbox image; switching it off on the Extensions tab removes exactly these cards.
 - The EZD RP and e-Doręczenia cards for Polish public offices live in [e-urzad](../e-urzad), beside the CLI, tools and view that use them.

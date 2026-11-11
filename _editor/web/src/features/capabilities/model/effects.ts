@@ -42,7 +42,7 @@ export const formEffects = (
     contributionOf: ContributionOf,
     manifestOf?: ManifestOf,
 ): readonly CapabilityEffect[] => {
-    const config = fieldConfig(entry, (field) => (values[field.key] ?? ``).trim());
+    const config = fieldConfig(entry, (field) => (values[field.key] ?? ``).trim(), values);
     return capabilityEffects({
         kind: entry.kind,
         id: name.trim() || undefined,

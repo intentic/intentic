@@ -34,11 +34,12 @@
                     { "key": "name", "label": "Display name", "default": "Pi", "optional": true },
                     {
                         "key": "env",
-                        "label": "Environment (KEY=VALUE per line)",
+                        "label": "Environment",
                         "placeholder": "ANTHROPIC_API_KEY=…",
                         "secret": true,
                         "optional": true,
-                        "multiline": true
+                        "multiline": true,
+                        "keyValue": true
                     },
                     { "key": "loginCommand", "label": "Login command", "default": "pi", "optional": true }
                 ]

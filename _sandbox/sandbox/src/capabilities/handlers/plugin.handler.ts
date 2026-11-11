@@ -1,7 +1,9 @@
-import type { PluginConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { PluginConfig } from "@intentic/sandbox-contract/schemas/git-installs";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
-import { checkoutInto } from "../git-checkout.js";
+import { opt } from "../../opt.js";
+import { checkoutInto, installReader } from "../git-checkout.js";
+import { readerWords } from "../credentials/git-connection.js";
 import { pluginDir, pluginsRoot } from "../plugin-dirs.js";
 
 // A Claude Code plugin: the daemon owns the git checkout at .intentic/records/plugins/<id>; the Agent SDK's plugin
@@ -20,6 +22,7 @@ export const pluginHandler: CapabilityHandler = {
             ...(plugin.ref !== undefined ? { ref: plugin.ref } : {}),
             ...(plugin.path !== undefined ? { path: plugin.path } : {}),
             ...(plugin.commit !== undefined ? { commit: plugin.commit } : {}),
+            ...opt("gitConnection", plugin.gitConnection),
             hasToken: plugin.token !== undefined,
         };
     },
@@ -31,14 +34,16 @@ export const pluginHandler: CapabilityHandler = {
         carry: async (ctx, from, to) => ctx.files.move(pluginDir(ctx.workspace.root, from), pluginDir(ctx.workspace.root, to)),
     },
     async *apply(ctx, id, config) {
-        const { url, ref, commit, token } = config as PluginConfig;
+        const { url, ref, commit, token, gitConnection } = config as PluginConfig;
         const at = commit ?? ref;
         const session = capabilityJobSession(id);
         if (ctx.terminalRun.visible) {
             yield { kind: "terminal", session };
         }
-        yield { kind: "log", message: `Cloning ${url}${at !== undefined ? ` @ ${at}` : ""}…` };
-        await checkoutInto(ctx, session, pluginsRoot(ctx.workspace.root), id, { url, ref: at, token });
+        // A private repository on an account the sandbox already holds is read with that card's token (git-connection.ts).
+        const reader = await installReader(ctx, { url, token, gitConnection });
+        yield { kind: "log", message: `Cloning ${url}${at !== undefined ? ` @ ${at}` : ""}${readerWords(reader)}…` };
+        await checkoutInto(ctx, session, pluginsRoot(ctx.workspace.root), id, { url, ref: at, token: reader.token });
         yield {
             kind: "log",
             message:

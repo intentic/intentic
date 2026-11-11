@@ -146,9 +146,10 @@ export interface DeviceOptions {
 }
 
 // Only Microsoft's own page is printed for the person to open, never Microsoft's `message`, which is server data.
+// Microsoft answers with `login.microsoft.com/device` today and `microsoft.com/devicelogin` before.
 const verificationPage = (raw: string | undefined): string => {
     const page = new URL(raw ?? "");
-    const known = ["microsoft.com", "www.microsoft.com", "login.microsoftonline.com"].includes(page.hostname);
+    const known = ["microsoft.com", "www.microsoft.com", "login.microsoft.com", "login.microsoftonline.com"].includes(page.hostname);
     if (page.protocol !== "https:" || page.username !== "" || page.password !== "" || page.port !== "" || !known) {
         throw new Error("Microsoft answered with a sign-in page this CLI does not recognise");
     }

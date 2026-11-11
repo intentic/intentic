@@ -52,6 +52,27 @@ test("a ready access token is used as it is; a refusal is fatal and never quotes
     await expect(mintAccessToken({ ...microsoft, oauthTenant: "a/b" })).rejects.toThrow("tenant");
 });
 
+// The card's form signs Exchange Online in with the scope its manifest declares (refreshToken.deviceCode): every
+// permission this CLI refreshes with, plus `openid profile` so the form can say who signed in.
+test("the card's own sign-in asks for what the CLI refreshes with, and for who signed in", async () => {
+    // SAFETY: this extension's own manifest, which the daemon's schema parses; only the declared scope is read here.
+    const manifest = (await Bun.file(new URL("../intentic-extension.json", import.meta.url)).json()) as {
+        contributes: { capabilities: { refreshToken: { deviceCode: { scope: string } } }[] };
+    };
+    expect(manifest.contributes.capabilities[0]!.refreshToken.deviceCode.scope).toBe(`${MICROSOFT_SCOPES} openid profile`);
+});
+
+// What Microsoft's device endpoint answers today (read off login.microsoftonline.com on 2026-11-11).
+test("Exchange Online device sign-in prints the page Microsoft answers with today", async () => {
+    const { http } = answering([
+        { body: { device_code: "dc", user_code: "L2ACH3MRV", verification_uri: "https://login.microsoft.com/device", expires_in: 60, interval: 1 } },
+        { body: { access_token: "at", refresh_token: "rt" } },
+    ]);
+    const lines: string[] = [];
+    await deviceLogin({ ...microsoft, oauthRefreshToken: "" }, async () => {}, (line) => lines.push(line), { http, pause: async () => {} });
+    expect(lines[0]).toBe("Open https://login.microsoft.com/device in your own browser, enter the code L2ACH3MRV and sign in as sekretariat@urzad.example.org.");
+});
+
 test("Exchange Online device sign-in prints only Microsoft's page and code and stores the token on the card", async () => {
     const { http } = answering([
         {

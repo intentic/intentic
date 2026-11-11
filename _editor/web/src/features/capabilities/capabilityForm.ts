@@ -116,6 +116,17 @@ const linkedPicker =
         form.touched.clear();
     };
 
+/**
+ * Whether the open card is added by its own press (a linked sandbox's pairing, the fleet's Allow), so the form's by-hand
+ * Add stays hidden: until the Advanced fold is opened or a pairing's answers are in the form, and never on an edit.
+ */
+export const addsByItself = (
+    entry: CapabilityCatalogEntry | undefined,
+    editing: CapabilitySummary | undefined,
+    foldOpen: boolean,
+    values: Readonly<FormValues>,
+): boolean => (entry?.kind === `link` || entry?.kind === `fleet`) && editing === undefined && !foldOpen && (values[`token`] ?? ``) === ``;
+
 // A tile's fields on one side of the Advanced fold, less those this kind of machine cannot offer (a GPU on a hosted one).
 const fieldsOf = (entry: CapabilityCatalogEntry, values: FormValues, on: { advanced: boolean; hosted: boolean }): readonly CapabilityField[] =>
     shownFields(entry, values).filter((field) => (field.advanced === true) === on.advanced && capabilityFieldAvailable(entry, field.key, on.hosted));

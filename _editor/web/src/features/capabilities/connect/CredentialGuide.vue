@@ -3,7 +3,8 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { computed } from "vue";
 import { entryGuide } from "../../../models/capabilities/catalogCopy";
-import { guideParts, guidePartsPrefixed, guideTokenUrl } from "../../../models/capabilities/credentialGuide";
+import { guideParts, guidePartsPrefixed, guideTokenUrl, isCommand } from "../../../models/capabilities/credentialGuide";
+import { CopyButton } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -57,7 +58,16 @@ const steps = computed<readonly string[]>(() => guide.value?.steps ?? []);
         <!-- `break-words`: literals (hostnames, commands) have no spaces to break at, and the docked column is narrow. -->
         <ol v-if="steps.length > 0" class="flex list-decimal flex-col gap-2.5 pl-4 text-xs leading-relaxed break-words text-muted marker:text-subtle">
             <li v-for="(step, index) in steps" :key="index">
-                <span v-for="(part, partIndex) in guideParts(step)" :key="partIndex" :class="part.literal ? literal : ''">{{ part.text }}</span>
+                <template v-for="(part, partIndex) in guideParts(step)" :key="partIndex">
+                    <!-- A command gets a line of its own with a copy button: nobody selects a hundred characters by hand. -->
+                    <span v-if="isCommand(part)" class="mt-1.5 flex items-start gap-1.5">
+                        <code class="min-w-0 flex-1 rounded bg-canvas px-2 py-1.5 font-mono text-2xs break-all text-content select-all">{{
+                            part.text.trim()
+                        }}</code>
+                        <CopyButton :text="part.text.trim()" />
+                    </span>
+                    <span v-else :class="part.literal ? literal : ''">{{ part.text }}</span>
+                </template>
             </li>
         </ol>
     </div>

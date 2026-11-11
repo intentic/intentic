@@ -326,7 +326,8 @@ export const adminContract = {
 };
 
 // Account-level API tokens: the only credential here that acts for a person rather than for one sandbox or one
-// sign-in, so minting and revoking are deliberately session-only — a token can never mint its successor.
+// sign-in, so minting and revoking are deliberately session-only — a token can never mint its successor. The one
+// exception is a token giving itself up (the ingress `fleetRelease`, 2026-11-11), which can only ever end its own use.
 export const tokenContract = {
     list: oc.route({ method: "GET", path: "/tokens" }).output(z.object({ tokens: z.array(ApiTokenSchema) })),
     create: oc

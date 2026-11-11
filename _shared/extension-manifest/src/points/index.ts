@@ -20,6 +20,7 @@ export * from "./agent.js";
 export * from "./automation-templates.js";
 export * from "./bin.js";
 export * from "./capabilities.js";
+export * from "./capability-field-shapes.js";
 export * from "./commands.js";
 export * from "./documents.js";
 export * from "./environment.js";

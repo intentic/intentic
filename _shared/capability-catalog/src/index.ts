@@ -12,6 +12,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type ExitPoint, TOR_EXIT_COUNTRIES, VPNGATE_EXIT_COUNTRIES } from "@intentic/sandbox-contract/schemas/exit";
 import type { ServiceKind } from "@intentic/sandbox-contract/schemas/inventory";
+import { EXTENSION_ENTRY, PLUGIN_ENTRY } from "./git-tiles.js";
 import { SSH_ENTRY } from "./ssh.js";
 
 // BINARY gigabytes, written "GB", because every number this feature prints is a memory quantity compared against a
@@ -175,7 +176,15 @@ export interface CapabilityGuide {
     readonly steps?: readonly string[] | undefined;
 }
 
+// A step a connected card still offers on the service's own site (invite the bot to a server): `url` is templated over
+// the card's non-secret fields, and the row offers the link only once every field it names holds a value.
+export interface CapabilityLink {
+    readonly label: string;
+    readonly url: string;
+}
+
 // This package is a kind's whole story: tiles declare the form, effects.ts declares the consequence.
+export * from "./connection-refs.js";
 export * from "./effects.js";
 export * from "./gpu.js";
 
@@ -195,8 +204,13 @@ export interface CapabilityCatalogEntry {
     // Paragraph under the add-form, also searched, so a tile stays findable by words `description` had no room for.
     readonly hint?: string | undefined;
     readonly guide?: CapabilityGuide | undefined;
+    // Links each connected card of this tile offers on its row.
+    readonly links?: readonly CapabilityLink[] | undefined;
     // True when there's nothing to name or duplicate (e.g. Docker Engine); opens pre-filled from the live instance.
     readonly singleton?: boolean | undefined;
+    // While a field's `signIn` button stands in for its box, as the card's device-code sign-in declares it (a `when`
+    // over the answers); undefined is always. The rest of that declaration is the sandbox's to read.
+    readonly signInWhen?: string | undefined;
 }
 
 // Permission switches every device tile carries; shared so platforms can't drift into different defaults.
@@ -640,8 +654,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "via",
                 label: "Reach it through",
                 optional: true,
-                placeholder: "the sandbox's own network",
-                hint: "A connected computer that opens this share itself, such as the PC you map it on: its LAN, its VPN and its names then apply. Its name as on Devices (rog). It must be online, with Run commands or Run programs on.",
+                placeholder: "The sandbox's own network",
+                connection: { kind: "device" },
+                hint: "A connected computer that opens this share itself, such as the PC you map it on: its LAN, its VPN and its names then apply. It must be online, with Run commands or Run programs on.",
                 when: "provider == 'smb'",
             },
             {
@@ -659,7 +674,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 "Read-only: mounted `ro`, and give it a read-only account on the server too.",
                 "Behind a VPN: add the VPN tile first; the disk mounts after the tunnel on every restart.",
                 "Mount it on its row below; the agent finds the files under `/mnt/netdisk/<name>`.",
-                "Already open on your PC (its VPN, a mapped drive)? Put that computer in `Reach it through`.",
+                "Already open on your PC (its VPN, a mapped drive)? Pick that computer in `Reach it through`.",
             ],
         },
     },
@@ -751,60 +766,24 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "Custom MCP server",
         kind: "mcp",
         category: "extend",
-        description: "Any remote MCP server, by URL and token.",
+        description: "Any remote MCP server: sign in, or paste a token.",
+        // `token` turns into a Sign in button when the URL names an OAuth sign-in (McpSignInField.vue); the sandbox then
+        // holds the tokens and renews them.
         fields: [
             { key: "url", label: "MCP URL", placeholder: "https://example.com/mcp" },
             { key: "token", label: "Token", secret: true, optional: true },
         ],
         guide: {
-            steps: ["Paste the server's URL (Streamable HTTP or SSE).", "Needs auth? Paste a bearer token.", "The agent connects next turn."],
-        },
-    },
-    {
-        id: "plugin",
-        name: "Claude plugin",
-        kind: "plugin",
-        category: "extend",
-        description: "A Claude Code plugin from a git repo.",
-        fields: [
-            { key: "url", label: "Git URL", placeholder: "https://github.com/owner/plugin" },
-            { key: "ref", label: "Branch, tag or commit", optional: true },
-            { key: "path", label: "Subdirectory", optional: true },
-            { key: "token", label: "Access token", secret: true, optional: true },
-        ],
-        hint: "Pinned to the commit it installs at and loaded by the agent next turn. Re-adding the same name updates it to the newest commit.",
-        guide: {
-            scopes: "private repos: read access (e.g. GitHub `repo`)",
             steps: [
-                "Point at a git repo holding a Claude Code plugin.",
-                "Private repo: add a token with read access.",
-                "Or browse a marketplace above to pre-fill this form.",
+                "Paste the server's URL (Streamable HTTP).",
+                "Asks for a sign-in? Press Sign in and approve in your browser.",
+                "Otherwise, if it needs a token, paste one from its settings.",
+                "The agent connects next turn.",
             ],
         },
     },
-    {
-        id: "extension",
-        name: "Extension",
-        kind: "extension",
-        category: "extend",
-        description: "An intentic extension from a git repo.",
-        fields: [
-            { key: "url", label: "Git URL", placeholder: "https://github.com/owner/extension" },
-            // A full sha, not a branch: extension code runs trusted, so installs pin exactly the reviewed commit. The
-            // app resolves the branch or release picked here into that sha (capabilities/GitRefField.vue).
-            { key: "ref", label: "Version" },
-            { key: "path", label: "Subdirectory", optional: true },
-            { key: "token", label: "Access token", secret: true, optional: true },
-        ],
-        guide: {
-            scopes: "private repos: read access (e.g. GitHub `repo`)",
-            steps: [
-                "Point at a repo with an `intentic-extension.json`.",
-                "Pick a branch or release: it is pinned to that commit, and an install never follows it.",
-                "Reload the app after installing to load its UI.",
-            ],
-        },
-    },
+    PLUGIN_ENTRY,
+    EXTENSION_ENTRY,
     // One email identity the sandbox acts as online, set up once instead of per platform. The user signs its email
     // provider in once, live; accounts opened through it share that browser. The open-accounts switch is the real
     // consent.
@@ -877,16 +856,25 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         icon: "server",
         description: "Let the agent create sandboxes on your account.",
         singleton: true,
-        fields: [{ key: "token", label: "Provisioning token", secret: true }],
+        // (2026-11-11) The card's Allow mints the token itself, under the owner's session (capabilities/connect/
+        // FleetAllow.vue), so the box is only the by-hand way, folded away.
+        fields: [
+            {
+                key: "token",
+                label: "Provisioning token",
+                secret: true,
+                advanced: true,
+                hint: "Only to use a token you minted yourself on Settings ▸ Tokens: Allow makes one for you.",
+            },
+        ],
         // No `url`: the token page is this app's own, and the reader is already in it. Every other tile's guide links
         // out to somebody else's dashboard, which is the only reason that field exists.
         guide: {
             scopes: "`provision`: create sandboxes on this account and mint their setup codes, and nothing else",
             steps: [
-                "Your account menu → `Settings` → `Tokens` → `Mint token`.",
-                "Copy it once. It is stored hashed, so a lost one is replaced rather than recovered.",
-                "Paste it here. It stays with this sandbox's daemon and is never put in the agent's environment.",
-                "Revoke it on the same page; provisioning stops the moment you do.",
+                "Press `Allow`: the app makes a provisioning token for this sandbox, listed under its name on `Settings` → `Tokens`.",
+                "It stays with this sandbox's daemon and is never put in the agent's environment.",
+                "Remove this card, or revoke the token there, and provisioning stops at once.",
             ],
         },
         hint: "The agent runs `sandboxes create` and every create asks you in chat first, naming the machine it would run on. New sandboxes land on a computer you have connected as a device — this never provisions hosted machines, so it cannot spend your plan.",
@@ -894,7 +882,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
     // Another of the owner's sandboxes this one may hand tasks to, kept with their computers: to them it is another place
     // their agent can act, its tools named after it, picked by personas on the same devices list, and held to what that
     // side allows as a device is. The token is minted over there, where the terms live; the editor pairs the two
-    // sandboxes and fills this in by itself, and the fields are the way to do it by hand.
+    // sandboxes and adds this by itself (components/LinkPairing.vue), and the folded fields are the way to do it by hand.
     {
         id: "link",
         name: "Linked sandbox",
@@ -903,16 +891,16 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         icon: "link",
         description: "Hand tasks to another of your sandboxes.",
         fields: [
-            { key: "url", label: "Its address", placeholder: "https://sandbox-….sbx.intentic.dev" },
-            { key: "token", label: "Link token", secret: true, placeholder: "ilk_…" },
+            { key: "url", label: "Its address", placeholder: "https://sandbox-….sbx.intentic.dev", advanced: true },
+            { key: "token", label: "Link token", secret: true, placeholder: "ilk_…", advanced: true },
             { key: "name", label: "What it is called", advanced: true },
         ],
         guide: {
             scopes: "Starts, follows up on and stops the tasks it hands over, and reads what they report. When that sandbox's owner shares its records on the link, also reads its conversations, logs and diagnostics, read-only. Never its files or its settings",
             steps: [
-                "Open the other sandbox → `Sandbox` → `Access` → `Linked sandboxes` → `New link`, and name this sandbox there.",
-                "Choose what its tasks wear (a persona), whether each one waits for you, and how many turns an hour it may start.",
-                "Copy the token once, and paste it here with that sandbox's address.",
+                "Pick the other sandbox above, what its tasks wear (a persona), whether each one waits for you there, and how many turns an hour it may start.",
+                "`Link` makes the link over there under your own sign-in and adds it here: nothing to copy.",
+                "Offered for a sandbox you own or maintain. For any other, its owner makes the link there (`Sandbox` → `Access` → `Linked sandboxes` → `New link`), and its address and token go under Advanced.",
                 "Revoke the link over there; tasks stop reaching it the moment you do.",
             ],
         },
@@ -939,8 +927,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Code mailbox",
                 optional: true,
                 advanced: true,
-                placeholder: "the IMAP connection's name",
-                hint: "A connected IMAP entry: the agent fetches verification codes, never the inbox.",
+                placeholder: "None",
+                connection: { kind: "cli", provider: "imap" },
+                hint: "A connected IMAP inbox: the agent fetches verification codes, never the inbox.",
             },
             {
                 key: "loginUrl",
@@ -964,7 +953,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Browse through",
                 optional: true,
                 advanced: true,
-                placeholder: "the geo exit's name",
+                placeholder: "This sandbox's own address",
+                connection: { kind: "exit" },
                 hint: "A connected Geo exit: every account under this identity browses from that country.",
             },
         ],
@@ -1096,7 +1086,8 @@ const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
         optional: true,
         advanced: true,
         when: "!identity",
-        placeholder: "the geo exit's name",
+        placeholder: "This sandbox's own address",
+        connection: { kind: "exit" },
         hint: "A connected Geo exit: this account then browses from that country.",
     },
 ];
@@ -1130,6 +1121,8 @@ export const contributionEntry = (contribution: CapabilityContribution): Capabil
         ],
         hint: contribution.catalog.hint,
         guide: contribution.catalog.guide,
+        links: contribution.catalog.links,
+        signInWhen: contribution.kind === "cli" ? contribution.refreshToken?.deviceCode?.when : undefined,
     };
 };
 

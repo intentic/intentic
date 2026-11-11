@@ -54,9 +54,8 @@
                             "Copy the `Directory (tenant) ID` and `Application (client) ID` from the overview onto this card.",
                             "`Authentication` → `Allow public client flows`: `Yes`. That is what lets the sign-in work without a redirect URI or a secret.",
                             "`API permissions` → `Microsoft Graph` → `Delegated permissions`: add the permissions listed above, then `Grant admin consent` if your tenant asks for it.",
-                            "Save this card, then ask the agent to run `m365 auth login` in a chat you are watching. Open the Microsoft page it prints in your own browser, type the code, and sign in as the office user.",
-                            "The sign-in is stored on this card by itself, never shown in the chat. Start a new chat to use it, or press `Test`.",
-                            "Changing what the agent may do (read only or read & write) needs a new sign-in."
+                            "Press `Sign in with Microsoft` on this card, open Microsoft's page beside it, type the code shown here and sign in as the office user. Then save the card.",
+                            "The sign-in is kept on this card and never shown. To switch user, or after changing what the agent may do, open the card and press `Reconnect`."
                         ]
                     }
                 },
@@ -86,11 +85,11 @@
                     },
                     {
                         "key": "refreshToken",
-                        "label": "Sign-in",
+                        "label": "Refresh token",
                         "secret": true,
                         "optional": true,
-                        "advanced": true,
-                        "hint": "Filled in by `m365 auth login`; leave it empty."
+                        "signIn": "microsoft",
+                        "hint": "From your app's own authorization-code flow, for an app with a client secret. Without a secret, this card signs in by itself."
                     },
                     {
                         "key": "clientSecret",
@@ -98,7 +97,7 @@
                         "secret": true,
                         "optional": true,
                         "advanced": true,
-                        "hint": "Only for an app that signs in through its own authorization-code flow and pastes its refresh token above. Leave it empty for the usual sign-in."
+                        "hint": "Only for an app that signs in through its own authorization-code flow and pastes its refresh token above. Leave it empty to sign in with Microsoft here."
                     }
                 ],
                 "env": {
@@ -109,7 +108,25 @@
                     "M365_AUTHORITY": "${authority}",
                     "M365_ACCESS": "${access}"
                 },
-                "refreshToken": { "field": "refreshToken", "boundTo": ["tenantId", "clientId", "authority", "access"] },
+                "refreshToken": {
+                    "field": "refreshToken",
+                    "boundTo": ["tenantId", "clientId", "authority", "access"],
+                    "deviceCode": {
+                        "when": "!clientSecret",
+                        "authorizeUrl": "https://${authority}/${tenantId:uri}/oauth2/v2.0/devicecode",
+                        "tokenUrl": "https://${authority}/${tenantId:uri}/oauth2/v2.0/token",
+                        "clientId": "${clientId}",
+                        "scope": [
+                            {
+                                "when": "access == 'read'",
+                                "scope": "offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Files.Read.All https://graph.microsoft.com/Sites.Read.All"
+                            },
+                            {
+                                "scope": "offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/Files.ReadWrite.All https://graph.microsoft.com/Sites.Read.All"
+                            }
+                        ]
+                    }
+                },
                 "hosts": ["${authority}", "graph.microsoft.com", "graph.microsoft.us", "microsoftgraph.chinacloudapi.cn"],
                 "skill": "skills/microsoft365/SKILL.md",
                 "probe": {

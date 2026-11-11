@@ -125,9 +125,10 @@
                         "url": "https://www.gov.pl/web/e-doreczenia/integracja-uslugi-e-doreczen",
                         "linkLabel": "e-Doręczenia integration",
                         "steps": [
-                            "The mailbox administrator signs in to e-Doręczenia and opens Moduł uprawnień → Systemy → Dodaj system.",
-                            "Name the system and either send a certificate request (CSR) or upload the office's own qualified certificate or e-seal; one certificate per system.",
-                            "Download the issued certificate and keep its private key; paste both here as PEM.",
+                            "Keep `Generate a key and certificate request for me`, fill in the office's details and press `Generate`. Download the request (CSR); the sandbox keeps its private key.",
+                            "The mailbox administrator signs in to e-Doręczenia, opens Moduł uprawnień → Systemy → Dodaj system, names the system and attaches that request; one certificate per system.",
+                            "Download the certificate it issues and paste it into `Issued certificate`. You can add the card first and paste it later.",
+                            "The office's own qualified certificate or e-seal instead? Pick `Paste my own certificate and key` and paste both as PEM.",
                             "Use INT for testing (INT admits only the public IP addresses you registered with it) and PROD once the integration works."
                         ]
                     }
@@ -159,16 +160,116 @@
                         "hint": "Exactly as registered in Moduł uprawnień."
                     },
                     {
+                        "key": "credential",
+                        "label": "Certificate",
+                        "default": "request",
+                        "options": [
+                            {
+                                "value": "request",
+                                "label": "Generate a key and certificate request for me"
+                            },
+                            {
+                                "value": "own",
+                                "label": "Paste my own certificate and key"
+                            }
+                        ],
+                        "hint": "Generate one for a certificate Moduł uprawnień issues. Paste your own for the office's qualified certificate or e-seal."
+                    },
+                    {
+                        "key": "organization",
+                        "label": "Organization (O)",
+                        "placeholder": "Urzad Gminy Przykladowo",
+                        "when": "credential == 'request'",
+                        "hint": "The office's full name as in its register entry, up to 64 characters. No Polish letters or commas: they are written without diacritics."
+                    },
+                    {
+                        "key": "commonName",
+                        "label": "Domain (CN)",
+                        "placeholder": "ezd.przykladowo.pl",
+                        "when": "credential == 'request'",
+                        "hint": "The domain of the system the certificate is for."
+                    },
+                    {
+                        "key": "province",
+                        "label": "Province (ST)",
+                        "placeholder": "Mazowieckie",
+                        "when": "credential == 'request'"
+                    },
+                    {
+                        "key": "locality",
+                        "label": "Locality (L)",
+                        "placeholder": "Warszawa",
+                        "when": "credential == 'request'"
+                    },
+                    {
+                        "key": "country",
+                        "label": "Country (C)",
+                        "default": "PL",
+                        "advanced": true,
+                        "when": "credential == 'request'"
+                    },
+                    {
+                        "key": "unit",
+                        "label": "Department (OU)",
+                        "optional": true,
+                        "advanced": true,
+                        "placeholder": "Dzial IT",
+                        "when": "credential == 'request'"
+                    },
+                    {
+                        "key": "email",
+                        "label": "E-mail address",
+                        "optional": true,
+                        "advanced": true,
+                        "when": "credential == 'request'"
+                    },
+                    {
+                        "key": "privateKey",
+                        "label": "Key and certificate request",
+                        "secret": true,
+                        "when": "credential == 'request'",
+                        "keyRequest": {
+                            "subject": {
+                                "C": "${country}",
+                                "ST": "${province}",
+                                "L": "${locality}",
+                                "O": "${organization}",
+                                "OU": "${unit}",
+                                "CN": "${commonName}",
+                                "emailAddress": "${email}"
+                            },
+                            "request": "certificateRequest"
+                        }
+                    },
+                    {
+                        "key": "certificateRequest",
+                        "label": "Certificate request (CSR)",
+                        "optional": true,
+                        "multiline": true,
+                        "when": "credential == 'request'"
+                    },
+                    {
+                        "key": "certificate",
+                        "label": "Issued certificate (PEM)",
+                        "secret": true,
+                        "multiline": true,
+                        "optional": true,
+                        "when": "credential == 'request'",
+                        "hint": "The certificate Moduł uprawnień issues for the request above. Not issued yet? Add the card now and paste it here once it is."
+                    },
+                    {
                         "key": "certificate",
                         "label": "System certificate (PEM)",
                         "secret": true,
-                        "multiline": true
+                        "multiline": true,
+                        "when": "credential == 'own'"
                     },
                     {
                         "key": "privateKey",
                         "label": "Certificate private key (PEM)",
                         "secret": true,
-                        "multiline": true
+                        "multiline": true,
+                        "when": "credential == 'own'"
                     },
                     {
                         "key": "uaUrl",

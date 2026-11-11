@@ -4,9 +4,13 @@ import type { Capability, CapabilityProbe } from "@intentic/sandbox-contract/sch
 import { parseSseText, sseJson } from "@intentic/sandbox-contract/protocol/sse";
 import { versionedBase } from "../endpoints/endpoint-config.js";
 import { nodeRequest } from "../system/tls/node-request.js";
-import { type OAuthExchange, probeOAuth } from "./probe-oauth.js";
+import { type OAuthExchange, type OAuthProbeTarget, probeOAuth } from "./probe-oauth.js";
 import { contributionFor, type ResolvedContribution } from "./contributions.js";
+import { type DatabaseClients, dialProbe, dialTargetOf } from "./probes/probe-dial.js";
+import { DATABASE_CLIENTS } from "./probes/probe-databases.js";
 import { parseJsonOr } from "@intentic/base/json";
+import { z } from "zod";
+import { mcpBearerOf } from "./mcp-oauth/mcp-session.js";
 
 // Checks whether a entry's settings actually reach the service, turning a generic failure into a specific reason. A cli
 // entry declares its probe in the manifest; endpoint and mcp are handled directly since their check is the protocol
@@ -61,8 +65,12 @@ const transportReason = (error: unknown): string => {
     return errorMessage(error);
 };
 
-// What each HTTP status means for a credential, said once so every entry refuses in the same words.
-const httpReason = (status: number): string => {
+// What each HTTP status means for a credential, said once so every entry refuses in the same words. A bearer the test
+// traded for itself was just accepted by the sign-in service, so a 403 against it is about what it may do.
+const httpReason = (status: number, traded: boolean): string => {
+    if (status === 403 && traded) {
+        return "the sign-in works, but what it was granted does not cover this request";
+    }
     if (status === 401 || status === 403) {
         return "the credential was refused";
     }
@@ -82,9 +90,13 @@ interface HttpProbe {
     readonly headers?: Record<string, string> | undefined;
     readonly body?: string | undefined;
     readonly identity?: string | undefined;
+    /** A dotted path that must hold `true` in the answer, for a service that answers 200 either way (Slack's `ok`). */
+    readonly ok?: string | undefined;
     readonly insecure?: boolean | undefined;
     /** What to call the thing in the answer: "GitHub", "your model endpoint". */
     readonly subject: string;
+    /** The bearer came from the test's own token trade (`oauth`), not from the form. */
+    readonly traded?: boolean | undefined;
 }
 
 interface RawAnswer {
@@ -125,6 +137,22 @@ const whoAnswered = (answer: RawAnswer, path: string): string | undefined => {
     return identityIn(parseJsonOr(answer.body, undefined), path);
 };
 
+const BODY_ERROR = z.object({ error: z.string().regex(/^[\w.-]{1,64}$/) });
+
+// A 200 whose body says the call failed: its `error` code when it names one ("invalid_auth"), else just that it said no.
+// Only a short code is repeated, never free text, which could carry back what was sent.
+const refusedInBody = (answer: RawAnswer, path: string): string | undefined => {
+    const body: unknown = parseJsonOr(answer.body, undefined);
+    let node: unknown = body;
+    for (const key of path.split(".")) {
+        node = isRecord(node) ? node[key] : undefined;
+    }
+    if (node === true) {
+        return undefined;
+    }
+    return BODY_ERROR.safeParse(body).data?.error ?? `${path}: false`;
+};
+
 const runHttpProbe = async (probe: HttpProbe, request: typeof nodeRequest): Promise<CapabilityProbe> => {
     let url: URL;
     try {
@@ -142,7 +170,11 @@ const runHttpProbe = async (probe: HttpProbe, request: typeof nodeRequest): Prom
         return { checked: true, ok: false, message: `Could not reach ${url.host}: ${transportReason(error)}.` };
     }
     if (answer.status < 200 || answer.status >= 300) {
-        return { checked: true, ok: false, message: `${probe.subject} answered ${answer.status}: ${httpReason(answer.status)}.` };
+        return { checked: true, ok: false, message: `${probe.subject} answered ${answer.status}: ${httpReason(answer.status, probe.traded === true)}.` };
+    }
+    const refused = probe.ok === undefined ? undefined : refusedInBody(answer, probe.ok);
+    if (refused !== undefined) {
+        return { checked: true, ok: false, message: `${probe.subject} answered ${refused}: the credential was refused.` };
     }
     const reached = `Reached ${probe.subject}: it answered as itself.`;
     if (probe.identity === undefined) {
@@ -154,25 +186,33 @@ const runHttpProbe = async (probe: HttpProbe, request: typeof nodeRequest): Prom
         : { checked: true, ok: true, message: `Reached ${probe.subject}, authenticated as ${who}.`, who };
 };
 
-// A card whose credential is a delegated sign-in has nothing to test until someone has signed in, which happens after
-// it is saved: that is not a failure either.
+// A card whose credential is a delegated sign-in has nothing to test until someone has signed in: that is not a failure
+// either.
 const NOT_SIGNED_IN: CapabilityProbe = {
     checked: false,
     ok: false,
-    message: "Nothing to test until someone signs in: save this connection, then ask the agent to sign in with it.",
+    message: "Nothing to test until someone signs in with this connection.",
 };
 
+// A refused trade in the words of the grant it tried; never the authority's own, which may echo the credential.
+const refusedTrade = (grant: string): string =>
+    grant === "client_credentials"
+        ? "The app's credentials were refused: check the tenant ID, the client ID and the client secret's value. A client secret expires."
+        : "The sign-in was refused: sign in with this connection again.";
+
 const signedInProbe = async (plan: HttpProbe, oauth: OAuthExchange, request: typeof nodeRequest): Promise<CapabilityProbe> => {
-    if (oauth.form["refresh_token"] === undefined) {
+    const grant = oauth.form["grant_type"] ?? "";
+    if (grant === "refresh_token" && oauth.form["refresh_token"] === undefined) {
         return NOT_SIGNED_IN;
     }
+    let target: OAuthProbeTarget;
     try {
-        const target = await probeOAuth(oauth, plan.url);
-        return await runHttpProbe({ ...plan, url: target.url, headers: { ...plan.headers, authorization: `Bearer ${target.token}` } }, request);
+        target = await probeOAuth(oauth, plan.url, request);
     } catch {
         // allow(silent-catch): the authority's answer may echo the credential, so a refusal is said only as one.
-        return { checked: true, ok: false, message: "The sign-in was refused: ask the agent to sign in with this connection again." };
+        return { checked: true, ok: false, message: refusedTrade(grant) };
     }
+    return runHttpProbe({ ...plan, url: target.url, headers: { ...plan.headers, authorization: `Bearer ${target.token}` }, traded: true }, request);
 };
 
 // Not tested is not a failure: an ssh box, paired device or signed-in browser has no test besides using it.
@@ -185,7 +225,8 @@ const NO_TEST: CapabilityProbe = {
 // Builds an HTTP probe from the entry's declared template, using the submitted config values.
 const contributionProbe = (contribution: ResolvedContribution | undefined, config: Record<string, unknown>): CapabilityProbe | HttpProbe => {
     const spec = contribution?.spec;
-    if (spec === undefined || spec.kind !== "cli" || spec.probe === undefined) {
+    // A test that dials a service other than over HTTP (`connect`) is probe-dial.ts's.
+    if (spec === undefined || spec.kind !== "cli" || spec.probe === undefined || "connect" in spec.probe) {
         return NO_TEST;
     }
     const declared = spec.probe;
@@ -205,6 +246,7 @@ const contributionProbe = (contribution: ResolvedContribution | undefined, confi
         method: declared.method,
         headers: Object.fromEntries(Object.entries(declared.headers ?? {}).map(([key, value]) => [key, template(value, config)])),
         identity: declared.identity,
+        ok: declared.ok,
         insecure: declared.insecure,
         subject: spec.catalog.name,
     };
@@ -226,7 +268,8 @@ const coreProbe = (capability: Capability): CapabilityProbe | HttpProbe => {
         };
     }
     if (capability.kind === "mcp") {
-        const token = String(config["token"] ?? "").trim();
+        // A sign-in's session (mcp-oauth/mcp-session.ts) is tested with its access token.
+        const token = mcpBearerOf(capability.config.token) ?? "";
         return {
             url: String(config["url"] ?? ""),
             method: "POST",
@@ -253,8 +296,13 @@ export const probeCapability = async (
     registry: ReadonlyMap<string, ResolvedContribution>,
     capability: Capability,
     request: typeof nodeRequest = nodeRequest,
+    databases: DatabaseClients = DATABASE_CLIENTS,
 ): Promise<CapabilityProbe> => {
     const config = capability.config as Record<string, unknown>;
+    const dial = capability.kind === "cli" ? dialTargetOf(contributionFor(registry, capability.kind, config), capability.config) : undefined;
+    if (dial !== undefined) {
+        return dialProbe(dial, databases);
+    }
     const plan = capability.kind === "cli" ? contributionProbe(contributionFor(registry, capability.kind, config), config) : coreProbe(capability);
     if ("checked" in plan) {
         return plan;

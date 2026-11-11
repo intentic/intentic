@@ -53,7 +53,10 @@ export type MountTarget =
     | { readonly kind: "tools"; readonly extension: string; readonly card?: string }
     // An extension's MCP endpoint that speaks Streamable HTTP itself: at `path` in its backend namespace, or on a declared
     // process's port; with a card, at `<path>/<card>`.
-    | { readonly kind: "extension"; readonly extension: string; readonly card?: string; readonly path: string; readonly process?: string };
+    | { readonly kind: "extension"; readonly extension: string; readonly card?: string; readonly path: string; readonly process?: string }
+    // A remote MCP server signed in to through the sandbox (mcp-kind card holding a sign-in): forwarded whole, with the
+    // card's access token attached at the door, so the agent never holds a token that can lapse mid-turn.
+    | { readonly kind: "remote"; readonly capability: string };
 
 export interface MountSpec {
     // The MCP server name: what the model sees as `mcp__<name>__…`, and the path segment the door is reached at.

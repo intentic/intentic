@@ -190,10 +190,11 @@ export interface DeviceLoginOptions {
 }
 
 // Only Microsoft's own page may be printed for the person to open, and never Microsoft's `message`, which is server data
-// rather than an instruction.
+// rather than an instruction. Microsoft answers with `login.microsoft.com/device` today and `microsoft.com/devicelogin`
+// (its national clouds' variants included) before; a national cloud may answer with a page on its own sign-in host.
 const verificationPage = (raw: string, authority: string): string => {
     const page = new URL(raw);
-    const microsoft = ["microsoft.com", "www.microsoft.com"].includes(page.hostname) && page.pathname === "/devicelogin";
+    const microsoft = ["microsoft.com", "www.microsoft.com", "login.microsoft.com"].includes(page.hostname);
     const plain = page.protocol === "https:" && page.username === "" && page.password === "" && page.port === "";
     if (!plain || !(microsoft || page.hostname === authority)) {
         throw new Error("Microsoft answered with a sign-in page this CLI does not recognise");

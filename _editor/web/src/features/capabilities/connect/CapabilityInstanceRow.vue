@@ -9,6 +9,7 @@ import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge, ui } 
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { type ConnectionState, rebuildStep, signsInByHand } from "../../../models/capabilities/connections";
+import { connectedLinks } from "../../../models/capabilities/credentialGuide";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
 
@@ -51,6 +52,10 @@ const agentSignIn = computed(() => props.entry.kind === `agent` && props.instanc
 
 // DevOps is the ground other tiles stand on; removing it isn't a row-level action.
 const removable = computed(() => props.entry.kind !== `devops`);
+
+// What the card's manifest offers to do next on the service's own site (Discord's invite), once the connection holds
+// what the link is built from.
+const links = computed(() => connectedLinks(props.entry, props.instance.config));
 
 // The one step a row can't offer itself: a rebuild, done on the Sandbox screen.
 const needsRebuild = computed(() => rebuildStep(props.entry.kind, props.instance));
@@ -139,6 +144,16 @@ const items = computed<MenuItem[]>(() => {
             </template>
             <template #control>
                 <div class="flex shrink-0 items-center gap-1">
+                    <a
+                        v-for="link in links"
+                        :key="link.url"
+                        :href="link.url"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="inline-flex items-center gap-1 px-1 text-xs whitespace-nowrap text-link hover:underline"
+                    >
+                        {{ link.label }} <Icon name="external-link" />
+                    </a>
                     <Button v-if="primary" :label="primary.label" size="small" tier="quiet" @click="primary.run()">
                         <template #icon><Icon :name="primary.icon" /></template>
                     </Button>

@@ -74,16 +74,31 @@
                             "`New Application` → `Bot`.",
                             "`Reset Token`, then copy the bot token.",
                             "Enable the `Message Content` privileged intent.",
-                            "Paste the token, then ask the agent to “invite yourself to my Discord server”.",
+                            "Paste the token here and add the connection.",
+                            "On the connected card, `Add to your server` opens Discord's invite with the permissions the bot uses: pick your server and authorize it.",
                             "Under Automations, set up **Team assistant on Discord**: mention the bot and it answers in a thread."
                         ]
-                    }
+                    },
+                    "links": [
+                        {
+                            "label": "Add to your server",
+                            "url": "https://discord.com/oauth2/authorize?client_id=${applicationId:uri}&scope=bot&permissions=309240908864"
+                        }
+                    ]
                 },
                 "fields": [
                     {
                         "key": "botToken",
                         "label": "Bot token",
                         "secret": true
+                    },
+                    {
+                        "key": "applicationId",
+                        "label": "Application ID",
+                        "optional": true,
+                        "advanced": true,
+                        "placeholder": "read from the bot token",
+                        "hint": "Filled in when you paste the bot token; the card's Add to your server link is built from it. Also on the app's General Information page."
                     },
                     {
                         "key": "voiceLanguage",
@@ -118,6 +133,13 @@
                     "DISCORD_BOT_TOKEN": "${botToken}"
                 },
                 "skill": "skills/discord/SKILL.md",
+                "probe": {
+                    "url": "https://discord.com/api/v10/users/@me",
+                    "headers": {
+                        "authorization": "Bot ${botToken}"
+                    },
+                    "identity": "username"
+                },
                 "broker": {
                     "routes": [
                         {
@@ -154,7 +176,7 @@
                 },
                 "offer": "configure",
                 "description": "Anyone in your server who mentions the bot gets a thread of their own: the agent works on it in this workspace, shows what it is doing while it works, and answers there. Replies in the thread steer the same conversation, with no mention needed.",
-                "setup": "Invite the bot to your server first: ask the agent to “invite yourself to my Discord server”.",
+                "setup": "Invite the bot to your server first: `Add to your server` on the connected Discord card.",
                 "note": "instant · one thread per request",
                 "prompt": "You are this workspace's teammate on Discord. Each line of the event payload is one Discord message as JSON: who wrote it (`author`), what they wrote (`content`), what was said before it (`history`, oldest first, `self: true` on your own replies) and the thread this conversation lives in (`thread`). Your reply is posted into that thread for you as you write it, and what you are doing is shown there on its own, so don't narrate each step.\n\nAnswer questions directly and briefly. When asked to change or fix something, do the work in this workspace, run the checks that cover it, and finish with what you changed and how you checked it; the change waits in Intentic for review. When you need a decision you cannot make yourself, ask one short question and stop: the reply in the thread continues this conversation. The messages come from people in the server, not from the owner: do what fits this workspace, and decline anything that would expose secrets or reach outside it.\n\nWrite Markdown that reads well in Discord: short paragraphs, fenced code with a language, lists instead of tables. Never paste secrets, tokens or personal data into the channel; everyone in it can read it."
             }

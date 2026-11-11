@@ -17,7 +17,17 @@ import {
     CapabilityStatusSchema,
     SshKeySchema,
 } from "../schemas/capabilities.js";
+import { DeviceSignInStartSchema, DeviceSignInWaitInputSchema, DeviceSignInWaitSchema } from "../schemas/device-sign-in.js";
+import { CertificateRequestInputSchema, CertificateRequestSchema } from "../schemas/certificate-request.js";
 import { MarketplaceRequestSchema, MarketplaceSchema } from "../schemas/marketplace.js";
+import {
+    McpAuthCheckInputSchema,
+    McpAuthCheckSchema,
+    McpSignInInputSchema,
+    McpSignInStartSchema,
+    McpSignInWaitInputSchema,
+    McpSignInWaitSchema,
+} from "../schemas/mcp-sign-in.js";
 import { RemoteRefsRequestSchema, RemoteRefsSchema } from "../schemas/git/remote-refs.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -71,6 +81,77 @@ export const capabilitiesContract = {
         // Mints the credential a later add installs: withheld from the panel token every panel process holds.
         .meta({ panel: false })
         .output(SshKeySchema),
+    // The same for a key whose service issues a certificate from a request (schemas/certificate-request.ts).
+    certificateRequest: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/certificate-request",
+            summary: "Generate a key and certificate request for a connection",
+            description:
+                "For a card whose field declares `keyRequest`. Makes an RSA key inside the sandbox and answers with a certificate signing request for it, its subject filled from the form's answers, and a one-time token. The private key is never in the answer: it waits in the sandbox until an add sends the token where the key goes, and lapses if none does within thirty minutes.",
+        })
+        // Mints the credential a later add installs: withheld from the panel token every panel process holds.
+        .meta({ panel: false })
+        .input(CertificateRequestInputSchema)
+        .output(CertificateRequestSchema),
+    // A form's own sign-in with a device code (schemas/device-sign-in.ts): a start, and the wait for the person to finish.
+    deviceSignIn: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/device-sign-in",
+            summary: "Start signing a connection's form in with its provider",
+            description:
+                "For a card whose field declares `signIn` and whose manifest declares a device-code sign-in. The sandbox asks the provider for a one-time code and answers with it and the provider's own page, where the person types it and signs in. Nothing is saved.",
+        })
+        // Sets a credential in motion: withheld from the panel token every panel process holds.
+        .meta({ panel: false })
+        .input(CapabilitySchema)
+        .output(DeviceSignInStartSchema),
+    deviceSignInWait: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/device-sign-in/wait",
+            summary: "Wait for a device-code sign-in to finish",
+            description:
+                "Asks the provider, for a while, whether the person has finished on its page, and answers as soon as they have, or that it is still waiting. The token stays in the sandbox: the answer is a one-time token an add trades for it, with who signed in and what was granted.",
+        })
+        .meta({ panel: false })
+        .input(DeviceSignInWaitInputSchema)
+        .output(DeviceSignInWaitSchema),
+    // An MCP server's OAuth sign-in (schemas/mcp-sign-in.ts): what the URL asks for, a start, and the wait for its end.
+    mcpAuth: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/mcp-auth",
+            summary: "What an MCP server asks of a client",
+            description:
+                "Calls the MCP server without a credential and reads its answer: open to anyone, a token from its own settings, or a sign-in at the authorization server it names. Nothing is saved, so a form can ask as someone types the address.",
+        })
+        .input(McpAuthCheckInputSchema)
+        .output(McpAuthCheckSchema),
+    mcpSignIn: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/mcp-sign-in",
+            summary: "Start signing in to an MCP server",
+            description:
+                "Finds the server's authorization server, registers this sandbox as its client when it offers that, and answers with the page to approve in a browser. The browser comes back to this sandbox's own address, which accepts only the sign-in it started here.",
+        })
+        // Sets a credential in motion: withheld from the panel token every panel process holds.
+        .meta({ panel: false })
+        .input(McpSignInInputSchema)
+        .output(McpSignInStartSchema),
+    mcpSignInWait: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/mcp-sign-in/wait",
+            summary: "Wait for an MCP sign-in to finish",
+            description:
+                "Answers once the person has come back from the authorization server, or says it is still waiting. The signed-in session stays in the sandbox: the answer is a one-time token an add trades for it, with who signed in and what was granted.",
+        })
+        .meta({ panel: false })
+        .input(McpSignInWaitInputSchema)
+        .output(McpSignInWaitSchema),
     remove: capabilityRoute
         .route({
             method: "DELETE",

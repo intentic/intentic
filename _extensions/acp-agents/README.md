@@ -12,7 +12,7 @@ flowchart LR
 
 - Holds no code: the manifest declares three `agent`-kind cards (`opencode`, `gemini`, `acp-agent`) and their form fields, and the daemon's generic agent handler does the rest.
 - Adding a card spawns the command and runs an ACP `initialize` probe, so a command that does not speak ACP fails at the card with its stderr, before any chat depends on it. The agent then appears as a provider in the chat's model picker.
-- The agent runs inside the sandbox over stdio and keeps its own credentials: an `env` block for API keys, or a `loginCommand` the owner runs once in a Terminal.
+- The agent runs inside the sandbox over stdio and keeps its own credentials: API keys in `env`, which the form draws as rows of a name and a masked value (`keyValue`) and stores as the `KEY=VALUE` lines the daemon reads, or a `loginCommand` the card's Sign in runs in a terminal. Gemini's is `NO_BROWSER=true gemini`, its interactive sign-in told to print a link and take the code back, since the sandbox's browser is not the owner's.
 - The extension installs nothing: the command must already be on the sandbox PATH.
 - Baked into every sandbox image; switching it off on the Extensions tab removes exactly these cards.
 

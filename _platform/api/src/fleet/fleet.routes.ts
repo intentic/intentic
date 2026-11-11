@@ -2,7 +2,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
-import { ingressServer } from "../ingress.js";
+import { type IngressHandler, ingressServer } from "../ingress.js";
 import { mintSandbox } from "../sandbox/mint-sandbox.js";
 import { trashSandbox } from "../sandbox/sandbox-trash.js";
 import { mintSetupCodeFor, ReachabilityUnavailable } from "../sandbox/setup-code.js";
@@ -24,6 +24,34 @@ const PROVISION_PER_WINDOW = 10;
 
 const REVOKED = `that provisioning token was revoked or never existed`;
 
+type FleetEnv = { Variables: { logger: Logger } };
+type CallerOf = (c: { req: { header: (name: string) => string | undefined } }) => Promise<VerifiedToken | undefined>;
+
+// 401 rather than 404: unlike a sandbox's connect token, the holder here knows it is presenting a credential and the
+// useful answer is "that one does not work", which is what sends them to the Tokens page.
+const callerFor =
+    (prisma: PrismaClient): CallerOf =>
+    async (c) =>
+        await verifyApiToken(prisma, bearerOf(c.req.header(`authorization`)), `provision`);
+
+/*
+ * The presented token, revoked by itself (2026-11-11): what a sandbox calls when the fleet card holding a token the
+ * editor minted for it is removed, or that token replaced, so a card taken away takes its access with it whoever removed
+ * it (the owner in the app, or an approved ask in chat). Only ever the caller's own token: a token still cannot touch
+ * another one, or mint one, so this needs no session. A dead token is refused, as on every route here.
+ */
+const releaseHandler =
+    (prisma: PrismaClient, callerOf: CallerOf, now: () => Date): IngressHandler<FleetEnv, `fleetRelease`> =>
+    async (c, kit) => {
+        const caller = await callerOf(c);
+        if (caller === undefined) {
+            return kit.refuse(401, REVOKED);
+        }
+        const { count } = await prisma.apiToken.updateMany({ where: { id: caller.id, revokedAt: null }, data: { revokedAt: now() } });
+        c.get(`logger`).info({ tokenId: caller.id, ownerId: caller.userId }, `fleet: a provisioning token was released by the sandbox holding it`);
+        return kit.answer({ revoked: count > 0 });
+    };
+
 export interface FleetDeps {
     readonly config: Config;
     readonly prisma: PrismaClient;
@@ -38,13 +66,10 @@ export const fleetHttpRoutes = ({
     now = () => new Date(),
     trash = (sandboxId, logger) => trashSandbox(prisma, config, logger, sandboxId),
 }: FleetDeps) => {
-    const app = new Hono<{ Variables: { logger: Logger } }>();
+    const app = new Hono<FleetEnv>();
     const ingress = ingressServer(app, `/fleet`);
 
-    // 401 rather than 404: unlike a sandbox's connect token, the holder here knows it is presenting a credential and
-    // the useful answer is "that one does not work", which is what sends them to the Tokens page.
-    const callerOf = async (c: { req: { header: (name: string) => string | undefined } }): Promise<VerifiedToken | undefined> =>
-        await verifyApiToken(prisma, bearerOf(c.req.header(`authorization`)), `provision`);
+    const callerOf = callerFor(prisma);
 
     /* Whether the token still names an account. The probe behind the `fleet` capability's status row. */
     ingress(`fleetWhoami`, async (c, kit) => {
@@ -144,6 +169,8 @@ export const fleetHttpRoutes = ({
         c.get(`logger`).info({ sandboxId: sandbox.id, ownerId: caller.userId }, `fleet: a sandbox was moved to the trash`);
         return kit.answer({ name: sandbox.name, recoverableUntil: purgeAfter.toISOString() });
     });
+
+    ingress(`fleetRelease`, releaseHandler(prisma, callerOf, now));
 
     return app;
 };

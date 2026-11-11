@@ -122,6 +122,46 @@ test(`fills the mail settings an address already implies, without overwriting a 
     expect(expandPaste(imap, usernameField, {}, `ada@acme.dev`)).toBeUndefined();
 });
 
+// The SharePoint card's Cloud Shell command ends with `az ad app credential reset`, whose JSON answers three boxes.
+test(`fills an app registration's three boxes from the Azure CLI's answer, wherever it is pasted`, () => {
+    const sharepoint = tile(`cli`, [
+        { key: `tenantId`, label: `Directory (tenant) ID` },
+        { key: `clientId`, label: `Application (client) ID` },
+        { key: `clientSecret`, label: `Client secret value`, secret: true },
+        { key: `hostname`, label: `SharePoint hostname`, optional: true },
+    ]);
+    const printed = `{\n  "appId": "11111111-2222-3333-4444-555555555555",\n  "password": "abc~SECRET",\n  "tenant": "99999999-8888-7777-6666-000000000000"\n}\n`;
+
+    const expansion = expandPaste(sharepoint, { key: `hostname`, label: `SharePoint hostname` }, {}, printed);
+
+    expect(expansion?.values).toEqual({
+        tenantId: `99999999-8888-7777-6666-000000000000`,
+        clientId: `11111111-2222-3333-4444-555555555555`,
+        clientSecret: `abc~SECRET`,
+    });
+    expect(expansion?.summary).toBe(
+        `Read from the Azure CLI output: tenant 99999999-8888-7777-6666-000000000000 · client 11111111-2222-3333-4444-555555555555 · secret set.`,
+    );
+    // JSON that is not the CLI's answer, or a tile without the three boxes, is an ordinary paste.
+    expect(expandPaste(sharepoint, { key: `tenantId`, label: `Tenant` }, {}, `{"appId":"x"}`)).toBeUndefined();
+    expect(expandPaste(tile(`cli`, [{ key: `tenantId`, label: `Tenant` }]), { key: `tenantId`, label: `Tenant` }, {}, printed)).toBeUndefined();
+});
+
+// A bot token's first segment is the bot's id in base64, and a bot's id is its application's: the invite link's client_id.
+test(`reads a Discord bot's application id out of its token, and keeps the token cleaned`, () => {
+    const tokenField = { key: `botToken`, label: `Bot token`, secret: true };
+    const discord = tile(`cli`, [tokenField, { key: `applicationId`, label: `Application ID`, optional: true }]);
+    const token = `${btoa(`80351110224678912`).replace(/=+$/u, ``)}.GhIjKl.mnOpQrStUvWxYz0123456789`;
+
+    expect(expandPaste(discord, tokenField, {}, ` ${token}\n`)).toEqual({
+        values: { botToken: token, applicationId: `80351110224678912` },
+        summary: `Read the application ID from the token: 80351110224678912. The connected card's invite link is built from it.`,
+    });
+    // A dotted secret that is not a Discord token (a JWT's header decodes to JSON), or a tile with nowhere to put the id.
+    expect(expandPaste(discord, tokenField, {}, `eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig`)).toBeUndefined();
+    expect(expandPaste(tile(`cli`, [tokenField]), tokenField, {}, token)).toBeUndefined();
+});
+
 test(`reads a WireGuard blob back to its owner, and flags a config that lost its peer`, () => {
     const conf = `[Interface]\nPrivateKey = x\nAddress = 10.2.0.2/32\n\n[Peer]\nPublicKey = y\nEndpoint = de.example.com:51820\n`;
     expect(wireguardSummary(conf)?.text).toBe(`Read: 1 config · endpoint de.example.com:51820.`);

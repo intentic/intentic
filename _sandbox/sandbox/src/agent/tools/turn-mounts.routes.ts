@@ -8,7 +8,8 @@ import type { MountTarget, RpcMessage, TurnMounts } from "./turn-mounts.js";
 // The one door every daemon-hosted MCP server is reached through, `ALL /mcp/<name>`: the bearer names one live turn (and
 // its conversation), that turn's lease maps the name to a target, and the target's endpoint answers. Streamable HTTP, answered as plain
 // JSON: nothing a daemon-hosted server says is server-initiated, so there is no stream to open. An extension endpoint that
-// speaks the transport itself (a backend path, a process's port) is the exception, forwarded whole.
+// speaks the transport itself (a backend path, a process's port) and a signed-in remote server are the exceptions,
+// forwarded whole.
 
 // Who a request is for, handed to the endpoint along with the target: the conversation comes from the bearer, never from
 // anything the request says about itself.
@@ -33,13 +34,15 @@ export interface MountEndpoints {
     readonly tools: RpcEndpoint<TargetOf<"tools">>;
     // The whole exchange, forwarded to the backend host or the process (extension-mcp.ts).
     readonly extension: (target: TargetOf<"extension">, c: Context<AppEnv>, call: MountCall) => Promise<Response>;
+    // The whole exchange, forwarded to a signed-in MCP server with its fresh bearer (capabilities/mcp-oauth/mcp-remote.ts).
+    readonly remote: (target: TargetOf<"remote">, c: Context<AppEnv>, call: MountCall) => Promise<Response>;
 }
 
 // A daemon tool server answers in this process, with the request's own signal: nothing to reach but the object itself.
 export const daemonEndpoint: RpcEndpoint<TargetOf<"daemon">> = (target, message, call) => target.server.handle(message, call.signal);
 
 // The endpoint that answers a resolved target's messages, chosen by the target's kind alone.
-const rpcOf = (endpoints: MountEndpoints, target: Exclude<MountTarget, TargetOf<"extension">>, call: MountCall) => {
+const rpcOf = (endpoints: MountEndpoints, target: Exclude<MountTarget, TargetOf<"extension" | "remote">>, call: MountCall) => {
     switch (target.kind) {
         case "browser":
             return (message: RpcMessage) => endpoints.browser(target, message, call);
@@ -108,6 +111,9 @@ export const createTurnMountRoute =
         const { target } = reach;
         if (target.kind === "extension") {
             return endpoints.extension(target, c, call);
+        }
+        if (target.kind === "remote") {
+            return endpoints.remote(target, c, call);
         }
         const handle = rpcOf(endpoints, target, call);
         return answerRpc(c, async (message) => {
