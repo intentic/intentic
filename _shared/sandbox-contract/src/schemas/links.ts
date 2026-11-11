@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { AskQuestionSchema } from "../events/requests.js";
 import { entryId } from "./internal.js";
-import { SharedAccountRefSchema } from "./providers/account-sharing.js";
 
 // LINKED SANDBOXES: one of the owner's sandboxes handing tasks to another. The sandbox that hands work over holds a
 // `link` capability card (schemas/capabilities.ts LinkConfigSchema); the one that takes it holds an inbound link, minted
@@ -35,7 +34,7 @@ const turnsPerHourTerm = z
     .describe("How many turns the link may start in an hour, new tasks and follow-ups alike. Words said into a turn already running are not counted.");
 const tasksTerm = z
     .boolean()
-    .describe("Whether the link may hand this sandbox tasks at all. An accounts link is minted without: it only borrows and copies the accounts below.");
+    .describe("Whether the link may hand this sandbox tasks at all. Without, it only reads records or operates, as those terms allow.");
 const recordsTerm = z
     .boolean()
     .describe(
@@ -45,12 +44,6 @@ const operateTerm = z
     .boolean()
     .describe(
         "Whether the asking sandbox may operate this one as its owner does from their own terminal: run commands, and read and write files, in this sandbox's main checkout. They run as root, or, while conversations here can be private, inside the same jail every person's shell gets (the history volume out of reach). Anything the owner's terminal can do, including reading this sandbox's secrets. Every call is logged here. Off unless its owner turns it on.",
-    );
-const accountsTerm = z
-    .array(SharedAccountRefSchema)
-    .max(64)
-    .describe(
-        "The model accounts the asking sandbox may use (schemas/providers/account-sharing.ts): a static key it may copy, a sign-in it borrows turn by turn. Empty lends nothing.",
     );
 
 export const LinkTermsSchema = z.object({
@@ -70,7 +63,6 @@ export const LinkTermsSchema = z.object({
     tasks: tasksTerm.default(true),
     records: recordsTerm.default(false),
     operate: operateTerm.default(false),
-    accounts: accountsTerm.default([]),
 });
 export type LinkTerms = z.infer<typeof LinkTermsSchema>;
 
@@ -119,9 +111,8 @@ export const InboundLinkMintedSchema = z.object({ id: z.string(), token: z.strin
 export type InboundLinkMinted = z.infer<typeof InboundLinkMintedSchema>;
 // POST /system/links/{id}: new terms, whole fields replaced, the rest kept. `null` on the persona or the service takes it
 // off (2026-10-26): absence keeps a field, so before this neither could be cleared once set. Spelled field by field rather
-// than as LinkTermsSchema.partial(): zod still fills a partial's inner defaults, so a change naming only `accounts`
-// read as `approve: false, turnsPerHour: 20, tasks: true` and quietly turned an accounts link into one taking tasks
-// (2026-10-29).
+// than as LinkTermsSchema.partial(): zod still fills a partial's inner defaults, so a change naming one field would read
+// as `approve: false, turnsPerHour: 20, tasks: true` and quietly reset the rest (2026-10-29).
 export const InboundLinkTermsUpdateSchema = z.object({
     label: z.string().trim().min(1).max(60).optional(),
     actsAs: entryId.nullable().optional().describe("The persona every task wears; null takes it off."),
@@ -131,7 +122,6 @@ export const InboundLinkTermsUpdateSchema = z.object({
     tasks: tasksTerm.optional(),
     records: recordsTerm.optional(),
     operate: operateTerm.optional(),
-    accounts: accountsTerm.optional(),
 });
 export type InboundLinkTermsUpdate = z.infer<typeof InboundLinkTermsUpdateSchema>;
 // POST /system/links/{id}/requests/{request}: the owner's answer to one waiting task.
@@ -148,9 +138,8 @@ export const LinkHelloSchema = z.object({
         approve: z.boolean(),
         turnsPerHour: z.number().int(),
         persona: z.string().optional().describe("The name of the persona its tasks wear, when they wear one."),
-        // Absent from a sandbox older than accounts links, which takes tasks and lends nothing.
+        // Absent from a sandbox older than 2026-10-29, which takes tasks.
         tasks: z.boolean().optional(),
-        accounts: z.number().int().nonnegative().optional().describe("How many accounts the link may use."),
         // Absent from a sandbox older than records over links, which shares none.
         records: z.boolean().optional().describe("Whether the link may read this sandbox's records (its conversations, logs and diagnostics)."),
         // Absent from a sandbox older than operating over links, which allows none.

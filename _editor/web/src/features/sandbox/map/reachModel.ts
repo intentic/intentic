@@ -303,8 +303,8 @@ const tokenReach = (input: ReachInput, scope: ControlScope): Map<string, ReachHo
 };
 
 const linkReach = (input: ReachInput, link: InboundLinkSummary): Map<string, ReachHow> => {
-    // An accounts link takes no tasks (schemas/links.ts `tasks`): it lends this sandbox's model accounts out, and nothing
-    // runs here through it.
+    // A link that takes no tasks (schemas/links.ts `tasks`) runs nothing here: it only reads records or operates, which
+    // the reach map does not draw as reach.
     if (link.terms.tasks === false) {
         return new Map();
     }

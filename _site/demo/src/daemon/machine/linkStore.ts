@@ -9,51 +9,35 @@ import {
 } from "@intentic/sandbox-contract/schemas/links";
 import { refuse } from "@intentic/contract-serve";
 import { DEMO_USER } from "../../platform";
-import { LENDING_SANDBOX, lendingSandboxShown } from "../../world/sandboxRegistry";
+import { LAPTOP_SANDBOX } from "../../world/sandboxRegistry";
 import { demoPersonas } from "../extensions/personas";
 import { sayOrBook } from "../board/queue";
 
 // Other sandboxes linked into this one (the Access tab's Linked sandboxes, Sandbox ▸ Map), held as the daemon's link
 // store holds them: minted with a token shown once, re-termed, revoked, and the tasks a link's terms hold for the owner
 // allowed (the task opens its conversation here and starts) or declined. The support desk's sandbox hands this one tasks
-// as Maya, one of them waiting for the owner's yes; where the account lists Ada's laptop (accounts.ts), the laptop
-// borrows this sandbox's Claude Max over an accounts link, which takes no tasks.
+// as Maya, one of them waiting for the owner's yes.
 //
 // Each sandbox of the demo's world keeps its own links, told apart by the address a call was sent to: the laptop's are
-// the ones this sandbox's Models page mints and widens when it brings the laptop's accounts in.
+// the ones a pairing from this sandbox mints there.
 
 const shopLinks = (): InboundLinkSummary[] => [
     {
         id: `lnk_support`,
         label: `support-desk`,
         from: { sandboxId: `sbx_support`, url: `https://support-desk.acme.dev` },
-        terms: { actsAs: `maya-support`, approve: true, turnsPerHour: 20, tasks: true, records: false, operate: false, accounts: [] },
+        terms: { actsAs: `maya-support`, approve: true, turnsPerHour: 20, tasks: true, records: false, operate: false },
         createdAt: Date.now() - 20 * 24 * 3_600_000,
         createdBy: DEMO_USER.email,
         lastUsedAt: Date.now() - 2 * 3_600_000,
         conversations: 4,
         requests: [{ id: `req_1`, conversationId: `link-refund-macro`, task: `Draft the refund macro for damaged parcels`, askedAt: Date.now() - 40 * 60_000 }],
     },
-    ...(lendingSandboxShown
-        ? [
-              {
-                  id: `lnk_laptop_accounts`,
-                  label: LENDING_SANDBOX.name,
-                  from: { sandboxId: LENDING_SANDBOX.id, url: LENDING_SANDBOX.origin },
-                  terms: { approve: false, turnsPerHour: 20, tasks: false, records: false, operate: false, accounts: [{ provider: `claude`, account: `acc_claude_demo` }] },
-                  createdAt: Date.now() - 6 * 24 * 3_600_000,
-                  createdBy: DEMO_USER.email,
-                  lastUsedAt: Date.now() - 25 * 60_000,
-                  conversations: 0,
-                  requests: [],
-              },
-          ]
-        : []),
 ];
 
 // The links each sandbox holds, by its daemon's address; anything but the laptop is this sandbox.
 const books = new Map<string, InboundLinkSummary[]>();
-const bookAt = (at: URL): string => (at.origin === LENDING_SANDBOX.origin ? LENDING_SANDBOX.origin : `shop`);
+const bookAt = (at: URL): string => (at.origin === LAPTOP_SANDBOX.origin ? LAPTOP_SANDBOX.origin : `shop`);
 const linksAt = (at: URL): InboundLinkSummary[] => {
     const key = bookAt(at);
     const held = books.get(key) ?? (key === `shop` ? shopLinks() : []);
@@ -87,7 +71,7 @@ export const mintLink = (at: URL, { label, from, terms }: InboundLinkMint): Inbo
 };
 
 // Whole fields replaced, the rest kept; `null` takes the persona or the service off.
-export const updateLink = (at: URL, id: string, { label, actsAs, runAs, approve, turnsPerHour, tasks, records, operate, accounts }: InboundLinkTermsUpdate): InboundLinkSummary => {
+export const updateLink = (at: URL, id: string, { label, actsAs, runAs, approve, turnsPerHour, tasks, records, operate }: InboundLinkTermsUpdate): InboundLinkSummary => {
     checkPersona(actsAs);
     const link = linkOf(at, id);
     const terms: InboundLinkSummary[`terms`] = {
@@ -96,7 +80,6 @@ export const updateLink = (at: URL, id: string, { label, actsAs, runAs, approve,
         tasks: tasks ?? link.terms.tasks,
         records: records ?? link.terms.records,
         operate: operate ?? link.terms.operate,
-        accounts: accounts ?? link.terms.accounts,
     };
     const persona = actsAs === null ? undefined : (actsAs ?? link.terms.actsAs);
     if (persona !== undefined) {

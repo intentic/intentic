@@ -61,6 +61,11 @@ export interface NeedRequest {
     readonly detail: string;
     readonly conversationId?: string | undefined;
     readonly signal?: AbortSignal | undefined;
+    // Who asks: an agent (the default), or the owner from the editor (the connections hub's take), which the prompt says.
+    readonly purpose?: "agent" | "owner" | undefined;
+    // Whether a computer may offer its type-once box when nothing matches anywhere. Off for what nobody would type by hand
+    // (a hub entry's envelope); on by default.
+    readonly typeOnce?: boolean | undefined;
 }
 
 export interface KeyringNeedsDeps {
@@ -132,7 +137,7 @@ const ask = async (deps: KeyringNeedsDeps, request: NeedRequest, machine: string
             ...opt("username", request.username),
             detail: request.detail.slice(0, 300),
             ...opt("conversation", request.conversationId?.slice(0, 200)),
-            purpose: "agent",
+            purpose: request.purpose ?? "agent",
             typeOnce,
         },
         request.signal,
@@ -154,7 +159,7 @@ const round = async (deps: KeyringNeedsDeps, request: NeedRequest, need: Sandbox
         }
     }
     const first = computers[0];
-    if (!allUnknown || first === undefined) {
+    if (!allUnknown || first === undefined || request.typeOnce === false) {
         return { unsettled: last };
     }
     // Nothing fits anywhere: the computer used last offers its type-once box, so the person can type it there.

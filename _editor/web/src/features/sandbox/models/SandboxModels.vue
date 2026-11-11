@@ -26,7 +26,6 @@ import { loadProviderModels } from "../../../models/conversations/accounts/useCh
 import { rememberedModelFor, rememberPick } from "../../../models/conversations/run/turnDefaults";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { accessKnown, providerReady } from "../../../models/providers/access";
-import BringAccounts from "./BringAccounts.vue";
 import LocalModelsPanel from "./LocalModelsPanel.vue";
 import type { ModelSource, ModelSourceStanding } from "./modelSources";
 import ProviderPanel from "./ProviderPanel.vue";
@@ -48,8 +47,6 @@ import {
 import ProviderTile from "./ProviderTile.vue";
 import { useLocalModelFit } from "./useLocalModelFit";
 import { useModelSources } from "./useModelSources";
-import { offerFor } from "./otherAccounts";
-import { useOtherAccounts } from "./useOtherAccounts";
 import { here, page } from "../../../lib/routes/links";
 
 // Stable peer tiles for each provider and Local models open the sole accounts/sign-in or local/server panel below the grid.
@@ -129,8 +126,6 @@ const select = (tile: TileKey): void => {
 const STANDING_RANK = { attention: 0, blocked: 1, ready: 2, waiting: 3 } as const satisfies Record<ModelSourceStanding, number>;
 const sourcesOf = (tile: TileKey): readonly ModelSource[] =>
     sources.value.filter((source) => source.kind !== `trial` && tileOf(source.provider, keyedBeside) === tile);
-// What the owner's other sandboxes hold that this one does not: a tile with nothing here names where its account is.
-const { rows: otherRows } = useOtherAccounts();
 const tileFacts = computed(() =>
     Object.fromEntries(
         MODEL_TILES.map((tile) => {
@@ -154,7 +149,6 @@ const tileFacts = computed(() =>
                     count: accessKnown.value ? tileCount(facts) : undefined,
                     standing: accessKnown.value ? standing : undefined,
                     found: accessKnown.value && facts.found && facts.count === 0,
-                    elsewhere: accessKnown.value && !facts.found && facts.count === 0 ? offerFor(otherRows.value, tile)?.source.name : undefined,
                 },
             ];
         }),
@@ -443,8 +437,6 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                 <!-- Getting started's mark for connecting a model: this page is where that step is done. -->
                 <TourMark step="models" place="models" :priority="3" side="bottom" />
             </p>
-            <!-- What the owner's other sandboxes hold, behind a quiet door: brought in without signing in again, or signed in here instead. -->
-            <BringAccounts :busy="starting !== undefined" @sign-in="(provider) => void connect(provider)" />
         </div>
 
         <Notice
@@ -520,7 +512,6 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                 :line="tileFacts[tile]?.line"
                 :standing="tileFacts[tile]?.standing"
                 :found="tileFacts[tile]?.found ?? false"
-                :elsewhere="tileFacts[tile]?.elsewhere"
                 :controls="panelId"
                 @select="select(tile)"
             />

@@ -5,8 +5,10 @@ import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contr
 import { loopDoors, loopLabel, loopOf, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { mintedVariants, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { Button, Icon, Notice, type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
+import type { HubTarget } from "@intentic/sandbox-contract/schemas/connection-hub";
+import { Button, ContextMenu, Icon, Notice, type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, useTemplateRef } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
@@ -17,6 +19,8 @@ import { accountsOf, subscriptionOnly } from "../../../models/conversations/acco
 import { offeredLoops } from "../../../models/providers/offeredLoops";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { hasSignIn } from "../../../models/providers/access";
+import { accountTarget, accountWant, saveLabel } from "../../../models/hub/connectionHub";
+import { useConnectionHub } from "../../../models/hub/useConnectionHub";
 import { keysBeside } from "../../../models/providers/providerCatalog";
 import {
     type AccountFacts,
@@ -27,6 +31,7 @@ import {
     planHeadroom,
     routedAccountFacts,
 } from "../../../models/providers/usageStatus";
+import HubTakeOffer from "../../../parts/sandbox/HubTakeOffer.vue";
 import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import EstatePicker from "../secrets/EstatePicker.vue";
@@ -44,9 +49,6 @@ import {
     usageLine,
     waitingLine,
 } from "./accountRows";
-import { offerFor } from "./otherAccounts";
-import { lendingKey, useProviderSharing } from "./useAccountSharing";
-import { useBringOther, useOtherAccounts } from "./useOtherAccounts";
 
 // ONE PROVIDER, opened from its tile in Sandbox ▸ Models' grid: everything about it in one card. Its accounts (who each
 // one signs in as, what it is spending, what it needs, drop one), the one button that adds one, and the sign-in itself
@@ -111,13 +113,6 @@ const attemptBlock = useTemplateRef<InstanceType<typeof ConnectAttempt>>(`attemp
 defineExpose({ reveal: () => attemptBlock.value?.reveal() });
 
 const { accountBusy, accountUsage, usageLoaded, renameAccount, disconnect, disconnectTranslator, translatorKey } = useChat();
-// Loans both ways (useAccountSharing.ts): a row another of the owner's sandboxes lends here is ended here and fixed there;
-// a row of this one's own that another borrows says so, with the press that takes it back.
-const { borrowedFrom, lentNote, stopBorrowing, stopLending, busy: loanBusy, notice: loanNotice } = useProviderSharing();
-// The same account signed in on another of the owner's sandboxes: with nothing here, using it is one press, not a sign-in.
-const { rows: otherRows } = useOtherAccounts();
-const { bring, bringing, notice: bringNotice, tag: bringTag, dismiss: dismissBring } = useBringOther();
-const offer = computed(() => offerFor(otherRows.value, provider));
 
 // The provider as the translator keys it, where it holds subscriptions there at all; parsed once, so every routed read
 // below names a provider the translator knows rather than asserting one.
@@ -175,6 +170,26 @@ const loopNote = (account: OauthAccount): string | undefined => {
 };
 
 const ambiguous = computed(() => ambiguousLabels(nativeAccounts.value));
+
+// The connections hub (models/hub): a provider whose account is a key that does not rotate (Cursor, Devin, Z.ai,
+// Meta) keeps one on the owner's computer for their other sandboxes, and an empty card takes one saved there instead of
+// signing in. Every other provider is signed in to on each sandbox, and reads nothing of the hub.
+const hubWant = computed(() => accountWant(provider));
+const hub = useConnectionHub(() => hubWant.value !== undefined);
+const hubTargets = computed(() => nativeAccounts.value.flatMap((account) => accountTarget(provider, account.id) ?? []));
+const hubFailure = computed(() => hub.saveFailure(hubTargets.value));
+// One computer takes the press at once; several are asked about in a menu under it.
+const saveMenu = useTemplateRef<InstanceType<typeof ContextMenu>>(`saveMenu`);
+const saveItems = ref<MenuItem[]>([]);
+const saveToHub = ({ target, machines }: { readonly target: HubTarget; readonly machines: readonly string[] }, event: Event): void => {
+    const [only] = machines;
+    if (machines.length === 1 && only !== undefined) {
+        void hub.save(target, only);
+        return;
+    }
+    saveItems.value = machines.map((machine) => ({ label: machine, command: () => void hub.save(target, machine) }));
+    saveMenu.value?.show(event);
+};
 
 interface AccountRow<T> {
     account: T;
@@ -250,72 +265,54 @@ interface AccountView {
     // The loop door a native row signs in through, which its Reconnect asks for again.
     readonly variant?: string | undefined;
     readonly busy: string;
-    // Absent where the reader may not take it off: an account somebody else connected, or a loan only Full access ends.
+    // Absent where the reader may not take it off: an account somebody else connected.
     readonly disconnect: (() => void) | undefined;
-    // What taking it off is called: Disconnect, or for one another sandbox lends here, Stop borrowing.
-    readonly removeLabel: string;
-    // Ends another sandbox's loan of this one, when one borrows it.
-    readonly stopLending?: (() => void) | undefined;
+    // Where it can be kept on the owner's computer, for an account that travels; its note says so while a save is on its way.
+    readonly save?: { readonly target: HubTarget; readonly machines: readonly string[] } | undefined;
+    readonly noteBusy?: boolean | undefined;
 }
 
-// What a native row offers the reader. A row of this sandbox's own is renamed, signed in again and disconnected here by
-// whoever may change it (accountRows.ts `mayChangeAccount`); one another of the owner's sandboxes lends here (`from`) is
-// signed in over there, so taking it off here only stops borrowing it, which is for whoever may end loans.
-type NativePresses = Pick<AccountView, `rename` | `verify` | `reconnect` | `disconnect` | `removeLabel`>;
-const nativePresses = (account: OauthAccount, from: string | undefined, state: AccountState): NativePresses => {
+// What a native row offers the reader: renamed, signed in again and disconnected here by whoever may change it
+// (accountRows.ts `mayChangeAccount`).
+type NativePresses = Pick<AccountView, `rename` | `verify` | `reconnect` | `disconnect`>;
+const nativePresses = (account: OauthAccount, state: AccountState): NativePresses => {
     const changes = mayChangeAccount(account, reader.value);
-    if (from !== undefined) {
-        const ends = canShip.value || can(`sharing.stop`);
-        return {
-            rename: undefined,
-            verify: changes ? verifyUrl(state) : undefined,
-            reconnect: false,
-            disconnect: ends ? () => void stopBorrowing(account.id) : undefined,
-            removeLabel: t(`connect.providerPanel.stopBorrowing`),
-        };
-    }
     return {
         rename: changes ? renameOf(account) : undefined,
         verify: changes ? verifyUrl(state) : undefined,
         reconnect: changes && needsReconnect(state) && (doorOf(account) !== undefined || canAddDefault.value),
         disconnect: changes ? () => void disconnect(account.id, provider) : undefined,
-        removeLabel: t(`ui.action.disconnect`),
     };
 };
 
 const nativeView = ({ account, headroom, exhausted, state }: AccountRow<OauthAccount>): AccountView => {
-    const from = borrowedFrom(account);
-    const own = { provider, account: account.id };
-    // Loans to the owner's other sandboxes are read and ended by Full access alone.
-    const lent = from === undefined && canShip.value ? lentNote(own) : undefined;
-    // The loan first, since it is why this row's buttons differ from its neighbours'. Who connected it comes last, except
-    // for a reader who changes only their own accounts, for whom it is that reason, so it comes straight after.
+    // Who connected it comes last, except for a reader who changes only their own accounts, for whom it is the reason
+    // this row's buttons differ from its neighbours', so it comes first.
     const connector = connectorNote(account.connectedBy, reader.value.email);
+    const target = accountTarget(provider, account.id);
+    const onHub = target === undefined ? undefined : hub.rowOf(target);
     const note = [
-        from === undefined ? lent : t(`connect.providerPanel.borrowedFrom`, { name: from }),
         reader.value.full ? undefined : connector,
         loopNote(account),
         identityNote(account, ambiguous.value),
+        onHub?.note,
         reader.value.full ? connector : undefined,
     ];
     return {
         key: account.id,
         title: account.label,
         note: rowNote(note),
-        // A borrowed sign-in is fixed where it is held: the daemon's own words for why, else the way to that sandbox.
-        description:
-            from !== undefined && needsReconnect(state)
-                ? (account.detail ?? t(`connect.providerPanel.signInAgainOn`, { name: from }))
-                : stateLine(state, account, account.needsReauth === true && account.detail === undefined),
+        description: stateLine(state, account, account.needsReauth === true && account.detail === undefined),
         state,
         headroom,
         exhausted,
         // Per-account spend, in the meter's card rather than on the row; withheld entirely until usage has loaded.
         activity: needsReconnect(state) || !usageLoaded.value ? undefined : usageLine(accountUsage.value[account.id]),
-        ...nativePresses(account, from, state),
+        ...nativePresses(account, state),
         variant: doorOf(account)?.door,
         busy: account.id,
-        stopLending: lent === undefined ? undefined : () => void stopLending(own),
+        save: target === undefined || onHub === undefined || onHub.saveTo.length === 0 ? undefined : { target, machines: onHub.saveTo },
+        noteBusy: onHub?.busy,
     };
 };
 const nativeViews = computed<readonly AccountView[]>(() => rowsOf(nativeAccounts.value, accountFacts).map(nativeView));
@@ -345,7 +342,6 @@ const routedViews = computed<readonly AccountView[]>(() =>
                   }
               }
             : undefined,
-        removeLabel: t(`ui.action.disconnect`),
     })),
 );
 
@@ -396,12 +392,8 @@ const ways = computed(() =>
     }),
 );
 
-// What the empty card says: the account another sandbox already holds, that connecting this one is Full access's, or
-// what signing in takes.
+// What the empty card says: that connecting this one is Full access's, or what signing in takes.
 const emptyLine = computed(() => {
-    if (offer.value) {
-        return t(`connect.shareAccounts.offerHere`, { label: offer.value.account.label, name: offer.value.source.name });
-    }
     if (ways.value.length === 0 && !canShip.value) {
         return t(`connect.providerPanel.emptyFullAccess`);
     }
@@ -435,8 +427,8 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
         <RowNote v-if="notice" variant="block">
             <Notice :of="notice" size="sm" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="emit(`dismissNotice`)" />
         </RowNote>
-        <RowNote v-if="loanNotice" variant="block">
-            <Notice :of="loanNotice" size="sm" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="loanNotice = undefined" />
+        <RowNote v-if="hubFailure" variant="block">
+            <Notice :of="hubFailure" size="sm" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="hub.dismissSaves(hubTargets)" />
         </RowNote>
 
         <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
@@ -484,6 +476,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
             :state="connectionState(row.state)"
             :tone="row.state.kind === `blocked` && row.state.fix !== `wait` ? `warning` : `default`"
             :note="row.note"
+            :note-busy="row.noteBusy"
             :description="row.description"
             :activity="row.activity"
             :rename="row.rename"
@@ -503,26 +496,30 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
                     :disabled="busy"
                     @click="ask(row.via, row.variant)"
                 />
-                <!-- Lent to another of the owner's sandboxes: taking the loan back leaves the account here. -->
+                <!-- Kept on the owner's computer for their other sandboxes: the one computer by name, or a pick when there are several. -->
                 <Button
-                    v-if="row.stopLending"
-                    :label="t(`connect.providerPanel.stopLending`)"
+                    v-if="row.save"
+                    :label="saveLabel(row.save.machines)"
                     size="small"
                     tier="quiet"
-                    :loading="loanBusy === lendingKey({ provider, account: row.key })"
-                    @click="row.stopLending()"
-                />
+                    :disabled="row.noteBusy"
+                    :aria-haspopup="row.save.machines.length > 1 ? `menu` : undefined"
+                    @click="saveToHub(row.save, $event)"
+                >
+                    <template #icon><Icon name="desktop" /></template>
+                </Button>
                 <Button
                     v-if="row.disconnect"
-                    :label="row.removeLabel"
+                    :label="t(`ui.action.disconnect`)"
                     size="small"
                     tier="quiet"
                     tone="danger"
-                    :loading="accountBusy === row.busy || loanBusy === row.busy"
+                    :loading="accountBusy === row.busy"
                     @click="row.disconnect()"
                 />
             </template>
         </ConnectionRow>
+        <ContextMenu ref="saveMenu" :model="saveItems" :min-width="8" />
 
         <RowNote
             v-if="shouldCollapse"
@@ -541,24 +538,12 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
             <div class="flex flex-col items-start gap-3">
                 <p class="text-xs text-muted">{{ emptyLine }}</p>
                 <!-- The plan is the sign-in's own first step, so it is asked beside the button, before anything starts. -->
-                <EstatePicker v-if="offersEstates && !offer" v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
-                <div v-if="offer || ways.length > 0" class="flex flex-wrap gap-2">
-                    <!-- Already signed in over there: bringing it is the step asked for, signing in again the alternative. -->
-                    <Button
-                        v-if="offer"
-                        tier="accent"
-                        size="small"
-                        :label="t(`connect.shareAccounts.useFrom`, { name: offer.source.name })"
-                        :loading="bringing === offer.key"
-                        :disabled="busy || bringing !== undefined"
-                        @click="bring([offer], offer.key)"
-                    >
-                        <template #icon><Icon name="link" /></template>
-                    </Button>
+                <EstatePicker v-if="offersEstates" v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
+                <div v-if="ways.length > 0 || hubWant" class="flex flex-wrap items-start gap-2">
                     <Button
                         v-for="(way, index) in ways"
                         :key="way.key"
-                        :tier="index === 0 && !offer ? `accent` : `boring`"
+                        :tier="index === 0 ? `accent` : `boring`"
                         size="small"
                         :label="way.label"
                         :disabled="busy"
@@ -566,14 +551,9 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
                     >
                         <template #icon><Icon name="sign-in" /></template>
                     </Button>
+                    <!-- Saved on the owner's computer from another of their sandboxes: the alternative to signing in here. -->
+                    <HubTakeOffer v-if="hubWant" :want="hubWant" :disabled="busy" />
                 </div>
-                <Notice
-                    v-if="offer && bringNotice && bringTag === offer.key"
-                    :of="bringNotice"
-                    size="sm"
-                    :dismiss-label="t(`ui.action.dismiss`)"
-                    @dismiss="dismissBring()"
-                />
             </div>
         </RowNote>
 

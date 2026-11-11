@@ -19,6 +19,7 @@ import { endpointsDoors } from "./account/endpoints.handler";
 import { extensionsDoors } from "./extensions/extensions.handler";
 import { gitDoors } from "./git/git.handler";
 import { historyDoors } from "./git/history.handler";
+import { hubDoors } from "./account/hub.handler";
 import { intenticDoors } from "./machine/intentic.handler";
 import { issuesDoors } from "./extensions/issues.handler";
 import { logsDoors } from "./machine/logs.handler";
@@ -42,7 +43,6 @@ import { sessionsDoors } from "./board/sessions.handler";
 import { settingsDoors } from "./account/settings.handler";
 import { shareDoors } from "./extensions/share.handler";
 import { sealDoors } from "./seal/seal.handler";
-import { sharingDoors } from "./account/sharing.handler";
 import { systemDoors } from "./machine/system.handler";
 import { translatorDoors } from "./account/translator.handler";
 import { usageDoors } from "./account/usage.handler";
@@ -103,8 +103,8 @@ export const procedures = {
     share: shareDoors,
     // Private conversations: who reads whose, and the ways into one (seal/seal.handler.ts).
     seal: sealDoors,
-    // Model accounts brought in from another of the owner's sandboxes, and what this one could share (sharing.handler.ts).
-    sharing: sharingDoors,
+    // Connections kept on the owner's computer for their other sandboxes, and taken from there (hub.handler.ts).
+    hub: hubDoors,
     issues: issuesDoors,
     logs: logsDoors,
 } satisfies FixtureRouter;

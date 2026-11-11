@@ -13,28 +13,20 @@ import { isFreeTile, LOCAL_TILE, type TileKey, type TileTone } from "./providerG
 
 const t = useT();
 
-const { tile, selected, line, standing, found, elsewhere, controls } = defineProps<{
+const { tile, selected, line, standing, found, controls } = defineProps<{
     tile: TileKey;
     selected: boolean;
     line: { readonly text: string; readonly tone: TileTone } | undefined;
     // What its connections are in, drawn as a dot on the mark; nothing connected, no dot.
     standing: ModelSourceStanding | undefined;
     found: boolean;
-    // Another of the owner's sandboxes holds an account of it that can come here, by that sandbox's name.
-    elsewhere?: string | undefined;
     // The panel this tile opens, for assistive tech.
     controls: string;
 }>();
 const emit = defineEmits<{ select: [] }>();
 
 // What the corner mark means, since a glyph alone does not say it.
-const tip = computed(() =>
-    found
-        ? { title: t(`connect.providerGrid.onThisComputer`), note: t(`connect.connect.foundConnectHint`) }
-        : elsewhere !== undefined
-          ? { title: t(`connect.shareAccounts.onOther`, { name: elsewhere }), note: t(`connect.shareAccounts.onOtherNote`) }
-          : undefined,
-);
+const tip = computed(() => (found ? { title: t(`connect.providerGrid.onThisComputer`), note: t(`connect.connect.foundConnectHint`) } : undefined));
 
 const name = computed(() => (tile === LOCAL_TILE ? t(`connect.providerGrid.local`) : (providerSpec(tile)?.accountLabel ?? tile)));
 
@@ -62,7 +54,7 @@ const LINE = {
         :class="{ 'ui-row-select-on': selected }"
         :aria-pressed="selected"
         :aria-controls="controls"
-        :aria-description="found ? t(`connect.connect.foundSignedIn`) : elsewhere !== undefined ? t(`connect.shareAccounts.onOther`, { name: elsewhere }) : undefined"
+        :aria-description="found ? t(`connect.connect.foundSignedIn`) : undefined"
         @click="emit(`select`)"
     >
         <div v-if="isFreeTile(tile)" class="absolute inset-x-1.5 top-1.5 h-4">
@@ -72,10 +64,6 @@ const LINE = {
         </div>
         <span v-if="found" class="absolute right-1.5 top-1.5 flex size-4 items-center justify-center text-xs text-accent" aria-hidden="true">
             <Icon name="desktop" />
-        </span>
-        <!-- Signed in on another of the owner's sandboxes: one press in its panel brings it here. -->
-        <span v-else-if="elsewhere !== undefined" class="absolute right-1.5 top-1.5 flex size-4 items-center justify-center text-xs text-accent" aria-hidden="true">
-            <Icon name="link" />
         </span>
         <!-- The mark itself, no plate: the provider's logo is what the tile is recognised by. -->
         <span

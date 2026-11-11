@@ -7,15 +7,14 @@ import { opt } from "../opt.js";
 // A trial marks the answer only when it is one, as the wire has always said it.
 const trialOf = (trial: boolean | undefined): true | undefined => (trial === true ? true : undefined);
 
-// LENDING THIS SANDBOX'S MODEL ACCESS, the rules both lending doors share: a runner's (runners/runner-credentials.routes.ts),
-// which spends this sandbox's providers for the turns it was handed, and an accounts link's (links/accounts/), which
-// lends named sign-ins to another of the owner's sandboxes. What travels is the least a turn needs: an access token
-// minted for it, a route to dial, or a key that does not rotate. A refresh token never leaves, and neither does the
-// translator's own bearer: a borrower reaches the translator only through a door that sets that bearer itself.
+// LENDING THIS SANDBOX'S MODEL ACCESS TO ITS OWN RUNNERS (runners/runner-credentials.routes.ts), which spend this
+// sandbox's providers for the turns it handed them. What travels is the least a turn needs: an access token minted for
+// it, a route to dial, or a key that does not rotate. A refresh token never leaves, and neither does the translator's
+// own bearer: a runner reaches the translator only through a door that sets that bearer itself. Another of the owner's
+// sandboxes is never lent anything (links.md, 2026-11-11): it signs in itself, or takes a static key from the hub.
 
 // Exported for its unit test: every arm is a rule about what leaves the sandbox. `envOauth` travels as an ordinary
-// oauth value since resolution answers {} for it; an API-key-shaped fallback stays home instead. A link passes "" for
-// it: the container's own credential is this sandbox's, and is never lent to another.
+// oauth value since resolution answers {} for it; an API-key-shaped fallback stays home instead.
 export const toRunnerCredential = (resolved: HarnessCredentialsResult, translatorUrl: string, envOauth: string): RunnerCredential => {
     if (!resolved.ok) {
         return { ok: false, ...opt("code", resolved.code), message: resolved.message };

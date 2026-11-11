@@ -10,6 +10,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { type ConnectionState, rebuildStep, signsInByHand } from "../../../models/capabilities/connections";
 import { connectedLinks } from "../../../models/capabilities/credentialGuide";
+import { type HubRowView, saveLabel } from "../../../models/hub/connectionHub";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
 
@@ -30,9 +31,11 @@ const props = defineProps<{
     facts: string;
     /** The tile's form is open over this row; it wears the selected tint so the fields below have a subject. */
     editing?: boolean;
+    /** Its place in the connections hub, for a kind that travels: the computers it can be saved to, and what it says. */
+    hub?: HubRowView | undefined;
 }>();
 
-const emit = defineEmits<{ connect: []; revoke: []; browse: []; login: []; agentLogin: []; edit: []; rename: []; remove: [] }>();
+const emit = defineEmits<{ connect: []; revoke: []; browse: []; login: []; agentLogin: []; edit: []; rename: []; remove: []; save: [machine: string] }>();
 
 // A device connects by running a command on it; a browser, by pasting a code into it; a phone, by scanning a code
 // with it. One that's never checked in is waiting on that step; one that has is merely asleep, which a fresh pairing
@@ -104,6 +107,17 @@ const items = computed<MenuItem[]>(() => {
     if (pairs.value && paired.value) {
         kindActions.push({ label: t(`sandbox.words.revokeAccess`), icon: `sign-out`, command: () => emit(`revoke`) });
     }
+    // Kept on the owner's computer for their other sandboxes: the one computer by name, or a pick when there are several.
+    // A connection that cannot travel offers nothing, rather than a press the sandbox would refuse.
+    const saveTo = props.hub?.saveTo ?? [];
+    if (saveTo.length > 0 && props.hub?.busy !== true) {
+        const [only] = saveTo;
+        kindActions.push(
+            saveTo.length === 1 && only !== undefined
+                ? { label: saveLabel(saveTo), icon: `desktop`, command: () => emit(`save`, only) }
+                : { label: saveLabel(saveTo), icon: `desktop`, items: saveTo.map((machine) => ({ label: machine, command: () => emit(`save`, machine) })) },
+        );
+    }
     return [
         ...kindActions,
         ...(kindActions.length > 0 ? [{ separator: true }] : []),
@@ -124,6 +138,11 @@ const items = computed<MenuItem[]>(() => {
                     <!-- Mono: an identifier the agent's skill/tools/env vars are named after, compared character by character. -->
                     <span class="min-w-0 truncate font-mono">{{ instance.id }}</span>
                     <StatusBadge size="xs" :dot="true" :variant="state.tone" :label="state.label" class="shrink-0" />
+                    <!-- Where the hub keeps it, quietly: saved to a computer, waiting for a yes there, or taken from one. The
+                         name keeps its room; this is the one cut short. -->
+                    <span v-if="hub?.note" class="flex min-w-0 flex-1 items-center gap-1 text-2xs font-normal text-subtle">
+                        <Icon v-if="hub.busy" name="spinner" spin class="shrink-0" /><span class="truncate" v-tooltip.overflow="hub.note">{{ hub.note }}</span>
+                    </span>
                 </span>
             </template>
             <!-- What tells this connection apart, given its own line and the full width rather than a capped trailing cluster. -->

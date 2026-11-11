@@ -30,7 +30,6 @@ import { createEndpointsRoutes } from "./endpoints/endpoints.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
 import { createDeviceSystemRoutes } from "./hosts/devices.routes.js";
 import { createAccountsRoutes } from "./agent/routes/accounts.routes.js";
-import { createSharingRoutes } from "./links/sharing.routes.js";
 import { createHistoryRoutes } from "./history/history.routes.js";
 import { createIntenticRoutes } from "./intentic/intentic.routes.js";
 import { createInventoryRoutes } from "./inventory/inventory.routes.js";
@@ -84,6 +83,7 @@ import { createWorkspaceFollowRoutes } from "./workspace/workspace-follow.routes
 import { createWorkspaceMediaRoutes } from "./workspace/workspace-media.routes.js";
 import { createWorkspaceSearchRoutes } from "./workspace/workspace-search.routes.js";
 import { pruneStore } from "./workspace/watch/state-janitor.js";
+import { createHubRoutes } from "./hub/hub.routes.js";
 
 // The implemented oRPC router, the per-domain route factories assembled into the sandboxContract shape. The
 // OpenAPIHandler in app.ts serves it. Typed by the contract it implements rather than inferred: the inferred type
@@ -172,8 +172,8 @@ export const createRouter = (services: Services): SandboxRouter => ({
         void placePeopleShells(services).catch((error) => services.logger.warn({ err: error }, "seal: people's shells could not be placed"));
     }),
     share: createShareRoutes(services),
-    // Model accounts brought in from, or lent to, another of the owner's sandboxes (links/accounts/).
-    sharing: createSharingRoutes(services),
+    // Connections kept on the owner's computer, saved from here and taken in (hub/).
+    hub: createHubRoutes(services),
     skills: createSkillsRoutes(services),
     areas: createAreasRoutes(services),
     intentic: createIntenticRoutes(services),

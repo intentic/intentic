@@ -160,6 +160,17 @@ export const addCapability = (capability: Capability): Frames<IntenticLine> => {
     });
 };
 
+/** A connection made whole at once, with no apply to watch: the connections hub making one from an entry the owner's
+ *  computer shared here (hub.handler.ts). */
+export const fileCapability = (capability: Capability): void => {
+    const { summary, credential } = summarize(capability, statusAfterApply(capability));
+    write(summary, connections().some((row) => row.id === summary.id));
+    if (summary.secrets.length > 0) {
+        vaultConnection(summary.id, credential);
+    }
+    pushRuntime(`capabilities`);
+};
+
 const existing = (id: string): CapabilitySummary => connections().find((row) => row.id === id) ?? refuse(`no capability with that id`, 404);
 
 // Docker is part of the sandbox and has no remove; every other kind tears down as a connection.

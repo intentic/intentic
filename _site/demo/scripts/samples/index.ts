@@ -18,6 +18,7 @@ import { endpointsSamples } from "./endpoints.samples.ts";
 import { extensionsSamples } from "./extensions.samples.ts";
 import { gitSamples } from "./git.samples.ts";
 import { historySamples } from "./history.samples.ts";
+import { hubSamples } from "./hub.samples.ts";
 import { intenticSamples } from "./intentic.samples.ts";
 import { issuesSamples } from "./issues.samples.ts";
 import { logsSamples } from "./logs.samples.ts";
@@ -43,7 +44,6 @@ import { sessionsSamples } from "./sessions.samples.ts";
 import { settingsSamples } from "./settings.samples.ts";
 import { shareSamples } from "./share.samples.ts";
 import { sealSamples } from "./seal.samples.ts";
-import { sharingSamples } from "./sharing.samples.ts";
 import { skillsSamples } from "./skills.samples.ts";
 import { systemSamples } from "./system.samples.ts";
 import { translatorSamples } from "./translator.samples.ts";
@@ -65,7 +65,6 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
         git: gitSamples(context),
         diff: diffSamples(context),
         accounts: accountsSamples(context),
-        sharing: sharingSamples(context),
         translator: translatorSamples(context),
         providers: providersSamples(context),
         endpoints: endpointsSamples(context),
@@ -106,6 +105,7 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
         push: pushSamples(context),
         share: shareSamples(context),
         seal: sealSamples(context),
+        hub: hubSamples(context),
         issues: issuesSamples(context),
         logs: logsSamples(context),
     };

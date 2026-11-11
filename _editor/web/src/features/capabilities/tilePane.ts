@@ -1,11 +1,14 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import { contributionDiscriminator } from "@intentic/extension-manifest";
+import { type CapabilityContribution, contributionDiscriminator } from "@intentic/extension-manifest";
 import type { RegistryEntry } from "@intentic/registry";
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
-import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { CapabilityKind, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { HubTarget } from "@intentic/sandbox-contract/schemas/connection-hub";
 import { computed, type Ref } from "vue";
 import type { BackgroundProcessRow } from "../../models/terminal/useBackgroundProcesses";
 import { rebuildStep } from "../../models/capabilities/connections";
+import { tileWant } from "../../models/hub/connectionHub";
+import { useConnectionHub } from "../../models/hub/useConnectionHub";
 import { type ConnectionSources, liveState, tileRowFacts } from "./model/connectionRows";
 import type { DeviceConnection } from "./model/deviceConnections";
 
@@ -61,3 +64,29 @@ export const useTilePane = ({ selected, instances, sources, syncOnly, processRow
     verifiedCount: computed(() => published.value.filter((entry) => entry.trust === `verified`).length),
     selectedRecommendation: computed(() => (selected.value === undefined ? undefined : recommendationFor(selected.value.id))),
 });
+
+export interface TileHubHost {
+    readonly selected: Readonly<Ref<CapabilityCatalogEntry | undefined>>;
+    readonly instances: Readonly<Ref<readonly CapabilitySummary[]>>;
+    readonly contributionOf: (kind: CapabilityKind, id: string) => CapabilityContribution | undefined;
+}
+
+// The connections hub on the open tile (models/hub): a tile of a kind that travels offers taking one saved on the
+// owner's computer instead of filling its form in, and each of its connections saving it there, with the refusal of the
+// newest such save as the page's notice. A connector that renews its own sign-in never travels, so its tile reads nothing
+// of the hub.
+export const useTileHub = ({ selected, instances, contributionOf }: TileHubHost) => {
+    const want = computed(() => {
+        const entry = selected.value;
+        const contribution = entry === undefined ? undefined : contributionOf(entry.kind, entry.id);
+        return entry === undefined ? undefined : tileWant(entry.kind, entry.id, contribution?.kind === `cli` && contribution.refreshToken !== undefined);
+    });
+    const hub = useConnectionHub(() => want.value !== undefined);
+    const card = (id: string): HubTarget => ({ type: `card`, id });
+    return {
+        want,
+        rowOf: (id: string) => hub.rowOf(card(id)),
+        save: (id: string, machine: string): void => void hub.save(card(id), machine),
+        failure: computed(() => hub.saveFailure(instances.value.map((instance) => card(instance.id)))),
+    };
+};

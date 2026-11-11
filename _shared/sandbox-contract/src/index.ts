@@ -22,6 +22,7 @@ import { exitContract } from "./contracts/exit.contract.js";
 import { extensionsContract } from "./contracts/extensions.contract.js";
 import { gitContract } from "./contracts/git.contract.js";
 import { historyContract } from "./contracts/history.contract.js";
+import { hubContract } from "./contracts/hub.contract.js";
 import { intenticContract } from "./contracts/intentic.contract.js";
 import { inventoryContract } from "./contracts/inventory.contract.js";
 import { issuesContract } from "./contracts/issues.contract.js";
@@ -47,7 +48,6 @@ import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
 import { sealContract } from "./contracts/seal.contract.js";
 import { shareContract } from "./contracts/share.contract.js";
-import { sharingContract } from "./contracts/sharing.contract.js";
 import { skillsContract } from "./contracts/skills.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
 import { translatorContract } from "./contracts/translator.contract.js";
@@ -81,6 +81,7 @@ export const sandboxContract: {
     extensions: typeof extensionsContract;
     git: typeof gitContract;
     history: typeof historyContract;
+    hub: typeof hubContract;
     intentic: typeof intenticContract;
     inventory: typeof inventoryContract;
     issues: typeof issuesContract;
@@ -106,7 +107,6 @@ export const sandboxContract: {
     settings: typeof settingsContract;
     seal: typeof sealContract;
     share: typeof shareContract;
-    sharing: typeof sharingContract;
     skills: typeof skillsContract;
     system: typeof systemContract;
     translator: typeof translatorContract;
@@ -134,6 +134,7 @@ export const sandboxContract: {
     extensions: extensionsContract,
     git: gitContract,
     history: historyContract,
+    hub: hubContract,
     intentic: intenticContract,
     inventory: inventoryContract,
     issues: issuesContract,
@@ -159,7 +160,6 @@ export const sandboxContract: {
     settings: settingsContract,
     seal: sealContract,
     share: shareContract,
-    sharing: sharingContract,
     skills: skillsContract,
     system: systemContract,
     translator: translatorContract,

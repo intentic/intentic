@@ -14,22 +14,22 @@ const TRASH_DAYS = 7;
 const SETUP_CODE_TTL_MS = 30 * 60_000;
 
 // ANOTHER OF THE OWNER'S SANDBOXES, in the modes that show every state: Ada's laptop, running at an address of its own,
-// whose model accounts this sandbox's Models page can bring in (daemon/account/sharing.handler.ts) and which borrows this
-// one's Claude Max in turn (daemon/machine/linkStore.ts). Not in the calmer modes, whose rail is one sandbox on purpose.
-export const LENDING_SANDBOX = { id: `demo-laptop`, name: `ada-laptop`, origin: `https://laptop.demo.invalid` } as const;
-export const lendingSandboxShown = demoMode.id === `full` || demoMode.id === `busy`;
+// which keeps links of its own (daemon/machine/linkStore.ts). Not in the calmer modes, whose rail is one sandbox on
+// purpose.
+export const LAPTOP_SANDBOX = { id: `demo-laptop`, name: `ada-laptop`, origin: `https://laptop.demo.invalid` } as const;
+const laptopShown = demoMode.id === `full` || demoMode.id === `busy`;
 // The owner's own machine, so nothing about it is the platform's to report.
-const lendingRow = (): SandboxSummary => ({
+const laptopRow = (): SandboxSummary => ({
     ...DEMO_SANDBOX,
-    id: LENDING_SANDBOX.id,
-    name: LENDING_SANDBOX.name,
-    daemonUrl: LENDING_SANDBOX.origin,
+    id: LAPTOP_SANDBOX.id,
+    name: LAPTOP_SANDBOX.name,
+    daemonUrl: LAPTOP_SANDBOX.origin,
     role: `owner`,
     hosted: null,
     hostReport: null,
 });
 
-const rows: SandboxSummary[] = [...DEMO_SANDBOXES, ...(lendingSandboxShown && DEMO_SANDBOXES.length > 0 ? [lendingRow()] : [])].map((row) => ({ ...row }));
+const rows: SandboxSummary[] = [...DEMO_SANDBOXES, ...(laptopShown && DEMO_SANDBOXES.length > 0 ? [laptopRow()] : [])].map((row) => ({ ...row }));
 const trash: TrashedSandbox[] = [...DEMO_TRASH];
 // The rows the visitor made on this page: each one is a sandbox on its first day (world/fresh.ts serves it so).
 const madeHere = new Set<string>();

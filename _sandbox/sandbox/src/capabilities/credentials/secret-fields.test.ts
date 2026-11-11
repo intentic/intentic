@@ -206,12 +206,6 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
     fleet: [{ id: "fleet", kind: "fleet", config: { token: "itk_x" } }],
     link: [
         { id: "ops", kind: "link", config: { url: "https://sandbox-ops.sbx.test", token: "ilk_x", name: "ops", sandboxId: "sbx-ops" } },
-        // An accounts link: its purpose is an enum, so a vaulted one is a card the manifest cannot read back.
-        {
-            id: "accounts-ops",
-            kind: "link",
-            config: { url: "https://sandbox-ops.sbx.test", token: "ilk_y", name: "ops", sandboxId: "sbx-ops", purpose: "accounts" },
-        },
     ],
 };
 

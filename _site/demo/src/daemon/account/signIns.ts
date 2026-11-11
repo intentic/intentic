@@ -3,10 +3,10 @@ import { PROVIDER_SPECS, TRANSLATOR_PROVIDERS, type TranslatorProvider } from "@
 import type { LoginStart, LoginStatus, OauthAccount, TranslatorStatus } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import type { TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { freshEdition, noModels } from "../../mode";
+import { freshEdition, homeRecording, noModels } from "../../mode";
 import { DEMO_USER } from "../../world/account";
 import { listeners } from "../board/roster";
-import { demoClaudeAccount, demoClaudeAccountSecond, demoTranslatorAccounts, demoSignInStart } from "./accounts";
+import { demoClaudeAccount, demoClaudeAccountSecond, demoCursorAccount, demoTranslatorAccounts, demoSignInStart } from "./accounts";
 
 // The accounts this sandbox holds, as a store a sign-in adds to and a disconnect takes from, for this page load. A
 // sign-in plays out the way the real one does: a device code is approved "upstream" a few seconds after it is shown
@@ -32,7 +32,11 @@ interface Attempt {
 // Seeded on first use, since the fixture accounts are built on first read (daemon/accounts.ts says why).
 let nativeHeld: Map<string, OauthAccount[]> | undefined;
 const nativeStore = (): Map<string, OauthAccount[]> =>
-    (nativeHeld ??= new Map([[`claude`, freshEdition || noModels ? [] : [demoClaudeAccount(), demoClaudeAccountSecond()]]]));
+    (nativeHeld ??= new Map([
+        [`claude`, freshEdition || noModels ? [] : [demoClaudeAccount(), demoClaudeAccountSecond()]],
+        // Not in the home recording, whose Models page is filmed as it was.
+        [`cursor`, freshEdition || noModels || homeRecording ? [] : [demoCursorAccount()]],
+    ]));
 const attempts = new Map<string, Attempt>();
 
 // Attempts and accounts are numbered per provider, so an id or a handshake reads as whose it is.

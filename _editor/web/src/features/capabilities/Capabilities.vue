@@ -46,6 +46,8 @@ import CapabilityFieldRow from "../../parts/capabilities/CapabilityFieldRow.vue"
 import CatalogDetail from "../../components/CatalogDetail.vue";
 import CatalogTile from "../../components/CatalogTile.vue";
 import CapabilityInstanceRow from "./connect/CapabilityInstanceRow.vue";
+import BrowseExtensionsLink from "./connect/BrowseExtensionsLink.vue";
+import HubTakeOffer from "../../parts/sandbox/HubTakeOffer.vue";
 import CapabilityRail from "./connect/CapabilityRail.vue";
 import CapabilityRenameDialog from "./connect/CapabilityRenameDialog.vue";
 import ForticlientImport from "./connect/ForticlientImport.vue";
@@ -71,7 +73,7 @@ import { picksVersion } from "./model/refs";
 import { catalogEntries, entryIcon } from "../../models/capabilities/tiles";
 import { useSetupWalk } from "./setupWalk";
 import FieldStandIn from "./connect/FieldStandIn.vue";
-import { useTilePane } from "./tilePane";
+import { useTileHub, useTilePane } from "./tilePane";
 import CapabilityFormStatus from "./CapabilityFormStatus.vue";
 
 // Capabilities give the agent tools (GitHub, MCP servers, SSH hosts, Stripe) and scaffold managed repos. Core tiles are
@@ -143,6 +145,7 @@ const pane = useTilePane({
     recommendationFor,
 });
 const { selectedDevices, cardProcesses, rowState, cardRowFacts, soleRebuildStep, publishedCount, verifiedCount, selectedRecommendation } = pane;
+const { want: hubWant, rowOf: hubRow, save: saveToHub, failure: hubFailure } = useTileHub({ selected, instances: selectedInstances, contributionOf });
 
 const hosted = computed(() => useSandbox().active.value?.hosted != null);
 const form = useCapabilityForm({
@@ -192,7 +195,7 @@ const { confirmDisconnectDevice, removing, renaming } = actions;
 const topError = computed<NoticeModel | undefined>(() => {
     // What this page refused itself first, then the tile's save and test, then a connection's removal: each kept in the
     // operations ledger, so a reader who left while one ran comes back to how it went.
-    const refused = error.value ?? saveFailure.value ?? probeFailure.value ?? actions.failure.value;
+    const refused = error.value ?? saveFailure.value ?? probeFailure.value ?? actions.failure.value ?? hubFailure.value;
     if (refused !== null && refused !== undefined) {
         return refused;
     }
@@ -307,6 +310,7 @@ onBeforeUnmount(() => {
                                 :state="rowState(selected, instance)"
                                 :facts="cardRowFacts(instance)"
                                 :editing="editing?.id === instance.id"
+                                :hub="hubRow(instance.id)"
                                 @connect="openPairing(selected, instance)"
                                 @revoke="removePairedAccess(selected, instance.id)"
                                 @browse="openBrowser(instance.id, instance.id, `browse`)"
@@ -315,6 +319,7 @@ onBeforeUnmount(() => {
                                 @edit="openEdit(instance.id)"
                                 @rename="askRename(instance.id)"
                                 @remove="confirmRemoveId = instance.id"
+                                @save="saveToHub(instance.id, $event)"
                             />
                             <!-- Last, after what is actually connected: machines already reachable through desktop sync, which this tile would give commands, files and screen. -->
                             <SyncOnlyDeviceRow
@@ -391,28 +396,7 @@ onBeforeUnmount(() => {
                         <FleetAllow v-if="selected.kind === 'fleet'" :instance="soleInstance" :save="add" @notice="error = $event" />
 
                         <!-- Where extensions are found, on the tile people arrive at wanting one. -->
-                        <RouterLink
-                            v-if="selected.kind === 'extension'"
-                            :to="here(pages.sandboxSettings(`extensions`, { query: { view: `browse` } }))"
-                            class="flex items-center gap-3 rounded-lg bg-card shadow-sm px-3 py-2.5 transition-colors hover:bg-overlay"
-                        >
-                            <Icon name="search" class="shrink-0 text-link" />
-                            <span class="min-w-0 flex-1">
-                                <span class="block text-xs font-medium text-content">{{
-                                    t(`capabilities.capabilities.browsePublishedExtensions`)
-                                }}</span>
-                                <span class="block text-2xs text-muted">
-                                    <template v-if="publishedCount > 0"
-                                        >{{ t(`capabilities.capabilities.publishedCount`, { count: publishedCount })
-                                        }}<template v-if="verifiedCount > 0">{{
-                                            t(`capabilities.capabilities.sourceReadByHuman`, { verifiedCount })
-                                        }}</template
-                                        >. </template
-                                    >{{ t(`capabilities.capabilities.installInClickRegistry`) }}
-                                </span>
-                            </span>
-                            <Icon name="arrow-right" class="shrink-0 text-subtle" />
-                        </RouterLink>
+                        <BrowseExtensionsLink v-if="selected.kind === 'extension'" :published-count="publishedCount" :verified-count="verifiedCount" />
 
                         <!-- Registry browse for plugins only; extensions have their own Browse tab, linked above. -->
                         <PluginRegistryBrowse
@@ -441,6 +425,8 @@ onBeforeUnmount(() => {
                             </template>
                         </SectionHeader>
 
+                        <!-- Saved on the owner's computer from another of their sandboxes: taken from there instead of filled in here. -->
+                        <HubTakeOffer v-if="hubWant && !editing" :want="hubWant" />
                         <!-- No name box while editing or on a singleton tile: renaming moves state a form can't (askRename), so a second box here would be a lossy shortcut for it. -->
                         <label v-if="!selected.singleton && !editing" class="ui-field">
                             <span class="ui-field-label">{{ t(`shared.name`) }}</span>

@@ -171,8 +171,7 @@ export const linkMountsOf = (
     conversationId: string | undefined,
 ): AgentTool[] =>
     granted.flatMap((capability) =>
-        // An accounts card only borrows models (sharing/): it hands nothing over, so its turn gets no delegate tool.
-        capability.kind === "link" && capability.config.purpose !== "accounts"
+        capability.kind === "link"
             ? [lease.open({ name: capability.id, target: { kind: "daemon", server: sdkServerDoor(linkServer(deps, capability, conversationId)) } })]
             : [],
     );

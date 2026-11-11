@@ -58,8 +58,8 @@ import { extensionUsageDocument } from "../extensions/extension-usage.js";
 import { memberCommitIdentityDocument } from "../git/attribution/commit-attribution.js";
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
+import { connectionHubDocument } from "../hub/hub-store.js";
 import { issuesDocument } from "../issues/issues-store.js";
-import { borrowedAccountsDocument } from "../links/accounts/borrowed-store.js";
 import { inboundLinksDocument } from "../links/inbound-links.js";
 import { linkedChildrenDocument } from "../links/linked-children-store.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
@@ -103,6 +103,7 @@ import { settingsDocument } from "../settings/settings-store.js";
 import { sharesDocument } from "../share/share-store.js";
 import { conversationsSchemaStep } from "../store/conversations-db.js";
 import { conversionsDocument } from "../store/evolution/state-convergence.js";
+import { borrowedAccountsLeftoversStep } from "../store/evolution/steps/borrowed-accounts-leftovers.js";
 import { fieldNotesLeftoversStep } from "../store/evolution/steps/field-notes-leftovers.js";
 import { landCheckLeftoversStep } from "../store/evolution/steps/land-check-leftovers.js";
 import { projectsHostLeftoversStep } from "../store/evolution/steps/projects-host-leftovers.js";
@@ -198,8 +199,8 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     hookApprovalsDocument,
     hookRequestsDocument,
     hostSetupSeededDocument,
+    connectionHubDocument,
     issuesDocument,
-    borrowedAccountsDocument,
     inboundLinksDocument,
     linkedChildrenDocument,
     loopDesignsDocument,
@@ -301,6 +302,7 @@ export const stateSteps = (): readonly StructuralStep[] =>
         safetyCardLinesStep,
         earlierDefaultsStep,
         conversationsSchemaStep,
+        borrowedAccountsLeftoversStep,
         fieldNotesLeftoversStep,
         landCheckLeftoversStep,
         projectsHostLeftoversStep,

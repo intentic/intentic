@@ -5557,13 +5557,6 @@
             "empty": "Aún sin conectar. Iniciar sesión lleva un minuto y la cuenta permanece en este sandbox.",
             "otherLive": "Tu inicio de sesión en {other} sigue pendiente. Conectar {provider} lo sustituye.",
             "showOther": "Mostrar {other}",
-            "borrowedFrom": "Prestada por {name}",
-            "signInAgainOn": "Sesión cerrada. Vuelve a iniciar sesión en {name}, que la presta aquí.",
-            "stopBorrowing": "Dejar de tomarla prestada",
-            "couldntStopBorrowing": "No se pudo dejar de tomar prestada esa cuenta.",
-            "lentTo": "Prestada a {names}",
-            "stopLending": "Dejar de prestar",
-            "couldntStopLending": "No se pudo dejar de prestar esa cuenta.",
             "emptyFullAccess": "Aún no está conectada. La conecta el propietario o alguien con acceso total."
         },
         "providerTile": {
@@ -5578,52 +5571,6 @@
             "adding": "Añadiendo {server} como endpoint de modelos",
             "couldntAdd": "No se ha podido añadir {server}.",
             "noneFound": "Para usar una GPU, ejecuta Ollama o LM Studio en el equipo que aloja este sandbox y aparecerá aquí. En Linux, inicia Ollama con OLLAMA_HOST=0.0.0.0; en LM Studio, activa el servicio en la red local."
-        },
-        "shareAccounts": {
-            "title": "Desde tus otros sandboxes",
-            "explain": "Nada que iniciar dos veces. Copiar: una clave que no cambia se copia aquí. Tomar prestada: un inicio de sesión de Claude se queda en el otro sandbox, que lo presta aquí turno a turno.",
-            "open": "{count} cuenta en tus otros sandboxes | {count} cuentas en tus otros sandboxes",
-            "openNone": "Tus otros sandboxes",
-            "endpoint": "Endpoint de modelo",
-            "modeCopy": "Copiar su clave",
-            "modeLend": "Tomar prestada turno a turno",
-            "modeNo": "No se puede compartir",
-            "bring": "Traer",
-            "bringAll": "Traer las {count}",
-            "signInHere": "Iniciar sesión aquí en su lugar",
-            "bringing": "Trayendo cuentas de {name}",
-            "couldntBring": "No se pudieron traer esas cuentas de {name}.",
-            "failed": "No se pudo traer.",
-            "copied": "Copiada",
-            "borrowed": "Prestada",
-            "looking": "Mirando qué tienen tus otros sandboxes…",
-            "allHere": "Todo lo que tienen tus otros sandboxes ya está aquí.",
-            "unreachable": "No se pudo contactar con {names}, así que sus cuentas no aparecen.",
-            "tooOldThere": "{names} ejecuta una versión demasiado antigua para compartir cuentas. Actualízalo para verlas aquí.",
-            "notRunning": "{names} no está en marcha. Inícialo para traer sus cuentas aquí.",
-            "noAnswer": "No respondió.",
-            "outdatedHere": "Las cuentas de tus otros sandboxes se pueden traer aquí sin volver a iniciar sesión.",
-            "offerHere": "{label} ya tiene la sesión iniciada en {name}. Úsala aquí sin volver a iniciar sesión.",
-            "useFrom": "Usar desde {name}",
-            "onOther": "En {name}",
-            "onOtherNote": "Úsala sin iniciar sesión",
-            "bringCount": "Traer {count}",
-            "groupTitle": "{provider} · {count} cuenta | {provider} · {count} cuentas",
-            "someHere": "{count} de {total} aquí",
-            "allHereCount": "Las {count} aquí",
-            "someFailed": "{count} cuenta no llegó desde {name}. | {count} cuentas no llegaron desde {name}.",
-            "stateLinked": "Vinculado",
-            "stateUnlinked": "Sin vincular",
-            "stateRevoked": "Vínculo revocado",
-            "stateSilent": "No responde",
-            "link": "Vincular {name}",
-            "linkAgain": "Vincular de nuevo",
-            "checkAgain": "Comprobar de nuevo",
-            "linking": "Vinculando {name}",
-            "couldntLink": "No se pudo vincular {name}.",
-            "linkFirst": "Tiene {count} cuenta que este sandbox no tiene: {providers}. Vincula {name} aquí para usarla. Solo presta lo que traigas, y puedes detenerlo cuando quieras. | Tiene {count} cuentas que este sandbox no tiene: {providers}. Vincula {name} aquí para usarlas. Solo presta lo que traigas, y puedes detenerlo cuando quieras.",
-            "revoked": "{name} ya no mantiene su vínculo con este sandbox. Vincúlalo de nuevo para traer sus cuentas aquí.",
-            "silent": "Este sandbox no puede llegar a {name} por el vínculo, así que aún no puede llegar nada desde allí."
         },
         "apiKey": {
             "offer": "Usar una clave de API de {vendor}",
@@ -7453,6 +7400,19 @@
             "waitingSandboxToAnswer": "Esperando a que el sandbox responda. Tu espacio de trabajo se abrirá automáticamente cuando esté listo.",
             "weWontStartMachine": "No vamos a arrancar esta máquina: el correo que enviamos dice por qué y a dónde escribir si nos equivocamos. Tus archivos siguen en ella, y nada más de tu cuenta cambia. El mismo sandbox se ejecuta en tu propio ordenador, gratis y sin límites, desde su pantalla de configuración.",
             "yourSandbox": "tu sandbox"
+        },
+        "connectionHub": {
+            "saveTo": "Guardar en {machine}",
+            "saveToComputer": "Guardar en tu ordenador",
+            "savedTo": "Guardado en {machine}",
+            "waitsForYes": "Espera tu confirmación en {machine}",
+            "fromComputer": "De tu ordenador",
+            "fromComputerNamed": "De tu ordenador ({machine})",
+            "useSaved": "Usar una guardada en tu ordenador",
+            "saving": "Guardando en {machine}",
+            "couldntSave": "No se pudo guardar en {machine}.",
+            "taking": "Pidiendo a tu ordenador una conexión guardada",
+            "couldntTake": "No se pudo preguntar a tu ordenador."
         },
         "containerHealth": {
             "copiesTakeTurns": "Las copias en {hosts} se registran con el mismo token, así que se turnan su dirección: se corta más o menos cada minuto y los turnos en curso se interrumpen.",
@@ -9991,6 +9951,10 @@
                     "label": "Historial",
                     "where": "el registro de conversaciones y turnos anteriores"
                 },
+                "hub": {
+                    "label": "Centro de conexiones",
+                    "where": "conexiones guardadas en tu ordenador y llevadas a los sandboxes"
+                },
                 "intentic": {
                     "label": "Despliegues",
                     "where": "planes de despliegue y las ejecuciones que los aplican"
@@ -10090,10 +10054,6 @@
                 "share": {
                     "label": "Páginas compartidas",
                     "where": "conversaciones publicadas como páginas de solo lectura"
-                },
-                "sharing": {
-                    "label": "Cuentas de modelos compartidas",
-                    "where": "cuentas de modelos de otro sandbox"
                 },
                 "skills": {
                     "label": "Skills",
@@ -11226,7 +11186,7 @@
             "token": "Token",
             "createLink": "Crear vínculo",
             "empty": "No hay sandboxes vinculados. Empareja uno desde la tarjeta Sandbox vinculado del otro sandbox, o crea un vínculo aquí a mano.",
-            "lendsAccounts": "presta {count} cuenta de modelo y no acepta tareas | presta {count} cuentas de modelos y no acepta tareas"
+            "takesNoTasks": "no acepta tareas"
         },
         "linkedSandboxRows": {
             "title": "Sandboxes vinculados",

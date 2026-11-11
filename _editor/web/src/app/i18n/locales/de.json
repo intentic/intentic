@@ -5557,13 +5557,6 @@
             "empty": "Noch nicht verbunden. Die Anmeldung dauert eine Minute und das Konto bleibt in dieser Sandbox.",
             "otherLive": "Ihre Anmeldung bei {other} wartet noch. Das Verbinden von {provider} ersetzt sie.",
             "showOther": "{other} anzeigen",
-            "borrowedFrom": "Geliehen von {name}",
-            "signInAgainOn": "Abgemeldet. Melden Sie sich in {name} erneut an, das es hierher verleiht.",
-            "stopBorrowing": "Nicht mehr leihen",
-            "couldntStopBorrowing": "Das Leihen dieses Kontos konnte nicht beendet werden.",
-            "lentTo": "Verliehen an {names}",
-            "stopLending": "Nicht mehr verleihen",
-            "couldntStopLending": "Das Verleihen dieses Kontos konnte nicht beendet werden.",
             "emptyFullAccess": "Noch nicht verbunden. Dieses verbindet der Eigentümer oder jemand mit vollem Zugriff."
         },
         "providerTile": {
@@ -5578,52 +5571,6 @@
             "adding": "{server} wird als Modell-Endpunkt hinzugefügt",
             "couldntAdd": "{server} konnte nicht hinzugefügt werden.",
             "noneFound": "Für eine GPU starte Ollama oder LM Studio auf dem Computer, auf dem diese Sandbox läuft, dann erscheint es hier. Unter Linux starte Ollama mit OLLAMA_HOST=0.0.0.0; in LM Studio schalte die Bereitstellung im lokalen Netzwerk ein."
-        },
-        "shareAccounts": {
-            "title": "Aus Ihren anderen Sandboxes",
-            "explain": "Nichts muss zweimal angemeldet werden. Kopieren: Ein Schlüssel, der sich nicht ändert, wird hierher kopiert. Leihen: Eine Claude-Anmeldung bleibt in der anderen Sandbox, die sie hier Zug um Zug verleiht.",
-            "open": "{count} Konto in Ihren anderen Sandboxes | {count} Konten in Ihren anderen Sandboxes",
-            "openNone": "Ihre anderen Sandboxes",
-            "endpoint": "Modell-Endpunkt",
-            "modeCopy": "Schlüssel kopieren",
-            "modeLend": "Zug um Zug leihen",
-            "modeNo": "Kann nicht geteilt werden",
-            "bring": "Übernehmen",
-            "bringAll": "Alle {count} übernehmen",
-            "signInHere": "Stattdessen hier anmelden",
-            "bringing": "Konten werden aus {name} übernommen",
-            "couldntBring": "Diese Konten konnten nicht aus {name} übernommen werden.",
-            "failed": "Konnte nicht übernommen werden.",
-            "copied": "Kopiert",
-            "borrowed": "Geliehen",
-            "looking": "Prüfe, was Ihre anderen Sandboxes enthalten…",
-            "allHere": "Alles, was Ihre anderen Sandboxes enthalten, ist bereits hier.",
-            "unreachable": "{names} war nicht erreichbar, daher fehlen seine Konten.",
-            "tooOldThere": "{names} läuft mit einem Build, der zu alt zum Teilen von Konten ist. Aktualisieren Sie ihn, um sie hier zu sehen.",
-            "notRunning": "{names} läuft nicht. Starten Sie ihn, um seine Konten hierher zu übernehmen.",
-            "noAnswer": "Keine Antwort.",
-            "outdatedHere": "Konten Ihrer anderen Sandboxes lassen sich hierher übernehmen, ohne sich erneut anzumelden.",
-            "offerHere": "{label} ist auf {name} bereits angemeldet. Nutzen Sie es hier, ohne sich erneut anzumelden.",
-            "useFrom": "Von {name} nutzen",
-            "onOther": "Auf {name}",
-            "onOtherNote": "Ohne Anmeldung nutzen",
-            "bringCount": "{count} übernehmen",
-            "groupTitle": "{provider} · {count} Konto | {provider} · {count} Konten",
-            "someHere": "{count} von {total} hier",
-            "allHereCount": "Alle {count} hier",
-            "someFailed": "{count} Konto kam nicht von {name} herein. | {count} Konten kamen nicht von {name} herein.",
-            "stateLinked": "Verknüpft",
-            "stateUnlinked": "Nicht verknüpft",
-            "stateRevoked": "Verknüpfung widerrufen",
-            "stateSilent": "Antwortet nicht",
-            "link": "{name} verknüpfen",
-            "linkAgain": "Erneut verknüpfen",
-            "checkAgain": "Erneut prüfen",
-            "linking": "{name} wird verknüpft",
-            "couldntLink": "{name} konnte nicht verknüpft werden.",
-            "linkFirst": "Hat {count} Konto, das diese Sandbox nicht hat: {providers}. Verknüpfe {name} hier, um es zu nutzen. Es verleiht nur, was du übernimmst, und du kannst es jederzeit beenden. | Hat {count} Konten, die diese Sandbox nicht hat: {providers}. Verknüpfe {name} hier, um sie zu nutzen. Es verleiht nur, was du übernimmst, und du kannst es jederzeit beenden.",
-            "revoked": "{name} hält die Verknüpfung zu dieser Sandbox nicht mehr. Verknüpfe sie erneut, um ihre Konten hierher zu holen.",
-            "silent": "Diese Sandbox erreicht {name} über die Verknüpfung nicht, daher kann noch nichts von dort kommen."
         },
         "apiKey": {
             "offer": "Stattdessen einen {vendor}-API-Schlüssel verwenden",
@@ -7453,6 +7400,19 @@
             "waitingSandboxToAnswer": "Es wird darauf gewartet, dass die Sandbox antwortet. Ihr Workspace öffnet sich automatisch, sobald sie bereit ist.",
             "weWontStartMachine": "Wir starten diese Maschine nicht: die E-Mail, die wir geschickt haben, sagt warum und wohin Sie schreiben können, wenn wir falsch liegen. Ihre Dateien sind weiterhin darauf, und an Ihrem Konto ändert sich sonst nichts. Dieselbe Sandbox läuft auf Ihrem eigenen Computer, kostenlos und ohne Grenzen, von ihrem Einrichtungsbildschirm aus.",
             "yourSandbox": "Ihre Sandbox"
+        },
+        "connectionHub": {
+            "saveTo": "Auf {machine} speichern",
+            "saveToComputer": "Auf Ihrem Computer speichern",
+            "savedTo": "Auf {machine} gespeichert",
+            "waitsForYes": "Wartet auf {machine} auf Ihre Zustimmung",
+            "fromComputer": "Von Ihrem Computer",
+            "fromComputerNamed": "Von Ihrem Computer ({machine})",
+            "useSaved": "Eine auf Ihrem Computer gespeicherte verwenden",
+            "saving": "Wird auf {machine} gespeichert",
+            "couldntSave": "Sie konnte nicht auf {machine} gespeichert werden.",
+            "taking": "Ihr Computer wird nach einer gespeicherten Verbindung gefragt",
+            "couldntTake": "Ihr Computer konnte nicht danach gefragt werden."
         },
         "containerHealth": {
             "copiesTakeTurns": "Kopien auf {hosts} melden sich beide mit demselben Token, also halten sie ihre Adresse abwechselnd: Sie bricht etwa einmal pro Minute ab, und laufende Durchgänge werden unterbrochen.",
@@ -9991,6 +9951,10 @@
                     "label": "Historie",
                     "where": "die Aufzeichnung vergangener Unterhaltungen und Züge"
                 },
+                "hub": {
+                    "label": "Verbindungs-Hub",
+                    "where": "auf deinem Computer gespeicherte und in Sandboxen übernommene Verbindungen"
+                },
                 "intentic": {
                     "label": "Deployments",
                     "where": "Deployment-Pläne und die Läufe, die sie anwenden"
@@ -10090,10 +10054,6 @@
                 "share": {
                     "label": "Geteilte Seiten",
                     "where": "als schreibgeschützte Seiten veröffentlichte Unterhaltungen"
-                },
-                "sharing": {
-                    "label": "Geteilte Modellkonten",
-                    "where": "Modellkonten aus einer anderen Sandbox"
                 },
                 "skills": {
                     "label": "Skills",
@@ -11226,7 +11186,7 @@
             "token": "Token",
             "createLink": "Verknüpfung erstellen",
             "empty": "Keine verknüpften Sandboxes. Koppeln Sie eine über die Karte Verknüpfte Sandbox der anderen Sandbox oder erstellen Sie hier manuell eine Verbindung.",
-            "lendsAccounts": "verleiht {count} Modellkonto und nimmt keine Aufgaben an | verleiht {count} Modellkonten und nimmt keine Aufgaben an"
+            "takesNoTasks": "nimmt keine Aufgaben an"
         },
         "linkedSandboxRows": {
             "title": "Verknüpfte Sandboxes",

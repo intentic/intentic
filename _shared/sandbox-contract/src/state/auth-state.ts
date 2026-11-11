@@ -72,6 +72,9 @@ export const AUTH_STATE_FILES: readonly StateFile[] = [
     { path: "keyring-copies.json", portability: "identity" },
     { path: "keyring-sync-mailbox.json", portability: "identity" },
     { path: "keyring-needs.json", portability: "identity" },
+    // What this sandbox saved to the connections hub and what it made from hub entries shared here (hub/): entry names
+    // and the cards they became, no credential.
+    { path: "connection-hub.json", portability: "identity" },
     // The credential broker's signing key and the privacy gateway's token key, each minted on first use.
     { path: "broker-session.key", portability: "identity" },
     { path: "privacy-gateway.key", portability: "identity" },

@@ -108,11 +108,11 @@ const taskTermsLine = (terms: LinkTerms): string =>
         terms.approve ? t(`sandbox.linkedSandboxes.eachWaits`) : t(`sandbox.linkedSandboxes.startsAtOnce`),
         t(`sandbox.linkedSandboxes.perHour`, { count: terms.turnsPerHour }),
     ].join(` · `);
-// An accounts link (minted on the other sandbox's Models page) takes no tasks: what it lends is all there is to say of it.
-// Records shared are said on either kind, and only when they are: off is every link's default.
+// A link that takes no tasks says so instead of the terms its tasks would run under. Records shared are said on either
+// kind, and only when they are: off is every link's default.
 const termsLine = (terms: LinkTerms): string =>
     [
-        terms.tasks === false ? t(`sandbox.linkedSandboxes.lendsAccounts`, { count: terms.accounts.length }, terms.accounts.length) : taskTermsLine(terms),
+        terms.tasks === false ? t(`sandbox.linkedSandboxes.takesNoTasks`) : taskTermsLine(terms),
         ...(terms.records ? [t(`sandbox.linkedSandboxes.readsRecords`)] : []),
         ...(terms.operate ? [t(`sandbox.linkedSandboxes.operates`)] : []),
     ].join(` · `);
@@ -201,7 +201,7 @@ const submit = async (): Promise<void> => {
         return;
     }
     // Records stay unshared and operating off on a link made by hand, as on every new one; its Terms turn them on.
-    const terms: LinkTerms = { approve: approve.value, turnsPerHour: 20, tasks: true, records: false, operate: false, accounts: [] };
+    const terms: LinkTerms = { approve: approve.value, turnsPerHour: 20, tasks: true, records: false, operate: false };
     if (runAs.value !== undefined) {
         terms.runAs = runAs.value;
     }

@@ -50,9 +50,6 @@ export const UNSERVED = {
     // A keyring on the owner's computer fetches this sandbox's public keys here before it shares anything with it.
     "GET /keyring/keys": NOT_THE_EDITORS,
     "GET /link": NOT_THE_EDITORS,
-    // An accounts link's doors (this one and the three POSTs below): the borrowing sandbox's daemon calls them with the
-    // link token, never the editor.
-    "GET /link/accounts": NOT_THE_EDITORS,
     "GET /link/conversations/{id}": NOT_THE_EDITORS,
     // A link's operating doors (this one and the four POSTs below): the operating sandbox's daemon calls them with the
     // link token, never the editor.
@@ -104,13 +101,10 @@ export const UNSERVED = {
     "POST /fleet/message": NOT_THE_EDITORS,
     "POST /fleet/resume": NOT_THE_EDITORS,
     "POST /intake/{id}/report": OFF_SITE,
-    "POST /link/accounts/copy": NOT_THE_EDITORS,
     "POST /link/conversations": NOT_THE_EDITORS,
     "POST /link/conversations/{id}/answer": NOT_THE_EDITORS,
     "POST /link/conversations/{id}/messages": NOT_THE_EDITORS,
     "POST /link/conversations/{id}/stop": NOT_THE_EDITORS,
-    "POST /link/credentials": NOT_THE_EDITORS,
-    "POST /link/credentials/refresh": NOT_THE_EDITORS,
     "POST /link/operate/exec": NOT_THE_EDITORS,
     "POST /link/operate/exec/{id}/stop": NOT_THE_EDITORS,
     "POST /link/operate/read": NOT_THE_EDITORS,

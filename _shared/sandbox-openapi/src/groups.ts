@@ -352,12 +352,12 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "One route family for every provider whose credential lives in this daemon's own auth tree — sign in, finish or abandon a sign-in, list what is connected with how full each account's limits were, rename one, disconnect one. The provider is a parameter rather than a group of its own because the operations are the same six for all of them; what differs is each provider's mechanism, which its own module declares. The translator group next door is the other shape of the same idea, for subscriptions a proxy holds and re-serves. No answer here can carry a credential: the account rows have no field one could ride in, and a sign-in's proof never leaves the sandbox.",
     },
     {
-        name: "sharing",
+        name: "hub",
         shelf: "models",
-        label: "Shared model accounts",
-        summary: "Model accounts copied or borrowed from another of the owner's sandboxes",
+        label: "Connections hub",
+        summary: "Connections kept on the owner's computer, saved from one sandbox and taken into another",
         description:
-            "Lists which model accounts this sandbox can share and how each travels, brings selected accounts in through an accounts link, lists borrowed accounts, and stops borrowing one. Static keys are copied; supported sign-ins are lent while their renewal stays on the source sandbox. The owner must be signed in to both sandboxes to arrange the link, and no credential is returned by these routes.",
+            "Lists the owner's computers whose keyring can hold connections and every card and model account held here with whether it can go there; saves one to a computer's keyring; and asks the computers for a saved one to use here. Only credentials that do not rotate travel: CLI connector cards, tool servers, model endpoints and static model keys. The person at the computer says yes to every save and every share, and no credential is returned by these routes.",
     },
     {
         name: "translator",

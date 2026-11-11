@@ -1,4 +1,4 @@
-import { type Capability, CapabilitySchema, type LocalModelConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Capability, CapabilitySchema, type LinkConfig, type LocalModelConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { isJsonObject, mapValue, retireEntries, transform } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
@@ -21,6 +21,12 @@ type LocalModelWithGpu = {
     id: string;
     kind: "localmodel";
     config: LocalModelConfig & { gpu: unknown };
+};
+
+type LinkWithPurpose = {
+    id: string;
+    kind: "link";
+    config: LinkConfig & { purpose: unknown };
 };
 
 export const capabilitiesDocument = defineDocument({
@@ -46,6 +52,21 @@ export const capabilitiesDocument = defineDocument({
                 entry["kind"] === "localmodel" && isJsonObject(entry["config"]) && Object.hasOwn(entry["config"], "gpu"),
             (entry) => {
                 const { gpu: _retired, ...config } = entry.config;
+                return { ...entry, config };
+            },
+        ),
+        // 2026-11-11: accounts links were withdrawn (links.md): another of the owner's sandboxes no longer lends or copies
+        // model accounts, so a link card saved only to borrow them reaches nothing. Retired; a task link loses the
+        // `purpose` that told the two apart.
+        retireEntries(
+            "retires a link saved only to borrow model accounts, withdrawn in favour of the connections hub",
+            (entry): entry is { kind: "link" } => isJsonObject(entry) && entry["kind"] === "link" && isJsonObject(entry["config"]) && entry["config"]["purpose"] === "accounts",
+        ),
+        transform(
+            "drops a link's purpose, which only told an accounts link from a task link",
+            (entry): entry is LinkWithPurpose => entry["kind"] === "link" && isJsonObject(entry["config"]) && Object.hasOwn(entry["config"], "purpose"),
+            (entry) => {
+                const { purpose: _retired, ...config } = entry.config;
                 return { ...entry, config };
             },
         ),

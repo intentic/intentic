@@ -37,6 +37,7 @@ const AREAS = {
     extensions: () => ({ label: t(`sandbox.driftReport.areas.extensions.label`), where: t(`sandbox.driftReport.areas.extensions.where`) }),
     git: () => ({ label: t(`sandbox.driftReport.areas.git.label`), where: t(`sandbox.driftReport.areas.git.where`) }),
     history: () => ({ label: t(`sandbox.driftReport.areas.history.label`), where: t(`sandbox.driftReport.areas.history.where`) }),
+    hub: () => ({ label: t(`sandbox.driftReport.areas.hub.label`), where: t(`sandbox.driftReport.areas.hub.where`) }),
     intentic: () => ({ label: t(`sandbox.driftReport.areas.intentic.label`), where: t(`sandbox.driftReport.areas.intentic.where`) }),
     inventory: () => ({ label: t(`sandbox.driftReport.areas.inventory.label`), where: t(`sandbox.driftReport.areas.inventory.where`) }),
     issues: () => ({ label: t(`sandbox.driftReport.areas.issues.label`), where: t(`sandbox.driftReport.areas.issues.where`) }),
@@ -62,7 +63,6 @@ const AREAS = {
     services: () => ({ label: t(`sandbox.driftReport.areas.services.label`), where: t(`sandbox.driftReport.areas.services.where`) }),
     settings: () => ({ label: t(`sandbox.driftReport.areas.settings.label`), where: t(`sandbox.driftReport.areas.settings.where`) }),
     share: () => ({ label: t(`sandbox.driftReport.areas.share.label`), where: t(`sandbox.driftReport.areas.share.where`) }),
-    sharing: () => ({ label: t(`sandbox.driftReport.areas.sharing.label`), where: t(`sandbox.driftReport.areas.sharing.where`) }),
     skills: () => ({ label: t(`sandbox.driftReport.areas.skills.label`), where: t(`sandbox.driftReport.areas.skills.where`) }),
     // Named for what a reader would actually open, not for the group: "the sandbox itself" would collide with the
     // row above that IS the sandbox, and "internals" tells nobody which screen to distrust.

@@ -8,6 +8,7 @@ import { approvalsSlice, type ApprovalsSlice } from "../../approvals/approvals-s
 import { gitSlice, type GitSlice } from "../../git/git-slice.js";
 import { historySlice, type HistorySlice } from "../../history/history-slice.js";
 import { hostsSlice, type HostsSlice } from "../../hosts/hosts-slice.js";
+import { hubSlice, type HubSlice } from "../../hub/hub-slice.js";
 import { linksSlice, type LinksSlice } from "../../links/links-slice.js";
 import { type LoopsOwnMembers, loopsSlice } from "../../loops/loops-slice.js";
 import { needsSlice, type NeedsSlice } from "../../needs/needs-slice.js";
@@ -24,6 +25,7 @@ export type LeafMembers = TranslatorGatewaySlice &
     GitSlice &
     HistorySlice &
     HostsSlice &
+    HubSlice &
     LinksSlice &
     LoopsOwnMembers &
     NeedsSlice &
@@ -43,6 +45,7 @@ export const buildLeafSlices = (core: CompositionCore): LeafMembers => {
         gitSlice: gitSlice.build(core),
         historySlice: historySlice.build(core),
         hostsSlice: hostsSlice.build(core),
+        hubSlice: hubSlice.build(core),
         linksSlice: linksSlice.build(core),
         loopsSlice: loopsSlice.build(core),
         needsSlice: needsSlice.build(core),
@@ -64,6 +67,7 @@ export const buildLeafSlices = (core: CompositionCore): LeafMembers => {
         ...built.gitSlice,
         ...built.historySlice,
         ...built.hostsSlice,
+        ...built.hubSlice,
         ...built.linksSlice,
         ...built.loopsSlice,
         ...built.needsSlice,
@@ -84,6 +88,7 @@ export const leafTeardown = (services: Services): readonly (() => SliceStopped)[
     ...stopsOf(gitSlice, services),
     ...stopsOf(historySlice, services),
     ...stopsOf(hostsSlice, services),
+    ...stopsOf(hubSlice, services),
     ...stopsOf(linksSlice, services),
     ...stopsOf(loopsSlice, services),
     ...stopsOf(needsSlice, services),

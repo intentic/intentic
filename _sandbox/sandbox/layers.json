@@ -75,7 +75,7 @@
         },
         {
             "name": "orchestration",
-            "about": "what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings",
+            "about": "what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings, and what reconciles the connections hub",
             "units": [
                 "automations",
                 "compliance",
@@ -91,7 +91,8 @@
                 "portability",
                 "migrations",
                 "history",
-                "retention"
+                "retention",
+                "hub"
             ]
         },
         {

@@ -6,6 +6,7 @@ import { createApp, h } from "vue";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { ConnectionState } from "../../../models/capabilities/connections";
+import type { HubRowView } from "../../../models/hub/connectionHub";
 import { IconStub } from "@intentic/ui/testing";
 
 // Row reaches a router only through the rebuild hand-off, which none of these cases takes.
@@ -19,13 +20,13 @@ const STATE: ConnectionState = { label: `needs setup`, tone: `warning`, rank: 1 
 const render = (
     status: CapabilitySummary[`status`],
     state: ConnectionState = STATE,
-    { entry = ENTRY, config = {} }: { entry?: CapabilityCatalogEntry; config?: CapabilitySummary[`config`] } = {},
+    { entry = ENTRY, config = {}, hub }: { entry?: CapabilityCatalogEntry; config?: CapabilitySummary[`config`]; hub?: HubRowView } = {},
 ): string => {
     const el = document.createElement(`div`);
     document.body.append(el);
     const instance = { id: entry.id, kind: `cli`, status, config } as unknown as CapabilitySummary;
     const app = createApp({
-        render: () => h(CapabilityInstanceRow, { entry, instance, state, facts: `+49 151 12345678` }),
+        render: () => h(CapabilityInstanceRow, { entry, instance, state, facts: `+49 151 12345678`, hub }),
     });
     app.use(PrimeVue);
     // Globally registered in the real app; a bare span is enough for these assertions.
@@ -90,4 +91,14 @@ it("offers the card's own link on a connected row once the connection holds what
     expect(html).toContain(`href="https://discord.com/oauth2/authorize?client_id=80351110224678912&amp;scope=bot"`);
     expect(html).toContain(`Add to your server`);
     expect(render({ state: `active` }, connected, { entry: discord })).not.toContain(`Add to your server`);
+});
+
+// The connections hub: where the owner's computer keeps this connection is said quietly beside its name, and a row the
+// hub has never held says nothing about it.
+it("says where the hub keeps a connection, and says nothing of one it never held", () => {
+    const connected: ConnectionState = { label: `connected`, tone: `success`, rank: 3 };
+
+    expect(render({ state: `active` }, connected, { hub: { saveTo: [`rog`], note: `Saved to rog`, busy: false } })).toContain(`Saved to rog`);
+    expect(render({ state: `active` }, connected, { hub: { saveTo: [], note: `From your computer (rog)`, busy: false } })).toContain(`From your computer (rog)`);
+    expect(render({ state: `active` }, connected, { hub: { saveTo: [`rog`], note: undefined, busy: false } })).not.toContain(`rog`);
 });

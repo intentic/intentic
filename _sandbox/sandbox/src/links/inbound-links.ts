@@ -10,6 +10,7 @@ import {
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
+import { at as under, drop, isJsonObject, type JsonObject, nested, retireEntries } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { opt } from "../opt.js";
@@ -74,6 +75,22 @@ export const inboundLinksDocument = defineDocument({
     portability: "identity",
     note: "Pair the sandboxes that hand this one tasks again from its Access tab: their links name the source sandbox.",
     schema: StoredLinksSchema,
+    history: [
+        // 2026-11-11: accounts links were withdrawn (links.md). One minted only to lend model accounts (no tasks, no
+        // records, no operating) is left allowing nothing, so it is retired; every other link loses its `accounts` term.
+        ...nested("links", [
+            retireEntries(
+                "retires a link minted only to lend model accounts, withdrawn in favour of the connections hub",
+                (entry): entry is JsonObject =>
+                    isJsonObject(entry) &&
+                    isJsonObject(entry["terms"]) &&
+                    entry["terms"]["tasks"] === false &&
+                    entry["terms"]["records"] !== true &&
+                    entry["terms"]["operate"] !== true,
+            ),
+        ]),
+        under("links.*.terms", drop("accounts")),
+    ],
 });
 
 // How many tasks a link keeps on file, settled ones dropping off oldest first; a live or held one is never dropped.

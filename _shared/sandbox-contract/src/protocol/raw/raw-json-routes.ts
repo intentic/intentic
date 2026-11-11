@@ -88,14 +88,9 @@ import {
 } from "../../state/arrival.js";
 import { DefinitionDiffSchema, DefinitionExportSchema, WorkspacePublishResultSchema, WorkspacePublishSchema, WorkspaceRemoteSchema } from "../../state/definition.js";
 import {
-    RunnerCredentialRefreshRequestSchema,
-    RunnerCredentialRefreshSchema,
-    RunnerCredentialRequestSchema,
-    RunnerCredentialSchema,
     RunnerDefinitionAppliedSchema,
     RunnersListSchema,
 } from "../doors/runner-protocol.js";
-import { LinkAccountCopySchema, LinkAccountsSchema, SharedAccountRefSchema } from "../../schemas/providers/account-sharing.js";
 import type { RawRouteKey } from "./raw-routes.js";
 
 // What a raw route that answers plain JSON takes and answers, under its RAW_ROUTES key. `input` is the JSON body a write
@@ -211,11 +206,6 @@ export const RAW_JSON_ROUTES = {
     "POST /link/operate/write": { input: LinkWriteSchema, output: LinkWriteAnswerSchema },
     "POST /diagnostics": { input: DiagnosticsAskSchema, output: DiagnosticsAnswerSchema },
     "GET /fleet/{handle}/bundle": { output: ConversationBundleSchema },
-    // An accounts link: what it may use, one static key's copy, and a lent sign-in's per-turn credential.
-    "GET /link/accounts": { output: LinkAccountsSchema },
-    "POST /link/accounts/copy": { input: SharedAccountRefSchema, output: LinkAccountCopySchema },
-    "POST /link/credentials": { input: RunnerCredentialRequestSchema, output: RunnerCredentialSchema },
-    "POST /link/credentials/refresh": { input: RunnerCredentialRefreshRequestSchema, output: RunnerCredentialRefreshSchema },
     "GET /system/control/tokens": { output: ControlTokensListSchema },
     "POST /system/control/tokens": { input: ControlTokenMintSchema, output: ControlTokenMintedSchema },
     "DELETE /system/control/tokens/{id}": { output: OkSchema },

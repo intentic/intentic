@@ -5557,13 +5557,6 @@
             "empty": "Not connected yet. Signing in takes a minute, and the account stays in this sandbox.",
             "otherLive": "Your {other} sign-in is still waiting. Connecting {provider} replaces it.",
             "showOther": "Show {other}",
-            "borrowedFrom": "Borrowed from {name}",
-            "signInAgainOn": "Signed out. Sign in again on {name}, which lends it here.",
-            "stopBorrowing": "Stop borrowing",
-            "couldntStopBorrowing": "Couldn't stop borrowing that account.",
-            "lentTo": "Lent to {names}",
-            "stopLending": "Stop lending",
-            "couldntStopLending": "Couldn't stop lending that account.",
             "emptyFullAccess": "Not connected yet. The owner or someone with Full access connects this one."
         },
         "providerTile": {
@@ -5578,52 +5571,6 @@
             "adding": "Adding {server} as a model endpoint",
             "couldntAdd": "Couldn't add {server}.",
             "noneFound": "For a GPU, run Ollama or LM Studio on the computer that hosts this sandbox and it shows up here. On Linux, start Ollama with OLLAMA_HOST=0.0.0.0; in LM Studio, turn on serving on the local network."
-        },
-        "shareAccounts": {
-            "title": "From your other sandboxes",
-            "explain": "Nothing to sign in to twice. Copy: a key that does not change is copied here. Borrow: a Claude sign-in stays on the other sandbox, which lends it here turn by turn.",
-            "open": "{count} account on your other sandboxes | {count} accounts on your other sandboxes",
-            "openNone": "Your other sandboxes",
-            "endpoint": "Model endpoint",
-            "modeCopy": "Copy its key",
-            "modeLend": "Borrow turn by turn",
-            "modeNo": "Can't be shared",
-            "bring": "Bring",
-            "bringAll": "Bring all {count}",
-            "signInHere": "Sign in here instead",
-            "bringing": "Bringing accounts in from {name}",
-            "couldntBring": "Couldn't bring those accounts in from {name}.",
-            "failed": "Couldn't bring it in.",
-            "copied": "Copied",
-            "borrowed": "Borrowed",
-            "looking": "Looking at what your other sandboxes hold…",
-            "allHere": "Everything your other sandboxes hold is already here.",
-            "unreachable": "Couldn't reach {names}, so its accounts aren't listed.",
-            "tooOldThere": "{names} runs a build too old to share accounts. Update it to see them here.",
-            "notRunning": "{names} isn't running. Start it to bring its accounts here.",
-            "noAnswer": "It didn't answer.",
-            "outdatedHere": "Accounts your other sandboxes hold can be brought here without signing in again.",
-            "offerHere": "{label} is already signed in on {name}. Use it here without signing in again.",
-            "useFrom": "Use from {name}",
-            "onOther": "On {name}",
-            "onOtherNote": "Use it without signing in",
-            "bringCount": "Bring {count}",
-            "groupTitle": "{provider} · {count} account | {provider} · {count} accounts",
-            "someHere": "{count} of {total} here",
-            "allHereCount": "All {count} here",
-            "someFailed": "{count} account didn't come in from {name}. | {count} accounts didn't come in from {name}.",
-            "stateLinked": "Linked",
-            "stateUnlinked": "Not linked",
-            "stateRevoked": "Link revoked",
-            "stateSilent": "Not answering",
-            "link": "Link {name}",
-            "linkAgain": "Link again",
-            "checkAgain": "Check again",
-            "linking": "Linking {name}",
-            "couldntLink": "Couldn't link {name}.",
-            "linkFirst": "Holds {count} account this sandbox doesn't have: {providers}. Link {name} here to use it. It lends only what you bring, and you can stop it any time. | Holds {count} accounts this sandbox doesn't have: {providers}. Link {name} here to use them. It lends only what you bring, and you can stop it any time.",
-            "revoked": "{name} no longer holds its link to this sandbox. Link again to bring its accounts here.",
-            "silent": "This sandbox can't reach {name} over the link, so nothing can come from it yet."
         },
         "apiKey": {
             "offer": "Use an API key from {vendor} instead",
@@ -7453,6 +7400,19 @@
             "waitingSandboxToAnswer": "Waiting for the sandbox to answer. Your workspace opens automatically when it is ready.",
             "weWontStartMachine": "We won't start this machine: the email we sent says why and where to write if we have it wrong. Your files are still on it, and nothing else about your account changes. The same sandbox runs on your own computer, free and without limits, from its setup screen.",
             "yourSandbox": "your sandbox"
+        },
+        "connectionHub": {
+            "saveTo": "Save to {machine}",
+            "saveToComputer": "Save to your computer",
+            "savedTo": "Saved to {machine}",
+            "waitsForYes": "Waits for your yes on {machine}",
+            "fromComputer": "From your computer",
+            "fromComputerNamed": "From your computer ({machine})",
+            "useSaved": "Use one saved on your computer",
+            "saving": "Saving to {machine}",
+            "couldntSave": "Couldn't save it to {machine}.",
+            "taking": "Asking your computer for a saved connection",
+            "couldntTake": "Couldn't ask your computer for it."
         },
         "containerHealth": {
             "copiesTakeTurns": "Copies on {hosts} both check in with its one token, so they take turns holding its address: it drops about once a minute, and turns running on it are cut.",
@@ -9991,6 +9951,10 @@
                     "label": "History",
                     "where": "the record of past conversations and turns"
                 },
+                "hub": {
+                    "label": "Connections hub",
+                    "where": "connections saved on your computer and taken into sandboxes"
+                },
                 "intentic": {
                     "label": "Deployments",
                     "where": "deployment plans and the runs that apply them"
@@ -10090,10 +10054,6 @@
                 "share": {
                     "label": "Shared pages",
                     "where": "conversations published as read-only pages"
-                },
-                "sharing": {
-                    "label": "Shared model accounts",
-                    "where": "model accounts brought in from another sandbox"
                 },
                 "skills": {
                     "label": "Skills",
@@ -11226,7 +11186,7 @@
             "token": "Token",
             "createLink": "Create link",
             "empty": "No linked sandboxes. Pair one from the other sandbox's Linked sandbox card, or make a link here by hand.",
-            "lendsAccounts": "lends {count} model account and takes no tasks | lends {count} model accounts and takes no tasks"
+            "takesNoTasks": "takes no tasks"
         },
         "linkedSandboxRows": {
             "title": "Linked sandboxes",

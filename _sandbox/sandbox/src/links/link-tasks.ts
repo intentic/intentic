@@ -106,8 +106,8 @@ export interface LinkRefusal {
 
 const refusal = (refused: LinkRefusal["refused"], message: string): LinkRefusal => ({ refused, message });
 
-// What a link minted only to lend model accounts says to a task (schemas/providers/account-sharing.ts).
-const NO_TASKS = "This link only lends model accounts: it takes no tasks. Its owner can link the two sandboxes for tasks separately.";
+// What a link whose terms take no tasks says to one: it was minted for reading records or operating only.
+const NO_TASKS = "This link takes no tasks: its owner allowed it only to read records or operate. They can turn tasks on in its terms.";
 
 const nowOf = (deps: LinkTaskDeps): number => (deps.now ?? Date.now)();
 
@@ -235,7 +235,7 @@ const heldNotice = (link: ResolvedLink, task: StoredLinkTask, words: string): Pu
 
 /** A new task from the link: filed, then held for the owner or started, as the link's terms say. */
 export const askTask = async (deps: LinkTaskDeps, link: ResolvedLink, asked: LinkTask): Promise<LinkTaskStatus | LinkRefusal> => {
-    // An accounts link lends models and takes no work: refused before anything is filed, so it never opens a conversation.
+    // A link that takes no work is refused before anything is filed, so it never opens a conversation.
     if (!link.terms.tasks) {
         return refusal(409, NO_TASKS);
     }

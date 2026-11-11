@@ -186,7 +186,7 @@ describe(`control tokens`, () => {
 
 describe(`linked sandboxes`, () => {
     const link = (id: string, actsAs?: string): InboundLinkSummary => {
-        const terms: LinkTerms = { approve: false, turnsPerHour: 20, tasks: true, records: false, operate: false, accounts: [] };
+        const terms: LinkTerms = { approve: false, turnsPerHour: 20, tasks: true, records: false, operate: false };
         if (actsAs !== undefined) {
             terms.actsAs = actsAs;
         }
@@ -221,10 +221,10 @@ describe(`linked sandboxes`, () => {
         expect(principal(map, `link:lost`).reach.size).toBe(0);
     });
 
-    // An accounts link only lends model accounts out: nothing runs here through it, so it reaches nothing here.
+    // A link that takes no tasks runs nothing here, so it reaches nothing here.
     it(`reaches nothing when it takes no tasks`, () => {
-        const lending: InboundLinkSummary = { ...link(`laptop`), terms: { approve: false, turnsPerHour: 20, tasks: false, records: false, operate: false, accounts: [{ provider: `claude`, account: `acc_1` }] } };
-        const map = buildReachMap(input({ inbound: [lending] }));
+        const taskless: InboundLinkSummary = { ...link(`laptop`), terms: { approve: false, turnsPerHour: 20, tasks: false, records: false, operate: false } };
+        const map = buildReachMap(input({ inbound: [taskless] }));
         expect(principal(map, `link:laptop`).reach.size).toBe(0);
     });
 });

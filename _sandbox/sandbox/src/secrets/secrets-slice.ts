@@ -1,3 +1,5 @@
+import { withoutHubEntries } from "@intentic/sandbox-contract/schemas/connection-hub";
+import type { KeyringCopies } from "./device/keyring-stores.js";
 import { join } from "node:path";
 import type { SecretHostGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import type { Logger } from "pino";
@@ -74,6 +76,9 @@ export interface SecretsSlice {
     // value one use at a time, the sync mailbox between them, this sandbox's own keyring keys, and the device-held names
     // as the exits, the gates and the inventory read them.
     readonly keyringLink: KeyringLink;
+    // The `copy` entries the keyrings share here, name to value: what the registry resolves, and the connections hub
+    // (hub/) reads its own entries from.
+    readonly keyringCopies: KeyringCopies;
     readonly keyringSync: KeyringSync;
     readonly sandboxKeyringKeys: SandboxKeyringKeys;
     readonly deviceSecrets: DeviceSecretsService;
@@ -189,7 +194,8 @@ export const createSecretsSlice = ({
     const hostGuards = hostGuardReaders(secretHostGuards, connectorHosts, connectorHostMetadata);
     const keyrings = createKeyringParts({ authRoot, hub: deviceHub, publicUrl, logger });
     const secretRegistry = secretRegistryOf(secretVault, () => workspace.repos["desired-state"], sandboxSecrets, {
-        copies: () => keyrings.keyringCopies.all(),
+        // A connections hub entry is the hub's to read (hub/), never a value an agent spends by name.
+        copies: async () => withoutHubEntries(await keyrings.keyringCopies.all()),
         released: () => keyrings.releasedDeviceValues.all(),
     });
     const deviceSecrets = createDeviceSecrets({
@@ -205,6 +211,7 @@ export const createSecretsSlice = ({
         secretHostGuards,
         hostGuards,
         keyringLink: keyrings.keyringLink,
+        keyringCopies: keyrings.keyringCopies,
         keyringSync: keyrings.keyringSync,
         sandboxKeyringKeys: keyrings.keyringKeys,
         deviceSecrets,

@@ -55,6 +55,11 @@ Each entry is shared with each sandbox on its own terms:
 
 `copy` is the explicit downgrade: the value then lives in the sandbox and its guards are the sandbox's.
 
+An entry named `CONNECTION_…` is a connections hub item: a connection saved from a sandbox, whose value is a JSON
+envelope the sandbox reads, and whose only host is a `*.connections.invalid` name that a sandbox's need finds it by
+([capabilities.md](../../docs/architecture/capabilities.md#connections-hub)). To the keyring it is an ordinary `text`
+entry, shared like any other; sharing it with a sandbox in `copy` mode is how that sandbox takes the connection.
+
 ## Files
 
 In the service's own folder (`%ProgramData%\Intentic\Keyring\<SID>` on Windows, `/var/lib/intentic-keyring/<uid>` on

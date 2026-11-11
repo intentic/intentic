@@ -29,11 +29,6 @@ import {
 } from "./link-tasks.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 import { linkBody as bodyOf, presentedLink } from "./link-door.js";
-import { replaceRejectedToken } from "../agent/providers/claude/claude-credentials.js";
-import { resolveHarnessCredentials } from "../agent/providers/harness-credentials.js";
-import { toRunnerCredential } from "../sandboxes/credential-lending.js";
-import { copyOf, heldAccounts } from "./accounts/held-accounts.js";
-import { createLinkAccountDoors, type LinkAccountDoors } from "./accounts/link-account-doors.js";
 
 // The two halves of a link as routes. The owner's (`/system/links`): mint one, change its terms, revoke it, answer a task
 // that waits on them; each refused to anyone below the operating tier, like a control token's. The link doors (`/link`):
@@ -95,7 +90,6 @@ const helloOf = async (deps: LinkRoutesDeps, link: ResolvedLink): Promise<LinkHe
             tasks: link.terms.tasks,
             records: link.terms.records,
             operate: link.terms.operate,
-            accounts: link.terms.accounts.length,
         },
         maxHops: LINK_MAX_HOPS,
     };
@@ -277,41 +271,12 @@ export const createLinkRoutes = (deps: LinkRoutesDeps) => {
     };
 };
 
-// An accounts link's doors (accounts/link-account-doors.ts), each behind the link the request presents.
-export const linkAccountRoutes = (deps: Pick<LinkRoutesDeps, "links" | "logger">, doors: LinkAccountDoors) => {
-    const behindLink =
-        (door: (c: Context<AppEnv>, link: ResolvedLink) => Promise<Response>) =>
-        async (c: Context<AppEnv>): Promise<Response> => {
-            const link = await presentedLink(deps, c);
-            return link instanceof Response ? link : await door(c, link);
-        };
-    return {
-        "GET /link/accounts": behindLink(doors.accounts),
-        "POST /link/accounts/copy": behindLink(doors.copy),
-        "POST /link/credentials": behindLink(doors.credential),
-        "POST /link/credentials/refresh": behindLink(doors.refresh),
-    };
-};
-
-// What the account doors read of the daemon: what it holds, and how its own turns resolve a credential.
-const linkAccountDoorsOf = (services: Services): LinkAccountDoors =>
-    createLinkAccountDoors({
-        logger: services.logger,
-        held: () => heldAccounts(services),
-        copyOf: (ref) => copyOf(services, ref),
-        // "" for the container's own credential: that is this sandbox's, and never lent to another.
-        credential: async (input) => toRunnerCredential(await resolveHarnessCredentials(services, input), services.config.translator.url, ""),
-        remint: (account, rejected) => replaceRejectedToken(services.claudeStore, account, rejected),
-    });
-
 // Linked sandboxes: the owner's links for other sandboxes of theirs (mint, terms, revoke, a waiting task's answer), and
-// the doors those sandboxes hand tasks through, each reaching only the conversations its own link opened, and the
-// accounts doors an accounts link borrows through.
+// the doors those sandboxes hand tasks through, each reaching only the conversations its own link opened.
 export const linkRawRoutes = defineRawRoutes((services: Services) => {
     const deps = linkRoutesDepsOf(services);
     const links = createLinkRoutes(deps);
     return {
-        ...linkAccountRoutes(deps, linkAccountDoorsOf(services)),
         "GET /system/links": links.list,
         "POST /system/links": links.mint,
         "POST /system/links/{id}": links.update,

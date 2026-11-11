@@ -36,8 +36,8 @@ import { registry } from "./registry.js";
 import { createStatusCache, type StatusCache } from "./status/status-cache.js";
 import type { RuntimeDomain } from "@intentic/sandbox-contract/state/runtime-state";
 import { publishRuntimeChange, runtimeGeneration } from "../seams/runtime-feed.js";
-import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { capabilitiesDocument } from "./capabilities-store.js";
+import { applyAndStore, convergeAfterConnectionChange, uninstallConnection, versionManifest } from "../hub/connection-install.js";
 import { storeRefreshToken } from "./refresh-token.js";
 import { mintPlatformAccess, platformDoor } from "./oauth-access.js";
 import { stateRelPath } from "../state-paths.js";
@@ -45,17 +45,6 @@ import { stateRelPath } from "../state-paths.js";
 // personas-store.ts's document, named by its contract-checked state path rather than imported: personas reaches
 // capabilities through the browser, so importing it here would close a cycle.
 const PERSONAS_PATH = stateRelPath(".intentic/config/personas.json");
-
-// The capability pages' own writes to the connection manifest, each committed as it lands (settings-versions.ts): left
-// uncommitted, they read as the owner's edits and a land touching the same file is refused. A rename also repoints the
-// personas that name the connection, so it commits that file with it. Only where the files held nothing uncommitted
-// before the write: an agent's landed change to them waiting in Changes is not the page's to commit unreviewed.
-const versionManifest = <T>(
-    services: Services,
-    subject: string,
-    write: () => Promise<T>,
-    paths: readonly string[] = [capabilitiesDocument.path],
-): Promise<T> => versionedSettingsWrite(services, paths, `Settings: ${subject}`, write);
 
 // Follows a capability id everywhere else it's stored by name: an account's identity, an identity's mailbox, a
 // persona's capabilities list. Kept out of the handlers, since none of these is a fact about the kind being renamed.
@@ -92,13 +81,6 @@ const repointCapabilityReferences = async (services: Services, ctx: CapabilityCt
             await services.personas.upsert({ ...persona, capabilities: persona.capabilities.map((id) => (id === from ? to : id)) });
         }
     }
-};
-
-// The entry as stored once its apply succeeded: what the install learned (handler.installed), re-parsed so a handler
-// cannot store what the schema refuses.
-const installedEntry = async (ctx: CapabilityCtx, entry: Capability): Promise<Capability> => {
-    const installed = registry[entry.kind].installed;
-    return installed === undefined ? entry : CapabilitySchema.parse({ ...entry, config: await installed(ctx, entry.id, entry.config) });
 };
 
 // Resolves the markers a form sends where a credential goes, before apply runs: VAULTED back to the stored value (the
@@ -273,7 +255,6 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
             return { capabilities: rows, recommendations };
         }),
         add: i.add.handler(async function* ({ input, context }) {
-            const handler = registry[input.kind];
             // Its id would become the `mcp__<id>__` server name for the turn, which must not shadow a daemon server.
             refuseReservedServerId(input.kind, input.id);
             if (adding.has(input.id)) {
@@ -294,9 +275,7 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
             await refuseUnusableGpu(entry, () => probeDockerGpu(services));
             adding.add(input.id);
             try {
-                yield* handler.apply(ctx, entry.id, entry.config);
-                const stored = await installedEntry(ctx, entry);
-                await versionManifest(services, `connection ${entry.id}`, () => services.capabilities.upsert(stored));
+                yield* applyAndStore(services, ctx, entry, `connection ${entry.id}`);
                 // Applied again under the same settings is still a change: the next list probes it behind its answer.
                 statuses.due(entry.id);
                 // Stored for good: a generated key's token has done its one job and cannot install the key again.
@@ -312,13 +291,7 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
                     // backend host.
                     services.extensionBackend.restart();
                 }
-                // A connector add or remove flips whether its provider's gateway is wanted; this converges listener
-                // extensions.
-                void reconcileListenerProcesses(services);
-                // Awaited, not fire-and-forget: "added" must mean the next turn on this endpoint actually routes.
-                if (mintsEndpointProvider(input.kind)) {
-                    await syncEndpointCompat(services);
-                }
+                await convergeAfterConnectionChange(services, input.kind);
                 // This entry's image fragments join the overlay; upsert happens first so the compose sees them.
                 if ((await rebuildNeeded(services)) && (await services.environmentSources.capabilityFragments(entry)).length > 0) {
                     yield {
@@ -438,16 +411,11 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
                 throw new ORPCError("CONFLICT", { message: `the ${capability.kind} capability holds no secret` });
             }
             const updated = CapabilitySchema.parse({ ...capability, config: { ...capability.config, [field]: input.value } });
-            for await (const line of registry[updated.kind].apply(ctx, updated.id, updated.config)) {
+            for await (const line of applyAndStore(services, ctx, updated, `connection ${updated.id} credential`)) {
                 void line;
             }
-            const stored = await installedEntry(ctx, updated);
-            await versionManifest(services, `connection ${updated.id} credential`, () => services.capabilities.upsert(stored));
-            void reconcileListenerProcesses(services);
             // A rotated key is a new upstream credential; the translator keeps the old one until told to sync.
-            if (mintsEndpointProvider(updated.kind)) {
-                await syncEndpointCompat(services);
-            }
+            await convergeAfterConnectionChange(services, updated.kind);
             return { ok: true } as const;
         }),
         remove: i.remove.handler(async ({ input }) => {
@@ -455,26 +423,10 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
             }
-            const handler = registry[capability.kind];
-            if (handler.remove === undefined) {
+            if (registry[capability.kind].remove === undefined) {
                 throw new ORPCError("CONFLICT", { message: `the ${capability.kind} capability can't be removed` });
             }
-            await handler.remove(ctx, capability.id, capability.config);
-            // The warm subprocess dies with a removed agent capability; a re-add respawns lazily on the next turn.
-            if (capability.kind === "agent") {
-                services.acpConnections.drop(capability.id);
-            }
-            await versionManifest(services, `removed connection ${input.id}`, () => services.capabilities.remove(input.id));
-            // Removed only after the manifest drops it, so the rebuilt list can't put the endpoint straight back.
-            if (mintsEndpointProvider(capability.kind)) {
-                await syncEndpointCompat(services);
-            }
-            await composeEnvironment(services);
-            void reconcileListenerProcesses(services);
-            // A removed extension's backend retires with it; a no-op for other kinds, whose set is unchanged.
-            if (capability.kind === "extension") {
-                services.extensionBackend.restart();
-            }
+            await uninstallConnection(services, ctx, capability, `removed connection ${input.id}`);
             return { ok: true } as const;
         }),
         status: i.status.handler(async ({ input }) => {

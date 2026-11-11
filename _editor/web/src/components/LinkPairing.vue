@@ -103,7 +103,6 @@ const pair = async (): Promise<void> => {
             tasks: true,
             records: records.value,
             operate: operate.value,
-            accounts: [],
         };
         if (actsAs.value !== undefined && actsAs.value !== NO_PERSONA) {
             terms.actsAs = actsAs.value;

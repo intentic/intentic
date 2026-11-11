@@ -34,16 +34,14 @@ const statusOf = (link: LinkConfig, answer: Awaited<ReturnType<typeof linkHello>
 
 export const linkHandler: CapabilityHandler = {
     secret: () => "token",
-    // Every key left out of the echo is vaulted as a credential (credentials/secret-fields.ts). `purpose` once was: the
-    // manifest then held the marker where the schema wants "tasks" or "accounts", dropped the card as unreadable, and
-    // the editor, reading this echo, never found the accounts card it had saved (2026-11-04).
+    // Every key left out of the echo is vaulted as a credential (credentials/secret-fields.ts), so every setting that is
+    // not the token is echoed here.
     echo: (config) => {
         const link = LinkConfigSchema.parse(config);
         return {
             url: link.url,
             ...opt("name", link.name),
             ...opt("sandboxId", link.sandboxId),
-            ...opt("purpose", link.purpose),
             hasToken: link.token !== "",
         };
     },
