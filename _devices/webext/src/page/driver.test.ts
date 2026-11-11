@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { renderPage, toPageState } from "@intentic/browser/page";
-import { askConfirm } from "./overlay.js";
+import { askConfirm, OVERLAY_LOOK } from "./overlay.js";
 import { clickRef, collectPage, describeRef, fillRef, pinFocusedField, readPageText, selectRef, typeSecretInto, waitForText } from "./driver.js";
 
 // Tests the page walk against real DOM via jsdom, which is enough for the judgements that matter (what's clickable,
@@ -253,7 +253,7 @@ test("the question is not part of the page: a snapshot cannot list it, and the p
         document.addEventListener(type, listen, true);
     }
     try {
-        const answer = askConfirm(`Your agent wants to click "Remove". Allow it?`, 100);
+        const answer = askConfirm(`Your agent wants to click "Remove". Allow it?`, 100, "", OVERLAY_LOOK);
         const host = panel();
         expect(host?.tagName).toBe("DIV");
         expect(collectPage().elements.some((element) => element.name === "Allow" || element.name === "No")).toBe(false);
@@ -292,7 +292,7 @@ const askCaught = () => {
         add(type, listener, options);
     };
     try {
-        const answer = askConfirm(`Your agent wants to click "Remove". Allow it?`, 5_000);
+        const answer = askConfirm(`Your agent wants to click "Remove". Allow it?`, 5_000, "", OVERLAY_LOOK);
         const send = (event: Event): void => {
             for (const listener of caught) {
                 if ("handleEvent" in listener) {

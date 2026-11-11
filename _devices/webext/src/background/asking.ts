@@ -1,5 +1,5 @@
 import { within } from "@intentic/base/async";
-import { askConfirm, dismissConfirm } from "../page/overlay.js";
+import { askConfirm, dismissConfirm, OVERLAY_LOOK } from "../page/overlay.js";
 import { originPattern } from "./policy.js";
 import { type SandboxKey, store } from "./store.js";
 import { openPanel, refreshBadge } from "./tools/access.js";
@@ -58,7 +58,7 @@ export const askPerson = async (
         flash(hidden, true);
         await openPanel();
     }
-    const onPage = inject(tab.id, askConfirm, [question, timeoutMs, id]);
+    const onPage = inject(tab.id, askConfirm, [question, timeoutMs, id, OVERLAY_LOOK]);
     // allow(silent-catch): marks a page that went away after the popup answered as handled; the race below still sees it
     void onPage.catch(() => undefined);
     try {

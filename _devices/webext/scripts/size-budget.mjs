@@ -9,7 +9,8 @@ import { join } from "node:path";
 
 const BUDGETS = {
     // ~200 kB today: zod's runtime, @orpc's client/server, the page driver, the tools and Passwords' native port.
-    "background.js": 260_000,
+    // 2026-11-11: up 2 kB for the in-page overlays' stylesheet and mark (page/overlay.ts), the popup's own materials.
+    "background.js": 262_000,
     // Injected into every intentic.dev page, so it stays two constants and a listener. 374 bytes today.
     "pair-bridge.js": 4_000,
     // The popup's own script; it holds no schema surface. 20.6 kB on 2026-10-28, up from 16.9 kB, for the Sandboxes

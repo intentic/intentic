@@ -13,7 +13,7 @@ import {
     selectRef,
     waitForText,
 } from "../../page/driver.js";
-import { flashBanner } from "../../page/overlay.js";
+import { flashBanner, OVERLAY_LOOK } from "../../page/overlay.js";
 import { isAgentWindow, type Opened, openInAgentWindow, ownWindow } from "../agent-window.js";
 import { askPerson } from "../asking.js";
 import { APPROVAL_HOLD_MS, assertRunning, assertScope, needsConfirm, RefusedError } from "../policy.js";
@@ -43,7 +43,7 @@ export const inject = async <Args extends unknown[], Result>(tabId: number, func
 };
 
 export const announce = (tabId: number, message: string): void => {
-    void chrome.scripting.executeScript({ target: { tabId }, func: flashBanner, args: [message] }).catch(() => undefined);
+    void chrome.scripting.executeScript({ target: { tabId }, func: flashBanner, args: [message, OVERLAY_LOOK] }).catch(() => undefined);
 };
 
 // Renders the page via the shared vocabulary in @intentic/browser/page, so this browser and the sandbox's own read
