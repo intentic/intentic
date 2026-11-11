@@ -51,7 +51,7 @@ const choosesSection = computed(() => tiled.value.size > 0 && !homeOnly.value);
          bookmark, then the account, whose own top margin finds no room inside it. The sandbox's own tools flew into the
          bookmark with its sections (tools/RailTools.vue) and fly back out when the rail folds. -->
     <div v-else class="mt-auto flex flex-col items-center" style="gap: var(--icon-rail-gap)">
-        <div class="flex flex-col items-center empty:hidden"><RailSignals /></div>
+        <div class="flex flex-col items-center empty:hidden" style="gap: var(--icon-rail-gap)"><RailSignals /></div>
         <HomeSectionPicker v-if="choosesSection" />
         <AccountPanel />
     </div>

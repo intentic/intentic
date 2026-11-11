@@ -471,7 +471,7 @@ useGettingStarted();
                  sandbox's tools (the terminal and Browsers fixed, a standing state over them only while it holds), then the
                  account, an avatar opening its identity and actions. A tile arriving here moves nothing else on the rail. -->
             <div class="mt-auto flex flex-col items-center" style="gap: var(--icon-rail-gap)">
-                <div class="flex flex-col items-center">
+                <div class="flex flex-col items-center" style="gap: var(--icon-rail-gap)">
                     <RailSignals />
                     <RailTools />
                 </div>
