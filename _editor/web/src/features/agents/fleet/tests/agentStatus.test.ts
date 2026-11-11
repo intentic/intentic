@@ -232,7 +232,7 @@ describe("unfinishedMark", () => {
 
     it("names why, in the board's own words", () => {
         expect(unfinishedMark({ status: `running`, attention: none })?.label).toBe(`Still working`);
-        expect(unfinishedMark({ status: `running`, attention: { ...none, question: true } })?.label).toBe(`Question for you`);
+        expect(unfinishedMark({ status: `running`, attention: { ...none, question: true } })?.label).toBe(`Question`);
         expect(unfinishedMark({ status: `conflict`, attention: none })?.label).toBe(`Land conflict`);
         expect(unfinishedMark({ status: `error`, attention: none })?.label).toBe(`Error`);
         expect(unfinishedMark({ status: `interrupted`, attention: none })?.label).toBe(`Interrupted`);
@@ -472,13 +472,13 @@ describe("a spent allowance", () => {
 
     // Booked to go again at the reset, nothing is owed: counted as a call, it held the badge and the tab title up for
     // hours over a question the reader had already answered. Active, as an armed watch is, and the card keeps its
-    // "Usage limit" chip, so the stall is still in sight.
+    // "Limit" chip, so the stall is still in sight.
     it("leaves attention once a resend is booked at the reset", () => {
         const booked: AgentStanding = { status: `error`, attention: none, ...SHUT, next: { kind: `rerun`, at: SHUT.limitResetsAt * 1000 } };
         expect(blocked(booked)).toBe(false);
         expect(laneOf(booked)).toBe(`active`);
         expect(unfinishedMark(booked)?.label).toBe(`Resend booked`);
-        expect(attentionReason(booked)).toBe(`Usage limit`);
+        expect(attentionReason(booked)).toBe(`Limit`);
         expect(laneOf({ ...booked, awaitingWake: true })).toBe(`active`);
         // With nothing carrying it on, the same card is the reader's again.
         expect(laneOf({ ...booked, next: undefined })).toBe(`attention`);
@@ -496,14 +496,15 @@ describe("a spent allowance", () => {
     // The chip does the work: the card carries no other sentence about the wall, and both halves of the wait name the
     // same condition since the reader's question has the same answer either side of the reset.
     it("names the condition in the corner instead of calling it an error", () => {
-        expect(attentionReason({ status: `error`, attention: none, ...SHUT })).toBe(`Usage limit`);
-        expect(attentionReason({ status: `error`, attention: none, ...OPEN })).toBe(`Usage limit`);
+        expect(attentionReason({ status: `error`, attention: none, ...SHUT })).toBe(`Limit`);
+        expect(attentionReason({ status: `error`, attention: none, ...OPEN })).toBe(`Limit`);
     });
 
     // A layout constraint, not taste: the chip is shrink-0 beside a title that isn't, so every character it grows comes
-    // off the agent's own name. Pinned for this label only; longer siblings on the same chip are unmeasured.
+    // off the agent's own name. Pinned for these labels only; longer siblings on the same chip are unmeasured.
     it("keeps the chip short enough that the card can still say which agent it is", () => {
-        expect(attentionReason({ status: `error`, attention: none, ...SHUT })?.length).toBeLessThanOrEqual(12);
+        expect(attentionReason({ status: `error`, attention: none, ...SHUT })?.length).toBeLessThanOrEqual(5);
+        expect(attentionReason({ status: `running`, attention: { ...none, question: true } })?.length).toBeLessThanOrEqual(8);
     });
 
     // "View error" points at a transcript ending in a polite refusal; there's nothing to diagnose, so the label names
@@ -545,12 +546,12 @@ describe("a spent allowance", () => {
         const in40 = NOW + 40 * 60 * 1000;
         const soon: AgentStanding = { status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: in40 / 1000 };
         expect(selfStart(soon, NOW)?.text).toBe(`back in 40m`);
-        expect(selfStart({ ...soon, next: { kind: `rerun`, at: in40 } }, NOW)?.text).toBe(`resends in 40m`);
+        expect(selfStart({ ...soon, next: { kind: `rerun`, at: in40 } }, NOW)?.text).toBe(`in 40m`);
         // The instant it states is the re-run's own, which waits behind a still-spent account past the reset.
-        expect(selfStart({ ...soon, next: { kind: `rerun`, at: NOW + 4 * 60 * 60 * 1000 } }, NOW)?.text).toMatch(/^resends (?:\S.* )?\d{2}:\d{2}$/u);
+        expect(selfStart({ ...soon, next: { kind: `rerun`, at: NOW + 4 * 60 * 60 * 1000 } }, NOW)?.text).toMatch(/^(?:\S.* )?\d{2}:\d{2}$/u);
         // Past its instant a booked resend goes on the pass's next beat: said so, not dropped for a date that makes a
         // card resting in Active look stuck.
-        expect(selfStart({ status: `error`, attention: none, ...OPEN, next: { kind: `rerun`, at: NOW - 1_000 } }, NOW)?.text).toBe(`resends in a moment`);
+        expect(selfStart({ status: `error`, attention: none, ...OPEN, next: { kind: `rerun`, at: NOW - 1_000 } }, NOW)?.text).toBe(`in a moment`);
         expect(selfStart({ ...soon, next: { kind: `rerun`, at: NOW, onto: `Work` } }, NOW)).toEqual({ kind: `moving`, account: `Work`, text: `moving to Work` });
     });
 
@@ -1044,7 +1045,7 @@ describe("a failure the daemon classified", () => {
 
     // An ask outranks the failure it rides on, as it outranks every ending: the ask is what the card's presses answer.
     it("gives the corner to an ask over the failure", () => {
-        expect(attentionReason({ ...failed(`provider-outage`), attention: { ...none, question: true } })).toBe(`Question for you`);
+        expect(attentionReason({ ...failed(`provider-outage`), attention: { ...none, question: true } })).toBe(`Question`);
     });
 
     // The way on for a refusal is a choice the conversation offers (another account or model, sending again): the chat,
@@ -1055,7 +1056,7 @@ describe("a failure the daemon classified", () => {
         expect(reviewAction({ ...failed(`claude-not-entitled`), ...branch })).toBe(`Open chat`);
         expect(drillTarget(failed(`claude-not-entitled`))).toBe(`chat`);
         expect(drillTarget(failed(`provider-outage`))).toBe(`chat`);
-        expect(reviewAction({ ...failed(`turn-cap`), ...branch })).toBe(`See where it stopped`);
+        expect(reviewAction({ ...failed(`turn-cap`), ...branch })).toBe(`Where it stopped`);
         expect(drillTarget(failed(`turn-cap`))).toBe(`chat`);
         expect(reviewAction({ ...failed(undefined), ...branch })).toBe(`View error`);
         expect(drillTarget(failed(undefined))).toBe(`chat`);

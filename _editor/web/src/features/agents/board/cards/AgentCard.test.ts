@@ -943,7 +943,9 @@ it(`offers Send again once the window is open or no reset is known`, () => {
 it(`offers no Send again once a resend is booked, and says when it goes`, () => {
     const card = mount(resends(stranded()));
     expect(resendButton(card)).toBeUndefined();
-    expect(card.textContent).toContain(`resends in 40m`);
+    // The time alone, beside the card's own Send again glyph: "back in" would be a limit nothing is booked for.
+    expect(card.textContent).toContain(`in 40m`);
+    expect(card.textContent).not.toContain(`back in`);
 });
 
 // A booked move goes on the resume pass's next beat, so the refused account's reset is not when anything happens.
@@ -951,7 +953,7 @@ it(`names where a booked move is taking the turn, not the refused account's rese
     const card = mount(stranded({ next: { kind: `rerun`, at: Date.now(), onto: `Work` } }));
     expect(resendButton(card)).toBeUndefined();
     expect(card.textContent).toContain(`moving to Work`);
-    expect(card.textContent).not.toContain(`resends in`);
+    expect(card.textContent).not.toContain(`in a moment`);
 });
 
 // Every press waits for a restore in the archive, and another sandbox's turn is not this daemon's to resend: the seat
@@ -968,7 +970,7 @@ it(`withholds Send again in the archive and on another sandbox's card`, () => {
 // ONE CLOCK PER CORNER. A watch firing into a shut window runs nothing, so the reset is the next moment the card moves.
 it(`keeps the limit's clock over a watch's, the watch's coming back once the limit has had its say`, () => {
     const card = mount(watching(resends(stranded())));
-    expect(card.textContent).toContain(`resends in 40m`);
+    expect(card.textContent).toContain(`in 40m`);
     expect(card.textContent).not.toContain(`pnpm verify gate`);
 });
 

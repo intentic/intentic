@@ -150,7 +150,7 @@ it(`gives each row's corner one reading: the word when there is one, the glyph w
     expect(perStanding((key) => cornerOf(rowOf(el, key), key))).toEqual({
         // A stopped turn and a spent allowance name themselves; the triangle that stood here said neither.
         halted: { word: `Stopped`, glyph: undefined },
-        spent: { word: `Usage limit`, glyph: undefined },
+        spent: { word: `Limit`, glyph: undefined },
         // Nothing is owed, but the card worked since it was last opened, which is the corner's second-rank word.
         worked: { word: `Updated`, glyph: undefined },
         // Nothing to say: the corner goes back to the resting glyph, as it always was.
@@ -170,6 +170,6 @@ it(`reads every standing exactly as the board's own card reads it, word and tone
     // Stated, not merely matched: a spent allowance is the quiet one (it needs a person, but nothing is wrong and
     // nothing is lost), and the two surfaces used to disagree about exactly that.
     expect(rail.halted).toEqual({ label: `Stopped`, tone: expect.stringContaining(`text-warning`) });
-    expect(rail.spent).toEqual({ label: `Usage limit`, tone: expect.stringContaining(`text-muted`) });
+    expect(rail.spent).toEqual({ label: `Limit`, tone: expect.stringContaining(`text-muted`) });
     expect(rail.worked).toEqual({ label: `Updated`, tone: expect.stringContaining(`text-link`) });
 });

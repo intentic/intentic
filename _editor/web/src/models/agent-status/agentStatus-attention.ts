@@ -20,7 +20,8 @@ import {
 // One table for the chip word and drill-in verb per attention flag, in display rank order, so the two can't drift
 // apart as they did before. `satisfies Record<keyof AgentAttention, …>` makes a new wire flag a build error until
 // both words exist. Kept short: the chip is `shrink-0` beside the title, so every character taken grows at the
-// agent name's expense.
+// agent name's expense; and the verb sits in the closing row's reading, which never shrinks (AgentCard's `min-w-max`),
+// so a verb opens on what it shows ("What it needs →"), the arrow already saying "see".
 const attentionWords = () =>
     ({
         plan: { chip: t(`agents.agentStatus.approvalNeeded`), verb: t(`agents.agentStatus.reviewPlan`) },
@@ -35,6 +36,8 @@ const attentionWords = () =>
         // Something the agent asked a person for that outlives the turn (a connection, a secret, reach, a tool): ranked
         // with a setup, since it is one, and worded for what the reader does, which is answer it where it is drawn.
         need: { chip: t(`agents.agentStatus.needsYou`), verb: t(`agents.agentStatus.seeWhatItNeeds`) },
+        // "Question" alone, as "Permission" below: "Question for you" pushed a lane-width title onto a second line, and the
+        // Answer press beside it already says whose it is. The chat's waiting bar, which has the room, keeps it whole.
         question: { chip: t(`agents.agentStatus.question`), verb: t(`ui.action.answer`) },
         // Ranked last, the most routine and cheapest park to clear: a plan, a spend or a setup wants reading first. Chip
         // reads "Permission" alone, not "Approval needed" (a plan's word) or "Permission needed" (too long at the card's
@@ -72,11 +75,12 @@ export const editsRefusal = (agent: AgentStanding): boolean =>
 // The one-line "why this card needs you" label, shared by the card chip, the Changes legend's hover card, and any
 // future toast.
 export const attentionReason = (agent: AgentStanding): string | undefined => {
-    // "Usage limit": the vendor's own phrase, not "allowance" which reads as jargon. Naming the condition here is the
-    // whole fix; the card's body is left to say what the card is rather than what happened to it. Short, since the
-    // chip is `shrink-0` beside the agent's name.
+    // "Limit": the vendor's own word, not "allowance" which reads as jargon. Naming the condition here is the whole fix;
+    // the card's body is left to say what the card is rather than what happened to it. One word, since the chip is
+    // `shrink-0` beside the agent's name and every letter it takes comes out of the title; the hovers that have room
+    // say "Usage limit" whole.
     if (limited(agent)) {
-        return t(`agents.agentStatus.usageLimit`);
+        return t(`agents.agentStatus.limit`);
     }
     // Held, not failed: the chip is the word the reader acts on ("send anyway"), and "error" sent people hunting a fault.
     // Once something carries it on (sent when memory frees, or booked for later) the hold is answered, and the corner

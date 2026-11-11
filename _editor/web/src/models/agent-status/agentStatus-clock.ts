@@ -48,7 +48,7 @@ export const limitBack = (clock: LimitClock): string =>
  * WHEN A CARD GOES AGAIN BY ITSELF, read off the one thing that says so: the card's `next` (agent-next.ts), which the
  * sandbox derives from what the conversation holds by the rules its movers act by, so this corner, the lane and the chat
  * cannot disagree about whether or when. The chip beside the title says why it waits (Usage limit, Memory low,
- * Scheduled); this corner, in the date's seat, says what goes and when: a held turn's re-run ("resends 02:00") or move
+ * Scheduled); this corner, in the date's seat, says what goes and when: a held turn's re-run ("⟳ 02:00") or move
  * ("moving to …"), a memory hold's send once memory frees, messages booked for a time or another agent's land. Nothing
  * carries it on: a spent allowance's corner says when it is back, for the press the card still owes.
  */
@@ -64,16 +64,18 @@ const CORNER_TITLE = 24;
 const cornerTitle = (title: string): string => (title.length > CORNER_TITLE ? `${title.slice(0, CORNER_TITLE - 1).trimEnd()}…` : title);
 
 // A held turn's re-run: where a move takes it, else when it goes, "in a moment" once that instant has passed (the pass
-// lets it go on its next beat).
+// lets it go on its next beat). A resend's text is its time alone ("in 62m", "02:00"): the corner draws it beside the
+// card's own Send again glyph (AgentCardClock), which says "resends" in the room "resends " took from a tight card, and
+// its hover names it.
 const rerunCorner = (next: Extract<AgentNext, { kind: `rerun` }>, now: number): SelfStart => {
     if (next.onto !== undefined) {
         return { kind: `moving`, account: next.onto, text: t(`agents.agentCard.movingTo`, { account: next.onto }) };
     }
     const clock = countdownTo(next.at, now);
     if (clock === undefined) {
-        return { kind: `resend`, text: t(`agents.agentCard.resendsShortly`) };
+        return { kind: `resend`, text: t(`agents.agentCard.shortly`) };
     }
-    return { kind: `resend`, clock, text: clock.wait ? t(`agents.agentCard.resendsIn`, { limitBackAt: clock.text }) : t(`agents.agentCard.resends`, { limitBackAt: clock.text }) };
+    return { kind: `resend`, clock, text: clock.wait ? t(`agents.agentCard.inWait`, { wait: clock.text }) : clock.text };
 };
 
 // Messages booked for later, in the resend's grammar: "sends in 12m", "sends 14:05", "sends after <agent> lands", and

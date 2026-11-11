@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { Button, useDevice } from "@intentic/ui";
+import { Button, type IconName, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { computed } from "vue";
+import type { SelfStart } from "../../../../models/agent-status/agentStatus-clock";
 import type { CardClock } from "./cardClock";
 
 // An agent card's closing-row "when": a watch, when it goes again by itself (a limit's resend, a message held for memory
@@ -23,14 +25,20 @@ const emit = defineEmits<{
 const t = useT();
 const { mobile } = useDevice();
 const { shown, goesTip, warm, warmTip, cooling, coolingTip, watch, prompt, stopsCommand } = clock;
+
+// The glyph says what goes, where the card has a glyph for it, so the words can be only when: a resend wears the card's
+// own Send again glyph ("⟳ in 62m", agentStatus-clock's rerunCorner), a move the arrow its "Moved to" line wears.
+// Everything else counts on a clock, its verb in its words ("back in 27m", "sends 14:05").
+const GLYPHS = { resend: `refresh`, moving: `arrow-right`, back: `clock`, room: `clock`, send: `clock` } as const satisfies Record<SelfStart[`kind`], IconName>;
+const glyph = computed(() => GLYPHS[shown.value?.kind ?? `back`]);
 </script>
 
 <template>
-    <!-- Takes the date's slot: "resends 02:00", "sends in 12m", "back in 27m" tell the reader something to plan around, unlike "last active". -->
+    <!-- Takes the date's slot: "⟳ in 62m", "sends in 12m", "back in 27m" tell the reader something to plan around, unlike "last active". -->
     <!-- Capped, since the row floors its reading at its whole width (AgentCard's `min-w-max`): "sends after <a title> lands"
          ran past the card's edge, and from the right-hand lane that scrolled the whole board sideways. The hover says it whole. -->
     <span v-if="shown !== undefined" class="inline-flex shrink-0 items-center gap-1" v-tooltip.top="goesTip">
-        <Icon name="clock" class="shrink-0 text-2xs" />
+        <Icon :name="glyph" class="shrink-0 text-2xs" />
         <span class="max-w-60 truncate tabular-nums">{{ shown.text }}</span>
     </span>
     <!-- A hold on the cache, running or stopped early: the corner says until when, or since when it went cold. -->
