@@ -401,7 +401,7 @@ export const bashTmuxHooks = (
                         // reference-form `command`.
                         let executed = command;
                         if (secrets !== undefined) {
-                            const resolved = await resolveCommandSecrets(command, secrets);
+                            const resolved = await resolveCommandSecrets(command, secrets, "shell", "Bash", runRootFor(isolation));
                             if ("refusal" in resolved) {
                                 return {
                                     hookSpecificOutput: {

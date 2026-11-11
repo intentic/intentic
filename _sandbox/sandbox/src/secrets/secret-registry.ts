@@ -35,15 +35,19 @@ export interface ResolvedReferences {
     readonly used: readonly string[];
     // Names shaped like a reference but unmatched; callers fail hard rather than leave a literal token in config.
     readonly unknown: readonly string[];
+    // Names asked for as a file (`|file`) where no file can be written; callers refuse rather than run the token.
+    readonly fileless: readonly string[];
 }
 
 // Replaces every known `{{secret:name}}` token with its value, textually, so it survives wherever it sits (a quoted
-// JSON body, an env assignment, a URL) that an env-var indirection would not.
-export const resolveSecretReferences = (text: string, secrets: readonly NamedSecret[]): ResolvedReferences => {
+// JSON body, an env assignment, a URL) that an env-var indirection would not. A token with `|file` becomes the path
+// `toFile` wrote the value to instead; without `toFile` it is left as it is and named in `fileless`.
+export const resolveSecretReferences = (text: string, secrets: readonly NamedSecret[], toFile?: (value: string) => string): ResolvedReferences => {
     const byName = new Map(secrets.map((secret) => [secret.name, secret.value]));
     const used: string[] = [];
     const unknown: string[] = [];
-    const resolved = text.replace(REFERENCES, (token, name: string) => {
+    const fileless: string[] = [];
+    const resolved = text.replace(REFERENCES, (token, name: string, file: string | undefined) => {
         const value = byName.get(name);
         if (value === undefined) {
             if (!unknown.includes(name)) {
@@ -51,12 +55,18 @@ export const resolveSecretReferences = (text: string, secrets: readonly NamedSec
             }
             return token;
         }
+        if (file !== undefined && toFile === undefined) {
+            if (!fileless.includes(name)) {
+                fileless.push(name);
+            }
+            return token;
+        }
         if (!used.includes(name)) {
             used.push(name);
         }
-        return value;
+        return file !== undefined && toFile !== undefined ? toFile(value) : value;
     });
-    return { text: resolved, used, unknown };
+    return { text: resolved, used, unknown, fileless };
 };
 
 // Every name a reference in `text` carries, in order of first appearance, whatever holds it.

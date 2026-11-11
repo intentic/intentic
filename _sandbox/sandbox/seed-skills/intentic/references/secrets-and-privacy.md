@@ -8,7 +8,13 @@ unknown name fails and lists the names that exist. In a file you write, keep the
 
 - **One nobody has stored**: `secrets ask NAME --why "…"` puts a masked field on a card in the chat, and the answer
   comes back once it is stored (`--link` where to get one, `--hint` what it looks like, `--replace` for a stored one
-  being refused, `--where` how it will be used). Never a request to paste it into chat.
+  being refused, `--where` how it will be used, `--multiline` for a key file or a whole `.env`, kept exactly as pasted).
+  Never a request to paste it into chat.
+- **A value with lines or quotes** (an SSH key, a `.env`): write `{{secret:name|file}}` instead. It becomes the path of a
+  private file holding the value byte for byte, so nothing in the value can change the command:
+  `--env-file {{secret:name|file}}`, `set -a; . {{secret:name|file}}; set +a`, `cp {{secret:name|file}} dev.env`. The
+  file is removed 15 minutes later; gates and host guards treat it as they treat the plain reference. Only the shell
+  tools and the code tool hand one over.
 - **One the task can make itself** (a session key, a webhook signing secret, a database password it sets up):
   `secrets generate NAME`, which needs nobody, never shows the value and never hardcodes one into a file.
 - **A password for a PLACE whose name you do not know** is asked for by need: `secrets want --site github.com` (or

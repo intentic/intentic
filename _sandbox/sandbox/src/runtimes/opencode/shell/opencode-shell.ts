@@ -110,7 +110,7 @@ const paneArgv = (pane: ShellPane, said: string, executed: string, runRoot: stri
 
 export const shellRouteOf = (options: ShellRouteOptions): ShellRoute => ({
     prepare: async ({ command }) => {
-        const resolved = options.secrets === undefined ? { command } : await resolveCommandSecrets(command, options.secrets, "shell", "shell");
+        const resolved = options.secrets === undefined ? { command } : await resolveCommandSecrets(command, options.secrets, "shell", "shell", options.runRoot ?? tmpdir());
         if ("refusal" in resolved) {
             return { refused: `Not run: ${resolved.refusal}` };
         }

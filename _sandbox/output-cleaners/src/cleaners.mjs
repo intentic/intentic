@@ -7,7 +7,7 @@ import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync 
 import { basename, dirname, join } from "node:path";
 import * as util from "node:util";
 
-import { bodyBytes, invocation } from "./cleaner-shapes.mjs";
+import { bodyBytes, invocation, multilineParts } from "./cleaner-shapes.mjs";
 import { dedupeRuns, elideWideRuns } from "./repeated-output.mjs";
 import { foldLogTemplates } from "./log-templates.mjs";
 import { compactJsonArrays } from "./json-arrays.mjs";
@@ -264,7 +264,7 @@ const looksLikeCredential = (value) =>
 // A `{{secret:name}}` reference, capturing the name: the alphabet every store below names a value with (env keys,
 // `<id>/<field>`). The contract's SECRET_REFERENCE is the same pattern, pinned to this one by the daemon's parity test.
 // Not global, so it carries no `lastIndex` between callers.
-export const SECRET_REFERENCE = /\{\{secret:([A-Za-z0-9_./-]+)\}\}/;
+export const SECRET_REFERENCE = /\{\{secret:([A-Za-z0-9_./-]+)(?:\|(file))?\}\}/;
 // Double braces, not a value-lookalike, since substitution must be exact-match; a key-shaped token invites a model to
 // "fix" it or reason about its length. The daemon's tool-result masking re-exports this one.
 export const secretReference = (name) => `{{secret:${name}}}`;
@@ -313,6 +313,7 @@ const maskKeyBlocks = (text) =>
 // value masks per line to the anonymous mask instead, since a reference stands for the whole value. Below this length a
 // value is not distinctive enough to blank safely; the daemon's tool-result masking uses the same floor.
 export const SECRET_VALUE_MIN = 12;
+export { multilineParts };
 
 // Every store a stored secret value lives in, in the order a name two of them hold resolves. The daemon's registry
 // (src/secrets/secret-registry.ts) walks this same list, so the terminal cannot miss a store the tools mask. `root` is
@@ -483,10 +484,8 @@ const harvest = (text, layout) => {
         for (const form of surfaceForms(value.trim())) {
             add(form, secretReference(name));
         }
-        if (value.includes("\n")) {
-            for (const line of value.split("\n")) {
-                add(line, "***");
-            }
+        for (const part of multilineParts(value)) {
+            add(part, "***");
         }
     }
     // Longest first, so a value that contains another is masked whole rather than leaving its tail behind.

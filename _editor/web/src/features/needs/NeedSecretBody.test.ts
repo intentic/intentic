@@ -30,14 +30,14 @@ jest.mock(`../../workbench/notifications/notifications`, () => ({ useNotificatio
 // The masked field is its own component with its own suite; here it is only somewhere to type.
 jest.mock(`../../parts/capabilities/SecretField.vue`, () => ({
     default: defineComponent({
-        props: { modelValue: { type: String, default: `` } },
+        props: { modelValue: { type: String, default: `` }, multiline: Boolean },
         emits: [`update:modelValue`],
         setup: (props, { emit }) => () =>
-            h(`input`, {
-                type: `password`,
+            h(props.multiline ? `textarea` : `input`, {
+                type: props.multiline ? undefined : `password`,
                 value: props.modelValue,
                 onInput: (event: Event) => {
-                    if (event.target instanceof HTMLInputElement) {
+                    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
                         emit(`update:modelValue`, event.target.value);
                     }
                 },
@@ -56,16 +56,16 @@ const { default: NeedSecretBody } = await import("./NeedSecretBody.vue");
 const SUBJECT: SecretNeed = { kind: `secret`, name: `VPN_PASSWORD` };
 const NEED: Need = { id: `need-1`, conversationId: `c-1`, title: `VPN password`, subject: SUBJECT, status: `open`, createdAt: 1, updatedAt: 1 };
 
-const mount = () => {
+const mount = (subject: SecretNeed = SUBJECT) => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    const app = createApp({ render: () => h(NeedSecretBody, { need: NEED, subject: SUBJECT }) });
+    const app = createApp({ render: () => h(NeedSecretBody, { need: { ...NEED, subject }, subject }) });
     app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     const typeValue = async (text: string): Promise<void> => {
-        const input = el.querySelector<HTMLInputElement>(`input[type="password"]`);
+        const input = el.querySelector<HTMLInputElement | HTMLTextAreaElement>(`input[type="password"], textarea`);
         if (input === null) {
             throw new Error(`no value field on the card`);
         }
@@ -117,6 +117,29 @@ it("saves from Enter in the field, Ctrl+Enter included, since no form surrounds 
     field?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, ctrlKey: true, bubbles: true, cancelable: true }));
     await nextTick();
     expect(provideSecret.mutateAsync).toHaveBeenCalledWith({ id: `need-1`, value: `hunter2`, keepOn: undefined });
+    done();
+});
+
+it("trims a single-line value, since a paste drags whitespace along", async () => {
+    const { typeValue, press, done } = mount();
+    await typeValue(`  hunter2\n`);
+    await press(`Save`);
+    expect(provideSecret.mutateAsync).toHaveBeenCalledWith({ id: `need-1`, value: `hunter2`, keepOn: undefined });
+    done();
+});
+
+it("keeps a multi-line value exactly, and saves it only from Ctrl+Enter, leaving Enter to break its lines", async () => {
+    const env = `# dev\nAPI_KEY='abc def'\nDB_URL=postgres://u:p@h/db\n`;
+    const { el, typeValue, done } = mount({ kind: `secret`, name: `DEV_ENV`, multiline: true });
+    await typeValue(env);
+    const field = el.querySelector<HTMLTextAreaElement>(`textarea`);
+    expect(field).not.toBeNull();
+    field?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true, cancelable: true }));
+    await nextTick();
+    expect(provideSecret.mutateAsync).not.toHaveBeenCalled();
+    field?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, ctrlKey: true, bubbles: true, cancelable: true }));
+    await nextTick();
+    expect(provideSecret.mutateAsync).toHaveBeenCalledWith({ id: `need-1`, value: env, keepOn: undefined });
     done();
 });
 

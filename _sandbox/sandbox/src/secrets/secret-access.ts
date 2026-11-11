@@ -1,5 +1,14 @@
+import { errorMessage } from "@intentic/base/errors";
+import { SECRET_REFERENCE } from "@intentic/sandbox-contract/schemas/needs";
 import { hasSecretReferences, type NamedSecret, referencedNames, resolveSecretReferences } from "./secret-registry.js";
+import { writeSecretFile } from "./secret-files.js";
 import { DETAIL_MAX } from "./secret-uses.js";
+
+// A `|file` reference anywhere in a text (`{{secret:NAME|file}}`): the second capture of the contract's pattern.
+const hasFileReferences = (text: string): boolean => [...text.matchAll(new RegExp(SECRET_REFERENCE.source, "g"))].some((match) => match[2] !== undefined);
+
+const FILELESS_REFUSAL =
+    "this tool cannot hand a secret over as a file (`|file`): run the command in the Bash tool, where the reference becomes the path of a private file holding the value, or use the plain reference";
 
 // The only place a `{{secret:name}}` reference becomes its real value, after the permission card and command gate have
 // already seen the reference-form line. Not wired into Edit/Write: a file at rest keeps the reference, never the value.
@@ -116,15 +125,20 @@ const fetchDeviceValues = async (
 // the token through. In this order, so nothing is asked of anybody for a use that cannot happen and no value exists
 // before the gates said yes: every name known, then the gates (named approvers, the host guard), then each value a
 // computer's keyring holds, then the substitution. `lane` and `tool` exist because the JS execution backend is a second
-// caller, resolving into its own subprocess.
+// caller, resolving into its own subprocess. `fileRoot` is where a `|file` reference's value may be written for the
+// command's process to read (writeSecretFile); a caller that cannot name one has every such reference refused.
 export const resolveCommandSecrets = async (
     command: string,
     secrets: SecretAccess,
     lane: "shell" | "code" = "shell",
     tool = "Bash",
+    fileRoot?: string,
 ): Promise<ResolvedCommand> => {
     if (!hasSecretReferences(command)) {
         return { command };
+    }
+    if (fileRoot === undefined && hasFileReferences(command)) {
+        return { refusal: FILELESS_REFUSAL };
     }
     const holdings = await holdingsOf(secrets);
     if (holdings === undefined) {
@@ -157,7 +171,12 @@ export const resolveCommandSecrets = async (
         }
         fetched = asked.values;
     }
-    const { text } = resolveSecretReferences(command, [...holdings.held, ...fetched]);
+    let text: string;
+    try {
+        ({ text } = resolveSecretReferences(command, [...holdings.held, ...fetched], fileRoot === undefined ? undefined : (value) => writeSecretFile(fileRoot, value)));
+    } catch (error) {
+        return { refusal: `a secret's file could not be written, so the command was not run: ${errorMessage(error)}` };
+    }
     for (const name of names) {
         const approvedBy = released.approvedBy?.[name];
         secrets.used({ name, lane, detail, ...(approvedBy !== undefined ? { approvedBy } : {}) });

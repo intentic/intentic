@@ -69,8 +69,10 @@ const facts = computed<CardFact[]>(() => [
 ]);
 
 const save = async (): Promise<void> => {
-    const given = value.value.trim();
-    if (given === `` || busy.value) {
+    // A value asked for with lines (a key file, a .env) is kept exactly, trailing newline included; a single line loses
+    // the whitespace a paste drags along.
+    const given = props.subject.multiline === true ? value.value : value.value.trim();
+    if (given.trim() === `` || busy.value) {
         return;
     }
     // Out of the field at the press: the value goes to the store and nowhere else, taken or not.
@@ -90,9 +92,13 @@ const save = async (): Promise<void> => {
     }
 };
 
-// The field only collects (`collect`), and no form surrounds it here to submit: Enter in it, Ctrl+Enter included, is this
-// card's Save. Only from the field itself, so Enter on its show/hide toggle still just toggles.
+// The field only collects (`collect`), and no form surrounds it here to submit: Enter in it is this card's Save. Only from
+// the field itself, so Enter on its show/hide toggle still just toggles. A box with lines keeps plain Enter for its line
+// breaks and saves on Ctrl+Enter (⌘+Enter), as SecretField's own does.
 const onFieldEnter = (event: KeyboardEvent): void => {
+    if (event.target instanceof HTMLTextAreaElement && !event.ctrlKey && !event.metaKey) {
+        return;
+    }
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         event.preventDefault();
         void save();
@@ -113,7 +119,7 @@ const storedElsewhere = async (): Promise<void> => {
         <a v-if="subject.link" :href="subject.link" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-2xs text-link">
             <Icon name="external-link" />{{ t(`needs.secret.getOne`) }}
         </a>
-        <SecretField v-model="value" :secret-key="subject.name" collect no-hint @keydown.enter="onFieldEnter" />
+        <SecretField v-model="value" :secret-key="subject.name" :multiline="subject.multiline === true" collect no-hint @keydown.enter="onFieldEnter" />
 
         <!-- Where it is kept, once there is a choice: a keyring on one of the owner's computers answers now. -->
         <div v-if="online.length > 0" class="flex flex-col gap-1.5" data-keep-on>

@@ -45,6 +45,15 @@ describe("secret need", () => {
         });
     });
 
+    it("asks for a value with lines in a box with lines, keeps it exactly, and points the agent at the file form", async () => {
+        const { kind, kept } = harness();
+        const answer = await kind.resolve({ kind: "secret", name: "DEV_ENV", multiline: true }, context);
+        expect(answer).toEqual({ kind: "raise", title: "The DEV_ENV secret", subject: { kind: "secret", name: "DEV_ENV", multiline: true } });
+        const met = await kind.provide(needOf({ kind: "secret", name: "DEV_ENV", multiline: true }), "A=1\nB='two words'\n");
+        expect(kept).toEqual([{ name: "DEV_ENV", value: "A=1\nB='two words'\n" }]);
+        expect(met.use.join(" ")).toContain("{{secret:DEV_ENV|file}}");
+    });
+
     it("raises a card for a missing one, carrying where it goes, where to get one and what it looks like", async () => {
         const { kind } = harness();
         const answer = await kind.resolve(

@@ -77,6 +77,13 @@ test("a multi-line credential is masked line by line, to the anonymous mask", as
     expect(shown(await fire(held(named("host/sshKey", key)), "Read", result), result)).toEqual({ content: "key: *** and ***" });
 });
 
+test("a whole .env kept as one secret masks each value printed on its own, without its key or quotes", async () => {
+    // What `set -a; . file; set +a` then `echo "$API_KEY"` prints: the value alone, which no line of the block equals.
+    const env = "# dev\nAPI_KEY='sk-live-abcdef123456'\nDB_URL=\"postgres://user:pa55w0rd-long@db/app\"\n";
+    const result = "key=sk-live-abcdef123456 url=postgres://user:pa55w0rd-long@db/app";
+    expect(shown(await fire(held(named("DEV_ENV", env)), "Bash", result), result)).toBe("key=*** url=***");
+});
+
 test("a multi-line credential appearing WHOLE masks to its reference", async () => {
     const key = "line-one-aaaaaaaaaa\nline-two-bbbbbbbbbb";
     const result = `conf:\n${key}\nend`;

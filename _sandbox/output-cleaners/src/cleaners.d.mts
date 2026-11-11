@@ -43,6 +43,9 @@ export const secretReference: (name: string) => string;
 // The shortest stored value masked by value; shorter ones are not distinctive enough to blank.
 export const SECRET_VALUE_MIN: number;
 
+// What of a multi-line value masks on its own: each line, and each entry's value where it reads as a dotenv.
+export const multilineParts: (value: string) => string[];
+
 // One store a secret value lives in: which root it sits under, its path there, how it lays out its values, and what the
 // daemon's registry records a value from it as.
 export interface SecretStore {

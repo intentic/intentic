@@ -20,10 +20,15 @@ export interface SecretNeedDeps {
 
 // How the agent spends it, honestly per runtime: a loop whose shell fills a reference in at execution (the Claude Code
 // loop; Codex, Cursor and Pi through their hooks) is told to write one; any other is told it won't be filled.
-const useOf = (name: string, context: Pick<AskContext, "standing"> | undefined): string[] =>
+// A value with lines is told the file form first: spliced into a command, its newlines and quotes would change it.
+const useOf = (name: string, context: Pick<AskContext, "standing"> | undefined, multiline = false): string[] =>
     context?.standing !== undefined && context.standing.secrets === "none"
         ? [`This conversation's runtime does not fill in {{secret:…}} references, so the value is there for a Claude Code turn and for connections that read it, not for this shell.`]
-        : [`Write {{secret:${name}}} where the value goes (a command, a header, an env assignment): the sandbox fills it in at execution, and it never appears in what you read.`];
+        : multiline
+          ? [
+                `It has lines, so write {{secret:${name}|file}} where a file goes: the sandbox turns it into the path of a private file holding the value exactly (\`--env-file {{secret:${name}|file}}\`, \`set -a; . {{secret:${name}|file}}; set +a\`, \`cp {{secret:${name}|file}} <path>\`), and the value never appears in what you read.`,
+            ]
+          : [`Write {{secret:${name}}} where the value goes (a command, a header, an env assignment): the sandbox fills it in at execution, and it never appears in what you read.`];
 
 const titleOf = (subject: SecretNeed): string => (subject.replace === true ? `A new value for ${subject.name}` : `The ${subject.name} secret`);
 
@@ -50,7 +55,7 @@ export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly p
                 kind: "met",
                 message: [
                     `${ask.name} is already stored.`,
-                    ...useOf(ask.name, context),
+                    ...useOf(ask.name, context, ask.multiline === true),
                     "If the service refuses it, ask again with --replace.",
                 ].join(" "),
             };
@@ -63,6 +68,9 @@ export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly p
             ...(ask.hint === undefined ? {} : { hint: ask.hint }),
             ...(ask.replace === true ? { replace: true } : {}),
         };
+        if (ask.multiline === true) {
+            subject.multiline = true;
+        }
         return { kind: "raise", subject, title: titleOf(subject) };
     };
 
@@ -76,7 +84,7 @@ export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly p
             if (subject === undefined || subject.replace === true || !(await stored(subject.name))) {
                 return undefined;
             }
-            return { result: `${subject.name} is stored.`, use: useOf(subject.name, undefined) };
+            return { result: `${subject.name} is stored.`, use: useOf(subject.name, undefined, subject.multiline === true) };
         },
         answer: async (need, answer) => {
             const subject = subjectOf(need);
@@ -88,7 +96,7 @@ export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly p
             }
             // Stored some other way (the Secrets view, a deploy): the person says so, and the store has to agree.
             if (answer.kind === "apply" && (await stored(subject.name))) {
-                return { status: "met", result: `${subject.name} is stored.`, use: useOf(subject.name, undefined) };
+                return { status: "met", result: `${subject.name} is stored.`, use: useOf(subject.name, undefined, subject.multiline === true) };
             }
             return { refused: `${subject.name} is not stored yet: paste its value into the card, or add it on the Secrets view.` };
         },
@@ -104,7 +112,7 @@ export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly p
                 return keptOnWords(subject, keepOn, (await deps.keepOn(subject.name, value, keepOn)).pending);
             }
             await deps.keep(subject.name, value);
-            return { result: `${subject.name} is stored${subject.replace === true ? ", in place of the value that was refused" : ""}.`, use: useOf(subject.name, undefined) };
+            return { result: `${subject.name} is stored${subject.replace === true ? ", in place of the value that was refused" : ""}.`, use: useOf(subject.name, undefined, subject.multiline === true) };
         },
         nextTurn: () => false,
         key: (subject: NeedSubject) => (subject.kind === "secret" ? subject.name : ""),

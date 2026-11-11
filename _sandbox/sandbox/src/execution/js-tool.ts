@@ -1,10 +1,11 @@
+import { tmpdir } from "node:os";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../engines/claude-sdk.js";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { JS_SERVER_NAME, JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { resolveCommandSecrets, type SecretAccess } from "../secrets/secret-access.js";
-import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
+import { handoffDirOf, type TurnPlacement } from "../conversations/worktrees/isolation.js";
 import type { GuardOutcome } from "../guard/command-guard.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S, type JsExecutionPlan, type JsRunResult, runJs } from "./js-runtime.js";
 
@@ -97,7 +98,7 @@ export const runJsTool = async (deps: JsToolDeps, args: { code: string; timeoutS
     }
     let code = args.code;
     if (deps.secrets !== undefined) {
-        const resolved = await resolveCommandSecrets(args.code, deps.secrets, "code", JS_TOOL_NAME);
+        const resolved = await resolveCommandSecrets(args.code, deps.secrets, "code", JS_TOOL_NAME, handoffDirOf(deps.placement?.anchor) ?? tmpdir());
         if ("refusal" in resolved) {
             return resolved.refusal;
         }

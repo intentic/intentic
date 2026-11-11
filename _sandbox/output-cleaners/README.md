@@ -80,7 +80,8 @@ MCP conversations raw and records them as the control. The dedup, wide and cap s
 - [src/log-templates.mjs](src/log-templates.mjs), [src/json-arrays.mjs](src/json-arrays.mjs) and
   [src/search-fairness.mjs](src/search-fairness.mjs) — the new shape stages.
 - [src/output-cap.mjs](src/output-cap.mjs), [src/repeated-output.mjs](src/repeated-output.mjs) and
-  [src/cleaner-shapes.mjs](src/cleaner-shapes.mjs) — budgets, repeated-output filters and shared text shapes.
+  [src/cleaner-shapes.mjs](src/cleaner-shapes.mjs) — budgets, repeated-output filters and shared text shapes, among them
+  what of a multi-line secret masks on its own.
 - [src/text-shaping.mjs](src/text-shaping.mjs) — `cleanToolText`, the same generic stages applied to an MCP tool's text, which
   has no command to classify.
 - [src/agent-output-filter.mjs](src/agent-output-filter.mjs) — `filterOutput`, `filterRun` and the sandbox's adapter.

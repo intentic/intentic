@@ -62,7 +62,9 @@ const save = async (): Promise<void> => {
     if (!canSave.value || props.collect || saving.value) {
         return;
     }
-    const given = value.value.trim();
+    // A single line loses the whitespace a paste drags along; a multi-line value (a key file, a .env) is kept exactly,
+    // its trailing newline included, since that is part of the file it stands for.
+    const given = props.multiline ? value.value : value.value.trim();
     const { capabilityId, secretKey } = props;
     write.dismiss();
     const ended = await write.run({

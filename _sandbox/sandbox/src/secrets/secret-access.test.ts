@@ -89,3 +89,13 @@ test("without a way to the keyrings, a device-held name is as unknown as any oth
     const { device: _none, ...withoutDevice } = secrets;
     expect(await resolveCommandSecrets("echo {{secret:VPN_PASSWORD}}", withoutDevice)).toMatchObject({ refusal: expect.stringContaining('no stored secret named "VPN_PASSWORD"') });
 });
+
+// `|file` with no root to write into (secret-files.integration.test.ts has the written file itself).
+const DOTENV: NamedSecret = { name: "DEV_ENV", value: "A=1\nB=2\n", source: "sandbox" };
+
+test("a |file reference where no file can be written is refused before anyone is asked, never inlined", async () => {
+    const { secrets, recorded } = access({ registry: [DOTENV] });
+    expect(await resolveCommandSecrets("cp {{secret:DEV_ENV|file}} .env", secrets)).toMatchObject({ refusal: expect.stringContaining("cannot hand a secret over as a file") });
+    expect(recorded.steps).toEqual([]);
+    expect(recorded.uses).toEqual([]);
+});

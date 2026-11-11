@@ -89,6 +89,26 @@ it(`saves a multiline value from Ctrl+Enter, leaving Enter to break its lines`, 
     await waitFor(() => expect(set).toHaveBeenCalledWith({ key: `DEMO_KEY`, value: `first line\nsecond line` }));
 });
 
+it(`keeps a multiline value's trailing newline, and trims a single-line one`, async () => {
+    const lines = mount({ multiline: true });
+    const area = lines.querySelector<HTMLTextAreaElement>(`textarea`)!;
+    area.value = `KEY=value-one\nOTHER=value-two\n`;
+    area.dispatchEvent(new Event(`input`));
+    await nextTick();
+    area.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, ctrlKey: true, bubbles: true, cancelable: true }));
+    await waitFor(() => expect(set).toHaveBeenCalledWith({ key: `DEMO_KEY`, value: `KEY=value-one\nOTHER=value-two\n` }));
+    set.mockClear();
+    app?.unmount();
+    draft.value = ``;
+    const line = mount();
+    const input = line.querySelector<HTMLInputElement>(`input`)!;
+    input.value = `  token-value \n`;
+    input.dispatchEvent(new Event(`input`));
+    await nextTick();
+    input.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true, cancelable: true }));
+    await waitFor(() => expect(set).toHaveBeenCalledWith({ key: `DEMO_KEY`, value: `token-value` }));
+});
+
 it(`lets collect mode submit its surrounding form without a standalone save or a secret write`, async () => {
     const host = mount({ collect: true });
     const input = host.querySelector<HTMLInputElement>(`input`)!;

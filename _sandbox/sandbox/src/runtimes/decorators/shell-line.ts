@@ -139,7 +139,8 @@ const panelSettle = (hook: HookCallback | undefined) => async (id: string, resul
 export const createShellLines = (options: ShellLineOptions): ShellLines => {
     const hooks = options.terminals ? panelHooks(options) : undefined;
     const panel = hooks === undefined ? undefined : panelRewrite(hooks.pre);
-    const masks = createMaskWrapper(handoffDirOf(options.isolation?.anchor) ?? tmpdir());
+    const runRoot = handoffDirOf(options.isolation?.anchor) ?? tmpdir();
+    const masks = createMaskWrapper(runRoot);
     const secrets = options.tools.secrets;
     let surfaced = false;
 
@@ -158,7 +159,7 @@ export const createShellLines = (options: ShellLineOptions): ShellLines => {
         }
         let executed = wrapped?.command;
         if (executed === undefined && secrets !== undefined) {
-            const resolved = await resolveCommandSecrets(command, secrets);
+            const resolved = await resolveCommandSecrets(command, secrets, "shell", "Bash", runRoot);
             if ("refusal" in resolved) {
                 return { refuse: resolved.refusal };
             }

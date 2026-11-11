@@ -65,7 +65,10 @@ export const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 // `lastIndex` between callers: a site that replaces or spans every one derives its own /g copy from it. The terminal
 // filter (@intentic/output-cleaners, builtins only) keeps a copy, pinned to this one by the daemon's
 // src/secrets/terminal-masking-parity.test.ts.
-export const SECRET_REFERENCE = /\{\{secret:([A-Za-z0-9_./-]+)\}\}/;
+// `{{secret:NAME|file}}` (the second capture) resolves to the path of a private file holding the value instead of the
+// value itself: the way a multi-line value, or one with quotes, reaches a command without being spliced into its source.
+// Group 1 is the name in both forms, so every reader that only needs the name reads both alike.
+export const SECRET_REFERENCE = /\{\{secret:([A-Za-z0-9_./-]+)(?:\|(file))?\}\}/;
 
 export const SecretNeedSchema = z.object({
     kind: z.literal("secret"),
@@ -79,6 +82,10 @@ export const SecretNeedSchema = z.object({
         .describe("Where a person gets one, shown as a link on the card."),
     hint: z.string().max(120).optional().describe("What a valid one looks like, so a wrong paste is caught by eye."),
     replace: z.boolean().optional().describe("One is stored under this name and is being refused: the ask is for a new value in its place."),
+    multiline: z
+        .boolean()
+        .optional()
+        .describe("A value with lines (a key file, a whole .env): the card takes it in a box with lines and keeps it exactly as pasted."),
 });
 export type SecretNeed = z.infer<typeof SecretNeedSchema>;
 

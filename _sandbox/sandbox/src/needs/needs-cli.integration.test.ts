@@ -218,6 +218,16 @@ describe("the asking commands speak the needs contract", () => {
         });
     });
 
+    it("secrets ask --multiline asks for a value with lines", async () => {
+        server.answer = raised({ state: "open", message: "Asked a person: The DEV_ENV secret.", need: OPEN_NEED });
+        const result = await run(server.port, "secrets", ["ask", "DEV_ENV", "--multiline", "--why", "the dev server reads dev.env"]);
+        expect(result.code).toBe(3);
+        expect(NeedRaiseSchema.parse(server.seen[0]?.body)).toEqual({
+            ask: { kind: "secret", name: "DEV_ENV", multiline: true },
+            why: "the dev server reads dev.env",
+        });
+    });
+
     it("secrets request raises a release, grants a grant, environment a proposal with the draft's steps", async () => {
         server.answer = raised({ state: "open", message: "Asked.", need: OPEN_NEED });
         await run(server.port, "secrets", ["request", "reddit-work", "--why", "post the approved reply"]);
