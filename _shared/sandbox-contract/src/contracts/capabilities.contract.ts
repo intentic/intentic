@@ -98,6 +98,9 @@ export const capabilitiesContract = {
             summary: "Replace a stored credential",
             description: "Swaps one connection's key or token for a new one and re-applies it, without touching any of its other settings.",
         })
+        // Replaces a stored credential (a swapped provider key reroutes every turn): withheld from the panel token every
+        // panel process holds. An extension token writes only its own cards (capabilities.routes.ts).
+        .meta({ panel: false })
         .input(CapabilitySecretInputSchema)
         .output(OkSchema),
     // Called by a connector's own CLI and listener process, never by a page: a sign-in on the agent's side stores its

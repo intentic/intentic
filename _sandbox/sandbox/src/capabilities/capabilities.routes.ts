@@ -167,6 +167,19 @@ const cardOf = (capability: CapabilityInstanceLike): string => {
 // and a Linux PC added under an SSH connection's name dropped the SSH one without its handler ever removing what it had
 // installed. An edit is the same kind and, where a kind's cards pin a discriminator (`platform`, `provider`), the same
 // card (cardOf); anything else is a different connection that needs a name of its own.
+// An extension's own cards: one its contribution describes, or its own install record. The one ownership rule for the
+// routes an extension token reaches by a `*` glob over every card (the connection read, the secret write), so the read
+// and the write can't drift apart.
+const refuseForeignCard = async (services: Services, capability: Capability, extensionId: string): Promise<void> => {
+    const owner =
+        capability.kind === "extension"
+            ? capability.id
+            : contributionFor(await contributionRegistry(services), capability.kind, capability.config)?.extension.id;
+    if (owner !== extensionId) {
+        throw new ORPCError("FORBIDDEN", { message: `"${capability.id}" is not a connection extension "${extensionId}" contributes` });
+    }
+};
+
 const refuseOtherTilesId = async (services: Services, input: Capability): Promise<void> => {
     const held = await services.capabilities.get(input.id);
     if (held === undefined || (held.kind === input.kind && cardOf(held) === cardOf(input))) {
@@ -391,10 +404,20 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
         }),
         // Replaces one secret field and re-runs the idempotent apply; no composeEnvironment, since a secret can't
         // change a fragment. Apply runs before upsert, so a failed apply keeps the old secret stored.
-        setSecret: i.setSecret.handler(async ({ input }) => {
+        // An extension token writes only the cards its extension owns, as the connection read reads only those: the
+        // `POST /capabilities/*/secret` glob says it writes credentials at all, not whose. Judged here rather than by the
+        // grant middleware, so it holds on a loopback daemon too.
+        setSecret: i.setSecret.handler(async ({ input, context }) => {
+            const caller = callingExtension(services.extensionBackend.verifyExtensionToken, (name) => context.headers.get(name));
+            if (context.headers.has(EXTENSION_TOKEN_HEADER) && caller === undefined) {
+                throw new ORPCError("FORBIDDEN", { message: "that extension token is not one this daemon issued" });
+            }
             const capability = await services.capabilities.get(input.id);
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
+            }
+            if (caller !== undefined) {
+                await refuseForeignCard(services, capability, caller.id);
             }
             const field = secretField(capability, await contributionRegistry(services));
             if (field === undefined) {
@@ -460,13 +483,7 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
             }
-            const owner =
-                capability.kind === "extension"
-                    ? capability.id
-                    : contributionFor(await contributionRegistry(services), capability.kind, capability.config)?.extension.id;
-            if (owner !== caller.id) {
-                throw new ORPCError("FORBIDDEN", { message: `"${capability.id}" is not a connection extension "${caller.id}" contributes` });
-            }
+            await refuseForeignCard(services, capability, caller.id);
             // Only string fields survive; a connection is env-shaped, so a structured value would confuse a header
             // caller.
             const config = Object.fromEntries(Object.entries(capability.config).filter(([, value]) => typeof value === "string")) as Record<
