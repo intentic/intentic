@@ -60,7 +60,7 @@ const change = async (next: { readonly private: boolean; readonly readers: reado
 </script>
 
 <template>
-    <div v-if="pill || opens.length > 0" class="mx-auto flex w-full max-w-[51rem] flex-col gap-2 px-2 pb-3" data-seal-head>
+    <div v-if="pill || opens.length > 0" class="mx-auto flex w-full max-w-[calc(var(--chat-measure,48rem)+3rem)] flex-col gap-2 px-2 pb-3" data-seal-head>
         <div v-if="pill" class="flex min-w-0 items-center">
             <SealPill
                 :label="sealLabel(seal, me)"

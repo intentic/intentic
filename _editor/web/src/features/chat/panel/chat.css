@@ -242,10 +242,27 @@
     text-decoration-style: solid;
     text-decoration-color: var(--color-info);
 }
+/* THE READING MEASURE STEPS WITH THE PANE'S ROOM, and the composer (ChatPane's footer) follows it. A narrow pane (a
+   docked chat) keeps a tighter column so the capacity rail beside it (chatCapacity's PANE_COMFORT_PX, which is this
+   smallest step) arrives at a narrower panel; only with room to spare does the column widen to the full measure.
+   Keyed on the pane's whole width, which the rail's reserved strips never change, so the rail cannot flip a step. */
+.chat-pane > * {
+    --chat-measure: 36rem;
+}
+@container (min-width: 80rem) {
+    .chat-pane > * {
+        --chat-measure: 42rem;
+    }
+}
+@container (min-width: 100rem) {
+    .chat-pane > * {
+        --chat-measure: 48rem;
+    }
+}
 /* Reading width for the transcript. The left gutter is the spine's (below), the right one the reader's controls'. */
 .chat-turns {
     width: 100%;
-    max-width: calc(48rem + var(--chat-spine-gutter) + var(--chat-gutter));
+    max-width: calc(var(--chat-measure, 48rem) + var(--chat-spine-gutter) + var(--chat-gutter));
     padding-inline: var(--chat-spine-gutter) var(--chat-gutter);
     margin-inline: auto;
 }
@@ -571,7 +588,7 @@
     margin-right: -0.125rem;
     padding-right: 0.125rem;
 }
-/* 52.5rem of column, a lane on each side of it, and the strips the scroller reserves: under that width the pane cannot
+/* The widest column (52.5rem), a lane on each side of it, and the strips the scroller reserves: under that width the pane cannot
    hold the lane clear of the scrollbar, so the marks stay in the column on their own right-aligned bar. */
 @container (min-width: 65.5rem) {
 /* The reserve, spent: negative margin then equal padding, so the row paints out to the lane's edge without the text

@@ -207,7 +207,7 @@ const balanceChip = computed(() => {
 <template>
     <!-- Keep the composer above the mobile keyboard inset. -->
     <div
-        class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 text-2xs text-subtle"
+        class="mx-auto flex w-full max-w-[calc(var(--chat-measure,48rem)+3rem)] items-center gap-2 px-3 text-2xs text-subtle"
         :class="{ 'pb-2': !mobile || block !== undefined || homeDoor }"
         :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
     >

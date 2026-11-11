@@ -384,10 +384,12 @@ export const heldReadings = (held: readonly PlanLimitsHeld[], now: number = Date
 // Whether the panel should reserve the rail's strip before layout runs, so it must know before anything is drawn.
 export const hasCapacity = (): boolean => planLimitRows(providerAccounts.value, translatorAccounts.value).length > 0;
 
-// Only claims width no pane needs: past the 52.5rem reading measure (`.chat-turns`) a pane is just centring. That
-// per-pane surplus, measured off the panel and the chat list's live width in app pixels, is what the rail may take.
+// Only claims width no pane needs: past the narrowest reading measure (chat.css `--chat-measure`, 36rem plus the 4.5rem
+// of gutters `.chat-turns` wears at that width, plus the scroller's strips) a pane is just centring. That per-pane
+// surplus, measured off the panel and the chat list's live width in app pixels, is what the rail may take. The wider
+// measures only step in once a pane is wider still, so the rail comes before the column grows.
 export const CAPACITY_RAIL_PX = 240;
-const PANE_COMFORT_PX = 872;
+export const PANE_COMFORT_PX = 680;
 
 export const railFitsBeside = (panelPx: number, listRailPx: number, panes: number): boolean =>
     panelPx - listRailPx - CAPACITY_RAIL_PX >= panes * PANE_COMFORT_PX;

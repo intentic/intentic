@@ -1,7 +1,7 @@
 import { setLocale } from "@intentic/ui/i18n";
 import type { AccountUsage, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { CAPACITY_RAIL_PX, chatCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
+import { CAPACITY_RAIL_PX, PANE_COMFORT_PX, chatCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
 import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../../../../models/providers/providerAccounts";
 
 // The rail's offers must all still serve a turn, and everything it withholds must be accounted for: spent, refused,
@@ -671,7 +671,7 @@ describe(`the order the providers are read in`, () => {
 describe(`when there is room for the rail`, () => {
     const LIST_RAIL = 320;
     // One pane's comfort width plus both rails: the narrowest panel with anything to spare.
-    const FITS = 872 + LIST_RAIL + CAPACITY_RAIL_PX;
+    const FITS = PANE_COMFORT_PX + LIST_RAIL + CAPACITY_RAIL_PX;
 
     it(`yields the column only once no pane pays for it`, () => {
         expect(railFitsBeside(FITS, LIST_RAIL, 1)).toBe(true);
@@ -683,8 +683,8 @@ describe(`when there is room for the rail`, () => {
     });
 
     it(`asks for the comfort width once per pane`, () => {
-        expect(railFitsBeside(FITS + 872, LIST_RAIL, 2)).toBe(true);
-        expect(railFitsBeside(FITS + 871, LIST_RAIL, 2)).toBe(false);
+        expect(railFitsBeside(FITS + PANE_COMFORT_PX, LIST_RAIL, 2)).toBe(true);
+        expect(railFitsBeside(FITS + PANE_COMFORT_PX - 1, LIST_RAIL, 2)).toBe(false);
     });
 
     it(`draws nothing before the panel has been measured`, () => {

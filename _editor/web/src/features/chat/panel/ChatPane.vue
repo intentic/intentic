@@ -532,7 +532,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                 <div
                     ref="footer"
                     data-lane-floor
-                    class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2"
+                    class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[calc(var(--chat-measure,48rem)+3rem)] flex-col gap-2"
                     :class="strip ? 'chat-footer-strip' : 'px-2 pt-3'"
                 >
                     <!-- The composer stands whatever this chat can send with (no model: ChatPaneNotices), unless the reader cannot drive. -->
