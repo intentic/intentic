@@ -76,9 +76,7 @@ const answers = computed<readonly { readonly how: KeyringNeedAnswer; readonly la
                 <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                     <h3 class="text-sm font-medium text-content">{{ headline(request) }}</h3>
                     <p class="text-xs text-muted">
-                        {{ t(`app.requests.for`, { detail: request.detail }) }} · {{ timeAgo(request.at, { now }) }}<template v-if="request.computer">
-                            · {{ t(`app.requests.onComputer`, { computer: request.computer }) }}</template
-                        >
+                        {{ t(`app.requests.for`, { detail: request.detail }) }} · {{ timeAgo(request.at, { now }) }}
                     </p>
                 </div>
             </div>
@@ -103,7 +101,7 @@ const answers = computed<readonly { readonly how: KeyringNeedAnswer; readonly la
                 {{ t(`app.requests.use`) }} <span class="font-medium text-content">{{ titleOf(request.matches[0] ?? ``) }}</span>
                 <template v-if="usernameOf(request.matches[0] ?? ``)"> · {{ usernameOf(request.matches[0] ?? ``) }}</template>
             </p>
-            <div v-else-if="port.capabilities.manage" class="flex flex-col gap-1.5">
+            <div v-else class="flex flex-col gap-1.5">
                 <p class="text-xs text-muted">{{ t(`app.requests.noMatch`) }}</p>
                 <input
                     type="password"
@@ -118,7 +116,7 @@ const answers = computed<readonly { readonly how: KeyringNeedAnswer; readonly la
                 />
             </div>
 
-            <div v-if="port.capabilities.manage" class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 <template v-if="request.matches.length > 0">
                     <Button
                         v-for="(choice, index) in answers"
@@ -150,7 +148,6 @@ const answers = computed<readonly { readonly how: KeyringNeedAnswer; readonly la
                 />
                 <span v-if="waiting?.startsWith(`${request.id}:`)" class="flex items-center gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</span>
             </div>
-            <Button v-else-if="port.manageOnComputer" tier="boring" size="small" class="self-start" :label="t(`app.manageOnComputer`)" @click="port.manageOnComputer()" />
         </article>
     </section>
 </template>

@@ -65,6 +65,7 @@ import { useExtensions } from "../../models/extensions/useExtensions";
 import { usePanels } from "../../models/extensions/usePanels";
 import { useRegistry } from "../extensions/useRegistry";
 import { useHostedBuild } from "./secrets/useHostedBuild";
+import { useWants } from "./secrets/useWants";
 import { useAccess } from "../../client/sandbox/access/useAccess";
 import type { AccessReason } from "../../client/sandbox/access/accessReason";
 import { useRole } from "../../client/sandbox/useRole";
@@ -108,10 +109,29 @@ const HUB = `sandbox`;
 // The count the index carries, and whatever is running behind the row. Extensions counts installed extensions with a
 // newer registry commit; info, not warning, since nothing here auto-updates. Models counts what needs a person (an
 // account to sign in again or verify, a seat only an admin can restore, a sign-in that ended without connecting) as a
-// warning, since a model that cannot serve is a turn that will not run. A run is not an errand, so it adds no count of
-// its own: it rides `running`, which the row draws as a turning mark, and a sign-in waiting on the reader is one.
-const sectionBadge = (slug: string, counts: { updates: number; models: number }, running: string | undefined): ViewBadge | undefined => {
-    const count = slug === `extensions` ? counts.updates : slug === `models` ? counts.models : 0;
+// warning, since a model that cannot serve is a turn that will not run. Secrets counts the credentials agents asked the
+// owner's computers for that wait on an answer (secrets/useWants.ts), as info: the answer is given in Passwords on that
+// computer, and the turn that asked is woken by it. A run is not an errand, so it adds no count of its own: it rides
+// `running`, which the row draws as a turning mark, and a sign-in waiting on the reader is one.
+interface Counts {
+    readonly updates: number;
+    readonly models: number;
+    readonly wants: number;
+}
+const countOf = (slug: string, counts: Counts): number => {
+    switch (slug) {
+        case `extensions`:
+            return counts.updates;
+        case `models`:
+            return counts.models;
+        case `secrets`:
+            return counts.wants;
+        default:
+            return 0;
+    }
+};
+const sectionBadge = (slug: string, counts: Counts, running: string | undefined): ViewBadge | undefined => {
+    const count = countOf(slug, counts);
     if (count === 0 && running === undefined) {
         return undefined;
     }
@@ -121,6 +141,9 @@ const sectionBadge = (slug: string, counts: { updates: number; models: number },
         badge.tone = slug === `models` ? `warning` : `info`;
         if (slug === `models`) {
             badge.tooltip = t(`connect.modelSources.badgeNeedsYou`, { count }, count);
+        }
+        if (slug === `secrets`) {
+            badge.tooltip = t(`sandbox.sandboxSecrets.wantsBadge`, { count }, count);
         }
     }
     if (running !== undefined) {
@@ -172,6 +195,15 @@ const sources = useModelSources();
 const { liveSignIn, signInFailure } = useChat();
 const modelsNeedingSomeone = computed(() => sourcesNeedingSomeone(sources.value) + (signInFailure.value === undefined ? 0 : 1));
 
+// What Secrets' row says without being opened: the wants still waiting, read only by a reader the section opens for,
+// since the daemon refuses the read to anyone else.
+const secretsOpen = computed(() => {
+    const section = sandboxSectionOf(`secrets`);
+    return section !== undefined && !isGuest.value && opens(section);
+});
+const { needs: wantNeeds } = useWants(secretsOpen);
+const wantsWaiting = computed(() => wantNeeds.value.filter((need) => need.state === `pending`).length);
+
 // The environment build the platform runs for a hosted sandbox: minutes long, server-side, and followed here rather
 // than by the section, since the row has to keep saying so while the section is closed. Everything else a section
 // starts reports itself through the ledger as it runs (hubWork.ts).
@@ -222,7 +254,12 @@ const sectionOf = (row: SandboxSection): readonly HubTab[] => {
     if (orgHidden.value.has(row.slug)) {
         return [];
     }
-    return [{ ...row, badge: sectionBadge(row.slug, { updates: updatable.value, models: modelsNeedingSomeone.value }, runningIn(row.slug)) }];
+    return [
+        {
+            ...row,
+            badge: sectionBadge(row.slug, { updates: updatable.value, models: modelsNeedingSomeone.value, wants: wantsWaiting.value }, runningIn(row.slug)),
+        },
+    ];
 };
 
 // One table row: a section, or a tabbed row of the parts this reader may open, which leaves the index with none of

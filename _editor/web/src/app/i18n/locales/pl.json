@@ -3021,7 +3021,7 @@
             "sharedLabel": "Udostępniony",
             "standing": "{machine} jest teraz {standing}",
             "changeLabel": "Zmień go",
-            "changeOn": "Uruchom to na {machine}",
+            "changeOn": "W Hasłach na {machine} albo uruchom to tam",
             "asksOn": "Pyta na {machine} za każdym razem",
             "anyField": "Dowolne pole",
             "passwordFieldOnly": "Tylko pola haseł"
@@ -8645,7 +8645,11 @@
             "nameTaken": "{name} już tu istnieje. Zapisanie zastąpi jego wartość.",
             "couldntPushToCi": "Nie udało się wypchnąć sekretów do CI.",
             "onYourComputers": "Na twoich komputerach",
-            "openInPasswords": "Otwórz w Hasłach"
+            "openInPasswords": "Otwórz w Hasłach",
+            "wantAs": "{place} jako {username}",
+            "wantWaiting": "Czeka na twoją odpowiedź w Hasłach na {machine} · {when}",
+            "wantWaitingSomewhere": "Czeka na twoją odpowiedź w Hasłach · {when}",
+            "wantsBadge": "{count} prośba agenta o dane logowania czeka na ciebie | {count} prośby agentów o dane logowania czekają na ciebie | {count} próśb agentów o dane logowania czeka na ciebie"
         },
         "sandboxStorageCard": {
             "historyLow": "Na dysku historii pozostało {free} wolnego miejsca, poniżej progu {floor} wymaganego dla nowych rozmów. Zwolnij tutaj miejsce, a następnie wyślij ponownie.",

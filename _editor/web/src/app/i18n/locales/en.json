@@ -3021,7 +3021,7 @@
             "sharedLabel": "Shared",
             "standing": "{machine} is {standing} now",
             "changeLabel": "Change it",
-            "changeOn": "Run this on {machine}",
+            "changeOn": "In Passwords on {machine}, or run this there",
             "asksOn": "Asks on {machine} each time",
             "anyField": "Any field",
             "passwordFieldOnly": "Password fields only"
@@ -9155,7 +9155,11 @@
             "nameTaken": "{name} already exists here. Saving replaces its value.",
             "couldntPushToCi": "Could not push secrets to CI.",
             "onYourComputers": "On your computers",
-            "openInPasswords": "Open in Passwords"
+            "openInPasswords": "Open in Passwords",
+            "wantAs": "{place} as {username}",
+            "wantWaiting": "Waiting for your answer in Passwords on {machine} · {when}",
+            "wantWaitingSomewhere": "Waiting for your answer in Passwords · {when}",
+            "wantsBadge": "{count} credential an agent asked for waits on you | {count} credentials agents asked for wait on you"
         },
         "sandboxSwitcher": {
             "couldntDeleteThere": "Couldn't delete it from {machine}.",

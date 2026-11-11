@@ -2,7 +2,6 @@
      Every one of them is changed where it is read, one at a time, through the person's yes at the computer: there is no edit form. -->
 <script setup lang="ts">
 import {
-    Button,
     ConfirmDialog,
     CopyButton,
     Icon,
@@ -38,7 +37,6 @@ const { item, port, sandboxes, now, undoable = false } = defineProps<{
 }>();
 const emit = defineEmits<{ back: []; changed: []; removed: [name: string, title: string] }>();
 
-const manage = computed(() => port.capabilities.manage);
 const error = ref<string | undefined>(undefined);
 // The one prompt up on the computer, by what it is for: Show, Copy, an access change, a restore, the delete.
 const waiting = ref<string | undefined>(undefined);
@@ -189,7 +187,7 @@ const readAround = async (name: string): Promise<void> => {
         // allow(silent-catch): the record of use is context; a password still shows when it cannot be read
         port.activity(name).catch(() => []),
         // allow(silent-catch): likewise its earlier values, whose section is then not drawn
-        manage.value && item.versions > 0 ? port.history(name).catch(() => []) : Promise.resolve([]),
+        item.versions > 0 ? port.history(name).catch(() => []) : Promise.resolve([]),
     ]);
     if (name === item.name) {
         activity.value = [...lines].sort((a, b) => b.at - a.at);
@@ -266,34 +264,24 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
                         :write="rename"
                         :label="t(`app.edit.title`)"
                         :action="t(`app.edit.title`)"
-                        :editable="manage"
                         :maxlength="200"
                         :failure="t(`app.error.act`)"
                     />
                 </h2>
                 <p class="text-xs text-muted">{{ savedLine(item, now) }}</p>
-                <p v-if="item.computer" class="text-xs text-subtle">{{ t(`app.detail.onComputer`, { computer: item.computer }) }}</p>
             </div>
-            <Button
-                v-if="!manage && port.manageOnComputer"
-                tier="boring"
-                size="small"
-                :label="t(`app.manageOnComputer`)"
-                @click="port.manageOnComputer(item.name)"
-            />
         </header>
 
         <Notice v-if="error" tone="danger" size="sm" @dismiss="error = undefined">{{ error }}</Notice>
 
         <!-- The fields: what a person reads, copies and shows. -->
         <section class="flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
-            <div v-if="item.username || manage" class="flex items-center gap-3 px-4 py-3">
+            <div class="flex items-center gap-3 px-4 py-3">
                 <div class="flex min-w-0 flex-1 flex-col">
                     <label :for="`${uid}-username`" class="text-2xs text-subtle">{{ t(`app.detail.username`) }}</label>
                     <!-- The field reads as the text it holds (the kit's frameless field, which lights its ground once it has a
                          caret), with a wash under a pointer to say it can be written in. -->
                     <input
-                        v-if="manage"
                         :id="`${uid}-username`"
                         v-model="usernameDraft"
                         class="field-bare ui-field-lit -mx-1 w-full min-w-0 rounded-md px-1 transition-colors hover:bg-content/5"
@@ -305,17 +293,15 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
                         @keydown.enter.prevent="blurOut"
                         @keydown.esc.prevent="revertUsername"
                     />
-                    <span v-else :id="`${uid}-username`" class="truncate text-sm text-content">{{ item.username }}</span>
                     <p v-if="waiting === `username`" class="flex items-center gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</p>
                 </div>
                 <CopyButton v-if="item.username" :text="item.username" :label="t(`app.detail.copy`)" />
             </div>
-            <div v-if="item.backend === undefined || port.capabilities.reveal || manage" class="flex items-center gap-3 px-4 py-3">
+            <div class="flex items-center gap-3 px-4 py-3">
                 <div class="flex min-w-0 flex-1 flex-col">
                     <span class="text-2xs text-subtle">{{ fieldLabel }}</span>
                     <!-- The value itself is where a new one is set: pressing it opens the panel for it, anchored here. -->
                     <button
-                        v-if="manage"
                         ref="valueAnchor"
                         type="button"
                         class="-mx-1 cursor-pointer self-start rounded-md px-1 text-left text-sm text-content transition-colors hover:bg-content/5"
@@ -326,38 +312,33 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
                     >
                         {{ revealed ?? `•••••••••••` }}
                     </button>
-                    <span v-else-if="revealed !== undefined" class="break-all font-mono text-sm text-content">{{ revealed }}</span>
-                    <span v-else class="text-sm tracking-widest text-content" aria-hidden="true">•••••••••••</span>
                     <span v-if="waiting === `reveal` || waiting === `copy`" class="flex items-center gap-1.5 text-2xs text-info" role="status">
                         <Icon name="spinner" spin />{{ t(`app.confirmHere`) }}
                     </span>
                     <span v-else-if="copySeconds > 0" class="text-2xs text-success" role="status">{{ t(`app.detail.copiedClears`, { seconds: copySeconds }) }}</span>
                 </div>
-                <template v-if="port.capabilities.reveal">
-                    <button
-                        type="button"
-                        :class="ui.textButton({ tone: `quiet` })"
-                        :disabled="waiting !== undefined"
-                        :aria-pressed="revealed !== undefined"
-                        @click="revealed === undefined ? show() : hide()"
-                    >
-                        <Icon :name="revealed === undefined ? `eye` : `eye-slash`" />{{ revealed === undefined ? t(`app.detail.show`) : t(`app.detail.hide`) }}
-                    </button>
-                    <button type="button" :class="ui.textButton({ tone: `quiet` })" :disabled="waiting !== undefined" @click="copy()">
-                        <Icon name="copy" />{{ t(`app.detail.copy`) }}
-                    </button>
-                </template>
+                <button
+                    type="button"
+                    :class="ui.textButton({ tone: `quiet` })"
+                    :disabled="waiting !== undefined"
+                    :aria-pressed="revealed !== undefined"
+                    @click="revealed === undefined ? show() : hide()"
+                >
+                    <Icon :name="revealed === undefined ? `eye` : `eye-slash`" />{{ revealed === undefined ? t(`app.detail.show`) : t(`app.detail.hide`) }}
+                </button>
+                <button type="button" :class="ui.textButton({ tone: `quiet` })" :disabled="waiting !== undefined" @click="copy()">
+                    <Icon name="copy" />{{ t(`app.detail.copy`) }}
+                </button>
             </div>
             <div class="flex flex-col gap-2 px-4 py-3">
                 <span class="text-2xs text-subtle">{{ t(`app.detail.worksOn`) }}</span>
-                <PasswordPlaces :origins="item.origins" :editable="manage" :busy="waiting === `origins`" @change="setPlaces" />
+                <PasswordPlaces :origins="item.origins" :busy="waiting === `origins`" @change="setPlaces" />
                 <span v-if="item.unverified" class="text-xs text-subtle">{{ t(`app.detail.unverified`) }}</span>
                 <p v-if="waiting === `origins`" class="flex items-center gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</p>
             </div>
-            <div v-if="item.note || manage" class="flex flex-col gap-1 px-4 py-3">
+            <div class="flex flex-col gap-1 px-4 py-3">
                 <label :for="`${uid}-note`" class="text-2xs text-subtle">{{ t(`app.detail.note`) }}</label>
                 <ProseField
-                    v-if="manage"
                     :id="`${uid}-note`"
                     v-model="noteDraft"
                     class="-mx-2 rounded-md transition-colors hover:bg-content/5"
@@ -366,10 +347,9 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
                     @blur="writeNote"
                     @keydown.esc.prevent="revertNote"
                 />
-                <p v-else :id="`${uid}-note`" class="whitespace-pre-wrap text-sm text-content">{{ item.note }}</p>
                 <p v-if="waiting === `note`" class="flex items-center gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</p>
             </div>
-            <label v-if="manage" class="flex items-start gap-3 px-4 py-3">
+            <label class="flex items-start gap-3 px-4 py-3">
                 <span class="flex min-w-0 flex-1 flex-col">
                     <span class="text-sm text-content">{{ t(`app.edit.anyField`) }}</span>
                     <span class="text-2xs text-subtle">{{ t(`app.edit.anyFieldHelp`) }}</span>
@@ -397,14 +377,12 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <span class="flex min-w-0 items-center gap-2 text-sm text-content"><Icon name="robot" class="text-muted" /><span class="truncate">{{ row.sandbox.label }}</span></span>
                         <SegmentedControl
-                            v-if="manage"
                             :model-value="row.level"
                             :options="accessOptions"
                             size="xs"
                             :aria-label="t(`app.access.label`, { sandbox: row.sandbox.label })"
                             @update:model-value="(level: AccessLevel) => setAccess(row.sandbox.url, level)"
                         />
-                        <span v-else class="text-xs font-medium text-muted">{{ t(`app.access.${row.level}`) }}</span>
                     </div>
                     <p v-if="waiting === `access:${row.sandbox.url}`" class="flex items-center gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</p>
                     <p v-else class="text-2xs text-subtle">{{ accessHelp(row.level) }}</p>
@@ -427,7 +405,7 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
             </div>
         </Section>
 
-        <Section v-if="manage && versions.length > 0" :label="t(`app.detail.history`)" :heading="3">
+        <Section v-if="versions.length > 0" :label="t(`app.detail.history`)" :heading="3">
             <ol class="flex flex-col gap-1">
                 <li v-for="version in versions" :key="version.version" class="flex items-center justify-between gap-3 text-xs">
                     <span class="text-content">{{ t(`app.detail.version`, { when: timeAgo(version.at, { now }) }) }}</span>
@@ -438,13 +416,13 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
             </ol>
         </Section>
 
-        <div v-if="manage" class="pt-2">
+        <div class="pt-2">
             <button type="button" :class="ui.textButton({ tone: `danger` })" :disabled="waiting !== undefined" @click="askDelete()">
                 <Icon :name="waiting === `remove` ? `spinner` : `trash`" :spin="waiting === `remove`" />{{ t(`app.detail.delete`) }}
             </button>
         </div>
 
-        <PasswordValuePopover v-if="manage" v-model="changingValue" :item="item" :anchor="valueAnchor" :saving="waiting === `value`" @save="setValue" />
+        <PasswordValuePopover v-model="changingValue" :item="item" :anchor="valueAnchor" :saving="waiting === `value`" @save="setValue" />
 
         <ConfirmDialog
             :open="confirmDelete"

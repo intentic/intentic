@@ -1,4 +1,4 @@
-/* Source-consumed by the web app's Vite (default export → ./src/index.ts). */
+/* Source-consumed by the desktop app's Vite through the one entry it imports (./src/app/index.ts). */
 {
     "compilerOptions": {
         "types": ["node", "bun", "@intentic/testing/globals"],
@@ -7,6 +7,6 @@
         "tsBuildInfoFile": "./.cache/tsbuildinfo",
         "resolveJsonModule": true
     },
-    "include": ["./src/**/*.ts", "./src/**/*.vue", "./intentic-extension.json"],
+    "include": ["./src/**/*.ts", "./src/**/*.vue"],
     "extends": "@intentic/tsconfig/tsconfig.vue.json"
 }

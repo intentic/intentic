@@ -250,7 +250,6 @@ export const tauriPasswordsPort = (): PasswordsPort => {
         return items;
     };
     return {
-        capabilities: { scope: `computer`, manage: true, reveal: true },
         status: () => readStatus(readHere),
         list,
         sandboxes: async () => (await readHere()).links.map((link) => ({ url: link.sandboxUrl, label: sandboxLabel(link.sandboxUrl) })),

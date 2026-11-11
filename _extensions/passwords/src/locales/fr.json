@@ -1,13 +1,4 @@
 {
-    "extension": {
-        "passwords": "Mots de passe"
-    },
-    "hosted": {
-        "manageOnComputer": "Gérez-le dans Mots de passe sur votre ordinateur.",
-        "notSetUp": "Mots de passe n'est encore configuré sur aucun de vos ordinateurs : configurez-le dans l'app de bureau Intentic, sur l'ordinateur où vous voulez les garder.",
-        "noComputer": "aucun de vos ordinateurs",
-        "badge": "attendent votre réponse"
-    },
     "app": {
         "title": "Mots de passe",
         "loading": "Chargement…",
@@ -18,7 +9,6 @@
         "cancel": "Annuler",
         "save": "Enregistrer",
         "retry": "Réessayer",
-        "manageOnComputer": "Gérer sur cet ordinateur",
         "confirmHere": "Confirmer sur cet ordinateur",
         "error": {
             "read": "Impossible de charger les mots de passe.",
@@ -107,8 +97,7 @@
             "delete": "Supprimer le mot de passe",
             "deleteAsk": "Supprimer {title} ?",
             "deleteSays": "Les agents perdent l'accès et il disparaît de cet ordinateur. C'est irréversible.",
-            "reference": "Les agents le désignent comme",
-            "onComputer": "Conservé sur {computer}"
+            "reference": "Les agents le désignent comme"
         },
         "access": {
             "label": "Accès pour {sandbox}",
@@ -176,7 +165,6 @@
             "wantsAs": "L'agent de {sandbox} veut se connecter à {place} en tant que {username}",
             "for": "pour {detail}",
             "use": "Utiliser",
-            "onComputer": "sur {computer}",
             "deny": "Refuser",
             "noMatch": "Aucun mot de passe enregistré ne convient. Saisissez-le une fois et il sera enregistré ici pour la prochaine fois.",
             "typeOnce": "Le saisir une fois",

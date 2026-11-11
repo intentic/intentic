@@ -2,14 +2,12 @@ import type { KeyringNeedAnswer, KeyringOrigin, KeyringRemember, KeyringShareMod
 
 // THE PASSWORDS APP'S ONE DOOR TO THE WORLD. The app (PasswordsApp.vue and everything under src/app) knows nothing of
 // Tauri, the sandbox daemon, the keyring's pipe or the extension host: it is handed a PasswordsPort and draws what the
-// port says. Two hosts implement it today:
+// port says. One host implements it: the desktop app (`_editor/desktop-app/src/passwords/tauriPort.ts`), over
+// intentic-machine's `keyring` commands, as This computer's Passwords, where the vault is and is managed in full. No
+// sandbox hosts the app (2026-11-11): a sandbox deals in secrets, and lists what a keyring shared with it, and what its
+// agents asked for and wait on, in its own Secrets view.
 //
-//   - the desktop app (`_editor/desktop-app/src/passwords/tauriPort.ts`), over intentic-machine's `keyring` commands,
-//     scope "computer": the vault on this computer, managed in full;
-//   - the hosted editor (this extension's `src/sandboxPort.ts`), over the sandbox daemon, scope "sandbox": what this
-//     sandbox may use from the owner's computers, the requests it is waiting on, and its activity, managed on the computer.
-//
-// Removing Passwords is deleting this package and its two adapters; making it an application of its own is mounting
+// Removing Passwords is deleting this package and its adapter; making it an application of its own is mounting
 // PasswordsApp with tauriPort in a shell of its own. Everything here is a plain value: no class, no Vue ref.
 
 /** Where a password belongs, as the app groups them. */
@@ -58,8 +56,6 @@ export interface PasswordItem {
     readonly anyField: boolean;
     readonly note?: string | undefined;
     readonly access: readonly AgentAccess[];
-    /** The computer it is kept on, in the sandbox scope where several may answer. */
-    readonly computer?: string | undefined;
 }
 
 export type UnlockWay = "hello" | "passphrase" | "polkit";
@@ -152,7 +148,6 @@ export interface PasswordRequest {
     readonly at: number;
     /** Names that fit, best first; empty when none does yet (the app offers to type it once). */
     readonly matches: readonly string[];
-    readonly computer?: string | undefined;
 }
 
 export interface ActivityLine {
@@ -216,23 +211,11 @@ export type PasswordsEvent =
     | { readonly kind: "request"; readonly request: PasswordRequest }
     | { readonly kind: "changed" };
 
-export interface PasswordsCapabilities {
-    /** "computer": this computer's vault, in full. "sandbox": what this sandbox may use, read-only, managed on the computer. */
-    readonly scope: "computer" | "sandbox";
-    /** Adding, editing, removing, access, settings, import, setup. */
-    readonly manage: boolean;
-    /** Show and Copy of a value (always behind the person's yes at the computer). */
-    readonly reveal: boolean;
-}
-
 /**
- * Everything the app may ask. A method the scope cannot do rejects with a sentence saying where it can be done; the
- * app does not offer it in the first place (`capabilities`). Every rejection's message is shown as it is, so it is
- * written for the person: what happened and what to do.
+ * Everything the app may ask. Every rejection's message is shown as it is, so it is written for the person: what
+ * happened and what to do.
  */
 export interface PasswordsPort {
-    readonly capabilities: PasswordsCapabilities;
-
     readonly status: () => Promise<VaultStatus>;
     readonly list: () => Promise<readonly PasswordItem[]>;
     readonly sandboxes: () => Promise<readonly SandboxRef[]>;
@@ -247,8 +230,7 @@ export interface PasswordsPort {
     readonly lock: () => Promise<void>;
     /**
      * Starts Passwords over for a person who lost the recovery key: an administrator's yes, then the vault set aside on
-     * this computer (never deleted: its old key still opens it) and the computer ready to be set up again. Only where
-     * the vault is (scope "computer").
+     * this computer (never deleted: its old key still opens it) and the computer ready to be set up again.
      */
     readonly reset?: (() => Promise<void>) | undefined;
 
@@ -292,9 +274,6 @@ export interface PasswordsPort {
     readonly setUpSource: (source: RememberSource) => Promise<void>;
 
     readonly importRows: (rows: readonly ImportRow[], from: string) => Promise<ImportResult>;
-
-    /** The sandbox scope's way to the computer: opens the desktop app on Passwords (on `name`, when given). */
-    readonly manageOnComputer?: ((name?: string) => void) | undefined;
 
     /** Subscribe to what happens without asking; returns the unsubscribe. Absent: the app reads again on focus. */
     readonly subscribe?: ((listener: (event: PasswordsEvent) => void) => () => void) | undefined;

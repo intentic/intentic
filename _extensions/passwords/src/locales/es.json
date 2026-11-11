@@ -1,13 +1,4 @@
 {
-    "extension": {
-        "passwords": "Contraseñas"
-    },
-    "hosted": {
-        "manageOnComputer": "Gestiónalo en Contraseñas en tu ordenador.",
-        "notSetUp": "Contraseñas aún no está configurado en ninguno de tus ordenadores: configúralo en la app de escritorio de Intentic, en el ordenador donde quieras guardarlas.",
-        "noComputer": "ninguno de tus ordenadores",
-        "badge": "esperan tu respuesta"
-    },
     "app": {
         "title": "Contraseñas",
         "loading": "Cargando…",
@@ -18,7 +9,6 @@
         "cancel": "Cancelar",
         "save": "Guardar",
         "retry": "Reintentar",
-        "manageOnComputer": "Gestionar en este ordenador",
         "confirmHere": "Confirmar en este ordenador",
         "error": {
             "read": "No se pudieron cargar las contraseñas.",
@@ -107,8 +97,7 @@
             "delete": "Eliminar contraseña",
             "deleteAsk": "¿Eliminar {title}?",
             "deleteSays": "Los agentes pierden el acceso y desaparece de este ordenador. No se puede deshacer.",
-            "reference": "Los agentes la llaman",
-            "onComputer": "Guardada en {computer}"
+            "reference": "Los agentes la llaman"
         },
         "access": {
             "label": "Acceso para {sandbox}",
@@ -176,7 +165,6 @@
             "wantsAs": "El agente de {sandbox} quiere iniciar sesión en {place} como {username}",
             "for": "para {detail}",
             "use": "Usar",
-            "onComputer": "en {computer}",
             "deny": "Denegar",
             "noMatch": "Ninguna contraseña guardada encaja. Escríbela una vez y quedará guardada aquí para la próxima.",
             "typeOnce": "Escribirla una vez",

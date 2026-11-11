@@ -3021,7 +3021,7 @@
             "sharedLabel": "Geteilt",
             "standing": "{machine} ist gerade {standing}",
             "changeLabel": "Ändern",
-            "changeOn": "Auf {machine} ausführen",
+            "changeOn": "In Passwörter auf {machine}, oder dort diesen Befehl ausführen",
             "asksOn": "Fragt jedes Mal auf {machine}",
             "anyField": "Jedes Feld",
             "passwordFieldOnly": "Nur Passwortfelder"
@@ -9155,7 +9155,11 @@
             "nameTaken": "{name} gibt es hier schon. Speichern ersetzt seinen Wert.",
             "couldntPushToCi": "Secrets konnten nicht an CI übertragen werden.",
             "onYourComputers": "Auf deinen Computern",
-            "openInPasswords": "In Passwörter öffnen"
+            "openInPasswords": "In Passwörter öffnen",
+            "wantAs": "{place} als {username}",
+            "wantWaiting": "Wartet in Passwörter auf {machine} auf deine Antwort · {when}",
+            "wantWaitingSomewhere": "Wartet in Passwörter auf deine Antwort · {when}",
+            "wantsBadge": "{count} Zugangsdaten, um die ein Agent gebeten hat, warten auf dich | {count} Zugangsdaten, um die Agenten gebeten haben, warten auf dich"
         },
         "sandboxSwitcher": {
             "couldntDeleteThere": "Sie ließ sich auf {machine} nicht löschen.",

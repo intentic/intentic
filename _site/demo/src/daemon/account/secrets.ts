@@ -8,7 +8,7 @@ import type { CredentialGate,
     SecretInventoryEntry,
     SecretProgramGuard } from "@intentic/sandbox-contract/schemas/secrets";
 
-import { demoPasswordActivity, demoPasswordNeeds, demoPasswords } from "./passwords";
+import { demoWants } from "./wants";
 
 type BrokerRule = CredentialPolicy[`rules`][number];
 
@@ -210,9 +210,7 @@ const keyringFingerprint = (machine: string): string =>
 
 export const secretDoors = {
     inventory: () => ({ entries: demoSecretInventory() }),
-    passwords: () => demoPasswords(),
-    passwordNeeds: () => demoPasswordNeeds(),
-    passwordActivity: () => demoPasswordActivity(),
+    wants: () => demoWants(),
     // The names desired-state/.env holds: every value the owner keeps or the sandbox made, not the connections' own.
     list: () => ({ keys: demoSecretInventory().filter((entry) => entry.kind === `env` || entry.kind === `generated`).filter((entry) => entry.status === `set`).map((entry) => entry.key) }),
     // Refused for a name something already holds, since a new value would break whatever reads the old one.

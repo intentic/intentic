@@ -3021,7 +3021,7 @@
             "sharedLabel": "Partagé",
             "standing": "{machine} est {standing} en ce moment",
             "changeLabel": "Le changer",
-            "changeOn": "À lancer sur {machine}",
+            "changeOn": "Dans Mots de passe sur {machine}, ou lance ceci là-bas",
             "asksOn": "Demande sur {machine} à chaque fois",
             "anyField": "Tout champ",
             "passwordFieldOnly": "Champs de mot de passe seulement"
@@ -9155,7 +9155,11 @@
             "nameTaken": "{name} existe déjà ici. Enregistrer remplace sa valeur.",
             "couldntPushToCi": "Impossible d'envoyer les secrets à la CI.",
             "onYourComputers": "Sur tes ordinateurs",
-            "openInPasswords": "Ouvrir dans Mots de passe"
+            "openInPasswords": "Ouvrir dans Mots de passe",
+            "wantAs": "{place} en tant que {username}",
+            "wantWaiting": "Attend ta réponse dans Mots de passe sur {machine} · {when}",
+            "wantWaitingSomewhere": "Attend ta réponse dans Mots de passe · {when}",
+            "wantsBadge": "{count} identifiant demandé par un agent attend ta réponse | {count} identifiants demandés par des agents attendent ta réponse"
         },
         "sandboxSwitcher": {
             "couldntDeleteThere": "Impossible de le supprimer de {machine}.",

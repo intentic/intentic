@@ -2,6 +2,7 @@
 // top, and a truncated or filtered account stays reachable, never silently dropped.
 import "@intentic/testing/dom";
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import type { SandboxNeed } from "@intentic/sandbox-contract/schemas/sandbox-passwords";
 import type { SecretInventoryEntry, SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -48,6 +49,10 @@ jest.mock(`../../capabilities/connect/secrets/useKeyrings`, () => ({
     }),
     useTypeInto: () => ({ typeInto: { mutateAsync: jest.fn() } }),
 }));
+
+// No agent waits on a credential unless a case says so.
+const needs = ref<SandboxNeed[]>([]);
+jest.mock(`./useWants`, () => ({ useWants: () => ({ needs }) }));
 
 const capabilities = ref<CapabilitySummary[]>([]);
 jest.mock(`../../../models/capabilities/useCapabilities`, () => ({
@@ -148,6 +153,7 @@ beforeEach(() => {
 
 afterEach(() => {
     keyrings.value = [];
+    needs.value = [];
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -287,6 +293,25 @@ it(`gathers secrets kept on the owner's computers in a group of their own, besid
     expect(all).toContain(`Offline`);
     // One answers now, and pairing needs two that do.
     expect([...el.querySelectorAll(`button`)].some((button) => button.textContent?.trim() === `Pair`)).toBe(false);
+});
+
+// What an agent asked the owner's computers for by place and nobody answered yet: a turn waits on it, so it leads "Needs
+// attention", says where the answer waits, and opens Passwords there. One already answered is not drawn.
+it(`leads Needs attention with the credentials agents asked for and still wait on`, () => {
+    const at = Date.now() - 60_000;
+    needs.value = [
+        { id: `n1`, origin: { kind: `site`, host: `dashboard.stripe.com` }, username: `ada@acme.dev`, detail: `Check last night's refunds`, machine: `rog`, state: `pending`, at },
+        { id: `n2`, origin: { kind: `program`, program: `FortiClient.exe`, label: `FortiClient VPN` }, detail: `Reach GitLab`, machine: `rog`, state: `allowed`, name: `VPN`, at },
+    ];
+    const el = mount();
+    const all = text(el);
+    expect(all).toContain(`dashboard.stripe.com as ada@acme.dev`);
+    expect(all).toContain(`Check last night's refunds`);
+    expect(all).toContain(`Waiting for your answer in Passwords on rog`);
+    expect(all).not.toContain(`FortiClient VPN`);
+    expect(all.indexOf(`Needs attention`)).toBeLessThan(all.indexOf(`dashboard.stripe.com`));
+    expect(all.indexOf(`dashboard.stripe.com`)).toBeLessThan(all.indexOf(`CF_API_TOKEN`));
+    expect(el.querySelector(`[data-secret-want] a[href="intentic://passwords"]`)).not.toBeNull();
 });
 
 it(`draws no keyring group in a sandbox no computer keeps anything for`, () => {

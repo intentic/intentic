@@ -126,8 +126,8 @@ flowchart LR
   once, so the name resolves on the next use; an answer the person has not given yet (`pending`) ends the round and
   waits in Passwords on that computer; when nothing fits anywhere, the computer used last is asked again with its
   type-once box. Every need is kept in `keyring-needs.json` under the auth root, and a pending one turns allowed by
-  itself when a later read of that computer lists an entry serving its place. The hosted Passwords view reads
-  `GET /secrets/passwords`, `/secrets/passwords/needs` and `/secrets/passwords/activity` (`secrets/device/passwords.routes.ts`).
+  itself when a later read of that computer lists an entry serving its place. `GET /secrets/wants`
+  (`secrets/device/wants.routes.ts`) lists the ones still waiting, which the Secrets view draws under "Needs attention".
 - Terminal capture (`secrets/device/terminal-capture.ts`, `secrets/device/prompt-capture.ts`): netd watches the sessions the person
   types into (`web-…`, never an agent's). When a password prompt is left without a newline and the pane's tty then has
   echo off, netd edits the next line as the tty does and tells this daemon `ToNode::HiddenLine` once, then drops it

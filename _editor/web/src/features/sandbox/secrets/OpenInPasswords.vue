@@ -1,19 +1,20 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
-import { computed } from "vue";
-import { RouterLink } from "vue-router";
-import { useExtensions } from "../../../models/extensions/useExtensions";
-import { here, page } from "../../../lib/routes/links";
+import { passwordsLink } from "../../capabilities/connect/secrets/keyringWords";
 
-// The quiet way from the Secrets view's keyring rows to Passwords, the app where the owner's passwords are listed by
-// place, the requests this sandbox waits on are, and the computer's vault is one press away. Drawn only while the
-// Passwords extension is on: a link to a view that is switched off leads nowhere.
+// The quiet way from a keyring row in the Secrets view to Passwords in the Intentic app on the reader's computer, where
+// the owner's passwords are kept, shared and answered for. A link the app hears rather than a page here: Passwords is the
+// computer's, and the sandbox only lists the pointers it was given (and the wants it waits on) as secrets.
 
 const t = useT();
-const { enabled } = useExtensions();
-const on = computed(() => enabled.value.some((extension) => extension.id === `intentic.passwords`));
+const { entry } = defineProps<{ entry?: string | undefined }>();
 </script>
 
 <template>
-    <RouterLink v-if="on" :to="here(page.extension(`passwords`))" class="text-2xs text-link hover:underline" data-open-passwords>{{ t(`sandbox.sandboxSecrets.openInPasswords`) }}</RouterLink>
+    <a
+        :href="passwordsLink(entry)"
+        class="text-2xs text-link hover:underline"
+        data-open-passwords
+        >{{ t(`sandbox.sandboxSecrets.openInPasswords`) }}</a
+    >
 </template>

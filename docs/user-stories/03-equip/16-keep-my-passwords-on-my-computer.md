@@ -5,12 +5,12 @@ computer and be saved as I use them, then handed to an agent only for a use I al
 router's admin page, the sites I sign in to, and the program that has no browser. Giving the agent hands on my machine
 should not mean giving it my passwords, and none of them should sit in a sandbox that runs other people's code all day.
 
-**Passwords** is an app of its own, with its own tile on the editor's rail. On my computer, in the desktop app, it is the
-whole password manager. Its list has search, kinds (websites, apps, terminal, phone, notes), "Agents can use" by sandbox,
+**Passwords** is an app of its own, on my computer: its own tile in the desktop app's rail, under This computer. It is
+the whole password manager. Its list has search, kinds (websites, apps, terminal, phone, notes), "Agents can use" by sandbox,
 and Attention (Just saved, Requests, Weak or reused). Each password shows its user, its value behind a Show or Copy that
-asks me first, where it works, which agents may use it and how, what it was used for, and its earlier values. In the
-hosted editor the same app shows what that sandbox may use, the requests it is waiting on and what it used, with "Manage
-on this computer".
+asks me first, where it works, which agents may use it and how, what it was used for, and its earlier values. A sandbox
+has no Passwords of its own: it deals in secrets. Its Secrets view lists what my computers share with it beside every
+other secret, with "Open in Passwords", and what its agents asked for and wait on under Needs attention.
 
 Turning it on is one button. Windows asks once for an administrator's approval (Linux asks through pkexec), because the
 vault is held by a service under a system account. No program I run, the agent's commands included, can read it. I
@@ -40,7 +40,7 @@ command, without ever seeing it.
 
 ## Acceptance criteria
 
-- [ ] Passwords is its own rail app in the desktop app and in the hosted editor. This device no longer holds a passwords group
+- [ ] Passwords is its own rail app in the desktop app, and only there. This device no longer holds a passwords group. A sandbox's Secrets view lists what a computer shares with it and the requests it waits on, and opens Passwords on the computer
 - [ ] Turning it on installs the protected service with one administrator prompt, enrols Windows Hello (polkit on Linux) and shows a recovery key once. There is no per-user or "hardened" mode, and setup on macOS or without administrator rights says why it cannot
 - [ ] A value shown, copied, filled or released leaves the vault only after the OS-verified yes of the person at the computer, a sandbox's signed grant under its share's terms, or a paired phone's biometric signature
 - [ ] One consent turns on remembering per source (browser, terminal, apps, phone, sandbox), each switchable later. Saving then asks nothing, and shows a notice with Undo

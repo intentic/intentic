@@ -1,13 +1,4 @@
 {
-    "extension": {
-        "passwords": "Passwörter"
-    },
-    "hosted": {
-        "manageOnComputer": "Verwalte es in Passwörter auf deinem Computer.",
-        "notSetUp": "Passwörter ist auf keinem deiner Computer eingerichtet: Richte es in der Intentic-Desktop-App auf dem Computer ein, auf dem du sie aufbewahren möchtest.",
-        "noComputer": "keiner deiner Computer",
-        "badge": "warten auf deine Antwort"
-    },
     "app": {
         "title": "Passwörter",
         "loading": "Wird geladen…",
@@ -18,7 +9,6 @@
         "cancel": "Abbrechen",
         "save": "Speichern",
         "retry": "Erneut versuchen",
-        "manageOnComputer": "Auf diesem Computer verwalten",
         "confirmHere": "Auf diesem Computer bestätigen",
         "error": {
             "read": "Passwörter konnten nicht geladen werden.",
@@ -107,8 +97,7 @@
             "delete": "Passwort löschen",
             "deleteAsk": "{title} löschen?",
             "deleteSays": "Agenten verlieren den Zugriff, und es ist von diesem Computer weg. Das lässt sich nicht rückgängig machen.",
-            "reference": "Agenten nennen es",
-            "onComputer": "Auf {computer} gespeichert"
+            "reference": "Agenten nennen es"
         },
         "access": {
             "label": "Zugriff für {sandbox}",
@@ -176,7 +165,6 @@
             "wantsAs": "Agent von {sandbox} will sich bei {place} als {username} anmelden",
             "for": "für {detail}",
             "use": "Verwenden",
-            "onComputer": "auf {computer}",
             "deny": "Ablehnen",
             "noMatch": "Kein gespeichertes Passwort passt. Gib es einmal ein — es wird hier für das nächste Mal gespeichert.",
             "typeOnce": "Einmal eingeben",

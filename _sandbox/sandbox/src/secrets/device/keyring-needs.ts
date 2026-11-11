@@ -15,7 +15,7 @@ import type { DevicePointer, KeyringComputer, KeyringLink, KeyringLogger } from 
 // type-once box, so the person can type it there once. Every need this sandbox raised is kept here, and a pending one
 // turns allowed by itself when a later read of that computer's shares lists an entry that serves its origin.
 
-// id -> the need, as the hosted Passwords view lists it. Names, places and words only, never a value.
+// id -> the need, as `GET /secrets/wants` lists it while it waits. Names, places and words only, never a value.
 export const keyringNeedsDocument = defineDocument({ root: "auth", path: "keyring-needs.json", schema: SandboxNeedSchema, granularity: "record" });
 
 // A long-lived sandbox raises needs for months; the oldest settled ones go first past this many.
@@ -31,7 +31,7 @@ const trimmed = (needs: Readonly<Record<string, SandboxNeed>>) => {
     if (rows.length <= KEPT_MAX) {
         return { ...needs };
     }
-    // Pending ones stay whatever their age: they are what the view's Requests and the badge count.
+    // Pending ones stay whatever their age: they are what the Secrets view lists and its badge counts.
     const settled = rows.filter((need) => need.state !== "pending").toSorted((left, right) => left.at - right.at);
     const drop = new Set(settled.slice(0, rows.length - KEPT_MAX).map((need) => need.id));
     return Object.fromEntries(rows.filter((need) => !drop.has(need.id)).map((need) => [need.id, need]));

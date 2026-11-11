@@ -33,6 +33,14 @@ export const keyringModeExplained = (mode: KeyringShareMode, machine: string): s
 /** The command that changes a keyring entry, typed on the computer that holds it: nothing here can change it. */
 export const keyringEditCommand = (name: string): string => `intentic-machine keyring edit ${name}`;
 
+/**
+ * The link that opens Passwords in the Intentic app on the reader's computer, on one entry when named. Passwords is the
+ * computer's (the app's "This computer"), never a sandbox's: the sandbox holds pointers and lists them as secrets. The
+ * app hears `intentic://passwords[?entry=NAME]` (desktop-app setup_link.rs); a browser without it hands the link to the
+ * OS, which opens the app where one is installed.
+ */
+export const passwordsLink = (name?: string): string => (name === undefined ? `intentic://passwords` : `intentic://passwords?entry=${encodeURIComponent(name)}`);
+
 /** A keyring's standing as a short phrase: offline, locked or unlocked. */
 export const keyringStanding = (keyring: Pick<SandboxKeyring, `online` | `locked`>): string => {
     if (!keyring.online) {

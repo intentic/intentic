@@ -1,13 +1,4 @@
 {
-    "extension": {
-        "passwords": "Hasła"
-    },
-    "hosted": {
-        "manageOnComputer": "Zarządzaj tym w Hasłach na swoim komputerze.",
-        "notSetUp": "Hasła nie są jeszcze skonfigurowane na żadnym z Twoich komputerów: skonfiguruj je w aplikacji Intentic na komputerze, na którym chcesz je trzymać.",
-        "noComputer": "żaden z Twoich komputerów",
-        "badge": "czekają na Twoją odpowiedź"
-    },
     "app": {
         "title": "Hasła",
         "loading": "Ładowanie…",
@@ -18,7 +9,6 @@
         "cancel": "Anuluj",
         "save": "Zapisz",
         "retry": "Spróbuj ponownie",
-        "manageOnComputer": "Zarządzaj na tym komputerze",
         "confirmHere": "Potwierdź na tym komputerze",
         "error": {
             "read": "Nie udało się wczytać haseł.",
@@ -107,8 +97,7 @@
             "delete": "Usuń hasło",
             "deleteAsk": "Usunąć {title}?",
             "deleteSays": "Agenci tracą do niego dostęp i znika z tego komputera. Tego nie cofniesz.",
-            "reference": "Agenci określają je jako",
-            "onComputer": "Przechowywane na {computer}"
+            "reference": "Agenci określają je jako"
         },
         "access": {
             "label": "Dostęp dla {sandbox}",
@@ -176,7 +165,6 @@
             "wantsAs": "Agent {sandbox} chce zalogować się do {place} jako {username}",
             "for": "do {detail}",
             "use": "Użyj",
-            "onComputer": "na {computer}",
             "deny": "Odmów",
             "noMatch": "Żadne zapisane hasło nie pasuje. Wpisz je raz — zapisze się tutaj na następny raz.",
             "typeOnce": "Wpisz raz",

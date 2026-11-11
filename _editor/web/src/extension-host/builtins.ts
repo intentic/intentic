@@ -8,7 +8,6 @@ import * as automations from "@intentic/ext-automations";
 import * as eUrzad from "@intentic/ext-e-urzad";
 import * as gitHistory from "@intentic/ext-git-history";
 import * as onlyoffice from "@intentic/ext-onlyoffice";
-import * as passwords from "@intentic/ext-passwords";
 import * as pipelines from "@intentic/ext-pipelines";
 import * as preview from "@intentic/ext-preview";
 import * as viewers from "@intentic/ext-viewers";
@@ -35,7 +34,6 @@ const modules: readonly BuiltinModule[] = [
     gitHistory,
     eUrzad,
     onlyoffice,
-    passwords,
     preview,
     viewers,
 ];

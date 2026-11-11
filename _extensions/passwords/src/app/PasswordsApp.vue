@@ -25,7 +25,6 @@ const emit = defineEmits<{ "update:selection": [selection: PasswordsSelection] }
 const state = usePasswordsState(port);
 const { status, items, requests, toasts } = state;
 const ready = state.ready;
-const manage = computed(() => port.capabilities.manage);
 const now = useNow(true, 1000);
 
 /* THE SELECTION, held here and told to the host, which may hand it back (a deep link, the back button). */
@@ -51,7 +50,7 @@ const tell = (): void => {
 watch(query, tell);
 
 const filter = computed(() => filterOf(current.value));
-const onSettings = computed(() => current.value === SETTINGS && manage.value);
+const onSettings = computed(() => current.value === SETTINGS);
 const onRequests = computed(() => filter.value.kind === `requests`);
 const onRemoved = computed(() => filter.value.kind === `removed` && port.recentlyDeleted !== undefined);
 // Removing is undoable where the vault keeps Recently deleted (a keyring from 2026-11-09 on) and the port can put it back.
@@ -162,7 +161,7 @@ const toggleLock = async (): Promise<void> => {
 
 /* STARTING OVER, for a lost recovery key: offered while locked, where the port can. What is in the vault is set aside,
    never deleted, and the first run follows for a new key. */
-const canReset = computed(() => manage.value && port.reset !== undefined && ready.value?.locked === true);
+const canReset = computed(() => port.reset !== undefined && ready.value?.locked === true);
 const confirmReset = ref(false);
 const resetting = ref(false);
 const resetSays = computed(() => (items.value.length === 0 ? t(`app.reset.saysEmpty`) : t(`app.reset.says`, { count: items.value.length }, items.value.length)));
@@ -184,7 +183,7 @@ const firstRun = ref(false);
 watch(
     status,
     (next) => {
-        if (next?.kind === `not-set-up` && manage.value) {
+        if (next?.kind === `not-set-up`) {
             firstRun.value = true;
         }
     },
@@ -199,7 +198,7 @@ const finishFirstRun = async (): Promise<void> => {
    in a strip until it is, or until "Not now" for this visit. */
 const helloLater = ref(false);
 const addingHello = ref(false);
-const offerHello = computed(() => manage.value && port.addHello !== undefined && ready.value?.helloAddable === true && !helloLater.value);
+const offerHello = computed(() => port.addHello !== undefined && ready.value?.helloAddable === true && !helloLater.value);
 const turnOnHello = async (): Promise<void> => {
     addingHello.value = true;
     lockError.value = undefined;
@@ -214,7 +213,7 @@ const turnOnHello = async (): Promise<void> => {
 };
 
 // The one-time question, for a vault set up before it was asked, or set up elsewhere.
-const askRemember = computed(() => manage.value && ready.value !== undefined && !ready.value.rememberAsked && !firstRun.value);
+const askRemember = computed(() => ready.value !== undefined && !ready.value.rememberAsked && !firstRun.value);
 const rememberAll = async (): Promise<void> => {
     try {
         const sources = await port.sources();
@@ -270,7 +269,7 @@ watch(item, async (found) => {
         />
 
         <FirstRun
-            v-else-if="manage && (firstRun || status.kind === `not-set-up`)"
+            v-else-if="firstRun || status.kind === `not-set-up`"
             :port="port"
             :status="status.kind === `not-set-up` ? status : undefined"
             @done="finishFirstRun()"
@@ -297,7 +296,7 @@ watch(item, async (found) => {
                         <Icon :name="ready?.locked ? `lock` : `unlock`" />{{ lockChip }}
                     </span>
                     <button
-                        v-if="ready && manage"
+                        v-if="ready"
                         type="button"
                         :class="ui.textButton({ tone: `quiet` })"
                         :disabled="locking"
@@ -305,23 +304,20 @@ watch(item, async (found) => {
                     >
                         <Icon v-if="locking" name="spinner" spin />{{ ready.locked ? t(`app.lock.unlock`) : t(`app.lock.lockNow`) }}
                     </button>
-                    <template v-if="manage">
-                        <!-- Adding one is a labelled, filled button, as every list in the app adds; settings stays an icon. -->
-                        <Button size="small" tier="boring" :label="t(`app.new`)" @click="creating = true">
-                            <template #icon><Icon name="plus" /></template>
-                        </Button>
-                        <button
-                            type="button"
-                            :class="ui.iconButton({ size: `lg`, on: onSettings })"
-                            :aria-label="t(`app.settingsAction`)"
-                            :aria-pressed="onSettings"
-                            :title="t(`app.settingsAction`)"
-                            @click="pick(onSettings ? `all` : SETTINGS)"
-                        >
-                            <Icon name="cog" />
-                        </button>
-                    </template>
-                    <Button v-else-if="port.manageOnComputer" tier="boring" size="small" :label="t(`app.manageOnComputer`)" @click="port.manageOnComputer()" />
+                    <!-- Adding one is a labelled, filled button, as every list in the app adds; settings stays an icon. -->
+                    <Button size="small" tier="boring" :label="t(`app.new`)" @click="creating = true">
+                        <template #icon><Icon name="plus" /></template>
+                    </Button>
+                    <button
+                        type="button"
+                        :class="ui.iconButton({ size: `lg`, on: onSettings })"
+                        :aria-label="t(`app.settingsAction`)"
+                        :aria-pressed="onSettings"
+                        :title="t(`app.settingsAction`)"
+                        @click="pick(onSettings ? `all` : SETTINGS)"
+                    >
+                        <Icon name="cog" />
+                    </button>
                 </div>
             </template>
 

@@ -6,7 +6,5 @@ export const secretsSamples: GroupSamples<`secrets`> = () => ({
     ...SECRET_SAMPLES,
     list: undefined,
     generate: { key: `SMOKE_GENERATED`, bytes: 32, format: `hex` },
-    passwords: undefined,
-    passwordNeeds: undefined,
-    passwordActivity: undefined,
+    wants: undefined,
 });

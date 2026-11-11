@@ -102,9 +102,9 @@ const originText = (origin: KeyringOrigin): string => {
     }
 };
 
-/** Every word a search may find a password by: its title, name, user, places, note and the computer it is on. */
+/** Every word a search may find a password by: its title, name, user, places and note. */
 export const searchText = (item: PasswordItem): string =>
-    [item.title, item.name, item.username ?? "", item.note ?? "", item.computer ?? "", ...item.origins.map(originText)].join(" ").toLowerCase();
+    [item.title, item.name, item.username ?? "", item.note ?? "", ...item.origins.map(originText)].join(" ").toLowerCase();
 
 /** Each word of the query must appear somewhere: "git radar" finds `git github.com` for user radarsu. */
 export const matchesQuery = (item: PasswordItem, query: string): boolean => {

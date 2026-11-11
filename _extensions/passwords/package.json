@@ -1,17 +1,11 @@
 {
     "name": "@intentic/ext-passwords",
     "version": "1.0.0",
-    "description": "Passwords: the owner's password manager, kept on their own computers and used by agents without their seeing it, as a first-party intentic extension and a host-neutral app the desktop app mounts",
+    "description": "Passwords: the owner's password manager, kept on their own computers and used by agents without their seeing it. The host-neutral app the desktop app mounts as This computer's Passwords; no sandbox hosts it",
     "license": "MIT",
     "private": true,
     "type": "module",
-    "main": "src/index.ts",
-    "types": "src/index.ts",
     "exports": {
-        ".": {
-            "types": "./src/index.ts",
-            "default": "./src/index.ts"
-        },
         "./app": {
             "types": "./src/app/index.ts",
             "default": "./src/app/index.ts"
@@ -22,8 +16,6 @@
         "test": "suites"
     },
     "dependencies": {
-        "@intentic/extension-api": "workspace:*",
-        "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*"
     },

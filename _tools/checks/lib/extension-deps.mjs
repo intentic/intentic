@@ -56,8 +56,8 @@ export const CONSUMERS = new Map([
     ["_devices/local-files", { extensions: new Set(["@intentic/ext-onlyoffice"]), specifiers: new Set(["@intentic/ext-onlyoffice/local-office"]) }],
     // The real editor demo hosts the office view; its backend fixture shares only the snapshot wire shape.
     ["_site/demo", { extensions: new Set(["@intentic/ext-e-urzad"]), specifiers: new Set(["@intentic/ext-e-urzad/snapshot"]) }],
-    // The desktop app mounts the Passwords app on this computer's own vault, over its Tauri port: the app is the
-    // extension's (one app, two hosts), and this one entry carries it without the extension's activation.
+    // The desktop app mounts the Passwords app on this computer's own vault, over its Tauri port. The package is no
+    // extension any more (no sandbox hosts Passwords), but stays on the extension SDK, and this is its one entry.
     ["_editor/desktop-app", { extensions: new Set(["@intentic/ext-passwords"]), specifiers: new Set(["@intentic/ext-passwords/app"]) }],
 ]);
 

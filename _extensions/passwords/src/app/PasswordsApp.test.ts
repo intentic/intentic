@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import type { KeyringNeedAnswer } from "@intentic/sandbox-contract/schemas/keyring";
-import type { PasswordItem, PasswordPatch, PasswordRequest, PasswordsCapabilities, PasswordsPort, VaultStatus } from "./port.js";
+import type { PasswordItem, PasswordPatch, PasswordRequest, PasswordsPort, VaultStatus } from "./port.js";
 
 // The Passwords app against a fake port: a computer with no vault is taken through turning it on, its recovery key,
 // the one yes to remembering and the import; a request is answered with the password that fits, or a value typed once
@@ -69,13 +69,12 @@ interface Calls {
     edits: { name: string; patch: PasswordPatch }[];
 }
 
-const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; requests?: PasswordRequest[]; capabilities?: PasswordsCapabilities; alreadySetUp?: boolean; reset?: boolean }) => {
+const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; requests?: PasswordRequest[]; alreadySetUp?: boolean; reset?: boolean }) => {
     const calls: Calls = { setUp: [], resets: 0, remember: [], sources: [], answers: [], edits: [] };
     let status = options.status;
     let requests = options.requests ?? [];
     const settings = { remember: { browser: true, terminal: true, apps: false, phone: false, sandbox: false }, neverSave: [], autoLockMinutes: 15, lockOnSleep: true };
     const port: PasswordsPort = {
-        capabilities: options.capabilities ?? { scope: `computer`, manage: true, reveal: true },
         status: async () => status,
         list: async () => options.items ?? [],
         sandboxes: async () => [SANDBOX],
@@ -126,7 +125,6 @@ const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; reques
             calls.sources.push(source);
         },
         importRows: async () => ({ saved: 0, updated: 0, unchanged: 0, skipped: 0 }),
-        manageOnComputer: () => undefined,
     };
     return { port, calls };
 };
@@ -397,20 +395,6 @@ describe(`PasswordsApp`, () => {
         }
         remove.click();
         await waitFor(() => expect(calls.edits.at(-1)).toEqual({ name: `GITHUB_COM`, patch: { origins: [] } }));
-    });
-
-    it(`offers nothing that manages the vault in a sandbox's view`, async () => {
-        const { port } = fakePort({ status: READY, items: [GITHUB], capabilities: { scope: `sandbox`, manage: false, reveal: false } });
-        const el = mount(port, { item: `GITHUB_COM` });
-        await waitFor(() => expect(el.textContent).toContain(`saved from Brave`));
-        expect(el.textContent).not.toContain(`New password`);
-        expect(el.querySelector(`[aria-label="Settings"]`)).toBeNull();
-        expect(el.textContent).not.toContain(`Delete password`);
-        expect(el.textContent).not.toContain(`Edit`);
-        expect(el.textContent).toContain(`Manage on this computer`);
-        // The access is read, not set.
-        expect(el.querySelector(`[role="tablist"]`)).toBeNull();
-        expect(el.textContent).toContain(`Ask`);
     });
 
     it(`lists a password with where it came from, and opens it`, async () => {

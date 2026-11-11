@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { KeyringOriginSchema, KeyringRememberSchema, KeyringShareModeSchema } from "./keyring.js";
+import { KeyringOriginSchema } from "./keyring.js";
 
 // THE SANDBOX'S SIDE OF PASSWORDS (2026-10-19): an agent asking for a credential by where it is to be used (`secrets
-// want`, `type_secret` aimed at a page or a window), and the hosted Passwords view's three reads. The vault and its
-// management stay on the owner's computers; what a sandbox learns of an entry is the pointer its keyring shared here.
+// want`, `type_secret` aimed at a page or a window), and the wants still waiting, which the Secrets view lists. Passwords
+// itself, the vault and its management, is on the owner's computers alone (2026-11-11): a sandbox deals in secrets, and
+// what it learns of an entry is the pointer its keyring shared here, which the secret inventory lists like any other.
 
 /** `secrets want`: a credential by the place it is for, asked of the owner's keyrings. */
 export const SecretWantSchema = z
@@ -30,7 +31,7 @@ export const SecretWantResultSchema = z.discriminatedUnion("state", [
 ]);
 export type SecretWantResult = z.infer<typeof SecretWantResultSchema>;
 
-/** One need this sandbox raised, as its record and the hosted view's Requests keep it. */
+/** One need this sandbox raised, as its record keeps it and the Secrets view lists it while it waits. */
 export const SandboxNeedSchema = z.object({
     id: z.string(),
     origin: KeyringOriginSchema,
@@ -44,45 +45,3 @@ export const SandboxNeedSchema = z.object({
 });
 export type SandboxNeed = z.infer<typeof SandboxNeedSchema>;
 export const SandboxNeedsSchema = z.object({ needs: z.array(SandboxNeedSchema) });
-
-/** One of the owner's computers as the hosted Passwords view shows its keyring. */
-export const SandboxPasswordsKeyringSchema = z.object({
-    machine: z.string(),
-    online: z.boolean(),
-    setUp: z.boolean().describe("Answering, set up, and trusted by this sandbox: it can be asked."),
-    locked: z.boolean().optional(),
-    remember: KeyringRememberSchema.optional(),
-});
-export type SandboxPasswordsKeyring = z.infer<typeof SandboxPasswordsKeyringSchema>;
-
-/** One password this sandbox may use: a pointer one of the owner's keyrings shares here. Never a value. */
-export const SandboxPasswordSchema = z.object({
-    name: z.string(),
-    title: z.string(),
-    kind: z.enum(["password", "text"]),
-    origins: z.array(KeyringOriginSchema).describe("Where it works, from the entry's rules."),
-    anyField: z.boolean(),
-    machine: z.string().describe("The computer whose keyring keeps it."),
-    mode: KeyringShareModeSchema.describe("How this sandbox may use it."),
-    online: z.boolean(),
-    updatedAt: z.number(),
-    lastUsedAt: z.number().optional().describe("This sandbox's last use of it, from its own use ledger."),
-});
-export type SandboxPassword = z.infer<typeof SandboxPasswordSchema>;
-
-export const SandboxPasswordsSchema = z.object({
-    sandbox: z.string().describe("This sandbox's own address, as the keyrings name it."),
-    items: z.array(SandboxPasswordSchema),
-    keyrings: z.array(SandboxPasswordsKeyringSchema),
-});
-export type SandboxPasswords = z.infer<typeof SandboxPasswordsSchema>;
-
-/** One use of a keyring-held password by this sandbox, from its use ledger. */
-export const SandboxPasswordUseSchema = z.object({
-    at: z.number(),
-    name: z.string(),
-    lane: z.string(),
-    detail: z.string().optional(),
-    approvedBy: z.string().optional(),
-});
-export const SandboxPasswordsActivitySchema = z.object({ lines: z.array(SandboxPasswordUseSchema) });

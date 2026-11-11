@@ -3021,7 +3021,7 @@
             "sharedLabel": "Compartido",
             "standing": "{machine} está {standing} ahora",
             "changeLabel": "Cambiarlo",
-            "changeOn": "Ejecuta esto en {machine}",
+            "changeOn": "En Contraseñas en {machine}, o ejecuta esto allí",
             "asksOn": "Pregunta en {machine} cada vez",
             "anyField": "Cualquier campo",
             "passwordFieldOnly": "Solo campos de contraseña"
@@ -9155,7 +9155,11 @@
             "nameTaken": "{name} ya existe aquí. Guardar reemplaza su valor.",
             "couldntPushToCi": "No se pudieron enviar los secretos a CI.",
             "onYourComputers": "En tus ordenadores",
-            "openInPasswords": "Abrir en Contraseñas"
+            "openInPasswords": "Abrir en Contraseñas",
+            "wantAs": "{place} como {username}",
+            "wantWaiting": "Espera tu respuesta en Contraseñas en {machine} · {when}",
+            "wantWaitingSomewhere": "Espera tu respuesta en Contraseñas · {when}",
+            "wantsBadge": "{count} credencial que pidió un agente espera tu respuesta | {count} credenciales que pidieron los agentes esperan tu respuesta"
         },
         "sandboxSwitcher": {
             "couldntDeleteThere": "No se pudo eliminar de {machine}.",

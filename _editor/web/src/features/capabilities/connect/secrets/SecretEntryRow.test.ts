@@ -327,7 +327,7 @@ it("offers nothing that reads, copies or sets a value kept on one of the owner's
     done();
 });
 
-it("reads a keyring entry's share and rules, and names the command that changes them on that computer", () => {
+it("reads a keyring entry's share and rules, and opens Passwords or names the command that changes them on that computer", () => {
     const { el, done } = mount(DEVICE_ROW);
     const text = el.textContent ?? ``;
     expect(text).toContain(`Asks each time`);
@@ -335,7 +335,8 @@ it("reads a keyring entry's share and rules, and names the command that changes 
     expect(text).toContain(`FortiClient.exe`);
     expect(text).toContain(`Password fields only`);
     expect(text).toContain(`vpn.example.com`);
-    expect(text).toContain(`Run this on rog`);
+    expect(text).toContain(`In Passwords on rog, or run this there`);
+    expect(el.querySelector(`[data-open-passwords]`)?.getAttribute(`href`)).toBe(`intentic://passwords?entry=VPN_PASSWORD`);
     expect(el.querySelector(`[data-keyring-command]`)?.textContent).toBe(`intentic-machine keyring edit VPN_PASSWORD`);
     // Its lists are the keyring's, changed there: the only answer to press is the sandbox's own approver.
     expect(el.querySelector(`button[aria-label^="Change where it may go"]`)).toBeNull();

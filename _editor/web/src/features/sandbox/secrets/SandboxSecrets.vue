@@ -14,6 +14,9 @@ import { useSecretInventory } from "../../../models/capabilities/useSecrets";
 import { useKeyrings } from "../../capabilities/connect/secrets/useKeyrings";
 import OpenInPasswords from "./OpenInPasswords.vue";
 import SecretKeyrings from "./SecretKeyrings.vue";
+import SecretWantRow from "./SecretWantRow.vue";
+import { waitingWants } from "./secretWants";
+import { useWants } from "./useWants";
 import { useOperation } from "../../../workbench/operations/operations";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
 import { useT } from "@intentic/ui/i18n";
@@ -64,6 +67,14 @@ const matches = computed<SecretRow[]>(() => {
 
 // Unfinished rows lifted out of their groups: the two reasons this tab gets opened in a hurry.
 const attention = computed(() => matches.value.filter((row) => row.attention));
+// What agents asked the owner's computers for by place and nobody has answered yet: a turn waits on each, so they lead
+// "Needs attention". Answered in Passwords on the computer named; the "missing" scope keeps them, since each is a
+// credential this sandbox does not have.
+const { needs } = useWants();
+const wants = computed(() => {
+    const needle = query.value.trim().toLowerCase();
+    return waitingWants(needs.value).filter((want) => needle === `` || want.haystack.includes(needle));
+});
 const held = (group: SecretGroup): SecretRow[] => matches.value.filter((row) => !row.attention && row.group === group);
 const required = computed(() => held(`required`));
 const yours = computed(() => held(`yours`));
@@ -95,7 +106,7 @@ const clearFilters = (): void => {
 
 // Distinguishes empty inventory from no filter matches; drawn only once the inventory has been read.
 const emptyNote = computed<string | undefined>(() => {
-    if (matches.value.length > 0) {
+    if (matches.value.length > 0 || wants.value.length > 0) {
         return undefined;
     }
     return rows.value.length === 0 ? t(`sandbox.sandboxSecrets.noCredentialsYet`) : t(`sandbox.sandboxSecrets.nothingMatchesFilter`);
@@ -224,7 +235,8 @@ const pushToCi = async (): Promise<void> => {
                 </div>
 
                 <!-- Shown only while something is owed: the rows themselves, not a count of them. -->
-                <RowGroup v-if="attention.length > 0" :label="t(`sandbox.words.needsAttention`)">
+                <RowGroup v-if="attention.length > 0 || wants.length > 0" :label="t(`sandbox.words.needsAttention`)">
+                    <SecretWantRow v-for="want in wants" :key="want.id" :want="want" />
                     <SecretEntryRow
                         v-for="row in attention"
                         :key="row.entry.key"

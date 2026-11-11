@@ -1523,9 +1523,6 @@ importers:
       '@intentic/ext-onlyoffice':
         specifier: workspace:*
         version: link:../../_extensions/onlyoffice
-      '@intentic/ext-passwords':
-        specifier: workspace:*
-        version: link:../../_extensions/passwords
       '@intentic/ext-pipelines':
         specifier: workspace:*
         version: link:../../_extensions/pipelines
@@ -2082,12 +2079,6 @@ importers:
 
   _extensions/passwords:
     dependencies:
-      '@intentic/extension-api':
-        specifier: workspace:*
-        version: file:_shared/extension-api(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))
-      '@intentic/extension-manifest':
-        specifier: workspace:*
-        version: link:../../_shared/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_shared/extension-ui

@@ -1,13 +1,4 @@
 {
-    "extension": {
-        "passwords": "Passwords"
-    },
-    "hosted": {
-        "manageOnComputer": "Manage it in Passwords on your computer.",
-        "notSetUp": "Passwords is not set up on any of your computers yet: set it up in the Intentic desktop app, on the computer you want to keep them on.",
-        "noComputer": "none of your computers",
-        "badge": "waiting for your answer"
-    },
     "app": {
         "title": "Passwords",
         "loading": "Loading…",
@@ -18,7 +9,6 @@
         "cancel": "Cancel",
         "save": "Save",
         "retry": "Try again",
-        "manageOnComputer": "Manage on this computer",
         "confirmHere": "Confirm on this computer",
         "error": {
             "read": "Passwords could not be loaded.",
@@ -107,8 +97,7 @@
             "delete": "Delete password",
             "deleteAsk": "Delete {title}?",
             "deleteSays": "Agents lose access to it, and it is gone from this computer. This can't be undone.",
-            "reference": "Agents refer to it as",
-            "onComputer": "Kept on {computer}"
+            "reference": "Agents refer to it as"
         },
         "access": {
             "label": "Access for {sandbox}",
@@ -176,7 +165,6 @@
             "wantsAs": "{sandbox}'s agent wants to sign in to {place} as {username}",
             "for": "to {detail}",
             "use": "Use",
-            "onComputer": "on {computer}",
             "deny": "Deny",
             "noMatch": "No saved password fits. Type it once and it is saved here for next time.",
             "typeOnce": "Type it once",
