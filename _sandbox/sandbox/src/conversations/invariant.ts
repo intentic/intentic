@@ -6,6 +6,7 @@ import type { AgentsRegistry } from "./registry/agents-registry.js";
 import { isIsolated } from "./registry/agents-store.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";
 import { type StrayStanding, strayStandings } from "./worktrees/stray-work.js";
+import { discoverRepos, ROOT_REPO } from "../workspace/layout/repo-discovery.js";
 
 // Two independent records of whether a conversation is running (the run each actor holds, the conversation actors'
 // own phase) that must agree, checked both ways: a live run on an idle card, and a running phase with no live run
@@ -29,6 +30,24 @@ export interface FleetRegistryDeps {
 }
 
 export const owner = "agents";
+
+// Each shared checkout stands in its own repository. In the privacy jail git can record a shared checkout as a
+// conversation's worktree, and any later `worktree repair` re-points the shared one into that record (targowisko,
+// 2026-11-11). Healed here under each repo's lock (worktrees.ts healShared, worktree-links.ts) and said, since a
+// sandbox nobody lands in or presses Back to main in would otherwise stand on a conversation's branch unseen.
+const sharedCheckoutsCheck = (agentWorktrees: Pick<AgentWorktrees, "mainDir" | "healShared">): InvariantCheck => ({
+    name: "shared-checkouts-stand-in-their-own-repository",
+    on: ["sweep"],
+    run: async ({ fail }) => {
+        const repos = [ROOT_REPO, ...(await discoverRepos(agentWorktrees.mainDir(ROOT_REPO)))];
+        const healed = await agentWorktrees.healShared(repos);
+        if (healed.length > 0) {
+            fail(
+                `${healed.length} git link(s) had put a shared checkout into a conversation's worktree record, and were pointed back: ${healed.map(({ repo, kind }) => `${repo} (${kind})`).join(", ")}`,
+            );
+        }
+    },
+});
 
 export const checks = ({
     agents,
@@ -71,6 +90,7 @@ export const checks = ({
             }
         },
     },
+    sharedCheckoutsCheck(agentWorktrees),
     // A spent allowance's held turn is written onto its entry so a restart keeps the turn and its booking (limit-hold.ts).
     // One the schema refuses lives only as long as the daemon: a restart loses it with no card and no line, as a batch of
     // a person's messages joining more files than a turn may carry once did (2026-10-10). Every turn the daemon builds is

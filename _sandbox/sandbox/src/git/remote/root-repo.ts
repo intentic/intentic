@@ -7,11 +7,13 @@ import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { defaultGit, gitInit, gitStageAll, type GitRunner, persistGitDurability } from "@intentic/base/git";
 import { repoGitDir, rootExcludes, syncRootExcludes } from "../../workspace/layout/git-layout.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
+import { detachFromSharedLine } from "../../workspace/layout/worktree-links.js";
+import { latchedMainBranch } from "../main-line-lock.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { commitIndex, stageAll, unstagePaths } from "../changes/changes-index.js";
 import { scratchOf, scratchScopeOf } from "../changes/scratch.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
-import { ignoreFileMode } from "./repo-git-dirs.js";
+import { ignoreFileMode, keepWorktreeRecords } from "./repo-git-dirs.js";
 import { ensureLines } from "../../store/plain-files/text-file.js";
 import { syncSkillLinkExcludes } from "../../store/git/skill-link-excludes.js";
 import { generatedSkillNames } from "../../store/skills/skill-stamp.js";
@@ -241,6 +243,11 @@ export const commitWorktreeRemainder = async (
     git: GitRunner = defaultGit,
     leave: readonly string[] = [],
 ): Promise<boolean> => {
+    // Never onto a line someone else stands on: a conversation's checkout found on the main line or on a branch another
+    // checkout holds is detached in place first (worktree-links.ts). The shared checkout itself is never detached.
+    const main = repo === "root" ? workspaceRoot : join(workspaceRoot, repo);
+    // allow(silent-catch): a repo whose main line cannot be read locks nothing; a branch another checkout holds still counts.
+    await detachFromSharedLine(dir, await latchedMainBranch(main, git).catch(() => undefined), git);
     const scratch = await scratchOf(dir, await scratchScopeOf(repo, workspaceRoot), git);
     await stageAll(dir, scratch, git).catch(skippedPaths);
     // Back to HEAD in the index only: the tree keeps them, uncommitted, for the commit that owes them.
@@ -271,6 +278,7 @@ export const ensureRootRepo = async (
         await writeFile(join(workspace.root, ".git"), `gitdir: ${gitDir}\n`);
     }
     await ignoreFileMode(workspace.root, git);
+    await keepWorktreeRecords(workspace.root, git);
     await persistGitDurability(workspace.root, git);
     // Exclude list lives in $GIT_DIR/info/exclude, outside /work, and is re-synced before every baseline commit. The
     // generated-skills block first, so the root rewrite carries the current one onto the history scope.

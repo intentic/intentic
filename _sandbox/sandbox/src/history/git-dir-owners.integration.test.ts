@@ -186,23 +186,3 @@ test("a new repository's name is freed of a git dir nothing uses, and refused wh
     expect(await freeGitDirFor(deps, ["app-2"], "app")).toBe("app-2");
     expect(existsSync(repoGitDir(historyRoot, "app"))).toBe(true);
 });
-
-// targowisko, 2026-11-09: git linked the shared checkout into the home conversation's worktree record. The history
-// cycle points it back at its repository, so a sandbox nobody lands in still comes back on its own.
-test("a shared checkout git linked into a conversation's worktree record is pointed back at its repository", async () => {
-    const { historyRoot, sh, makeRepo, pointer, history } = await setup();
-    const app = await makeRepo("app");
-    const home = join(historyRoot, "worktrees", "home", "app");
-    await mkdir(join(historyRoot, "worktrees", "home"), { recursive: true });
-    await sh(app, "worktree", "add", "-q", "-b", "agent/home", home);
-    const admin = (await pointer(home)).replace(/^gitdir:\s*/u, "");
-    await writeFile(join(admin, "gitdir"), `${join(app, ".git")}\n`);
-    await sh(app, "worktree", "repair");
-    expect(await sh(app, "symbolic-ref", "--short", "HEAD")).toBe("agent/home");
-
-    await history.snapshot("interval");
-
-    expect(await pointer(app)).toBe(`gitdir: ${repoGitDir(historyRoot, "app")}`);
-    expect(await sh(app, "symbolic-ref", "--short", "HEAD")).toBe("main");
-    expect(await sh(home, "symbolic-ref", "--short", "HEAD")).toBe("agent/home");
-});

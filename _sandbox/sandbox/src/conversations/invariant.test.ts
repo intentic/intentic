@@ -1,3 +1,6 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { LinkHeal } from "../workspace/layout/worktree-links.js";
 import type { ConversationActors } from "./actor/conversation-actors.js";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";
@@ -199,4 +202,25 @@ describe("held-limit-turns-are-kept-for-a-restart", () => {
         await expect(runWith(held(21))).rejects.toThrow(/c1 \(input\.attachments: /);
         await expect(runWith(held(21, { reason: "stopped" }))).rejects.toThrow(/c1 \(input\.attachments: /);
     });
+});
+
+// targowisko, 2026-11-11: a shared checkout linked into a conversation's worktree record. The sweep heals it through the
+// worktrees, which take each repo's lock, and says what it put back; nothing to put back is nothing to say.
+test("a shared checkout git linked into a conversation's record is put back on the sweep, and said", async () => {
+    const asked: string[][] = [];
+    let healed: readonly LinkHeal[] = [{ repo: "root", kind: "shared-checkout", path: "/work", from: "/history/gits/root/worktrees/home", to: "/history/gits/root" }];
+    const agentWorktrees: AgentWorktrees = {
+        ...SETTLED,
+        mainDir: () => join(tmpdir(), "intentic-no-such-workspace"),
+        healShared: async (repos) => {
+            asked.push([...repos]);
+            return healed;
+        },
+    };
+    const check = checkNamed("shared-checkouts-stand-in-their-own-repository", { agents: fleetOf({}), conversations: actorsOf({}), agentWorktrees, now: () => NOW });
+
+    await expect(check.run({ moment: "sweep", fail })).rejects.toThrow("pointed back: root (shared-checkout)");
+    expect(asked).toEqual([["root"]]);
+    healed = [];
+    await expect(check.run({ moment: "sweep", fail })).resolves.toBeUndefined();
 });

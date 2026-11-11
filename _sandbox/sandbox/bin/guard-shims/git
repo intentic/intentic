@@ -4,12 +4,17 @@
 # workload/heavy-commands.ts), never on the daemon's own. The shared checkout, /work and every repo under it,
 # stays on its main line (the daemon's src/git/main-line-lock.ts, latched as `intentic.mainBranch`), so a checkout,
 # switch or symbolic-ref that would move its HEAD anywhere else is refused here, before git writes a single file.
-# A linked worktree of a managed repo (a conversation's own checkout) moves to any branch but that line: on 2026-11-11
-# an agent's `checkout --ignore-other-worktrees main` in one let its next checkpoint commit onto everyone's main. And
-# where the sandbox keeps a repo's git dir (/history/gits), `worktree prune` and `worktree repair` are refused: they act
-# on every conversation's worktree link at once, and inside the privacy sandbox, which hides the other checkouts, prune
-# drops their links and repair writes its own paths into them. Everything else, and every other command, is the real
-# git at once.
+# A linked worktree of a managed repo (a conversation's own checkout) moves to any branch but that line, by its name or
+# by one git resolves to it (`-`, `@{-1}`, `@{upstream}`): on 2026-11-11 an agent's `checkout --ignore-other-worktrees
+# main` in one let its next checkpoint commit onto everyone's main. Options are read as git's own parser reads them,
+# clustered (`-qB main`) or abbreviated (`--det`, `--force-cr=main`). And where the sandbox keeps a repo's git dir
+# (/history/gits), `worktree prune`, `repair`, `move` and `remove` are refused: the sandbox keeps those worktree links
+# itself, and inside the privacy sandbox, which hides the other conversations' checkouts, they look missing, so prune
+# drops their links, repair writes its own paths into them, and move or remove breaks the conversation whose checkout
+# it names. Everything else, and every other command, is the real git at once.
+
+# Words are split below, never globbed.
+set -f
 
 case $0 in
     */*) here=${0%/*} ;;
@@ -85,7 +90,8 @@ kept() {
     return 1
 }
 
-# `worktree` is read for its own verb, the first word after it; only prune and repair, on a kept repo, are refused.
+# `worktree` is read for its own verb, the first word after it; only prune, repair, move and remove, on a kept repo, are
+# refused. list, add, lock and unlock go through.
 if [ "$sub" = worktree ]; then
     action=""
     old_ifs=$IFS
@@ -99,15 +105,117 @@ if [ "$sub" = worktree ]; then
     done
     IFS=$old_ifs
     case $action in
-        prune|repair) ;;
+        prune|repair|move|remove) ;;
         *) exec "$real" "$@" ;;
     esac
     # The common dir alone: run inside a kept git dir, git has no work tree to name.
     common_dir=$(in_repo rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exec "$real" "$@"
     kept "$common_dir" || exec "$real" "$@"
     echo "git: the sandbox keeps this repository's worktree links itself, one for every conversation's checkout." >&2
-    echo "git: \`git worktree $action\` acts on every conversation's checkout at once, and inside the privacy sandbox it sees the others as missing." >&2
+    case $action in
+        prune|repair) echo "git: \`git worktree $action\` acts on every conversation's checkout at once, and inside the privacy sandbox it sees the others as missing." >&2 ;;
+        *) echo "git: \`git worktree $action\` acts on a conversation's checkout, and inside the privacy sandbox the others look missing: it would break the conversation that checkout belongs to." >&2 ;;
+    esac
     exit 1
+fi
+
+# checkout and switch are read as git's option parser reads them, into one word an option: a cluster of short ones is
+# split (`-qB main` is `-q -B main`, `-bmain` is `-b main`: the branch of `-b`, `-B`, `-c` and `-C` is its own word, and
+# `-t` keeps the rest of its cluster), an abbreviated long one is spelled out (`--det`, `--force-cr`, `--ignore-o`), the
+# branch of `--create`, `--force-create` and `--orphan` given with `=` is its own word, and the value of `--conflict` or
+# `--pathspec-from-file` given as the next word is joined to it with `=`, so it is not read as a branch. Past `--` every
+# word is a path, left as it is.
+abbrev() {
+    case $1 in "$3"*) ;; *) return 1 ;; esac
+    case $2 in "$1"*) return 0 ;; esac
+    return 1
+}
+if [ "$sub" = checkout ] || [ "$sub" = switch ]; then
+    words=""
+    joins=""
+    rest=""
+    old_ifs=$IFS
+    IFS='
+'
+    for arg in $past; do
+        if [ -n "$rest" ]; then
+            words="$words
+$arg"
+            continue
+        fi
+        if [ -n "$joins" ]; then
+            words="$words
+$joins=$arg"
+            joins=""
+            continue
+        fi
+        case $arg in
+            --)
+                rest=1
+                words="$words
+--"
+                ;;
+            --*)
+                name=${arg%%=*}
+                # The shortest prefix of each that no other option of checkout or switch shares.
+                if abbrev "$name" --create --cr; then name=--create
+                elif abbrev "$name" --force-create --force-; then name=--force-create
+                elif abbrev "$name" --orphan --or; then name=--orphan
+                elif abbrev "$name" --detach --de; then name=--detach
+                elif abbrev "$name" --ignore-other-worktrees --ignore-o; then name=--ignore-other-worktrees
+                elif abbrev "$name" --patch --patc; then name=--patch
+                elif abbrev "$name" --conflict --co; then name=--conflict
+                elif abbrev "$name" --pathspec-from-file --pathspec-fr; then name=--pathspec-from-file
+                fi
+                case $arg in
+                    *=*)
+                        case $name in
+                            --create|--force-create|--orphan) words="$words
+$name
+${arg#*=}" ;;
+                            *) words="$words
+$name=${arg#*=}" ;;
+                        esac
+                        ;;
+                    *)
+                        case $name in
+                            --conflict|--pathspec-from-file) joins=$name ;;
+                            *) words="$words
+$name" ;;
+                        esac
+                        ;;
+                esac
+                ;;
+            -?*)
+                chars=${arg#-}
+                while [ -n "$chars" ]; do
+                    more=${chars#?}
+                    char=${chars%"$more"}
+                    case $char in
+                        b|B|c|C)
+                            words="$words
+-$char"
+                            [ -z "$more" ] || words="$words
+$more"
+                            break
+                            ;;
+                        t)
+                            words="$words
+-$chars"
+                            break
+                            ;;
+                    esac
+                    words="$words
+-$char"
+                    chars=$more
+                done
+                ;;
+            *) words="$words
+$arg" ;;
+        esac
+    done
+    IFS=$old_ifs
+    past=$words
 fi
 
 info=$(in_repo rev-parse --path-format=absolute --git-dir --git-common-dir --show-toplevel 2>/dev/null) || exec "$real" "$@"
@@ -158,10 +266,12 @@ refuse_linked() {
 
 locked_ref() { [ "$1" = "$locked" ] || [ "$1" = "refs/heads/$locked" ]; }
 
-# A linked worktree switches to any branch but the main line: not by its name, not by creating or resetting it
+# A linked worktree switches to any branch but the main line: not by its name, not by one git resolves to it (`-` and
+# `@{-N}` for a branch checked out before, `@{upstream}` and `@{push}`), not by creating or resetting it
 # (`-b`/`-B`/`-c`/`-C` and their long forms), and never past git's own refusal (`--ignore-other-worktrees`). A start
 # point on it (`switch -c topic main`), a detached HEAD at it, and a restore from it (`checkout main -- <path>`,
-# `checkout main <path>`) leave HEAD off the line, and go through. Its symbolic-ref is read below.
+# `checkout main <path>`, `checkout - -- <path>`) leave HEAD off the line, and go through. Its symbolic-ref is read
+# below.
 if [ -n "$linked" ] && [ "$sub" != symbolic-ref ]; then
     first=""
     paths=""
@@ -186,17 +296,21 @@ if [ -n "$linked" ] && [ "$sub" != symbolic-ref ]; then
             --) separated=1 ;;
             --ignore-other-worktrees) refuse_linked ;;
             -b|-B|-c|-C|--create|--force-create|--orphan) creates=1; named=1 ;;
-            --create=*|--force-create=*|--orphan=*) creates=1; locked_ref "${arg#*=}" && refuse_linked ;;
-            -b*|-B*|-c*|-C*) creates=1; locked_ref "${arg#-?}" && refuse_linked ;;
             -d|--detach) detached=1 ;;
             -p|--patch) IFS=$old_ifs; exec "$real" "$@" ;;
-            -*) ;;
+            # A bare `-` is not an option but the branch checked out before this one.
+            -?*) ;;
             *) if [ -z "$first" ]; then first=$arg; else paths=1; fi ;;
         esac
     done
     IFS=$old_ifs
-    if [ -z "$creates" ] && [ -z "$detached" ] && [ -z "$paths" ] && locked_ref "$first"; then
-        refuse_linked
+    if [ -z "$creates" ] && [ -z "$detached" ] && [ -z "$paths" ]; then
+        locked_ref "$first" && refuse_linked
+        [ "$first" != - ] || first='@{-1}'
+        case $first in
+            # What git would switch to, asked of git itself.
+            *@\{*) [ "$(in_repo rev-parse --symbolic-full-name "$first" 2>/dev/null)" != "refs/heads/$locked" ] || refuse_linked ;;
+        esac
     fi
     exec "$real" "$@"
 fi
@@ -209,7 +323,7 @@ case $sub in
 '
         for arg in $past; do
             case $arg in
-                -c|-C|--create|--force-create|--orphan|--detach|-d|--create=*|--force-create=*|--orphan=*|-) IFS=$old_ifs; refuse "" ;;
+                -c|-C|--create|--force-create|--orphan|--detach|-d|-) IFS=$old_ifs; refuse "" ;;
                 -*) ;;
                 *) [ -z "$first" ] && first=$arg ;;
             esac
@@ -232,7 +346,7 @@ case $sub in
             fi
             case $arg in
                 --) separated=1 ;;
-                -b|-B|--orphan|--detach|-) IFS=$old_ifs; refuse "" ;;
+                -b|-B|--orphan|--detach|-d|-) IFS=$old_ifs; refuse "" ;;
                 -p|--patch) IFS=$old_ifs; exec "$real" "$@" ;;
                 -*) ;;
                 *) [ -z "$first" ] && first=$arg ;;

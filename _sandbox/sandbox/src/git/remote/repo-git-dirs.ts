@@ -63,6 +63,18 @@ export const ignoreFileMode = async (repoDir: string, git: GitRunner = defaultGi
     await git(repoDir, ["config", "--local", "core.fileMode", "false"]);
 };
 
+// Worktree records are the daemon's to drop (conversations/worktrees/worktrees.ts), never gc's: auto-gc runs `worktree
+// prune --expire`, and in the privacy jail every other conversation's checkout reads as missing, so a record old enough
+// would go with a live conversation still standing on it (workspace/layout/worktree-links.ts).
+export const keepWorktreeRecords = async (repoDir: string, git: GitRunner = defaultGit): Promise<void> => {
+    // allow(silent-catch): `config --get` exits 1 for a key nobody set, which is the answer "not set yet".
+    const current = await git(repoDir, ["config", "--local", "--get", "gc.worktreePruneExpire"]).catch(() => undefined);
+    if (current?.stdout.trim() === "never") {
+        return;
+    }
+    await git(repoDir, ["config", "--local", "gc.worktreePruneExpire", "never"]);
+};
+
 // Where an in-tree git dir waits while its copy is brought level, beside the checkout it belongs to (same mount, so the
 // rename in and back out is atomic). Found on a later pass, it says a relocation was cut short (recoverAside).
 const ASIDE = ".git-relocating";
@@ -213,6 +225,9 @@ const convergeRepo = async (
     );
     await ignoreFileMode(join(workspace.root, repo), git).catch((err) =>
         logger.warn({ err, repo }, "git dirs: could not persist core.fileMode=false, a terminal's git may see mode-only edits"),
+    );
+    await keepWorktreeRecords(join(workspace.root, repo), git).catch((err) =>
+        logger.warn({ err, repo }, "git dirs: could not set gc.worktreePruneExpire, auto-gc may prune a live conversation's record"),
     );
     await persistGitDurability(join(workspace.root, repo), git).catch((err) =>
         logger.warn({ err, repo }, "git dirs: could not persist core.fsync, a terminal's git writes may not survive a host crash"),

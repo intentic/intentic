@@ -5,7 +5,7 @@ import type { Services } from "../composition.js";
 import type { gitImplementer } from "./index.routes.js";
 import { latchedMainBranch, lockedBranchOf, mainLineRefusal, mainLineStanding, staysOnMainLine } from "./main-line-lock.js";
 import { liveBranchStarts } from "../conversations/land/branch/branch-repos.js";
-import { healSharedCheckoutLinks, releaseBranch } from "../workspace/layout/worktree-links.js";
+import { healSharedCheckoutLinks, holdersOf, releaseBranch } from "../workspace/layout/worktree-links.js";
 
 // The routes that move a shared checkout's HEAD, which stays on its main line (main-line-lock.ts): a checkout or a new
 // branch switched to is refused before anything is written, and the one switch they take is back onto the main line.
@@ -33,13 +33,22 @@ export const createOffMainLine =
         return locked === undefined || branch === locked ? undefined : locked;
     };
 
-// git's refusal when another worktree still holds the main line, said as what it means and what to do about it; any
-// other refusal (uncommitted work in the way) is git's own words, which already say both.
-export const plainCheckoutRefusal = (said: string, locked: string): string => {
-    const holder = /is already (?:used|checked out) by worktree at '([^']+)'/u.exec(said)?.[1];
-    return holder === undefined
-        ? said
-        : `\`${locked}\` is still checked out at ${holder}, so the workspace cannot take it back. Stop or archive the conversation working there, then try again.`;
+// Why the way back failed while another checkout still holds the main line, said as what it means and what to do.
+export const heldElsewhereReason = (locked: string, holder: string): string =>
+    `\`${locked}\` is still checked out at ${holder}, so the workspace cannot take it back. Stop or archive the conversation working there, then try again.`;
+
+// Back onto the main line. When the switch fails, git's own listing (worktree-links.ts holdersOf) says whether a
+// conversation's checkout holds the line: that one is detached in place, and the switch tried once more.
+const switchBack = async (services: Services, dir: string, locked: string): Promise<void> => {
+    try {
+        await services.git.checkoutRef(dir, locked);
+    } catch (error) {
+        // allow(silent-catch): a listing git cannot give releases nothing, and the switch's own failure is the answer.
+        if ((await releaseBranch(dir, locked, services.logger, defaultGit).catch(() => [])).length === 0) {
+            throw error;
+        }
+        await services.git.checkoutRef(dir, locked);
+    }
 };
 
 export const mainLineRoutes = (i: GitImplementer, deps: MainLineRouteDeps) => {
@@ -102,11 +111,12 @@ export const mainLineRoutes = (i: GitImplementer, deps: MainLineRouteDeps) => {
                     moved();
                     return { ok: true };
                 }
-                await releaseBranch(dir, standing.locked, services.logger, defaultGit);
                 try {
-                    await services.git.checkoutRef(dir, standing.locked);
+                    await switchBack(services, dir, standing.locked);
                 } catch (error) {
-                    return { ok: false, reason: plainCheckoutRefusal(errorMessage(error), standing.locked) };
+                    // allow(silent-catch): a listing git cannot give names no holder, and git's own words are the reason.
+                    const holder = (await holdersOf(dir, standing.locked, defaultGit).catch(() => []))[0];
+                    return { ok: false, reason: holder === undefined ? errorMessage(error) : heldElsewhereReason(standing.locked, holder) };
                 }
                 moved();
                 return { ok: true };

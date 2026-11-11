@@ -66,17 +66,22 @@ export const linkOne = async (admin: string, checkout: string, shared: readonly 
     await writeFileAtomic(join(checkout, ".git"), `gitdir: ${resolve(admin)}\n`);
 };
 
+// A path with its symlinks resolved, so two spellings of one git dir compare alike: git writes resolved paths into the
+// files it makes, while the layout names `/history` as configured. One that does not resolve is kept as named.
+// allow(silent-catch): a path that is not there has no other spelling, which is the answer asked for.
+const real = async (path: string): Promise<string> => realpath(path).catch(() => resolve(path));
+
 /** The admin dir main keeps for a checkout at `target`, found by its backlink; undefined once pruned. */
 export const adminFor = async (main: string, target: string): Promise<string | undefined> => {
     const gitDir = await gitDirOf(main);
     if (gitDir === undefined) {
         return undefined;
     }
-    const common = await commonDirOf(gitDir);
-    // allow(silent-catch): an unresolvable link keeps the path as named, as every other read of the common dir does.
-    const admins = join(await realpath(common).catch(() => common), "worktrees");
+    const admins = join(await real(await commonDirOf(gitDir)), "worktrees");
+    const wanted = await real(target);
     for (const name of (await readdir(admins).catch(undefinedIfMissing)) ?? []) {
-        if ((await backlinkOf(join(admins, name))) === resolve(target)) {
+        const back = await backlinkOf(join(admins, name));
+        if (back !== undefined && (await real(back)) === wanted) {
             return join(admins, name);
         }
     }
@@ -95,7 +100,7 @@ export const freshAdminFor = async (main: string, target: string, branch: string
     try {
         const staging = join(scratch, basename(target));
         await git(main, ["worktree", "add", "--no-checkout", staging, branch]);
-        const admin = await pointerOf(staging);
+        const admin = await gitDirOf(staging);
         if (admin === undefined) {
             throw new Error(`git worktree add left no pointer at ${staging}`);
         }
@@ -132,11 +137,10 @@ export const repointLinkedCheckouts = async (common: string, shared: readonly st
     }
 };
 
-// The `.git` pointer file of a checkout, resolved, undefined for an in-tree `.git` dir or none.
-const pointerOf = async (checkout: string): Promise<string | undefined> => {
-    // allow(silent-catch): no `.git`, or a `.git` dir, is no pointer, which is the answer asked for.
-    const named = (await readFile(join(checkout, ".git"), "utf8").catch(() => "")).match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-    return named === undefined || named === "" ? undefined : resolve(checkout, named);
+// Whether a checkout's `.git` leads into `admin` (already resolved), however either is spelled.
+const leadsInto = async (checkout: string, admin: string): Promise<boolean> => {
+    const gitDir = await gitDirOf(checkout);
+    return gitDir !== undefined && (await real(gitDir)) === admin;
 };
 
 // Which conversation's checkout leads into `admin`: the one its branch names first (`agent/<id>`), else any under the
@@ -144,17 +148,29 @@ const pointerOf = async (checkout: string): Promise<string | undefined> => {
 const ownerOf = async (layout: LinkLayout, repo: string, admin: string): Promise<string | undefined> => {
     const branch = await headBranchIn(admin);
     const named = branch?.startsWith("agent/") === true ? layout.worktreeDir(branch.slice("agent/".length), repo) : undefined;
-    if (named !== undefined && (await pointerOf(named)) === admin) {
+    if (named !== undefined && (await leadsInto(named, admin))) {
         return named;
     }
     const root = dirname(layout.conversationDir("_"));
     for (const id of (await readdir(root).catch(undefinedIfMissing)) ?? []) {
         const candidate = layout.worktreeDir(id, repo);
-        if (candidate !== named && (await pointerOf(candidate)) === admin) {
+        if (candidate !== named && (await leadsInto(candidate, admin))) {
             return candidate;
         }
     }
     return undefined;
+};
+
+/** The linked worktrees of `main`'s repository that have `branch` checked out, read off git's porcelain listing. */
+export const holdersOf = async (main: string, branch: string, git: GitRunner): Promise<string[]> => {
+    const { stdout } = await git(main, ["worktree", "list", "--porcelain"]);
+    // The first entry is the repository's main worktree, which is the shared checkout itself.
+    return stdout
+        .split("\n\n")
+        .slice(1)
+        .filter((entry) => entry.split("\n").includes(`branch refs/heads/${branch}`))
+        .flatMap((entry) => /^worktree (.+)$/m.exec(entry)?.[1] ?? [])
+        .filter((path) => resolve(path) !== resolve(main));
 };
 
 /**
@@ -163,16 +179,8 @@ const ownerOf = async (layout: LinkLayout, repo: string, admin: string): Promise
  * Answers the checkouts it detached; one git cannot reach is said and left.
  */
 export const releaseBranch = async (main: string, branch: string, logger: Logger, git: GitRunner): Promise<string[]> => {
-    const { stdout } = await git(main, ["worktree", "list", "--porcelain"]);
-    // The first entry is the repository's main worktree, which is the shared checkout itself.
-    const holders = stdout
-        .split("\n\n")
-        .slice(1)
-        .filter((entry) => entry.split("\n").includes(`branch refs/heads/${branch}`))
-        .flatMap((entry) => /^worktree (.+)$/m.exec(entry)?.[1] ?? [])
-        .filter((path) => resolve(path) !== resolve(main));
     const released: string[] = [];
-    for (const path of holders) {
+    for (const path of await holdersOf(main, branch, git)) {
         try {
             await git(path, ["switch", "--detach", "-q"]);
             released.push(path);
@@ -182,6 +190,49 @@ export const releaseBranch = async (main: string, branch: string, logger: Logger
         }
     }
     return released;
+};
+
+/**
+ * The line a checkout at `dir` must not commit on, when it stands on one: the repository's main line (`locked`), or a
+ * branch another checkout of the repository has checked out (the shared checkout, a branch's view), since a commit
+ * there moves a line someone else stands on. Undefined for the shared checkout itself, a detached HEAD, or a branch
+ * nobody else holds. File reads only: asked before every commit of a conversation's checkout.
+ */
+const sharedLineOf = async (dir: string, locked: string | undefined): Promise<string | undefined> => {
+    const gitDir = await gitDirOf(dir);
+    if (gitDir === undefined) {
+        return undefined;
+    }
+    const own = await real(gitDir);
+    const common = await real(await commonDirOf(gitDir));
+    const branch = await headBranchIn(gitDir);
+    if (own === common || branch === undefined) {
+        return undefined;
+    }
+    if (branch === locked || (await headBranchIn(common)) === branch) {
+        return branch;
+    }
+    for (const name of (await readdir(join(common, "worktrees")).catch(undefinedIfMissing)) ?? []) {
+        const admin = join(common, "worktrees", name);
+        if (admin !== own && (await headBranchIn(admin)) === branch) {
+            return branch;
+        }
+    }
+    return undefined;
+};
+
+/**
+ * Detaches a conversation's checkout in place when it stands on a shared line (sharedLineOf), and answers that line.
+ * `switch --detach` moves no file and no index entry; what is committed next sits on the detached HEAD, and the turn's
+ * carry takes it onto `agent/<id>` (conversations/worktrees/stray-work.ts). targowisko, 2026-11-11: an agent switched
+ * its checkout to `main`, and the next commit of it moved everyone's main.
+ */
+export const detachFromSharedLine = async (dir: string, locked: string | undefined, git: GitRunner): Promise<string | undefined> => {
+    const line = await sharedLineOf(dir, locked);
+    if (line !== undefined) {
+        await git(dir, ["switch", "--detach", "-q"]);
+    }
+    return line;
 };
 
 /** One repair the heal made, for its log line and its caller. */
@@ -208,7 +259,8 @@ export const healSharedCheckoutLinks = async (layout: LinkLayout, repos: readonl
             if (gitDir === undefined) {
                 continue;
             }
-            const common = resolve(await commonDirOf(gitDir));
+            const common = await real(await commonDirOf(gitDir));
+            const shared = await real(main);
             // Only a checkout of its own repository (`gits/<repo>`, as the workspace makes them): a folder holding a
             // worktree of another one (`git worktree add <workspace>/app-feature`) is a person's, and stays as they made it.
             if (basename(common) !== encodeURIComponent(repo)) {
@@ -217,7 +269,8 @@ export const healSharedCheckoutLinks = async (layout: LinkLayout, repos: readonl
             const admins = join(common, "worktrees");
             for (const name of (await readdir(admins).catch(undefinedIfMissing)) ?? []) {
                 const admin = join(admins, name);
-                if ((await backlinkOf(admin)) !== resolve(main)) {
+                const back = await backlinkOf(admin);
+                if (back === undefined || (await real(back)) !== shared) {
                     continue;
                 }
                 const owner = await ownerOf(layout, repo, admin);
@@ -226,7 +279,7 @@ export const healSharedCheckoutLinks = async (layout: LinkLayout, repos: readonl
                 await writeFileAtomic(join(admin, "gitdir"), `${join(to, ".git")}\n`);
                 healed.push({ repo, kind: "worktree-record", path: admin, from: main, to });
             }
-            if (resolve(gitDir) !== common) {
+            if ((await real(gitDir)) !== common) {
                 await writeFileAtomic(join(main, ".git"), `gitdir: ${common}\n`);
                 healed.push({ repo, kind: "shared-checkout", path: main, from: gitDir, to: common });
             }

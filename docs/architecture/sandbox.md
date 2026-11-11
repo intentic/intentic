@@ -120,11 +120,13 @@ flowchart LR
   so git inside records `/work/<repo>` as that worktree's place, and every other conversation's checkout reads as
   missing. 2026-11-11 (targowisko): a worktree record naming the shared checkout made the daemon's next `git worktree
   repair` re-point `/work/<repo>/.git` into it, and every land waited on a checkout no person had moved. So the daemon
-  never runs `worktree repair` and links one pair at a time, and a hijacked shared checkout is pointed back by the
-  history cycle, before a land waits on it and by Back to main
+  never runs `worktree repair` and links one pair at a time, and a hijacked shared checkout is pointed back, under the
+  repo's lock, by the conversations' sweep, before a land waits on it and by Back to main
   ([`worktree-links.ts`](../../_sandbox/sandbox/src/workspace/layout/worktree-links.ts)). The git wrapper refuses
-  `worktree prune` and `repair`, and a conversation's own checkout switching onto the main line; a checkpoint detaches
-  a checkout found standing there before it commits; and a jailed turn is told where it stands.
+  `worktree prune`, `repair`, `move` and `remove`, and a conversation's own checkout switching onto the main line;
+  `gc.worktreePruneExpire` is `never`, so auto-gc drops no record; every commit of a conversation's checkout
+  (`commitWorktreeRemainder`) detaches it first when it stands on the main line or on a branch another checkout holds;
+  and a jailed turn is told where it stands.
 - 2026-10-06: a fenced turn used to run in the same mount namespace as any other, as root with every capability, so the fence held only for an agent that did not try to leave it. A container per turn was considered and rejected: it is the same kernel boundary with far more plumbing to cross (stdio, tmux panes, hooks, previews).
 
 ## Land

@@ -11,7 +11,7 @@ import { changedFiles } from "./changes/changes.js";
 import { checkoutRef } from "./changes/changes-commits.js";
 import { createBranch } from "./ops/branches.js";
 import { MAIN_BRANCH_CONFIG } from "./main-line-lock.js";
-import { plainCheckoutRefusal } from "./main-line.routes.js";
+import { heldElsewhereReason } from "./main-line.routes.js";
 import { linkLayoutOf } from "../workspace/layout/worktree-links.js";
 
 // The shared checkout stays on its main line (main-line-lock.ts): the routes that would move it refuse before writing,
@@ -114,11 +114,10 @@ test("the way back detaches a conversation's checkout that took the main line, m
     expect(readFileSync(join(copy, "a.txt"), "utf8")).toBe("the agent's edit\n");
 });
 
-test("git's refusal over a worktree holding the main line is said as what it means", () => {
-    expect(plainCheckoutRefusal("fatal: 'main' is already used by worktree at '/history/gits/app'", "main")).toBe(
-        "`main` is still checked out at /history/gits/app, so the workspace cannot take it back. Stop or archive the conversation working there, then try again.",
+test("a way back a held main line still blocks says where it is held and what to do", () => {
+    expect(heldElsewhereReason("main", "/history/worktrees/c1/app")).toBe(
+        "`main` is still checked out at /history/worktrees/c1/app, so the workspace cannot take it back. Stop or archive the conversation working there, then try again.",
     );
-    expect(plainCheckoutRefusal("error: Your local changes would be overwritten", "main")).toBe("error: Your local changes would be overwritten");
 });
 
 test("the main line latched by hand is the one kept", async () => {
