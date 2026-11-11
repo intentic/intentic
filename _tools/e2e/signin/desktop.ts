@@ -7,8 +7,9 @@ import type { BrowserContext, Page } from "@playwright/test";
 // have unit tests pinning the same shapes (`the_profile_rides_the_completion…`, `parses_an_auth_handoff`).
 //
 // The app's windows are Chromium pages here, and what the app would hear from them (a navigation to `intentic://…`,
-// which Tauri intercepts in Rust) is read off Chrome DevTools' `Page.frameRequestedNavigation`, which reports the link
-// verbatim before Chromium gives up on a scheme with no handler.
+// which Tauri intercepts in Rust) is taken by the Navigation API before Chromium follows it, and passed verbatim to
+// the test. Letting Chromium follow an app command at startup (the preferences handover, for example) leaves the page
+// unable to receive native clicks; the real app consumes those commands without navigating its webview.
 
 export interface Attempt {
     readonly state: string;
@@ -70,6 +71,7 @@ export const becomeTheAppWebview = async (context: BrowserContext): Promise<void
 declare global {
     interface Window {
         __INTENTIC_DESKTOP__?: { version: string; installId: string; update: string | null };
+        intenticE2eDeepLink: (link: string) => Promise<void>;
     }
 }
 
@@ -80,17 +82,12 @@ export interface DeepLinks {
     readonly seen: readonly string[];
 }
 
-/** Starts hearing the `intentic:` links `page` asks for, as the app would. Call before the action that sends one. */
+/** Starts hearing the `intentic:` links `page` asks for, as the app would. Call before loading the page. */
 export const listenForDeepLinks = async (page: Page): Promise<DeepLinks> => {
     const seen: string[] = [];
     const taken = new Set<number>();
     const waiters = new Set<{ readonly prefix: string; readonly resolve: (link: string) => void }>();
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send(`Page.enable`);
-    cdp.on(`Page.frameRequestedNavigation`, ({ url }) => {
-        if (!url.startsWith(`intentic:`)) {
-            return;
-        }
+    await page.exposeFunction(`intenticE2eDeepLink`, (url: string) => {
         seen.push(url);
         for (const waiter of waiters) {
             if (url.startsWith(waiter.prefix)) {
@@ -100,6 +97,14 @@ export const listenForDeepLinks = async (page: Page): Promise<DeepLinks> => {
                 return;
             }
         }
+    });
+    await page.addInitScript(() => {
+        window.navigation.addEventListener(`navigate`, (event) => {
+            if (event.destination.url.startsWith(`intentic:`)) {
+                event.preventDefault();
+                void window.intenticE2eDeepLink(event.destination.url);
+            }
+        });
     });
     const next = (prefix: string, timeoutMs = 20_000): Promise<string> => {
         const waiting = seen.findIndex((link, index) => !taken.has(index) && link.startsWith(prefix));

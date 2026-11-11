@@ -20,9 +20,9 @@ flowchart LR
   and Postgres through testcontainers with the migrations replayed. Google is replaced at its two edges only
   (`google.ts`): a fake Identity Services script whose button returns an RS256 ID token, and the matching JWKS
   answered inside the api's process, so Better Auth's real one-tap verification accepts it. The desktop app's half
-  (`desktop.ts`) is `auth.rs` in TypeScript: the state and verifier, the `intentic://` links read off Chrome
-  DevTools, and the landing the app points its window at. The app opens Home before sign-in; the specs press its
-  Sign in link before continuing in the browser. `accounts.spec.ts` covers several accounts in one browser: adding one
+  (`desktop.ts`) is `auth.rs` in TypeScript: the state and verifier, the `intentic://` links intercepted before
+  Chromium navigates (as Tauri consumes app commands), and the landing the app points its window at. The app opens Home
+  before sign-in; the specs press its Sign in link before continuing in the browser. `accounts.spec.ts` covers several accounts in one browser: adding one
   from the account menu, switching back, a second tab following the switch, a call meant for the account a page was
   opened as refused once the browser moved on, signing out of one or of all, and Continue as on the sign-in screen
   once the active account's sign-in ended. Its people sign in by emailed code, except the one whose Google credential
