@@ -3,11 +3,14 @@ import { Button, Icon } from "@intentic/extension-ui";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { t } from "./i18n.js";
 
-/* PDF preview: the browser's own PDF plugin, via <object>. */
+/* PDF preview: the browser's own PDF plugin, via <object>. The hosted editor's CSP lets an <object> and a frame load
+   blob: URLs for this (nginx.conf), so the blob is typed as a PDF here, whatever type it arrived with: what the page
+   embeds is only ever handed to the PDF viewer, never rendered as a document of the editor's own origin. */
 
 const { blob } = defineProps<{ blob: Blob }>();
 defineEmits<{ download: [] }>();
 
+const PDF = `application/pdf`;
 const url = ref<string>();
 
 const revoke = (): void => {
@@ -20,7 +23,7 @@ watch(
     () => blob,
     (next) => {
         revoke();
-        url.value = URL.createObjectURL(next);
+        url.value = URL.createObjectURL(next.type === PDF ? next : new Blob([next], { type: PDF }));
     },
     { immediate: true },
 );

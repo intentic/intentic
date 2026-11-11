@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 // Pins that nginx.conf's response headers don't break Google sign-in: Referrer-Policy must still send Origin to
-// accounts.google.com's cross-origin request, and CSP must still allow its script and frame.
+// accounts.google.com's cross-origin request, and CSP must still allow its script and frame. And that the CSP still
+// lets a PDF open in the browser's own viewer.
 
 const here = import.meta.dirname;
 const nginxConf = readFileSync(resolve(here, `../nginx.conf`), `utf8`);
@@ -32,6 +33,15 @@ describe(`deployed web headers`, () => {
         const csp = valueOf(`Content-Security-Policy`);
         const directive = (name: string): string => new RegExp(`${name} [^;]*`).exec(csp)?.[0] ?? ``;
         expect(directive(`script-src`)).toContain(`https://accounts.google.com`);
-        expect(directive(`frame-src`)).toBe(`frame-src 'self' https:`);
+        expect(directive(`frame-src`)).toBe(`frame-src 'self' https: blob:`);
+    });
+
+    // The viewers extension's PdfViewer is an <object> on a blob URL, and Chromium's PDF viewer loads that blob again
+    // in a frame: refuse either and every PDF shows "This PDF can't be displayed inline".
+    it(`lets the browser's own PDF viewer show a blob`, () => {
+        const csp = valueOf(`Content-Security-Policy`);
+        const sources = (name: string): string[] => (new RegExp(`${name} ([^;]*)`).exec(csp)?.[1] ?? ``).split(` `);
+        expect(sources(`object-src`)).toContain(`blob:`);
+        expect(sources(`frame-src`)).toContain(`blob:`);
     });
 });
