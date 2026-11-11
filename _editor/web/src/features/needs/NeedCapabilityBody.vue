@@ -51,6 +51,9 @@ const suggestedName = (): string => {
     return entry.value === undefined ? cleanName(props.subject.entry) : suggestName(entry.value, capabilities.value);
 };
 const name = ref(suggestedName());
+// What is actually saved: the typed name repaired (an e-mail's `@` and dots to hyphens), never refused for its characters.
+const savedName = computed(() => cleanName(name.value));
+const namePreview = computed(() => (savedName.value !== `` && savedName.value !== name.value.trim() ? savedName.value : undefined));
 const values = reactive<Record<string, string>>(entry.value === undefined ? {} : seedValues(entry.value, undefined, props.subject.prefill ?? {}));
 const fields = computed(() => (entry.value === undefined ? [] : shownFields(entry.value, values)));
 const complete = computed(() => entry.value !== undefined && formComplete(entry.value, values, name.value));
@@ -109,7 +112,7 @@ const connect = async (): Promise<void> => {
     }
     // Taken at the press: the card may be gone by the time the accept lands.
     const id = props.need.id;
-    const input = { id: name.value, kind: tile.kind, config: buildConfig(tile, values) };
+    const input = { id: savedName.value, kind: tile.kind, config: buildConfig(tile, values) };
     await answer({
         what: t(`needs.capability.connecting`, { name: props.subject.name }),
         tag: `connect`,
@@ -233,6 +236,9 @@ const guideSteps = computed<readonly string[]>(() => entry.value?.guide?.steps ?
                 <span class="ui-field-label">{{ t(`needs.capability.name`) }}</span>
                 <input v-model="name" :class="ui.input('w-full font-mono')" autocapitalize="off" spellcheck="false" />
                 <span v-if="nameError(name)" class="text-2xs text-warning">{{ nameError(name) }}</span>
+                <span v-else-if="namePreview" class="text-2xs text-muted">
+                    {{ t(`capabilities.capabilities.saved`) }} <span class="font-mono text-content">{{ namePreview }}</span>
+                </span>
             </label>
             <template v-for="field in fields" :key="field.key">
                 <!-- A key the sandbox makes: only its public half and the line that authorizes it, never a box to paste into. -->

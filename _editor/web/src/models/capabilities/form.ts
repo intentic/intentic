@@ -12,6 +12,8 @@ import { formatCount } from "@intentic/ui/format";
 // edit: on edit, a blank secret box for a `stored` key means keep it, not unanswered.
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+// The daemon's entry id limit (sandbox-contract `entryId`); a longer paste is cut, not refused.
+const NAME_MAX = 60;
 // End-anchored and whitespace-free: uncheckpointed, a two-line paste passed and `fieldVerified` then put a green tick on
 // it, which is worse than no tick. Parsed as well as matched, so the check stands behind what it vouches for.
 const URL_RE = /^https?:\/\/\S+$/i;
@@ -28,7 +30,8 @@ const parsesAsUrl = (value: string): boolean => {
 
 // Repairs a typed name into a valid one instead of refusing it (case kept); only a name with nothing
 // salvageable left is refused. Accents are folded to their base letter rather than dropped: deleting the
-// é from `Café` leaves `Caf`, a different word, where folding leaves `Cafe`.
+// é from `Café` leaves `Caf`, a different word, where folding leaves `Cafe`. An e-mail address becomes
+// `ann-example-com`, and anything past the id limit is cut.
 export const cleanName = (raw: string): string =>
     raw
         .trim()
@@ -37,6 +40,7 @@ export const cleanName = (raw: string): string =>
         .replace(/[^a-zA-Z0-9_-]+/gu, `-`)
         .replace(/[-_]{2,}/g, `-`)
         .replace(/^[-_]+/, ``)
+        .slice(0, NAME_MAX)
         .replace(/[-_]+$/, ``);
 
 /** The form's values, keyed by field; every value, including a switch, is a string ("on"/"off"). */

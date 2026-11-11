@@ -43,6 +43,8 @@ test(`repairs a typed name instead of refusing it`, () => {
     expect(cleanName(`  ops box (new)  `)).toBe(`ops-box-new`);
     expect(cleanName(`-nope-`)).toBe(`nope`);
     expect(cleanName(`ops-box_2`)).toBe(`ops-box_2`);
+    expect(cleanName(`ann.lee@example.com`)).toBe(`ann-lee-example-com`);
+    expect(cleanName(`${`a`.repeat(59)  }-bcd`)).toBe(`a`.repeat(59));
     expect(cleanName(`…`)).toBe(``);
 
     // Accents fold to their base letter: dropping the é would leave `Caf`, a different word.
