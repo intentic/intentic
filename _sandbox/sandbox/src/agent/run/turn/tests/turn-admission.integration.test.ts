@@ -89,6 +89,8 @@ const refusedAdmission = async (get: () => Promise<AgentDomainPolicy>) => {
         agents: fleet.agents,
         conversations: fleet.conversations,
         events,
+        // Not a runner: a sandbox's own words start its own turns, never a parent's (runners/ownership/wake.ts).
+        runnerParent: {},
         workspace: unstubbed<Services["workspace"]>("workspace", { root: "/nowhere/domain-admission" }),
         // Where a journalled run's log is written as it draws (sessions/run-log.ts).
         config: unstubbed<Services["config"]>("config", { historyRoot: mkdtempSync(join(tmpdir(), "admission-history-")) }),

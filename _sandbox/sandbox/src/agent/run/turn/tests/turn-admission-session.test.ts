@@ -31,6 +31,8 @@ const doorsOver = (fleet: Awaited<ReturnType<typeof onCodex>>) => {
         agents: fleet.agents,
         conversations: fleet.conversations,
         events: createDomainEvents(() => {}),
+        // Not a runner: a sandbox's own words start its own turns, never a parent's (runners/ownership/wake.ts).
+        runnerParent: {},
         workspace: unstubbed<Services["workspace"]>("workspace", { root: "/nowhere/admission-sessions" }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { append: async () => {}, count: async () => 0 }),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {} }),

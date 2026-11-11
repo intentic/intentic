@@ -71,6 +71,8 @@ const fakeServices = (
     return unstubbed<Services>("services", {
         // Parked with the same actors, so a restored card is the one a reply resolves.
         cards: parkedCards(conversations),
+        // Not a runner: a sandbox's own words start its own turns, never a parent's (runners/ownership/wake.ts).
+        runnerParent: {},
         sandboxSettings: fileSandboxSettingsStore(join(root, "settings.json")),
         // Read as data by run-role health, so it has to be a real seam: the helpers below spread this object, and a
         // spread keeps only own keys, dropping unstubbed's throwing proxy. Empty ledger: no rung has a failing streak.

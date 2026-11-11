@@ -213,6 +213,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         personas: memoryPersonasStore(),
         // No areas by default: the unfenced workspace, which is what every member row without them already means.
         areas: memoryAreasStore(),
+        // Not a runner, as a sandbox is until runner mode names its parent: its own words start its own turns
+        // (runners/ownership/wake.ts), and no turn mirrors a parent's.
+        runnerParent: {},
         // Schema's own defaults: parsing an empty object is exactly what an unwritten settings file reads as.
         sandboxSettings: unstubbed("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse({}),

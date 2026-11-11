@@ -68,6 +68,7 @@ export const secretsSliceFake = (devices: KeyringDevices & KeyringSyncDevices = 
     const uses: SecretUse[] = [];
     let gates: CredentialGate[] = [];
     let kept: Record<string, string> = {};
+    let copies: Readonly<Record<string, string>> = {};
     let stored: StoredHostGuard[] = [];
     // What the sandbox's own store below holds, as the real registry unions it; nothing else is stored. In-memory,
     // not unstubbed, since the inventory route reads it every call.
@@ -121,6 +122,13 @@ export const secretsSliceFake = (devices: KeyringDevices & KeyringSyncDevices = 
         // Nobody listens unless a suite subscribes; the announcing store is tested where it lives (sandbox-secrets.test.ts).
         onSecretsChanged: () => () => undefined,
         secretsChanged: () => undefined,
+        // Nothing any keyring shared in copy mode, in memory, as a fresh sandbox holds; the hub reconcile reads it.
+        keyringCopies: {
+            all: async () => copies,
+            change: async (change: (current: Readonly<Record<string, string>>) => Readonly<Record<string, string>>) => {
+                copies = change(copies);
+            },
+        },
         // The sandbox's own store, in memory: what a need's card and a DevOps-less Secrets view write.
         sandboxSecrets: {
             all: async () => kept,
