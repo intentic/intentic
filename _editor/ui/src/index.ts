@@ -389,7 +389,7 @@ export { useExplorerStyle } from "./composables/useExplorerStyle.js";
 export { commandLang, type CommandOs, osOptions, useOsPreference } from "./composables/useOsPreference.js";
 export { type Device, useDevice } from "./composables/useDevice.js";
 // Whether this element, not the screen, is too narrow for its layout; useDevice answers about the screen only.
-export { useNarrow } from "./composables/useNarrow.js";
+export { NARROW_HYSTERESIS_REM, useNarrow } from "./composables/useNarrow.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
 // Every draggable divider in the app; only the per-surface setter differs.
 export { type PointerResize, usePointerResize } from "./composables/usePointerResize.js";

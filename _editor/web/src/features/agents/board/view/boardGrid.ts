@@ -12,10 +12,11 @@ import type { LaneContent } from "./phoneLanes";
 // shapes: Attention, Active, Finished.
 const NARROW_BOARD_REM = 48;
 const PAIRED_BOARD_REM = 72;
-// From here three columns give each lane some 520px, enough for a card's title and facts on one line: reshaping a board
-// this wide would only stretch the cards (two columns of 900px put a card's time a screen's width from its title), so a
-// roomy board keeps its three lanes whatever they hold.
-const ROOMY_BOARD_REM = 100;
+// From here three columns give each lane some 460px, enough for a card's title and facts on one line: reshaping a board
+// this wide would only stretch the cards (two columns of 700px put a card's time a screen's width from its title), so a
+// roomy board keeps its three lanes whatever they hold. Low enough that a 4K screen at 150% (2560px) keeps three lanes
+// beside a chat docked wide enough for its Usage left rail (pinned in boardGrid.test.ts).
+export const ROOMY_BOARD_REM = 90;
 
 // AND BY WHAT THE LANES HOLD. On a wide board an empty lane still took a third of it for one sentence, while the lane
 // with something to read cut its titles short beside it. So an empty lane gives its column away and says its sentence

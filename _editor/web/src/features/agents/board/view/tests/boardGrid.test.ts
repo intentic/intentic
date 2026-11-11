@@ -1,4 +1,7 @@
-import { boardLayout, LOUD } from "../boardGrid";
+import { NARROW_HYSTERESIS_REM } from "@intentic/ui";
+import { CAPACITY_RAIL_PX, PANE_COMFORT_PX } from "../../../../chat/panel/capacity/chatCapacity";
+import { ICON_RAIL_SCREEN_PX } from "../../../../../workbench/window/iconRailWidth";
+import { boardLayout, LOUD, ROOMY_BOARD_REM } from "../boardGrid";
 
 // Pins how the board lays its lanes out: by its width, and by which lanes are empty, so an empty lane gives its column
 // to the lanes with something to read.
@@ -42,5 +45,18 @@ describe(`boardLayout`, () => {
     it(`keeps the width's layout on a board with nothing in any lane`, () => {
         expect(boardLayout(false, false, quiet(`attention`, `active`, `finished`))).toEqual({ kind: `three` });
         expect(boardLayout(false, true, quiet(`attention`, `active`, `finished`))).toEqual({ kind: `paired` });
+    });
+});
+
+// A 4K screen at 150% (3840px / 1.5) keeps the roomy board's three lanes beside a chat docked just wide enough for its
+// Usage left rail (railFitsBeside: one pane at comfort width plus the rail). The board's own chrome, measured in the
+// demo: the lane grid's padding (lg:p-6, 48px), the scroller's stable gutter (10px) and the chat's seam (1px). The board
+// must clear the roomy width by the hysteresis too, or one that once folded would never unfold again at that width.
+describe(`the roomy board's width`, () => {
+    it(`keeps three lanes on a 2560px screen beside a chat showing its usage rail`, () => {
+        const screen = 3840 / 1.5;
+        const chrome = 48 + 10 + 1;
+        const board = screen - ICON_RAIL_SCREEN_PX - (PANE_COMFORT_PX + CAPACITY_RAIL_PX) - chrome;
+        expect(board).toBeGreaterThanOrEqual((ROOMY_BOARD_REM + NARROW_HYSTERESIS_REM) * 16);
     });
 });

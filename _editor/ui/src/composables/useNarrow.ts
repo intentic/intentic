@@ -8,7 +8,7 @@ import { useTextSize } from "./useTextSize.js";
 
 // Hysteresis: the answer can move what it measures (folding a layout can summon a scrollbar, changing
 // the width that produced the fold), so switching back requires clearing the threshold by a margin.
-const HYSTERESIS_REM = 1.5;
+export const NARROW_HYSTERESIS_REM = 1.5;
 
 // The root's font size, read once per text-size rung (the one thing that moves it, with the browser's own base size)
 // rather than on every resize: each read made the browser work out the page's style in the middle of the resize
@@ -28,7 +28,7 @@ export function useNarrow(element: Readonly<Ref<HTMLElement | undefined>>, at: n
     const narrow = ref(false);
     let width = Number.POSITIVE_INFINITY;
     const { scale } = useTextSize();
-    const verdict = (): boolean => width < (narrow.value ? at + HYSTERESIS_REM : at) * rootFontSize(scale.value);
+    const verdict = (): boolean => width < (narrow.value ? at + NARROW_HYSTERESIS_REM : at) * rootFontSize(scale.value);
     const judge = (): void => {
         narrow.value = verdict();
     };
