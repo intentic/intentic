@@ -103,6 +103,27 @@ jobs:
           $workerScript = Join-Path $PWD '_tools/scripts/ci/wsl-workers.sh'
           $workerText = [System.IO.File]::ReadAllText($workerScript).Replace("`r`n", "`n")
           [System.IO.File]::WriteAllText($workerScript, $workerText, [System.Text.UTF8Encoding]::new($false))
+
+      # This box also hosts the Linux fleet's workers in WSL2. Drain them before tool setup and dependency install:
+      # release run 42991360694 hit pnpm's 30s hook-worker deadline before reaching the pause below the install.
+      # wsl-workers.sh drains current jobs and arms a failsafe to restore the workers if this job disappears.
+      - name: Pause the fleet's workers on this machine
+        # A pause that could not happen pauses nothing (the script arms its timer first and stops nothing without it), so
+        # the job still runs on a busy machine rather than being skipped.
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          if (-not ((wsl.exe -l -q) -replace "`0", "" | Where-Object { $_.Trim() -eq $env:FLEET_DISTRO })) {
+            Write-Output "no $env:FLEET_DISTRO distro on this machine: no fleet workers to pause"
+            exit 0
+          }
+          # Past this job's own timeout, so the timer never gives the workers back while the tiers still run.
+          $failsafe = [int]$env:JOB_TIMEOUT_MINUTES + 15
+          wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh pause $failsafe
+        env:
+          FLEET_DISTRO: ${{ vars.WSL_FLEET_DISTRO || 'archlinux' }}
+          JOB_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         if: ${{ (inputs.deep && !inputs.engine-only) || inputs.engine-move }}
         with:
@@ -191,27 +212,6 @@ jobs:
         with:
           name: ${{ inputs.artifact-name }}
           path: windows-artifacts
-
-      # This box also hosts the Linux fleet's workers in WSL2. Every Windows smoke run needs them drained:
-      # release run 41071974841 exceeded the cold setup's 120s bound and a window listing's 15s deadline
-      # while release smoke still skipped the pause that protected the deep tiers.
-      # wsl-workers.sh drains current jobs and arms a failsafe to restore the workers if this job disappears.
-      - name: Pause the fleet's workers on this machine
-        # A pause that could not happen pauses nothing (the script arms its timer first and stops nothing without it), so
-        # the tiers still run, on a busy machine, rather than being skipped.
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          if (-not ((wsl.exe -l -q) -replace "`0", "" | Where-Object { $_.Trim() -eq $env:FLEET_DISTRO })) {
-            Write-Output "no $env:FLEET_DISTRO distro on this machine: no fleet workers to pause"
-            exit 0
-          }
-          # Past this job's own timeout, so the timer never gives the workers back while the tiers still run.
-          $failsafe = [int]$env:JOB_TIMEOUT_MINUTES + 15
-          wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh pause $failsafe
-        env:
-          FLEET_DISTRO: ${{ vars.WSL_FLEET_DISTRO || 'archlinux' }}
-          JOB_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
 
       # Restart Manager ends the Tao event loop without ExitRequested. Exercise those exact shipped bytes
       # before tier 1, then uninstall so its first-install assertions still start from a clean machine.
