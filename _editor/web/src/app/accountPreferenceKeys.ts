@@ -9,7 +9,6 @@ export const ACCOUNT_PREFERENCE_KEYS: readonly string[] = [
     `ui-motion`,
     `ui-text-size`,
     `ui-locale`,
-    `ui-icon-rail-size`,
     `ui-explorer-style`,
     `ui-file-nesting`,
     `ui-changes-by-module`,

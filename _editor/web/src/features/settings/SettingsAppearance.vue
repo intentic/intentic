@@ -23,7 +23,6 @@ import { type DiffOpen, useLayout } from "../../workbench/window/useLayout";
 import { useChangeGrouping } from "../../models/workspace/changes/useChangeGrouping";
 import { useChangeWeight } from "../../models/workspace/changes/changeWeight";
 import { useFileNesting } from "../../models/workspace/tree/useFileNesting";
-import { useIconRailSize } from "../../workbench/window/useIconRailSize";
 import { useSkin } from "../../skins/useSkin";
 import { WALLPAPERS, useWallpaper } from "../../skins/useWallpaper";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "../../skins/themeRow";
@@ -40,7 +39,6 @@ import { inDesktopWindow } from "../../workbench/window/textZoom";
 const { choice: schemeChoice, handed: handedScheme, set: setScheme, hand: handScheme, accent, setAccent } = useTheme();
 const { textSize, setTextSize, percent: textPercent } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
-const { iconRailSize } = useIconRailSize();
 const { mobile } = useDevice();
 const { fileNesting } = useFileNesting();
 // Review-list reading: groupByModule also has a toggle on the Changes panel; largestFirst is set only here.
@@ -144,10 +142,6 @@ const setThemeChoice = (value: ThemeRow): void => {
 };
 const wallpaperOptions = computed(() => WALLPAPERS.map((value) => ({ label: t(`settings.appearance.wallpaper.${value}`), value })));
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: t(`settings.appearance.explorer.${value}`), value })));
-const iconRailOptions = computed(() => [
-    { label: t(`settings.words.iconRailCompact`), value: `compact` as const },
-    { label: t(`settings.words.iconRailComfortable`), value: `comfortable` as const },
-]);
 // Whether the interface moves (@intentic/ui/motion, choice.ts): `system` defers to the OS's reduce-motion switch, the other two decide
 // outright. Off is instant, not merely calmer: every transition in the app reads its duration through motion.css.
 const { motion, setMotion } = useMotion();
@@ -280,21 +274,10 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             >
                 <template #control><SegmentedControl :model-value="motion" :options="motionOptions" @update:model-value="setMotion" /></template>
             </Row>
-            <!-- Above the rail row: this one moves the whole workspace, that one moves a column of it. -->
             <Row data-setting="text-size" icon="expand" :title="t(`settings.appearance.look.textSize`)" :description="textSizeHint">
                 <template #control
                     ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
                 /></template>
-            </Row>
-            <!-- A phone's rail has one size, a finger's (MobileRail.vue), so there is nothing here to set. -->
-            <Row v-if="!mobile" data-setting="icon-rail" icon="sliders-h" :title="t(`settings.appearance.look.iconRail`)">
-                <template #control>
-                    <SegmentedControl
-                        :model-value="iconRailSize"
-                        :options="iconRailOptions"
-                        @update:model-value="(value) => (iconRailSize = value)"
-                    />
-                </template>
             </Row>
         </RowGroup>
 

@@ -32,7 +32,6 @@ import { useShellCommands } from "./commands/useShellCommands";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
 import { useLayout } from "../workbench/window/useLayout";
 import { uiLength } from "../workbench/window/uiScale";
-import { useIconRailSize } from "../workbench/window/useIconRailSize";
 import { useAudience } from "../app/useAudience";
 import { startAgent } from "../models/fleet/agentActions";
 import { railFrame } from "./rail/railFrame";
@@ -93,7 +92,6 @@ const { panels } = usePanels();
 // A guest has no More door and no + (see the rail's foot below).
 const { isGuest } = useRole();
 const layout = useLayout();
-const { iconRailSize } = useIconRailSize();
 // When chat floats, this column collapses everywhere else; the panel itself mounts above the router.
 const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
@@ -291,7 +289,7 @@ const sideWidth = computed(() =>
 const gridStyle = computed(() => ({
     "--side-width": sideColumnShown.value ? uiLength(sideWidth.value) : `0px`,
     // The rail's own measures, shared with a desktop window on a local folder (railFrame.ts, iconRail.css).
-    ...railFrame(iconRailSize.value),
+    ...railFrame(),
 }));
 
 // Toggled by the rail tile or Ctrl+`; the panel docks below the workspace since sessions are sandbox-global.

@@ -71,13 +71,6 @@ export const SETTINGS_CARDS: readonly SettingEntry[] = [
     { id: `motion`, slug: `appearance`, title: () => t(`settings.appearance.motion.title`), terms: () => [t(`settings.search.motion`)] },
     { id: `text-size`, slug: `appearance`, title: () => t(`settings.appearance.look.textSize`), terms: () => [t(`settings.search.textSize`)] },
     {
-        id: `icon-rail`,
-        slug: `appearance`,
-        title: () => t(`settings.appearance.look.iconRail`),
-        terms: () => [t(`settings.search.iconRail`)],
-        shown: (reader) => !reader.phone,
-    },
-    {
         id: `file-tree`,
         slug: `appearance`,
         title: () => t(`settings.appearance.explorer.group`),

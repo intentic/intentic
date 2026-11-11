@@ -21,7 +21,6 @@ import { useFaceProcesses } from "../models/processes/faceProcesses";
 import { LOCAL_PROCESS_PATH, processOnThisComputer } from "../models/processes/processAddress";
 import { type ProcessTile, processTilesOf } from "../models/processes/processTiles";
 import ProcessTiles from "../parts/processes/ProcessTiles.vue";
-import { useIconRailSize } from "../workbench/window/useIconRailSize";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
 import { navigatedPath } from "./appEvents";
@@ -50,11 +49,10 @@ const t = useT();
 const host = localHost();
 const route = useRoute();
 const router = useRouter();
-const { iconRailSize } = useIconRailSize();
 const { user } = useAccount();
 // The folder this window shows, as the editor knows it: the page is drawn anew for each (folderSwitch.ts).
 const { activeSandboxId } = useSandbox();
-const gridStyle = computed(() => railFrame(iconRailSize.value));
+const gridStyle = computed(() => railFrame());
 
 interface Tile {
     readonly section: string;

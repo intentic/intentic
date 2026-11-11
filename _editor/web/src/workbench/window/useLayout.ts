@@ -4,7 +4,7 @@ import { boolPreference, enumPreference, numberPreference } from "@intentic/ui/p
 import { useAudience } from "../../app/useAudience";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
 import type { ExplorerFilters } from "../../features/workspace/explorer/explorerFilter";
-import { iconRailScreenPx, useIconRailSize } from "./useIconRailSize";
+import { ICON_RAIL_SCREEN_PX } from "./iconRailWidth";
 import { toAppPx } from "./uiScale";
 import { readWindowState, writeWindowState } from "./windowStore";
 
@@ -140,12 +140,11 @@ const HOME_ARRANGE_KEY = `ui-home-arrange`;
 
 // Clamped to a floor and ~95% of the viewport, sliver reserved for the workspace, after subtracting the icon rail's
 // width (the chat column sits beside it) and converting from screen pixels.
-const { iconRailSize } = useIconRailSize();
 /**
  * The one bound that moves: tracks the viewport and the rail beside it, so the seam is handed a function rather than a
  * constant.
  */
-export const maxChatWidth = (): number => Math.min(MAX_CHAT_WIDTH, toAppPx((window.innerWidth - iconRailScreenPx(iconRailSize.value)) * 0.95));
+export const maxChatWidth = (): number => Math.min(MAX_CHAT_WIDTH, toAppPx((window.innerWidth - ICON_RAIL_SCREEN_PX) * 0.95));
 const clampWidth = (px: number): number => Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(px, maxChatWidth())));
 
 // A popped-out chat's side panel (FloatingSection.vue), its own width since that window holds no rail and no section:
@@ -157,7 +156,7 @@ export const defaultFloatingSideWidth = (): number => clampFloatingSideWidth(toA
 
 // Split, the beside column shares the room the rail and the chat leave with the section in the main area: at most all
 // of it but one pane for that section, and half of it until dragged. Unsplit, it takes all of that room.
-export const roomBesideChat = (): number => toAppPx(window.innerWidth - iconRailScreenPx(iconRailSize.value)) - chatWidth.value;
+export const roomBesideChat = (): number => toAppPx(window.innerWidth - ICON_RAIL_SCREEN_PX) - chatWidth.value;
 const maxBesideWidth = (): number => Math.max(MIN_PANE_PX, roomBesideChat() - MIN_PANE_PX);
 const clampBesideWidth = (px: number): number => Math.round(Math.max(MIN_PANE_PX, Math.min(px, maxBesideWidth())));
 export const defaultBesideWidth = (): number => clampBesideWidth(roomBesideChat() / 2);
