@@ -114,6 +114,11 @@ fn says_yes(answer: &str) -> bool {
     answer.trim() == "true"
 }
 
+/// Whether the page `label` has said its bar is up: it has mounted, and is drawing more than the frame's background.
+pub(super) fn bar_is_up(label: &str) -> bool {
+    chrome_of(label).ready.load(Ordering::Relaxed)
+}
+
 /// The page saying its bar is up. Taking the platform's frame off is a no-op in the ordinary case and the whole point
 /// in the slow one: a page that arrives after the fallback fired takes the frame off again, so the window ends in the
 /// state the page can actually drive either way round.
@@ -229,6 +234,8 @@ pub(super) fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
         WindowVerb::Fit(width) => fit_width(&window, f64::from(width)),
         // Answered before this is reached (`handle_link`); it is about the app's faces, not this window.
         WindowVerb::Mode(mode, look) => announced(app, mode, look),
+        // Answered before this is reached too (`handle_link`): about every page of the app, not this window.
+        WindowVerb::Prefs(values) => super::prefs::heard(app, label, values),
     }
 }
 

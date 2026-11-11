@@ -638,6 +638,9 @@ pub enum WindowVerb {
     /// The workspace's page saying it shows this sandbox, connected and drawn (`window?do=shown&sandbox=<id>`): what a
     /// folder's setup waits for before it calls the folder ready (windows.rs `warm_workspace`).
     Shown(String),
+    /// A page saying the preferences that follow the account (`window?do=prefs&values=<JSON>`): the workspace's whole
+    /// set, or a choice made on a local page, which the app carries to its other pages (windows/prefs.rs).
+    Prefs(crate::windows::prefs::Values),
 }
 
 /// Where `intentic://launcher` puts the reader down on this computer's face.
@@ -1093,6 +1096,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
                 get("look").and_then(|look| crate::state::Look::parse(&look)),
             ),
             "shown" => WindowVerb::Shown(get("sandbox").filter(|id| is_sandbox_id(id))?),
+            "prefs" => WindowVerb::Prefs(crate::windows::prefs::values_of(&get("values")?)?),
             _ => return None,
         })),
         "window" => None,
@@ -1781,6 +1785,17 @@ L"}"#,
             (
                 "intentic://window?do=shown&sandbox=cmvjklu9p000201oznem6o5e3",
                 WindowVerb::Shown("cmvjklu9p000201oznem6o5e3".to_string()),
+            ),
+            (
+                "intentic://window?do=prefs&values=%7B%22ui-icon-rail-size%22%3A%22comfortable%22%2C%22ui-text-size%22%3Anull%7D",
+                WindowVerb::Prefs(
+                    [
+                        ("ui-icon-rail-size".to_string(), Some("comfortable".to_string())),
+                        ("ui-text-size".to_string(), None),
+                    ]
+                    .into_iter()
+                    .collect(),
+                ),
             ),
             (
                 "intentic://window?do=mode&mode=light",

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 use tauri::webview::WebviewBuilder;
@@ -22,6 +23,10 @@ const FACES: [&str; 2] = [WORKSPACE, HOME];
 
 /// The face the frame draws. Set by [`show`] alone; a face added to the frame is out of sight until it is shown.
 static SHOWN: Mutex<Option<&'static str>> = Mutex::new(None);
+
+/// How many times [`show`] has drawn a face: a draw held back for a page to paint (windows.rs `when_drawn`) gives way to
+/// any the reader asked for meanwhile.
+static SHOWS: AtomicU64 = AtomicU64::new(0);
 
 /// What the taskbar and alt-tab call the frame while each face is drawn: the frame wears the title of the face it shows.
 static TITLES: LazyLock<Mutex<HashMap<&'static str, String>>> = LazyLock::new(Mutex::default);
@@ -72,6 +77,11 @@ fn drawn_label(label: &str, shown: Option<&str>) -> bool {
 /// Whether the frame is where the reader can see it: shown, and not minimised to the taskbar.
 pub fn on_screen(app: &AppHandle) -> bool {
     frame(app).is_some_and(|frame| crate::windows::bounds::window_on_screen(&frame))
+}
+
+/// How many faces [`show`] has drawn so far.
+pub fn shows() -> u64 {
+    SHOWS.load(Ordering::SeqCst)
 }
 
 /// `work` run on the main thread, and its answer: at once on that thread, waited for from any other. Building and
@@ -219,6 +229,7 @@ pub fn show(
         .collect();
     let title = TITLES.lock().unwrap().get(label).cloned();
     let (shown_face, held) = (face.clone(), frame.clone());
+    SHOWS.fetch_add(1, Ordering::SeqCst);
     on_main(app, move |_| {
         *SHOWN.lock().unwrap() = Some(label);
         // The one coming up first and the other after, in one turn of the main thread: nothing is drawn in between.

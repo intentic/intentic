@@ -10,6 +10,20 @@
              window paints one look and useTheme corrects it a moment later. -->
         <script>
             try {
+                // The preferences the workspace keeps with the account, as the app last heard them (windows/prefs.rs),
+                // written over this origin's own before anything below reads them, unless a page of this origin has
+                // taken that handover or a later one (the web's desktopPreferences.ts, which wears later ones as they
+                // come): a spare window loaded a while ago holds an older one.
+                var carried = window.__INTENTIC_PREFS__;
+                if (carried && typeof carried.version === "number" && carried.values && typeof carried.values === "object" && carried.version > (Number(localStorage.getItem("intentic.prefs-version")) || 0)) {
+                    for (var carriedKey in carried.values) {
+                        var carriedRaw = carried.values[carriedKey];
+                        if (!Object.prototype.hasOwnProperty.call(carried.values, carriedKey) || !/^ui-[a-z0-9-]+$/.test(carriedKey)) continue;
+                        if (carriedRaw === null) localStorage.removeItem(carriedKey);
+                        else if (typeof carriedRaw === "string") localStorage.setItem(carriedKey, carriedRaw);
+                    }
+                    localStorage.setItem("intentic.prefs-version", String(carried.version));
+                }
                 var accentVars = localStorage.getItem("ui-accent-vars");
                 if (accentVars) document.documentElement.setAttribute("style", accentVars);
                 var uiTextSize = localStorage.getItem("ui-text-size");

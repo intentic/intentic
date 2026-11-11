@@ -6,7 +6,7 @@ use super::mode::{face_background, look_init_script, settle_face_background};
 use super::present::Press;
 use super::scripts::{update_told, workspace_init_script, BROWSER_ARGS};
 use super::unsaved::{ask_here, ask_page, forget_unsaved, page_started, CloseTurn, UNSAVED};
-use super::{raise, swap_in, HOME};
+use super::{frame_in_use, raise, swap_in, when_drawn, HOME};
 use crate::setup_link::Source;
 use crate::state::AppState;
 use std::time::Instant;
@@ -63,6 +63,9 @@ macro_rules! local_page {
             ))
             // The look the reader was last seen in, as every hosted page is handed it (`hosted_page`).
             .initialization_script(look_init_script(state.ui_look()))
+            // And the preferences the workspace keeps with the account, which local.html writes over this origin's own
+            // before it paints (prefs.rs).
+            .initialization_script(super::prefs::local_init_script(app))
             .initialization_script($init)
             // A page starting over has no unsaved changes yet: it says again what it holds once it mounts, and until
             // then nothing of the page before it may hold a close. And whether a spare's page has loaded, so only one
@@ -214,9 +217,12 @@ pub fn show_home_face(
     crate::frame::set_title(app, HOME, title);
     settle_face_background(&face, app.state::<AppState>().ui_mode());
     arm_frame_fallback(app, HOME);
-    // Built for work it runs out of sight (local.rs `open_home_hidden_later`), it stays where `add_face` put it.
+    // Built for work it runs out of sight (local.rs `open_home_hidden_later`), it stays where `add_face` put it. Asked for,
+    // it is drawn once its page has drawn something, when that would replace the workspace on screen (`when_drawn`).
     if let Some(press) = shown {
-        swap_in(app, HOME, press);
+        when_drawn(app, HOME, frame_in_use(app), move |app| {
+            swap_in(app, HOME, press);
+        });
     }
     Ok(face)
 }

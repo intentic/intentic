@@ -1,11 +1,12 @@
 use self::bounds::{take_frame, window_on_screen};
-use self::chrome::{arm_frame_fallback, fit_decorations};
+use self::chrome::{arm_frame_fallback, bar_is_up, fit_decorations};
 use self::hosted::{app_origin, page_webview};
 use self::mode::settle_face_background;
 use self::present::Press;
 use self::scripts::open_in_place;
 use self::warmth::WARM;
 use crate::state::{AppState, Face};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, Url, Webview, Window};
 
 pub(crate) mod bounds;
@@ -15,6 +16,7 @@ pub(crate) mod hosted;
 pub(crate) mod links;
 pub(crate) mod local_pages;
 pub(crate) mod mode;
+pub(crate) mod prefs;
 pub(crate) mod present;
 pub(crate) mod quit;
 pub(crate) mod scripts;
@@ -46,6 +48,52 @@ fn swap_in(app: &AppHandle, label: &'static str, press: Press) -> Option<Webview
             Face::Workspace
         });
     Some(face)
+}
+
+/// The longest a face just added to the frame is held back for its page to draw ([`when_drawn`]): a local page mounts
+/// well inside it, and a hosted one slower than this shows its own loading screen by then, which is still a page.
+const FIRST_DRAW_WAIT: Duration = Duration::from_millis(1500);
+
+/// How often a held-back face is looked at, and how long it is given after its page says it is up, for that page's first
+/// frame to reach the screen.
+const DRAW_TICK: Duration = Duration::from_millis(16);
+const DRAWN_GRACE: Duration = Duration::from_millis(50);
+
+/// `draw` the face `label`, just added to the frame, once its page has drawn something (2026-11-11). Swapped in as it was
+/// added, a face put the frame's bare background where the other face had been until its page painted, the window's flash
+/// on the first switch between a sandbox and This computer. So while `replacing` (the frame on screen with the other face
+/// in it, or a window the face takes the place of), it is held until its page says its bar is up (chrome.rs, which every
+/// page of the editor sends as it mounts) or for [`FIRST_DRAW_WAIT`] at most; and a face the reader had drawn meanwhile
+/// (frame.rs `shows`) stands. Not replacing anything (a launch, the tray), it is drawn at once, as before.
+fn when_drawn(
+    app: &AppHandle,
+    label: &'static str,
+    replacing: bool,
+    draw: impl FnOnce(&AppHandle) + Send + 'static,
+) {
+    if !replacing || bar_is_up(label) {
+        draw(app);
+        return;
+    }
+    let shows = crate::frame::shows();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let started = Instant::now();
+        while !bar_is_up(label) && started.elapsed() < FIRST_DRAW_WAIT {
+            tokio::time::sleep(DRAW_TICK).await;
+        }
+        if bar_is_up(label) {
+            tokio::time::sleep(DRAWN_GRACE).await;
+        }
+        if crate::frame::shows() == shows {
+            draw(&app);
+        }
+    });
+}
+
+/// Whether the frame is on screen drawing a face: what a face swapped in now would replace.
+fn frame_in_use(app: &AppHandle) -> bool {
+    crate::frame::on_screen(app) && crate::frame::shown().is_some()
 }
 
 /// The page the reader is typing into, by label: the face the frame draws while the frame has the focus, or the page of
@@ -155,14 +203,24 @@ fn show_workspace_over(
             face
         }
     };
+    if loaded.is_none() {
+        // Just added: drawn once its page has drawn something, so the frame never shows its bare background between
+        // the face on screen and this one ([`when_drawn`]).
+        let replacing = frame_in_use(app) || replaced.is_some();
+        when_drawn(app, WORKSPACE, replacing, move |app| {
+            if let Some(frame) = crate::frame::frame(app) {
+                take_frame(&frame, replaced.as_ref());
+            }
+            swap_in(app, WORKSPACE, press);
+            close_replaced(replaced);
+        });
+        return;
+    }
     if let Some(frame) = crate::frame::frame(app) {
         take_frame(&frame, replaced.as_ref());
     }
     swap_in(app, WORKSPACE, press);
     close_replaced(replaced);
-    if loaded.is_none() {
-        return;
-    }
     // The workspace coming back is the cheapest evidence this machine is awake and being used, which the six-hourly
     // timer cannot see through a night of sleep (update.rs).
     crate::update::nudge(app);

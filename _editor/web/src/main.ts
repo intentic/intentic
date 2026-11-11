@@ -15,6 +15,7 @@ import { startAudienceSync } from "./client/sandbox/audienceSync";
 import { directMode } from "./client/directory/directState";
 import { apiClient } from "./lib/useApi";
 import { startAccountPreferences } from "./app/accountPreferences";
+import { startDesktopPreferences } from "./app/preferences/desktopPreferences";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
 import { dropTranscriptStore } from "./models/conversations/transcript/transcriptCache";
 import { describeError, installClientDiagnostics, reportAutomaticReloads, reportClient, sendClientDiagnosticsWith } from "./app/clientDiagnostics";
@@ -160,6 +161,9 @@ startAccountPreferences(
     computed(() => (directMode.value ? null : useAuth().user.value)),
     apiClient.me,
 );
+// Inside the desktop app, its two faces wear the same of them: the workspace's, carried to This computer and back
+// (app/preferences/desktopPreferences.ts), so switching between a sandbox and This computer never resizes the rail.
+startDesktopPreferences();
 
 // The reader's language, fetched before a single component renders in the wrong one. On `en` this resolves in the
 // same tick; on any other language it is one chunk, and paying for it here is what buys a first paint that is

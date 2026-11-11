@@ -2,9 +2,11 @@ import "@intentic/testing/dom";
 import {
     adoptPreference,
     boolPreference,
+    choosePreference,
     definePreference,
     enumPreference,
     numberPreference,
+    onPreferenceChange,
     onPreferenceWrite,
     type PreferenceNote,
     receivePreferenceChange,
@@ -201,6 +203,51 @@ describe(`a value kept beyond this browser`, () => {
             [`ui-motion`, `off`],
             [`ui-motion`, null],
         ]);
+    });
+});
+
+// A value from outside this window that is still the reader's choice: one made in the desktop app's window on a folder,
+// whose page reaches no account, handed to the workspace's page to keep (app/preferences/desktopPreferences.ts).
+describe(`a choice made elsewhere, taken as made here`, () => {
+    it(`is worn, stored, told to the other windows, and heard as a choice`, async () => {
+        const heard: (readonly [string, string | null])[] = [];
+        const stop = onPreferenceWrite((key, raw) => heard.push([key, raw]));
+        const another = new BroadcastChannel(`intentic.preferences`);
+        const told = new Promise<PreferenceNote>((resolve) => {
+            another.addEventListener(`message`, (event: MessageEvent<PreferenceNote>) => resolve(event.data), { once: true });
+        });
+        const rail = definePreference<string>({ key: `ui-rail-chosen`, read: (raw) => raw ?? `compact`, write: (value) => value });
+
+        choosePreference(`ui-rail-chosen`, `comfortable`);
+        stop();
+
+        expect(rail.value).toBe(`comfortable`);
+        expect(localStorage.getItem(`ui-rail-chosen`)).toBe(`comfortable`);
+        expect(heard).toEqual([[`ui-rail-chosen`, `comfortable`]]);
+        expect(await told).toEqual({ key: `ui-rail-chosen`, raw: `comfortable` });
+        another.close();
+    });
+});
+
+// What the desktop app's workspace page tells the app whenever the account's preferences change here, by any road.
+describe(`every change, whoever made it`, () => {
+    it(`is heard: a choice here, one in another window, one adopted, and a store cleared whole`, () => {
+        const heard: (readonly [string, string | null])[] = [];
+        const stop = onPreferenceChange((key, raw) => heard.push([key, raw]));
+        const size = definePreference<string>({ key: `ui-size-changes`, read: (raw) => raw ?? `compact`, write: (value) => value });
+
+        size.value = `large`;
+        receivePreferenceChange({ key: `ui-size-changes`, raw: `default` });
+        adoptPreference(`ui-not-held-here`, `on`);
+        receivePreferenceChange({ key: null, raw: null });
+        stop();
+        size.value = `compact`;
+
+        expect(heard).toContainEqual([`ui-size-changes`, `large`]);
+        expect(heard).toContainEqual([`ui-size-changes`, `default`]);
+        expect(heard).toContainEqual([`ui-not-held-here`, `on`]);
+        expect(heard.at(-1)).toEqual([`ui-size-changes`, null]);
+        expect(heard).not.toContainEqual([`ui-size-changes`, `compact`]);
     });
 });
 

@@ -47,15 +47,41 @@ export interface PreferenceNote {
 
 const channel = typeof window === `undefined` || window.BroadcastChannel === undefined ? undefined : new BroadcastChannel(`intentic.preferences`);
 
+/** Hears what a preference is stored as now: the storage key and its string, `null` when the key was removed. */
+export type PreferenceWriteListener = (key: string, raw: string | null) => void;
+
+// Whatever follows every preference this window holds, however it changed (`onPreferenceChange`).
+const changeListeners = new Set<PreferenceWriteListener>();
+
+/**
+ * Hear every change to what this device stores for a preference, wherever it was made: a choice in this window, one in
+ * another window of this origin, or a value taken from outside (`adoptPreference`). A store cleared whole says `null`
+ * for each preference this window holds. Returns the unsubscribe.
+ */
+export const onPreferenceChange = (listener: PreferenceWriteListener): (() => void) => {
+    changeListeners.add(listener);
+    return () => {
+        changeListeners.delete(listener);
+    };
+};
+
+const changed = (key: string, raw: string | null): void => {
+    for (const listener of changeListeners) {
+        listener(key, raw);
+    }
+};
+
 /** A preference change from another window enters through this path. */
 export const receivePreferenceChange = ({ key, raw }: PreferenceNote): void => {
     if (key === null) {
-        for (const adopt of held.values()) {
+        for (const [name, adopt] of held) {
             adopt(null);
+            changed(name, null);
         }
         return;
     }
     held.get(key)?.(raw);
+    changed(key, raw);
 };
 
 channel?.addEventListener(`message`, (event: MessageEvent<PreferenceNote>) => receivePreferenceChange(event.data));
@@ -69,9 +95,6 @@ if (typeof window !== `undefined`) {
         }
     });
 }
-
-/** Hears a choice made in this window: the storage key and the string stored for it, `null` when the key was removed. */
-export type PreferenceWriteListener = (key: string, raw: string | null) => void;
 
 // Whatever keeps preferences beyond this browser (the account, web's app/accountPreferences.ts) hears only choices made
 // here. A change adopted from another window or from the account is never one, or the account would be handed back
@@ -100,6 +123,20 @@ export const adoptPreference = (key: string, raw: string | null): void => {
     persist(key, raw);
     held.get(key)?.(raw);
     tell(key, raw);
+    changed(key, raw);
+};
+
+/**
+ * Take a value as a choice made in this window, though it arrived from outside it: worn and told to the other windows
+ * as `adoptPreference` does, and heard by `onPreferenceWrite` as a choice made here, so whatever keeps preferences
+ * beyond this browser keeps it. For a choice made where nothing would keep it otherwise (the desktop app's window on a
+ * folder, whose choices the workspace's page carries to the account).
+ */
+export const choosePreference = (key: string, raw: string | null): void => {
+    adoptPreference(key, raw);
+    for (const listener of writeListeners) {
+        listener(key, raw);
+    }
 };
 
 /** Declare one preference and hand back the ref the app reads and writes; assigning it applies, persists, and notifies every other window. */
@@ -138,6 +175,7 @@ export const definePreference = <T>({ key: name, read, write, apply, scope = `de
             for (const listener of writeListeners) {
                 listener(key, raw);
             }
+            changed(key, raw);
         },
         { flush: `sync` },
     );

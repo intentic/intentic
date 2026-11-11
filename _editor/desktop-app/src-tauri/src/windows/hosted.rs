@@ -92,6 +92,12 @@ macro_rules! hosted_page {
             // The look the reader was last seen in, on whichever of the app's pages: this origin's storage is not
             // theirs, and a first sandbox opened in a profile's daylight under a reader the app had just shown sanctum.
             .initialization_script(look_init_script(state.ui_look()))
+            // A choice made on a local page while the workspace was not up, for it to take as its own (prefs.rs).
+            .initialization_script(if label == WORKSPACE {
+                super::prefs::workspace_init_script(app)
+            } else {
+                String::new()
+            })
             .initialization_script(crate::offline::init_script(&origin))
             .on_navigation({
                 let app = app.clone();

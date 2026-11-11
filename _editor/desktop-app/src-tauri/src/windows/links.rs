@@ -139,6 +139,12 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         Some(Link::Wake(args)) => crate::wake::reported(app, args),
         // The page saying what light it is drawn in; about this app's faces, not the workspace window.
         Some(Link::Window(WindowVerb::Mode(mode, look))) => announced(app, mode, look),
+        // The preferences that follow the account, carried between the app's pages (prefs.rs).
+        Some(Link::Window(WindowVerb::Prefs(values))) => {
+            if let Some(window) = source.window() {
+                super::prefs::heard(app, window, values);
+            }
+        }
         // The page's own title bar, working the window it is drawn in (`work_the_window`). Nothing is parked
         // and no face is swapped: these are presses on one window, answered on that window — and only a window
         // of the app's own sends them (`parse_link`).

@@ -76,6 +76,9 @@
                     "__INTENTIC_SANDBOX_FACE__",
                     // A host's stand-in for a sandbox address an element loads (web client/endpoint/elementAddress.ts).
                     "__INTENTIC_ELEMENT_ADDRESS__",
+                    // The account's preferences the desktop app hands its pages, and how it hands a page already up a change (web desktopPreferences.ts).
+                    "__INTENTIC_PREFS__",
+                    "__INTENTIC_PREFS_IN__",
                     "__termFrames",
                     "__name",
                     "_core",
