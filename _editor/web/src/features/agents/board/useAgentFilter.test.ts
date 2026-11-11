@@ -357,6 +357,28 @@ describe(`useAgentFilter`, () => {
     });
 
     // ...but a rename is a real change of input, and the memo must not keep answering for the name it cached under.
+    it(`matches the model a card runs on, by its id or the name the card shows, with no snippet`, async () => {
+        setAgents(
+            [
+                agent(`a1`, { title: `fix the login bug`, model: `claude-opus-4-5` }),
+                agent(`a2`, { title: `tidy the readme`, model: `claude-sonnet-4-5` }),
+                agent(`a3`, { title: `port the parser`, provider: `codex` }),
+            ],
+            1,
+        );
+        const filter = filterIn();
+        const matching = (): string[] => useAgents().fleet.value.filter((card) => filter.matches(card)).map((card) => card.id);
+        filter.query.value = `opus`;
+        await nextTick();
+        expect(matching()).toEqual([`a1`]);
+        expect(useAgents().fleet.value.map((card) => filter.snippetOf(card))).toEqual([undefined, undefined, undefined]);
+
+        // No model recorded: the card names its provider, so that's what matches.
+        filter.query.value = `codex`;
+        await nextTick();
+        expect(matching()).toEqual([`a3`]);
+    });
+
     it(`stops matching a title the user has renamed away from the query`, async () => {
         setAgents([agent(`a1`, { title: `the landAgent rewrite` })], 1);
         const filter = filterIn();

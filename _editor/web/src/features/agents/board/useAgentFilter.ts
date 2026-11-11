@@ -11,6 +11,8 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useAgents } from "../../../models/fleet/useAgents";
 import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { handleOf, type IdMatch, idMatchOf } from "./idMatch";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import { modelLabelFor } from "../../../models/providers/providerCatalog";
 import { rpcKey } from "../../../lib/queryKeys";
 
 // Filters the fleet by what was said, as a factory (not a singleton) so each surface owns its own query. Matches in two
@@ -95,6 +97,43 @@ const sameHit = (left: AgentHit, right: AgentHit): boolean => sameSnippet(left.s
 // sharing one.
 const cardKey = (agent: FleetAgent): string => `${agent.sandboxId ?? ``}/${agent.id}`;
 
+// What a card says runs it, as the card names it (AgentCard's `model`), and the raw id as well, so either "opus" or the
+// pasted id finds it. Falls back to the provider's name as the card does when no model is recorded.
+const modelNamesOf = (agent: FleetAgent): readonly string[] =>
+    agent.model === undefined ? [providerLabel(agent.provider)] : [modelLabelFor(agent.provider, agent.model), agent.model];
+
+const modelMatches = (agent: FleetAgent, term: string, caseSensitive: boolean): boolean =>
+    modelNamesOf(agent).some((name) => indexOfTerm(caseSensitive ? name : name.toLowerCase(), term) !== -1);
+
+// What one evaluation of the filter knows, read once per reactive change rather than per card.
+interface HitInputs {
+    readonly term: string;
+    readonly caseSensitive: boolean;
+    // The query read as a handle as well, undefined while it reads only as words.
+    readonly named: ReturnType<typeof handleOf>;
+    readonly lines: readonly SpokenLine[];
+    readonly answered: AgentHit | undefined;
+}
+
+// One card's match, strongest evidence first: its id, its title, what this browser saw said, what the daemon found said,
+// then its model. A title or model hit carries no snippet, since the card already shows both.
+const hitFor = (agent: FleetAgent, inputs: HitInputs): AgentHit | undefined => {
+    const { term, caseSensitive, named } = inputs;
+    const id = named === undefined ? undefined : idMatchOf(agent, named);
+    if (id !== undefined) {
+        return { id };
+    }
+    const title = caseSensitive ? agent.title : agent.title?.toLowerCase();
+    if (title !== undefined && indexOfTerm(title, term) !== -1) {
+        return {};
+    }
+    const local = snippetFor(inputs.lines, term);
+    if (local !== undefined) {
+        return { snippet: local };
+    }
+    return inputs.answered ?? (modelMatches(agent, term, caseSensitive) ? {} : undefined);
+};
+
 const DEBOUNCE_MS = 150;
 
 // The case rule, shared by every filter field and remembered across reloads and windows: the ref is the preference, so
@@ -177,14 +216,13 @@ export function useAgentFilter() {
 
     // A memoising closure re-minted on every reactive change (query, case rule, transcripts, daemon reply), since the
     // board tests every card in a lane several times per render. The title and the session id ride in the memo key, being
-    // the inputs read lazily off the agent handed in that can change under the same card.
+    // the inputs read lazily off the agent handed in that can change under the same card, and so does the model.
     const finder = computed(() => {
         const on = active.value;
         const term = needle.value;
         const caseSensitive = matchCase.value;
         const index = localLines.value;
         const answered = remote.value;
-        // The query read as a handle as well, undefined while it reads only as words.
         const named = handleOf(query.value);
         const found = new Map<string, AgentHit | undefined>();
         return (agent: FleetAgent): AgentHit | undefined => {
@@ -192,22 +230,11 @@ export function useAgentFilter() {
                 return undefined;
             }
             const card = cardKey(agent);
-            const key = `${card}/${agent.sessionId ?? ``}/${agent.title ?? ``}`;
+            const key = `${card}/${agent.sessionId ?? ``}/${agent.model ?? ``}/${agent.title ?? ``}`;
             if (found.has(key)) {
                 return found.get(key);
             }
-            const title = caseSensitive ? agent.title : agent.title?.toLowerCase();
-            const hit = ((): AgentHit | undefined => {
-                const id = named === undefined ? undefined : idMatchOf(agent, named);
-                if (id !== undefined) {
-                    return { id };
-                }
-                if (title !== undefined && indexOfTerm(title, term) !== -1) {
-                    return {};
-                }
-                const local = snippetFor(index.get(agent.id) ?? [], term);
-                return local === undefined ? answered.get(agent.id) : { snippet: local };
-            })();
+            const hit = hitFor(agent, { term, caseSensitive, named, lines: index.get(agent.id) ?? [], answered: answered.get(agent.id) });
             const previous = hit === undefined ? undefined : held.get(card);
             const reported = previous !== undefined && hit !== undefined && sameHit(previous, hit) ? previous : hit;
             if (reported !== undefined) {
