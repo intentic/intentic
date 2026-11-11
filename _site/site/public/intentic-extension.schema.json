@@ -662,6 +662,13 @@
                                                 "totp": {
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
+                                                },
+                                                "signIn": {
+                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "google"
+                                                    ]
                                                 }
                                             },
                                             "required": [
@@ -1098,6 +1105,13 @@
                                                 "totp": {
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
+                                                },
+                                                "signIn": {
+                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "google"
+                                                    ]
                                                 }
                                             },
                                             "required": [
@@ -1288,6 +1302,13 @@
                                                 "totp": {
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
+                                                },
+                                                "signIn": {
+                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "google"
+                                                    ]
                                                 }
                                             },
                                             "required": [
@@ -1469,6 +1490,13 @@
                                                 "totp": {
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
+                                                },
+                                                "signIn": {
+                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "google"
+                                                    ]
                                                 }
                                             },
                                             "required": [
@@ -1655,6 +1683,13 @@
                                                 "totp": {
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
+                                                },
+                                                "signIn": {
+                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "google"
+                                                    ]
                                                 }
                                             },
                                             "required": [
@@ -1841,6 +1876,13 @@
                                                 "totp": {
                                                     "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
                                                     "type": "boolean"
+                                                },
+                                                "signIn": {
+                                                    "description": "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "google"
+                                                    ]
                                                 }
                                             },
                                             "required": [

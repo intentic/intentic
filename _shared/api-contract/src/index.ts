@@ -6,6 +6,7 @@ import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import { orgContract } from "./organisations.js";
+import { googleConnectContract } from "./google-connect.js";
 import { AccountPreferencesPatchSchema, AccountPreferencesSchema } from "./account-preferences.js";
 import {
     AddressOfferSchema,
@@ -59,6 +60,7 @@ export * from "./account-preferences.js";
 export * from "./admin.js";
 export * from "./organisations.js";
 export * from "./device-accounts.js";
+export * from "./google-connect.js";
 
 // Current authenticated user, or null with no session. `export` is the caller's GDPR data export as JSON; credentials
 // (session/OAuth/connect tokens, setup payloads) are excluded.
@@ -349,4 +351,5 @@ export const apiContract = {
     wallet: walletContract,
     admin: adminContract,
     org: orgContract,
+    googleConnect: googleConnectContract,
 };

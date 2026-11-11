@@ -554,6 +554,11 @@ export const CapabilityRefreshTokenInputSchema = z.object({
     refreshToken: z.string().min(1).max(32768).describe("The new refresh token. Never echoed back."),
     login: z.boolean().optional().describe("A fresh interactive sign-in rather than a rotation: restarts the card's listener."),
 });
+// POST /capabilities/{id}/oauth-access: an hour of access for a card signed in through the platform's own OAuth client.
+export const CapabilityAccessTokenSchema = z.object({
+    accessToken: z.string().describe("Bearer for the provider's APIs, good for about an hour. Cache it; never store it on the card."),
+    expiresIn: z.number().describe("Seconds until it expires."),
+});
 // POST /capabilities/{id}/rename: a capability's id is the agent's handle for it (skill file, tool prefix, env suffix,
 // ssh alias), so renaming is a migration, not a label edit. Which kinds may be renamed is the handler's own answer, not
 // this schema's.

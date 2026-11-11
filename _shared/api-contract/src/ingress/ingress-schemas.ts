@@ -357,6 +357,10 @@ export const TrialTurnAnswerSchema = z.object({ grace: z.boolean() });
 const UsdSchema = z.string().regex(/^\d+(\.\d{1,6})?$/);
 const HEX_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
+// Connect Google: the card's refresh token, traded for an hour of access token with the platform's own client secret,
+// which never leaves the platform. Nothing is stored; a refusal carries Google's own error code (`invalid_grant`).
+export const GoogleAccessTokenBodySchema = z.object({ refreshToken: z.string().min(1).max(2048) });
+export const GoogleAccessTokenSchema = z.object({ accessToken: z.string(), expiresIn: z.number() });
 export const WalletEnsureBodySchema = z.object({ network: z.string() });
 export const WalletAddressSchema = z.object({ address: z.string() });
 // One EIP-3009 transferWithAuthorization to sign: the EIP-712 domain off the challenge, so the platform signs what the

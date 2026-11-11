@@ -6,9 +6,12 @@ import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 
 export type AccessLevel = "read" | "write";
 
-// The two ways a card authenticates: `user` is one person's OAuth grant; `domain` is a service account impersonating
-// one person, hence the address.
+// The three ways a card authenticates: `platform` is one person's grant to the platform's own client (the card's
+// Connect Google button), refreshed through the daemon since the client secret stays on the platform; `user` is one
+// person's grant to a client the owner brought; `domain` is a service account impersonating one person, hence the
+// address. `cardId` is how the daemon finds the card whose refresh token it trades.
 export type Credential =
+    | { readonly mode: "platform"; readonly cardId: string; readonly refreshToken: string }
     | { readonly mode: "user"; readonly clientId: string; readonly clientSecret: string; readonly refreshToken: string }
     | { readonly mode: "domain"; readonly clientEmail: string; readonly privateKey: string; readonly tokenUri: string };
 
@@ -63,7 +66,13 @@ const domainCredential = (raw: string): { credential?: Credential; problem?: str
     return { credential: { mode: "domain", clientEmail, privateKey, tokenUri: typeof tokenUri === "string" ? tokenUri : DEFAULT_TOKEN_URI } };
 };
 
-const userCredential = (fields: RequestFields): { credential?: Credential; problem?: string } => {
+const userCredential = (name: string, fields: RequestFields): { credential?: Credential; problem?: string } => {
+    // No client of the owner's own: the card was signed in with its Connect Google button, on the platform's client.
+    if (fields.clientId === "" && fields.clientSecret === "") {
+        return fields.refreshToken === ""
+            ? { problem: "the card is not signed in yet: press Connect Google on its card under Capabilities" }
+            : { credential: { mode: "platform", cardId: name, refreshToken: fields.refreshToken } };
+    }
     const missing = [
         ...(fields.clientId === "" ? ["client ID"] : []),
         ...(fields.clientSecret === "" ? ["client secret"] : []),
@@ -77,7 +86,7 @@ const userCredential = (fields: RequestFields): { credential?: Credential; probl
 
 export const connectionOf = (name: string, fields: RequestFields): Connection => {
     const domain = fields.mode === "domain";
-    const resolved = domain ? domainCredential(fields.serviceAccountKey) : userCredential(fields);
+    const resolved = domain ? domainCredential(fields.serviceAccountKey) : userCredential(name, fields);
     return {
         name,
         email: fields.email,

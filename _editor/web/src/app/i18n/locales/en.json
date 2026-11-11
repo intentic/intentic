@@ -1815,6 +1815,27 @@
             "replacesOldKey": "Saving swaps this in for the key the connection used. The old one stays authorized on the server until you remove it there.",
             "sandboxMakesPair": "The sandbox makes the key pair and keeps the private half. You only see the public half."
         },
+        "googleSignInField": {
+            "cancelledOnGoogle": "You cancelled on Google's page. Connect again when you're ready.",
+            "connectFirst": "Connect your Google account before saving.",
+            "connectGoogle": "Connect Google",
+            "connected": "Connected to Google",
+            "connectedAs": "Connected as {email}",
+            "couldntFinish": "Couldn't finish the Google sign-in.",
+            "couldntStart": "Couldn't start the Google sign-in.",
+            "finishing": "Finishing the sign-in…",
+            "googleRefused": "Google refused the sign-in ({error}).",
+            "grantedReadOnly": "Read only. Saving the card stores the sign-in.",
+            "grantedReadWrite": "Read & write. Saving the card stores the sign-in.",
+            "noPlatformClient": "This platform has no Google sign-in of its own. Open Advanced and use your own OAuth client.",
+            "opensGoogle": "Opens Google's own page to choose an account and approve access.",
+            "popupBlocked": "The browser blocked the Google window. Allow pop-ups for this site, then connect again.",
+            "reconnect": "Reconnect",
+            "reconnectForWrite": "This grant is read only. Reconnect to grant read & write.",
+            "signedIn": "Signed in. Reconnect to switch account or access.",
+            "stopWaiting": "Stop waiting",
+            "waitingForGoogle": "Finish in the Google window…"
+        },
         "webExtConnectDialog": {
             "connectedAllowOnSite": "is connected. Allow it on a site in the extension, and the agent can work there from its next turn.",
             "extensionCodeOpenToolbar": "Your extension has the code. Open it (the toolbar icon is showing",

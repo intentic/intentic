@@ -40,6 +40,7 @@ import { hostedPlanHttpRoutes } from "./sandbox/hosted/plan/hosted-plan.routes.j
 import { fleetHttpRoutes } from "./fleet/fleet.routes.js";
 import { orgPolicyHttpRoutes } from "./org/org-policy-http.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
+import { googleConnectHttpRoutes } from "./google-connect/google-connect.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
 import { repairRoutes } from "./repair/repair.routes.js";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
@@ -570,11 +571,11 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
     // The hosted plan's one non-browser route, Stripe's webhook; off (404s) unless its Stripe keys are set.
     app.route(`/hosted-plan`, hostedPlanHttpRoutes({ config, prisma }));
 
-    // The agent wallet's signer routes; caps are re-checked here against the database, never trusted from a box.
+    // Sandbox doors that spend a platform-held key: the wallet (caps re-checked, never trusted from a box), Connect Google.
     app.route(`/wallet`, walletHttpRoutes({ config, prisma }));
+    app.route(`/google-connect`, googleConnectHttpRoutes({ config, prisma }));
 
-    // The provisioning door: an account-scoped API token, not a session, so a sandbox can create sandboxes for its
-    // owner. Rows and claims only — never a hosted machine.
+    // The provisioning door: an account-scoped API token rather than a session; rows and claims only, never a hosted machine.
     app.route(`/fleet`, fleetHttpRoutes({ config, prisma }));
 
     // A development lane: admin READS replayed against another deployment, so a local panel can show its figures; off

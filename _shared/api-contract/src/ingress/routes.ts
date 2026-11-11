@@ -14,6 +14,8 @@ import {
     FleetRemovedSchema,
     FleetSandboxesSchema,
     FleetWhoSchema,
+    GoogleAccessTokenBodySchema,
+    GoogleAccessTokenSchema,
     HostReportClaimedSchema,
     HostReportClaimSchema,
     HostReportPostSchema,
@@ -191,6 +193,17 @@ export const PLATFORM_INGRESS = {
         answer: "json",
         input: WalletSignBodySchema,
         output: WalletSignatureSchema,
+    },
+
+    // Connect Google: an access token for a card signed in through the platform's own OAuth client.
+    googleAccessToken: {
+        method: "POST",
+        path: "/google-connect/access-token",
+        auth: "connect",
+        body: "json",
+        answer: "json",
+        input: GoogleAccessTokenBodySchema,
+        output: GoogleAccessTokenSchema,
     },
 
     /* The daemon, for its owner's account (the `sandboxes` CLI, under the `fleet` capability's token). */

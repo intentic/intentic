@@ -348,6 +348,7 @@ flowchart LR
 | `src/push-relay` | Push relay for native installs: APNs for the iPhone app, FCM for the Android editor and Intentic Device apps, never carrying a notification's words to Android |
 | `src/trial` | Free-trial model API, OpenAI-compatible, on the platform's credential. Metered per model call (`TRIAL_DAILY_MESSAGES`, default 12 a day); a turn the daemon opens with a call left may finish on up to `TRIAL_GRACE_STEPS` more (default 25 a day, `POST /trial/turn`) |
 | `src/wallet` | Agent wallet: payments signed by a custody provider under per-member caps |
+| `src/google-connect` | Connect Google: the Google Workspace card's sign-in on the platform's own OAuth client (`GOOGLE_WORKSPACE_CLIENT_ID`, `GOOGLE_WORKSPACE_CLIENT_SECRET`; redirect URI `WEB_ORIGIN/oauth/google.html`). Builds the consent URL, trades the popup's code (PKCE, session required), and trades a sandbox's refresh token for an hour of access (`POST /google-connect/access-token`, connect token). Stores nothing; both unset, it 404s |
 | `src/e2e` | Suites against real Fly and Stripe, gated by `INTENTIC_E2E` |
 
 ## Model browsing

@@ -122,20 +122,28 @@ person. On a personal connection there is nobody else to be, and it will say so.
 
 ## If nothing is connected yet
 
-`gw accounts` says so. The owner adds the **Google Workspace** card under Capabilities; its guide walks through
-the Google Cloud console. If they would rather not use Google's OAuth playground, offer them this instead:
+`gw accounts` says so. The owner adds the **Google Workspace** card under Capabilities and presses **Connect
+Google** on it: they pick the account on Google's own page and approve, and the card holds the grant from then on.
+There is nothing to create in the Google Cloud console and nothing to paste. Never ask them for a refresh token.
+
+A card set up with the owner's **own** OAuth client (its client ID and secret under Advanced) signs in from here
+instead, and stores the grant on the card by itself rather than printing it:
 
 ```
-gw auth login --client-id <id> --client-secret <secret>
+gw auth login [--account <card>]
 ```
 
-It prints a URL to approve and then the refresh token to paste onto the card. Approving in this sandbox's own
-browser completes it here; approving in their own browser lands on a page that cannot load, and pasting **that
-whole address** into `gw auth exchange --code "<url>"` finishes it just as well.
+It prints a URL to approve. Approving in this sandbox's own browser completes it here; approving in their own
+browser lands on a page that cannot load, and pasting **that whole address** into
+`gw auth exchange --account <card> --code "<url>"` finishes it just as well.
 
-One failure is worth recognising on sight: **"Google rejected the refresh token"**. It almost always means the
-OAuth consent screen was left in `Testing`, where Google expires refresh tokens after 7 days. The fix is to set
-it to `In production` in the Google Cloud console and get a fresh token.
+Two failures are worth recognising on sight:
+
+- **"Google no longer accepts the sign-in"** on a Connect Google card: the grant was revoked or went unused for six
+  months. The owner presses **Reconnect** on the card; nothing else fixes it.
+- **"Google rejected the refresh token"** on a card with its own client: almost always an OAuth consent screen left
+  in `Testing`, where Google expires refresh tokens after 7 days. The owner sets it to `In production` in the Google
+  Cloud console, then `gw auth login` again.
 
 ## Watching
 

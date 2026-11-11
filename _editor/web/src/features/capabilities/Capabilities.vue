@@ -66,10 +66,10 @@ import { deviceConnections } from "./model/deviceConnections";
 import { advancedLabel, inlineField } from "../../models/capabilities/form";
 import { hostGrantSummary, matchHostPreset } from "./model/previews";
 import { picksVersion } from "./model/refs";
-import { generatesKey } from "../../models/capabilities/sshKey";
+import { standInOf } from "../../models/capabilities/fieldStandIn";
 import { catalogEntries, entryIcon } from "../../models/capabilities/tiles";
 import { useSetupWalk } from "./setupWalk";
-import SshKeyField from "../../parts/capabilities/SshKeyField.vue";
+import FieldStandIn from "./connect/FieldStandIn.vue";
 import { useTilePane } from "./tilePane";
 import CapabilityFormStatus from "./CapabilityFormStatus.vue";
 
@@ -496,9 +496,10 @@ onBeforeUnmount(() => {
                                 :alarm="fieldAlarm(field)"
                                 @left="finishField(field)"
                             />
-                            <!-- A key the sandbox makes: the private half never reaches this page, only the public half to authorize. -->
-                            <SshKeyField
-                                v-else-if="generatesKey(selected, field, values)"
+                            <!-- A key the sandbox makes, or a sign-in through the platform's own client, in place of a box to paste into. -->
+                            <FieldStandIn
+                                v-else-if="standInOf(selected, field, values)"
+                                :kind="standInOf(selected, field, values)!"
                                 :field="field"
                                 :values="values"
                                 :entry="selected.id"

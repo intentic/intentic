@@ -38,6 +38,16 @@ export const configSchema = z.object({
             clientSecret: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
+    // The OAuth client behind the Google Workspace card's Connect Google button (google-connect/), a Web application
+    // client of its own, never the sign-in one above: it asks for Gmail and Drive scopes, which put a client through
+    // Google's verification and yearly security assessment. Its authorized redirect URI is WEB_ORIGIN + /oauth/google.html.
+    // Both empty (the default) and the button's routes 404, so the card offers the owner's own client instead.
+    googleWorkspace: z
+        .object({
+            clientId: z.string().default(``),
+            clientSecret: z.string().default(``).meta({ secret: true }),
+        })
+        .prefault({}),
     // Sign-in besides Google (sign-in.ts). `email` offers a code mailed to the address (Better Auth emailOTP), so an
     // address no identity provider vouches for can sign in; production refuses it while mail is unconfigured, since a
     // code nobody receives is a door nobody can use and a logged one is a door anybody reading logs can.

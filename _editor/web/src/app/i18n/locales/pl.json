@@ -1761,6 +1761,27 @@
             "replacesOldKey": "Zapisanie podmieni klucz, którego używało połączenie. Stary klucz pozostaje autoryzowany na serwerze, dopóki go tam nie usuniesz.",
             "sandboxMakesPair": "Sandbox tworzy parę kluczy i zatrzymuje część prywatną. Ty widzisz tylko część publiczną."
         },
+        "googleSignInField": {
+            "cancelledOnGoogle": "Anulowano na stronie Google. Połącz ponownie, gdy będziesz gotowy.",
+            "connectFirst": "Połącz konto Google przed zapisaniem.",
+            "connectGoogle": "Połącz z Google",
+            "connected": "Połączono z Google",
+            "connectedAs": "Połączono jako {email}",
+            "couldntFinish": "Nie udało się dokończyć logowania Google.",
+            "couldntStart": "Nie udało się rozpocząć logowania Google.",
+            "finishing": "Kończenie logowania…",
+            "googleRefused": "Google odrzucił logowanie ({error}).",
+            "grantedReadOnly": "Tylko odczyt. Zapisanie karty zachowa logowanie.",
+            "grantedReadWrite": "Odczyt i zapis. Zapisanie karty zachowa logowanie.",
+            "noPlatformClient": "Ta platforma nie ma własnego logowania Google. Otwórz Zaawansowane i użyj własnego klienta OAuth.",
+            "opensGoogle": "Otwiera stronę Google, aby wybrać konto i zatwierdzić dostęp.",
+            "popupBlocked": "Przeglądarka zablokowała okno Google. Zezwól na wyskakujące okna dla tej strony i połącz ponownie.",
+            "reconnect": "Połącz ponownie",
+            "reconnectForWrite": "To uprawnienie jest tylko do odczytu. Połącz ponownie, aby przyznać odczyt i zapis.",
+            "signedIn": "Zalogowano. Połącz ponownie, aby zmienić konto lub dostęp.",
+            "stopWaiting": "Przestań czekać",
+            "waitingForGoogle": "Dokończ w oknie Google…"
+        },
         "tiles": {
             "standalone": "Samodzielne"
         },

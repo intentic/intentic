@@ -3,6 +3,7 @@ import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import {
     CapabilitiesListSchema,
+    CapabilityAccessTokenSchema,
     CapabilityEntryParamSchema,
     CapabilityConnectionSchema,
     CapabilityIdParamSchema,
@@ -116,6 +117,19 @@ export const capabilitiesContract = {
         .meta({ agent: true, panel: false })
         .input(CapabilityRefreshTokenInputSchema)
         .output(OkSchema),
+    // Called by a connector's own CLI and listener process: a card signed in through the platform's own OAuth client
+    // (a field declaring `signIn`) refreshes there, since the client secret never leaves the platform.
+    oauthAccess: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/{id}/oauth-access",
+            summary: "Mint an access token for a platform sign-in",
+            description:
+                "For a card whose sign-in ran through the platform's own OAuth client. The daemon trades the card's stored refresh token at the platform and answers with an hour of access token; the caller names the card and never handles the refresh token or the client secret. An extension token reaches only the cards its extension contributes.",
+        })
+        .meta({ agent: true, panel: false })
+        .input(CapabilityIdParamSchema)
+        .output(CapabilityAccessTokenSchema),
     status: capabilityRoute
         .route({
             method: "GET",

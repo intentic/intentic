@@ -56,6 +56,13 @@ export {
     storeRefreshTokenAsAgent,
     storeRefreshTokenAsExtension,
 } from "./refresh-token.js";
+export {
+    mintPlatformAccessAsAgent,
+    mintPlatformAccessAsExtension,
+    type PlatformAccess,
+    type PlatformAccessDaemon,
+    PlatformAccessRefused,
+} from "./platform-access.js";
 export { findWorkspaceRoot, readGatewayUrl } from "./workspace.js";
 // Each platform's one-message ceiling, from the contract's single table (the subpath, so a gateway loads no more of
 // the contract than that).

@@ -1,6 +1,7 @@
 import { createVerify, generateKeyPairSync } from "node:crypto";
 import type { Connection, Credential } from "./accounts.js";
-import { assertionFor, tokenFailure } from "./token.js";
+import { PlatformAccessRefused } from "@intentic/connector-runtime";
+import { assertionFor, mintToken, tokenFailure } from "./token.js";
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 
@@ -63,6 +64,12 @@ describe("tokenFailure", () => {
         expect(tokenFailure(connection, "domain", "unauthorized_client", undefined)).toContain("admin.google.com");
     });
 
+    it("sends a Connect Google card back to its Reconnect button, never to the Cloud console", () => {
+        const message = tokenFailure(connection, "platform", "invalid_grant", undefined);
+        expect(message).toMatch(/Reconnect on its card/);
+        expect(message).not.toMatch(/Testing/);
+    });
+
     it("blames the client pair when Google rejects the client", () => {
         expect(tokenFailure(connection, "user", "invalid_client", undefined)).toMatch(/client ID and secret came from the same credential/);
     });
@@ -72,5 +79,22 @@ describe("tokenFailure", () => {
         expect(message).toContain("company (ana@company.com)");
         expect(message).toContain("some_new_error");
         expect(message).toContain("explained here");
+    });
+});
+
+describe("mintToken on a Connect Google card", () => {
+    const platform: Connection = { ...connection, mode: "user", credential: { mode: "platform", cardId: "work", refreshToken: "rt" } };
+
+    it("asks the daemon for the card's token and keeps it for its hour", async () => {
+        const mint = jest.fn().mockResolvedValue({ accessToken: "at", expiresIn: 3599 });
+        expect(await mintToken(platform, { mode: "platform", cardId: "work", refreshToken: "rt" }, 1000, mint)).toEqual({ token: "at", expiresAt: 4599 });
+        expect(mint).toHaveBeenCalledWith("work");
+    });
+
+    it("puts Google's refusal into what the owner does about it", async () => {
+        const mint = jest.fn().mockRejectedValue(new PlatformAccessRefused("invalid_grant", 400));
+        await expect(mintToken(platform, { mode: "platform", cardId: "work", refreshToken: "rt" }, 1000, mint)).rejects.toThrow(/Reconnect on its card/);
+        const offline = jest.fn().mockRejectedValue(new PlatformAccessRefused("the platform could not be reached to refresh the sign-in", 502));
+        await expect(mintToken(platform, { mode: "platform", cardId: "work", refreshToken: "rt" }, 1000, offline)).rejects.toThrow(/could not be reached/);
     });
 });

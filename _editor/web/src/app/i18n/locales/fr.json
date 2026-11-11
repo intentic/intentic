@@ -1815,6 +1815,27 @@
             "replacesOldKey": "L'enregistrement remplace par celle-ci la clé qu'utilisait la connexion. L'ancienne reste autorisée sur le serveur jusqu'à ce que vous l'y retiriez.",
             "sandboxMakesPair": "Le sandbox crée la paire de clés et garde la partie privée. Vous ne voyez que la partie publique."
         },
+        "googleSignInField": {
+            "cancelledOnGoogle": "Vous avez annulé sur la page de Google. Reconnectez-vous quand vous serez prêt.",
+            "connectFirst": "Connectez votre compte Google avant d'enregistrer.",
+            "connectGoogle": "Connecter Google",
+            "connected": "Connecté à Google",
+            "connectedAs": "Connecté en tant que {email}",
+            "couldntFinish": "Impossible de terminer la connexion Google.",
+            "couldntStart": "Impossible de lancer la connexion Google.",
+            "finishing": "Finalisation de la connexion…",
+            "googleRefused": "Google a refusé la connexion ({error}).",
+            "grantedReadOnly": "Lecture seule. Enregistrer la carte conserve la connexion.",
+            "grantedReadWrite": "Lecture et écriture. Enregistrer la carte conserve la connexion.",
+            "noPlatformClient": "Cette plateforme n'a pas de connexion Google à elle. Ouvrez Avancé et utilisez votre propre client OAuth.",
+            "opensGoogle": "Ouvre la page de Google pour choisir un compte et autoriser l'accès.",
+            "popupBlocked": "Le navigateur a bloqué la fenêtre Google. Autorisez les fenêtres pop-up pour ce site, puis reconnectez-vous.",
+            "reconnect": "Reconnecter",
+            "reconnectForWrite": "Cette autorisation est en lecture seule. Reconnectez-vous pour accorder la lecture et l'écriture.",
+            "signedIn": "Connecté. Reconnectez-vous pour changer de compte ou d'accès.",
+            "stopWaiting": "Ne plus attendre",
+            "waitingForGoogle": "Terminez dans la fenêtre Google…"
+        },
         "webExtConnectDialog": {
             "connectedAllowOnSite": "est connecté. Autorisez-le sur un site depuis l'extension, et l'agent pourra y travailler dès son prochain tour.",
             "extensionCodeOpenToolbar": "Votre extension a le code. Ouvrez-la (l'icône de la barre d'outils affiche",

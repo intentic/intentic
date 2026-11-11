@@ -1815,6 +1815,27 @@
             "replacesOldKey": "Beim Speichern ersetzt dieser den Schlüssel, den die Verbindung bisher verwendet hat. Der alte bleibt auf dem Server autorisiert, bis Sie ihn dort entfernen.",
             "sandboxMakesPair": "Die Sandbox erzeugt das Schlüsselpaar und behält die private Hälfte. Sie sehen nur die öffentliche Hälfte."
         },
+        "googleSignInField": {
+            "cancelledOnGoogle": "Du hast auf Googles Seite abgebrochen. Verbinde erneut, wenn du so weit bist.",
+            "connectFirst": "Verbinde dein Google-Konto vor dem Speichern.",
+            "connectGoogle": "Mit Google verbinden",
+            "connected": "Mit Google verbunden",
+            "connectedAs": "Verbunden als {email}",
+            "couldntFinish": "Die Google-Anmeldung konnte nicht abgeschlossen werden.",
+            "couldntStart": "Die Google-Anmeldung konnte nicht gestartet werden.",
+            "finishing": "Anmeldung wird abgeschlossen…",
+            "googleRefused": "Google hat die Anmeldung abgelehnt ({error}).",
+            "grantedReadOnly": "Nur lesen. Beim Speichern der Karte wird die Anmeldung hinterlegt.",
+            "grantedReadWrite": "Lesen & schreiben. Beim Speichern der Karte wird die Anmeldung hinterlegt.",
+            "noPlatformClient": "Diese Plattform hat keine eigene Google-Anmeldung. Öffne „Erweitert“ und nutze deinen eigenen OAuth-Client.",
+            "opensGoogle": "Öffnet Googles eigene Seite, um ein Konto zu wählen und den Zugriff zu erlauben.",
+            "popupBlocked": "Der Browser hat das Google-Fenster blockiert. Erlaube Pop-ups für diese Seite und verbinde erneut.",
+            "reconnect": "Neu verbinden",
+            "reconnectForWrite": "Diese Freigabe erlaubt nur Lesen. Verbinde neu, um Lesen & Schreiben zu erlauben.",
+            "signedIn": "Angemeldet. Verbinde neu, um Konto oder Zugriff zu wechseln.",
+            "stopWaiting": "Nicht mehr warten",
+            "waitingForGoogle": "Schließe den Vorgang im Google-Fenster ab…"
+        },
         "webExtConnectDialog": {
             "connectedAllowOnSite": "ist verbunden. Erlauben Sie es in der Erweiterung auf einer Website, und der Agent kann ab seinem nächsten Zug dort arbeiten.",
             "extensionCodeOpenToolbar": "Ihre Erweiterung hat den Code. Öffnen Sie sie (das Symbol in der Symbolleiste zeigt",

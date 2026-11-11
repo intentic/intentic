@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { parseJsonOr } from "@intentic/base/json";
 import { type Connection, type Credential, credentialOf } from "./accounts.js";
 import { runtimeDir, workspaceRoot } from "./paths.js";
-import { type AccessToken, mintToken } from "./token.js";
+import { type AccessToken, mintToken, type PlatformMint } from "./token.js";
 
 // One access token per connection, reused for its hour; cached in a file under the workspace's runtime tree since `gw`
 // is a fresh process per command. Keyed by a fingerprint of the credential, not the connection name, so rotating the
@@ -19,7 +19,9 @@ interface CachedToken extends AccessToken {
 const fingerprintOf = (credential: Credential): string =>
     createHash("sha256")
         .update(
-            credential.mode === "user" ? `${credential.clientId}:${credential.refreshToken}` : `${credential.clientEmail}:${credential.privateKey}`,
+            credential.mode === "domain"
+                ? `${credential.clientEmail}:${credential.privateKey}`
+                : `${credential.mode === "user" ? credential.clientId : "platform"}:${credential.refreshToken}`,
         )
         .digest("hex")
         .slice(0, 16);
@@ -54,7 +56,9 @@ export interface Session {
     readonly refresh: () => Promise<string>;
 }
 
-export const openSession = (connection: Connection, env: NodeJS.ProcessEnv, cwd: string, clock: () => number): Session => {
+// `platform` is how a card signed in with Connect Google is minted for: the agent's CLI by default, the watcher passes
+// its extension's own daemon client.
+export const openSession = (connection: Connection, env: NodeJS.ProcessEnv, cwd: string, clock: () => number, platform?: PlatformMint): Session => {
     const credential = credentialOf(connection);
     const fingerprint = fingerprintOf(credential);
     const path = cachePath(env, cwd, connection);
@@ -62,7 +66,7 @@ export const openSession = (connection: Connection, env: NodeJS.ProcessEnv, cwd:
 
     const mint = async (): Promise<string> => {
         const now = Math.floor(clock() / 1000);
-        const minted = await mintToken(connection, credential, now);
+        const minted = await mintToken(connection, credential, now, platform);
         const entry: CachedToken = { ...minted, fingerprint };
         // Best effort: a read-only or full disk must not stop a command that already has a good token in hand.
         await mkdir(join(path, ".."), { recursive: true }).catch(() => undefined);

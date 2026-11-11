@@ -1815,6 +1815,27 @@
             "replacesOldKey": "Al guardar, esta sustituye a la clave que usaba la conexión. La antigua sigue autorizada en el servidor hasta que la quites allí.",
             "sandboxMakesPair": "El sandbox genera el par de claves y guarda la mitad privada. Tú solo ves la mitad pública."
         },
+        "googleSignInField": {
+            "cancelledOnGoogle": "Cancelaste en la página de Google. Vuelve a conectar cuando quieras.",
+            "connectFirst": "Conecta tu cuenta de Google antes de guardar.",
+            "connectGoogle": "Conectar Google",
+            "connected": "Conectado a Google",
+            "connectedAs": "Conectado como {email}",
+            "couldntFinish": "No se pudo completar el inicio de sesión de Google.",
+            "couldntStart": "No se pudo iniciar el inicio de sesión de Google.",
+            "finishing": "Completando el inicio de sesión…",
+            "googleRefused": "Google rechazó el inicio de sesión ({error}).",
+            "grantedReadOnly": "Solo lectura. Al guardar la tarjeta se guarda el inicio de sesión.",
+            "grantedReadWrite": "Lectura y escritura. Al guardar la tarjeta se guarda el inicio de sesión.",
+            "noPlatformClient": "Esta plataforma no tiene un inicio de sesión de Google propio. Abre Avanzado y usa tu propio cliente OAuth.",
+            "opensGoogle": "Abre la página de Google para elegir una cuenta y aprobar el acceso.",
+            "popupBlocked": "El navegador bloqueó la ventana de Google. Permite las ventanas emergentes para este sitio y vuelve a conectar.",
+            "reconnect": "Volver a conectar",
+            "reconnectForWrite": "Este permiso es de solo lectura. Vuelve a conectar para conceder lectura y escritura.",
+            "signedIn": "Sesión iniciada. Vuelve a conectar para cambiar de cuenta o de acceso.",
+            "stopWaiting": "Dejar de esperar",
+            "waitingForGoogle": "Termina en la ventana de Google…"
+        },
         "webExtConnectDialog": {
             "connectedAllowOnSite": "está conectado. Permítelo en un sitio desde la extensión, y el agente podrá trabajar allí desde su próximo turno.",
             "extensionCodeOpenToolbar": "Tu extensión tiene el código. Ábrela (el icono de la barra de herramientas muestra",

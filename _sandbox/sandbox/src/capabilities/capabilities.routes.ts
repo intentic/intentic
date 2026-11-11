@@ -37,6 +37,7 @@ import { publishRuntimeChange, runtimeGeneration } from "../seams/runtime-feed.j
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { capabilitiesDocument } from "./capabilities-store.js";
 import { storeRefreshToken } from "./refresh-token.js";
+import { mintPlatformAccess, platformDoor } from "./oauth-access.js";
 import { stateRelPath } from "../state-paths.js";
 
 // personas-store.ts's document, named by its contract-checked state path rather than imported: personas reaches
@@ -223,6 +224,16 @@ const listStatuses = (services: Services): StatusCache => {
     });
 };
 
+// The extension a listener process calls as, undefined for the agent's own CLI or a person; an extension token this
+// daemon did not issue is refused rather than read as no extension at all.
+const extensionCaller = (services: Services, context: OrpcContext): ReturnType<typeof callingExtension> => {
+    const caller = callingExtension(services.extensionBackend.verifyExtensionToken, (name) => context.headers.get(name));
+    if (context.headers.has(EXTENSION_TOKEN_HEADER) && caller === undefined) {
+        throw new ORPCError("FORBIDDEN", { message: "that extension token is not one this daemon issued" });
+    }
+    return caller;
+};
+
 // `probeDockerGpu` is handed in: asking the host needs the device hub, and capabilities must not import hosts.
 export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (services: Services) => Promise<CapabilityProbe>) => {
     const i = implement(capabilitiesContract).$context<OrpcContext>();
@@ -393,14 +404,16 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
         // extension token, which must be the extension contributing the card). No apply and no composeEnvironment: the
         // agent's env is composed per turn from the store, and a token changes no fragment.
         oauthToken: i.oauthToken.handler(async ({ input, context }) => {
-            const caller = callingExtension(services.extensionBackend.verifyExtensionToken, (name) => context.headers.get(name));
-            if (context.headers.has(EXTENSION_TOKEN_HEADER) && caller === undefined) {
-                throw new ORPCError("FORBIDDEN", { message: "that extension token is not one this daemon issued" });
-            }
+            const caller = extensionCaller(services, context);
             await storeRefreshToken(services.capabilities, await contributionRegistry(services), input, caller?.id);
             publishRuntimeChange("capabilities");
             void reconcileListenerProcesses(services);
             return { ok: true } as const;
+        }),
+        // An hour of access for a card signed in through the platform's own client: same callers as oauthToken.
+        oauthAccess: i.oauthAccess.handler(async ({ input, context }) => {
+            const caller = extensionCaller(services, context);
+            return mintPlatformAccess(services.capabilities, await contributionRegistry(services), platformDoor(services.config), input.id, caller?.id);
         }),
         // Replaces one secret field and re-runs the idempotent apply; no composeEnvironment, since a secret can't
         // change a fragment. Apply runs before upsert, so a failed apply keeps the old secret stored.
@@ -408,10 +421,7 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
         // `POST /capabilities/*/secret` glob says it writes credentials at all, not whose. Judged here rather than by the
         // grant middleware, so it holds on a loopback daemon too.
         setSecret: i.setSecret.handler(async ({ input, context }) => {
-            const caller = callingExtension(services.extensionBackend.verifyExtensionToken, (name) => context.headers.get(name));
-            if (context.headers.has(EXTENSION_TOKEN_HEADER) && caller === undefined) {
-                throw new ORPCError("FORBIDDEN", { message: "that extension token is not one this daemon issued" });
-            }
+            const caller = extensionCaller(services, context);
             const capability = await services.capabilities.get(input.id);
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });

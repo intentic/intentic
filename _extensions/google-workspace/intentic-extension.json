@@ -8,6 +8,9 @@
     "engines": {
         "intentic": "^2.0.0"
     },
+    "permissions": {
+        "daemon": ["POST /capabilities/*/oauth-access"]
+    },
     "contributes": {
         "listener": {
             "provider": "google",
@@ -60,11 +63,10 @@
                         "linkLabel": "Open Google Cloud credentials",
                         "scopes": "read & write: `gmail.modify` `gmail.send` `calendar` `drive` `documents` `spreadsheets` `contacts`, read only: the `.readonly` form of each",
                         "steps": [
-                            "In `console.cloud.google.com`, enable the `Gmail`, `Calendar`, `Drive`, `Docs`, `Sheets` and `People` APIs.",
-                            "`OAuth consent screen`: `External`, add yourself as a test user.",
-                            "Set it to `In production`: a `Testing` screen's tokens die after 7 days.",
-                            "`Credentials` → `OAuth client ID` → `Web application`, redirect URI `https://developers.google.com/oauthplayground`.",
-                            "Easiest: paste the client ID and secret here, then run `gw auth login` in a chat for the refresh token.",
+                            "Pick what the agent may do, press `Connect Google`, choose the account and approve. That is the whole setup for one person's account.",
+                            "Read only asks Google for read scopes alone, and `gw` refuses every writing command on it.",
+                            "Your own OAuth client instead: in `console.cloud.google.com` enable the `Gmail`, `Calendar`, `Drive`, `Docs`, `Sheets` and `People` APIs, set the `OAuth consent screen` to `In production`, and create a `Desktop app` OAuth client.",
+                            "Paste its ID and secret under `Advanced`, save, then ask the agent to run `gw auth login`: the grant lands on this card by itself.",
                             "Whole company: make a service account, download its `JSON` key, note its `Client ID`.",
                             "Whole company: authorise that client ID under `Domain-wide delegation` in `admin.google.com`.",
                             "Add this card again for a second account."
@@ -82,28 +84,44 @@
                         ]
                     },
                     {
-                        "key": "email",
-                        "label": "Google account",
-                        "placeholder": "you@example.com",
-                        "hint": "The address this connection acts as."
-                    },
-                    {
-                        "key": "clientId",
-                        "label": "OAuth client ID",
-                        "placeholder": "…apps.googleusercontent.com",
-                        "when": "mode == 'user'"
+                        "key": "access",
+                        "label": "What the agent may do",
+                        "default": "write",
+                        "options": [
+                            { "value": "write", "label": "Read & write" },
+                            { "value": "read", "label": "Read only" }
+                        ]
                     },
                     {
                         "key": "refreshToken",
-                        "label": "Refresh token",
+                        "label": "Google account",
                         "secret": true,
+                        "optional": true,
+                        "signIn": "google",
                         "when": "mode == 'user'",
-                        "hint": "Rotate here when Google revokes it."
+                        "hint": "Sign in with Google; reconnect here to switch account or access."
+                    },
+                    {
+                        "key": "email",
+                        "label": "Account address",
+                        "placeholder": "you@example.com",
+                        "hint": "Filled in when you connect; for a whole company, the person the agent acts as by default."
+                    },
+                    {
+                        "key": "clientId",
+                        "label": "Your own OAuth client ID",
+                        "placeholder": "…apps.googleusercontent.com",
+                        "optional": true,
+                        "advanced": true,
+                        "when": "mode == 'user'",
+                        "hint": "Only to use your own Google Cloud client instead of Connect Google. Save, then run `gw auth login` in a chat."
                     },
                     {
                         "key": "clientSecret",
-                        "label": "OAuth client secret",
+                        "label": "Your own OAuth client secret",
                         "secret": true,
+                        "optional": true,
+                        "advanced": true,
                         "when": "mode == 'user'"
                     },
                     {
@@ -113,17 +131,9 @@
                         "multiline": true,
                         "when": "mode == 'domain'",
                         "hint": "The whole downloaded JSON file."
-                    },
-                    {
-                        "key": "access",
-                        "label": "What the agent may do",
-                        "default": "write",
-                        "options": [
-                            { "value": "write", "label": "Read & write" },
-                            { "value": "read", "label": "Read only" }
-                        ]
                     }
                 ],
+                "refreshToken": { "field": "refreshToken", "boundTo": ["mode", "clientId"] },
                 "env": {
                     "GOOGLE_MODE": "${mode}",
                     "GOOGLE_EMAIL": "${email}",

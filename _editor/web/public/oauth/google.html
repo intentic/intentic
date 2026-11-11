@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- Where Google sends Connect Google's popup back (the platform's client registers WEB_ORIGIN/oauth/google.html as its
+     redirect URI). No app boots here: the page hands Google's answer to the editor form that opened the popup, on a
+     BroadcastChannel (Google's opener policy can sever window.opener) and to the opener when it survived, then closes.
+     The code alone is worth nothing: the form that opened the consent holds its PKCE verifier. -->
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="referrer" content="no-referrer" />
+        <title>Google sign-in</title>
+        <style>
+            :root {
+                color-scheme: light dark;
+                font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+            }
+            body {
+                margin: 0;
+                min-height: 100vh;
+                display: grid;
+                place-items: center;
+                background: Canvas;
+                color: CanvasText;
+            }
+            p {
+                max-width: 22rem;
+                padding: 0 1.5rem;
+                text-align: center;
+                line-height: 1.5;
+            }
+        </style>
+    </head>
+    <body>
+        <p id="said">Finishing the sign-in…</p>
+        <script>
+            (() => {
+                const query = new URLSearchParams(window.location.search);
+                const message = { state: query.get("state") ?? "", code: query.get("code") ?? undefined, error: query.get("error") ?? undefined };
+                // Off the address bar and out of history: the code is single-use, but nothing gains by keeping it.
+                window.history.replaceState(null, "", window.location.pathname);
+                try {
+                    const channel = new BroadcastChannel("intentic:google-connect");
+                    channel.postMessage(message);
+                    channel.close();
+                } catch {
+                    // A browser without BroadcastChannel still has the opener path below.
+                }
+                if (window.opener) {
+                    window.opener.postMessage(message, window.location.origin);
+                }
+                const said = document.getElementById("said");
+                said.textContent =
+                    message.code === undefined
+                        ? "Google did not sign you in" + (message.error ? " (" + message.error + ")" : "") + ". Close this window and try again."
+                        : "Signed in. You can close this window and go back to Intentic.";
+                window.setTimeout(() => window.close(), 300);
+            })();
+        </script>
+    </body>
+</html>

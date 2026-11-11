@@ -1,4 +1,4 @@
-import { runConnectorGateway } from "@intentic/connector-runtime";
+import { mintPlatformAccessAsExtension, runConnectorGateway } from "@intentic/connector-runtime";
 import { type CardConfig, type Connection, connectionOf, fieldsOfConfig } from "./google/accounts.js";
 import { openSession } from "./google/session.js";
 import { type Watcher, startWatcher } from "./watch/poller.js";
@@ -26,7 +26,8 @@ void runConnectorGateway<GoogleConnectorConfig, Watcher>({
         keyOf,
         open: async (id, config) => {
             const connection = connectionFor(id, config);
-            const session = openSession(connection, process.env, ctx.workspaceRoot, Date.now);
+            // A card signed in with Connect Google refreshes through the daemon under this extension's own token.
+            const session = openSession(connection, process.env, ctx.workspaceRoot, Date.now, (cardId) => mintPlatformAccessAsExtension(ctx.api, cardId));
             // Fails the open on a credential Google already refuses, instead of a poller that finds out later.
             await session.token();
             return startWatcher(ctx, connection, session, (detail) => control.markFatal(keyOf(config), detail));

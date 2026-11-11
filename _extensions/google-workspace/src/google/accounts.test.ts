@@ -54,6 +54,16 @@ describe("connectionsFrom", () => {
         expect(() => credentialOf(connection!)).toThrow(/refresh token/);
     });
 
+    // A Connect Google card holds no client of its own: its token is refreshed on the platform's client, through the
+    // daemon, which finds the card by the name the CLI knows it as.
+    it("reads a card with no client of its own as a platform sign-in, and an unsigned one as not signed in", () => {
+        const signedIn = connectionsFrom({ GOOGLE_MODE_WORK: "user", GOOGLE_EMAIL_WORK: "me@x.com", GOOGLE_REFRESH_TOKEN_WORK: "rt" })[0];
+        expect(signedIn?.credential).toEqual({ mode: "platform", cardId: "work", refreshToken: "rt" });
+        const unsigned = connectionsFrom({ GOOGLE_MODE_WORK: "user", GOOGLE_EMAIL_WORK: "me@x.com" })[0];
+        expect(unsigned?.credential).toBeUndefined();
+        expect(unsigned?.problem).toMatch(/Connect Google/);
+    });
+
     it("calls a service account key that is not JSON what it is", () => {
         const [connection] = connectionsFrom({ GOOGLE_MODE_CO: "domain", GOOGLE_EMAIL_CO: "a@b.com", GOOGLE_SERVICE_ACCOUNT_KEY_CO: "not json" });
         expect(connection?.problem).toMatch(/not valid JSON/);

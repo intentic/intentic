@@ -1,11 +1,13 @@
 import { createSign } from "node:crypto";
+import { mintPlatformAccessAsAgent, type PlatformAccess, PlatformAccessRefused } from "@intentic/connector-runtime";
 import type { Connection, Credential } from "./accounts.js";
 import { describe } from "./accounts.js";
 import { scopesFor } from "./scopes.js";
 
-// Mints the one-hour access token every request rides: a `user` card exchanges its refresh token, a `domain` card signs
-// a JWT naming the person to act as in `sub`. `invalid_grant` gets a real explanation, since a Testing-status consent
-// screen issues refresh tokens that die after 7 days.
+// Mints the one-hour access token every request rides: a `platform` card asks the daemon (the platform holds its
+// client's secret), a `user` card exchanges its refresh token with its own client, a `domain` card signs a JWT naming
+// the person to act as in `sub`. `invalid_grant` gets a real explanation, since a Testing-status consent screen issues
+// refresh tokens that die after 7 days.
 
 export interface AccessToken {
     readonly token: string;
@@ -35,7 +37,10 @@ export const assertionFor = (credential: Extract<Credential, { mode: "domain" }>
     return `${header}.${claims}.${b64url(signature)}`;
 };
 
-const grantBody = (connection: Connection, credential: Credential, now: number): URLSearchParams => {
+// How a `platform` card's token is minted: the agent's CLI asks with the agent token, the watcher with its extension's.
+export type PlatformMint = (cardId: string) => Promise<PlatformAccess>;
+
+const grantBody = (connection: Connection, credential: Exclude<Credential, { mode: "platform" }>, now: number): URLSearchParams => {
     if (credential.mode === "user") {
         return new URLSearchParams({
             grant_type: "refresh_token",
@@ -54,6 +59,12 @@ const grantBody = (connection: Connection, credential: Credential, now: number):
 // about the card, said as that rather than relayed raw.
 export const tokenFailure = (connection: Connection, mode: Credential["mode"], error: string, description: string | undefined): string => {
     const who = describe(connection);
+    if (error === "invalid_grant" && mode === "platform") {
+        return [
+            `Google no longer accepts the sign-in on "${who}": it was revoked (at myaccount.google.com, by a password change, or by an admin) or went unused for six months.`,
+            `Press Reconnect on its card under Capabilities.`,
+        ].join(" ");
+    }
     if (error === "invalid_grant" && mode === "user") {
         return [
             `Google rejected the refresh token for "${who}".`,
@@ -78,7 +89,28 @@ export const tokenFailure = (connection: Connection, mode: Credential["mode"], e
     return `Google refused to issue a token for "${who}": ${error}${description === undefined ? "" : `, ${description}`}.`;
 };
 
-export const mintToken = async (connection: Connection, credential: Credential, now: number): Promise<AccessToken> => {
+const mintOnPlatform = async (connection: Connection, cardId: string, now: number, platform: PlatformMint): Promise<AccessToken> => {
+    try {
+        const { accessToken, expiresIn } = await platform(cardId);
+        return { token: accessToken, expiresAt: now + expiresIn };
+    } catch (error) {
+        // A 400 carries Google's own protocol code; anything else is the daemon's or the platform's sentence already.
+        if (error instanceof PlatformAccessRefused) {
+            throw new Error(error.status === 400 ? tokenFailure(connection, "platform", error.reason, undefined) : `Google sign-in on "${describe(connection)}": ${error.reason}.`, { cause: error });
+        }
+        throw error;
+    }
+};
+
+export const mintToken = async (
+    connection: Connection,
+    credential: Credential,
+    now: number,
+    platform: PlatformMint = (cardId) => mintPlatformAccessAsAgent(cardId),
+): Promise<AccessToken> => {
+    if (credential.mode === "platform") {
+        return mintOnPlatform(connection, credential.cardId, now, platform);
+    }
     const url = credential.mode === "user" ? TOKEN_URL : credential.tokenUri;
     const response = await fetch(url, {
         method: "POST",

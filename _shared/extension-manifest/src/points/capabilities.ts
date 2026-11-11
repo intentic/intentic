@@ -73,6 +73,15 @@ export const CapabilityFieldSchema = z.object({
         .describe(
             "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
         ),
+    // Filled by a sign-in button rather than typed: the platform's own OAuth client for that provider runs the consent
+    // and hands the refresh token to the form, and later trades it for access tokens (the client secret never leaves
+    // the platform). Only on the field the card's `refreshToken` names.
+    signIn: z
+        .enum(["google"])
+        .optional()
+        .describe(
+            "Fill this field with a sign-in button instead of a text box: the platform's own OAuth client for the provider runs the consent screen and the refresh token lands here, with nobody creating a client or pasting a token. The card's CLI then trades it for access tokens through the daemon's `POST /capabilities/{id}/oauth-access`, since the client secret stays on the platform. Only on the secret field the card's `refreshToken` names.",
+        ),
 });
 export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
 
@@ -396,6 +405,9 @@ export const CapabilityContributionSchema = z
             for (const key of spec.refreshToken.boundTo.filter((candidate) => !declared.has(candidate) || candidate === spec.refreshToken?.field)) {
                 ctx.addIssue({ code: "custom", message: `refreshToken.boundTo names "${key}", which is not another field of this card` });
             }
+        }
+        for (const field of spec.fields.filter((candidate) => candidate.signIn !== undefined && candidate.key !== spec.refreshToken?.field)) {
+            ctx.addIssue({ code: "custom", message: `signIn on "${field.key}" needs refreshToken.field to name it` });
         }
         for (const field of spec.fields.filter((candidate) => candidate.totp === true)) {
             if (Object.values(spec.env).some((template) => template.includes(`\${${field.key}}`) || template.includes(`\${${field.key}:uri}`))) {

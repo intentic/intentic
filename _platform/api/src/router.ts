@@ -2,6 +2,7 @@ import type { apiContract } from "@intentic/api-contract";
 import type { Router } from "@orpc/server";
 import { adminRoutes } from "./admin/admin.routes.js";
 import { desktopRoutes } from "./desktop/desktop.routes.js";
+import { googleConnectRoutes } from "./google-connect/google-connect.routes.js";
 import { inviteRoutes } from "./invite/invite.routes.js";
 import { meRoutes } from "./me/me.routes.js";
 import { orgRoutes } from "./org/org.routes.js";
@@ -29,4 +30,5 @@ export const router: ApiRouter = {
     wallet: walletRoutes(),
     admin: adminRoutes,
     org: orgRoutes,
+    googleConnect: googleConnectRoutes(),
 };

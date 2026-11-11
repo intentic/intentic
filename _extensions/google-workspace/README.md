@@ -4,7 +4,7 @@ The Google Workspace connection: one card that gives the agent `gw`, a CLI for G
 
 ```mermaid
 flowchart LR
-    card["Google card<br/>OAuth or service account"] -->|"env per instance"| gw(["gw CLI<br/>bin/gw"])
+    card["Google card<br/>Connect Google, own client<br/>or service account"] -->|"env per instance"| gw(["gw CLI<br/>bin/gw"])
     agent["Agent"] --> gw
     gw --> google["Google APIs"]
     watcher["watcher process<br/>node dist/gateway.js"] -->|"poll"| google
@@ -12,6 +12,7 @@ flowchart LR
 ```
 
 - `gw` reaches the agent's PATH through `contributes.bin`. Its router picks the account, applies the read-only switch and formats failures once; each command in `src/services/` is only the API call and its output. Several accounts can be connected, and a company connection can act as anyone in the domain with `--as`. It keeps the agent-CLI contract: failures print to stdout (an agent drops stderr) with exit 2, and a flag no command reads is refused before anything runs rather than dropped.
+- Three ways a card signs in. **Connect Google** (the default): a button on the card runs Google's consent on the platform's own OAuth client and puts the refresh token on the card; nobody makes a Cloud project or pastes a token. The client secret never leaves the platform, so `gw` and the watcher get each hour's access token from the daemon (`POST /capabilities/{id}/oauth-access`, through `@intentic/connector-runtime`), which trades the card's token at the platform. **Your own client** (Advanced): `gw auth login` runs the consent and stores the grant on the card through the daemon's `oauth-token` route rather than printing it. **Whole company**: a service account with domain-wide delegation.
 - Read-only is enforced twice: the card asks Google for read scopes, and every command marked `writes` is refused by the router.
 - Access tokens are cached per credential fingerprint in a `0600` file under the workspace runtime tree, since each `gw` call is a fresh process.
 - The watcher polls because Gmail push needs a public endpoint the sandbox lacks. Mail follows Gmail's `history.list` cursor; calendar looks a short window ahead. A watermark file per connection means a restart neither replays the inbox nor skips mail. It runs only while an automation listens to `google`.

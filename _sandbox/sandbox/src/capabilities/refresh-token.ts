@@ -27,7 +27,7 @@ export interface RefreshTokenInput {
 type CliCard = Extract<Capability, { kind: "cli" }>;
 type CliSpec = Extract<CapabilityContribution, { kind: "cli" }>;
 
-interface SignInCard {
+export interface SignInCard {
     readonly card: CliCard;
     readonly spec: CliSpec;
     readonly declared: NonNullable<CliSpec["refreshToken"]>;
@@ -36,7 +36,7 @@ interface SignInCard {
 
 // The card a CLI names, by its id as the owner typed it or as the CLI knows it from its per-instance env suffix, with
 // the manifest entry that declares its sign-in.
-const signInCard = async (
+export const signInCard = async (
     store: Pick<CapabilitiesStore, "get" | "list">,
     registry: ReadonlyMap<string, ResolvedContribution>,
     id: string,
