@@ -8,7 +8,7 @@ import { oneLine } from "@intentic/base/one-line";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Services } from "../../composition.js";
 import { statePath } from "../../state-paths.js";
-import { outputTail, runCheck, shellArgv } from "../../workload/run-check.js";
+import { runCheck, shellArgv } from "../../workload/run-check.js";
 import { type AutomationRecord, sawSame, WATCH_VALUE_MAX, watchDigest } from "../automations-store.js";
 import { guardCapabilityEnv } from "./guard-env.js";
 import { checkSource, sourceLabel } from "./watch-sources.js";
@@ -22,8 +22,11 @@ import { checkSource, sourceLabel } from "./watch-sources.js";
 const GUARD_TIMEOUT_MS = 60_000;
 // Output a guard may print per stream; past it the guard fails (execFile's default maxBuffer, which it ran under).
 const GUARD_CAPTURE_BYTES = 1024 * 1024;
-// How much of a check's words survive into the run's detail.
-const DETAIL_TAIL = 500;
+// How much of a failed guard's words survive into the run's detail: its first lines and its last, since a crash says
+// what went wrong at the top (`Error: Cannot find module …`) and a stack trace fills the rest. A tail alone kept only
+// the bottom of the trace, so the watch read `oader:1118:27)` and nobody could tell why the check failed.
+const DETAIL_HEAD = 600;
+const DETAIL_TAIL = 400;
 // How much of what a check saw reaches the woken prompt; a page longer than this is summarised by its diff instead.
 const OBSERVED_MAX = 12_000;
 // Lines of a diff listed on each side before the rest is counted.
@@ -106,8 +109,24 @@ const runGuard = async (services: Services, automation: AutomationRecord, comman
     if (ran.exitCode === 0 && !ran.truncated) {
         return { pass: true, output: ran.stdout.trim() };
     }
-    return { pass: false, detail: outputTail(ran, DETAIL_TAIL) || (ran.spawnError ?? "") };
+    return { pass: false, detail: headAndTail(`${ran.stderr}${ran.stdout}`.trim()) || (ran.spawnError ?? "") };
 };
+
+// Whole when short; otherwise its opening lines and its end, the cut said where it falls.
+export const headAndTail = (text: string): string => {
+    if (text.length <= DETAIL_HEAD + DETAIL_TAIL) {
+        return text;
+    }
+    const head = text.slice(0, DETAIL_HEAD);
+    const cut = head.lastIndexOf("\n");
+    const kept = cut > DETAIL_HEAD / 2 ? head.slice(0, cut) : head;
+    return `${kept}\n… ${text.length - kept.length - DETAIL_TAIL} characters left out …\n${text.slice(-DETAIL_TAIL)}`;
+};
+
+// The line a watch's one-line state shows for a failed check: the one naming the error when there is one (a Node crash
+// opens on a loader frame and `throw err;`, with the message lines below), else its first line.
+export const failureGist = (detail: string): string =>
+    firstLine(detail.split("\n").find((line) => /\b[A-Z]\w*(Error|Exception)\b|^\s*error\b/i.test(line)) ?? detail);
 
 // Lines only on one side, each side listed up to DIFF_LINES: what a reader needs to see what moved, not an edit script.
 export const lineDiff = (before: string, after: string): string => {
@@ -187,7 +206,7 @@ export const checkCondition = async (services: Services, automation: AutomationR
     // another, and the second must compare against what the first just saw.
     const previous = (await services.automations.get(automation.id))?.watch;
     if (!checked.pass) {
-        await remember(services, automation.id, now, () => ({ waiting: firstLine(checked.detail) || "the check did not pass" }));
+        await remember(services, automation.id, now, () => ({ waiting: failureGist(checked.detail) || "the check did not pass" }));
         return { kind: "skip", detail: checked.detail };
     }
     const value = checked.output;

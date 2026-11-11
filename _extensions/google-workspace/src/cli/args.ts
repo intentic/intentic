@@ -168,6 +168,11 @@ export const list = (args: Args, ...names: readonly string[]): string[] =>
         .map((entry) => entry.trim())
         .filter((entry) => entry !== "");
 
+// What a command is handed: the positionals after the words that routed to it (`mail read`), the flags as they are.
+// The flags Map is shared, not copied, so a command that sets one (`mail reply` setting --thread) still reaches send.
+export const operands = (args: Args, consumed: number): Args => ({ positional: args.positional.slice(consumed), flags: args.flags });
+
+// `index` counts from the command's first operand: `gw mail read <id>` reads its id at 0.
 export const positional = (args: Args, index: number, what: string): string => {
     const value = args.positional[index];
     if (value === undefined || value === "") {

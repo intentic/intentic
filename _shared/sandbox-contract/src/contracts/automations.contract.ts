@@ -41,7 +41,10 @@ export const automationsContract = {
         })
         .input(WatchCheckInputSchema)
         .output(WatchCheckResultSchema),
+    // The `automations sources` CLI reads it on the agent token, so an agent can name a listener it may propose; it
+    // holds labels and event names only, never a credential.
     catalog: procedure
+        .meta({ agent: true })
         .route({
             method: "GET",
             path: "/automations/catalog",

@@ -102,6 +102,33 @@ const thenWords = computed<string>(() => {
 const runsAs = (it: Automation): string | undefined =>
     it.target === undefined || it.target.kind === `agent` ? personaLabel(it.actsAs, [], true) : undefined;
 
+// Who may set off a listener, by the ids its source vouches for, and what everyone else gets: the line that says whether
+// a stranger's mail can start an agent, which is the first thing to read before approving one.
+const fromWords = (it: Automation): string | undefined => {
+    if (it.senders === undefined) {
+        return undefined;
+    }
+    const senders = it.senders.rules
+        .flatMap((rule) => {
+            const who = [...(rule.ids ?? []), ...(rule.groups ?? [])].join(`, `);
+            return rule.actsAs === it.actsAs ? [who] : [`${who} (${personaLabel(rule.actsAs, [], true)})`];
+        })
+        .join(`; `);
+    switch (it.senders.others) {
+        case `ignore`:
+            return t(`needs.automation.fromIgnore`, { senders });
+        case `hold`:
+            return t(`needs.automation.fromHold`, { senders });
+        case `allow`:
+            return t(`needs.automation.fromAllow`, { senders });
+    }
+};
+
+const fromFact = (it: Automation): readonly { key: string; label: string; value: string }[] => {
+    const from = fromWords(it);
+    return from === undefined ? [] : [{ key: `from`, label: t(`needs.automation.from`), value: from }];
+};
+
 // Labelled facts, one per question a person asks before letting something run unattended; a fact with nothing to say is
 // left out rather than drawn as "none".
 const facts = computed<readonly { key: string; label: string; value: string; mono?: boolean }[]>(() => {
@@ -121,6 +148,7 @@ const facts = computed<readonly { key: string; label: string; value: string; mon
         { key: `name`, label: t(`needs.automation.name`), value: it.id, mono: true },
         ...(it.note === undefined ? [] : [{ key: `for`, label: t(`needs.automation.for`), value: it.note }]),
         { key: `when`, label: t(`needs.automation.when`), value: triggerWords(it.trigger) },
+        ...fromFact(it),
         {
             key: `if`,
             label: t(`needs.automation.if`),

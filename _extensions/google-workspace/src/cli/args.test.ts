@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { KNOWN_FLAGS, UsageError, bool, flag, limit, list, parseArgs, positional, rejectUnknownFlags, required } from "./args.js";
+import { KNOWN_FLAGS, UsageError, bool, flag, limit, list, operands, parseArgs, positional, rejectUnknownFlags, required } from "./args.js";
 
 describe("parseArgs", () => {
     it("reads a flag and its value, however it was spelled", () => {
@@ -46,7 +46,21 @@ describe("what a command demands", () => {
     });
 
     it("names the positional that was missing, in the words the caller used", () => {
-        expect(() => positional(parseArgs(["mail", "read"]), 2, "A message id")).toThrow(/A message id is required/);
+        expect(() => positional(operands(parseArgs(["mail", "read"]), 2), 0, "A message id")).toThrow(/A message id is required/);
+    });
+
+    // Commands read their operands from 0. Handed the whole line, `gw mail read <id>` asked Gmail for message "read".
+    it("hands a command only what follows its group and name, flags intact", () => {
+        const args = operands(parseArgs(["mail", "read", "1a1cac244191e03f", "--json"]), 2);
+        expect(positional(args, 0, "A message id")).toBe("1a1cac244191e03f");
+        expect(bool(args, "json")).toBe(true);
+        expect(operands(parseArgs(["mail", "search", "from:x@y.com", "is:unread"]), 2).positional.join(" ")).toBe("from:x@y.com is:unread");
+    });
+
+    it("shares the flags, so a command that sets one is seen by the one it calls", () => {
+        const args = parseArgs(["mail", "reply", "ID"]);
+        operands(args, 2).flags.set("thread", "T1");
+        expect(flag(args, "thread")).toBe("T1");
     });
 
     // The ceiling is what keeps a stray -n from walking a whole mailbox one page at a time.

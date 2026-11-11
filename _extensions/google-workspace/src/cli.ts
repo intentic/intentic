@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type Args, bool, flag, parseArgs, rejectUnknownFlags } from "./cli/args.js";
+import { type Args, bool, flag, operands, parseArgs, rejectUnknownFlags } from "./cli/args.js";
 import type { Command, CommandGroup, RootCommand, RootContext } from "./cli/command.js";
 import { type Connection, connectionsFrom, describe, retargetAs, selectConnection } from "./google/accounts.js";
 import { openSession } from "./google/session.js";
@@ -92,7 +92,7 @@ const run = async (args: Args, out: (line: string) => void): Promise<number> => 
 
     const rootSubcommand = group.rootCommands?.find((command) => command.name === second);
     if (rootSubcommand !== undefined) {
-        await rootSubcommand.run(context);
+        await rootSubcommand.run({ ...context, args: operands(args, 2) });
         return 0;
     }
 
@@ -111,7 +111,8 @@ const run = async (args: Args, out: (line: string) => void): Promise<number> => 
         out("Change it to Read & write on the Google Workspace card if that is what you want.");
         return 2;
     }
-    await command.run({ ...context, connection, session: openSession(connection, process.env, process.cwd(), Date.now) });
+    // A command reads its own operands from 0: `gw mail read <id>` hands `read` just [<id>], not the words that routed to it.
+    await command.run({ ...context, args: operands(args, 2), connection, session: openSession(connection, process.env, process.cwd(), Date.now) });
     return 0;
 };
 

@@ -136,7 +136,7 @@ const show: Command = {
     usage: "gw cal show <eventId> [--calendar id]",
     run: async (ctx) => {
         const event = await call<CalendarEvent>(ctx.session, {
-            url: `${API}/calendars/${encodeURIComponent(calendarId(ctx.args))}/events/${encodeURIComponent(positional(ctx.args, 1, "An event id"))}`,
+            url: `${API}/calendars/${encodeURIComponent(calendarId(ctx.args))}/events/${encodeURIComponent(positional(ctx.args, 0, "An event id"))}`,
         });
         if (ctx.json) {
             printJson(ctx, event);
@@ -211,7 +211,7 @@ const update: Command = {
         }
         const updated = await call<CalendarEvent>(ctx.session, {
             method: "PATCH",
-            url: `${API}/calendars/${encodeURIComponent(id)}/events/${encodeURIComponent(positional(ctx.args, 1, "An event id"))}`,
+            url: `${API}/calendars/${encodeURIComponent(id)}/events/${encodeURIComponent(positional(ctx.args, 0, "An event id"))}`,
             query: { sendUpdates: "all" },
             body,
         });
@@ -229,7 +229,7 @@ const remove: Command = {
     usage: "gw cal delete <eventId> [--calendar id]",
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "An event id");
+        const id = positional(ctx.args, 0, "An event id");
         await call(ctx.session, {
             method: "DELETE",
             url: `${API}/calendars/${encodeURIComponent(calendarId(ctx.args))}/events/${encodeURIComponent(id)}`,

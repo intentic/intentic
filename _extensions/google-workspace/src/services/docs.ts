@@ -21,7 +21,7 @@ const read: Command = {
     summary: "Read a document as text",
     usage: "gw docs read <documentId>",
     run: async (ctx) => {
-        const doc = await call<GoogleDoc>(ctx.session, { url: `${API}/${encodeURIComponent(positional(ctx.args, 1, "A document id"))}` });
+        const doc = await call<GoogleDoc>(ctx.session, { url: `${API}/${encodeURIComponent(positional(ctx.args, 0, "A document id"))}` });
         if (ctx.json) {
             printJson(ctx, doc);
             return;
@@ -62,7 +62,7 @@ const append: Command = {
     usage: 'gw docs append <documentId> --text "…" | --from FILE',
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A document id");
+        const id = positional(ctx.args, 0, "A document id");
         const text = await textOf(ctx.args);
         await call(ctx.session, {
             method: "POST",
@@ -80,7 +80,7 @@ const replace: Command = {
     usage: 'gw docs replace <documentId> --find "old" --with "new" [--case]',
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A document id");
+        const id = positional(ctx.args, 0, "A document id");
         const answer = await call<{ replies?: { replaceAllText?: { occurrencesChanged?: number } }[] }>(ctx.session, {
             method: "POST",
             url: `${API}/${encodeURIComponent(id)}:batchUpdate`,

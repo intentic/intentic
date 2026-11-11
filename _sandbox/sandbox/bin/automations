@@ -10,14 +10,21 @@ import { call, die, parseArgs, raise, refusalOf, WAIT_HELP } from "./needs-cli.m
 
 const COMMAND = "automations";
 
-const USAGE = `automations — what this sandbox runs on its own, and how to ask for a new watch
+const USAGE = `automations — what this sandbox runs on its own, and how to ask for a new one
 
   automations                     every automation: on or off, when, what it checks, where it goes, what it saw last
   automations show <id>           one automation whole, with its recent runs
   automations check <source>      run a ready-made check once now and print what it sees (exit 0 passes, 1 does not)
+  automations sources             what can wake an agent the moment something arrives (new mail, a chat message, a
+                                  CI run): each listener's provider id, its events, and whether it names senders
   automations propose <id> <source | --guard '<cmd>'> --prompt "…" --why "…" [options]
                                   ask the owner, on a card in this chat, to switch on a watch; nothing runs until they
                                   approve it, and the card shows what its check sees today
+  automations propose <id> --on <provider> --model <provider>/<model> --prompt "…" --why "…" [options]
+                                  ask the owner to switch on an automation that starts an agent whenever its source
+                                  delivers something (new Gmail, a Slack message): no script and no schedule of yours,
+                                  and the agent gets what arrived. As fast as the source: chat at once, Gmail within a
+                                  minute. Prefer it to a --guard that polls the same service.
 
 Sources (no shell, no model, no token needed):
   --npm <package>[@<range|tag>]   a version on npm: with a range (bun@>=1.4.3) it passes once one is published;
@@ -27,6 +34,14 @@ Sources (no shell, no model, no token needed):
   --guard '<command>'             your own shell check instead: exit 0 passes, and what it prints goes with the wake.
                                   Test it in your shell first; it is never run before approval. $AUTOMATION_STATE names a
                                   file it may keep between runs, $AUTOMATION_LAST holds what it printed last time.
+
+Listening instead of checking (--on): no schedule, always starts a new agent, so it needs --model
+  --on <provider>                 the listener to wake on, as \`automations sources\` names it: google, microsoft365, slack…
+  --event <type>                  only this kind of event (google: mail or event); absent means every kind
+  --channel <id>                  only this channel, label, folder or calendar; absent means all of them
+  --mentioned                     only what is addressed to the agent (google: mail with your address in To)
+  --from <sender>                 only from this sender (an e-mail address, a user id, as the source names them);
+                                  repeat for several. Everyone else is ignored. Only on a source that names senders.
 
 Options for propose:
   --every <15m|2h|6h|1d|1w>       how often it checks (default 6h); or --cron '<expr>' [--tz <Zone/Name>]
@@ -38,7 +53,9 @@ Options for propose:
                                   notify: only tell the owner, no model at all
                                   new: a new agent with the prompt; needs --model
   --model <provider>/<model>[:<effort>]   for --target new; repeat for a fallback ladder, best first
-  --as <persona>                  the persona its wakes act as
+  --as <persona>                  the persona its wakes act as: a card's id from .intentic/config/personas.json, or
+                                  full-access (every connected account) or no-accounts (connector credentials, such as
+                                  a connected Gmail, but no signed-in site account). Absent means no-accounts.
   --note "…"                      one line on what it watches for, shown in notifications
   --prompt "…"                    what the woken conversation or agent is told to do (required)
 
@@ -108,7 +125,7 @@ const triggerText = (trigger) => {
         case "event":
             return "webhook";
         case "listener":
-            return `messages from ${trigger.provider}`;
+            return `${trigger.eventType ?? "messages"} from ${trigger.provider}${trigger.channelId === undefined ? "" : ` in ${trigger.channelId}`}${trigger.mentioned === true ? ", addressed to it" : ""}`;
         default:
             return `workspace ${trigger.event}`;
     }
@@ -139,6 +156,16 @@ const watchText = (watch) => {
         .join(" · ");
 };
 
+// Who may set off a listener, in a line: each rule's ids or groups, and what everyone else gets.
+const sendersText = (senders) => {
+    const rules = senders.rules.map((rule) => {
+        const who = [...(rule.ids ?? []), ...(rule.groups ?? []).map((group) => `group ${group}`)].join(", ");
+        return rule.actsAs === undefined ? who : `${who} (as ${rule.actsAs})`;
+    });
+    const others = { allow: "everyone else allowed", hold: "everyone else held for a person", ignore: "everyone else ignored" }[senders.others];
+    return [...rules, others].join("; ");
+};
+
 const list = async () => {
     const { automations } = await get("/automations");
     if (automations.length === 0) {
@@ -161,6 +188,11 @@ const list = async () => {
     }
 };
 
+const latestDetail = (run) => {
+    const lines = (run?.detail ?? "").trim().split("\n");
+    return lines.length <= 1 && (lines[0] ?? "").length <= 140 ? [] : ["newest run said:", ...lines.map((line) => `  ${line}`)];
+};
+
 const show = async (id) => {
     const { automations } = await get("/automations");
     const automation = automations.find((entry) => entry.id === id);
@@ -176,6 +208,7 @@ const show = async (id) => {
         ...(automation.expiresAt === undefined ? [] : [`ends: ${new Date(automation.expiresAt).toISOString()}`]),
         `goes to: ${targetText(automation.target)}`,
         ...(automation.actsAs === undefined ? [] : [`acts as: ${automation.actsAs}`]),
+        ...(automation.senders === undefined ? [] : [`senders: ${sendersText(automation.senders)}`]),
         ...(automation.models === undefined ? [] : [`models: ${automation.models.map((pin) => `${pin.provider}/${pin.model}`).join(", ")}`]),
         ...(automation.watch === undefined ? [] : [`last check: ${watchText(automation.watch)}`]),
         "prompt:",
@@ -189,6 +222,8 @@ const show = async (id) => {
                       (run) =>
                           `  ${new Date(run.at).toISOString()} ${run.outcome}${run.detail === undefined ? "" : ` — ${firstLine(run.detail, 140)}`}`,
                   )),
+        // The newest run's words whole, when they run past a line: a failed check's error is what fixing it starts from.
+        ...latestDetail(automation.runs[0]),
     ];
     process.stdout.write(`${lines.join("\n")}\n`);
 };
@@ -227,6 +262,32 @@ const sourceOf = (flags) => {
         return { kind: "url", url: flags.url, ...(flags.select === undefined ? {} : { select: flags.select }) };
     }
     return undefined;
+};
+
+// What can wake an agent when something arrives: the same catalogue the Automations page offers, which saving is
+// checked against, so a provider printed here is one a proposal may name.
+const sources = async () => {
+    const catalog = await get("/automations/catalog");
+    const listeners = catalog.sources.toSorted((a, b) => a.provider.localeCompare(b.provider));
+    if (listeners.length === 0) {
+        process.stdout.write("No listener sources: install the extension for one (Google Workspace, Slack, …) on Sandbox ▸ Extensions.\n");
+        return;
+    }
+    for (const source of listeners) {
+        const state = source.enabled ? "" : " [its extension is off]";
+        const needs = source.requires.length === 0 ? "" : ` · needs a connected ${source.requires.join(" or ")}`;
+        process.stdout.write(`${source.provider} — ${source.label}${state}${needs}\n`);
+        if (source.events.length > 0) {
+            process.stdout.write(`  --event ${source.events.map((event) => `${event.value} (${event.label})`).join(", ")}\n`);
+        }
+        process.stdout.write(`  --channel ${source.channel.label}\n`);
+        if (source.mentionLabel !== undefined) {
+            process.stdout.write(`  --mentioned ${source.mentionLabel}\n`);
+        }
+        if (source.sender !== undefined) {
+            process.stdout.write(`  --from ${source.sender.label}${source.sender.hint === undefined ? "" : `: ${source.sender.hint}`}\n`);
+        }
+    }
 };
 
 const check = async (args) => {
@@ -320,22 +381,71 @@ const targetOf = (raw) => {
     return { kind: "conversation", conversationId: raw };
 };
 
+const LISTENER_FLAGS = ["on", "event", "channel"];
+
+// A listener trigger and who may set it off, from --on and its narrowing flags. A sender rule wears the persona it names
+// in place of the automation's own (src/automations/senders.ts), so --as is carried onto it: without that, the people
+// it admits would wake with no persona at all.
+const listenerOf = (flags) => {
+    const trigger = {
+        kind: "listener",
+        provider: flags.on,
+        ...(flags.event === undefined ? {} : { eventType: flags.event }),
+        ...(flags.channel === undefined ? {} : { channelId: flags.channel }),
+        ...(flags.mentioned === true ? { mentioned: true } : {}),
+    };
+    const from = flags.from ?? [];
+    const senders =
+        from.length === 0 ? undefined : { rules: [{ ids: from, ...(flags.as === undefined ? {} : { actsAs: flags.as }) }], others: "ignore" };
+    return { trigger, senders };
+};
+
 const propose = async (args) => {
     const { flags, rest } = parseArgs(COMMAND, args, {
-        values: [...SOURCE_FLAGS, "guard", "every", "cron", "tz", "fire-on", "until", "expires", "target", "as", "note", "prompt", "why", "wait"],
-        switches: ["prereleases"],
-        repeated: ["model"],
+        values: [
+            ...SOURCE_FLAGS,
+            ...LISTENER_FLAGS,
+            "guard",
+            "every",
+            "cron",
+            "tz",
+            "fire-on",
+            "until",
+            "expires",
+            "target",
+            "as",
+            "note",
+            "prompt",
+            "why",
+            "wait",
+        ],
+        switches: ["prereleases", "mentioned"],
+        repeated: ["model", "from"],
     });
     const [id] = rest;
     if (id === undefined || !/^[a-z0-9][a-z0-9-]{0,59}$/.test(id)) {
         return die(COMMAND, "propose needs an id: lowercase letters, digits and dashes, like bun-1-4-3");
     }
     const source = sourceOf(flags);
+    const listens = flags.on !== undefined;
     if (source !== undefined && flags.guard !== undefined) {
         return die(COMMAND, "give it a source or a --guard command, not both");
     }
-    if (source === undefined && flags.guard === undefined) {
-        return die(COMMAND, "a watch needs something to check: --npm, --github, --url or --guard");
+    if (listens) {
+        if (source !== undefined || flags.every !== undefined || flags.cron !== undefined || flags.tz !== undefined) {
+            return die(COMMAND, "--on listens for what arrives, so it takes no --npm, --github, --url, --every or --cron: drop them, or drop --on for a watch");
+        }
+        if (flags.target !== undefined && flags.target !== "new") {
+            return die(COMMAND, "--on answers whoever wrote, so it can only start a new agent: drop --target, or give --target new");
+        }
+    } else {
+        if (source === undefined && flags.guard === undefined) {
+            return die(COMMAND, "a watch needs something to check: --npm, --github, --url or --guard, or --on <provider> to listen instead");
+        }
+        const stray = [...LISTENER_FLAGS.filter((flag) => flags[flag] !== undefined), ...(flags.mentioned === true ? ["mentioned"] : []), ...((flags.from ?? []).length > 0 ? ["from"] : [])];
+        if (stray.length > 0) {
+            return die(COMMAND, `--${stray[0]} narrows a listener: give --on <provider> with it (\`automations sources\` names them)`);
+        }
     }
     if (flags.prompt === undefined || flags.prompt.trim() === "") {
         return die(COMMAND, '--prompt is required: what the woken conversation or agent should do, like "Carry out the migration plan above."');
@@ -349,23 +459,31 @@ const propose = async (args) => {
     if (flags.every !== undefined && flags.cron !== undefined) {
         return die(COMMAND, "give --every or --cron, not both");
     }
-    const target = targetOf(flags.target);
+    const target = targetOf(listens ? "new" : flags.target);
     const models = (flags.model ?? []).map(modelOf);
     if (target.kind === "agent" && models.length === 0) {
-        return die(COMMAND, "--target new starts a new agent, which needs at least one --model <provider>/<model>");
+        return die(
+            COMMAND,
+            listens
+                ? "--on starts a new agent for each arrival, which needs at least one --model <provider>/<model>"
+                : "--target new starts a new agent, which needs at least one --model <provider>/<model>",
+        );
     }
-    const cron = flags.cron ?? cronEvery(flags.every ?? "6h", id);
+    const { trigger, senders } = listens
+        ? listenerOf(flags)
+        : { trigger: { kind: "schedule", cron: flags.cron ?? cronEvery(flags.every ?? "6h", id), ...(flags.tz === undefined ? {} : { tz: flags.tz }) } };
     const automation = {
         id,
         enabled: true,
-        trigger: { kind: "schedule", cron, ...(flags.tz === undefined ? {} : { tz: flags.tz }) },
-        ...(source === undefined ? { guard: flags.guard } : { source }),
+        trigger,
+        ...(source !== undefined ? { source } : flags.guard !== undefined ? { guard: flags.guard } : {}),
         ...(flags["fire-on"] === undefined ? {} : { fireOn: flags["fire-on"] }),
         ...(flags.until === undefined ? {} : { until: flags.until }),
         ...(flags.expires === undefined ? {} : { expiresAt: expiresOf(flags.expires) }),
         target,
         ...(models.length === 0 ? {} : { models }),
         ...(flags.as === undefined ? {} : { actsAs: flags.as }),
+        ...(senders === undefined ? {} : { senders }),
         ...(flags.note === undefined ? {} : { note: flags.note }),
         prompt: flags.prompt,
     };
@@ -391,6 +509,10 @@ const main = async () => {
     }
     if (command === "check") {
         await check(args);
+        return;
+    }
+    if (command === "sources") {
+        await sources();
         return;
     }
     if (command === "propose") {

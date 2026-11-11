@@ -139,5 +139,19 @@ it to `In production` in the Google Cloud console and get a fresh token.
 
 ## Watching
 
-If the owner has an automation with Google as its source, new inbox mail and imminent calendar events start
-agent runs on their own. Nothing needs to be polled from here: this tool is for acting, not for waiting.
+An automation with Google as its source starts an agent run on its own when new inbox mail arrives (within
+about a minute) or a calendar event is about to start. Nothing needs to be polled from here: this tool is for
+acting, not for waiting, so never build a `--guard` script or a cron that polls Gmail.
+
+When the owner wants mail or events to set something off, propose that automation yourself; they approve it on
+a card in the chat:
+
+```
+automations propose mail-from-boss --on google --event mail --from boss@example.com \
+  --model claude/claude-opus-5-5 --as full-access --note "Mail from boss@example.com" \
+  --prompt "Read the mail in the payload with gw mail read <id> and act on it." --why "…"
+```
+
+`--from` (repeatable) admits only those senders and ignores everyone else; `--mentioned` keeps only mail with the
+owner's address in To; `--event event` is for calendar events. A wake with no `--as` wears No accounts, which
+still carries this connection's credentials, so `gw` works there; name a persona when the run needs more.

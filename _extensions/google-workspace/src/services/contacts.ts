@@ -27,7 +27,7 @@ const search: Command = {
     summary: "Look someone up by name, email or company",
     usage: "gw contacts search <text> [-n 10]",
     run: async (ctx) => {
-        const query = ctx.args.positional.slice(1).join(" ");
+        const query = ctx.args.positional.join(" ");
         if (query === "") {
             throw new Error("Say who to look for.");
         }

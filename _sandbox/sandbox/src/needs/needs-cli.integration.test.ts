@@ -593,6 +593,88 @@ describe("the automations command speaks the automations and needs contracts", (
         expect(modelless.stdout).toContain("needs at least one --model");
     });
 
+    it("propose --on asks for a listener that starts a new agent, its senders wearing the persona it names", async () => {
+        server.answer = raised({ state: "open", message: "Asked.", need: OPEN_NEED });
+        const result = await run(server.port, "automations", [
+            "propose",
+            "gmail-from-boss",
+            "--on",
+            "google",
+            "--event",
+            "mail",
+            "--from",
+            "boss@example.com",
+            "--from",
+            "deputy@example.com",
+            "--as",
+            "mail-reader",
+            "--model",
+            "claude/claude-opus-5-5",
+            "--prompt",
+            "Act on the mail.",
+            "--why",
+            "react to the boss's mail",
+        ]);
+        expect(result.code).toBe(3);
+        const ask = NeedRaiseSchema.parse(server.seen[0]?.body).ask;
+        if (ask.kind !== "automation") {
+            throw new Error(`expected an automation ask, got ${ask.kind}`);
+        }
+        expect(ask.automation).toEqual({
+            id: "gmail-from-boss",
+            enabled: true,
+            trigger: { kind: "listener", provider: "google", eventType: "mail" },
+            target: { kind: "agent" },
+            models: [{ provider: "claude", model: "claude-opus-5-5" }],
+            actsAs: "mail-reader",
+            senders: { rules: [{ ids: ["boss@example.com", "deputy@example.com"], actsAs: "mail-reader" }], others: "ignore" },
+            prompt: "Act on the mail.",
+        });
+    });
+
+    it("propose --on refuses what a listener cannot be, and a listener's filters without --on", async () => {
+        const modelless = await run(server.port, "automations", ["propose", "x", "--on", "google", "--prompt", "p"]);
+        expect(modelless).toMatchObject({ code: 2 });
+        expect(modelless.stdout).toContain("needs at least one --model");
+        const scheduled = await run(server.port, "automations", ["propose", "x", "--on", "google", "--every", "1h", "--model", "a/b", "--prompt", "p"]);
+        expect(scheduled.stdout).toContain("takes no --npm, --github, --url, --every or --cron");
+        const continuing = await run(server.port, "automations", ["propose", "x", "--on", "google", "--target", "here", "--model", "a/b", "--prompt", "p"]);
+        expect(continuing.stdout).toContain("can only start a new agent");
+        const stray = await run(server.port, "automations", ["propose", "x", "--npm", "bun", "--from", "a@b.c", "--prompt", "p"]);
+        expect(stray.stdout).toContain("--from narrows a listener");
+        expect(server.seen).toEqual([]);
+    });
+
+    it("sources lists each listener from the catalogue the contract declares, with the flags that narrow it", async () => {
+        server.answer = (seen) =>
+            `${seen.method} ${seen.path}` === declared(["automations", "catalog"], undefined)
+                ? {
+                      status: 200,
+                      body: {
+                          sources: [
+                              {
+                                  provider: "google",
+                                  label: "Google Workspace",
+                                  events: [{ value: "mail", label: "New mail" }],
+                                  channel: { label: "Gmail label", placeholder: "every inbox" },
+                                  sender: { label: "Sender address", placeholder: "name@example.com" },
+                                  mentionLabel: "Only mail addressed to you",
+                                  requires: ["google"],
+                                  enabled: true,
+                              },
+                          ],
+                          templates: [],
+                      },
+                  }
+                : { status: 404, body: { message: `nothing at ${seen.path}` } };
+        const result = await run(server.port, "automations", ["sources"]);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain("google — Google Workspace · needs a connected google");
+        expect(result.stdout).toContain("--event mail (New mail)");
+        expect(result.stdout).toContain("--from Sender address");
+        expect(result.stdout).toContain("--mentioned Only mail addressed to you");
+    });
+
     it("check runs one source through the route the contract declares and exits by whether it passes", async () => {
         server.answer = (seen) =>
             `${seen.method} ${seen.path}` === declared(["automations", "check"], seen.body)

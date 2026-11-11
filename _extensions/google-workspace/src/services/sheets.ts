@@ -61,7 +61,7 @@ const tabs: Command = {
             properties?: { title?: string };
             sheets?: { properties?: { title?: string; sheetId?: number; gridProperties?: { rowCount?: number; columnCount?: number } } }[];
         }>(ctx.session, {
-            url: `${API}/${encodeURIComponent(positional(ctx.args, 1, "A spreadsheet id"))}`,
+            url: `${API}/${encodeURIComponent(positional(ctx.args, 0, "A spreadsheet id"))}`,
             query: { fields: "properties.title, sheets.properties" },
         });
         if (ctx.json) {
@@ -90,7 +90,7 @@ const read: Command = {
     summary: "Read a range as CSV",
     usage: "gw sheets read <spreadsheetId> [--range 'Sheet1!A1:D50']     (no range = the first sheet, whole)",
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A spreadsheet id");
+        const id = positional(ctx.args, 0, "A spreadsheet id");
         const target = flag(ctx.args, "range") ?? (await firstTab(ctx, id));
         const values = await call<ValueRange>(ctx.session, { url: `${API}/${encodeURIComponent(id)}/values/${encodeURIComponent(target)}` });
         if (ctx.json) {
@@ -108,7 +108,7 @@ const write: Command = {
     usage: "gw sheets write <spreadsheetId> --range 'Sheet1!A1' --csv FILE | --json-values '[[…]]' | --values \"a,b;c,d\"",
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A spreadsheet id");
+        const id = positional(ctx.args, 0, "A spreadsheet id");
         const range = required(ctx.args, "range");
         const values = await valuesOf(ctx.args);
         const done = await call<{ updatedCells?: number; updatedRange?: string }>(ctx.session, {
@@ -127,7 +127,7 @@ const append: Command = {
     usage: "gw sheets append <spreadsheetId> [--range 'Sheet1'] --csv FILE | --json-values '[[…]]' | --values \"a,b\"",
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A spreadsheet id");
+        const id = positional(ctx.args, 0, "A spreadsheet id");
         const range = flag(ctx.args, "range") ?? "Sheet1";
         const values = await valuesOf(ctx.args);
         const done = await call<{ updates?: { updatedRange?: string; updatedRows?: number } }>(ctx.session, {
@@ -146,7 +146,7 @@ const clear: Command = {
     usage: "gw sheets clear <spreadsheetId> --range 'Sheet1!A2:D'",
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A spreadsheet id");
+        const id = positional(ctx.args, 0, "A spreadsheet id");
         const range = required(ctx.args, "range");
         await call(ctx.session, { method: "POST", url: `${API}/${encodeURIComponent(id)}/values/${encodeURIComponent(range)}:clear` });
         ctx.out(`cleared ${range}`);

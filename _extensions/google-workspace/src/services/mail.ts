@@ -115,7 +115,7 @@ const search: Command = {
     summary: "Find mail with Gmail's own search syntax",
     usage: 'gw mail search "<query>" [-n 20]',
     run: async (ctx) => {
-        const query = ctx.args.positional.slice(1).join(" ");
+        const query = ctx.args.positional.join(" ");
         if (query === "") {
             throw new Error('A query is required: Gmail search syntax, e.g. "from:ana is:unread newer_than:7d".');
         }
@@ -139,7 +139,7 @@ const read: Command = {
     run: async (ctx) => {
         const message = parseMessage(
             await call<GmailMessage>(ctx.session, {
-                url: `${API}/messages/${encodeURIComponent(positional(ctx.args, 1, "A message id"))}`,
+                url: `${API}/messages/${encodeURIComponent(positional(ctx.args, 0, "A message id"))}`,
                 query: { format: "full" },
             }),
         );
@@ -169,7 +169,7 @@ const thread: Command = {
     usage: "gw mail thread <threadId>",
     run: async (ctx) => {
         const found = await call<{ messages?: GmailMessage[] }>(ctx.session, {
-            url: `${API}/threads/${encodeURIComponent(positional(ctx.args, 1, "A thread id"))}`,
+            url: `${API}/threads/${encodeURIComponent(positional(ctx.args, 0, "A thread id"))}`,
             query: { format: "full" },
         });
         const messages = (found.messages ?? []).map(parseMessage);
@@ -208,7 +208,7 @@ const reply: Command = {
     usage: 'gw mail reply <messageId> --body "…" [--all] [--attach path]',
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A message id");
+        const id = positional(ctx.args, 0, "A message id");
         const original = await call<GmailMessage>(ctx.session, {
             url: `${API}/messages/${encodeURIComponent(id)}`,
             query: { format: "metadata", metadataHeaders: [...LIST_HEADERS, "Message-ID", "References", "Reply-To"] },
@@ -243,7 +243,7 @@ const label: Command = {
     usage: "gw mail label <messageId> [--add Work,Urgent] [--remove INBOX,UNREAD]",
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A message id");
+        const id = positional(ctx.args, 0, "A message id");
         const [addLabelIds, removeLabelIds] = await Promise.all([
             resolveLabels(ctx.session, list(ctx.args, "add")),
             resolveLabels(ctx.session, list(ctx.args, "remove")),
@@ -270,7 +270,7 @@ const trash: Command = {
     usage: "gw mail trash <messageId>",
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A message id");
+        const id = positional(ctx.args, 0, "A message id");
         await call(ctx.session, { method: "POST", url: `${API}/messages/${encodeURIComponent(id)}/trash` });
         ctx.out(`${id} moved to the bin (recoverable for 30 days)`);
     },
@@ -281,7 +281,7 @@ const attachments: Command = {
     summary: "List a message's attachments, or download them",
     usage: "gw mail attachments <messageId> [--download DIR]",
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A message id");
+        const id = positional(ctx.args, 0, "A message id");
         const message = parseMessage(
             await call<GmailMessage>(ctx.session, { url: `${API}/messages/${encodeURIComponent(id)}`, query: { format: "full" } }),
         );

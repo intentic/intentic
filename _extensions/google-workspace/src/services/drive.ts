@@ -100,7 +100,7 @@ const search: Command = {
     summary: "Find files by words in them or in their name",
     usage: 'gw drive search "quarterly budget" [-n 25]     (a real Drive query is passed through as written)',
     run: async (ctx) => {
-        const phrase = ctx.args.positional.slice(1).join(" ");
+        const phrase = ctx.args.positional.join(" ");
         if (phrase === "") {
             throw new Error("Say what to look for.");
         }
@@ -122,7 +122,7 @@ const ls: Command = {
     summary: "What is in a folder",
     usage: "gw drive ls [folderId]     (no id = My Drive's root)",
     run: async (ctx) => {
-        const folder = ctx.args.positional[1] ?? "root";
+        const folder = ctx.args.positional[0] ?? "root";
         const max = readLimit(ctx.args, 100, 500);
         const files = await listFiles(ctx, `'${folder}' in parents and trashed = false`, max);
         if (ctx.json) {
@@ -141,7 +141,7 @@ const get: Command = {
     summary: "Download a file, converting Google formats on the way out",
     usage: "gw drive get <fileId> [--out path] [--as md|txt|pdf|docx|html|csv|xlsx|pptx]",
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A file id");
+        const id = positional(ctx.args, 0, "A file id");
         const file = await call<DriveFile>(ctx.session, {
             url: `${API}/files/${encodeURIComponent(id)}`,
             query: { fields: "id, name, mimeType, size", supportsAllDrives: true },
@@ -170,7 +170,7 @@ const put: Command = {
     usage: "gw drive put <path> [--folder folderId] [--name shownAs]",
     writes: true,
     run: async (ctx) => {
-        const path = positional(ctx.args, 1, "A file path");
+        const path = positional(ctx.args, 0, "A file path");
         const data = await readFile(path);
         const name = flag(ctx.args, "name") ?? basename(path);
         const folder = flag(ctx.args, "folder");
@@ -207,7 +207,7 @@ const mkdir: Command = {
             method: "POST",
             url: `${API}/files`,
             query: { fields: "id, name, webViewLink", supportsAllDrives: true },
-            body: { name: positional(ctx.args, 1, "A folder name"), mimeType: FOLDER_TYPE, ...(parent === undefined ? {} : { parents: [parent] }) },
+            body: { name: positional(ctx.args, 0, "A folder name"), mimeType: FOLDER_TYPE, ...(parent === undefined ? {} : { parents: [parent] }) },
         });
         ctx.out(row(created.id, created.name, created.webViewLink ?? ""));
     },
@@ -219,7 +219,7 @@ const mv: Command = {
     usage: "gw drive mv <fileId> --folder <folderId>",
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A file id");
+        const id = positional(ctx.args, 0, "A file id");
         const folder = required(ctx.args, "folder");
         const current = await call<{ parents?: string[] }>(ctx.session, {
             url: `${API}/files/${encodeURIComponent(id)}`,
@@ -240,7 +240,7 @@ const rm: Command = {
     usage: "gw drive rm <fileId>",
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A file id");
+        const id = positional(ctx.args, 0, "A file id");
         // Trashed, never deleted: Drive's own delete is permanent, and nothing here should be unrecoverable.
         await call(ctx.session, {
             method: "PATCH",
@@ -258,7 +258,7 @@ const share: Command = {
     usage: "gw drive share <fileId> --email someone@x.com [--role reader|commenter|writer] [--notify]",
     writes: true,
     run: async (ctx) => {
-        const id = positional(ctx.args, 1, "A file id");
+        const id = positional(ctx.args, 0, "A file id");
         const email = required(ctx.args, "email");
         const role = flag(ctx.args, "role") ?? "reader";
         if (!["reader", "commenter", "writer"].includes(role)) {
@@ -280,7 +280,7 @@ const link: Command = {
     usage: "gw drive link <fileId>",
     run: async (ctx) => {
         const file = await call<DriveFile>(ctx.session, {
-            url: `${API}/files/${encodeURIComponent(positional(ctx.args, 1, "A file id"))}`,
+            url: `${API}/files/${encodeURIComponent(positional(ctx.args, 0, "A file id"))}`,
             query: { fields: "id, name, webViewLink, owners(emailAddress)", supportsAllDrives: true },
         });
         ctx.out(row(file.webViewLink ?? "(no link)", file.name, file.owners?.[0]?.emailAddress ?? ""));
@@ -293,7 +293,7 @@ const permissions: Command = {
     usage: "gw drive who <fileId>",
     run: async (ctx) => {
         const found = await call<{ permissions?: { id: string; type: string; role: string; emailAddress?: string }[] }>(ctx.session, {
-            url: `${API}/files/${encodeURIComponent(positional(ctx.args, 1, "A file id"))}/permissions`,
+            url: `${API}/files/${encodeURIComponent(positional(ctx.args, 0, "A file id"))}/permissions`,
             query: { fields: "permissions(id, type, role, emailAddress)", supportsAllDrives: true },
         });
         const listed = found.permissions ?? [];
