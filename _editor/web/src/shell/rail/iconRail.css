@@ -51,6 +51,14 @@
     font-size: var(--icon-rail-glyph-size);
 }
 
+/* A PICTURE ON THE RAIL (a sandbox's logo, the switcher's, a new sandbox's letter) sits inside its tile at the picture
+   size (railFrame.ts), the account avatar's, so a filled square weighs what a line glyph does instead of filling the plate.
+   Outside a rail the property is unset and the picture takes the whole box it is in. */
+.icon-rail-picture {
+    width: var(--icon-rail-picture-size, 100%);
+    height: var(--icon-rail-picture-size, 100%);
+}
+
 /* The one type size behind all three corner marks; each states its own size as a multiple of it. */
 .icon-rail-mark {
     font-size: var(--icon-rail-mark-size);

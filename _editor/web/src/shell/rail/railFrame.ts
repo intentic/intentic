@@ -8,7 +8,10 @@ const rail = (value: string): string => `calc(${value} / var(--ui-scale))`;
 export const railFrame = () => ({
     "--icon-rail-width": rail(`${ICON_RAIL_WIDTH_REM}rem`),
     "--icon-rail-tile-size": rail(`2.375rem`),
-    "--icon-rail-account-size": rail(`2.25rem`),
+    // A picture (the sandbox's logo at the top, the account's avatar at the foot, the others' avatars beside them) is
+    // filled edge to edge where a glyph is a line drawing, so it is drawn smaller than the tile: 28px, between the 20px
+    // glyph and the 38px plate, so it weighs what a glyph does rather than standing out as the largest thing here.
+    "--icon-rail-picture-size": rail(`1.75rem`),
     "--icon-rail-divider-width": rail(`2rem`),
     "--icon-rail-gap": rail(`0.5rem`),
     "--icon-rail-padding": rail(`0.75rem`),
@@ -24,7 +27,7 @@ export const railFrame = () => ({
 export const phoneRailFrame = () => ({
     "--icon-rail-width": rail(`4rem`),
     "--icon-rail-tile-size": rail(`3.25rem`),
-    "--icon-rail-account-size": rail(`2.75rem`),
+    "--icon-rail-picture-size": rail(`2.75rem`),
     "--icon-rail-divider-width": rail(`2.25rem`),
     "--icon-rail-gap": rail(`0.25rem`),
     "--icon-rail-padding": rail(`0.5rem`),

@@ -54,7 +54,9 @@ const show = (): void => {
         :data-phase="reading.phase"
         @click="show"
     >
-        <SandboxLogo :image="null" :name="name" class="rounded-lg" />
+        <span class="icon-rail-picture pointer-events-none flex items-center justify-center overflow-hidden rounded-md">
+            <SandboxLogo :image="null" :name="name" class="rounded-md" />
+        </span>
         <ViewBadgeChip :badge="corner" class="icon-rail-mark absolute right-0.5 top-0.5" />
         <TileMark v-if="turning" name="spinner" spin :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]" />
     </button>

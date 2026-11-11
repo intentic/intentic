@@ -249,7 +249,8 @@ const communityPressed = (): void => {
     <!-- The dot sits outside the avatar's clip circle; the wrapper positions it, the button keeps overflow-hidden. -->
     <!-- The active plate is a sibling so the avatar image remains undecorated. -->
     <div class="account-control relative mt-auto shrink-0">
-        <span v-if="onAccountPage" class="pointer-events-none absolute -inset-1 rounded-lg bg-primary-600/15" aria-hidden="true"></span>
+        <!-- The lit plate is a tile's, whatever the avatar's own size, so the open account lights like an open section. -->
+        <span v-if="onAccountPage" class="account-plate pointer-events-none absolute rounded-lg bg-primary-600/15" aria-hidden="true"></span>
         <button
             ref="trigger"
             type="button"
@@ -438,8 +439,12 @@ const communityPressed = (): void => {
 </template>
 
 <style scoped>
+.account-plate {
+    inset: calc((var(--icon-rail-picture-size, 1.75rem) - var(--icon-rail-tile-size, 2.25rem)) / 2);
+}
+
 .account-control {
-    width: var(--icon-rail-account-size, 2.25rem);
-    height: var(--icon-rail-account-size, 2.25rem);
+    width: var(--icon-rail-picture-size, 1.75rem);
+    height: var(--icon-rail-picture-size, 1.75rem);
 }
 </style>

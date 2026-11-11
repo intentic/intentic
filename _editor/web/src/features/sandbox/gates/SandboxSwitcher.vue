@@ -219,7 +219,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? openThisComputer : undefined)
             v-tooltip.right="t(`shared.settings`)"
             @click="settingsHere()"
         >
-            <span class="flex size-full items-center justify-center overflow-hidden rounded-md [&_span]:text-inherit">
+            <span class="icon-rail-picture flex items-center justify-center overflow-hidden rounded-md [&_span]:text-inherit">
                 <SandboxLogo :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
             </span>
         </button>

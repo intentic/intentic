@@ -102,7 +102,9 @@ const addTip = computed<TooltipValue>(() =>
             @click="openBox(box)"
             @contextmenu="openTileMenu($event, box)"
         >
-            <SandboxLogo :image="box.image ?? null" :name="box.name" class="pointer-events-none rounded-lg" />
+            <span class="icon-rail-picture pointer-events-none flex items-center justify-center overflow-hidden rounded-md">
+                <SandboxLogo :image="box.image ?? null" :name="box.name" class="pointer-events-none rounded-md" />
+            </span>
         </button>
         <button
             type="button"

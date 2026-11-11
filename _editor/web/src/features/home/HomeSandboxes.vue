@@ -308,7 +308,9 @@ const choose = (id: string, input: `click` | `enter`): void => {
                     aria-hidden="true"
                 ></span>
                 <template v-else>
-                    <SandboxLogo :image="box.image ?? null" :name="box.name" class="pointer-events-none rounded-lg" />
+                    <span class="icon-rail-picture pointer-events-none flex items-center justify-center overflow-hidden rounded-md">
+                        <SandboxLogo :image="box.image ?? null" :name="box.name" class="pointer-events-none rounded-md" />
+                    </span>
                     <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
                     <TileMark v-if="runOf(box.id)" name="spinner" spin :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]" />
                 </template>
