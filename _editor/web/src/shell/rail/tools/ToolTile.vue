@@ -23,8 +23,11 @@ const {
     to?: RouteLocationRaw | undefined;
     /** Its page is in front, or its panel open. */
     active?: boolean;
-    /** The dot: something live (`live`, grey), waiting on the reader (`warning`), or a good standing state (`success`). */
-    dot?: `live` | `warning` | `success` | undefined;
+    /**
+     * The dot: something live (`live`, grey), work going on that the reader was not shown (`busy`, pulsing), waiting on the
+     * reader (`warning`), or a good standing state (`success`).
+     */
+    dot?: `live` | `busy` | `warning` | `success` | undefined;
     /** Can't be pressed right now (the sandbox not answering): drawn faint and taken out of the tab order. */
     inert?: boolean;
     /** The flight's key and group while the rail folds and unrolls (railMorph.ts). */
@@ -33,7 +36,7 @@ const {
 }>();
 const emit = defineEmits<{ press: [] }>();
 
-const DOT = { live: `bg-subtle`, warning: `bg-warning`, success: `bg-success` } as const;
+const DOT = { live: `bg-subtle`, busy: `bg-link motion-safe:animate-pulse`, warning: `bg-warning`, success: `bg-success` } as const;
 </script>
 
 <template>

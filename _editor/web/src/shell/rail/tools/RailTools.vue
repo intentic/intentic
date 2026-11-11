@@ -20,8 +20,9 @@ const FIXED = new Set([`terminal`, `browsers`]);
 // The standing states first, the fixed pair last: the column is bottom-anchored, so what comes and goes is on top.
 const ordered = computed(() => [...chips.value.filter((chip) => !FIXED.has(chip.id)), ...chips.value.filter((chip) => FIXED.has(chip.id))]);
 
-// A count is a grey dot, a standing state its own tone; the number itself is the hover card's.
-const dotOf = (chip: RuntimeChip): `live` | `warning` | `success` | undefined => chip.tone ?? (chip.count === undefined ? undefined : `live`);
+// A count is a grey dot, work going off screen a pulsing one, a standing state its own tone; the words are the hover card's.
+const dotOf = (chip: RuntimeChip): `live` | `busy` | `warning` | `success` | undefined =>
+    chip.tone ?? (chip.busy === true ? `busy` : chip.count === undefined ? undefined : `live`);
 </script>
 
 <template>

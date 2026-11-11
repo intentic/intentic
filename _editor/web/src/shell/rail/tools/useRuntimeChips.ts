@@ -14,6 +14,7 @@ import { useLiveLinks } from "../../../models/sandbox/devices/useLiveLinks";
 import { usePorts } from "../../../models/sandbox/environment/usePorts";
 import { useTerminalActivity } from "../../../features/terminal/useTerminalActivity";
 import { useTerminalPanel } from "../../../models/terminal/useTerminalPanel";
+import { quietRunRows } from "../../../models/terminal/quietRuns";
 import { usePublicOutbox } from "../../../models/workspace/push/usePublicOutbox";
 import { commandShortcut } from "../../../workbench/commands/useCommands";
 import { sectionReachable } from "../../../workbench/views/registry";
@@ -62,6 +63,7 @@ export function useRuntimeChips(): RuntimeChips {
                 ? terminalChip({
                       count: activity.count.value,
                       summary: activity.summary.value,
+                      quiet: quietRunRows(),
                       open: terminal.open.value,
                       keys: commandShortcut(`terminal.toggle`),
                   })

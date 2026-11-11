@@ -13357,6 +13357,7 @@
         "usePushRun": {
             "lostContact": "Utracono kontakt z wypychaniem.",
             "pushing": "Push: {repo}",
+            "pushingLabel": "Push trwa",
             "startFailed": "Nie udało się rozpocząć wypychania.",
             "stopFailed": "Nie udało się zatrzymać wypychania."
         },

@@ -2,6 +2,7 @@ import type { BrowserSession } from "@intentic/sandbox-contract/schemas/terminal
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { page, type PageLink } from "../../../lib/routes/links";
+import type { QuietRunRow } from "../../../models/terminal/quietRuns";
 
 // THE RAIL'S TOOL TILES (2026-11-10): the machinery agents work with, as small quiet tiles at the folded rail's foot, over
 // the account (RailTools.vue). The terminal and Browsers are always there, so the foot never moves for them: what changes
@@ -26,6 +27,8 @@ export interface RuntimeChip {
     readonly count?: number;
     /** A standing state worth a colour: a browser waiting on the reader, a port the internet can reach, a tunnel up. */
     readonly tone?: `warning` | `success`;
+    /** Something is being done right now that the reader was not shown: a push running off screen (quietRuns.ts). */
+    readonly busy?: true;
     /** Its page is in front, or for the terminal, its panel is open. */
     readonly active: boolean;
     /** The accessible name: the label, then what the hover card says. */
@@ -36,33 +39,25 @@ export interface RuntimeChip {
 
 const spoken = (...parts: readonly (string | undefined)[]): string => parts.filter((part) => part !== undefined && part !== ``).join(`, `);
 
-/** The global terminal: for a developer always, badged with its live sessions. */
+/**
+ * The global terminal: for a developer always, badged with its live sessions, and busy while a quiet run (a push) goes
+ * without its terminal on screen, each named on the hover card.
+ */
 export const terminalChip = (facts: {
     readonly count: number;
     readonly summary: string | undefined;
+    readonly quiet: readonly QuietRunRow[];
     readonly open: boolean;
     readonly keys: string | undefined;
 }): RuntimeChip => {
     const label = t(`shared.terminal`);
-    const tip =
-        facts.keys === undefined && facts.summary === undefined
-            ? undefined
-            : {
-                  title: label,
-                  keys: facts.keys,
-                  rows: facts.summary === undefined ? [] : [{ label: t(`shared.running`), value: facts.summary }],
-              };
-    const chip: RuntimeChip = {
-        id: `terminal`,
-        label,
-        ...(facts.count > 0 ? { count: facts.count } : {}),
-        active: facts.open,
-        aria: spoken(label, facts.summary) + (facts.keys === undefined ? `` : ` (${facts.keys})`),
-    };
-    if (tip === undefined) {
-        return chip;
-    }
-    return { ...chip, tip };
+    const rows = [...(facts.summary === undefined ? [] : [{ label: t(`shared.running`), value: facts.summary }]), ...facts.quiet];
+    const tip = facts.keys === undefined && rows.length === 0 ? undefined : { title: label, keys: facts.keys, rows };
+    const said = spoken(label, facts.summary, ...facts.quiet.map((run) => `${run.label} ${run.value}`));
+    const chip: RuntimeChip = { id: `terminal`, label, active: facts.open, aria: said + (facts.keys === undefined ? `` : ` (${facts.keys})`) };
+    const counted = facts.count > 0 ? { ...chip, count: facts.count } : chip;
+    const lit = facts.quiet.length > 0 ? { ...counted, busy: true as const } : counted;
+    return tip === undefined ? lit : { ...lit, tip };
 };
 
 /**
@@ -136,12 +131,9 @@ export const browsersChip = (facts: BrowsersFacts): RuntimeChip => {
         const note = t(`shell.shellDesktop.agentNeedsHelp`);
         return { ...base, count: helping, tone: `warning`, aria: spoken(label, note), tip: { title: note, tone: `warning`, rows } };
     }
-    const chip: RuntimeChip = {
-        ...base,
-        ...(total > 0 ? { count: total } : {}),
-        aria: spoken(label, ...rows.map((row) => `${row.label} ${row.value}`)),
-    };
-    return rows.length === 0 ? chip : { ...chip, tip: { title: label, rows } };
+    const chip: RuntimeChip = { ...base, aria: spoken(label, ...rows.map((row) => `${row.label} ${row.value}`)) };
+    const counted = total > 0 ? { ...chip, count: total } : chip;
+    return rows.length === 0 ? counted : { ...counted, tip: { title: label, rows } };
 };
 
 /** Ports forwarded to the internet: the sandbox is answering strangers for as long as this chip is here. */

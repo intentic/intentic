@@ -13978,6 +13978,7 @@
         "usePushRun": {
             "lostContact": "Kontakt zum Push verloren.",
             "pushing": "{repo} wird gepusht",
+            "pushingLabel": "Push läuft",
             "startFailed": "Der Push ließ sich nicht starten.",
             "stopFailed": "Der Push ließ sich nicht stoppen."
         },

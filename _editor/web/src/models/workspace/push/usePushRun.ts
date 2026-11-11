@@ -9,6 +9,11 @@ import { t } from "@intentic/ui/i18n";
 // take minutes, so it's a run, not one request dying at the header deadline. Watchers are kept per repo and view, joining
 // a second press to the run already started.
 
+// Past this a push is news: no pre-push hook (the common case) answers within seconds, so a push still going here is
+// running a suite or stuck on something, and its terminal is worth seeing. Before it, and for a pass, only the rail's
+// terminal tile says it is going: pushes are pressed too often for each to open the panel.
+const PUSH_SLOW_MS = 20_000;
+
 // Dropped with the sandbox: a run being polled there is about repos the reader has left.
 const watchers = sandboxValue(
     () => new Map<string, RunWatcher<PushRun>>(),
@@ -28,6 +33,7 @@ export const usePushRun = (repo: string, view: ViewScope = SHARED_SCOPE): RunWat
         state: () => sandboxRpc.git.pushState({ repo }, options),
         cancel: () => sandboxRpc.git.pushCancel({ repo }, options),
         reveal: (run) => ({ title: t(`workspace.usePushRun.pushing`, { repo }), detail: run.command }),
+        quiet: { slowMs: PUSH_SLOW_MS, row: () => ({ label: t(`workspace.usePushRun.pushingLabel`), value: repo }) },
         says: {
             startFailed: () => t(`workspace.usePushRun.startFailed`),
             lostContact: () => t(`workspace.usePushRun.lostContact`),

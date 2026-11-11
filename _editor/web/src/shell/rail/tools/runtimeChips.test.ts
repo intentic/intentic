@@ -17,12 +17,25 @@ const browser = (overrides: Partial<BrowserSession> = {}): BrowserSession => ({
 
 describe(`the terminal's chip`, () => {
     it(`stays with nothing running, and counts live sessions when there are some`, () => {
-        const idle = terminalChip({ count: 0, summary: undefined, open: false, keys: `Ctrl+\`` });
-        expect([idle.label, idle.count, idle.to, idle.active]).toEqual([`Terminal`, undefined, undefined, false]);
+        const idle = terminalChip({ count: 0, summary: undefined, quiet: [], open: false, keys: `Ctrl+\`` });
+        expect([idle.label, idle.count, idle.to, idle.active, idle.busy]).toEqual([`Terminal`, undefined, undefined, false, undefined]);
         expect(idle.aria).toBe(`Terminal (Ctrl+\`)`);
 
-        const busy = terminalChip({ count: 2, summary: `2 shells`, open: true, keys: undefined });
-        expect([busy.count, busy.active, busy.aria]).toEqual([2, true, `Terminal, 2 shells`]);
+        const busy = terminalChip({ count: 2, summary: `2 shells`, quiet: [], open: true, keys: undefined });
+        expect([busy.count, busy.active, busy.aria, busy.busy]).toEqual([2, true, `Terminal, 2 shells`, undefined]);
+    });
+
+    it(`is busy while a push runs off screen, and names it on the hover card beside the live sessions`, () => {
+        const chip = terminalChip({ count: 1, summary: `1 shell`, quiet: [{ label: `Pushing`, value: `intentic` }], open: false, keys: undefined });
+        expect([chip.busy, chip.count]).toEqual([true, 1]);
+        expect(chip.tip?.rows).toEqual([
+            { label: `Running`, value: `1 shell` },
+            { label: `Pushing`, value: `intentic` },
+        ]);
+        expect(chip.aria).toBe(`Terminal, 1 shell, Pushing intentic`);
+        // A push alone: no session is counted, but the tile is still busy.
+        const alone = terminalChip({ count: 0, summary: undefined, quiet: [{ label: `Pushing`, value: `intentic` }], open: false, keys: undefined });
+        expect([alone.busy, alone.count]).toEqual([true, undefined]);
     });
 });
 
