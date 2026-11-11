@@ -5,7 +5,8 @@ import { pathExists } from "@intentic/base/fs";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { checkoutsOf, convergeGitDirs, type GitDirPointer, reapGitDir } from "../workspace/layout/git-dir-owners.js";
-import { hasGitEntry, isValidRepoId } from "../workspace/layout/repo-discovery.js";
+import { hasGitEntry, isValidRepoId, ROOT_REPO } from "../workspace/layout/repo-discovery.js";
+import { healSharedCheckoutLinks, linkLayoutOf } from "../workspace/layout/worktree-links.js";
 import type { HistoryGitRunner } from "./history-git.js";
 
 // The history cycle's care of /history/gits, split out of history.ts: heal a pointer an agent deleted, reap the git
@@ -118,7 +119,11 @@ export const createGitDirReaper = (options: GitDirReaperOptions): GitDirReaper =
         return emptied(entry, worktree, hasPointer);
     };
 
+    const links = linkLayoutOf(workspaceRoot, join(historyRoot, "worktrees"));
     const heal = async (repos: readonly string[]): Promise<boolean> => {
+        // First, so nothing below reads a shared checkout through a worktree's record (worktree-links.ts). Its pointer
+        // stays a pointer either way, so discovery has nothing to re-read.
+        await healSharedCheckoutLinks(links, [ROOT_REPO, ...repos], logger);
         const { pointers } = await convergeGitDirs({ workspaceRoot, historyRoot, logger, said: blockedSaid }, repos);
         let rediscover = false;
         for (const entry of (await readdir(gitsRoot).catch(undefinedIfMissing)) ?? []) {

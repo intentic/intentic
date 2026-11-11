@@ -32,13 +32,15 @@ afterEach(async () => {
 });
 
 // A shared checkout on `main` with a `side` branch one commit ahead of it, and a conversation cut while it stood on main.
-const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; main: string; side: string }> => {
+// `separate` gives it the production shape: its git dir on the history volume, `.git` a pointer file.
+const setup = async (separate = false): Promise<{ work: string; worktrees: AgentWorktrees; main: string; side: string }> => {
     const base = await mkdtemp(join(tmpdir(), "intentic-off-line-"));
     tempDirs.push(base);
     const work = join(base, "work");
     const historyRoot = join(base, "history");
     await mkdir(work, { recursive: true });
-    await sh(work, "init", "-q", "-b", "main");
+    await mkdir(join(historyRoot, "gits"), { recursive: true });
+    await sh(work, "init", "-q", "-b", "main", ...(separate ? ["--separate-git-dir", join(historyRoot, "gits", "root")] : []));
     await writeFile(join(work, "app.ts"), "one\n");
     await sh(work, "add", "-A");
     const main = (await commit(work, "baseline"), await sh(work, "rev-parse", "HEAD"));
@@ -108,5 +110,26 @@ test("a land into a shared checkout moved off its line writes nothing and says w
     await sh(work, "checkout", "-q", "main");
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
     expect(landed.landed).toBe(true);
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("one\nagent\n");
+});
+
+// targowisko, 2026-11-11: git linked the shared checkout into the home conversation's worktree record, and every land
+// waited on a checkout no person had moved. The land now undoes that link itself and goes on.
+test("a land into a shared checkout git linked into a conversation's worktree record undoes the link and goes through", async () => {
+    const { work, worktrees } = await setup(true);
+    await worktrees.ensure("c0", []);
+    const home = await worktrees.ensure("home", []);
+    const conversation = await worktrees.ensure("c1", []);
+    await writeFile(join(conversation.cwd, "app.ts"), "one\nagent\n");
+    const admin = (await readFile(join(home.cwd, ".git"), "utf8")).replace(/^gitdir:\s*/u, "").trim();
+    await writeFile(join(admin, "gitdir"), `${join(work, ".git")}\n`);
+    await sh(work, "worktree", "repair");
+    expect(await sh(work, "symbolic-ref", "--short", "HEAD")).toBe("agent/home");
+
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+
+    expect(landed.landed).toBe(true);
+    expect(await sh(work, "symbolic-ref", "--short", "HEAD")).toBe("main");
+    expect(await sh(home.cwd, "symbolic-ref", "--short", "HEAD")).toBe("agent/home");
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("one\nagent\n");
 });

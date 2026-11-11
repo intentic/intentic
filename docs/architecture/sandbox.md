@@ -113,8 +113,18 @@ flowchart LR
   ([`jail-store.ts`](../../_sandbox/sandbox/src/sessions/jail-store.ts)). A runtime other than Claude Code is refused
   meanwhile. A shell a person opens from the editor starts in a sandbox of its own, through the tmux server's
   default-command, and a person's shell opened before is ended
-  ([`shell-jail.ts`](../../_sandbox/sandbox/src/terminal/shell-jail.ts)). Read as each turn is placed and each terminal
-  opens; while neither holds, nothing changes. 2026-11-04.
+  ([`shell-jail.ts`](../../_sandbox/sandbox/src/terminal/shell-jail.ts)), running as `node`, and says so as it opens;
+  a root shell is the host's (`docker exec -u 0`). Read as each turn is placed and each terminal opens; while neither
+  holds, nothing changes. 2026-11-04.
+- In the jail a conversation's checkout stands at `/work` while the git directories are writable at their real path,
+  so git inside records `/work/<repo>` as that worktree's place, and every other conversation's checkout reads as
+  missing. 2026-11-11 (targowisko): a worktree record naming the shared checkout made the daemon's next `git worktree
+  repair` re-point `/work/<repo>/.git` into it, and every land waited on a checkout no person had moved. So the daemon
+  never runs `worktree repair` and links one pair at a time, and a hijacked shared checkout is pointed back by the
+  history cycle, before a land waits on it and by Back to main
+  ([`worktree-links.ts`](../../_sandbox/sandbox/src/workspace/layout/worktree-links.ts)). The git wrapper refuses
+  `worktree prune` and `repair`, and a conversation's own checkout switching onto the main line; a checkpoint detaches
+  a checkout found standing there before it commits; and a jailed turn is told where it stands.
 - 2026-10-06: a fenced turn used to run in the same mount namespace as any other, as root with every capability, so the fence held only for an agent that did not try to leave it. A container per turn was considered and rejected: it is the same kernel boundary with far more plumbing to cross (stdio, tmux panes, hooks, previews).
 
 ## Land

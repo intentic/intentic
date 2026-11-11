@@ -15,7 +15,7 @@ import { branchOf } from "./branch/branch-repos.js";
 // checkout is back, which the Changes view offers. Asked only of the trees the land writes into: a parent's checkout is
 // the parent's own business, and a repo started from a branch lands onto that branch's checkout (branch-land.ts).
 export const assertLandable = async (
-    worktrees: Pick<AgentWorktrees, "relink" | "mainDir">,
+    worktrees: Pick<AgentWorktrees, "relink" | "mainDir" | "healShared">,
     entry: IsolatedAgent,
     into: string | undefined,
     git: GitRunner = defaultGit,
@@ -36,6 +36,11 @@ export const assertLandable = async (
         }
         const standing = await mainLineStanding(main, git);
         if (!standing.on && standing.locked !== undefined) {
+            // A shared checkout linked into a worktree's record was moved by git, not by a person: undone here, and the
+            // land goes on when that put it back on its line (workspace/layout/worktree-links.ts).
+            if ((await worktrees.healShared([repo])).length > 0 && (await mainLineStanding(main, git)).on) {
+                continue;
+            }
             throw new OffMainLineError(repo, standing.locked, standing.current);
         }
     }

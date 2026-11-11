@@ -5,8 +5,18 @@ import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store
 import { withRuntimeHistory } from "../../sessions/vocabulary/runtime-history.js";
 import { withAttachmentNote } from "../../sessions/vocabulary/attachment-note.js";
 import { checkpointNote } from "../checkpoints/checkpoint-worktree.js";
-import { composeWirePrompt, LITERAL_SLASH_NOTE, withTurnPreamble } from "./turn-preamble.js";
-import { LEGACY_SPAWN_NOTE_HEADER, SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE, INJECTED, parsePromptEnvelope, parseQueuedPrompt, preambleNotes, stripTurnPreamble } from "../../sessions/vocabulary/prompt-envelope.js";
+import { composeWirePrompt, jailedNote, jailedReminder, LITERAL_SLASH_NOTE, WORKTREE_NOTE_TITLE, withTurnPreamble } from "./turn-preamble.js";
+import {
+    LEGACY_SPAWN_NOTE_HEADER,
+    SPAWN_NOTE_HEADER,
+    SPAWN_NOTE_TITLE,
+    INJECTED,
+    parsePromptEnvelope,
+    parseQueuedPrompt,
+    preambleNotes,
+    stripTurnPreamble,
+    WORKTREE_NOTE_HEADER,
+} from "../../sessions/vocabulary/prompt-envelope.js";
 
 const notice = `${SETUP_NOTICE_HEADER}\n(a dropped project arrives without them on purpose):\n- intentic: run \`pnpm install\` there first.`;
 const note = `${SPAWN_NOTE_HEADER}\n\nThis sandbox can start full agents on any connected provider from your shell.`;
@@ -97,6 +107,30 @@ test("what strip removes, the split hands back: titled, whole, and in the order 
         { title: "Dependencies aren't installed yet", text: notice },
     ]);
     expect(stripTurnPreamble(sent)).toBe("fix the bug");
+});
+
+// A jailed turn in its own worktree (turn-sandbox.ts WholeJail) has git but sees no other checkout, so git calls every
+// other conversation's prunable: 2026-11-11's agents pruned and repaired those records and moved a checkout to main.
+test("the jailed note says whose checkout the root is and which git commands break the others, once in full, then briefly", () => {
+    const full = jailedNote(WORKSPACE_ROOT);
+    expect(full.title).toBe(WORKTREE_NOTE_TITLE);
+    expect(full.text.startsWith(`${WORKTREE_NOTE_HEADER}\n\n\`${WORKSPACE_ROOT}\` here is this conversation's own checkout`)).toBe(true);
+    for (const said of ["`agent/<conversation id>`", "not the shared workspace", "prunable", "`git worktree prune`", "`repair`", "`move`", "`remove`", "main line", "landing", "Back to main", "Changes view"]) {
+        expect(full.text).toContain(said);
+    }
+
+    const brief = jailedReminder(WORKSPACE_ROOT);
+    expect(brief.title).toBe(WORKTREE_NOTE_TITLE);
+    expect(brief.text).toBe(
+        `${WORKTREE_NOTE_HEADER}\n\n\`${WORKSPACE_ROOT}\` is this conversation's own checkout, not the shared workspace: never prune, repair, move or remove git worktrees, nor switch it to the main line.`,
+    );
+
+    // Under the worktree header, so it comes back off a stored prompt as a note and never as the user's words.
+    for (const jailed of [full, brief]) {
+        const sent = composeWirePrompt([jailed], "carry on");
+        expect(stripTurnPreamble(sent)).toBe("carry on");
+        expect(preambleNotes(sent)).toEqual([jailed]);
+    }
 });
 
 // Stored prompts keep the header the note had when they were sent; retitling it must not leak them back into history.

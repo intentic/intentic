@@ -4,6 +4,8 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { withConversationTrailer } from "../../git-identity.js";
 import { headSha } from "../../git/changes/changes.js";
+import { latchedMainBranch } from "../../git/main-line-lock.js";
+import { checkedOutBranch } from "../../store/git/git-dir.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { AgentWorktrees } from "../../conversations/worktrees/worktrees.js";
 import { type ZeroedFile, zeroedFiles } from "../../git/integrity/zeroed-files.js";
@@ -123,6 +125,19 @@ const zeroedOf = async (services: CheckpointDeps, conversationId: string, repo: 
     return zeroed;
 };
 
+// A checkout standing on the shared main line is detached in place before anything commits there: a checkpoint on that
+// branch moves everyone's main (targowisko, 2026-11-11: an agent switched its checkout to `main`, and "Agent: before this
+// turn" landed on the shared line). `switch --detach` moves no file and no index entry; the commit then sits on a
+// detached HEAD, and the turn's carry copies it onto `agent/<id>` (conversations/worktrees/stray-work.ts).
+const offTheMainLine = async (services: CheckpointDeps, conversationId: string, repo: string, dir: string, git: GitRunner): Promise<void> => {
+    const branch = await checkedOutBranch(dir);
+    if (branch === undefined || branch !== (await latchedMainBranch(services.agentWorktrees.mainDir(repo), git))) {
+        return;
+    }
+    await git(dir, ["switch", "--detach", "-q"]);
+    services.logger.warn({ conversationId, repo, branch }, "checkpoints: the checkout stood on the shared main line, detached in place before committing");
+};
+
 export const checkpointWorktree = async (
     services: CheckpointDeps,
     conversationId: string,
@@ -135,6 +150,7 @@ export const checkpointWorktree = async (
     for (const { repo } of repos) {
         const dir = services.agentWorktrees.worktreeDir(conversationId, repo);
         try {
+            await offTheMainLine(services, conversationId, repo, dir, git);
             // Porcelain flags staged, unstaged and untracked changes but over-reports; the index decides what actually
             // goes in.
             const { stdout } = await git(dir, ["status", "--porcelain", "-z"]);

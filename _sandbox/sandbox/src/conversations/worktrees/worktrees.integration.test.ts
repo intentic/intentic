@@ -458,6 +458,24 @@ test("relink rebuilds a pointer main already pruned, and answers the repos it co
     expect(existsSync(join(created.cwd, "intent", ".git"))).toBe(false);
 });
 
+// targowisko, 2026-11-09: git in the privacy jail wrote the home conversation's record as `/work/<repo>/.git`, and the
+// next relink of another conversation ran `worktree repair`, which rewrote the shared checkout into that record.
+test("relinking one conversation leaves the shared checkout alone even when another's record names it", async () => {
+    const { work, worktrees } = await setup();
+    const shared = join(work, "intent");
+    const before = await sh(shared, "rev-parse", "--abbrev-ref", "HEAD");
+    const home = await worktrees.ensure("home", []);
+    const other = await worktrees.ensure("other", []);
+    const homeAdmin = (await readFile(join(home.cwd, "intent", ".git"), "utf8")).replace(/^gitdir:\s*/u, "").trim();
+    await writeFile(join(homeAdmin, "gitdir"), `${join(shared, ".git")}\n`);
+    await rm(join(other.cwd, "intent", ".git"));
+    await sh(shared, "worktree", "prune");
+
+    expect(await worktrees.relink("other", other.repos)).toEqual([]);
+    expect(await sh(join(other.cwd, "intent"), "branch", "--show-current")).toBe("agent/other");
+    expect(await sh(shared, "rev-parse", "--abbrev-ref", "HEAD")).toBe(before);
+});
+
 test("remove tears down worktrees and branches; prune leaves a checkout no record names", async () => {
     const { work, historyRoot, worktrees } = await setup();
     const conversation = await worktrees.ensure("c1", []);

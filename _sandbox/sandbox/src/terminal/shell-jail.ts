@@ -25,6 +25,11 @@ const JAIL_MARK = "@intentic_jail";
 // Where the line starts with, so the daemon knows the server's default-command for its own.
 const LINE_MARK = ": intentic-shell-jail;";
 const DAEMON_SESSIONS = [`${PANEL_SESSION_PREFIX}*`, `${JOB_SESSION_PREFIX}*`, `${AGENT_SESSION_PREFIX}*`, `${SERVICE_SESSION_PREFIX}*`, HOLDER_SESSION];
+// What a person reads at the top of a jailed pane, so a shell that is not root and cannot see /history says why and
+// where a root one is. No quote and no percent sign: it is printf's format, single-quoted inside the line.
+const NOTICE =
+    "Conversations here can be private, so this shell runs as node in a sandbox and /history is hidden.\\n" +
+    "For a root shell, use the host (docker exec -u 0 -it <container> bash) or the container terminal of your orchestrator.\\n";
 
 export interface ShellJailFiles {
     readonly dir: string;
@@ -53,6 +58,8 @@ export const jailedDefaultCommand = (original: string, files: Pick<ShellJailFile
         LINE_MARK,
         `case "$(tmux display-message -p -t "$TMUX_PANE" '#{session_name}' 2>/dev/null)" in ${DAEMON_SESSIONS.join("|")}) exec ${shell};; esac;`,
         `tmux set-option -p -t "$TMUX_PANE" ${JAIL_MARK} 1 2>/dev/null;`,
+        // Only a person's pane gets this far: a daemon session's output is read by the daemon, and stays as it was.
+        `printf '${NOTICE}';`,
         `exec /usr/bin/bwrap --args 3 --chdir "$PWD" -- ${shell} 3<${shellQuote(files.args)}`,
     ].join(" ");
 };

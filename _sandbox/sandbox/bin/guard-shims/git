@@ -4,8 +4,12 @@
 # workload/heavy-commands.ts), never on the daemon's own. The shared checkout, /work and every repo under it,
 # stays on its main line (the daemon's src/git/main-line-lock.ts, latched as `intentic.mainBranch`), so a checkout,
 # switch or symbolic-ref that would move its HEAD anywhere else is refused here, before git writes a single file.
-# Linked worktrees (an agent's own copy, a branch's view) are theirs to move. Everything else, and every other
-# command, is the real git at once.
+# A linked worktree of a managed repo (a conversation's own checkout) moves to any branch but that line: on 2026-11-11
+# an agent's `checkout --ignore-other-worktrees main` in one let its next checkpoint commit onto everyone's main. And
+# where the sandbox keeps a repo's git dir (/history/gits), `worktree prune` and `worktree repair` are refused: they act
+# on every conversation's worktree link at once, and inside the privacy sandbox, which hides the other checkouts, prune
+# drops their links and repair writes its own paths into them. Everything else, and every other command, is the real
+# git at once.
 
 case $0 in
     */*) here=${0%/*} ;;
@@ -51,25 +55,82 @@ for arg in "$@"; do
 done
 
 case $sub in
-    checkout|switch|symbolic-ref) ;;
+    checkout|switch|symbolic-ref|worktree) ;;
     *) exec "$real" "$@" ;;
 esac
 
 in_repo() { (cd "$target" 2>/dev/null && "$real" "$@"); }
+
+# The arguments after the verb.
+seen=""
+past=""
+for arg in "$@"; do
+    if [ -z "$seen" ]; then
+        [ "$arg" = "$sub" ] && seen=1
+        continue
+    fi
+    past="$past
+$arg"
+done
+
+# Where the sandbox keeps every repo's git dir (the daemon's src/git/remote/repo-git-dirs.ts), resolved, as git
+# resolves the paths it names.
+gits=${INTENTIC_GITS_ROOT:-/history/gits}
+gits=$(cd "$gits" 2>/dev/null && pwd -P) || gits=${INTENTIC_GITS_ROOT:-/history/gits}
+gits=${gits%/}
+kept() {
+    case $1 in
+        "$gits"/*) return 0 ;;
+    esac
+    return 1
+}
+
+# `worktree` is read for its own verb, the first word after it; only prune and repair, on a kept repo, are refused.
+if [ "$sub" = worktree ]; then
+    action=""
+    old_ifs=$IFS
+    IFS='
+'
+    for arg in $past; do
+        case $arg in
+            -*) ;;
+            *) action=$arg; break ;;
+        esac
+    done
+    IFS=$old_ifs
+    case $action in
+        prune|repair) ;;
+        *) exec "$real" "$@" ;;
+    esac
+    # The common dir alone: run inside a kept git dir, git has no work tree to name.
+    common_dir=$(in_repo rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exec "$real" "$@"
+    kept "$common_dir" || exec "$real" "$@"
+    echo "git: the sandbox keeps this repository's worktree links itself, one for every conversation's checkout." >&2
+    echo "git: \`git worktree $action\` acts on every conversation's checkout at once, and inside the privacy sandbox it sees the others as missing." >&2
+    exit 1
+fi
 
 info=$(in_repo rev-parse --path-format=absolute --git-dir --git-common-dir --show-toplevel 2>/dev/null) || exec "$real" "$@"
 git_dir=$(printf '%s\n' "$info" | sed -n 1p)
 common_dir=$(printf '%s\n' "$info" | sed -n 2p)
 top=$(printf '%s\n' "$info" | sed -n 3p)
 root=${INTENTIC_WORKSPACE_ROOT:-/work}
-# Only the shared checkout itself: a linked worktree's git dir is its own, under the common one.
-[ "$git_dir" = "$common_dir" ] || exec "$real" "$@"
-case $top in
-    "$root"|"$root"/*) ;;
-    *) exec "$real" "$@" ;;
-esac
+# The shared checkout, under the workspace root. A linked worktree's git dir is its own, under the common one, and it is
+# read wherever it is (the privacy sandbox shows a conversation its own checkout as /work), but only as a managed repo's:
+# one whose git dir the sandbox keeps, or which has latched its main line.
+if [ "$git_dir" = "$common_dir" ]; then
+    case $top in
+        "$root"|"$root"/*) ;;
+        *) exec "$real" "$@" ;;
+    esac
+fi
 
+linked=""
 locked=$(in_repo config --get intentic.mainBranch 2>/dev/null)
+if [ "$git_dir" != "$common_dir" ]; then
+    linked=1
+    [ -n "$locked" ] || kept "$common_dir" || exec "$real" "$@"
+fi
 if [ -z "$locked" ]; then
     in_repo rev-parse -q --verify refs/heads/main >/dev/null 2>&1 && locked=main
 fi
@@ -88,17 +149,57 @@ refuse() {
 
 commitish() { in_repo rev-parse -q --verify "$1^{commit}" >/dev/null 2>&1; }
 
-# The arguments after the verb.
-seen=""
-past=""
-for arg in "$@"; do
-    if [ -z "$seen" ]; then
-        [ "$arg" = "$sub" ] && seen=1
-        continue
+refuse_linked() {
+    echo "git: \`$locked\` is the shared workspace's line, checked out in the shared checkout; this checkout's work reaches it by landing from its own branch." >&2
+    echo "git: switching to it here would commit onto everyone's \`$locked\`." >&2
+    echo "git: if landing says the workspace is off its main line, that is for a person to fix from the Changes view (\"Back to main\"), not for an agent." >&2
+    exit 1
+}
+
+locked_ref() { [ "$1" = "$locked" ] || [ "$1" = "refs/heads/$locked" ]; }
+
+# A linked worktree switches to any branch but the main line: not by its name, not by creating or resetting it
+# (`-b`/`-B`/`-c`/`-C` and their long forms), and never past git's own refusal (`--ignore-other-worktrees`). A start
+# point on it (`switch -c topic main`), a detached HEAD at it, and a restore from it (`checkout main -- <path>`,
+# `checkout main <path>`) leave HEAD off the line, and go through. Its symbolic-ref is read below.
+if [ -n "$linked" ] && [ "$sub" != symbolic-ref ]; then
+    first=""
+    paths=""
+    named=""
+    creates=""
+    detached=""
+    separated=""
+    old_ifs=$IFS
+    IFS='
+'
+    for arg in $past; do
+        if [ -n "$named" ]; then
+            named=""
+            locked_ref "$arg" && refuse_linked
+            continue
+        fi
+        if [ -n "$separated" ]; then
+            IFS=$old_ifs
+            exec "$real" "$@"
+        fi
+        case $arg in
+            --) separated=1 ;;
+            --ignore-other-worktrees) refuse_linked ;;
+            -b|-B|-c|-C|--create|--force-create|--orphan) creates=1; named=1 ;;
+            --create=*|--force-create=*|--orphan=*) creates=1; locked_ref "${arg#*=}" && refuse_linked ;;
+            -b*|-B*|-c*|-C*) creates=1; locked_ref "${arg#-?}" && refuse_linked ;;
+            -d|--detach) detached=1 ;;
+            -p|--patch) IFS=$old_ifs; exec "$real" "$@" ;;
+            -*) ;;
+            *) if [ -z "$first" ]; then first=$arg; else paths=1; fi ;;
+        esac
+    done
+    IFS=$old_ifs
+    if [ -z "$creates" ] && [ -z "$detached" ] && [ -z "$paths" ] && locked_ref "$first"; then
+        refuse_linked
     fi
-    past="$past
-$arg"
-done
+    exec "$real" "$@"
+fi
 
 case $sub in
     switch)
@@ -159,7 +260,11 @@ case $sub in
             esac
         done
         IFS=$old_ifs
-        [ -z "$after_head" ] || [ "$after_head" = "refs/heads/$locked" ] || refuse "${after_head#refs/heads/}"
+        if [ -n "$linked" ]; then
+            [ "$after_head" != "refs/heads/$locked" ] || refuse_linked
+        else
+            [ -z "$after_head" ] || [ "$after_head" = "refs/heads/$locked" ] || refuse "${after_head#refs/heads/}"
+        fi
         ;;
 esac
 

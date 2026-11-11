@@ -12,6 +12,7 @@ import { workspacePaths } from "../../workspace/workspace.js";
 import { carriedRef, dropAgentRef } from "../../git/agent-refs.js";
 import { landAgent } from "../land/land.js";
 import { carryStrayWork, snapshotRefs, strayStandings } from "./stray-work.js";
+import { checkpointWorktree } from "../../agent/checkpoints/checkpoint-worktree.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";
 
 // Pins the carry of a turn's work off a branch of its own: what counts as the turn's (and what never does), that the
@@ -177,4 +178,22 @@ test("dropping the conversation's branch drops its carry marker with it", async 
     await dropAgentRef(work, OWN, (dir, args) => exec("git", ["-C", dir, ...args]));
 
     await expect(sh(work, "rev-parse", "-q", "--verify", carriedRef(OWN))).rejects.toThrow();
+});
+
+// targowisko, 2026-11-11: an agent switched its own checkout to `main` (past git's own refusal), and the next
+// checkpoint committed onto the shared main line. The checkpoint now detaches first, and the carry brings the work home.
+test("a checkout switched onto the shared main line is detached before the checkpoint, and its work reaches agent/<id>", async () => {
+    const { work, worktrees, conversation, cwd } = await setup();
+    const snapshot = await snapshotRefs(worktrees, conversation.repos);
+    const main = await sh(work, "rev-parse", "main");
+    await sh(cwd, "switch", "-q", "--ignore-other-worktrees", "main");
+    await writeFile(join(cwd, "app.ts"), "one\ntwo EDITED\nthree\n");
+
+    await checkpointWorktree({ agentWorktrees: worktrees, logger }, ID, conversation.repos);
+
+    expect(await sh(work, "rev-parse", "main")).toBe(main);
+    await expect(sh(cwd, "symbolic-ref", "-q", "HEAD")).rejects.toThrow();
+    expect(await sh(cwd, "show", "HEAD:app.ts")).toBe("one\ntwo EDITED\nthree");
+    expect(await carryStrayWork(worktrees, ID, conversation.repos, snapshot)).toEqual([{ repo: "root", carried: 1 }]);
+    expect(await sh(work, "show", `${OWN}:app.ts`)).toBe("one\ntwo EDITED\nthree");
 });

@@ -2,9 +2,9 @@ import { cp, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node
 import { join, relative, resolve, sep } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
-import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { repoGitDir } from "./git-layout.js";
+import { repointLinkedCheckouts } from "./worktree-links.js";
 
 /* WHO A GIT DIR ON /history BELONGS TO. Every repo's real git dir sits at /history/gits/<its folder's path>, and the
    folder holds a `.git` pointer to it. That name is where the dir was made, not who uses it: a copied folder carries
@@ -122,7 +122,6 @@ export interface GitDirConvergence {
     readonly workspaceRoot: string;
     readonly historyRoot: string;
     readonly logger: Logger;
-    readonly git?: GitRunner;
     // Names whose blocked convergence was already said, so a standing one is not logged again every cycle.
     readonly said?: Set<string>;
 }
@@ -162,16 +161,14 @@ const copyFor = async (deps: GitDirConvergence, entry: string, repo: string): Pr
     deps.logger.info({ repo, from: decodeURIComponent(entry) }, "git dirs: a copied checkout got a git dir of its own");
 };
 
-// `entry`'s dir renamed to `repo`'s name, the checkout re-pointed, and every linked worktree's link back repaired.
+// `entry`'s dir renamed to `repo`'s name, the checkout re-pointed, and every linked worktree pointed at its admin dir's
+// new place: by hand, never by `worktree repair`, which would also rewrite a shared checkout a record names
+// (worktree-links.ts).
 const moveTo = async (deps: GitDirConvergence, entry: string, repo: string): Promise<void> => {
     const to = repoGitDir(deps.historyRoot, repo);
     await rename(join(gitsRoot(deps.historyRoot), entry), to);
     await writePointer(deps.workspaceRoot, repo, to);
-    try {
-        await (deps.git ?? defaultGit)(join(deps.workspaceRoot, repo), ["worktree", "repair"]);
-    } catch (error) {
-        deps.logger.warn({ err: error, repo }, "git dirs: worktree repair after a move failed");
-    }
+    await repointLinkedCheckouts(to, [deps.workspaceRoot, join(deps.workspaceRoot, repo)], deps.logger, repo);
     deps.logger.info({ repo, from: decodeURIComponent(entry) }, "git dirs: a moved checkout took its git dir along");
 };
 

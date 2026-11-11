@@ -83,13 +83,17 @@ const runLine = async (session: string): Promise<{ readonly out: string; readonl
     return { out: stdout.trim(), dir: root };
 };
 
-test("a person's pane starts its shell in the sandbox, its arguments read from the file and its directory its own", async () => {
+test("a person's pane says why its shell is jailed, then starts it in the sandbox, its arguments read from the file and its directory its own", async () => {
     const { out, dir } = await runLine("web-a1");
-    expect(out).toBe(`bwrap --args 3 --chdir ${dir} -- zsh fd3:--ro-bind /usr /usr`);
+    expect(out.split("\n")).toEqual([
+        "Conversations here can be private, so this shell runs as node in a sandbox and /history is hidden.",
+        "For a root shell, use the host (docker exec -u 0 -it <container> bash) or the container terminal of your orchestrator.",
+        `bwrap --args 3 --chdir ${dir} -- zsh fd3:--ro-bind /usr /usr`,
+    ]);
 });
 
-test("a daemon session's pane starts its shell as it always did", async () => {
-    for (const session of ["panel-site", "job-push", "agent-abc", "intentic-server-pin"]) {
+test("a daemon session's pane starts its shell as it always did, with no notice in front", async () => {
+    for (const session of ["panel-site", "job-push", "agent-abc", "svc-api", "intentic-server-pin"]) {
         expect((await runLine(session)).out).toBe("zsh");
     }
 });

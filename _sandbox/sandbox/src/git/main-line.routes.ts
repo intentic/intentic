@@ -1,9 +1,11 @@
 import { errorMessage } from "@intentic/base/errors";
+import { defaultGit } from "@intentic/base/git";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { gitImplementer } from "./index.routes.js";
 import { latchedMainBranch, lockedBranchOf, mainLineRefusal, mainLineStanding, staysOnMainLine } from "./main-line-lock.js";
 import { liveBranchStarts } from "../conversations/land/branch/branch-repos.js";
+import { healSharedCheckoutLinks, releaseBranch } from "../workspace/layout/worktree-links.js";
 
 // The routes that move a shared checkout's HEAD, which stays on its main line (main-line-lock.ts): a checkout or a new
 // branch switched to is refused before anything is written, and the one switch they take is back onto the main line.
@@ -30,6 +32,15 @@ export const createOffMainLine =
         const locked = await latchedMainBranch(dir).catch(() => undefined);
         return locked === undefined || branch === locked ? undefined : locked;
     };
+
+// git's refusal when another worktree still holds the main line, said as what it means and what to do about it; any
+// other refusal (uncommitted work in the way) is git's own words, which already say both.
+export const plainCheckoutRefusal = (said: string, locked: string): string => {
+    const holder = /is already (?:used|checked out) by worktree at '([^']+)'/u.exec(said)?.[1];
+    return holder === undefined
+        ? said
+        : `\`${locked}\` is still checked out at ${holder}, so the workspace cannot take it back. Stop or archive the conversation working there, then try again.`;
+};
 
 export const mainLineRoutes = (i: GitImplementer, deps: MainLineRouteDeps) => {
     const { services, onRepo, invalidateScan } = deps;
@@ -74,7 +85,9 @@ export const mainLineRoutes = (i: GitImplementer, deps: MainLineRouteDeps) => {
             return { ok: true } as const;
         }),
         // The way back for a checkout something moved anyway (a raw git that went around every door). git's refusal to
-        // overwrite uncommitted work is the answer's reason; a checkpoint first, as for any HEAD-mover.
+        // overwrite uncommitted work is the answer's reason; a checkpoint first, as for any HEAD-mover. Two moves are
+        // git's, not a person's, and are undone first: the checkout linked into a worktree's record, and the main line
+        // held by a conversation's checkout (workspace/layout/worktree-links.ts).
         returnToMainLine: i.returnToMainLine.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 refuseSwitch();
@@ -83,10 +96,17 @@ export const mainLineRoutes = (i: GitImplementer, deps: MainLineRouteDeps) => {
                     return { ok: true };
                 }
                 await checkpoint(dir, `before returning to ${standing.locked}`);
+                // Under the repo lock onRepo already holds, so the heal is called bare rather than through healShared.
+                const healed = await healSharedCheckoutLinks(services.agentWorktrees, [input.repo], services.logger);
+                if (healed.length > 0 && (await mainLineStanding(dir)).on) {
+                    moved();
+                    return { ok: true };
+                }
+                await releaseBranch(dir, standing.locked, services.logger, defaultGit);
                 try {
                     await services.git.checkoutRef(dir, standing.locked);
                 } catch (error) {
-                    return { ok: false, reason: errorMessage(error) };
+                    return { ok: false, reason: plainCheckoutRefusal(errorMessage(error), standing.locked) };
                 }
                 moved();
                 return { ok: true };

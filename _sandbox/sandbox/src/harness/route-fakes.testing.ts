@@ -113,6 +113,7 @@ export const realCheckout = async (
             repoBusy: () => false,
             // A real linked worktree: nothing to re-link.
             relink: async () => [],
+            healShared: async () => [],
         },
     };
 };

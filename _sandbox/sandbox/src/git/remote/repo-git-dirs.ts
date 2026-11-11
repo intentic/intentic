@@ -1,6 +1,6 @@
-import { copyFile, cp, lstat, mkdir, readdir, readFile, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, readdir, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import type { Stats } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner, persistGitDurability } from "@intentic/base/git";
 import type { Logger } from "pino";
@@ -8,6 +8,7 @@ import { gitDirOf } from "../../store/git/git-dir.js";
 import { freeGitDirFor } from "../../workspace/layout/git-dir-owners.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
+import { repointLinkedCheckouts } from "../../workspace/layout/worktree-links.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 
 // No git dir lives under /work, so an isolated turn's worktree can stand in for the whole workspace root. Converges
@@ -140,30 +141,6 @@ const recoverAside = async (repoDir: string, repo: string, logger: Logger): Prom
     logger.warn({ repo }, "git dirs: an interrupted relocation was undone, the repo has its in-tree git dir back");
 };
 
-// Every linked checkout re-pointed at the moved git dir's admin dirs. `worktree repair` alone has been seen to exit 0
-// and still leave one pointing at the old place, so each is named to it, then read back and written by hand if not.
-const repointWorktrees = async (repoDir: string, target: string, repo: string, logger: Logger, git: GitRunner): Promise<void> => {
-    const admins = join(target, "worktrees");
-    const checkouts: { checkout: string; admin: string }[] = [];
-    for (const name of (await readdir(admins).catch(undefinedIfMissing)) ?? []) {
-        // The admin dir's backlink names the checkout's `.git`; one already gone is left for `worktree prune`.
-        const back = (await readFile(join(admins, name, "gitdir"), "utf8").catch(undefinedIfMissing))?.trim();
-        const pointer = back === undefined || back === "" ? undefined : resolve(admins, name, back);
-        if (pointer !== undefined && (await lstat(pointer).catch(undefinedIfMissing))?.isFile() === true) {
-            checkouts.push({ checkout: dirname(pointer), admin: join(admins, name) });
-        }
-    }
-    await git(repoDir, ["worktree", "repair", ...checkouts.map(({ checkout }) => checkout)]).catch((err) =>
-        logger.warn({ err, repo }, "git dirs: worktree repair failed"),
-    );
-    for (const { checkout, admin } of checkouts) {
-        if ((await gitDirOf(checkout)) !== admin) {
-            await writeFile(join(checkout, ".git"), `gitdir: ${admin}\n`).catch((err) =>
-                logger.warn({ err, repo, checkout }, "git dirs: a linked checkout still points at the old git dir"),
-            );
-        }
-    }
-};
 
 // Moves the repo's in-tree git dir to /history/gits/<repo>, safe while git is writing in it (the daemon calls this at
 // runtime too, for a repo that joined after boot). Copies first while the repo is live, then sets the original aside
@@ -210,7 +187,9 @@ const relocateOne = async (repo: string, repos: readonly string[], workspace: Wo
     await rm(aside, { recursive: true, force: true }).catch((err) =>
         logger.warn({ err, repo }, "git dirs: could not remove the old in-tree git dir"),
     );
-    await repointWorktrees(repoDir, target, repo, logger, git);
+    // Each linked checkout re-pointed by hand, never by `worktree repair`, which would also rewrite a shared checkout a
+    // worktree's record names (workspace/layout/worktree-links.ts).
+    await repointLinkedCheckouts(target, [workspace.root, repoDir], logger, repo);
     logger.info({ repo, target }, "git dirs: relocated in-tree git dir off the workspace root");
 };
 

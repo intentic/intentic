@@ -54,6 +54,29 @@ export const fencedReminder = (root: string): TurnNote => ({
     text: `${WORKTREE_NOTE_HEADER}\n\n\`${root}\` holds only this conversation's areas, and it has no git; your changes are recorded for you.`,
 });
 
+// The whole-workspace jail private conversations put every turn in (turn-sandbox.ts WholeJail), for a turn in its own
+// worktree: git works, but the shared checkout and every other conversation's are off this filesystem. Said once per
+// session, because jailed agents (2026-11-11) pruned and repaired the worktree records they saw as dangling, switched a
+// conversation's checkout to main, and edited their own checkout believing it the shared one.
+export const jailedNote = (root: string): TurnNote => ({
+    title: WORKTREE_NOTE_TITLE,
+    text:
+        `${WORKTREE_NOTE_HEADER}\n\n` +
+        `\`${root}\` here is this conversation's own checkout, on its own branch (\`agent/<conversation id>\`), not the ` +
+        `shared workspace other people and agents use, which this turn cannot see. Other conversations' checkouts are not ` +
+        `on this filesystem, so git lists them as prunable: never run \`git worktree prune\`, \`repair\`, \`move\` or ` +
+        `\`remove\`, which would break them. Never switch this checkout to the workspace's main line either: its work ` +
+        `reaches main by landing. If a land says the workspace is off its main line, tell the person to press Back to ` +
+        `main in the Changes view rather than fixing it with git.`,
+});
+
+export const jailedReminder = (root: string): TurnNote => ({
+    title: WORKTREE_NOTE_TITLE,
+    text:
+        `${WORKTREE_NOTE_HEADER}\n\n\`${root}\` is this conversation's own checkout, not the shared workspace: never prune, ` +
+        `repair, move or remove git worktrees, nor switch it to the main line.`,
+});
+
 // Deliberately no note: the model reliably over-reacted to being told about a routine rebase, re-verifying builds
 // unprompted. The human still sees it in the `worktree` frame; a rebase that doesn't apply is caught at land time
 // (conversations/land.ts) instead of by prose.

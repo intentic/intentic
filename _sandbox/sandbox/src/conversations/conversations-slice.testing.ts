@@ -61,6 +61,7 @@ const absentWorktrees = () =>
         repoBusy: () => false,
         // Every checkout still reaches its repository: nothing to re-link.
         relink: async () => [],
+        healShared: async () => [],
     }) satisfies ConversationsSlice["agentWorktrees"];
 
 export const conversationsSliceFake = (context: SliceFakeContext) => {

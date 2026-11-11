@@ -1,6 +1,5 @@
-import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, rmdir, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { lstat, mkdir, readdir, realpath, rename, rm, rmdir, symlink, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { pathExists, pathPresence } from "@intentic/base/fs";
 import { currentGitCaller, defaultGit, gitCallerWith, type GitRunner, withGitCaller } from "@intentic/base/git";
 import { keyedLock } from "@intentic/base/async";
@@ -15,6 +14,7 @@ import type { HistorySpace } from "../../system/resources/storage/checkout-space
 import type { PerfTracker } from "../../system/resources/perf.js";
 import { ensureLines } from "../../store/plain-files/text-file.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
+import { adminFor, freshAdminFor, healSharedCheckoutLinks, type LinkHeal, linkOne } from "../../workspace/layout/worktree-links.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { branchSha, dropAgentRef, parkAgentRefs, unparkAgentRef } from "../../git/agent-refs.js";
 import { withConversationTrailer } from "../../git-identity.js";
@@ -114,6 +114,9 @@ export interface AgentWorktrees {
     // command a sync or a land runs assumes the checkout shares main's objects; asked first, so a broken one stops with
     // a plain reason instead of a raw `bad object`. Takes each repo's lock itself.
     readonly relink: (id: string, repos: readonly { readonly repo: string }[]) => Promise<readonly string[]>;
+    // Undoes a shared checkout's hijack by a worktree record (workspace/layout/worktree-links.ts) in these repos, each
+    // under its lock, and answers what it changed. Asked before a land waits on a shared checkout off its main line.
+    readonly healShared: (repos: readonly string[]) => Promise<readonly LinkHeal[]>;
 }
 
 // Root first or root last, then everything else concurrently: root's checkout creates the dir nested worktrees mount
@@ -343,39 +346,6 @@ export const createAgentWorktrees = (
         return own !== undefined && own === (await commonOf(mainDir(repo)));
     };
 
-    // The admin dir main keeps for a checkout at `target`, found by its back-pointer; undefined once pruned.
-    const adminOf = async (main: string, target: string): Promise<string | undefined> => {
-        const common = await commonOf(main);
-        if (common === undefined) {
-            return undefined;
-        }
-        const admins = join(common, "worktrees");
-        const wanted = join(target, ".git");
-        for (const name of (await readdir(admins).catch(undefinedIfMissing)) ?? []) {
-            const back = ((await readFile(join(admins, name, "gitdir"), "utf8").catch(undefinedIfMissing)) ?? "").trim();
-            if (back !== "" && resolve(admins, name, back) === wanted) {
-                return join(admins, name);
-            }
-        }
-        return undefined;
-    };
-
-    // A pointer for `target` that main does not yet know: `worktree add` into a scratch dir of the same name (never
-    // over the checkout, whose files are the agent's work), whose `.git` then moves in; `repair` points main's admin dir
-    // back at it. Throws when git refuses (the branch is checked out elsewhere), before the checkout is touched.
-    const freshPointer = async (main: string, target: string, branch: string): Promise<string> => {
-        // allow(silent-catch): Pruning stale metadata is optional; the subsequent add or sweep reports its own failure.
-        await git(main, ["worktree", "prune"]).catch(() => undefined);
-        const scratch = await mkdtemp(join(tmpdir(), "intentic-relink-"));
-        try {
-            const staging = join(scratch, basename(target));
-            await git(main, ["worktree", "add", "--no-checkout", staging, branch]);
-            return await readFile(join(staging, ".git"), "utf8");
-        } finally {
-            await rm(scratch, { recursive: true, force: true });
-        }
-    };
-
     // Re-links a checkout whose `.git` is missing or no longer reaches main: the agent's files stay exactly where they
     // are, whatever stands at `.git` moves to the trash (never deleted: a standalone repo may hold commits someone
     // wants), and a pointer onto `agent/<id>` takes its place. The index is rebuilt from the branch, so what the turn
@@ -390,8 +360,8 @@ export const createAgentWorktrees = (
                 logger.warn({ id, repo }, "agents: checkout lost its link and its branch is gone, left as it is");
                 return false;
             }
-            const admin = await adminOf(main, target);
-            const pointer = admin === undefined ? await freshPointer(main, target, branch) : `gitdir: ${admin}\n`;
+            const admin = await adminFor(main, target);
+            const fresh = admin === undefined ? await freshAdminFor(main, target, branch, git) : undefined;
             const stray = join(target, ".git");
             if ((await lstat(stray).catch(undefinedIfMissing)) !== undefined) {
                 const trashed = join(historyRoot, "trash", `${encodeURIComponent(repo)}-${id}-git-${Date.now()}`);
@@ -399,9 +369,12 @@ export const createAgentWorktrees = (
                 await rename(stray, trashed);
                 logger.warn({ id, repo, trashed }, "agents: a checkout's .git no longer reached its repository, moved to trash");
             }
-            await writeFile(stray, pointer);
-            if (admin === undefined) {
-                await git(main, ["worktree", "repair", target]);
+            if (fresh === undefined) {
+                await writeFile(stray, `gitdir: ${admin}\n`);
+            } else {
+                // This one pair and nothing else: `git worktree repair` would also rewrite every checkout any other admin
+                // names, and one naming the shared checkout hijacked it (workspace/layout/worktree-links.ts).
+                await linkOne(fresh, target, [workspace.root, main]);
                 // Mixed reset: the index follows the branch, the working tree (the agent's files) is not touched.
                 await git(target, ["reset", "-q"]);
             }
@@ -830,6 +803,8 @@ export const createAgentWorktrees = (
         },
         withRepoLock,
         repoBusy: (repo) => (queued.get(repo) ?? 0) > 0,
+        healShared: async (repos) =>
+            (await Promise.all(repos.map((repo) => withRepoLock(repo, () => healSharedCheckoutLinks({ mainDir, worktreeDir, conversationDir }, [repo], logger))))).flat(),
         relink: async (id, repos) => {
             const broken: string[] = [];
             await eachRepo(repos, "root-first", async (repo) => {

@@ -23,7 +23,7 @@ import { type InstallReach, setupNoticeFor, setupNoticeTitle } from "../../../wo
 import type { SearchTool } from "../../prompt/guidance.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
-import { fencedNote, fencedReminder, worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
+import { fencedNote, fencedReminder, jailedNote, jailedReminder, worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
 import { promptTrim } from "../../prompt/window/context-trim.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import type { TurnBase, TurnPolicy, TurnSpec, TurnTools } from "../../providers/agent-request.js";
@@ -94,6 +94,22 @@ const installReachOf = (isolated: boolean, capabilities: AgentCapabilities, canI
 const deniedSkillNames = (denied: readonly string[]): ReadonlySet<string> =>
     new Set(denied.flatMap((rule) => /^Skill\((.+)\)$/.exec(rule)?.slice(1, 2) ?? []));
 
+// Where the turn's files live, in full on a session's first turn and as a reminder after.
+const treeNotes = (facts: AdmittedTurnFacts, context: TurnContext, capabilities: AgentCapabilities, isolated: boolean): TurnNote[] => {
+    const first = context.base.spec.sessionId === undefined;
+    const isolation = context.base.spec.isolation;
+    return [
+        ...(isolated && capabilities.isolation === "cwd" ? [first ? worktreeNote(context.localCwd, facts.root) : worktreeReminder(facts.root)] : []),
+        // A fenced turn's sandbox holds only its areas and no git. The whole-workspace jail holds both, but a turn in its
+        // own worktree there sees neither the shared checkout nor any other conversation's, which git lists as prunable:
+        // said so it neither prunes them nor takes its own for the shared one. A main-tree turn's root is the shared one.
+        ...(isolation?.anchor?.sandbox !== undefined && isolation.plan.fence?.whole === undefined
+            ? [first ? fencedNote(facts.root) : fencedReminder(facts.root)]
+            : []),
+        ...(isolated && isolation?.plan.fence?.whole !== undefined ? [first ? jailedNote(facts.root) : jailedReminder(facts.root)] : []),
+    ];
+};
+
 // What the turn is told about its tree and what the workspace holds, in the order it reads them.
 const workspaceNotes = (
     facts: AdmittedTurnFacts,
@@ -108,13 +124,7 @@ const workspaceNotes = (
     const skillCatalogNote =
         facts.skillCatalog === undefined ? undefined : skillCatalogNoteOf(catalogFor(facts.skillCatalog, access.persona), deniedSkillNames(access.denied));
     return [
-        ...(isolated && capabilities.isolation === "cwd"
-            ? [context.base.spec.sessionId === undefined ? worktreeNote(context.localCwd, facts.root) : worktreeReminder(facts.root)]
-            : []),
-        // A fenced turn's sandbox holds only its areas and no git; the whole-workspace jail holds both, so says nothing.
-        ...(context.base.spec.isolation?.anchor?.sandbox !== undefined && context.base.spec.isolation.plan.fence?.whole === undefined
-            ? [context.base.spec.sessionId === undefined ? fencedNote(facts.root) : fencedReminder(facts.root)]
-            : []),
+        ...treeNotes(facts, context, capabilities, isolated),
         ...(send.map && facts.mapNote !== undefined ? [{ title: WORKSPACE_MAP_NOTE_TITLE, text: facts.mapNote }] : []),
         // After the map, which draws the tree, and before the skills: what the tree holds is the next question it raises.
         ...[facts.contextNote].filter((note) => note !== undefined),

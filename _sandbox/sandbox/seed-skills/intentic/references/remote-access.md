@@ -105,6 +105,13 @@ Settings.
 - Changing the house rule never opens a conversation that is already private.
 - While anything may be private, every turn runs jailed, away from the sandbox's history volume. On a sandbox that runs
   on the owner's own computer, a shell on that machine can still read the files on disk, and Access ▸ People says so.
+- The editor's terminal is jailed the same way, for everyone, the owner included: it runs as `node` and `/history` is
+  hidden, because a root shell would read every private transcript. A root shell is the host's: `docker exec -u 0 -it
+  <container> bash` on the machine running the sandbox, or that orchestrator's container terminal (Komodo, Portainer).
+  Inside a jailed turn `/work` is the conversation's own checkout, not the shared workspace, and other conversations'
+  checkouts are not there; git's worktree links are the sandbox's to keep (`git worktree prune` and `repair` are
+  refused). A shared checkout git linked into a conversation's checkout anyway is put back by itself, at the latest
+  when a land would wait on it or when someone presses **Back to main** in Changes.
 
 ## Not a way into the workspace
 
