@@ -355,6 +355,7 @@ watch(item, async (found) => {
                     :unlock="ready.unlock"
                     :hello-addable="ready.helloAddable === true"
                     :master-password="ready.masterPassword"
+                    :keyring-update="ready.keyringUpdate"
                     @changed="state.load()"
                     @close="pick(`all`)"
                 />

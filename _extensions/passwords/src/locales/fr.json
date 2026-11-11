@@ -219,9 +219,11 @@
             "helloOffHelp": "Mots de passe a été configuré sans, et demande donc de taper votre phrase secrète.",
             "unlockPassphrase": "Le déverrouillage demande votre phrase secrète. Votre clé de récupération sert de secours.",
             "unlockRecovery": "Le déverrouillage demande votre clé de récupération, faute de phrase secrète. Définissez-en une pour que la clé reste un secours.",
+            "unlockRecoveryOld": "Le déverrouillage demande votre clé de récupération. Pour une phrase secrète, mettez d’abord à jour Mots de passe sur cet ordinateur.",
             "passphraseTitle": "Phrase secrète",
             "passphraseOn": "Saisie pour déverrouiller quand Windows Hello ou la vérification propre à votre ordinateur ne peut pas répondre.",
             "passphraseOff": "Non définie : Mots de passe demande donc votre clé de récupération. Définissez une phrase secrète et gardez la clé en secours.",
+            "passphraseNeedsUpdate": "Mots de passe sur cet ordinateur est en version {version}, antérieure aux phrases secrètes. Mettez-le à jour pour en définir une : vous confirmez ici, puis donnez une fois l’accord d’un administrateur.",
             "passphraseSet": "Définir",
             "passphraseChange": "Modifier",
             "passphraseHelp": "Mots de passe vous demande d’abord de confirmer sur cet ordinateur. Votre clé de récupération reste inchangée."

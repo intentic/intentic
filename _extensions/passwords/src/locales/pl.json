@@ -219,9 +219,11 @@
             "helloOffHelp": "Hasła skonfigurowano bez niego, więc proszą o wpisanie frazy dostępu.",
             "unlockPassphrase": "Odblokowanie wymaga frazy dostępu. Klucz odzyskiwania jest zapasowy.",
             "unlockRecovery": "Odblokowanie wymaga klucza odzyskiwania, bo nie ustawiono frazy dostępu. Ustaw ją, aby klucz pozostał zapasowy.",
+            "unlockRecoveryOld": "Odblokowanie wymaga klucza odzyskiwania. Aby ustawić frazę dostępu, najpierw zaktualizuj Hasła na tym komputerze.",
             "passphraseTitle": "Fraza dostępu",
             "passphraseOn": "Wpisywana do odblokowania, gdy Windows Hello ani komputer nie mogą potwierdzić, że to Ty.",
             "passphraseOff": "Nie ustawiono, więc Hasła proszą o klucz odzyskiwania. Ustaw frazę dostępu, a klucz zachowaj jako zapasowy.",
+            "passphraseNeedsUpdate": "Hasła na tym komputerze mają wersję {version}, sprzed fraz dostępu. Zaktualizuj je, aby ustawić frazę: potwierdzasz tutaj, a potem raz udzielasz zgody administratora.",
             "passphraseSet": "Ustaw",
             "passphraseChange": "Zmień",
             "passphraseHelp": "Najpierw Hasła poproszą o potwierdzenie na tym komputerze. Klucz odzyskiwania się nie zmienia."

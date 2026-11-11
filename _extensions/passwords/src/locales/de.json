@@ -219,9 +219,11 @@
             "helloOffHelp": "Passwörter wurde ohne Windows Hello eingerichtet und fragt deshalb nach deiner Passphrase.",
             "unlockPassphrase": "Zum Entsperren wird deine Passphrase abgefragt. Dein Wiederherstellungsschlüssel ist die Reserve.",
             "unlockRecovery": "Zum Entsperren wird dein Wiederherstellungsschlüssel abgefragt, weil keine Passphrase festgelegt ist. Lege eine fest, damit der Schlüssel die Reserve bleibt.",
+            "unlockRecoveryOld": "Zum Entsperren wird dein Wiederherstellungsschlüssel abgefragt. Für eine Passphrase muss Passwörter auf diesem Computer zuerst aktualisiert werden.",
             "passphraseTitle": "Passphrase",
             "passphraseOn": "Wird zum Entsperren eingegeben, wenn Windows Hello oder die eigene Prüfung deines Computers nicht antworten kann.",
             "passphraseOff": "Nicht festgelegt, daher fragt Passwörter nach deinem Wiederherstellungsschlüssel. Lege eine Passphrase fest und behalte den Schlüssel als Reserve.",
+            "passphraseNeedsUpdate": "Passwörter auf diesem Computer hat Version {version}, älter als Passphrasen. Aktualisiere es, um eine festzulegen: Du bestätigst hier und gibst einmal die Zustimmung eines Administrators.",
             "passphraseSet": "Festlegen",
             "passphraseChange": "Ändern",
             "passphraseHelp": "Passwörter bittet dich zuerst um eine Bestätigung an diesem Computer. Dein Wiederherstellungsschlüssel bleibt, wie er ist."

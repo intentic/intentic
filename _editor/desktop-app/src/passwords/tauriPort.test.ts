@@ -45,6 +45,11 @@ describe(`vaultOf`, () => {
         expect(vaultOf(ready, `rog`, false)).toMatchObject({ helloAddable: false, masterPassword: undefined, recentlyDeleted: undefined });
         const later: KeyringStatus = { ...ready, state: { version: `1`, locked: true, unlock: [`passphrase`], keys: KEYS, pendingInbox: 0, helloAddable: true, masterPassword: false, recentlyDeleted: 3 } };
         expect(vaultOf(later, `rog`, false)).toMatchObject({ helloAddable: true, masterPassword: false, recentlyDeleted: 3 });
+        // Without a passphrase to offer, the older keyring's update is offered in its place; a newer one needs none.
+        const older = vaultOf(ready, `rog`, false);
+        expect(older.kind === `ready` ? older.keyringUpdate?.version : undefined).toBe(`1`);
+        expect(older.kind === `ready` ? older.keyringUpdate?.fix.steps?.map((step) => step.id) : undefined).toEqual([`download`, `consent`, `install`, `start`]);
+        expect(vaultOf(later, `rog`, false)).toMatchObject({ keyringUpdate: undefined });
     });
 
     // Its service installed and the helper in front of it silent: never "turn on", which would read as starting over.

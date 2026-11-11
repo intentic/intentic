@@ -219,9 +219,11 @@
             "helloOffHelp": "Se configuró sin él, así que Contraseñas te pide que escribas tu frase de contraseña.",
             "unlockPassphrase": "Para desbloquear se pide tu frase de contraseña. Tu clave de recuperación es el respaldo.",
             "unlockRecovery": "Para desbloquear se pide tu clave de recuperación porque no hay frase de contraseña. Define una para que la clave quede como respaldo.",
+            "unlockRecoveryOld": "Para desbloquear se pide tu clave de recuperación. Para usar una frase de contraseña, primero hay que actualizar Contraseñas en este equipo.",
             "passphraseTitle": "Frase de contraseña",
             "passphraseOn": "Se escribe para desbloquear cuando Windows Hello o la comprobación propia de tu equipo no pueden responder.",
             "passphraseOff": "Sin definir, así que Contraseñas pide tu clave de recuperación. Define una frase de contraseña y guarda la clave como respaldo.",
+            "passphraseNeedsUpdate": "Contraseñas en este equipo tiene la versión {version}, anterior a las frases de contraseña. Actualízala para definir una: lo confirmas aquí y das una vez la aprobación de un administrador.",
             "passphraseSet": "Definir",
             "passphraseChange": "Cambiar",
             "passphraseHelp": "Contraseñas te pide primero que lo confirmes en este equipo. Tu clave de recuperación no cambia."

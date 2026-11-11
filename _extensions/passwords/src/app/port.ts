@@ -110,6 +110,11 @@ export type VaultStatus =
           readonly helloAddable?: boolean | undefined;
           /** Whether a passphrase is set (the keyring's "master password"); absent where the keyring cannot keep one (one older than 2026-11-09). */
           readonly masterPassword?: boolean | undefined;
+          /**
+           * The keyring here is older than what Settings offers (no `masterPassword` in its status, so no passphrase), and
+           * this is how it is updated: Settings offers it where the passphrase would be. `version` is the one running.
+           */
+          readonly keyringUpdate?: { readonly version: string; readonly fix: StatusFix } | undefined;
           /** How many removed passwords wait in Recently deleted; absent where removing is final (an older keyring). */
           readonly recentlyDeleted?: number | undefined;
       };

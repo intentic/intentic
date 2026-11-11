@@ -397,6 +397,36 @@ describe(`PasswordsApp`, () => {
         await waitFor(() => expect(calls.edits.at(-1)).toEqual({ name: `GITHUB_COM`, patch: { origins: [] } }));
     });
 
+    it(`offers a keyring from before passphrases its update where the passphrase would be, then the passphrase`, async () => {
+        const reached: string[] = [];
+        const { port } = fakePort({ status: READY });
+        let status: VaultStatus = {
+            ...READY,
+            unlock: [`passphrase`],
+            keyringUpdate: {
+                version: `1.368.0`,
+                fix: {
+                    label: `Update Passwords`,
+                    steps: [{ id: `install`, label: `Install the protected service`, hint: `Windows is asking for an administrator's approval.` }],
+                    run: async (onStep) => {
+                        onStep?.(`install`);
+                        reached.push(`install`);
+                        status = { ...READY, unlock: [`passphrase`], masterPassword: false };
+                    },
+                },
+            },
+        };
+        const el = mount({ ...port, status: async () => status, setMasterPassword: async () => undefined }, { filter: `settings` });
+        await waitFor(() => expect(el.textContent).toContain(`version 1.368.0, from before passphrases`));
+        expect(el.textContent).toContain(`A passphrase needs Passwords on this computer updated first.`);
+        expect(el.textContent).not.toContain(`Set one so the recovery key stays a backup.`);
+        button(el, `Update Passwords`).click();
+        await waitFor(() => expect(button(el, `Set`).disabled).toBe(false));
+        expect(reached).toEqual([`install`]);
+        expect(el.textContent).not.toContain(`from before passphrases`);
+        expect(el.textContent).toContain(`Set one so the recovery key stays a backup.`);
+    });
+
     it(`lists a password with where it came from, and opens it`, async () => {
         const { port } = fakePort({ status: READY, items: [GITHUB] });
         const el = mount(port, { item: `GITHUB_COM` });

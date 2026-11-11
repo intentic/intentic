@@ -134,6 +134,9 @@ export const vaultOf = (status: KeyringStatus | undefined, computer: string, rem
             computer,
             helloAddable: status.state.helloAddable === true,
             masterPassword: status.state.masterPassword,
+            // A keyring from before the passphrase (2026-11-09) says nothing of one and cannot keep one: its update is
+            // the way to it, offered in Settings where the passphrase would be.
+            keyringUpdate: status.state.masterPassword === undefined ? { version: status.state.version, fix: upgradeFix(`update`, status.support?.platform) } : undefined,
             recentlyDeleted: status.state.recentlyDeleted,
         };
     }

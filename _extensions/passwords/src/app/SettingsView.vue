@@ -7,7 +7,7 @@ import { computed, onMounted, ref, shallowRef } from "vue";
 import { t } from "../i18n.js";
 import ImportPanel from "./ImportPanel.vue";
 import PassphraseForm from "./PassphraseForm.vue";
-import type { PasswordsPort, PasswordsSettings, PasswordsSettingsPatch, RememberSource, SourceStatus, UnlockWay } from "./port.js";
+import type { PasswordsPort, PasswordsSettings, PasswordsSettingsPatch, RememberSource, SourceStatus, StatusFix, UnlockWay } from "./port.js";
 import { originLabel } from "./words.js";
 
 const {
@@ -15,6 +15,7 @@ const {
     unlock,
     helloAddable = false,
     masterPassword,
+    keyringUpdate,
 } = defineProps<{
     port: PasswordsPort;
     unlock: readonly UnlockWay[];
@@ -22,6 +23,8 @@ const {
     helloAddable?: boolean;
     /** Whether a passphrase is set; undefined where the keyring cannot keep one. */
     masterPassword?: boolean | undefined;
+    /** The keyring here predates the passphrase, and this updates it (port.ts `keyringUpdate`). */
+    keyringUpdate?: { readonly version: string; readonly fix: StatusFix } | undefined;
 }>();
 const emit = defineEmits<{ changed: []; close: [] }>();
 
@@ -102,7 +105,10 @@ const unlockNote = computed(() => {
     if (unlock.includes(`polkit`)) {
         return t(`app.settings.polkit`);
     }
-    return masterPassword === true ? t(`app.settings.unlockPassphrase`) : t(`app.settings.unlockRecovery`);
+    if (masterPassword === undefined) {
+        return t(`app.settings.unlockRecoveryOld`);
+    }
+    return masterPassword ? t(`app.settings.unlockPassphrase`) : t(`app.settings.unlockRecovery`);
 });
 
 /* WINDOWS HELLO, turned on for a vault set up without it. */
@@ -116,6 +122,24 @@ const savePassphrase = (passphrase: string): Promise<void> =>
     act(`passphrase`, async () => {
         await port.setMasterPassword?.(passphrase);
         passphraseOpen.value = false;
+    });
+
+/* A KEYRING FROM BEFORE THE PASSPHRASE: its update offered where the passphrase would be, each stage said as it is
+   reached (a prompt on this computer, then Windows' administrator prompt). The status read again after it brings the
+   passphrase row. */
+const updateStep = ref<string | undefined>(undefined);
+const runUpdate = (fix: StatusFix): Promise<void> =>
+    act(`update`, async () => {
+        try {
+            await fix.run((id) => {
+                const step = fix.steps?.find((known) => known.id === id);
+                if (step !== undefined) {
+                    updateStep.value = step.hint ?? step.label;
+                }
+            });
+        } finally {
+            updateStep.value = undefined;
+        }
     });
 
 const forget = (origin: KeyringOrigin): Promise<void> =>
@@ -175,6 +199,22 @@ const forget = (origin: KeyringOrigin): Promise<void> =>
                             <span class="text-2xs text-subtle">{{ t(`app.settings.helloOffHelp`) }}</span>
                         </div>
                         <Button tier="accent" size="small" :label="t(`app.hello.turnOn`)" :loading="waiting === `hello`" :disabled="waiting !== undefined" @click="addHello()" />
+                    </div>
+                    <div v-if="masterPassword === undefined && keyringUpdate" class="flex items-center gap-3 px-4 py-3">
+                        <div class="flex min-w-0 flex-1 flex-col">
+                            <span class="text-sm text-content">{{ t(`app.settings.passphraseTitle`) }}</span>
+                            <span class="text-2xs" :class="waiting === `update` ? `text-info` : `text-warning`">
+                                {{ (waiting === `update` ? updateStep : undefined) ?? t(`app.settings.passphraseNeedsUpdate`, { version: keyringUpdate.version }) }}
+                            </span>
+                        </div>
+                        <Button
+                            tier="accent"
+                            size="small"
+                            :label="keyringUpdate.fix.label"
+                            :loading="waiting === `update`"
+                            :disabled="waiting !== undefined"
+                            @click="runUpdate(keyringUpdate.fix)"
+                        />
                     </div>
                     <div v-if="canPassphrase" class="flex flex-col gap-3 px-4 py-3">
                         <div class="flex items-center gap-3">

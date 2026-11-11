@@ -219,9 +219,11 @@
             "helloOffHelp": "It was set up without it, so Passwords asks you to type your passphrase instead.",
             "unlockPassphrase": "Unlocking asks for your passphrase. Your recovery key is the backup.",
             "unlockRecovery": "Unlocking asks for your recovery key because no passphrase is set. Set one so the recovery key stays a backup.",
+            "unlockRecoveryOld": "Unlocking asks for your recovery key. A passphrase needs Passwords on this computer updated first.",
             "passphraseTitle": "Passphrase",
             "passphraseOn": "Typed to unlock when Windows Hello or your computer's own check can't answer.",
             "passphraseOff": "Not set, so Passwords asks for your recovery key instead. Set a passphrase and keep the recovery key as the backup.",
+            "passphraseNeedsUpdate": "Passwords on this computer is version {version}, from before passphrases. Update it to set one: you confirm here, then give an administrator's approval once.",
             "passphraseSet": "Set",
             "passphraseChange": "Change",
             "passphraseHelp": "Passwords asks you to confirm on this computer first. Your recovery key stays as it is."
