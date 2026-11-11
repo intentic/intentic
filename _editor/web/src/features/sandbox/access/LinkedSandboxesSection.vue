@@ -19,7 +19,8 @@ import { inboundLinksChanged } from "../../../models/sandbox/useInboundLinks";
 
 // INBOUND LINKS: the owner's other sandboxes allowed to hand this one tasks. Each link's terms are written here and
 // enforced here: the persona its tasks wear, whether each waits for the owner, how many turns an hour it may start, and
-// whether it may read this sandbox's records (its conversations, logs and diagnostics) without starting a turn. A task
+// whether it may read this sandbox's records (its conversations, logs and diagnostics) without starting a turn, and
+// whether it may operate this sandbox (run commands, read and write files, as the owner's own terminal would). A task
 // that waits is answered on its link's row. Usually minted by the editor while pairing two sandboxes (the other sandbox's
 // Linked sandbox card); minted here by hand, the token is shown once with this sandbox's address to paste over there.
 
@@ -113,6 +114,7 @@ const termsLine = (terms: LinkTerms): string =>
     [
         terms.tasks === false ? t(`sandbox.linkedSandboxes.lendsAccounts`, { count: terms.accounts.length }, terms.accounts.length) : taskTermsLine(terms),
         ...(terms.records ? [t(`sandbox.linkedSandboxes.readsRecords`)] : []),
+        ...(terms.operate ? [t(`sandbox.linkedSandboxes.operates`)] : []),
     ].join(` · `);
 
 const describe = (link: InboundLinkSummary): string =>
@@ -137,15 +139,16 @@ const decide = (link: InboundLinkSummary, request: LinkRequest, approve: boolean
 // One link's terms, shown under its row and each changed where it is shown: a pick, a switch or a number writes itself,
 // with no Save to reach for and nothing that turns into a form first.
 const editing = ref<string>();
-type TermsDraft = { runAs?: string | undefined; actsAs: string; approve: boolean; turnsPerHour: number; records: boolean };
+type TermsDraft = { runAs?: string | undefined; actsAs: string; approve: boolean; turnsPerHour: number; records: boolean; operate: boolean };
 const draftOf = (terms: LinkTerms): TermsDraft => ({
     runAs: terms.runAs,
     actsAs: terms.actsAs ?? NO_PERSONA,
     approve: terms.approve,
     turnsPerHour: terms.turnsPerHour,
     records: terms.records,
+    operate: terms.operate,
 });
-const draft = ref<TermsDraft>({ actsAs: NO_PERSONA, approve: false, turnsPerHour: 20, records: false });
+const draft = ref<TermsDraft>({ actsAs: NO_PERSONA, approve: false, turnsPerHour: 20, records: false, operate: false });
 const edit = (link: InboundLinkSummary): void => {
     if (editing.value === link.id) {
         editing.value = undefined;
@@ -157,14 +160,14 @@ const edit = (link: InboundLinkSummary): void => {
 const TURNS = { min: 1, max: 120 } as const;
 const write = async (link: InboundLinkSummary, change: Partial<TermsDraft>): Promise<void> => {
     draft.value = { ...draft.value, ...change };
-    const { actsAs, approve, turnsPerHour, records, runAs: service } = draft.value;
+    const { actsAs, approve, turnsPerHour, records, operate, runAs: service } = draft.value;
     // A number typed out of bounds, or not a number at all, is not sent: the field shows what the link still has.
     if (!Number.isInteger(turnsPerHour) || turnsPerHour < TURNS.min || turnsPerHour > TURNS.max) {
         draft.value = { ...draft.value, turnsPerHour: link.terms.turnsPerHour };
         return;
     }
     // Owner again is a null, which takes the service off; absence would keep the one the link had.
-    const input: InboundLinkTermsUpdate = { approve, turnsPerHour, records, runAs: service ?? null };
+    const input: InboundLinkTermsUpdate = { approve, turnsPerHour, records, operate, runAs: service ?? null };
     if (actsAs !== NO_PERSONA) {
         input.actsAs = actsAs;
     }
@@ -197,8 +200,8 @@ const submit = async (): Promise<void> => {
     if (named === `` || minting.value) {
         return;
     }
-    // Records stay unshared on a link made by hand, as on every new one; its Terms turn them on.
-    const terms: LinkTerms = { approve: approve.value, turnsPerHour: 20, tasks: true, records: false, accounts: [] };
+    // Records stay unshared and operating off on a link made by hand, as on every new one; its Terms turn them on.
+    const terms: LinkTerms = { approve: approve.value, turnsPerHour: 20, tasks: true, records: false, operate: false, accounts: [] };
     if (runAs.value !== undefined) {
         terms.runAs = runAs.value;
     }
@@ -370,6 +373,14 @@ const address = computed(() => daemonUrl.value ?? ``);
                                 {{ t(`sandbox.linkedSandboxes.shareRecords`) }}
                             </span>
                             <span class="text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.shareRecordsHint`) }}</span>
+                        </label>
+                        <!-- Not a task term either: what the other sandbox may do here as this sandbox's owner's own terminal would, said in full under its switch. -->
+                        <label class="flex flex-col gap-0.5">
+                            <span class="flex items-center gap-2 text-sm text-content">
+                                <ToggleSwitch :model-value="draft.operate" class="ui-switch-sm" @update:model-value="write(link, { operate: $event })" />
+                                {{ t(`sandbox.linkedSandboxes.operate`) }}
+                            </span>
+                            <span class="text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.operateHint`) }}</span>
                         </label>
                     </div>
                 </RowNote>

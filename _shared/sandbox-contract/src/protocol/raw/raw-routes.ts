@@ -305,6 +305,15 @@ export const RAW_ROUTES = {
     "GET /link/records/fleet/{handle}": { auth: "door", control: "never" },
     "GET /link/records/fleet/{handle}/bundle": { auth: "door", control: "never" },
     "POST /link/records/diagnostics": { auth: "door", control: "never" },
+    // A link's operating doors (schemas/links.ts `operate`): the asking sandbox running commands and reading and writing
+    // files here as this sandbox's owner does in their own terminal. Each checks the link token itself and answers only
+    // while the link's terms allow operating; a command is followed by reading it again, and only the link that started
+    // it reads or stops it.
+    "POST /link/operate/exec": { auth: "door", control: "never" },
+    "GET /link/operate/exec/{id}": { auth: "door", control: "never" },
+    "POST /link/operate/exec/{id}/stop": { auth: "door", control: "never" },
+    "POST /link/operate/read": { auth: "door", control: "never" },
+    "POST /link/operate/write": { auth: "door", control: "never" },
     // An accounts link's doors (schemas/providers/account-sharing.ts): the accounts its terms name, a static key's copy,
     // and a lent sign-in's access token per turn, re-minted mid-turn. The refresh token never leaves; each door checks the
     // link token itself and answers only for what the terms name.

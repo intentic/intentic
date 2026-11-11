@@ -60,6 +60,8 @@ const approve = ref(DEFAULT_TERMS.approve);
 const turnsPerHour = ref(DEFAULT_TERMS.turnsPerHour);
 // Whether this sandbox may read the far one's records (its conversations, logs and diagnostics) over the link.
 const records = ref(DEFAULT_TERMS.records);
+// Whether this sandbox may operate the far one: run commands and read and write files there, as its owner's terminal would.
+const operate = ref(DEFAULT_TERMS.operate);
 const pairing = ref(false);
 const paired = ref<PairedLink>();
 
@@ -95,7 +97,14 @@ const pair = async (): Promise<void> => {
     pairing.value = true;
     emit(`notice`, null);
     try {
-        const terms: LinkTerms = { approve: approve.value, turnsPerHour: turnsPerHour.value, tasks: true, records: records.value, accounts: [] };
+        const terms: LinkTerms = {
+            approve: approve.value,
+            turnsPerHour: turnsPerHour.value,
+            tasks: true,
+            records: records.value,
+            operate: operate.value,
+            accounts: [],
+        };
         if (actsAs.value !== undefined && actsAs.value !== NO_PERSONA) {
             terms.actsAs = actsAs.value;
         }
@@ -154,15 +163,24 @@ const pair = async (): Promise<void> => {
                             {{ t(`capabilities.linkPairing.turnsAnHour`) }}
                         </label>
                     </div>
-                    <!-- Not a task term: what this sandbox may read over there without asking for a turn, said in full under its switch. -->
+                    <!-- Not task terms: what this sandbox may read and do over there without asking for a turn, each said in full under its switch. -->
                     <div v-if="farId !== undefined" class="flex flex-wrap items-end gap-4">
-                        <label class="flex min-w-60 flex-1 flex-col gap-0.5">
-                            <span class="flex items-center gap-2 text-xs text-content">
-                                <ToggleSwitch v-model="records" />
-                                {{ t(`capabilities.linkPairing.shareRecords`) }}
-                            </span>
-                            <span class="text-2xs text-subtle">{{ t(`capabilities.linkPairing.shareRecordsHint`) }}</span>
-                        </label>
+                        <div class="flex min-w-60 flex-1 flex-col gap-2">
+                            <label class="flex flex-col gap-0.5">
+                                <span class="flex items-center gap-2 text-xs text-content">
+                                    <ToggleSwitch v-model="records" />
+                                    {{ t(`capabilities.linkPairing.shareRecords`) }}
+                                </span>
+                                <span class="text-2xs text-subtle">{{ t(`capabilities.linkPairing.shareRecordsHint`) }}</span>
+                            </label>
+                            <label class="flex flex-col gap-0.5">
+                                <span class="flex items-center gap-2 text-xs text-content">
+                                    <ToggleSwitch v-model="operate" />
+                                    {{ t(`capabilities.linkPairing.operate`) }}
+                                </span>
+                                <span class="text-2xs text-subtle">{{ t(`capabilities.linkPairing.operateHint`) }}</span>
+                            </label>
+                        </div>
                         <Button tier="accent" type="submit" :label="t(`capabilities.linkPairing.pair`)" size="small" :loading="pairing" :disabled="pairing || loadingPersonas">
                             <template #icon><Icon name="link" /></template>
                         </Button>

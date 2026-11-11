@@ -243,7 +243,7 @@ test("a revoked link ends the task here as failed, and the links listing says th
 test("the links listing names each linked sandbox with the terms it holds its tasks to", async () => {
     dev = devSandbox(await cardFor({ approve: true }));
     expect(await dev.linked.links(PARENT.conversationId)).toEqual([
-        { to: "ops", sandbox: "ops", online: true, persona: "On call", approve: true, turnsPerHour: 20, records: false },
+        { to: "ops", sandbox: "ops", online: true, persona: "On call", approve: true, turnsPerHour: 20, records: false, operate: false },
     ]);
 });
 

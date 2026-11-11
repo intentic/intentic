@@ -54,6 +54,9 @@ export const UNSERVED = {
     // link token, never the editor.
     "GET /link/accounts": NOT_THE_EDITORS,
     "GET /link/conversations/{id}": NOT_THE_EDITORS,
+    // A link's operating doors (this one and the four POSTs below): the operating sandbox's daemon calls them with the
+    // link token, never the editor.
+    "GET /link/operate/exec/{id}": NOT_THE_EDITORS,
     // A link's records doors: the reading sandbox's daemon calls them with the link token, never the editor.
     "GET /link/records/fleet": NOT_THE_EDITORS,
     "GET /link/records/fleet/{handle}": NOT_THE_EDITORS,
@@ -108,6 +111,10 @@ export const UNSERVED = {
     "POST /link/conversations/{id}/stop": NOT_THE_EDITORS,
     "POST /link/credentials": NOT_THE_EDITORS,
     "POST /link/credentials/refresh": NOT_THE_EDITORS,
+    "POST /link/operate/exec": NOT_THE_EDITORS,
+    "POST /link/operate/exec/{id}/stop": NOT_THE_EDITORS,
+    "POST /link/operate/read": NOT_THE_EDITORS,
+    "POST /link/operate/write": NOT_THE_EDITORS,
     "POST /link/records/diagnostics": NOT_THE_EDITORS,
     "POST /listeners/{provider}/dispatch": NOT_THE_EDITORS,
     "POST /listeners/{provider}/failure": NOT_THE_EDITORS,

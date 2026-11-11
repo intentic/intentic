@@ -400,7 +400,7 @@ const delegate = async (engine: Engine, parent: ChildParent, ask: DelegateAsk): 
     await startFollowing(engine, child, asked.value, held ? "pending" : "running");
     engine.deps.logger.info({ child: id, parent: parent.conversationId, link: card.id, remote: stored.remote }, "linked task: handed over");
     const where = held
-        ? `Handed to "${stored.sandbox}", where it waits for that sandbox's owner to allow it.`
+        ? `Handed to "${stored.sandbox}", where it waits for that sandbox's owner to allow it: its Access, Programs, Linked sandboxes has the Allow, and turning off "Ask me first" there lets the link's next tasks start at once.`
         : `Handed to "${stored.sandbox}", which is working on it in its own conversation. ${linkedLandingWords(stored.sandbox)}`;
     return { ok: true, id, note: `${where} Supervise it with wait(target: "${id}").` };
 };
@@ -426,6 +426,7 @@ const listLinks = async (engine: Engine, conversationId: string, only?: string):
                 approve: terms.approve,
                 turnsPerHour: terms.turnsPerHour,
                 records: terms.records === true,
+                operate: terms.operate === true,
             };
         }),
     );

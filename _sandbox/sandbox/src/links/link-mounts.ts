@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { DiagnosticsQuerySchema } from "@intentic/sandbox-contract/schemas/diagnostics";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
@@ -12,13 +13,16 @@ import { opt } from "../opt.js";
 import type { LinkListing } from "./link-listing.js";
 import { linkRecordsDiagnostics, linkRecordsRead } from "../sandboxes/link-client.js";
 import { MAX_ANSWER_CHARS } from "../logs/diagnostics-render.js";
+import { operateTools } from "./link-operate-tools.js";
 
 // EACH LINKED SANDBOX AS A TURN SEES IT: a tool server named after its card, mounted on the turn's lease the way a
 // connected computer's is (peers/peer-tools.ts), so every runtime reaches `mcp__<link>__delegate` and
 // `mcp__<link>__about` beside `mcp__<computer>__run_command`, and a persona grants it on the same devices list. What the
 // task does over there is that sandbox's terms; supervising it once handed over is the subagents tools' job (wait, send,
 // answer, cancel), since it is a `linked` child of the conversation. Its records tools read that sandbox's conversations
-// and diagnostics while its owner shares them (link-records.ts), the granted card being the whole gate on this side.
+// and diagnostics while its owner shares them (link-records.ts), the granted card being the whole gate on this side. Its
+// operating tools run commands and read and write files there as its owner's own terminal would, while its owner lets the
+// link operate it (link-operate-tools.ts), and only in a turn that may hand work on.
 
 export interface LinkMountDeps {
     readonly conversations: Pick<ConversationActors, "holdings">;
@@ -117,7 +121,10 @@ const linkServer = (deps: LinkMountDeps, card: LinkCard, conversationId: string 
                 `Hand a task to the linked sandbox "${sandbox}": a full agent over there, with that sandbox's own repos, ` +
                     "connections and credentials, working in a conversation of its own under the terms its owner set on the link. " +
                     "Its work runs and lands over there, never in your checkout. Reach for it when the work needs what only that " +
-                    "sandbox has; for more hands on this sandbox's own work, spawn instead. Returns a subagent id at once: " +
+                    "sandbox has; for more hands on this sandbox's own work, spawn instead. That conversation works in a checkout " +
+                    `of its own over there: \`${WORKSPACE_ROOT}/<repo>\` in its turn is its own worktree on its own branch, never the shared ` +
+                    "checkout, so it cannot repair that sandbox's shared state (a stuck branch, a `.git` pointer, a land that is " +
+                    "refused). For that, operate the sandbox yourself with run_command, read_file and write_file. Returns a subagent id at once: " +
                     "supervise it with wait, follow up with send, answer its questions with answer, stop it with cancel. Give it a " +
                     "self-contained task: it sees none of this conversation, and its closing report is all that comes back, read as " +
                     "outside content. Each task is a whole turn over there on that sandbox's allowance: batch small questions.",
@@ -139,7 +146,8 @@ const linkServer = (deps: LinkMountDeps, card: LinkCard, conversationId: string 
             sdk().tool(
                 "about",
                 `Whether the linked sandbox "${sandbox}" answers right now, and the terms it holds tasks to: the persona they ` +
-                    "wear there, whether each waits for its owner to allow it, and how many turns an hour it takes.",
+                    "wear there, whether each waits for its owner to allow it, how many turns an hour it takes, whether its owner " +
+                    "shares its records (`records`) and whether this link may operate it (`operate`: run_command, read_file, write_file).",
                 {},
                 async () => {
                     const listing = conversationId === undefined ? undefined : await deps.about(conversationId, card.id);
@@ -150,6 +158,7 @@ const linkServer = (deps: LinkMountDeps, card: LinkCard, conversationId: string 
                 { annotations: toolAnnotations("read") },
             ),
             ...recordsTools(card, sandbox),
+            ...operateTools(card, sandbox, conversationId, () => supervising(deps, conversationId) !== undefined),
         ],
     });
 };

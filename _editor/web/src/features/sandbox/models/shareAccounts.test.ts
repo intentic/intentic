@@ -39,7 +39,7 @@ const card = (id: string, config: CapabilitySummary[`config`]): CapabilitySummar
 });
 const accountsCard = card(`accounts-ada-s-laptop`, { url: SOURCE.daemonUrl, name: SOURCE.name, sandboxId: SOURCE.id, purpose: `accounts` });
 
-const terms = (change: Partial<LinkTerms> = {}): LinkTerms => ({ approve: false, turnsPerHour: 20, tasks: false, records: false, accounts: [], ...change });
+const terms = (change: Partial<LinkTerms> = {}): LinkTerms => ({ approve: false, turnsPerHour: 20, tasks: false, records: false, operate: false, accounts: [], ...change });
 const link = (id: string, change: Partial<InboundLinkSummary> = {}): InboundLinkSummary => ({
     id,
     label: HERE.name,

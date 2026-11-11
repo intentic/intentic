@@ -90,6 +90,33 @@ the sandbox's own `agents` and `diagnostics` read-only through `ic sandbox inspe
 and anywhere, a conversation's debug bundle (`agents bundle`, or the editor's download) carries the same reads in one
 file.
 
+## Operating links
+
+Records answer what happened; they cannot fix anything. A delegated task cannot either when the fault is the sandbox's
+own shared state: its turn works in a checkout of its own, so `/work/<repo>` in that turn is its worktree, and a repair
+to the shared checkout (a `.git` pointer, a branch the land refuses) lands in the wrong copy. That is what happened in
+targowisko on 2026-11-11, which was finally repaired through the host's `docker exec`.
+
+So a link can also let the asking sandbox **operate** this one as its owner does from their own terminal. The `operate`
+term is off unless this sandbox's owner turns on **Let it operate this sandbox** on the inbound link, or the pairing card
+asks for it. While it is on, the operating doors answer the link token
+([`link-operate.ts`](../../_sandbox/sandbox/src/links/link-operate.ts)): a command started and read again until it ends
+(a long one is never one request held for minutes), a stop, a file's lines or a directory's listing, and a file written.
+Each runs where a person's shell runs: in the main checkout, as root, or, while conversations here can be private, inside
+the same jail every person's terminal gets ([`shell-jail.ts`](../../_sandbox/sandbox/src/terminal/shell-jail.ts)). That
+jail hides the history volume and the workspace's secrets, and still leaves the main checkout and the git directories
+writable. Every answer says which (`jailed`), and every call is logged with the link's name. A link reads and stops only
+the commands it started.
+
+On the asking side the link's tool server carries `run_command`, `read_file` and `write_file`
+([`link-operate-tools.ts`](../../_sandbox/sandbox/src/links/link-operate-tools.ts)). Only a turn that may hand work on may
+use them: a turn started by outside content, or one whose persona does not delegate, is refused before anything is asked.
+`delegate`'s own description sends an agent there when the work is the sandbox itself.
+
+A door a far sandbox's build does not have yet is refused by its sign-in check as a bare "unauthorized". The asking side
+reads that as a build too old for the door, not as a dead link
+([`link-client.ts`](../../_sandbox/sandbox/src/sandboxes/link-client.ts) `TOO_OLD_FOR_DOOR`).
+
 ## Key files
 
 - [inbound-links.ts](../../_sandbox/sandbox/src/links/inbound-links.ts): the taking side's store.
@@ -98,6 +125,8 @@ file.
 - [link-mounts.ts](../../_sandbox/sandbox/src/links/link-mounts.ts): each linked sandbox as a turn's tool server.
 - [link-records.ts](../../_sandbox/sandbox/src/links/link-records.ts) and [link-records-relay.ts](../../_sandbox/sandbox/src/links/link-records-relay.ts): a records link's doors, and the asking side's `--on`.
 - [link-records.integration.test.ts](../../_sandbox/sandbox/src/links/tests/link-records.integration.test.ts): records off and on, and the relay between two daemons over HTTP.
+- [link-operate.ts](../../_sandbox/sandbox/src/links/link-operate.ts) and [link-operate-tools.ts](../../_sandbox/sandbox/src/links/link-operate-tools.ts): an operating link's doors, and the asking side's tools.
+- [link-operate.integration.test.ts](../../_sandbox/sandbox/src/links/tests/link-operate.integration.test.ts): operating off and on, commands, reads and writes over HTTP.
 - [links.ts](../../_shared/sandbox-contract/src/schemas/links.ts): the wire shapes both sides share.
 - [links/accounts/](../../_sandbox/sandbox/src/links/accounts/): an accounts link's doors, what this sandbox holds, and bringing accounts in.
 - [link-accounts.integration.test.ts](../../_sandbox/sandbox/src/links/tests/link-accounts.integration.test.ts): lending and borrowing over HTTP.

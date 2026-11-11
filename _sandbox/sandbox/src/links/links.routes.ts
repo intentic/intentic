@@ -9,7 +9,6 @@ import {
     LinkTaskSchema,
 } from "@intentic/sandbox-contract/schemas/links";
 import type { Context } from "hono";
-import type { z } from "zod";
 import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { ownerDenied } from "../auth/owner-gates.js";
@@ -29,7 +28,7 @@ import {
     stopTask,
 } from "./link-tasks.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
-import { presentedLink } from "./link-door.js";
+import { linkBody as bodyOf, presentedLink } from "./link-door.js";
 import { replaceRejectedToken } from "../agent/providers/claude/claude-credentials.js";
 import { resolveHarnessCredentials } from "../agent/providers/harness-credentials.js";
 import { toRunnerCredential } from "../sandboxes/credential-lending.js";
@@ -59,21 +58,6 @@ const linkRoutesDepsOf = (services: LinkServices & Pick<Services, "auth" | "info
     personas: async () => (await services.personas.list()).map((persona) => ({ id: persona.id, label: persona.label })),
     serviceIds: async () => (await services.services?.list())?.map((service) => service.id) ?? [],
 });
-
-type Parsed<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly response: Response };
-
-// A JSON body read through its schema; a body that is not JSON reads as none, which the schema then refuses by name.
-const bodyOf = async <T>(c: Context<AppEnv>, schema: z.ZodType<T>): Promise<Parsed<T>> => {
-    // allow(silent-catch): a body that is not JSON reads as none, which the schema then refuses by name.
-    const raw: unknown = await c.req.json().catch(() => undefined);
-    const parsed = schema.safeParse(raw ?? {});
-    if (parsed.success) {
-        return { ok: true, value: parsed.data };
-    }
-    const issue = parsed.error.issues[0];
-    const where = issue === undefined || issue.path.length === 0 ? "" : `${issue.path.join(".")}: `;
-    return { ok: false, response: c.json({ error: `${where}${issue?.message ?? "the body did not read as the route's input"}` }, 400) };
-};
 
 const refused = (c: Context<AppEnv>, refusal: LinkRefusal): Response => c.json({ error: refusal.message }, refusal.refused);
 
@@ -110,6 +94,7 @@ const helloOf = async (deps: LinkRoutesDeps, link: ResolvedLink): Promise<LinkHe
             ...opt("persona", persona === undefined ? undefined : (persona.label ?? persona.id)),
             tasks: link.terms.tasks,
             records: link.terms.records,
+            operate: link.terms.operate,
             accounts: link.terms.accounts.length,
         },
         maxHops: LINK_MAX_HOPS,

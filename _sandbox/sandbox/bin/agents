@@ -841,6 +841,7 @@ const links = async () => {
                   link.approve ? "each task waits for its owner" : "starts at once",
                   `${link.turnsPerHour} turns/h`,
                   link.records ? "shares records (--on)" : "shares no records",
+                  link.operate ? "may be operated (mcp__<link>__run_command)" : "may not be operated",
               ].join(" · ")
             : `offline: ${link.why ?? "no answer"}`;
         process.stdout.write(`${link.to}  "${link.sandbox}"  ${terms}\n`);

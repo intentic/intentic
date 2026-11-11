@@ -1,11 +1,18 @@
 import {
     LINK_HEADER,
+    LINK_OPERATE_WAIT_S_MAX,
     type LinkAnswer,
+    type LinkExec,
+    type LinkExecStatus,
+    type LinkRead as LinkFileRead,
+    type LinkReadAnswer,
     type LinkHello,
     type LinkMessage,
     type LinkMessageReceipt,
     type LinkTask,
     type LinkTaskStatus,
+    type LinkWrite,
+    type LinkWriteAnswer,
 } from "@intentic/sandbox-contract/schemas/links";
 import type { LinkConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { DiagnosticsAnswer, DiagnosticsQuery } from "@intentic/sandbox-contract/schemas/diagnostics";
@@ -43,6 +50,14 @@ export type LinkAnswerOf<T> = { readonly ok: true; readonly value: T } | { reado
 // What the far side says when it refuses: `{ error }` on every link door, a sentence written for the asking agent.
 const RefusalSchema = z.object({ error: z.string().min(1) });
 
+// A door the far side's build does not have yet is refused by its sign-in check, before any link door reads the token: a
+// bare "unauthorized", where every link door words its own refusal (link-door.ts). Said as what it is, since "unauthorized"
+// reads as a link that stopped working (knot-xwrx, 2026-11-11: records asked of a sandbox older than records over links).
+const TOO_OLD_FOR_DOOR =
+    "it runs a build too old for this: it refused the call as a sign-in it does not know, which is how a sandbox answers a link door it does not have yet. Updating that sandbox brings it";
+
+const tooOld = (status: number, error: string | undefined): boolean => status === 401 && error === "unauthorized";
+
 const refusalOf = async (response: Response): Promise<string> => {
     // allow(silent-catch): a refusal whose body cannot be read is still reported, by its status, below.
     const text = await response.text().catch(() => "");
@@ -55,7 +70,7 @@ const refusalOf = async (response: Response): Promise<string> => {
     }
     const refusal = RefusalSchema.safeParse(body);
     if (refusal.success) {
-        return refusal.data.error;
+        return tooOld(response.status, refusal.data.error) ? TOO_OLD_FOR_DOOR : refusal.data.error;
     }
     return response.status === 404 && text.includes("no-tunnel") ? "it is not online" : `it answered ${response.status}`;
 };
@@ -212,7 +227,8 @@ export const linkRecordsRead = async (target: LinkTarget, path: string): Promise
         });
         // allow(silent-catch): an answer that is not JSON is relayed as its status alone.
         const parsed = RecordsBodySchema.safeParse(await response.json().catch(() => undefined));
-        return { ok: true, status: response.status, body: parsed.success ? parsed.data : { error: `it answered ${response.status}` } };
+        const body = parsed.success ? parsed.data : { error: `it answered ${response.status}` };
+        return { ok: true, status: response.status, body: tooOld(response.status, body.error) ? { error: TOO_OLD_FOR_DOOR } : body };
     } catch (error) {
         const why = error instanceof Error && error.name === "TimeoutError" ? "it did not answer in time" : "it could not be reached";
         return { ok: false, status: 0, message: `${why} (${error instanceof Error ? error.message : "no answer"})` };
@@ -227,3 +243,55 @@ export const linkRecordsDiagnostics = (target: LinkTarget, query: DiagnosticsQue
         body: query,
         schema: RAW_JSON_ROUTES["POST /link/records/diagnostics"].output,
     });
+
+/* A link's operating doors (schemas/links.ts `operate`): this daemon running commands and reading and writing files in
+   the linked sandbox for its agent, while that sandbox's owner lets the link operate it. */
+
+// What a read or a write may be held for: the far side answers either whole within its own bound (link-operate.ts).
+const FILE_HOLD_S = 30;
+
+/** POST /link/operate/exec: one command started over there, answered once it ends or `waitS` passes. */
+export const linkExec = (target: LinkTarget, exec: LinkExec, signal?: AbortSignal): Promise<LinkAnswerOf<LinkExecStatus>> =>
+    call(
+        target,
+        { method: "POST", path: rawRouteUrl("POST /link/operate/exec"), body: exec, schema: RAW_JSON_ROUTES["POST /link/operate/exec"].output, holdS: exec.waitS },
+        signal,
+    );
+
+/** GET /link/operate/exec/{id}: where that command stands, held until it ends or `waitS` passes. */
+export const linkExecStatus = (target: LinkTarget, id: string, waitS: number = LINK_OPERATE_WAIT_S_MAX, signal?: AbortSignal): Promise<LinkAnswerOf<LinkExecStatus>> =>
+    call(
+        target,
+        {
+            method: "GET",
+            path: `${rawRouteUrl("GET /link/operate/exec/{id}", { id })}?${new URLSearchParams({ wait: String(waitS) }).toString()}`,
+            schema: RAW_JSON_ROUTES["GET /link/operate/exec/{id}"].output,
+            holdS: waitS,
+        },
+        signal,
+    );
+
+/** POST /link/operate/exec/{id}/stop */
+export const linkExecStop = (target: LinkTarget, id: string): Promise<LinkAnswerOf<LinkExecStatus>> =>
+    call(target, {
+        method: "POST",
+        path: rawRouteUrl("POST /link/operate/exec/{id}/stop", { id }),
+        schema: RAW_JSON_ROUTES["POST /link/operate/exec/{id}/stop"].output,
+        holdS: 5,
+    });
+
+/** POST /link/operate/read: a file's lines, or a directory's listing. */
+export const linkFileRead = (target: LinkTarget, read: LinkFileRead, signal?: AbortSignal): Promise<LinkAnswerOf<LinkReadAnswer>> =>
+    call(
+        target,
+        { method: "POST", path: rawRouteUrl("POST /link/operate/read"), body: read, schema: RAW_JSON_ROUTES["POST /link/operate/read"].output, holdS: FILE_HOLD_S },
+        signal,
+    );
+
+/** POST /link/operate/write: a file's whole new contents. */
+export const linkFileWrite = (target: LinkTarget, write: LinkWrite, signal?: AbortSignal): Promise<LinkAnswerOf<LinkWriteAnswer>> =>
+    call(
+        target,
+        { method: "POST", path: rawRouteUrl("POST /link/operate/write"), body: write, schema: RAW_JSON_ROUTES["POST /link/operate/write"].output, holdS: FILE_HOLD_S },
+        signal,
+    );

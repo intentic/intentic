@@ -27,7 +27,7 @@ const shopLinks = (): InboundLinkSummary[] => [
         id: `lnk_support`,
         label: `support-desk`,
         from: { sandboxId: `sbx_support`, url: `https://support-desk.acme.dev` },
-        terms: { actsAs: `maya-support`, approve: true, turnsPerHour: 20, tasks: true, records: false, accounts: [] },
+        terms: { actsAs: `maya-support`, approve: true, turnsPerHour: 20, tasks: true, records: false, operate: false, accounts: [] },
         createdAt: Date.now() - 20 * 24 * 3_600_000,
         createdBy: DEMO_USER.email,
         lastUsedAt: Date.now() - 2 * 3_600_000,
@@ -40,7 +40,7 @@ const shopLinks = (): InboundLinkSummary[] => [
                   id: `lnk_laptop_accounts`,
                   label: LENDING_SANDBOX.name,
                   from: { sandboxId: LENDING_SANDBOX.id, url: LENDING_SANDBOX.origin },
-                  terms: { approve: false, turnsPerHour: 20, tasks: false, records: false, accounts: [{ provider: `claude`, account: `acc_claude_demo` }] },
+                  terms: { approve: false, turnsPerHour: 20, tasks: false, records: false, operate: false, accounts: [{ provider: `claude`, account: `acc_claude_demo` }] },
                   createdAt: Date.now() - 6 * 24 * 3_600_000,
                   createdBy: DEMO_USER.email,
                   lastUsedAt: Date.now() - 25 * 60_000,
@@ -87,7 +87,7 @@ export const mintLink = (at: URL, { label, from, terms }: InboundLinkMint): Inbo
 };
 
 // Whole fields replaced, the rest kept; `null` takes the persona or the service off.
-export const updateLink = (at: URL, id: string, { label, actsAs, runAs, approve, turnsPerHour, tasks, records, accounts }: InboundLinkTermsUpdate): InboundLinkSummary => {
+export const updateLink = (at: URL, id: string, { label, actsAs, runAs, approve, turnsPerHour, tasks, records, operate, accounts }: InboundLinkTermsUpdate): InboundLinkSummary => {
     checkPersona(actsAs);
     const link = linkOf(at, id);
     const terms: InboundLinkSummary[`terms`] = {
@@ -95,6 +95,7 @@ export const updateLink = (at: URL, id: string, { label, actsAs, runAs, approve,
         turnsPerHour: turnsPerHour ?? link.terms.turnsPerHour,
         tasks: tasks ?? link.terms.tasks,
         records: records ?? link.terms.records,
+        operate: operate ?? link.terms.operate,
         accounts: accounts ?? link.terms.accounts,
     };
     const persona = actsAs === null ? undefined : (actsAs ?? link.terms.actsAs);

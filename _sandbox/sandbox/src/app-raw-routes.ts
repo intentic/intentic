@@ -34,6 +34,7 @@ import { deviceDoorRawRoutes } from "./hosts/device-door.routes.js";
 import { deviceRunRawRoutes } from "./hosts/runs/device-runs.routes.js";
 import { enrollRawRoutes } from "./inventory/enroll.routes.js";
 import { intakeRawRoutes } from "./issues/intake.routes.js";
+import { linkOperateRawRoutes } from "./links/link-operate.js";
 import { linkRecordsRawRoutes } from "./links/link-records.js";
 import { linkRawRoutes } from "./links/links.routes.js";
 import { diagnosticsRawRoutes } from "./logs/diagnostics.routes.js";
@@ -88,6 +89,7 @@ export const appRawRoutes = (services: Services) =>
         deviceRunRawRoutes(services),
         enrollRawRoutes(services),
         intakeRawRoutes(services),
+        linkOperateRawRoutes(services),
         linkRecordsRawRoutes(services),
         linkRawRoutes(services),
         diagnosticsRawRoutes(services),

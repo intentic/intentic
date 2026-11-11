@@ -66,6 +66,8 @@ export const DETACHED_KINDS = [
     // A repository's derived writers writing its derived files again after a land, where it wrote (conversations/land/rederive.ts).
     "fixers",
     "backend-host",
+    // A command another of the owner's sandboxes runs here over a link it may operate this one through (links/link-operate.ts).
+    "link-operate",
 ] as const;
 export type DetachedKind = (typeof DETACHED_KINDS)[number];
 

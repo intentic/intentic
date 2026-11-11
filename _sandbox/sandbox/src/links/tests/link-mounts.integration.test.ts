@@ -59,7 +59,16 @@ test("each granted link card is a server of its own, named after it, beside noth
     const opened = mounted([ops, laptop], "conv-a");
     expect(opened.map((spec) => spec.name)).toEqual(["ops"]);
     const server = await started(serverOf(opened[0]));
-    expect((await call(server, "tools/list")).result?.tools?.map((tool) => tool.name).toSorted()).toEqual(["about", "conversation", "conversations", "delegate", "diagnostics"]);
+    expect((await call(server, "tools/list")).result?.tools?.map((tool) => tool.name).toSorted()).toEqual([
+        "about",
+        "conversation",
+        "conversations",
+        "delegate",
+        "diagnostics",
+        "read_file",
+        "run_command",
+        "write_file",
+    ]);
     expect(JSON.parse(textOf(await call(server, "tools/call", { name: "about", arguments: {} })))).toMatchObject({ ok: true, to: "ops", online: true });
     server.close();
 });
@@ -83,5 +92,18 @@ test("a turn no supervisor was armed for may not hand work on; an armed one hand
     expect(yes).toEqual({ ok: true, child: "linked-brave-otter-1", note: "Handed over." });
     expect(asked).toEqual([{ to: "ops", task: "Count incidents.", description: "incidents" }]);
     refused.close();
+    server.close();
+});
+
+test("a turn that may not hand work on may not operate another sandbox either, and is refused before anything is asked", async () => {
+    const server = await started(serverOf(mounted([ops], "conv-a")[0]));
+    for (const [name, args] of [
+        ["run_command", { command: "id" }],
+        ["read_file", { path: ".git" }],
+        ["write_file", { path: "x", content: "y" }],
+    ] as const) {
+        const no = JSON.parse(textOf(await call(server, "tools/call", { name, arguments: args })));
+        expect(no).toMatchObject({ ok: false, message: expect.stringContaining("may not operate another sandbox") });
+    }
     server.close();
 });

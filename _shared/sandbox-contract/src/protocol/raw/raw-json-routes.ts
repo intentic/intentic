@@ -61,12 +61,18 @@ import {
     InboundLinkSummarySchema,
     InboundLinkTermsUpdateSchema,
     LinkAnswerSchema,
+    LinkExecSchema,
+    LinkExecStatusSchema,
     LinkHelloSchema,
     LinkMessageReceiptSchema,
     LinkMessageSchema,
+    LinkReadAnswerSchema,
+    LinkReadSchema,
     LinkRequestDecisionSchema,
     LinkTaskSchema,
     LinkTaskStatusSchema,
+    LinkWriteAnswerSchema,
+    LinkWriteSchema,
 } from "../../schemas/links.js";
 import { UploadManifestSchema, UploadSkipSchema } from "../../schemas/workspace/workspace-upload.js";
 import {
@@ -196,6 +202,13 @@ export const RAW_JSON_ROUTES = {
     // command's own routes do, which have no shared schema.
     "POST /link/records/diagnostics": { input: DiagnosticsQuerySchema, output: DiagnosticsAnswerSchema },
     "GET /link/records/fleet/{handle}/bundle": { output: ConversationBundleSchema },
+    // A link's operating doors: a command started and read again (`?wait=<seconds>` holds a read until it ends), stopped,
+    // a file or directory read, and a file written.
+    "POST /link/operate/exec": { input: LinkExecSchema, output: LinkExecStatusSchema },
+    "GET /link/operate/exec/{id}": { output: LinkExecStatusSchema },
+    "POST /link/operate/exec/{id}/stop": { output: LinkExecStatusSchema },
+    "POST /link/operate/read": { input: LinkReadSchema, output: LinkReadAnswerSchema },
+    "POST /link/operate/write": { input: LinkWriteSchema, output: LinkWriteAnswerSchema },
     "POST /diagnostics": { input: DiagnosticsAskSchema, output: DiagnosticsAnswerSchema },
     "GET /fleet/{handle}/bundle": { output: ConversationBundleSchema },
     // An accounts link: what it may use, one static key's copy, and a lent sign-in's per-turn credential.

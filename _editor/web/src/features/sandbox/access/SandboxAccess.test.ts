@@ -990,7 +990,7 @@ it(`shares a link's records from its terms, and says so on its row`, async () =>
     share?.click();
 
     await waitFor(() => expect(shown()).toContain(`reads this sandbox's records`));
-    expect(termsSent).toEqual([{ approve: true, turnsPerHour: 20, records: true, runAs: null }]);
+    expect(termsSent).toEqual([{ approve: true, turnsPerHour: 20, records: true, operate: false, runAs: null }]);
 });
 
 it(`counts what stands on the Allowed tab, so it is seen from any part`, async () => {

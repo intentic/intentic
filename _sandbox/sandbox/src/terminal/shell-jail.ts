@@ -107,6 +107,15 @@ const serial = <T>(work: () => Promise<T>): Promise<T> => {
     return next;
 };
 
+/** The empty file every mask in a person's shell's sandbox reads from, made when it is missing (links/link-operate.ts runs
+ * a linked sandbox's commands in that jail without arming people's shells first). */
+export const ensureJailEmpty = async (files: Pick<ShellJailFiles, "dir" | "empty"> = shellJailFiles()): Promise<void> => {
+    await mkdir(files.dir, { recursive: true, mode: 0o700 });
+    if ((await stat(files.empty).catch(undefinedIfMissing)) === undefined) {
+        await writeAtomic(files.empty, "", 0o444);
+    }
+};
+
 /**
  * Puts every new person's shell in the jail `args` builds (bwrap arguments, without the command), and ends the people's
  * sessions opened outside it. Throws when the server cannot be told, for the caller to refuse the terminal: a shell
