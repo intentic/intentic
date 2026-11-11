@@ -648,11 +648,29 @@ pub enum WindowVerb {
 pub enum LauncherTo {
     /// Bare, and anything this app does not know: This device.
     Device,
-    /// `to=files`: the folder the window is on.
-    Files,
+    /// `to=files`: the folder the window is on, with the rail the workspace had at the press when it says it
+    /// (`&rail=unrolled|folded`), so This computer comes up wearing the same one (the web's local/railArrival.ts).
+    Files { rail: Option<Rail> },
     /// `to=agent`: back to the folder whose way to an agent began the sign-in, whose own sandbox's setup starts by
     /// itself once the workspace says who signed in (windows.rs).
     Agent,
+}
+
+/// How the workspace's rail stood when it asked for This computer: unrolled onto every sandbox, or folded onto one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rail {
+    Unrolled,
+    Folded,
+}
+
+impl Rail {
+    /// The word the local shell reads on the route it is taken to (`?rail=`). Pure.
+    pub fn word(self) -> &'static str {
+        match self {
+            Rail::Unrolled => "unrolled",
+            Rail::Folded => "folded",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -722,9 +740,9 @@ pub enum Link {
     Auth(AuthArgs),
     /* `intentic://update` — the workspace banner's button, and the reason the SPA can offer a swap it has no way to perform. */
     Update,
-    /// `intentic://launcher[?to=files|agent]`: the workspace's way back to this computer's face, the main local window.
-    /// Bare, This device (the setup page's way back to the run it handed over); `to=files`, the folder itself (the
-    /// sandbox switcher's "This computer"); `to=agent`, wherever that folder's way to an agent currently stands. The
+    /// `intentic://launcher[?to=files[&rail=unrolled|folded]|agent]`: the workspace's way back to this computer's face,
+    /// the main local window. Bare, This device (the setup page's way back to the run it handed over); `to=files`, the
+    /// folder itself (the rail's "This computer", wearing the workspace's rail when `rail` says it); `to=agent`, wherever that folder's way to an agent currently stands. The
     /// name is the launcher's, whose place the main window took: a page that predates it still sends it, and an app
     /// that predates `to` reads the bare link.
     Launcher {
@@ -927,7 +945,13 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         "update" => source.is_app().then_some(Link::Update),
         "launcher" => source.is_app().then(|| Link::Launcher {
             to: match get("to").as_deref() {
-                Some("files") => LauncherTo::Files,
+                Some("files") => LauncherTo::Files {
+                    rail: match get("rail").as_deref() {
+                        Some("unrolled") => Some(Rail::Unrolled),
+                        Some("folded") => Some(Rail::Folded),
+                        _ => None,
+                    },
+                },
                 Some("agent") => LauncherTo::Agent,
                 _ => LauncherTo::Device,
             },
@@ -1485,7 +1509,31 @@ mod tests {
         assert_eq!(
             parse_link("intentic://launcher?to=files", APP),
             Some(Link::Launcher {
-                to: LauncherTo::Files
+                to: LauncherTo::Files { rail: None }
+            })
+        );
+        // The rail the workspace had at the press rides along, for This computer to come up wearing; any other word
+        // is none, and the window keeps the rail it has.
+        assert_eq!(
+            parse_link("intentic://launcher?to=files&rail=unrolled", APP),
+            Some(Link::Launcher {
+                to: LauncherTo::Files {
+                    rail: Some(Rail::Unrolled)
+                }
+            })
+        );
+        assert_eq!(
+            parse_link("intentic://launcher?to=files&rail=folded", APP),
+            Some(Link::Launcher {
+                to: LauncherTo::Files {
+                    rail: Some(Rail::Folded)
+                }
+            })
+        );
+        assert_eq!(
+            parse_link("intentic://launcher?to=files&rail=sideways", APP),
+            Some(Link::Launcher {
+                to: LauncherTo::Files { rail: None }
             })
         );
         // The way back from a sign-in that began on a folder: where it lands is worked out at the press (windows.rs).

@@ -17,6 +17,7 @@ import { sandboxAvailabilityVisual } from "../overview/availability";
 import type { SandboxPlacement } from "../overview/placement";
 import { rowPlacement, useSandboxPlacement } from "../overview/useSandboxPlacement";
 import { arrangedSandboxes, sandboxOrder } from "../../../models/home/sandboxOrder";
+import { masterRail } from "../../../models/home/masterRail";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { SANDBOX_LIST_KEY, useSandbox } from "../../../client/sandbox/useSandbox";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -187,8 +188,9 @@ onMounted(() => {
     }
 });
 
-// Alt+0 for this computer inside the app, Alt+1…9 for the sandboxes under it (useSwitchCommands.ts).
-useSwitchCommands(switchable, pick, inDesktopApp ? openThisComputer : undefined);
+// Alt+0 for this computer inside the app, Alt+1…9 for the sandboxes under it (useSwitchCommands.ts). This computer comes
+// up with its rail as this one stands (desktop.ts `openThisComputer`).
+useSwitchCommands(switchable, pick, inDesktopApp ? () => openThisComputer(masterRail.value ? `unrolled` : `folded`) : undefined);
 </script>
 
 <template>
@@ -199,14 +201,18 @@ useSwitchCommands(switchable, pick, inDesktopApp ? openThisComputer : undefined)
             v-if="local"
             type="button"
             data-rail-key="place:this-computer"
-            class="sandbox-switcher icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center overflow-hidden rounded-lg"
-            :class="logoLit ? 'ui-row-select-on text-link' : 'text-muted hover:text-content'"
+            class="sandbox-switcher icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center overflow-hidden rounded-lg text-link"
+            :class="{ 'ui-row-select-on': logoLit }"
             :aria-label="logoLabel"
             :aria-current="logoLit ? 'page' : undefined"
             v-tooltip.right="logoTip"
             @click="openLogo"
         >
-            <!-- This computer has one mark, whichever folder the local window shows. -->
+            <!-- This computer has one mark, whichever folder the local window shows, drawn in full ink on every page as a
+                 sandbox's picture is: it is this window's logo, not a tile to pick. Until 2026-11-11 it was muted away from
+                 Devices, the one logo on any rail that looked switched off while the reader stood in its place, and its
+                 flight out of the unrolled rail (where it is lit) changed colour as it landed. Its own page lights the
+                 tile's ground, as a sandbox's settings light its logo's. -->
             <Icon name="desktop" class="icon-rail-glyph" aria-hidden="true" />
         </button>
         <button

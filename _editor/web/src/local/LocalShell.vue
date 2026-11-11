@@ -24,6 +24,7 @@ import ProcessTiles from "../parts/processes/ProcessTiles.vue";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
 import { navigatedPath } from "./appEvents";
+import { arrivingRail, withoutRail } from "./railArrival";
 import { takeFolderSwitches } from "./folderSwitch";
 import LocalAccountTile from "./LocalAccountTile.vue";
 import LocalMasterRail from "./LocalMasterRail.vue";
@@ -142,10 +143,35 @@ const cycleSection = (delta: number): void => {
 const toggleRail = (): void => {
     localRailUnrolled.value = !localRailUnrolled.value;
 };
+// THE RAIL IT ARRIVES WITH: the workspace's This computer press names the rail it had (local/railArrival.ts), so the
+// window comes up wearing the same one. A window built for that press reads it off its first address, before it draws;
+// one already up hears it with the route the app sends (`onNavigate`), set without the morph, since nobody pressed
+// anything on this rail. Until 2026-11-11 the window kept its last rail, folded until it had once been unrolled, so the
+// first press from the workspace's unrolled rail landed on a rail of another shape.
+const arrived = arrivingRail(route.query);
+if (arrived !== undefined) {
+    localRailUnrolled.value = arrived;
+    void router.replace({ path: route.path, query: withoutRail(route.query), hash: route.hash });
+}
+let railArriving = false;
+const arriveWithRail = (unrolled: boolean | undefined): void => {
+    if (unrolled !== undefined && unrolled !== localRailUnrolled.value) {
+        railArriving = true;
+        localRailUnrolled.value = unrolled;
+    }
+};
 // One rail, folded or unrolled, played as the workspace's is: each sandbox flies out of the cluster to its tile and each
 // section into the bookmark, or back.
 const railNav = ref<HTMLElement | null>(null);
-useRailMorph(() => railNav.value, localRailUnrolled);
+useRailMorph(
+    () => railNav.value,
+    localRailUnrolled,
+    () => {
+        const quiet = railArriving;
+        railArriving = false;
+        return quiet;
+    },
+);
 let sectionCommands: readonly Disposable[] = [];
 onMounted(() => {
     sectionCommands = [
@@ -162,11 +188,18 @@ onUnmounted(() => {
 });
 
 // The app showing this window for a reason of its own (a setup handed over, the tray's agent row) names the screen it
-// is for; only a route of this shell is taken, anything else leaves the reader where they are.
+// is for; only a route of this shell is taken, anything else leaves the reader where they are. The workspace's own press
+// carries the rail it had as well, worn before the screen changes.
 const onNavigate = (event: Event): void => {
     const path = navigatedPath(event);
-    if (path !== undefined && router.resolve(path).matched.length > 0 && route.path !== path) {
-        void router.push(path);
+    const asked = path === undefined ? undefined : router.resolve(path);
+    if (asked === undefined || asked.matched.length === 0) {
+        return;
+    }
+    arriveWithRail(arrivingRail(asked.query));
+    const target = router.resolve({ path: asked.path, query: withoutRail(asked.query), hash: asked.hash }).fullPath;
+    if (route.path !== target) {
+        void router.push(target);
     }
 };
 // The app asking this window for its folder's sandbox (its project.rs `start`, for "Work on this with an agent" asked by

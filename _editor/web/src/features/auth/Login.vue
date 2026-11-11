@@ -173,7 +173,7 @@ watch(
             </Button>
         </div>
         <div v-else-if="desktop" class="back-band">
-            <Button :label="t(`shared.backToThisComputer`)" tier="quiet" class="back" @click="openThisComputer">
+            <Button :label="t(`shared.backToThisComputer`)" tier="quiet" class="back" @click="openThisComputer()">
                 <template #icon><Icon name="arrow-left" /></template>
             </Button>
         </div>

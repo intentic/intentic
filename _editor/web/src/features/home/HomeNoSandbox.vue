@@ -77,7 +77,7 @@ const inDesktopApp = desktopApp() !== undefined;
             </div>
             <p v-if="inDesktopApp" class="text-xs text-subtle" data-home-this-computer>
                 {{ t(`home.firstRun.thisComputerLead`) }}
-                <button type="button" class="rounded text-link hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-link" @click="openThisComputer">
+                <button type="button" class="rounded text-link hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-link" @click="openThisComputer(`unrolled`)">
                     {{ t(`home.firstRun.thisComputerLink`) }}
                 </button>
             </p>

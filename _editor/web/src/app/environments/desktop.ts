@@ -90,8 +90,14 @@ export const DESKTOP_LAUNCHER_LINK = `intentic://launcher`;
 /* THIS COMPUTER, the app's other face: its main local window on its folder (setup_link.rs `Launcher { files: true }`).
    The workspace window's way back there, from the sandbox switcher and from the screens outside the shell (sign-in,
    setup) that would otherwise be a dead end in a window whose only frame is the page. An app older than `to` reads the
-   bare link, which is this computer too. */
-export const openThisComputer = (): void => openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=files`);
+   bare link, which is this computer too.
+   `rail` is how the workspace's rail stands at the press, so This computer comes up wearing the same one, as a sandbox
+   picked on the rail does: unrolled onto every sandbox (This computer lit among them, a second press folding it), or
+   folded onto its own sections (setup_link.rs `rail`, the web's local/railArrival.ts). Until 2026-11-11 a local window
+   kept the rail it was left with, folded when it had never been unrolled, so the first press from the workspace's
+   unrolled rail swapped in a rail of another shape. Left out, the window keeps whatever rail it has. */
+export const openThisComputer = (rail?: `unrolled` | `folded`): void =>
+    openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=files${rail === undefined ? `` : `&rail=${rail}`}`);
 
 /* A SIGN-IN THAT BEGAN ON THIS COMPUTER IS DONE (auth.rs `complete_path`, which writes `back=agent` onto the completion
    this page is). The redemption has to happen here, in the workspace's page, because that is where the platform's

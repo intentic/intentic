@@ -160,6 +160,8 @@ const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`,
 // THIS COMPUTER, in the desktop app: a place of the same rank as the sandboxes, first on this rail as it is first in the
 // switcher (SandboxSwitcher.vue), so the way there is where the way to every sandbox is. One press, since there is
 // nothing to select first: the app shows it in this window's place. Never dragged, its place and its Alt+0 being fixed.
+// It arrives with its own rail unrolled, This computer lit among the sandboxes as a sandbox picked here is, so the rail
+// keeps its shape across the swap and a press on the lit tile there folds it (desktop.ts `openThisComputer`).
 const inDesktopApp = desktopApp() !== undefined;
 const thisComputerTip = computed(() => ({
     title: t(`sandbox.sandboxSwitcher.thisComputer`),
@@ -273,7 +275,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
             class="icon-rail-tile ui-row-select ui-row-select-horizontal flex shrink-0 items-center justify-center rounded-lg text-muted hover:text-content"
             :aria-label="t(`sandbox.sandboxSwitcher.thisComputer`)"
             v-tooltip.right="thisComputerTip"
-            @click="openThisComputer"
+            @click="openThisComputer(`unrolled`)"
         >
             <Icon name="desktop" class="icon-rail-glyph" aria-hidden="true" />
         </button>

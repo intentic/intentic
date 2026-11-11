@@ -76,9 +76,16 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         }
         // The workspace's way back to this computer: This device (a setup page's way back to the run it handed over,
         // a sandbox's "restart in the app"), or the folder itself (the sandbox switcher's "This computer").
+        // Wearing the rail the workspace had at the press, when it says it (the web's local/railArrival.ts).
         Some(Link::Launcher {
-            to: LauncherTo::Files,
-        }) => show_home_at(app, Press::by(Asked::Page), Some(FILES_ROUTE)),
+            to: LauncherTo::Files { rail },
+        }) => {
+            let route = match rail {
+                Some(rail) => format!("{FILES_ROUTE}?rail={}", rail.word()),
+                None => FILES_ROUTE.to_string(),
+            };
+            show_home_at(app, Press::by(Asked::Page), Some(&route))
+        }
         Some(Link::Launcher {
             to: LauncherTo::Device,
         }) => show_device(app, Press::by(Asked::Page)),

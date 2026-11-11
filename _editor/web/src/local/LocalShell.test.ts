@@ -91,7 +91,7 @@ afterEach(() => {
 const Files = defineComponent({ render: () => h(`p`, `files`) });
 const ThisComputer = defineComponent({ render: () => h(`p`, `this computer`) });
 
-const mountShell = async (): Promise<Router> => {
+const mountShell = async (at = `/workspace`): Promise<Router> => {
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [
@@ -110,7 +110,7 @@ const mountShell = async (): Promise<Router> => {
     document.body.append(el);
     app = createApp({ render: () => h(RouterView) });
     app.use(router);
-    await router.push(`/workspace`);
+    await router.push(at);
     app.mount(el);
     await router.isReady();
     await nextTick();
@@ -211,4 +211,41 @@ test(`This computer's own page has no tile, and the unrolled rail puts the secti
     localRailUnrolled.value = false;
     await nextTick();
     expect({ folded, unrolled, refolded: tiles() }).toEqual({ folded: [`workspace`, `passwords`], unrolled: [], refolded: [`workspace`, `passwords`] });
+});
+
+// Asked for from the workspace, This computer comes up wearing the rail the workspace had (local/railArrival.ts): read off
+// the first address of a window built for the press, and off the route the app sends one already up. The word is taken
+// off the address, and a press that names no rail leaves the rail as it is.
+test(`This computer arrives wearing the rail the workspace had at the press`, async () => {
+    const { localRailUnrolled } = await import("../models/home/masterRail");
+    localRailUnrolled.value = false;
+    // A navigation lands over more than a few microtasks: given real turns of the clock to land in.
+    jest.useRealTimers();
+    const settle = async (): Promise<void> => {
+        for (let turn = 0; turn < 5; turn += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+    };
+    const built = await mountShell(`/workspace?rail=unrolled`);
+    await settle();
+    const first = { unrolled: localRailUnrolled.value, at: built.currentRoute.value.fullPath };
+
+    const navigate = async (path: string): Promise<{ unrolled: boolean; at: string }> => {
+        window.dispatchEvent(new CustomEvent(`intentic:navigate`, { detail: { path } }));
+        await settle();
+        return { unrolled: localRailUnrolled.value, at: built.currentRoute.value.fullPath };
+    };
+    await built.push(`/device`);
+    const folded = await navigate(`/workspace?rail=folded`);
+    const unnamed = await navigate(`/device`);
+    const unrolled = await navigate(`/workspace?rail=unrolled`);
+    localRailUnrolled.value = false;
+    jest.useFakeTimers();
+
+    expect({ first, folded, unnamed, unrolled }).toEqual({
+        first: { unrolled: true, at: `/workspace` },
+        folded: { unrolled: false, at: `/workspace` },
+        unnamed: { unrolled: false, at: `/device` },
+        unrolled: { unrolled: true, at: `/workspace` },
+    });
 });

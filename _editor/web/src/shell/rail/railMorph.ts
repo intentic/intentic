@@ -294,9 +294,10 @@ const play = (root: HTMLElement, before: Reading): (() => void) | undefined => {
 /**
  * Plays the rail's change each time `unrolled` flips while the rail is mounted: the parts are read as they stand before
  * the render that swaps them, and flown once it has. A change made while another is in flight ends that one where it
- * belongs first. Called from the setup of the component that draws the rail.
+ * belongs first. Called from the setup of the component that draws the rail. `quiet`, asked at each flip, makes that one
+ * in a single frame: a rail set by how its window arrives (local/railArrival.ts), which is no press on it to explain.
  */
-export const useRailMorph = (rail: () => HTMLElement | null | undefined, unrolled: Readonly<Ref<boolean>>): void => {
+export const useRailMorph = (rail: () => HTMLElement | null | undefined, unrolled: Readonly<Ref<boolean>>, quiet?: () => boolean): void => {
     let stop: (() => void) | undefined;
     watch(
         unrolled,
@@ -304,7 +305,7 @@ export const useRailMorph = (rail: () => HTMLElement | null | undefined, unrolle
             stop?.();
             stop = undefined;
             const root = rail();
-            if (lessMotion() || !canAnimate(root) || document.visibilityState !== `visible`) {
+            if (quiet?.() === true || lessMotion() || !canAnimate(root) || document.visibilityState !== `visible`) {
                 return;
             }
             const before = readRail(root, true);

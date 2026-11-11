@@ -353,19 +353,19 @@ pub(crate) fn show_home_route(app: &AppHandle, press: Press, route: &str) {
 }
 
 /// The main window in the workspace's place, at `route` when given: added to the frame on its folder the first time
-/// (local.rs `open_home`, which draws it once it is up), drawn and taken there every time after. Only a press takes it
+/// (local.rs `open_home`, which draws it once it is up), taken there and drawn every time after. Only a press takes it
 /// anywhere: a process says what it needs on its tile and leaves the screen the reader is on alone (present.rs).
+/// Taken there before it is drawn, so the page changes (its screen, the rail it arrives with) while still out of sight:
+/// drawn first, the reader watched the screen they had left it on turn into the one they asked for.
 fn show_home_at(app: &AppHandle, press: Press, route: Option<&str>) {
-    if crate::frame::face(app, HOME).is_none() {
+    let Some(face) = crate::frame::face(app, HOME) else {
         crate::local::open_home_later(app, press, route.map(str::to_string));
-        return;
-    }
-    let Some(face) = swap_in(app, HOME, press) else {
         return;
     };
     if let Some(route) = route {
         crate::local::navigate(&face, route);
     }
+    swap_in(app, HOME, press);
 }
 
 /// The face this app was last used through, as a bare launch and the tray's "Open Intentic" open it.

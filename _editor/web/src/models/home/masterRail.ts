@@ -22,6 +22,7 @@ export const sandboxBeside = computed(() => !masterRail.value || sandboxPageInHo
 // THE SAME RAIL IN A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER (local/LocalShell.vue), unrolled onto every sandbox
 // (local/LocalMasterRail.vue) or folded onto This computer. That window has no Home frame for an address to say it, and
 // every sandbox it lists opens in the workspace, so its rail's state is the window's own: the cluster under the logo and
-// Mod+Alt+H unroll it, and a press on This computer's tile (or the shortcut again) folds it back. A new window opens folded.
+// Mod+Alt+H unroll it, and a press on This computer's tile (or the shortcut again) folds it back. A new window opens folded,
+// and one asked for from the workspace wears the rail the workspace had (local/railArrival.ts).
 // allow(module-state): the one rail of a local window
 export const localRailUnrolled = ref(false);
