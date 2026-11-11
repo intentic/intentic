@@ -118,8 +118,9 @@ export type EntryInfo = z.infer<typeof EntryInfoSchema>;
 export const RemovedInfoSchema = z.object({ entry: EntryInfoSchema, removedAt: z.number() });
 export type RemovedInfo = z.infer<typeof RemovedInfoSchema>;
 
-// The shortest master password the keyring takes: it guards the vault file as the recovery key's 150 bits do, behind
-// scrypt's half a second a guess, so it is held to the length a password manager's master password usually is.
+// The shortest passphrase the keyring takes (named `master` in the protocol and the vault, from before it was called a
+// passphrase): it guards the vault file as the recovery key's 150 bits do, behind scrypt's half a second a guess, so it
+// is held to the length a password manager's master password usually is.
 export const MASTER_PASSWORD_MIN = 10;
 
 export const EntryRulesSchema = z.object(entryRules);
@@ -127,14 +128,19 @@ export type EntryRules = z.infer<typeof EntryRulesSchema>;
 export const EntryPatchSchema = EntryRulesSchema.partial().strict();
 export type EntryPatch = z.infer<typeof EntryPatchSchema>;
 
-// How the vault is set up for unlocking, chosen at `setup`: a passphrase always (recovery when Windows Hello is reset or
-// the computer replaced), Windows Hello where the computer has it.
+// How the vault is set up for unlocking, chosen at `setup`: the recovery key always (the backup for when Windows Hello is
+// reset, the passphrase forgotten or the computer replaced), the person's own passphrase where they chose one (the
+// desktop app always asks for it, 2026-11-11), Windows Hello where the computer has it.
 export const SetupSchema = z
     .object({
         op: z.literal("setup"),
         // The passphrase itself rides the request: setup runs before the vault has an inbox key to seal it to, and the
         // pipe is this user's alone. The caller reads it from a terminal without echo, or from the desktop app's form.
+        // Named before recovery keys: what rides here is the recovery key the CLI made (service/recovery.ts).
         passphrase: z.string().min(10).max(1024),
+        // The passphrase the person chose, wrapped beside the recovery key as the vault's `master` wrap, so the vault is
+        // made with both in one yes rather than a second prompt right after setup. Checked as set-master-password checks it.
+        master: z.string().min(MASTER_PASSWORD_MIN).max(1024).optional(),
         hello: z.boolean().describe("Also unlock with Windows Hello. Ignored where Hello is not available."),
     })
     .strict();

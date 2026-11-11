@@ -1062,7 +1062,7 @@ it reaches the pipe.
 
 | Command | Success output |
 |---|---|
-| `keyring setup [--no-hello]` | `{ "ok": true, "path", "askpass": { "installed", "path"? }, "autostart", "setUp": true, "alreadySetUp", "recoveryKey"?, "state"? }` (`recoveryKey` only when this run made the vault) |
+| `keyring setup [--no-hello] [--stdin]` | `{ "ok": true, "path", "askpass": { "installed", "path"? }, "autostart", "setUp": true, "alreadySetUp", "recoveryKey"?, "state"? }` (`recoveryKey` only when this run made the vault). The passphrase the person chooses is read from stdin with `--stdin`, typed twice at a terminal otherwise, and left out where there is neither; the recovery key is the backup |
 | `keyring status` | `{ "ok": true, "installed", "running", "setUp", "state"?, "serviceDown"?, "serviceInstalled"?, "askpass": { "installed", "path"? }, "support": { "canSetUp", "why"?, "hello", "platform" } }` (`serviceInstalled`: the protected service is there and its session helper did not answer, so set up or not is unknown) |
 | `keyring start` | `{ "ok": true, "autostart", "setUp", "state" }`: the session helper started where the service is installed, the service repaired if silent |
 | `keyring unlock [--minutes N]` / `keyring lock` | `{ "ok": true, "unlockedUntil" }` / `{ "ok": true }` |

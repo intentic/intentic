@@ -39,5 +39,5 @@ export const asRecoveryKey = (typed: string): string => {
     return bare === undefined ? typed : grouped(bare);
 };
 
-/** Whether what a person typed reads as a recovery key: what a master password may never be (passwords/unlocking.ts). */
+/** Whether what a person typed reads as a recovery key: what a chosen passphrase may never be (passwords/unlocking.ts). */
 export const looksLikeRecoveryKey = (typed: string): boolean => bareKey(typed) !== undefined;

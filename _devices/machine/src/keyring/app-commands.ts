@@ -316,15 +316,15 @@ const purge = verb("Delete a removed password for good, or every one without a n
 
 const addHello = verb("Turn on Windows Hello for a vault set up without it (asks you)", "Windows Hello was not turned on.", Empty, async () => await ask({ op: "add-hello" }));
 
-// The password is sealed here to the vault's inbox key, for a master password alone, before it reaches the pipe.
+// The passphrase is sealed here to the vault's inbox key, for a passphrase alone, before it reaches the pipe.
 const setMasterPassword = verb(
-    "Set or change the master password, asked instead of the recovery key where Hello cannot answer (asks you)",
-    "The master password was not set.",
+    "Set or change your passphrase, asked instead of the recovery key where Hello cannot answer (asks you)",
+    "The passphrase was not set.",
     z.object({ password: z.string().min(MASTER_PASSWORD_MIN).max(1024) }).strict(),
     async (request) => await ask({ op: "set-master-password", sealed: sealMasterPassword(await inboxKey(), request.password) }),
 );
 
-const removeMasterPassword = verb("Remove the master password, leaving the recovery key (asks you)", "The master password was not removed.", Empty, async () => await ask({ op: "remove-master-password" }));
+const removeMasterPassword = verb("Remove your passphrase, leaving the recovery key (asks you)", "The passphrase was not removed.", Empty, async () => await ask({ op: "remove-master-password" }));
 
 export const appCommands = buildRouteMap({
     routes: {

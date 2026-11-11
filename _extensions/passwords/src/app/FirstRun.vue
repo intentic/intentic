@@ -1,10 +1,11 @@
-<!-- Turning Passwords on: one permission, the recovery key shown once, the one yes to remembering, and an optional import. -->
+<!-- Turning Passwords on: the passphrase the person chooses and one permission, the recovery key shown once as its backup, the one yes to remembering, and an optional import. -->
 <script setup lang="ts">
 import { Button, CopyButton, Icon, messageOr, Notice, Checkbox } from "@intentic/extension-ui";
 import { REMEMBER_NOTHING } from "@intentic/sandbox-contract/policy/keyring-origins";
 import { computed, ref, shallowRef } from "vue";
 import { t } from "../i18n.js";
 import ImportPanel from "./ImportPanel.vue";
+import PassphraseForm from "./PassphraseForm.vue";
 import type { PasswordsPort, SourceStatus, VaultStatus } from "./port.js";
 
 const { port, status } = defineProps<{ port: PasswordsPort; status: Extract<VaultStatus, { kind: `not-set-up` }> | undefined }>();
@@ -27,17 +28,17 @@ const run = async (task: () => Promise<void>): Promise<void> => {
     }
 };
 
-/* 1. THE ONE PERMISSION, and the recovery key it makes. */
+/* 1. THE PASSPHRASE AND THE ONE PERMISSION, and the recovery key it makes as the passphrase's backup. */
 const recoveryKey = ref<string | undefined>(undefined);
 const helloSkipped = ref(false);
 const keySaved = ref(false);
 const sources = shallowRef<readonly SourceStatus[]>([]);
-const turnOn = (): Promise<void> =>
+const turnOn = (passphrase: string): Promise<void> =>
     run(async () => {
-        const made = await port.setUp({ hello: status?.hello ?? false });
+        const made = await port.setUp({ hello: status?.hello ?? false, passphrase });
         // No key: the vault was there already, and an empty "shown only now" key would read as a new one.
         recoveryKey.value = made.recoveryKey;
-        // Hello offered here and not enrolled: this key is what Passwords asks for until Hello is turned on in Settings.
+        // Hello offered here and not enrolled: the passphrase is what Passwords asks for until Hello is turned on in Settings.
         helloSkipped.value = status?.hello === true && made.hello === false;
         step.value = made.recoveryKey === undefined ? `existing` : `recovery`;
     });
@@ -109,8 +110,17 @@ const notNow = (): Promise<void> =>
             <section v-if="step === `hero`" class="flex flex-col items-center gap-6 pt-10 text-center">
                 <span class="flex size-16 items-center justify-center rounded-2xl bg-primary-tint text-2xl text-primary-fill" aria-hidden="true"><Icon name="key" /></span>
                 <p class="max-w-md text-xl font-semibold leading-snug text-content">{{ t(`app.first.hero`) }}</p>
-                <p class="max-w-md text-sm text-muted">{{ status?.hello === false ? t(`app.first.permissionLinux`) : t(`app.first.permission`) }}</p>
-                <Button tier="loud" :label="busy ? t(`app.first.settingUp`) : t(`app.first.turnOn`)" :disabled="status?.canSetUp === false" :loading="busy" @click="turnOn()" />
+                <div class="flex w-full max-w-sm flex-col gap-2 text-left">
+                    <h2 class="text-sm font-semibold text-content">{{ t(`app.first.passphraseTitle`) }}</h2>
+                    <p class="text-xs text-muted">{{ status?.hello === false ? t(`app.first.passphraseHelpNoHello`) : t(`app.first.passphraseHelp`) }}</p>
+                </div>
+                <PassphraseForm
+                    :submit-label="busy ? t(`app.first.settingUp`) : t(`app.first.turnOn`)"
+                    :busy="busy"
+                    :disabled="status?.canSetUp === false"
+                    :help="status?.hello === false ? t(`app.first.permissionLinux`) : t(`app.first.permission`)"
+                    @submit="turnOn"
+                />
                 <p v-if="status?.canSetUp === false && status.why" class="max-w-md text-xs text-warning">{{ status.why }}</p>
             </section>
 

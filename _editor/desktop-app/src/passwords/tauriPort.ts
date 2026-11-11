@@ -254,8 +254,8 @@ export const tauriPasswordsPort = (): PasswordsPort => {
         status: () => readStatus(readHere),
         list,
         sandboxes: async () => (await readHere()).links.map((link) => ({ url: link.sandboxUrl, label: sandboxLabel(link.sandboxUrl) })),
-        setUp: async ({ hello }) => {
-            const made = await keyringSetup(hello);
+        setUp: async ({ hello, passphrase }) => {
+            const made = await keyringSetup(hello, passphrase);
             // Whether Hello was enrolled, so the first run can say when it was not and Settings can turn it on later.
             return { recoveryKey: made.recoveryKey, hello: made.state?.unlock.includes(`hello`) };
         },

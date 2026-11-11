@@ -209,7 +209,7 @@ namespace IntenticKeyring {
       panel.Controls.Add(Look.Body(message));
       if (!String.IsNullOrEmpty(problem)) panel.Controls.Add(Look.Problem(problem));
       bool key = asks != "master-password" && asks != "either";
-      panel.Controls.Add(Look.FieldLabel(key ? "Recovery key" : asks == "either" ? "Master password or recovery key" : "Master password"));
+      panel.Controls.Add(Look.FieldLabel(key ? "Recovery key" : asks == "either" ? "Passphrase or recovery key" : "Passphrase"));
       TextBox box = Look.Field(true, key, key ? "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" : null);
       box.Name = "answer";
       panel.Controls.Add(box);

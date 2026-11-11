@@ -96,12 +96,16 @@ fn valid_word(what: &str, value: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// `keyring setup [--no-hello]`: installs the protected service (one administrator prompt), enrols Windows Hello unless
-/// `hello` is off, and answers with the recovery key it made, once. Nothing is fed: there is no passphrase to choose. Pure.
-pub fn setup_args(hello: bool) -> Vec<String> {
+/// `keyring setup [--no-hello] [--stdin]`: installs the protected service (one administrator prompt), enrols Windows
+/// Hello unless `hello` is off, keeps the passphrase the person chose (fed on stdin, never an argument, when
+/// `passphrase` says one is), and answers with the recovery key it made as the backup, once. Pure.
+pub fn setup_args(hello: bool, passphrase: bool) -> Vec<String> {
     let mut args = vec!["keyring".to_string(), "setup".to_string()];
     if !hello {
         args.push("--no-hello".to_string());
+    }
+    if passphrase {
+        args.push("--stdin".to_string());
     }
     args.push("--json".to_string());
     args
@@ -465,10 +469,13 @@ pub async fn keyring_list() -> CommandResult<String> {
     blocking(|| run_present(plain_args("list"), None, READ_LIMIT)).await
 }
 
-/// A new protected vault: one administrator prompt, Windows Hello, and the recovery key in the answer, shown once.
+/// A new protected vault: one administrator prompt, Windows Hello, the passphrase the person chose (on stdin), and the
+/// recovery key in the answer, shown once.
 #[tauri::command]
-pub async fn keyring_setup(hello: bool) -> CommandResult<String> {
-    blocking(move || run_present(setup_args(hello), None, CONSENT_LIMIT)).await
+pub async fn keyring_setup(hello: bool, passphrase: Option<String>) -> CommandResult<String> {
+    let args = setup_args(hello, passphrase.is_some());
+    let secret = passphrase.map(Secret::from);
+    blocking(move || run_present(args, secret, CONSENT_LIMIT)).await
 }
 
 /// One of the Passwords app's verbs, its input as one JSON object on stdin.
@@ -548,11 +555,13 @@ mod tests {
         let args = app_args("save").expect("a known op");
         assert_eq!(args, ["keyring", "app", "save", "--json"]);
         assert!(args.iter().all(|arg| !arg.contains(VALUE)));
-        // A setup is fed nothing: the recovery key is made by the keyring and comes back in its answer.
-        assert_eq!(setup_args(true), ["keyring", "setup", "--json"]);
+        // A setup's passphrase rides stdin too: the arguments only say one is coming. The recovery key is made by the
+        // keyring and comes back in its answer.
+        assert_eq!(setup_args(true, false), ["keyring", "setup", "--json"]);
+        assert_eq!(setup_args(true, true), ["keyring", "setup", "--stdin", "--json"]);
         assert_eq!(plain_args("upgrade"), ["keyring", "upgrade", "--json"]);
         assert_eq!(
-            setup_args(false),
+            setup_args(false, false),
             ["keyring", "setup", "--no-hello", "--json"]
         );
     }

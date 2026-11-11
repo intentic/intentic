@@ -34,11 +34,11 @@ flowchart LR
   - The password shows its user, its value behind Show and Copy (the person's yes at the computer), and "Works on" chips.
   - Below those: Ask / While I'm here / Always / Off per sandbox, its activity and its history.
   - A narrow pane folds to list, then password, with the index as a row of chips.
-- **First run** ([src/app/FirstRun.vue](src/app/FirstRun.vue)) goes in four steps: Turn on Passwords (one administrator prompt), the recovery key shown once, the one yes to remembering per source, and an optional import.
+- **First run** ([src/app/FirstRun.vue](src/app/FirstRun.vue)) goes in four steps: choose a passphrase and Turn on Passwords (one administrator prompt), the recovery key shown once as the passphrase's backup, the one yes to remembering per source, and an optional import.
 - **Requests** ([src/app/RequestsView.vue](src/app/RequestsView.vue)) holds the needs agents raised and nobody answered yet, answered here. With no match, the password is typed once.
-- **Settings** ([src/app/SettingsView.vue](src/app/SettingsView.vue)) holds the remember switches per source, locking, Windows Hello for a vault set up without it, the master password, the recovery key, never-save places and import.
+- **Settings** ([src/app/SettingsView.vue](src/app/SettingsView.vue)) holds the remember switches per source, locking, Windows Hello for a vault set up without it, the passphrase (set or changed, never removed: the keyring's `master` wrap), the recovery key as its backup, never-save places and import.
 - **Recently deleted** ([src/app/RemovedView.vue](src/app/RemovedView.vue)): Delete asks nothing where the vault keeps removed passwords, says "Moved github.com to Recently deleted · Undo", and the index lists them for 30 days, each put back or deleted for good.
-- **Windows Hello, later.** A vault set up without Hello asks for the recovery key at every yes, so a strip offers to turn Hello on until it is.
+- **Windows Hello, later.** A vault set up without Hello asks for the passphrase (or, with none set, the recovery key) at every yes, so a strip offers to turn Hello on until it is.
 - **Import** ([src/app/import/](src/app/import)) parses CSV exports from Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden and KeePassXC in the page, recognising each by its header. The rows go to the port, which seals them.
 - **Toasts** ([src/app/ToastStack.vue](src/app/ToastStack.vue)): "Saved github.com · Undo · View" for what the port reports captured.
 

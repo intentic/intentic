@@ -23,6 +23,8 @@ const devMode = new URLSearchParams(globalThis.location?.search ?? ``).get(`pass
 let setUp = devMode !== `not-set-up`;
 let locked = devMode === `locked`;
 let outdated = devMode === `old-keyring`;
+// `?passwords=no-passphrase` shows a vault set up before the passphrase was asked for at setup.
+let passphrase = devMode !== `no-passphrase`;
 let remember: KeyringRemember = { browser: true, terminal: true, apps: false, phone: false, sandbox: false };
 let settings: KeyringSettings = { remember, rememberAskedAt: NOW - 86_400_000, neverSave: [{ kind: `site`, host: `bank.example.com` }], autoLockMinutes: 15, lockOnSleep: true };
 
@@ -142,6 +144,7 @@ const statusLine = (): string => {
         pendingInbox: 0,
         pendingCaptures: locked ? 2 : 0,
         remember,
+        masterPassword: passphrase,
     };
     if (!locked) {
         state.unlockedUntil = Date.now() + settings.autoLockMinutes * MIN;
@@ -158,6 +161,7 @@ interface VerbArgs {
     readonly name?: string;
     readonly sandbox?: string;
     readonly mode?: string;
+    readonly passphrase?: string | null;
     readonly op?: KeyringAppOp;
     readonly input?: KeyringAppOps[KeyringAppOp][`in`];
 }
@@ -236,8 +240,16 @@ const APP: StandInApp = {
             return ok({ purged });
         }),
     "add-hello": () => prompted(() => undefined),
-    "set-master-password": () => prompted(() => undefined),
-    "remove-master-password": () => prompted(() => undefined),
+    "set-master-password": () =>
+        prompted(() => {
+            passphrase = true;
+            return undefined;
+        }),
+    "remove-master-password": () =>
+        prompted(() => {
+            passphrase = false;
+            return undefined;
+        }),
 };
 
 const appVerb = <Op extends KeyringAppOp>(op: Op, input: KeyringAppOps[Op][`in`]): string | Promise<string> => APP[op](input);
@@ -267,6 +279,7 @@ export const keyringVerb = (command: string, args: InvokeArgs | undefined): stri
             return sleep(2500).then(() => {
                 setUp = true;
                 locked = false;
+                passphrase = (argsOf(args).passphrase ?? undefined) !== undefined;
                 remember = { browser: false, terminal: false, apps: false, phone: false, sandbox: false };
                 settings = { remember, neverSave: [], autoLockMinutes: settings.autoLockMinutes, lockOnSleep: settings.lockOnSleep };
                 return ok({ setUp: true, alreadySetUp: false, recoveryKey: `K7QX-29MF-H3TB-W8NC-5RVD-J4PL` });

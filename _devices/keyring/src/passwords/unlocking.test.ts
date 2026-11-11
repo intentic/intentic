@@ -46,7 +46,23 @@ describe("Windows Hello added after setup", () => {
     });
 });
 
-describe("the master password", () => {
+describe("the passphrase (the vault's master wrap)", () => {
+    test("chosen at setup, it is wrapped first beside the recovery key, in the one setup", async () => {
+        const h = keyringHarness([]);
+        expect(await h.keyring.handle({ op: "setup", passphrase: TEST_PASSPHRASE, master: "a passphrase of my own", hello: false })).toEqual({ ok: true });
+        expect(await stateOf(h)).toMatchObject({ masterPassword: true });
+        const wraps = h.files.vault?.wraps ?? [];
+        expect(wraps[0]).toMatchObject({ method: "passphrase", role: "master" });
+        expect(await unwrapPassphrase(wraps, "a passphrase of my own")).toBeInstanceOf(Buffer);
+        expect(await unwrapPassphrase(wraps, TEST_PASSPHRASE)).toBeInstanceOf(Buffer);
+    });
+
+    test("one at setup that reads as a recovery key makes no vault", async () => {
+        const h = keyringHarness([]);
+        expect(await h.keyring.handle({ op: "setup", passphrase: TEST_PASSPHRASE, master: "ABCDE-FGHJK-MNPQR-STVWX-YZ012-34567", hello: false })).toMatchObject({ ok: false, code: "declined" });
+        expect(h.files.vault).toBeUndefined();
+    });
+
     test("opens the vault beside the recovery key, is tried first, and can be taken away again", async () => {
         const h = keyringHarness([]);
         await h.keyring.handle({ op: "setup", passphrase: TEST_PASSPHRASE, hello: false });

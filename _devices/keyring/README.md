@@ -61,7 +61,7 @@ In the service's own folder (`%ProgramData%\Intentic\Keyring\<SID>` on Windows, 
 Linux), readable by the service's account and an administrator only:
 
 - `vault.json`: the entries, sealed under the vault key (AES-256-GCM), and the vault key wrapped once per way of
-  unlocking: by a key scrypt derives from the recovery key, and from the master password when the person set one; on
+  unlocking: by a key scrypt derives from the recovery key, and from the passphrase the person chose; on
   Windows by a key derived from a Windows Hello signature
   over a fixed challenge (KeyCredentialManager signs with an RSA key in the TPM; PKCS#1 v1.5 signatures are
   deterministic, so the same challenge gives the same key, and only a Hello gesture produces one); on Linux by the
@@ -200,17 +200,20 @@ the field `passphrase`. Asked for in the passphrase box ("Type your recovery key
 spaces or dashes, with I, L and O read as 1, 1 and 0; anything else is tried as typed, so a passphrase from before
 still opens a vault it made.
 
-### The master password
+### The passphrase
 
-The recovery key is for emergencies; typing it at every yes is not. Where Windows Hello or polkit cannot answer, the
-person may set a master password instead (`set-master-password`, at least 10 characters, sealed to the inbox key on its
-way in). It is one more scrypt wrap (`role: "master"`), kept first so it is the first one tried, and the recovery key's
-wrap is never taken away: it stays the way back for a forgotten master password. A password that reads as a recovery
-key is refused, since the box would read it as one. With a master password set, the box asks for it and says the
-recovery key works too. The session helper's box and the service can be a release apart and the door's call has no
-field for what is asked, so the service says it with the hint its message ends with (`asksOf` in
-`src/service/remote.ts`); a helper that does not know the hint shows its recovery-key box, which opens the vault with a
-master password all the same. `remove-master-password` takes it away again.
+The recovery key is the backup; typing it at every yes is not. Where Windows Hello or polkit cannot answer, the box asks
+for the passphrase the person chose. It is chosen at setup (the `setup` op's `master` field, which `keyring setup` reads
+from stdin with `--stdin` or a terminal, and the desktop app always sends), and set or changed later with
+`set-master-password` (sealed to the inbox key on its way in). Both take at least 10 characters. The protocol and the
+vault still call it the master password (`role: "master"`), its name until 2026-11-11. It is one more scrypt wrap, kept
+first so it is the first one tried, and the recovery key's wrap is never taken away: it stays the backup for a forgotten
+passphrase. A passphrase that reads as a recovery key is refused, since the box would read it as one. With a passphrase
+set, the box asks for it and says the recovery key works too. The session helper's box and the service can be a release
+apart and the door's call has no field for what is asked, so the service says it with the hint its message ends with
+(`asksOf` in `src/service/remote.ts`, which also knows the hints from before the rename); a helper that does not know
+the hint shows its recovery-key box, which opens the vault with a passphrase all the same. `remove-master-password`
+takes it away again; the Passwords app does not offer that.
 
 ## Recently deleted
 

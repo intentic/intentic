@@ -151,24 +151,28 @@ export const remoteHello = (link: HelperLink, pin: () => Promise<HelloPin | unde
 export const RECOVERY_FILE = "intentic-passwords-recovery-key.txt";
 
 // What the recovery prompt adds to the request it is shown for: the passphrase box is where the recovery key goes.
-export const RECOVERY_HINT = `Your recovery key is the one Passwords showed once, when it was set up. If you saved it, it is in ${RECOVERY_FILE}: paste it here.`;
-// The same where the person set a master password (2026-11-09), and where the asker cannot know whether they did.
-export const MASTER_HINT = "Type your master password for Passwords. Forgot it? Your recovery key works here too.";
-export const EITHER_HINT = `Type your master password for Passwords if you set one. Otherwise paste your recovery key, the one Passwords showed once when it was set up (in ${RECOVERY_FILE} if you saved it).`;
+const RECOVERY_HINT = `Your recovery key is the one Passwords showed once, when it was set up. If you saved it, it is in ${RECOVERY_FILE}: paste it here.`;
+// The same where the person set a passphrase (2026-11-09), and where the asker cannot know whether they did.
+const MASTER_HINT = "Type your passphrase for Passwords. Forgot it? Your recovery key, the backup, works here too.";
+export const EITHER_HINT = `Type your passphrase for Passwords. If you never set one, paste your recovery key, the one Passwords showed once when it was set up (in ${RECOVERY_FILE} if you saved it).`;
+// The same two as a service a release behind ends its messages with ("master password" until 2026-11-11), so this
+// helper still shows the box they ask for.
+const LEGACY_MASTER_HINT = "Type your master password for Passwords. Forgot it? Your recovery key works here too.";
+const LEGACY_EITHER_HINT = `Type your master password for Passwords if you set one. Otherwise paste your recovery key, the one Passwords showed once when it was set up (in ${RECOVERY_FILE} if you saved it).`;
 
 const HINTS = { "recovery-key": RECOVERY_HINT, "master-password": MASTER_HINT, either: EITHER_HINT } as const satisfies Readonly<Record<PassphraseAsks, string>>;
 
 /**
  * What a passphrase call asks for, read from the hint its message ends with. The door's call has no field for it: a
  * helper a release behind skips a call it does not parse, so the service would wait out its deadline for nothing. A
- * helper that does not know the hint shows its recovery-key box, into which a master password opens the vault all the
- * same.
+ * helper that does not know the hint shows its recovery-key box, into which a passphrase opens the vault all the same.
  */
-export const asksOf = (message: string): PassphraseAsks => (message.endsWith(MASTER_HINT) ? "master-password" : message.endsWith(EITHER_HINT) ? "either" : "recovery-key");
+export const asksOf = (message: string): PassphraseAsks =>
+    message.endsWith(MASTER_HINT) || message.endsWith(LEGACY_MASTER_HINT) ? "master-password" : message.endsWith(EITHER_HINT) || message.endsWith(LEGACY_EITHER_HINT) ? "either" : "recovery-key";
 
-// The recovery key or the master password (or a passphrase from before recovery keys), asked by the helper; the core
+// The recovery key or the person's passphrase (or a passphrase from before recovery keys), asked by the helper; the core
 // checks it against the vault, so a helper cannot make one up. What the person typed is read as a recovery key first
-// (recovery.ts): a master password never reads as one, since the keyring refuses to set one that does.
+// (recovery.ts): a chosen passphrase never reads as one, since the keyring refuses to set one that does.
 export const remotePassphrasePrompt =
     (link: HelperLink): PassphrasePrompt =>
     async (notice): Promise<PromptAnswer> => {

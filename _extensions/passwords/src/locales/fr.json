@@ -33,11 +33,11 @@
             "lockedNote": "Les noms restent visibles verrouillé. Afficher ou copier un mot de passe demande de déverrouiller."
         },
         "reset": {
-            "lost": "Clé de récupération perdue ?",
+            "lost": "Phrase secrète oubliée et clé de récupération perdue ?",
             "ask": "Recommencer Mots de passe sur cet ordinateur ?",
             "saysEmpty": "Mots de passe ne contient encore rien, rien n'est donc perdu.",
             "says": "Le {count} mot de passe qu'il contient est mis de côté sur cet ordinateur, pas supprimé, et ne s'ouvre à nouveau qu'avec l'ancienne clé de récupération. | Les {count} mots de passe qu'il contient sont mis de côté sur cet ordinateur, pas supprimés, et ne s'ouvrent à nouveau qu'avec l'ancienne clé de récupération.",
-            "then": "Cet ordinateur demande l'accord d'un administrateur, puis vous réactivez Mots de passe et obtenez une nouvelle clé de récupération.",
+            "then": "Cet ordinateur demande l’accord d’un administrateur, puis vous réactivez Mots de passe avec une nouvelle phrase secrète et une nouvelle clé de récupération.",
             "confirm": "Recommencer"
         },
         "index": {
@@ -143,7 +143,7 @@
             "undo-remove": "Restauré depuis Supprimés récemment",
             "purge": "Supprimé définitivement",
             "add-hello": "Windows Hello activé",
-            "master-password": "Mot de passe principal modifié"
+            "master-password": "Phrase secrète modifiée"
         },
         "edit": {
             "title": "Titre",
@@ -185,6 +185,13 @@
             "whileHere": "Tant que je suis là",
             "always": "Toujours"
         },
+        "passphrase": {
+            "new": "Nouvelle phrase secrète",
+            "again": "Saisissez-la à nouveau",
+            "length": "Au moins {count} caractères.",
+            "short": "Au moins {count} caractères.",
+            "mismatch": "Les deux ne correspondent pas."
+        },
         "settings": {
             "title": "Réglages",
             "remember": "Mémoriser les mots de passe de",
@@ -210,31 +217,26 @@
             "unlock": "Déverrouiller et verrouiller",
             "hello": "Le déverrouillage demande Windows Hello : votre visage, empreinte ou PIN.",
             "polkit": "Le déverrouillage demande le mot de passe de votre ordinateur.",
-            "passphrase": "Le déverrouillage demande votre clé de récupération. Définissez un mot de passe principal pour saisir celui-ci à la place.",
             "autoLock": "Verrouiller après",
             "minutes": "{count} minute | {count} minutes",
             "hours": "{count} heure | {count} heures",
             "lockOnSleep": "Verrouiller quand cet ordinateur se met en veille",
-            "recovery": "Clé de récupération",
-            "recoveryHelp": "Gardez-la pour les urgences : elle ouvre vos mots de passe si vous oubliez votre mot de passe principal, si Windows Hello est réinitialisé ou si cet ordinateur est remplacé. Elle a été affichée une fois, à l'activation de Mots de passe.",
+            "recovery": "Clé de récupération (secours)",
+            "recoveryHelp": "Votre solution de secours : elle ouvre vos mots de passe si vous oubliez votre phrase secrète, si Windows Hello est réinitialisé ou si cet ordinateur est remplacé. Elle a été affichée une fois, à l’activation de Mots de passe.",
             "neverSave": "Ne jamais enregistrer pour",
             "neverSaveEmpty": "Rien. « Jamais pour ce site » dans un avis ajoute un endroit ici.",
             "import": "Importer",
             "importHelp": "Un fichier CSV exporté depuis Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden ou KeePassXC.",
-            "master": "Le déverrouillage demande votre mot de passe principal. Votre clé de récupération fonctionne aussi.",
             "helloOff": "Windows Hello est désactivé pour Mots de passe",
-            "helloOffHelp": "Il a été configuré sans, donc Mots de passe demande votre clé de récupération.",
-            "masterTitle": "Mot de passe principal",
-            "masterOn": "Demandé quand Windows Hello ou la vérification de votre ordinateur ne peuvent pas répondre.",
-            "masterOff": "Non défini. Sans lui, Mots de passe demande votre clé de récupération quand Windows Hello ou la vérification de votre ordinateur ne peuvent pas répondre.",
-            "masterSet": "Définir",
-            "masterChange": "Modifier",
-            "masterRemove": "Retirer",
-            "masterNew": "Nouveau mot de passe principal",
-            "masterAgain": "Saisissez-le à nouveau",
-            "masterHelp": "Au moins {count} caractères. Mots de passe vous demandera d'abord de confirmer sur cet ordinateur.",
-            "masterShort": "Au moins {count} caractères.",
-            "masterMismatch": "Les deux ne correspondent pas."
+            "helloOffHelp": "Mots de passe a été configuré sans, et demande donc de taper votre phrase secrète.",
+            "unlockPassphrase": "Le déverrouillage demande votre phrase secrète. Votre clé de récupération sert de secours.",
+            "unlockRecovery": "Le déverrouillage demande votre clé de récupération, faute de phrase secrète. Définissez-en une pour que la clé reste un secours.",
+            "passphraseTitle": "Phrase secrète",
+            "passphraseOn": "Saisie pour déverrouiller quand Windows Hello ou la vérification propre à votre ordinateur ne peut pas répondre.",
+            "passphraseOff": "Non définie : Mots de passe demande donc votre clé de récupération. Définissez une phrase secrète et gardez la clé en secours.",
+            "passphraseSet": "Définir",
+            "passphraseChange": "Modifier",
+            "passphraseHelp": "Mots de passe vous demande d’abord de confirmer sur cet ordinateur. Votre clé de récupération reste inchangée."
         },
         "import": {
             "pick": "Choisir un fichier",
@@ -251,9 +253,9 @@
             "permission": "Windows demandera une fois l'autorisation de les garder où aucun programme — agents inclus — ne peut les lire.",
             "permissionLinux": "Votre ordinateur demandera une fois l'autorisation de les garder où aucun programme — agents inclus — ne peut les lire.",
             "settingUp": "Configuration…",
-            "recoveryTitle": "Votre clé de récupération",
-            "recoveryHelp": "Si Windows Hello est réinitialisé ou si cet ordinateur est remplacé, cette clé ouvre vos mots de passe. Elle n'est montrée qu'une fois, maintenant.",
-            "recoveryHelpNoHello": "Cette clé ouvre vos mots de passe chaque fois que Mots de passe la demande, et si la connexion de cet ordinateur est réinitialisée ou l'ordinateur remplacé. Elle n'est affichée que maintenant.",
+            "recoveryTitle": "Votre clé de récupération, le secours",
+            "recoveryHelp": "Si vous oubliez votre phrase secrète, si Windows Hello est réinitialisé ou si cet ordinateur est remplacé, cette clé ouvre vos mots de passe. Elle n’est affichée que maintenant.",
+            "recoveryHelpNoHello": "Si vous oubliez votre phrase secrète, si la connexion à cet ordinateur est réinitialisée ou si l’ordinateur est remplacé, cette clé ouvre vos mots de passe. Elle n’est affichée que maintenant.",
             "saveFile": "Enregistrer en fichier",
             "fileName": "intentic-passwords-recovery-key.txt",
             "fileText": "Clé de récupération Intentic Mots de passe pour {computer}\n\n{key}\n\nGardez-la en lieu sûr, loin de cet ordinateur.\n",
@@ -261,7 +263,7 @@
             "saved": "Je l'ai mise en lieu sûr",
             "continue": "Continuer",
             "existingTitle": "Mots de passe est déjà sur cet ordinateur",
-            "existingHelp": "Il a été configuré auparavant, il n'y a donc pas de nouvelle clé de récupération : celle affichée alors ouvre toujours vos mots de passe. Si vous ne l'avez plus, choisissez « Clé de récupération perdue ? » à côté du verrou.",
+            "existingHelp": "Il avait déjà été configuré : la phrase secrète que vous venez de choisir n’a pas été gardée et il n’y a pas de nouvelle clé de récupération. Ce qui l’ouvrait avant l’ouvre toujours. Définissez ou modifiez la phrase secrète dans les Réglages. Si vous n’avez ni l’une ni l’autre, choisissez « Phrase secrète oubliée et clé de récupération perdue ? » à côté du cadenas.",
             "rememberTitle": "Laisser Intentic mémoriser les mots de passe que vous saisissez",
             "rememberHelp": "Enregistrés discrètement en vous connectant, avec un avis pour annuler. Les agents n'en reçoivent aucun tant que vous ne l'autorisez pas.",
             "ready": "Prêt",
@@ -273,7 +275,10 @@
             "importTitle": "Emportez vos mots de passe",
             "importHelp": "Importez une exportation CSV depuis votre navigateur ou gestionnaire de mots de passe, ou passez — ils s'enregistreront en vous connectant.",
             "finish": "Terminé",
-            "helloSkipped": "Windows Hello n'a pas été configuré, donc Mots de passe demandera cette clé jusqu'à ce que vous activiez Hello dans les Réglages."
+            "helloSkipped": "Windows Hello n’a pas été configuré : Mots de passe demandera votre phrase secrète jusqu’à ce que vous activiez Hello dans les Réglages.",
+            "passphraseTitle": "Choisissez une phrase secrète",
+            "passphraseHelp": "Vous la tapez pour déverrouiller Mots de passe quand Windows Hello ne peut pas répondre. Vous recevrez ensuite une clé de récupération, le secours pour le jour où vous l’oubliez.",
+            "passphraseHelpNoHello": "Vous la tapez pour déverrouiller Mots de passe quand la vérification propre à votre ordinateur ne peut pas répondre. Vous recevrez ensuite une clé de récupération, le secours pour le jour où vous l’oubliez."
         },
         "unavailable": {
             "title": "Mots de passe n'est pas disponible",
@@ -295,7 +300,7 @@
             "removed": "{title} déplacé dans Supprimés récemment"
         },
         "hello": {
-            "strip": "Windows Hello n'est pas activé pour Mots de passe, qui demande donc votre clé de récupération. Activez-le pour confirmer avec votre visage, votre empreinte ou votre code PIN.",
+            "strip": "Windows Hello n’est pas activé pour Mots de passe, qui demande donc votre phrase secrète. Activez-le pour confirmer avec votre visage, votre empreinte ou votre code PIN.",
             "turnOn": "Activer Windows Hello"
         },
         "removed": {

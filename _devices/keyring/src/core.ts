@@ -22,7 +22,7 @@ import { Needs } from "./passwords/needs.js";
 import { Phones } from "./passwords/phone.js";
 import { RecentlyDeleted, removedInfoOf, withoutExpired } from "./passwords/removed.js";
 import { Sync } from "./passwords/sync.js";
-import { Unlocking } from "./passwords/unlocking.js";
+import { passphraseProblem, Unlocking } from "./passwords/unlocking.js";
 import {
     acceptGrant,
     applyPatch,
@@ -243,7 +243,7 @@ export class Keyring {
             return { doc: held.doc, key: held.key, asked: true, how: answer.how, choice: chosen };
         }
         if (answer.vaultKey === undefined) {
-            return refuse("locked", "Passwords could not be opened with that answer: unlock it with its master password or recovery key.");
+            return refuse("locked", "Passwords could not be opened with that answer: unlock it with its passphrase or recovery key.");
         }
         try {
             return { doc: openDocument(answer.vaultKey, file.sealed), key: answer.vaultKey, asked: true, how: answer.how, choice: chosen };
@@ -406,7 +406,7 @@ export class Keyring {
             case "state":
                 return await this.state();
             case "setup":
-                return await this.#lock(async () => await this.setup(request.passphrase, request.hello));
+                return await this.#lock(async () => await this.setup(request.passphrase, request.hello, request.master));
             case "unlock":
                 return await this.#lock(async () => await this.unlock(request.minutes));
             case "lock":
@@ -556,20 +556,27 @@ export class Keyring {
         return { ok: true, state, setUp: file !== undefined };
     }
 
-    async setup(passphrase: string, withHello: boolean): Answer<"setup"> {
+    // `passphrase` is the recovery key; `master` the passphrase the person chose, wrapped first so the answer typed most
+    // often is the first one tried (vault.ts unwrapPassphrase).
+    async setup(passphrase: string, withHello: boolean, master?: string): Answer<"setup"> {
         if (this.#file !== undefined) {
             return refuse("declined", "This keyring is set up already. To start over, move ~/.intentic/keyring/vault.json aside first: it is the only copy of what it holds.");
         }
+        const problem = master === undefined ? undefined : passphraseProblem(master);
+        if (problem !== undefined) {
+            return refuse("declined", problem);
+        }
         const key = newVaultKey();
         const doc: VaultDocument = { v: 1, revision: 0, entries: {}, inbox: newSealKeyPair(), sync: newSealKeyPair(), peers: [], backends: [], pins: {} };
-        const wraps: Wrap[] = [await wrapWithPassphrase(key, passphrase, this.deps.scrypt ?? SCRYPT_COST)];
+        const cost = this.deps.scrypt ?? SCRYPT_COST;
+        const wraps: Wrap[] = [...(master === undefined ? [] : [await wrapWithPassphrase(key, master, cost, "master")]), await wrapWithPassphrase(key, passphrase, cost)];
         const hello = this.deps.consent.hello;
         let how = "passphrase";
         if (withHello && hello !== undefined && (await hello.available())) {
             const challenge = helloChallenge();
             const enrolled = await hello.enrol(this.deps.helloCredential, challenge, {
                 title: "Set up the Intentic keyring",
-                message: "Windows Hello will unlock the keyring on this computer. The passphrase you chose still opens it if Hello is ever reset.",
+                message: master === undefined ? "Windows Hello will unlock the keyring on this computer. Your recovery key still opens it if Hello is ever reset." : "Windows Hello will unlock the keyring on this computer. Your passphrase still opens it if Hello is ever reset, and your recovery key is the backup.",
             });
             if (enrolled.ok) {
                 wraps.push(wrapWithHello(key, { credential: this.deps.helloCredential, challenge, signature: enrolled.value.signature, publicKey: enrolled.value.publicKey }));

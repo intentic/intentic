@@ -10,11 +10,26 @@ import { type Answer, NOT_SET_UP, refuse, type VaultAccess } from "./access.js";
 // add or take away a wrap, never touching the sealed document:
 // - Windows Hello where setup could not enrol it (no session helper yet, Hello skipped or not yet set up in Windows),
 //   which otherwise leaves a vault the recovery key alone opens, asked for at every sign-in and every yes;
-// - a master password the person chooses, asked for instead of the recovery key wherever Hello or polkit cannot
-//   answer. The recovery key's wrap is never taken away: it stays the way back for a forgotten master password.
+// - the passphrase the person chooses (the `master` wrap: "master password" until 2026-11-11), asked for instead of the
+//   recovery key wherever Hello or polkit cannot answer. The recovery key's wrap is never taken away: it stays the
+//   backup for a forgotten passphrase.
 // Each asks the person by the way the vault opens now, so adding a way in takes a way in the person already has.
 
 const MASTER_PASSWORD_MAX = 1024;
+
+/** Why a chosen passphrase cannot be kept, or undefined when it can: what setup and set-master-password both check. */
+export const passphraseProblem = (passphrase: string): string | undefined => {
+    const length = [...passphrase].length;
+    if (length < MASTER_PASSWORD_MIN || length > MASTER_PASSWORD_MAX) {
+        return `A passphrase needs at least ${String(MASTER_PASSWORD_MIN)} characters.`;
+    }
+    // The typed box reads a key-shaped answer as a recovery key (recovery.ts), so such a passphrase would never open.
+    if (looksLikeRecoveryKey(passphrase)) {
+        return "That reads as a recovery key. Choose a passphrase of your own: the recovery key stays as it is.";
+    }
+    return undefined;
+};
+
 const isMaster = (wrap: Wrap): boolean => wrap.method === "passphrase" && wrap.role === "master";
 
 export interface UnlockingAccess extends VaultAccess {
@@ -75,8 +90,8 @@ export class Unlocking {
         }
         const had = hasMasterPassword(file.wraps);
         const opened = await this.vault.open(file, {
-            title: had ? "Change your master password?" : "Set a master password for Passwords?",
-            message: "Passwords will ask for it whenever Windows Hello or your computer's own check can't answer. Your recovery key keeps working, for the day you forget it.",
+            title: had ? "Change your passphrase?" : "Set a passphrase for Passwords?",
+            message: "Passwords will ask for it whenever Windows Hello or your computer's own check can't answer. Your recovery key keeps working as the backup, for the day you forget it.",
             person: true,
         });
         if ("ok" in opened) {
@@ -86,15 +101,11 @@ export class Unlocking {
         try {
             password = unseal(opened.doc.inbox, sealed, MASTER_PASSWORD_PURPOSE);
         } catch {
-            return refuse("bad-grant", "The master password was not sealed to this keyring's inbox for a master password.");
+            return refuse("bad-grant", "The passphrase was not sealed to this keyring's inbox for a passphrase.");
         }
-        const length = [...password].length;
-        if (length < MASTER_PASSWORD_MIN || length > MASTER_PASSWORD_MAX) {
-            return refuse("declined", `A master password needs at least ${String(MASTER_PASSWORD_MIN)} characters.`);
-        }
-        // The typed box reads a key-shaped answer as a recovery key (recovery.ts), so such a password would never open.
-        if (looksLikeRecoveryKey(password)) {
-            return refuse("declined", "That reads as a recovery key. Choose a password of your own: the recovery key stays as it is.");
+        const problem = passphraseProblem(password);
+        if (problem !== undefined) {
+            return refuse("declined", problem);
         }
         const master = await wrapWithPassphrase(opened.key, password, this.vault.deps.scrypt ?? SCRYPT_COST, "master");
         const latest = this.vault.file() ?? file;
@@ -110,11 +121,11 @@ export class Unlocking {
             return refuse("locked", NOT_SET_UP);
         }
         if (!hasMasterPassword(file.wraps)) {
-            return refuse("unknown", "Passwords has no master password on this computer.");
+            return refuse("unknown", "Passwords has no passphrase on this computer.");
         }
         const opened = await this.vault.open(file, {
-            title: "Remove your master password?",
-            message: "Passwords will ask for your recovery key again wherever Windows Hello or your computer's own check can't answer.",
+            title: "Remove your passphrase?",
+            message: "Passwords will ask for your recovery key instead wherever Windows Hello or your computer's own check can't answer.",
             person: true,
         });
         if ("ok" in opened) {

@@ -179,7 +179,9 @@ export const keyringStatus = async (): Promise<KeyringStatus | undefined> => {
 export const keyringList = async (): Promise<readonly KeyringEntry[]> =>
     keyringAnswer<{ entries: readonly KeyringEntry[] }>(await invoke<string>(`keyring_list`)).entries;
 /** The protected vault set up: one administrator prompt, Windows Hello unless `hello` is off, a recovery key made. */
-export const keyringSetup = async (hello: boolean): Promise<KeyringSetupAnswer> => keyringAnswer<KeyringSetupAnswer>(await invoke<string>(`keyring_setup`, { hello }));
+/** Sets up the vault; `passphrase`, the one the person chose, rides the CLI's stdin, never its command line. */
+export const keyringSetup = async (hello: boolean, passphrase?: string): Promise<KeyringSetupAnswer> =>
+    keyringAnswer<KeyringSetupAnswer>(await invoke<string>(`keyring_setup`, { hello, passphrase: passphrase ?? null }));
 export const keyringRemove = async (name: string): Promise<void> => {
     keyringAnswer<KeyringLine>(await invoke<string>(`keyring_remove`, { name }));
 };

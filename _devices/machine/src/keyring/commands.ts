@@ -1,5 +1,5 @@
 import { plural } from "@intentic/base/format";
-import { askKeyring, type EntryInfo, type KeyringClientOptions, keyringPaths, KeyringUnavailable, newRecoveryKey, sealForKeyring } from "@intentic/keyring";
+import { askKeyring, type EntryInfo, type KeyringClientOptions, keyringPaths, type KeyringRequest, KeyringUnavailable, MASTER_PASSWORD_MIN, newRecoveryKey, sealForKeyring } from "@intentic/keyring";
 import type { AutostartKind, Item, Ui } from "@intentic/local-agent";
 import { civilDayIn, localZone } from "@intentic/sandbox-contract/time/zone";
 import type { KeyringShareMode, KeyringState, SealedBox } from "@intentic/sandbox-contract/schemas/keyring";
@@ -76,7 +76,22 @@ const sealedValue = async (ui: Ui, name: string, from: "stdin" | "terminal", wha
 
 interface SetupFlags extends JsonFlags {
     readonly hello: boolean;
+    readonly stdin: boolean;
 }
+
+// The passphrase the person chooses at setup, the way they unlock where Hello cannot answer: piped on stdin with --stdin
+// (the desktop app), typed twice at a terminal, or none where there is neither (a script), leaving the recovery key alone
+// until one is set with the Passwords app.
+const chosenPassphrase = async (ui: Ui, flags: SetupFlags): Promise<string | undefined> => {
+    if (flags.stdin) {
+        return await readStdin();
+    }
+    if (process.stdin.isTTY !== true || flags.json) {
+        return undefined;
+    }
+    ui.note(`Choose a passphrase for Passwords: you type it to unlock where Windows Hello or this computer's own check can't answer. At least ${String(MASTER_PASSWORD_MIN)} characters.`);
+    return await prompted(ui, async () => await readConfirmed("Passphrase"));
+};
 
 interface SetupAnswer {
     readonly ok: true;
@@ -94,7 +109,8 @@ const setup = buildCommand<SetupFlags>({
     docs: { brief: "Install Passwords' protected service (an administrator's yes, once), start it at login, and set up its vault" },
     parameters: {
         flags: {
-            hello: { kind: "boolean", brief: "Unlock with Windows Hello where this computer has it (--no-hello: the recovery key alone)", default: true },
+            hello: { kind: "boolean", brief: "Unlock with Windows Hello where this computer has it (--no-hello: your passphrase, or the recovery key)", default: true },
+            stdin: { kind: "boolean", brief: "Read the passphrase you chose from stdin (one trailing newline is dropped); without it a terminal asks for one", default: false },
             json,
         },
     },
@@ -117,9 +133,15 @@ const setup = buildCommand<SetupFlags>({
                 if (started.state.setUp) {
                     return { ...base, alreadySetUp: true, askpass: await readAskpassAnswer(), state: started.state.state };
                 }
-                // The recovery key rides the setup op's `passphrase` field, which the vault wraps exactly as it did one.
+                // The recovery key rides the setup op's `passphrase` field, which the vault wraps exactly as it did one; the
+                // passphrase the person chose rides `master`, the vault's name for it.
+                const master = await chosenPassphrase(ui, flags);
                 const recoveryKey = newRecoveryKey();
-                const done = await askKeyring(pipe(), { op: "setup", passphrase: recoveryKey, hello: flags.hello && process.platform === "win32" });
+                const setupOp: Extract<KeyringRequest, { op: "setup" }> = { op: "setup", passphrase: recoveryKey, hello: flags.hello && process.platform === "win32" };
+                if (master !== undefined) {
+                    setupOp.master = master;
+                }
+                const done = await askKeyring(pipe(), setupOp);
                 if (!done.ok) {
                     return done;
                 }
@@ -131,7 +153,7 @@ const setup = buildCommand<SetupFlags>({
             (result, ui) => {
                 if (result.recoveryKey !== undefined) {
                     ui.note(`Your recovery key: ${result.recoveryKey}`);
-                    ui.note("Write it down and keep it somewhere safe. It is shown only now, and it is the only way into your passwords if this computer's sign-in check is ever reset.");
+                    ui.note("Write it down and keep it somewhere safe: it is the backup that opens your passwords if you forget your passphrase or this computer's sign-in check is reset. It is shown only now.");
                 }
                 ui.done(result.alreadySetUp ? `Passwords was set up already, and is running from ${result.path}.` : `Set up Passwords at ${result.path}; it starts at every sign-in.`);
                 ui.later([

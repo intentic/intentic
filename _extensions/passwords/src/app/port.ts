@@ -112,7 +112,7 @@ export type VaultStatus =
           readonly computer: string;
           /** Windows Hello signs here, but the vault was set up without it, so it asks for the recovery key instead. */
           readonly helloAddable?: boolean | undefined;
-          /** Whether a master password is set; absent where the keyring cannot keep one (one older than 2026-11-09). */
+          /** Whether a passphrase is set (the keyring's "master password"); absent where the keyring cannot keep one (one older than 2026-11-09). */
           readonly masterPassword?: boolean | undefined;
           /** How many removed passwords wait in Recently deleted; absent where removing is final (an older keyring). */
           readonly recentlyDeleted?: number | undefined;
@@ -238,10 +238,11 @@ export interface PasswordsPort {
     readonly sandboxes: () => Promise<readonly SandboxRef[]>;
 
     /**
-     * Sets up the protected vault: one administrator prompt, Windows Hello, and a recovery key shown once. No key when the
-     * vault was there already: its key is the one shown when it was first set up.
+     * Sets up the protected vault: one administrator prompt, Windows Hello, the passphrase the person chose, and a
+     * recovery key shown once as its backup. No key when the vault was there already: its key is the one shown when it
+     * was first set up, and the passphrase given is not kept.
      */
-    readonly setUp: (options: { readonly hello: boolean }) => Promise<{ readonly recoveryKey?: string | undefined; readonly hello?: boolean | undefined }>;
+    readonly setUp: (options: { readonly hello: boolean; readonly passphrase?: string | undefined }) => Promise<{ readonly recoveryKey?: string | undefined; readonly hello?: boolean | undefined }>;
     readonly unlock: (minutes?: number) => Promise<void>;
     readonly lock: () => Promise<void>;
     /**
@@ -266,7 +267,7 @@ export interface PasswordsPort {
 
     /** Turns Windows Hello on for a vault set up without it (`helloAddable`): asked once by the way it opens now. */
     readonly addHello?: (() => Promise<void>) | undefined;
-    /** Sets or changes the master password, asked for instead of the recovery key; and takes it away again. */
+    /** Sets or changes the passphrase, asked for instead of the recovery key; and takes it away again. */
     readonly setMasterPassword?: ((password: string) => Promise<void>) | undefined;
     readonly removeMasterPassword?: (() => Promise<void>) | undefined;
     readonly setAccess: (name: string, sandbox: string, level: AccessLevel) => Promise<void>;

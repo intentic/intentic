@@ -33,11 +33,11 @@
             "lockedNote": "Nazwy widać także po zablokowaniu. Pokazanie lub skopiowanie hasła wymaga odblokowania."
         },
         "reset": {
-            "lost": "Zgubiony klucz odzyskiwania?",
+            "lost": "Zapomniana fraza dostępu i zgubiony klucz odzyskiwania?",
             "ask": "Zacząć Hasła od nowa na tym komputerze?",
             "saysEmpty": "Hasła nie zawierają jeszcze niczego, więc nic nie przepadnie.",
             "says": "{count} hasło zostaje odłożone na tym komputerze, nie usunięte, i otworzy się ponownie tylko starym kluczem odzyskiwania. | {count} hasła zostają odłożone na tym komputerze, nie usunięte, i otworzą się ponownie tylko starym kluczem odzyskiwania. | {count} haseł zostaje odłożonych na tym komputerze, nie usuniętych, i otworzy się ponownie tylko starym kluczem odzyskiwania.",
-            "then": "Ten komputer poprosi o zgodę administratora, potem ponownie włączysz Hasła i dostaniesz nowy klucz odzyskiwania.",
+            "then": "Ten komputer poprosi o zgodę administratora, potem ponownie włączysz Hasła z nową frazą dostępu i nowym kluczem odzyskiwania.",
             "confirm": "Zacznij od nowa"
         },
         "index": {
@@ -143,7 +143,7 @@
             "undo-remove": "Przywrócono z Ostatnio usuniętych",
             "purge": "Usunięto na zawsze",
             "add-hello": "Włączono Windows Hello",
-            "master-password": "Zmieniono hasło główne"
+            "master-password": "Zmieniono frazę dostępu"
         },
         "edit": {
             "title": "Tytuł",
@@ -185,6 +185,13 @@
             "whileHere": "Dopóki tu jestem",
             "always": "Zawsze"
         },
+        "passphrase": {
+            "new": "Nowa fraza dostępu",
+            "again": "Wpisz ją ponownie",
+            "length": "Co najmniej {count} znaków.",
+            "short": "Co najmniej {count} znaków.",
+            "mismatch": "Frazy nie są takie same."
+        },
         "settings": {
             "title": "Ustawienia",
             "remember": "Zapamiętuj hasła z",
@@ -210,31 +217,26 @@
             "unlock": "Odblokowanie i blokada",
             "hello": "Odblokowanie pyta o Windows Hello: twarz, odcisk palca lub PIN.",
             "polkit": "Odblokowanie pyta o hasło komputera.",
-            "passphrase": "Odblokowanie wymaga klucza odzyskiwania. Ustaw hasło główne, aby wpisywać je zamiast niego.",
             "autoLock": "Zablokuj po",
             "minutes": "{count} minuta | {count} minuty | {count} minut",
             "hours": "{count} godzina | {count} godziny | {count} godzin",
             "lockOnSleep": "Zablokuj, gdy komputer przejdzie w uśpienie",
-            "recovery": "Klucz odzyskiwania",
-            "recoveryHelp": "Zachowaj go na wypadek awarii: otwiera Twoje hasła, gdy zapomnisz hasła głównego, Windows Hello zostanie zresetowane lub zmienisz komputer. Był pokazany raz, przy włączaniu Haseł.",
+            "recovery": "Klucz odzyskiwania (zapasowy)",
+            "recoveryHelp": "Twoje zabezpieczenie na awarie: otwiera hasła, gdy zapomnisz frazy dostępu, Windows Hello zostanie zresetowane lub zmienisz komputer. Był pokazany raz, przy włączaniu Haseł.",
             "neverSave": "Nigdy nie zapisuj dla",
             "neverSaveEmpty": "Nic. „Nigdy dla tej strony” w powiadomieniu dodaje miejsce tutaj.",
             "import": "Importuj",
             "importHelp": "Plik CSV wyeksportowany z Chrome, Edge, Brave, Firefox, Safari, 1Password, Bitwarden lub KeePassXC.",
-            "master": "Odblokowanie wymaga hasła głównego. Klucz odzyskiwania też działa.",
             "helloOff": "Windows Hello jest wyłączone dla Haseł",
-            "helloOffHelp": "Hasła skonfigurowano bez niego, więc proszą o klucz odzyskiwania.",
-            "masterTitle": "Hasło główne",
-            "masterOn": "Pojawia się prośba o nie, gdy Windows Hello ani komputer nie mogą potwierdzić, że to Ty.",
-            "masterOff": "Nie ustawiono. Bez niego Hasła proszą o klucz odzyskiwania, gdy Windows Hello ani komputer nie mogą potwierdzić, że to Ty.",
-            "masterSet": "Ustaw",
-            "masterChange": "Zmień",
-            "masterRemove": "Usuń",
-            "masterNew": "Nowe hasło główne",
-            "masterAgain": "Wpisz je ponownie",
-            "masterHelp": "Co najmniej {count} znaków. Najpierw Hasła poproszą o potwierdzenie na tym komputerze.",
-            "masterShort": "Co najmniej {count} znaków.",
-            "masterMismatch": "Hasła nie są takie same."
+            "helloOffHelp": "Hasła skonfigurowano bez niego, więc proszą o wpisanie frazy dostępu.",
+            "unlockPassphrase": "Odblokowanie wymaga frazy dostępu. Klucz odzyskiwania jest zapasowy.",
+            "unlockRecovery": "Odblokowanie wymaga klucza odzyskiwania, bo nie ustawiono frazy dostępu. Ustaw ją, aby klucz pozostał zapasowy.",
+            "passphraseTitle": "Fraza dostępu",
+            "passphraseOn": "Wpisywana do odblokowania, gdy Windows Hello ani komputer nie mogą potwierdzić, że to Ty.",
+            "passphraseOff": "Nie ustawiono, więc Hasła proszą o klucz odzyskiwania. Ustaw frazę dostępu, a klucz zachowaj jako zapasowy.",
+            "passphraseSet": "Ustaw",
+            "passphraseChange": "Zmień",
+            "passphraseHelp": "Najpierw Hasła poproszą o potwierdzenie na tym komputerze. Klucz odzyskiwania się nie zmienia."
         },
         "import": {
             "pick": "Wybierz plik",
@@ -251,9 +253,9 @@
             "permission": "Windows poprosi raz o pozwolenie, żeby trzymać je tam, gdzie żaden program — w tym agenci — nie może ich odczytać.",
             "permissionLinux": "Komputer poprosi raz o pozwolenie, żeby trzymać je tam, gdzie żaden program — w tym agenci — nie może ich odczytać.",
             "settingUp": "Konfigurowanie…",
-            "recoveryTitle": "Twój klucz odzyskiwania",
-            "recoveryHelp": "Jeśli Windows Hello zostanie zresetowane lub ten komputer zostanie wymieniony, ten klucz otworzy hasła. Widać go tylko teraz.",
-            "recoveryHelpNoHello": "Ten klucz otwiera Twoje hasła zawsze, gdy Hasła o niego poproszą, a także gdy logowanie na tym komputerze zostanie zresetowane lub komputer wymieniony. Jest pokazywany tylko teraz.",
+            "recoveryTitle": "Twój klucz odzyskiwania, zapasowy",
+            "recoveryHelp": "Jeśli zapomnisz frazy dostępu, Windows Hello zostanie zresetowane lub ten komputer zostanie wymieniony, ten klucz otworzy hasła. Widać go tylko teraz.",
+            "recoveryHelpNoHello": "Jeśli zapomnisz frazy dostępu, logowanie na tym komputerze zostanie zresetowane lub komputer wymieniony, ten klucz otworzy hasła. Widać go tylko teraz.",
             "saveFile": "Zapisz jako plik",
             "fileName": "intentic-passwords-recovery-key.txt",
             "fileText": "Klucz odzyskiwania Intentic Hasła dla {computer}\n\n{key}\n\nTrzymaj go w bezpiecznym miejscu, z dala od tego komputera.\n",
@@ -261,7 +263,7 @@
             "saved": "Zachowałem go w bezpiecznym miejscu",
             "continue": "Dalej",
             "existingTitle": "Hasła są już na tym komputerze",
-            "existingHelp": "Zostały skonfigurowane wcześniej, więc nie ma nowego klucza odzyskiwania: ten pokazany wtedy nadal otwiera Twoje hasła. Jeśli go już nie masz, wybierz „Zgubiony klucz odzyskiwania?” przy kłódce.",
+            "existingHelp": "Zostały skonfigurowane wcześniej, więc wybrana przed chwilą fraza dostępu nie została zapisana i nie ma nowego klucza odzyskiwania: to, co otwierało je wcześniej, nadal działa. Frazę dostępu ustawisz lub zmienisz w Ustawieniach. Jeśli nie masz żadnego z nich, wybierz „Zapomniana fraza dostępu i zgubiony klucz odzyskiwania?” przy kłódce.",
             "rememberTitle": "Niech Intentic zapamiętuje hasła, które wpisujesz",
             "rememberHelp": "Zapisują się cicho przy logowaniu, z powiadomieniem do cofnięcia. Agenci nie dostają żadnego, dopóki na to nie pozwolisz.",
             "ready": "Gotowe",
@@ -273,7 +275,10 @@
             "importTitle": "Przenieś swoje hasła",
             "importHelp": "Zaimportuj eksport CSV z przeglądarki lub menedżera haseł albo pomiń — zapiszą się przy logowaniu.",
             "finish": "Gotowe",
-            "helloSkipped": "Windows Hello nie zostało skonfigurowane, więc Hasła będą prosić o ten klucz, dopóki nie włączysz Hello w Ustawieniach."
+            "helloSkipped": "Windows Hello nie zostało skonfigurowane, więc Hasła będą prosić o frazę dostępu, dopóki nie włączysz Hello w Ustawieniach.",
+            "passphraseTitle": "Wybierz frazę dostępu",
+            "passphraseHelp": "Wpisujesz ją, aby odblokować Hasła, gdy Windows Hello nie może odpowiedzieć. Potem dostaniesz klucz odzyskiwania, zapasowy na dzień, gdy jej zapomnisz.",
+            "passphraseHelpNoHello": "Wpisujesz ją, aby odblokować Hasła, gdy komputer nie może sam potwierdzić, że to Ty. Potem dostaniesz klucz odzyskiwania, zapasowy na dzień, gdy jej zapomnisz."
         },
         "unavailable": {
             "title": "Hasła są niedostępne",
@@ -295,7 +300,7 @@
             "removed": "Przeniesiono {title} do Ostatnio usuniętych"
         },
         "hello": {
-            "strip": "Windows Hello nie jest włączone dla Haseł, więc zamiast tego pojawia się prośba o klucz odzyskiwania. Włącz je, aby potwierdzać twarzą, odciskiem palca lub kodem PIN.",
+            "strip": "Windows Hello nie jest włączone dla Haseł, więc zamiast tego pojawia się prośba o frazę dostępu. Włącz je, aby potwierdzać twarzą, odciskiem palca lub kodem PIN.",
             "turnOn": "Włącz Windows Hello"
         },
         "removed": {

@@ -71,5 +71,5 @@ export const neededPerson = (answer: KeyringResponse<KeyringOp>): answer is Extr
 /** What the person reads instead, once the helper has put its proof box up: where to look, and what to do after. */
 export const proofAsked = (method: Challenge["method"] | undefined): string =>
     method === "passphrase"
-        ? `Passwords is asking for your master password, or your recovery key if you have not set one, in a window on this computer's screen. The recovery key is the XXXXX-XXXXX-… key shown when Passwords was set up (saved as ${RECOVERY_FILE} if you kept the file). Type one of them there, then try again.`
+        ? `Passwords is asking for your passphrase, or your recovery key if you have not set one, in a window on this computer's screen. The recovery key is the XXXXX-XXXXX-… key shown when Passwords was set up (saved as ${RECOVERY_FILE} if you kept the file). Type one of them there, then try again.`
         : "Passwords is asking you to confirm it is you, in a window on this computer's screen. Do that, then try again.";
