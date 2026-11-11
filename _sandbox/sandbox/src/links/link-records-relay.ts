@@ -23,8 +23,7 @@ export type LinkReach =
 
 export type LinkReachDeps = Pick<Services, "capabilities" | "conversations">;
 
-// An accounts card only borrows models; it reads nothing over there.
-const readableCard = (capability: Capability): capability is LinkCard => capability.kind === "link" && capability.config.purpose !== "accounts";
+const readableCard = (capability: Capability): capability is LinkCard => capability.kind === "link";
 
 // The turn a shell call is for: the one it names with its proof, else the one turn in flight.
 const askingTurn = (deps: LinkReachDeps, c: Context<AppEnv>): string | undefined => {
