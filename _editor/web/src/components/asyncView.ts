@@ -45,7 +45,11 @@ export const asyncView = (load: Loader, outline?: Component, options: { readonly
 
     const wrapper = defineComponent({
         name: `AsyncView`,
-        setup() {
+        // What the route hands its view (`props: true`, a route's props function) is the view's, not this wrapper's: it
+        // goes through to the view rather than onto the wait's element. Until 2026-11-11 it was dropped, and a local
+        // window's process page (`process/:id`) never learnt which process it was, so every one read "This has ended."
+        inheritAttrs: false,
+        setup(_, { attrs }) {
             const router = useRouter();
             const view = useChunkLoaded(() => chunk);
             // The page load ends where its first view has drawn (app/perf/boot.ts; a no-op after the first).
@@ -71,7 +75,7 @@ export const asyncView = (load: Loader, outline?: Component, options: { readonly
                     Await,
                     { of: view.value, imprint: imprint.value },
                     {
-                        default: ({ data }: { readonly data: Component }) => h(data),
+                        default: ({ data }: { readonly data: Component }) => h(data, attrs),
                         // Without an outline the wait is only marked busy: a page drawn before its code would be a guess.
                         fallback: () => (outline === undefined ? h(`div`, { class: `contents`, "aria-busy": `true` }) : h(outline)),
                         failed: ({ error, retry }: { readonly error: string; readonly retry: (() => void) | undefined }) =>

@@ -348,10 +348,36 @@ pub fn report(app: &AppHandle, report: ProcessReport) {
         Turn::StoppedAsking => crate::notice::withdraw(app, &notice_key(&report.id)),
         Turn::Same => {}
     }
+    if leaves_by_itself(&report) {
+        put_away_later(app, report);
+    }
     broadcast(app);
 }
 
-/// A run gone from the list (ended and seen, or given up).
+/* A FINISHED RUN GOES BY ITSELF (2026-11-11, the owner's): a run that ended well has nothing more to ask, and a "done"
+ * tile that waited for the reader's Dismiss stood on every rail until they found it (a rebuild's check mark on This
+ * computer for days). It stays a moment, long enough to be seen as it lands, then leaves the list, both faces with it.
+ * A failure stays: it is the way to Retry and to why it stopped. */
+const DONE_LINGER: Duration = Duration::from_secs(30);
+
+/// Whether a run leaves the list by itself once it has stood unchanged for [`DONE_LINGER`]. Pure.
+fn leaves_by_itself(report: &ProcessReport) -> bool {
+    report.state == "done"
+}
+
+/// `report` off the list after the linger, unless it changed meanwhile (the run started again, or said more): the
+/// report that replaced it is the one that decides, on its own clock.
+fn put_away_later(app: &AppHandle, report: ProcessReport) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(DONE_LINGER);
+        if get(&app, &report.id).as_ref() == Some(&report) {
+            clear(&app, &report.id);
+        }
+    });
+}
+
+/// A run gone from the list (ended and seen, ended well a moment ago, or given up).
 pub fn clear(app: &AppHandle, id: &str) {
     let taken = app.state::<Processes>().0.lock().unwrap().take(id);
     let Some((_, asking)) = taken else {
@@ -823,6 +849,14 @@ mod tests {
             "x",
             "done"
         )]));
+    }
+
+    #[test]
+    fn only_a_run_that_ended_well_leaves_by_itself() {
+        assert!(leaves_by_itself(&ProcessReport::of("recreate", "shop", "done")));
+        for state in ["running", "waiting", "failed", "stopped"] {
+            assert!(!leaves_by_itself(&ProcessReport::of("recreate", "shop", state)), "{state}");
+        }
     }
 
     /// Nothing ever moves: a reader looking is told by the tile, one elsewhere on screen by the taskbar, one not on

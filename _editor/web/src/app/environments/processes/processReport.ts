@@ -35,7 +35,8 @@ export const PROCESS_KINDS = [
 ] as const;
 export type ProcessKind = (typeof PROCESS_KINDS)[number];
 
-/** `done` stays on the rail until it is seen; `stopped` is the reader's own Stop, `failed` anything else that ended it. */
+/** `done` stays on the rail a moment and then goes by itself (the app's processes.rs `DONE_LINGER`); `stopped` is the
+ * reader's own Stop, `failed` anything else that ended it. */
 export const PROCESS_STATES = [`running`, `waiting`, `failed`, `stopped`, `done`] as const;
 export type ProcessState = (typeof PROCESS_STATES)[number];
 

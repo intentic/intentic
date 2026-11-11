@@ -152,3 +152,30 @@ it(`a chunk resolving does not re-arm a spent reload for a still-missing chunk`,
     expect(assign).not.toHaveBeenCalled();
     expect(second.el.querySelector(`button`)).not.toBeNull();
 });
+
+it(`hands the view what the route gives it as props`, async () => {
+    const view = asyncView(async () => ({
+        default: defineComponent({ props: { id: { type: String, default: undefined } }, setup: (props) => () => h(`div`, { "data-id": props.id ?? `none` }) }),
+    }));
+    const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+            { path: `/`, component: { render: () => h(`div`, `home`) } },
+            { path: `/process/:id`, props: true, component: view },
+        ],
+    });
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    const app = createApp({ render: () => h(RouterView) });
+    app.use(router);
+    await router.push(`/process/recreate:shop`);
+    app.mount(el);
+    mounted.push({ app, el });
+    await settle();
+    expect(el.querySelector(`[data-id]`)?.getAttribute(`data-id`)).toBe(`recreate:shop`);
+
+    // Another process's page is the same view, told its new id.
+    await router.push(`/process/sync:shop`);
+    await settle();
+    expect(el.querySelector(`[data-id]`)?.getAttribute(`data-id`)).toBe(`sync:shop`);
+});

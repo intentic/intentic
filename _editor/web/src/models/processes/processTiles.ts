@@ -12,8 +12,8 @@ import { processNote, processTitle } from "./processWords";
 
 // THE RAIL'S TEMPORARY GROUP: one tile per process under way, the same on Home's rail and on This computer's
 // (parts/processes/ProcessTiles.vue draws it, each face hands it its own list). A run stands on the rail while it works,
-// waits, asks or failed, and once it is done until the reader has seen it; one the reader stopped goes at once, since
-// they already know. Its marks are the rail's own: the spinning mark while it works, a warning while it waits on the
+// waits, asks or failed, and once it is done for a moment, until the app puts it away (processes.rs `DONE_LINGER`); one
+// the reader stopped goes at once, since they already know. Its marks are the rail's own: the spinning mark while it works, a warning while it waits on the
 // reader, a danger mark when it failed, a check when it is done.
 
 export interface ProcessTile {
