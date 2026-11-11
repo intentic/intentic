@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { ACTIVE_SANDBOX_KEY, storedValue } from "./browserStorage";
+import { reloadOnHotUpdate } from "../hotReload";
 
 // Which sandbox the browser is pointed at, and the query-key suffix that scopes cached server state to it. Split
 // from useSandbox to stay import-light: this touches only vue and localStorage, so anything can depend on it.
@@ -15,3 +16,6 @@ export const activeSandboxId = ref<string | undefined>(storedValue(ACTIVE_KEY));
 // Appends the sandbox id to a query key so cached state is per-sandbox; appended, not prepended, so a bare prefix
 // still matches every sandbox (`.every`). Reach it through a queryKeys family, not directly.
 export const sandboxKey = (...parts: readonly unknown[]): unknown[] => [...parts, activeSandboxId];
+
+// One active id per window: a re-run copy would scope the components it re-renders apart from useSandbox's (hotReload.ts).
+reloadOnHotUpdate(import.meta);

@@ -11,6 +11,7 @@ import { throttleTrailing } from "./throttleTrailing";
 import { whenIdle } from "./whenIdle";
 import { markBoot } from "../app/perf/boot";
 import { windowRole } from "./windows/windowRole";
+import { reloadOnHotUpdate } from "../app/hotReload";
 
 // Persists the vue-query cache to IndexedDB so a reload paints the last-known workspace instantly, instead of blocking
 // on the daemon tunnel. Hydrated data is distrusted when the stream says so rather than permanently: applyHello
@@ -340,3 +341,7 @@ export const clearPersistedQueries = async (which: { readonly account?: string }
         console.warn("Could not remove the persisted query cache", cause);
     }
 };
+
+// One query cache per window: a re-run copy would start empty beside the one every subscriber already holds
+// (hotReload.ts).
+reloadOnHotUpdate(import.meta);

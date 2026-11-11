@@ -18,6 +18,7 @@ import {
     type TopPageName,
 } from "@intentic/sandbox-contract/app-routes";
 import { type Ref, shallowRef } from "vue";
+import { reloadOnHotUpdate } from "../../app/hotReload";
 import type { RouteLocationNormalizedLoaded, Router } from "vue-router";
 import { localFace } from "../../app/environments/local";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
@@ -238,3 +239,7 @@ export const linkOf = (address: string): PageLink | undefined => {
         hash: hashAt === -1 ? `` : address.slice(hashAt + 1),
     };
 };
+
+// The list useSandbox handed in is held here once per window: a re-run copy holds none, and writes every address by
+// the whole id (hotReload.ts).
+reloadOnHotUpdate(import.meta);

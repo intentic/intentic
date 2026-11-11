@@ -23,6 +23,7 @@ import { forgetAddress } from "../directory/deviceDirectory";
 import { directMode } from "../directory/directState";
 import type { LeaveOutcome } from "./leaveSandbox";
 import { markBoot } from "../../app/perf/boot";
+import { reloadOnHotUpdate } from "../../app/hotReload";
 
 // Browser's view of the user's sandboxes, as a module singleton. The registry (sandbox.list) is the source of
 // truth for each daemon's URL/lastSeenAt; `reachable` stays browser-owned since only this browser knows if it
@@ -356,3 +357,8 @@ export function useSandbox() {
         remove,
     };
 }
+
+// One sandbox list, active selection and connection per window: a hot update that re-ran this module would hand the
+// components it re-renders an empty list (no active sandbox, an empty rail) while the router keeps the old one
+// (hotReload.ts).
+reloadOnHotUpdate(import.meta);
