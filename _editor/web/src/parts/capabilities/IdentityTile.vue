@@ -3,9 +3,13 @@
 import { computed } from "vue";
 import { tonePlate, toneWash } from "@intentic/ui";
 import { type SessionFacts, contextPressure, sessionKind } from "../../models/agent-status/sessionKind";
+import type { ChildTally } from "../fleet/childCount";
 
 // Undefined for a chat no agent stands behind yet: it reads as the everyday single agent, uncoloured.
-const props = defineProps<{ session: SessionFacts | undefined }>();
+// `children`, where given, is what the disc holds instead of the kind's glyph: the board card counts its family here
+// (null when it started nothing), as its branch already says what kind of session it is.
+const props = defineProps<{ session: SessionFacts | undefined; children?: ChildTally | null | undefined }>();
+const counted = computed(() => props.children !== undefined);
 const kind = computed(() => sessionKind(props.session));
 // An amber wash and an amber mark as the context window fills, a solid amber plate once it is nearly spent (contextPressure).
 // The wash alone vanishes on an 18px disc, so while filling the mark inside carries the colour: the kind's glyph, or for
@@ -27,12 +31,22 @@ const running = computed(() => props.session?.subagents?.running ?? 0);
         :data-context-pressure="pressure"
         :data-session-kind="kind.name"
     >
+        <!-- The family's total, live-tinted while any of it works; 99+ past two digits, the exact figure in the label. -->
+        <span
+            v-if="children"
+            role="img"
+            :aria-label="children.hint"
+            class="text-[0.625rem] font-semibold leading-none tabular-nums"
+            :class="children.running > 0 && pressure !== `full` ? `text-link` : ``"
+            data-children-count
+            >{{ children.total > 99 ? `99+` : children.total }}</span
+        >
         <!-- The everyday kind draws nothing inside the disc: a mark on every card would tell none of them apart. -->
-        <Icon v-if="kind.icon !== undefined" :name="kind.icon" aria-hidden="true" />
+        <Icon v-else-if="!counted && kind.icon !== undefined" :name="kind.icon" aria-hidden="true" />
         <span v-else-if="pressure === `filling`" class="size-[0.45em] rounded-full bg-current" aria-hidden="true"></span>
         <!-- `ring-canvas` parts the count from the disc it overlaps, as every badge pinned to an avatar does. -->
         <span
-            v-if="running > 0"
+            v-if="!counted && running > 0"
             class="absolute -right-1.5 -top-1 flex h-3 min-w-3 items-center justify-center rounded-full bg-content px-0.5 text-[0.5625rem] font-bold leading-none text-canvas tabular-nums ring-1 ring-canvas"
             aria-hidden="true"
             data-subagents-badge

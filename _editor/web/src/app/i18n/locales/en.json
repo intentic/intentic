@@ -1111,8 +1111,7 @@
             "child": "Subagent",
             "solo": "Single agent",
             "package": "Package",
-            "subagents": "Subagents",
-            "working": "{count} working"
+            "subagents": "Subagents"
         },
         "branchStart": {
             "commitTo": "Land to {branch}",

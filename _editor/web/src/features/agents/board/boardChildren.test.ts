@@ -105,11 +105,11 @@ it(`keeps the tray shut under a card the reader is not on, counting its family o
     expect(cards(board)).toEqual([`Focus agent: ship the release`]);
     expect(rows(board)).toEqual([expect.stringMatching(/^rotate the keys/)]);
     expect(fold(board)).toBeNull();
-    expect(count(board, t(`agents.childRows.workingCount`, { running: 1, total: 4 }))).toBe(`1/4`);
+    expect(count(board, t(`agents.childRows.workingCount`, { running: 1, total: 4 }))).toBe(`4`);
 
     await focus(board, `ship the release`);
     expect(rows(board)).toEqual([expect.stringMatching(/^rotate the keys/), expect.stringMatching(/^port the parser/)]);
-    expect(count(board, t(`agents.childRows.workingCount`, { running: 1, total: 4 }))).toBe(`1/4`);
+    expect(count(board, t(`agents.childRows.workingCount`, { running: 1, total: 4 }))).toBe(`4`);
 });
 
 it(`counts a family with nothing left at work as its total alone, and leaves no group to announce under a shut tray`, async () => {
@@ -288,7 +288,7 @@ it(`stands in for a spawned child whose first turn has not begun, and gives way 
     const board = await mountBoard();
     const standIns = (): (string | null)[] => [...(tray(board)?.querySelectorAll(`[data-starting-child]`) ?? [])].map((row) => row.getAttribute(`aria-label`));
 
-    expect(count(board, t(`agents.childRows.workingCount`, { running: 2, total: 2 }))).toBe(`2/2`);
+    expect(count(board, t(`agents.childRows.workingCount`, { running: 2, total: 2 }))).toBe(`2`);
     await focus(board, `ship the release`);
     // Newest asked for first, as working rows are; held ones say so, the rest are starting.
     expect(standIns()).toEqual([`WS3 cook models offline: ${t(`agents.childRows.queued`)}`, `WS2 near-field veil: ${t(`agents.childRows.starting`)}`]);
@@ -298,7 +298,7 @@ it(`stands in for a spawned child whose first turn has not begun, and gives way 
     await settle();
     expect(standIns()).toEqual([`WS3 cook models offline: ${t(`agents.childRows.queued`)}`]);
     expect(rows(board)).toEqual([expect.stringMatching(/^WS2 near-field veil/)]);
-    expect(count(board, t(`agents.childRows.workingCount`, { running: 2, total: 2 }))).toBe(`2/2`);
+    expect(count(board, t(`agents.childRows.workingCount`, { running: 2, total: 2 }))).toBe(`2`);
 });
 
 it(`draws no tray for a card that started nothing`, async () => {

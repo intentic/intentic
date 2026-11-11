@@ -63,7 +63,7 @@ import IdentityTile from "../../../../parts/capabilities/IdentityTile.vue";
 import MatchLine from "../../../../components/MatchLine.vue";
 import SessionChip from "../session/SessionChip.vue";
 import SessionMetrics from "../../metrics/SessionMetrics.vue";
-import ChildCount from "../../../../parts/fleet/ChildCount.vue";
+import { useChildCount } from "../../../../parts/fleet/childCount";
 import { boxImageOf, boxNameOf } from "../../../../models/fleet/fleetScope";
 import { blockersOf, settingsPagesOf, userBlockers } from "../../../../models/conversations/review/conflictResolution";
 import { keyBadge, sessionLogin } from "../session/accountChip";
@@ -182,7 +182,7 @@ const chip = computed<(StandingChip & { readonly hint?: Tip; readonly family?: t
     // rail's row names them too (settingsChip).
     return settingsChip(own, props.agent, settingsPages.value, ownerHold.value?.kind === `deleted`);
 });
-// ChildCount already shows the working children in the metadata row; this line describes the agent's own activity.
+// The identity disc already counts the working children (family); this line describes the agent's own activity.
 const activityText = computed(() => activityLine({ activity: props.agent.activity }));
 // Archive appears wherever it means something (not just the Finished lane, see canArchive), including in Attention,
 // since nothing is lost by it.
@@ -320,18 +320,19 @@ const diffShown = computed(() => !maker.value && props.agent.diff !== undefined 
 // unfinished work on every finished card, and "$3.26 of what?" has no denominator to draw against.
 // Plain ink on a receipt, where the reading is history rather than a live gauge.
 const rim = computed(() => tileRim(props.agent, { quiet: receipt.value }));
+// The family it started, counted inside the disc in place of the kind's glyph: the branch already names the kind.
+const family = useChildCount(() => props.agent);
 // One hover for the tile, since two nested tooltips would raise two boxes over the same 28 pixels: the kind it draws
-// in words, the package it works in, its working children, and its readings. Context fullness is put in figures here and
+// in words, the package it works in, its family, and its readings. Context fullness is put in figures here and
 // nowhere else on the card, and so is what it has cost. A reading not taken leaves its row empty and the card drops it.
 const tileHint = computed((): TooltipValue => {
     const list = props.agent.checklist;
     const percent = contextPct(props.agent.contextTokens, props.agent.contextWindow);
-    const running = props.agent.subagents?.running ?? 0;
     return {
         title: kind.value.label,
         rows: [
             { label: t(`agents.sessionKind.package`), value: sessionModule(props.agent)?.name ?? `` },
-            { label: t(`agents.sessionKind.subagents`), value: running === 0 ? `` : t(`agents.sessionKind.working`, { count: running }, running) },
+            { label: t(`agents.sessionKind.subagents`), value: family.value?.hint ?? `` },
             { label: t(`agents.agentCard.steps`), value: list === undefined ? `` : `${Math.min(list.done, list.total)}/${list.total}` },
             { label: t(`agents.agentCard.context`), value: percent === undefined ? `` : `${percent}%` },
             { label: t(`agents.agentCard.cost`), value: maker.value || props.agent.costUsd === undefined ? `` : formatMoney(props.agent.costUsd) },
@@ -605,13 +606,13 @@ const grab = (event: PointerEvent): void => {
              wraps onto a line of its own when a narrow column has no room for both, rather than squeezing the name to a
              letter or two beside a long chip and the press seats. -->
         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-            <!-- The session's kind as a glyph, an empty disc for the everyday single agent; tinted amber as its context fills (sessionKind.ts contextPressure). -->
+            <!-- How many agents it started, an empty disc for one that started none; tinted amber as its context fills (sessionKind.ts contextPressure). -->
             <!-- At the scale of the corner's badges (22px), not above it: the tile is a mark beside the title, not a heading. -->
             <!-- An 18px disc and a 12px glyph: whole-pixel insets (2px, 3px), so the glyph centres crisply instead of rounding half a pixel off-centre, and the disc meets the ring with no dead band. -->
             <span v-tooltip.top="tileHint" class="relative flex h-5.5 w-5.5 shrink-0 items-center justify-center self-start rounded-full">
                 <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`); `size-full` so it scales with the rem-sized tile under a larger browser font instead of the glyph spilling onto it. -->
                 <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="22" :stroke="1.5" class="absolute inset-0 size-full" :class="rim.tone" />
-                <IdentityTile :session="agent" class="h-4.5 w-4.5 text-xs" />
+                <IdentityTile :session="agent" :children="family ?? null" class="h-4.5 w-4.5 text-xs" />
             </span>
             <input
                 v-if="edit.editing"
@@ -816,8 +817,6 @@ const grab = (event: PointerEvent): void => {
                         <span :class="receipt ? '' : 'text-success'">+{{ diffCount(agent.diff.insertions) }}</span>
                         <span :class="receipt ? '' : 'text-danger'"> −{{ diffCount(agent.diff.deletions) }}</span>
                     </button>
-                    <!-- After the model and branch facts, before the time, as in the chat rail. ChildCount draws nothing for a card with no children. -->
-                    <ChildCount :agent="agent" />
                     <!-- Opt-in geek metrics: what its processes and those of everything grouped under it hold now, beside the other metadata rather than on a row of its own. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
                     <SessionMetrics v-if="localOnly" :card="agent.id" />
                 </div>
