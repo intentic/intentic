@@ -13,6 +13,7 @@
 # Windows runner).
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
+. "$(dirname "$0")/../lib/buildkit-retry.sh"
 . "$(dirname "$0")/../lib/desktop-artifacts.sh"
 
 ROOT="$(repo_root)"
@@ -26,7 +27,7 @@ fi
 DIST="$(cd "${1:-$ROOT/_editor/desktop-app/dist-bin}" && pwd)"
 
 echo "==> building the smoke image"
-docker build -q -t "$IMAGE" "$CONTEXT" >/dev/null
+buildkit_retry docker build -q -t "$IMAGE" "$CONTEXT" >/dev/null
 
 failures=0
 checked=0

@@ -21,6 +21,10 @@ const SUBJECTS = [
                 'ERROR: failed to build: listing workers for Build: failed to list workers: Unavailable: connection error: desc = "error reading server preface: read unix @->/run/docker.sock: use of closed network connection"',
             ],
             [
+                "worker discovery's write to the Docker socket dropped (killed desktop-update in run 43000902296)",
+                "ERROR: failed to build: failed to detect driver features: listing workers: failed to list workers: Unavailable: write unix @->/var/run/docker.sock: use of closed network connection",
+            ],
+            [
                 "the runner lost its route to Docker Hub resolving the syntax frontend (killed e2e in run 42359893687)",
                 'ERROR: failed to build: failed to solve: failed to resolve source metadata for docker.io/docker/dockerfile:1: failed to do request: Head "https://registry-1.docker.io/v2/docker/dockerfile/manifests/1": dial tcp 52.0.154.85:443: connect: no route to host',
             ],

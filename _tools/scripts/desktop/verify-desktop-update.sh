@@ -5,6 +5,7 @@
 # Costs two release-profile Tauri builds; released-artifact installation is covered by the separate install smoke tests.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
+. "$(dirname "$0")/../lib/buildkit-retry.sh"
 . "$(dirname "$0")/../lib/appimage-env.sh"
 
 ROOT="$(repo_root)"
@@ -98,7 +99,7 @@ cat >"$WORK/latest.json" <<MANIFEST
 MANIFEST
 
 echo "==> building the smoke image"
-docker build -q -t "$IMAGE" "$CONTEXT" >/dev/null
+buildkit_retry docker build -q -t "$IMAGE" "$CONTEXT" >/dev/null
 
 # A name unique per run, for the reason verify-desktop-install.sh spells out: container names are global to the
 # daemon, and a fixed one is a name a concurrent job force-removes out from under this one.

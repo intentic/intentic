@@ -61,7 +61,7 @@ const NEED: PasswordRequest = {
 };
 
 interface Calls {
-    setUp: { hello: boolean }[];
+    setUp: { hello: boolean; passphrase?: string | undefined }[];
     resets: number;
     remember: unknown[];
     sources: string[];
@@ -159,6 +159,18 @@ const button = (el: HTMLElement, text: string): HTMLButtonElement => {
     return found;
 };
 
+
+// Turning on asks for a passphrase typed twice; the button waits until both fields agree.
+const PASSPHRASE = `correct horse battery`;
+const turnOn = async (el: HTMLElement): Promise<void> => {
+    for (const field of el.querySelectorAll<HTMLInputElement>(`input[type="password"]`)) {
+        field.value = PASSPHRASE;
+        field.dispatchEvent(new Event(`input`));
+    }
+    await waitFor(() => expect(button(el, `Turn on Passwords`).disabled).toBe(false));
+    button(el, `Turn on Passwords`).click();
+};
+
 describe(`PasswordsApp`, () => {
     it(`waits for an update, then loads the passwords once it succeeds`, async () => {
         const { port } = fakePort({ status: READY });
@@ -243,9 +255,9 @@ describe(`PasswordsApp`, () => {
         await waitFor(() => expect(el.textContent).toContain(`Your passwords stay on this computer`));
         expect(el.textContent).not.toMatch(/hardened|keyring|askpass|inbox/iu);
 
-        button(el, `Turn on Passwords`).click();
+        await turnOn(el);
         await waitFor(() => expect(el.textContent).toContain(`ABCD-EFGH-IJKL-MNOP`));
-        expect(calls.setUp).toEqual([{ hello: true }]);
+        expect(calls.setUp).toEqual([{ hello: true, passphrase: PASSPHRASE }]);
         // Saving it says where it went: a download alone shows nothing in the desktop app. The test DOM's Blob is not the
         // runtime's, so the object URL is a stand-in.
         const made: unknown[] = [];
@@ -289,7 +301,7 @@ describe(`PasswordsApp`, () => {
         const { port } = fakePort({ status: { kind: `not-set-up`, canSetUp: true, hello: false, computer: `rog` }, alreadySetUp: true });
         const el = mount(port);
         await waitFor(() => expect(el.textContent).toContain(`Your passwords stay on this computer`));
-        button(el, `Turn on Passwords`).click();
+        await turnOn(el);
         await waitFor(() => expect(el.textContent).toContain(`Passwords is already on this computer`));
         expect(el.textContent).not.toContain(`Your recovery key`);
         expect(el.querySelector(`code`)).toBeNull();
@@ -312,8 +324,8 @@ describe(`PasswordsApp`, () => {
             });
         }
         const el = mount(port);
-        await waitFor(() => expect(el.textContent).toContain(`Lost your recovery key?`));
-        button(el, `Lost your recovery key?`).click();
+        await waitFor(() => expect(el.textContent).toContain(`Forgot your passphrase and lost your recovery key?`));
+        button(el, `Forgot your passphrase and lost your recovery key?`).click();
         await waitFor(() => expect(document.body.textContent).toContain(`Start Passwords over on this computer?`));
         expect(document.body.textContent).toContain(`The 1 password in it is set aside on this computer, not deleted`);
         expect(calls.resets).toBe(0);
@@ -325,10 +337,10 @@ describe(`PasswordsApp`, () => {
     it(`offers no start-over where the port cannot, or while unlocked`, async () => {
         const locked = mount(fakePort({ status: { ...READY, locked: true } }).port);
         await waitFor(() => expect(locked.textContent).toContain(`Names are shown while locked`));
-        expect(locked.textContent).not.toContain(`Lost your recovery key?`);
+        expect(locked.textContent).not.toContain(`Forgot your passphrase and lost your recovery key?`);
         const open = mount(fakePort({ status: { ...READY, locked: false }, reset: true }).port);
         await waitFor(() => expect(open.textContent).toContain(`Lock`));
-        expect(open.textContent).not.toContain(`Lost your recovery key?`);
+        expect(open.textContent).not.toContain(`Forgot your passphrase and lost your recovery key?`);
     });
 
     it(`says why it cannot be turned on where it cannot`, async () => {
