@@ -19,6 +19,7 @@ import AgentCardClock from "./AgentCardClock.vue";
 import AgentCardWhen from "./AgentCardWhen.vue";
 import { useCardClock } from "./cardClock";
 import CardLandPresses from "./CardLandPresses.vue";
+import { diffCount, diffTip } from "./cardPresses";
 
 const t = useT();
 
@@ -90,9 +91,10 @@ const grab = (event: PointerEvent): void => {
                 type="button"
                 class="inline-flex shrink-0 items-center gap-1.5 rounded-sm hover:underline"
                 :aria-label="t(`agents.agentCard.viewChangesCount`, { added: diff.insertions, removed: diff.deletions })"
+                v-tooltip.top="diffTip(diff)"
                 @click.stop="emit(`changes`)"
             >
-                <span class="font-mono tabular-nums"><span class="text-success">+{{ diff.insertions }}</span> <span class="text-danger">−{{ diff.deletions }}</span></span>
+                <span class="font-mono tabular-nums"><span class="text-success">+{{ diffCount(diff.insertions) }}</span> <span class="text-danger">−{{ diffCount(diff.deletions) }}</span></span>
                 <span>·</span>
                 <span class="font-medium text-link">{{ t(`agents.sealedCard.reviewDiff`) }}</span>
             </button>

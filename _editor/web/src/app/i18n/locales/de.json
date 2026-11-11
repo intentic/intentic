@@ -182,6 +182,8 @@
             "sends": "sendet {at}",
             "scheduledMessages": "Nachrichten",
             "sendsWhenRoom": "sendet, sobald Speicher frei ist",
+            "linesAdded": "Zeilen hinzugefügt",
+            "linesRemoved": "Zeilen entfernt",
             "viewChangesCount": "Änderungen ansehen: {added} Zeilen hinzugefügt, {removed} entfernt",
             "youDeletedFile": "Du hast {name} gelöscht, und dieser Agent hat die Datei auch geändert.",
             "youDeletedFiles": "Du hast {count} Datei gelöscht, die dieser Agent auch geändert hat. | Du hast {count} Dateien gelöscht, die dieser Agent auch geändert hat.",

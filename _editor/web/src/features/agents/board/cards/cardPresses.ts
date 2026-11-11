@@ -1,4 +1,5 @@
 import type { ActionItem, Tip, TooltipValue } from "@intentic/ui";
+import { formatCompact, formatCount } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { changesToRead } from "../../../../models/agent-status/agentStatus-attention";
 import { bookedGroups } from "../../../../models/conversations/drafts/bookings";
@@ -35,6 +36,18 @@ const familyRows = (family: number): Tip[`rows`] => (family > 0 ? [{ label: t(`a
 
 // Everything is kept, except what would go by itself: a message scheduled in it is cancelled (the sandbox's archive.ts),
 // since at its time it would only meet a conversation filed away. Said before the press, as the one thing it loses.
+// A diff count at card width: "16.6K", never "16569". The signs stay beside it, since a receipt card drops the colours.
+export const diffCount = formatCompact;
+
+// The diff count's hover: the card shows it compacted ("+16.6K −7.5K"), the tip names the exact lines.
+export const diffTip = (diff: { readonly insertions: number; readonly deletions: number }): Tip => ({
+    title: t(`agents.agentStatus.viewChanges`),
+    rows: [
+        { label: t(`agents.agentCard.linesAdded`), value: formatCount(diff.insertions), tone: `success` },
+        { label: t(`agents.agentCard.linesRemoved`), value: formatCount(diff.deletions), tone: `danger` },
+    ],
+});
+
 export const archiveTip = (agent: Pick<FleetAgent, "queue">, family: number): Tip => {
     const cancels = bookedGroups(agent.queue).reduce((count, group) => count + group.messages.length, 0);
     return {

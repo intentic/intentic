@@ -182,6 +182,8 @@
             "sends": "wyśle {at}",
             "scheduledMessages": "Wiadomości",
             "sendsWhenRoom": "wyśle, gdy zwolni się pamięć",
+            "linesAdded": "Dodane wiersze",
+            "linesRemoved": "Usunięte wiersze",
             "viewChangesCount": "Zobacz zmiany: dodane wiersze: {added}, usunięte: {removed}",
             "youDeletedFile": "Usunięto {name}, a ten agent też go zmienił.",
             "youDeletedFiles": "Usunięto {count} plik, który ten agent też zmienił. | Usunięto {count} pliki, które ten agent też zmienił. | Usunięto {count} plików, które ten agent też zmienił.",

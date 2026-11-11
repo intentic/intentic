@@ -182,6 +182,8 @@
             "sends": "part {at}",
             "scheduledMessages": "Messages",
             "sendsWhenRoom": "envoi quand la mémoire se libère",
+            "linesAdded": "Lignes ajoutées",
+            "linesRemoved": "Lignes supprimées",
             "viewChangesCount": "Voir les changements : {added} lignes ajoutées, {removed} supprimées",
             "youDeletedFile": "Vous avez supprimé {name}, que cet agent a aussi modifié.",
             "youDeletedFiles": "Vous avez supprimé {count} fichier que cet agent a aussi modifié. | Vous avez supprimé {count} fichiers que cet agent a aussi modifiés.",

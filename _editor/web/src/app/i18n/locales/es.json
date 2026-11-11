@@ -182,6 +182,8 @@
             "sends": "se envía {at}",
             "scheduledMessages": "Mensajes",
             "sendsWhenRoom": "se envía al liberarse memoria",
+            "linesAdded": "Líneas añadidas",
+            "linesRemoved": "Líneas eliminadas",
             "viewChangesCount": "Ver cambios: {added} líneas añadidas, {removed} eliminadas",
             "youDeletedFile": "Eliminaste {name}, y este agente también lo cambió.",
             "youDeletedFiles": "Eliminaste {count} archivo que este agente también cambió. | Eliminaste {count} archivos que este agente también cambió.",

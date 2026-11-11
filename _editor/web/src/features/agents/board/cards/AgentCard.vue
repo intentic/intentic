@@ -41,7 +41,7 @@ import { dropActionFor, type PendingAction } from "../laneDrop";
 import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
 import { attentionReason, changesToRead, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
-import { archiveTip, barFiling as barFilingOf, closeTip, type ReactionsStrip, restoreTip, toolPresses } from "./cardPresses";
+import { archiveTip, barFiling as barFilingOf, closeTip, diffCount, diffTip, type ReactionsStrip, restoreTip, toolPresses } from "./cardPresses";
 import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { cardLine, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
@@ -810,11 +810,11 @@ const grab = (event: PointerEvent): void => {
                         type="button"
                         class="shrink-0 rounded-sm font-mono tabular-nums hover:underline"
                         :aria-label="t(`agents.agentCard.viewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
-                        v-tooltip.top="t(`agents.agentStatus.viewChanges`)"
+                        v-tooltip.top="diffTip(agent.diff)"
                         @click.stop="emit('changes')"
                     >
-                        <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
-                        <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
+                        <span :class="receipt ? '' : 'text-success'">+{{ diffCount(agent.diff.insertions) }}</span>
+                        <span :class="receipt ? '' : 'text-danger'"> −{{ diffCount(agent.diff.deletions) }}</span>
                     </button>
                     <!-- After the model and branch facts, before the time, as in the chat rail. ChildCount draws nothing for a card with no children. -->
                     <ChildCount :agent="agent" />
