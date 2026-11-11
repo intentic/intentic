@@ -20,7 +20,7 @@ import type { AgentRequest } from "../providers/agent-request.js";
 import type { TurnContext } from "../providers/adapter.js";
 import { planTurn } from "../run/turn/turn-plan.js";
 import { budgetOn } from "../run/turn/turn-plan.testing.js";
-import { composeWirePrompt } from "./turn-preamble.js";
+import { composeWirePrompt, sharedTreeNote, WORKTREE_NOTE_TITLE } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "@intentic/agent-context/workspace-map";
 import { RUNTIME_ADAPTERS } from "../../runtimes/runtime-table.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
@@ -151,8 +151,9 @@ test("an opt-in that is off adds nothing at all", async () => {
 
     const prompt = await promptOf(servicesIn(root, { workspaceMap: false }), { prompt: "do the thing" } as AgentTurn, contextIn(root));
 
-    // The checks note is every opening message's, map or no map; nothing of the map's own rides beside it.
-    expect(prompt).toBe(composeWirePrompt([OPENING_CHECKS_NOTE], "do the thing"));
+    // Where its files live and the checks note are every opening message's, map or no map; nothing of the map's own
+    // rides beside them.
+    expect(prompt).toBe(composeWirePrompt([sharedTreeNote(root), OPENING_CHECKS_NOTE], "do the thing"));
 });
 
 test("a follow-up in the same conversation is not charged for the map again", async () => {
@@ -166,7 +167,13 @@ test("a follow-up in the same conversation is not charged for the map again", as
         },
     );
 
-    const prompt = await promptOf(services, { prompt: "and now this", conversationId: "conv-1" } as AgentTurn, contextIn(root, root, "and now this"));
+    // A follow-up resumes the session that heard the opening notes.
+    const followup = contextIn(root, root, "and now this");
+    const prompt = await promptOf(
+        services,
+        { prompt: "and now this", conversationId: "conv-1" } as AgentTurn,
+        { ...followup, base: { ...followup.base, spec: { ...followup.base.spec, sessionId: "session-1" } } },
+    );
 
     expect(prompt).toBe("and now this");
 });
@@ -225,7 +232,7 @@ test("a persona that drops the map gets none of it, however the sandbox is set",
 
     expect(plan).toMatchObject({ ok: true });
     const request = (plan as { request: AgentRequest }).request;
-    expect(composeWirePrompt(request.spec.notes ?? [], request.spec.prompt)).toBe(composeWirePrompt([OPENING_CHECKS_NOTE], "do the thing"));
+    expect(composeWirePrompt(request.spec.notes ?? [], request.spec.prompt)).toBe(composeWirePrompt([sharedTreeNote(root), OPENING_CHECKS_NOTE], "do the thing"));
     expect(plan).not.toHaveProperty("experiments.mapArm");
 });
 
@@ -237,5 +244,5 @@ test("the map strips back off the stored message, and the chat is given a row fo
     const prompt = await promptOf(servicesIn(root, { workspaceMap: true }), { prompt: "do the thing" } as AgentTurn, contextIn(root));
 
     expect(stripTurnPreamble(prompt)).toBe("do the thing");
-    expect(preambleNotes(prompt).map((note) => note.title)).toEqual(["Map of this project", LANDING_CHECKS_NOTE_TITLE]);
+    expect(preambleNotes(prompt).map((note) => note.title)).toEqual([WORKTREE_NOTE_TITLE, "Map of this project", LANDING_CHECKS_NOTE_TITLE]);
 });

@@ -7,7 +7,7 @@ import { unstubbed } from "@intentic/testing";
 import * as versionLanded from "../../conversations/land/version-landed.js";
 import type { Services } from "../../composition.js";
 import { collect } from "../../harness/route-client.testing.js";
-import { gitOut, OPENING_CHECKS_PREAMBLE, realCheckout, recordingLogger } from "../../harness/route-fakes.testing.js";
+import { gitOut, MAIN_TREE_OPENING_PREAMBLE, OWN_CHECKOUT_OPENING_PREAMBLE, realCheckout, recordingLogger } from "../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../harness/route-services.testing.js";
 import { beginTurn } from "../../conversations/actor/conversation-actors.testing.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
@@ -228,7 +228,7 @@ test("a main-tree turn checkpoints before it runs, snapshots after, and raises n
     const frames = await collect(streamAgent(s, { prompt: "tidy the readme", conversationId: "placed-main" }, undefined));
 
     expect(frames).toStrictEqual([
-        OPENING_CHECKS_PREAMBLE,
+        MAIN_TREE_OPENING_PREAMBLE,
         { kind: "checkpoint", id: "snap-1", index: 0 },
         { kind: "delta", text: "done" },
         { kind: "done" },
@@ -245,7 +245,7 @@ test("a main-tree turn with no conversation keeps its checkpoint unindexed and f
 
     const frames = await collect(streamAgent(s, { prompt: "tidy the readme" }, undefined));
 
-    expect(frames).toStrictEqual([OPENING_CHECKS_PREAMBLE, { kind: "checkpoint", id: "snap-2" }, { kind: "delta", text: "done" }, { kind: "done" }]);
+    expect(frames).toStrictEqual([MAIN_TREE_OPENING_PREAMBLE, { kind: "checkpoint", id: "snap-2" }, { kind: "delta", text: "done" }, { kind: "done" }]);
     expect(writes.checkpoints).toStrictEqual([]);
 });
 
@@ -263,7 +263,7 @@ test("a runtime that throws is observed as the turn's failure, and the throw rea
     })();
 
     await expect(run).rejects.toThrow("the harness crashed");
-    expect(frames).toStrictEqual([OPENING_CHECKS_PREAMBLE, { kind: "delta", text: "starting" }]);
+    expect(frames).toStrictEqual([MAIN_TREE_OPENING_PREAMBLE, { kind: "delta", text: "starting" }]);
     expect(s.agents.entry("placed-throws")).toMatchObject({ ending: { kind: "failed" } });
 });
 
@@ -284,7 +284,7 @@ test("a clean isolated turn rebases onto the main line, lands into the main tree
     expect(frames).toStrictEqual([
         { kind: "worktree", branch: "agent/placed-lands", base: base.slice(0, 7), unenforced: true, sync: { commits: 1, blocked: [] } },
         { kind: "checkpoint", id: "worktree:0", index: 0 },
-        OPENING_CHECKS_PREAMBLE,
+        OWN_CHECKOUT_OPENING_PREAMBLE,
         { kind: "delta", text: "shipped" },
         { kind: "done" },
         { kind: "landed", landed: true, deps: { missing: 1, started: ["root"], deferred: false } },
@@ -404,7 +404,7 @@ test("a failed isolated turn lands nothing, leaves its books alone, and settles 
     const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-fails", isolated: true, autoLand: true }, undefined));
 
     expect(frames.slice(2)).toStrictEqual([
-        OPENING_CHECKS_PREAMBLE,
+        OWN_CHECKOUT_OPENING_PREAMBLE,
         { kind: "error", code: "context-window-too-small", message: "this model cannot hold the turn", account: "default" },
         { kind: "done" },
     ]);
@@ -433,7 +433,7 @@ test("a stopped isolated turn lands nothing but settles its books on the branch"
         streamAgent(s, { prompt: "ship it", conversationId: "placed-stopped", isolated: true, autoLand: true }, controller.signal),
     );
 
-    expect(frames.slice(2)).toStrictEqual([OPENING_CHECKS_PREAMBLE, { kind: "delta", text: "working" }, { kind: "done" }]);
+    expect(frames.slice(2)).toStrictEqual([OWN_CHECKOUT_OPENING_PREAMBLE, { kind: "delta", text: "working" }, { kind: "done" }]);
     expect(lands(writes)).toStrictEqual([{ name: "agent.land", attrs: { id: "placed-stopped", mode: "measure", span: "outstanding" } }]);
     expect(await gitOut(work, "status", "--porcelain")).toBe("");
     expect(await gitOut(work, "show", "--name-only", "--format=%s", "agent/placed-stopped")).toContain("app.ts");
@@ -468,7 +468,7 @@ test("a card settling mid-turn rebases the branch again, restates where it stand
     expect(frames).toStrictEqual([
         { kind: "worktree", branch: "agent/placed-resync", base: base.slice(0, 7), unenforced: true },
         { kind: "checkpoint", id: "worktree:0", index: 0 },
-        OPENING_CHECKS_PREAMBLE,
+        OWN_CHECKOUT_OPENING_PREAMBLE,
         { kind: "delta", text: "asked" },
         { kind: "worktree", branch: "agent/placed-resync", base: moved.slice(0, 7), unenforced: true, sync: { commits: 1, blocked: [] } },
         { kind: "done" },

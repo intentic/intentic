@@ -19,6 +19,7 @@ import type { TurnContext } from "../../providers/adapter.js";
 import { experimentArm } from "@intentic/agent-context/experiments";
 import { conversationAfter } from "../../../conversations/registry/agents-store.testing.js";
 import { LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
+import { sharedTreeNote, WORKTREE_NOTE_TITLE } from "../../prompt/turn-preamble.js";
 import { base, budgetOn, context, memoryReading, ROOT, turn } from "../turn/turn-plan.testing.js";
 import { decideTurn, spawnNoteFor, type TurnDecision } from "./turn-decision.js";
 import type { AdmittedTurnFacts, TurnFacts } from "./turn-facts.js";
@@ -189,11 +190,13 @@ test.each([
 
     expect(decision.granted).toEqual(mounted ? [REDDIT] : []);
     expect(decision.context.base.policy.disallowedTools).toEqual(mounted ? undefined : ["Skill(reddit-main)"]);
-    // honoured's note, since an absence alone reads as an account that is not connected.
+    // honoured's note, since an absence alone reads as an account that is not connected. A main-tree opening turn is
+    // told its root is the shared checkout first, whatever it holds.
     expect(decision.context.base.spec.notes).toEqual(
         mounted
-            ? []
+            ? [sharedTreeNote(ROOT)]
             : [
+                  sharedTreeNote(ROOT),
                   {
                       title: GATED_CREDENTIALS_TITLE,
                       text: expect.stringContaining('- `reddit-main` needs approval from ada@example.com: `secrets request reddit-main --why "…"`'),
@@ -207,7 +210,7 @@ test("a gated connector loses its variables from the shell and its skill, and no
 
     expect(decision.context.base.tools.cliEnv).toEqual({ PATH: "/usr/bin" });
     expect(decision.context.base.policy.disallowedTools).toEqual(["Skill(github)"]);
-    expect(titles(decision)).toEqual([GATED_CREDENTIALS_TITLE]);
+    expect(titles(decision)).toEqual([WORKTREE_NOTE_TITLE, GATED_CREDENTIALS_TITLE]);
 });
 
 // the project map: an opening, non-fork message, and only in the treatment arm of a measured conversation

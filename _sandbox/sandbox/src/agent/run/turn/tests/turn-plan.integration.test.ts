@@ -17,7 +17,7 @@ import { SKILL_CATALOG_NOTE_HEADER } from "../../../../store/loaded-skills.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../../../../workspace/layout/workspace-setup.js";
 import { LANDING_CHECKS_NOTE } from "../../../prompt/checks-note.js";
 import type { AgentRequest } from "../../../providers/agent-request.js";
-import { composeWirePrompt } from "../../../prompt/turn-preamble.js";
+import { composeWirePrompt, sharedTreeNote } from "../../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../../providers/adapter.js";
 import { planTurn } from "../turn-plan.js";
 import { base, budgetOn, codexServices, context, harnessServices, servicesWith, turn, wire } from "../turn-plan.testing.js";
@@ -254,7 +254,7 @@ test("a native Grok turn hears it too: the note belongs to the tree, not to the 
     expect(prompt).toContain(SETUP_NOTICE_HEADER);
 });
 
-test("an installed tree earns no notice, so an opening turn is the user's message and the checks note alone", async () => {
+test("an installed tree earns no notice, so an opening turn is the user's message, where its files live and the checks note", async () => {
     const root = await mkdtemp(join(tmpdir(), "turn-plan-"));
     const services = servicesIn(root, {
         codexThreadExists: async () => true,
@@ -265,8 +265,9 @@ test("an installed tree earns no notice, so an opening turn is the user's messag
 
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(root));
 
-    // What runs after the work lands is every opening message's to hear; nothing about the tree's dependencies joins it.
-    expect(prompt).toBe(composeWirePrompt([LANDING_CHECKS_NOTE], "do the thing"));
+    // Where its files live and what runs after the work lands are every opening message's to hear; nothing about the
+    // tree's dependencies joins them.
+    expect(prompt).toBe(composeWirePrompt([sharedTreeNote(root), LANDING_CHECKS_NOTE], "do the thing"));
 });
 
 // The probe must ask about the tree the turn itself resolves through, not the daemon's worktree view: a daemon-side

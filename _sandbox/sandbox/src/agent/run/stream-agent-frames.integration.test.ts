@@ -5,14 +5,13 @@ import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/p
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { collect } from "../../harness/route-client.testing.js";
-import { OPENING_CHECKS_PREAMBLE, recordingLogger } from "../../harness/route-fakes.testing.js";
+import { MAIN_TREE_OPENING_PREAMBLE, recordingLogger } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, recordingTurnStores, services, withTranslator } from "../../harness/route-services.testing.js";
 import type { ConversationEvent } from "../../conversations/actor/conversation-decide.js";
 import { notedFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { recordProviderSuccess } from "../providers/provider-health.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import type { AgentRequest } from "../providers/agent-request.js";
-import { LANDING_CHECKS_NOTE } from "../prompt/checks-note.js";
 import { streamAgent } from "./stream-agent.js";
 
 // streamAgent's wiring with a scripted runtime: frames, settled stores, the recorded hold; the matrix is classify-failure.test.ts.
@@ -131,7 +130,7 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
 
     const stamp = { account: "default", actor: "ada@example.com" };
     expect(frames).toStrictEqual([
-        OPENING_CHECKS_PREAMBLE,
+        MAIN_TREE_OPENING_PREAMBLE,
         { kind: "session", sessionId: "s-clean", ...stamp },
         { kind: "delta", text: "Looking." },
         { kind: "text_end" },
@@ -262,7 +261,7 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
 
     const stamp = { account: "default", actor: "ada@example.com" };
     expect(frames).toStrictEqual([
-        OPENING_CHECKS_PREAMBLE,
+        MAIN_TREE_OPENING_PREAMBLE,
         { kind: "session", sessionId: "s-limit", ...stamp },
         { kind: "rate_limit_info", status: "rejected", resetsAt: 1_900_000_000, ...stamp },
         {
@@ -384,7 +383,7 @@ test("an outage goes out as the breaker's retry frame, and remembers the session
     const frames = await collect(streamAgent(s, input, undefined));
 
     expect(frames).toStrictEqual([
-        OPENING_CHECKS_PREAMBLE,
+        MAIN_TREE_OPENING_PREAMBLE,
         { kind: "session", sessionId: "s-outage", account: "default" },
         {
             kind: "error",
@@ -437,7 +436,7 @@ test("a refused credential is promised a re-mint and held for it, unless the tur
     const frames = await collect(streamAgent(s, input, undefined));
 
     expect(frames).toStrictEqual([
-        OPENING_CHECKS_PREAMBLE,
+        MAIN_TREE_OPENING_PREAMBLE,
         { kind: "session", sessionId: "s-token", account: "default" },
         { kind: "error", code: "claude-token-refused", message: "401 invalid bearer token", account: "default", autoResume: "scheduled" },
         { kind: "done" },
@@ -491,7 +490,7 @@ test("a turn that ends with nothing to show gets its failure synthesized ahead o
     const sentence =
         "The turn ended with nothing to show for it: 1 tool call and then a stop, no reply and no change to a file. Nothing failed: the session is intact, so carrying on continues from where it stopped.";
     expect(frames).toStrictEqual([
-        OPENING_CHECKS_PREAMBLE,
+        MAIN_TREE_OPENING_PREAMBLE,
         { kind: "tool_call", id: "call-read", name: "Read", category: "read", status: "completed", locations: [{ path: "/work/src/parser.ts" }] },
         { kind: "error", message: sentence, own: true, account: "default", held: { ran: true }, autoResume: "available" },
         { kind: "done" },
@@ -521,7 +520,7 @@ test("a stopped turn's error frames never reach the stream, and the ledger calls
     const frames = await collect(streamAgent(s, { prompt: "go", conversationId: "frames-cancel" }, controller.signal));
 
     expect(frames).toStrictEqual([
-        OPENING_CHECKS_PREAMBLE,
+        MAIN_TREE_OPENING_PREAMBLE,
         { kind: "session", sessionId: "s-cancel", account: "default" },
         { kind: "delta", text: "working" },
         { kind: "done" },
@@ -563,9 +562,9 @@ test("a routed runtime's readings are re-measured, the cache clock dropped, and 
 
     const stamp = { account: "codex-subscription" };
     expect(frames).toStrictEqual([
-        // Planning's own notes, disclosed before the runtime says anything: what runs after it lands. No spawning note:
-        // Codex reaches the daemon's subagents server over the door, which carries its own words.
-        { kind: "preamble", notes: [LANDING_CHECKS_NOTE] },
+        // Planning's own notes, disclosed before the runtime says anything: where its files live and what runs after it
+        // lands. No spawning note: Codex reaches the daemon's subagents server over the door, which carries its own words.
+        MAIN_TREE_OPENING_PREAMBLE,
         { kind: "session", sessionId: "thread-1", ...stamp },
         { kind: "delta", text: "on it" },
         { kind: "text_end" },

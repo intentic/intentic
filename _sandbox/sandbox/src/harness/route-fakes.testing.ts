@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import { type Logger, pino } from "pino";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
@@ -13,13 +14,17 @@ import { claudeStoreOf } from "../sessions/session-store.js";
 import { opt } from "../opt.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { LANDING_CHECKS_NOTE } from "../agent/prompt/checks-note.js";
+import { ownCheckoutNote, sharedTreeNote } from "../agent/prompt/turn-preamble.js";
 
 // Route harness's recording fakes: the two process supervisors, inert history/files seams a test overrides selectively,
 // and a temp workspace for repo-discovery suites. `services` composes the inert ones.
 
-// What a conversation's opening turn discloses before its runtime says anything: the note telling it what checks its
-// work (agent/prompt/checks-note.ts).
-export const OPENING_CHECKS_PREAMBLE: AgentEvent = { kind: "preamble", notes: [LANDING_CHECKS_NOTE] };
+// What a conversation's opening turn discloses before its runtime says anything: where its files live (turn-preamble.ts),
+// then what checks its work (agent/prompt/checks-note.ts). The root is the workspace these services run on.
+// A main-tree turn works in the shared checkout itself.
+export const MAIN_TREE_OPENING_PREAMBLE: AgentEvent = { kind: "preamble", notes: [sharedTreeNote(WORKSPACE_ROOT), LANDING_CHECKS_NOTE] };
+// An isolated turn in a namespaced runtime sees its own worktree at the root.
+export const OWN_CHECKOUT_OPENING_PREAMBLE: AgentEvent = { kind: "preamble", notes: [ownCheckoutNote(WORKSPACE_ROOT, false), LANDING_CHECKS_NOTE] };
 
 // A temp workspace on disk for repo discovery: each entry is a repo dir with a `.git`, optionally an operator/ panel
 // (package.json with a dev script).
