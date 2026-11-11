@@ -56,6 +56,9 @@ pub enum Outcome {
     Deleted,
     /// The edge stopped trusting this QUIC connection: a probe or a request went unanswered on it.
     Demoted,
+    /// Not a dial's ending but Node's word (2026-11-11): another copy, on this host, is the one the platform holds to run
+    /// the sandbox, and this copy is on standby. Nothing is dialled until Node sends a tunnel again.
+    Superseded(String),
 }
 
 impl Outcome {
@@ -70,6 +73,10 @@ impl Outcome {
             ),
             Self::Deleted => "the platform deleted this sandbox".into(),
             Self::Demoted => "the edge stopped trusting this QUIC connection".into(),
+            Self::Superseded(host) => format!(
+                "this copy is on standby: {} runs this sandbox",
+                tunnel::Identity::named_host(host)
+            ),
         }
     }
 }
@@ -129,6 +136,12 @@ impl Pace {
                 }
             }
             Outcome::Deleted => (DELETED_PACE, Some(TunnelRefusal::Deleted)),
+            // Never a carrier's to redial: Node withdrew the tunnel, which ends every carrier. Should one end this way
+            // anyway, it waits as long as a deleted sandbox's would.
+            Outcome::Superseded(host) => (
+                DELETED_PACE,
+                Some(TunnelRefusal::Superseded { host: host.clone() }),
+            ),
         };
         Next { wait, refused }
     }
@@ -188,6 +201,14 @@ impl Standing {
         }
     }
 
+    /// No tunnel is configured because this copy is on standby, and `host` runs the sandbox.
+    pub fn superseded(&self, host: String, reason: String) {
+        let mut inner = self.lock();
+        inner.held = false;
+        inner.reason = Some(reason);
+        inner.refused = Some(TunnelRefusal::Superseded { host });
+    }
+
     pub fn quic(&self, held: bool) {
         self.lock().quic = held;
     }
@@ -215,6 +236,8 @@ impl Standing {
                 (TunnelState::Elsewhere, Some(host.clone()))
             }
             (Some(TunnelRefusal::Deleted), false, true) => (TunnelState::Deleted, None),
+            // Standing down configures no tunnel; a stray report while one is configured reads as dialling.
+            (Some(TunnelRefusal::Superseded { .. }), false, true) => (TunnelState::Dialling, None),
             (None, false, true) => (TunnelState::Dialling, None),
         };
         Some(TunnelVitals {
@@ -290,6 +313,43 @@ mod tests {
             top,
         );
         assert_eq!(pace.drawing(&refused, Duration::ZERO, top).refused, None);
+    }
+
+    // A standby copy (2026-11-11): Node withdrew the tunnel and named the host that runs the sandbox. Node hears why
+    // on every hello until it sends a tunnel again, which clears it; the vitals read off, as for any unconfigured tunnel.
+    #[test]
+    fn a_stand_down_is_told_to_node_until_a_tunnel_is_configured_again() {
+        let standing = Standing::default();
+        standing.configure(false);
+        let reason = Outcome::Superseded("z440 (linux)".into()).reason();
+        assert!(reason.contains("standby"), "{reason}");
+        standing.superseded("z440 (linux)".into(), reason.clone());
+        assert_eq!(
+            standing.report(),
+            ToNode::Tunnel {
+                connected: false,
+                reason: Some(reason),
+                refused: Some(TunnelRefusal::Superseded {
+                    host: "z440 (linux)".into()
+                }),
+            }
+        );
+        assert_eq!(
+            standing.vitals(Instant::now()).map(|vitals| vitals.state),
+            Some(TunnelState::Off)
+        );
+        standing.configure(true);
+        assert_eq!(
+            standing.report(),
+            ToNode::Tunnel {
+                connected: false,
+                reason: None,
+                refused: None
+            }
+        );
+        // A carrier that somehow ends this way never redials at its usual pace.
+        let next = Pace::default().next(&Outcome::Superseded("z440".into()), Duration::ZERO);
+        assert_eq!(next.wait, DELETED_PACE);
     }
 
     #[test]

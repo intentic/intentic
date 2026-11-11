@@ -1,11 +1,15 @@
 pub mod at_rest;
 pub mod attention;
 pub mod backup;
+pub mod backup_repo;
+pub mod backup_seal;
 pub mod compose;
+pub mod compose_out;
 pub mod composition;
 pub mod connect;
 pub mod containment;
 pub mod desired;
+pub mod device_move;
 pub mod doctor;
 pub mod egress;
 pub mod fix;
@@ -39,6 +43,7 @@ pub mod sleep;
 pub mod staged;
 pub mod storage;
 pub mod swaps;
+pub mod takeover;
 pub mod target_probe;
 pub mod tidy;
 pub mod trash;
@@ -148,12 +153,13 @@ pub fn missing(slug: &str) -> String {
 /// guess which sandbox to touch when the device runs several (`verb` names the re-run, e.g. "ic sandbox
 /// update").
 pub fn resolve_slug(given: Option<String>, verb: &str) -> Result<String> {
-    if let Some(slug) = given {
+    if let Some(given) = given {
+        let slug = slug_for(given)?;
         // A name no sandbox can have is one this device does not have, said before anything is made in its name.
         if !is_slug(&slug) {
             bail!("{}", missing(&slug));
         }
-        return Ok(slug_named(slug));
+        return Ok(slug);
     }
     let slugs = list_slugs();
     match slugs.len() {
@@ -180,18 +186,56 @@ pub fn resolve_slug(given: Option<String>, verb: &str) -> Result<String> {
     }
 }
 
-/// The slug a name given on the command line stands for. The sandbox's own messages (a daemon that cannot read its
-/// owner file, the platform's pages) name it by its 12-hex sandbox id, while a sandbox set up from the platform runs
-/// as `sandbox-<id>`: an id with no container of its own is taken for that one, when it exists.
-fn slug_named(given: String) -> String {
+/// The slug a name given on the command line stands for: a sandbox's slug as it is, else its 12-hex sandbox id (the
+/// sandbox's own messages and the platform's pages name it so, while one set up from the platform runs as
+/// `sandbox-<id>`), else the owner's name for it as `ic sandbox list` shows it, matched whatever its case. A name two
+/// sandboxes share names neither, and says which slugs to pick from; a name nothing answers to comes back as it was
+/// given, for the verb to say there is no such sandbox in its own words.
+pub fn slug_for(given: String) -> Result<String> {
     let exists = |slug: &str| {
-        docker::container_exists(&container_of(slug)) || docker::container_exists(&parked_of(slug))
+        is_slug(slug)
+            && (docker::container_exists(&container_of(slug))
+                || docker::container_exists(&parked_of(slug)))
     };
-    let prefixed = format!("sandbox-{given}");
-    if !given.starts_with("sandbox-") && !exists(&given) && exists(&prefixed) {
-        return prefixed;
+    if exists(&given) {
+        return Ok(given);
     }
-    given
+    let prefixed = format!("sandbox-{given}");
+    if !given.starts_with("sandbox-") && exists(&prefixed) {
+        return Ok(prefixed);
+    }
+    let named = loopback::display_names(&list_slugs());
+    match slugs_named(&given, &named).as_slice() {
+        [] => Ok(given),
+        [slug] => Ok(slug.clone()),
+        several => bail!(
+            "{}",
+            crate::ui::explain(
+                &format!(
+                    "{} sandboxes on this device are named {given}.",
+                    several.len()
+                ),
+                Some(&format!("they are {}.", several.join(", "))),
+                Some("name it by its slug, as `ic sandbox list` shows it."),
+            )
+        ),
+    }
+}
+
+/// The slugs whose owner's name is `given`, ignoring case and the spaces around it. Pure.
+fn slugs_named(given: &str, named: &[(String, Option<String>)]) -> Vec<String> {
+    let wanted = given.trim().to_lowercase();
+    if wanted.is_empty() {
+        return Vec::new();
+    }
+    named
+        .iter()
+        .filter(|(_, name)| {
+            name.as_deref()
+                .is_some_and(|name| name.trim().to_lowercase() == wanted)
+        })
+        .map(|(slug, _)| slug.clone())
+        .collect()
 }
 
 /// The sandbox's own network, before any container joins it: docker mints a missing named volume at run
@@ -224,15 +268,20 @@ pub fn list() -> Result<()> {
         crate::ui::quiet("There is no sandbox on this device.");
     }
     let mut rows: Vec<crate::ui::Item> = Vec::new();
-    for slug in &slugs {
-        let asleep = crate::record::read(slug).is_ok_and(|record| record.asleep);
-        let status = shown_status(&container_status(slug), asleep).to_string();
-        // The log's row stays `<status> <slug>`, the shape anything reading a listing already knows.
-        crate::ui::plain(&format!("{status:<9} {slug}"));
+    for (slug, name) in loopback::display_names(&slugs) {
+        let asleep = crate::record::read(&slug).is_ok_and(|record| record.asleep);
+        let status = shown_status(&container_status(&slug), asleep).to_string();
+        // The log's row starts `<status> <slug>`, the shape anything reading a listing already knows; the owner's
+        // name, when the daemon kept one, follows it.
+        crate::ui::plain(&listed_row(&status, &slug, name.as_deref()));
+        let meta = match &name {
+            Some(_) => format!("{status} · {slug}"),
+            None => status.clone(),
+        };
         rows.push(crate::ui::Item::new(
             status_tone(&status),
-            slug.clone(),
-            status,
+            name.unwrap_or_else(|| slug.clone()),
+            meta,
         ));
     }
     if crate::ui::is_rich() {
@@ -240,6 +289,14 @@ pub fn list() -> Result<()> {
     }
     print_recoverable();
     Ok(())
+}
+
+/// One sandbox's line in the plain listing: its state, its slug, and the owner's name for it when there is one. Pure.
+fn listed_row(status: &str, slug: &str, name: Option<&str>) -> String {
+    match name {
+        Some(name) => format!("{status:<9} {slug}  {name}"),
+        None => format!("{status:<9} {slug}"),
+    }
 }
 
 /// The glyph a listing row carries: running is well, stopped or asleep is neutral, anything else wants a look. Pure.
@@ -346,6 +403,37 @@ mod tests {
         assert_eq!(status_tone("?"), crate::ui::Tone::Warn);
         assert_eq!(days_left(1), "1 day left");
         assert_eq!(days_left(6), "6 days left");
+    }
+
+    #[test]
+    fn a_listing_row_names_the_sandbox_after_its_slug() {
+        assert_eq!(listed_row("running", "work", None), "running   work");
+        assert_eq!(
+            listed_row("asleep", "sandbox-3c469e9d6c58", Some("Work laptop")),
+            "asleep    sandbox-3c469e9d6c58  Work laptop"
+        );
+    }
+
+    #[test]
+    fn a_sandbox_is_found_by_its_owners_name_whatever_its_case() {
+        let named = vec![
+            ("sandbox-aaa".to_string(), Some("Work".to_string())),
+            ("sandbox-bbb".to_string(), Some("Home lab".to_string())),
+            ("sandbox-ccc".to_string(), None),
+            ("sandbox-ddd".to_string(), Some(" home LAB ".to_string())),
+        ];
+        assert_eq!(slugs_named("work", &named), vec!["sandbox-aaa".to_string()]);
+        assert_eq!(
+            slugs_named(" WORK ", &named),
+            vec!["sandbox-aaa".to_string()]
+        );
+        // Two sandboxes share a name: both are answers, and the caller names neither.
+        assert_eq!(
+            slugs_named("Home lab", &named),
+            vec!["sandbox-bbb".to_string(), "sandbox-ddd".to_string()]
+        );
+        assert!(slugs_named("nobody", &named).is_empty());
+        assert!(slugs_named("  ", &named).is_empty());
     }
 
     fn names(list: &[&str]) -> Vec<String> {

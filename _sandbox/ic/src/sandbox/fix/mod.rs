@@ -1,3 +1,4 @@
+pub mod away;
 pub mod chain;
 pub mod clock;
 pub mod desktop;
@@ -137,6 +138,9 @@ struct Engine {
     /// Per sandbox, whether an unattended run leaves it to another side of this computer, which side that is, and
     /// whether that side has fallen silent so this run adopts it (side.rs): read once per run.
     sides: HashMap<String, Unattended>,
+    /// Per sandbox, why it is left to another hand: a copy on standby, or Compose's while it stands stopped (away.rs).
+    /// Read once per run; such a sandbox is reported settled and never started.
+    away: HashMap<String, away::Away>,
     /// This side's environment (side.rs), which every report names.
     env: Option<String>,
     /// The machine agent's last upkeep pass, summed for the finished reports (model::upkeep_summary): read once per run.
@@ -205,6 +209,7 @@ pub fn run(args: Args) -> Result<()> {
         platform_forced: forced.is_some(),
         machine: crate::sandbox::connect::machine_label(),
         sides: HashMap::new(),
+        away: HashMap::new(),
         env: side::here().env,
         upkeep: read_upkeep(),
         keeps_any: true,
@@ -668,6 +673,40 @@ impl Engine {
         side
     }
 
+    /// Take out of this run every sandbox another hand runs (away.rs), each looked at once: a copy on standby that still
+    /// runs is stopped as `ic sandbox stop` stops it (held), so no later sweep starts it again; doctor only says so.
+    fn leave_away(&mut self) {
+        for slug in self.slugs.clone() {
+            if !self.away.contains_key(&slug) {
+                let Some(found) = away::look(&slug).and_then(|seen| away::away(&seen, self.auto))
+                else {
+                    continue;
+                };
+                ui::note(&format!("{slug}: {}", away::sentence(&found, &slug)));
+                if let (false, away::Away::Standby { running: true, .. }) = (self.doctor, &found) {
+                    let by = if self.auto {
+                        crate::sandbox::power::By::Keeper
+                    } else {
+                        crate::sandbox::power::By::Person
+                    };
+                    if let Err(fail) = crate::sandbox::power::run_by(
+                        crate::sandbox::power::Power::Stop,
+                        Some(slug.clone()),
+                        by,
+                    ) {
+                        ui::warn(&format!(
+                            "{slug}: could not stop this standby copy: {}",
+                            fail.0
+                        ));
+                    }
+                }
+                self.away.insert(slug.clone(), found);
+            }
+        }
+        let away = &self.away;
+        self.slugs.retain(|slug| !away.contains_key(slug));
+    }
+
     fn adoption_of(&self, slug: &str) -> Option<&side::Adoption> {
         match self.sides.get(slug) {
             Some(Unattended::Adopted(adoption)) => Some(adoption),
@@ -694,6 +733,9 @@ impl Engine {
                 .filter(|slug| !matches!(self.side_of(slug), Unattended::Theirs(_)))
                 .collect();
             self.slugs = mine;
+        }
+        if engine_up {
+            self.leave_away();
         }
         if first {
             let here = side::here();
@@ -1020,6 +1062,13 @@ impl Engine {
                 report::emit(&report::result_line(slug, &elsewhere_report(side)));
             }
         }
+        let mut left_away: Vec<(&String, &away::Away)> = self.away.iter().collect();
+        left_away.sort_by(|left, right| left.0.cmp(right.0));
+        for (slug, found) in &left_away {
+            if self.json {
+                report::emit(&report::result_line(slug, &away::report(found, slug)));
+            }
+        }
         if snapshot.sandboxes.is_empty() {
             let outcome = model::outcome(&snapshot.host_checks, self.fixed_for(""), self.attempted);
             if self.json {
@@ -1050,7 +1099,13 @@ impl Engine {
         if self.doctor {
             return self.doctor_ending(&snapshot, &left);
         }
-        self.fix_ending(&snapshot, &outcomes, &left, &left_elsewhere);
+        self.fix_ending(
+            &snapshot,
+            &outcomes,
+            &left,
+            &left_elsewhere,
+            !left_away.is_empty(),
+        );
         let code = model::exit_code(
             &left
                 .iter()
@@ -1059,7 +1114,11 @@ impl Engine {
             session,
             !self.unasked,
         );
-        let code = if snapshot.sandboxes.is_empty() && left_elsewhere.is_empty() && code == 0 {
+        let code = if snapshot.sandboxes.is_empty()
+            && left_elsewhere.is_empty()
+            && left_away.is_empty()
+            && code == 0
+        {
             1
         } else {
             code
@@ -1076,11 +1135,15 @@ impl Engine {
         outcomes: &[(Option<String>, Outcome, Vec<&Check>)],
         left: &[(Option<&str>, &Check)],
         left_elsewhere: &[(&String, &Side)],
+        any_away: bool,
     ) {
         for (slug, side) in left_elsewhere {
             ui::note(&format!("{slug}: {}", side::sentence(side)));
         }
-        if snapshot.sandboxes.is_empty() && !left_elsewhere.is_empty() && left.is_empty() {
+        if snapshot.sandboxes.is_empty()
+            && (!left_elsewhere.is_empty() || any_away)
+            && left.is_empty()
+        {
             return;
         }
         if snapshot.sandboxes.is_empty() && left.is_empty() {

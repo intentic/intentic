@@ -3792,6 +3792,9 @@ importers:
       '@intentic/sandbox-openapi':
         specifier: workspace:*
         version: link:../../_shared/sandbox-openapi
+      '@intentic/sandbox-run':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-run
       '@intentic/site-content':
         specifier: workspace:*
         version: link:../site-content

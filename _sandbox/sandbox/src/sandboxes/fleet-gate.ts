@@ -97,7 +97,7 @@ const machineFor = async (deps: FleetGateDeps, on: string | undefined): Promise<
 
 // What picking the create means, then the agent's case for it, capped as every card caps it. The case rides on the
 // choice it argues for because the question card draws an option's label, description and preview and nothing else.
-const withCase = (means: string, why: string | undefined): string => {
+export const withCase = (means: string, why: string | undefined): string => {
     const agentsCase = whyOf(why).why;
     return agentsCase === undefined ? means : `${means} The agent's case: ${agentsCase}`;
 };
@@ -106,8 +106,8 @@ const approveDescription = (machineId: string, why: string | undefined): string 
     withCase(`Makes it on your intentic account and brings it up on ${machineId}. It is yours, and it outlives this conversation.`, why);
 
 // One card the owner answers before the account is touched: what it asks, its two buttons, and the words for each way
-// of not getting a yes. The create and the removal differ only in these.
-interface OwnerCard {
+// of not getting a yes. The create, the removal and the move (move-gate.ts) differ only in these.
+export interface OwnerCard {
     // The exact ask, so a yes given after the CLI stopped waiting is spent once, on that ask.
     readonly key: string;
     readonly question: string;
@@ -127,8 +127,9 @@ const removals = createHeldAsks<CliAnswer | undefined>();
 
 // The owner's decision, as the only thing standing between an agent and a change to their account. Undefined is a
 // yes; anything else is the refusal to answer with, worded for whichever way it was not a yes.
-const askOwner = async (
-    deps: FleetGateDeps,
+export type OwnerCardDeps = CardDeps & { readonly hold: HoldDeps };
+export const askOwner = async (
+    deps: OwnerCardDeps,
     where: { readonly conversationId: string | undefined; readonly signal: AbortSignal },
     held: ReturnType<typeof createHeldAsks<CliAnswer | undefined>>,
     card: OwnerCard,
@@ -159,7 +160,7 @@ const askOwner = async (
 };
 
 // Raises the card and settles with the owner's answer; `ended` settles it unanswered.
-const cardFor = async (deps: FleetGateDeps, run: LiveCard, card: OwnerCard, ended: AbortSignal): Promise<HeldAnswer<CliAnswer | undefined>> => {
+const cardFor = async (deps: OwnerCardDeps, run: LiveCard, card: OwnerCard, ended: AbortSignal): Promise<HeldAnswer<CliAnswer | undefined>> => {
     const answered = await raiseRequest(deps, run, {
         kind: "question",
         onAbort: { kind: "question", requestId: "", cancelled: true },

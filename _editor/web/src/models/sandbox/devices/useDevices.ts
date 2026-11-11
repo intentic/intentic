@@ -160,6 +160,9 @@ const OP_WORDS: Readonly<Record<DeviceSandboxOp, () => string>> = {
     create: () => t(`sandbox.useDevices.ops.create`),
     "runner-up": () => t(`sandbox.useDevices.ops.runnerUp`),
     "runner-remove": () => t(`sandbox.useDevices.ops.runnerRemove`),
+    "move-prepare": () => t(`sandbox.useDevices.ops.movePrepare`),
+    "move-out": () => t(`sandbox.useDevices.ops.moveOut`),
+    "move-in": () => t(`sandbox.useDevices.ops.moveIn`),
 };
 
 // A flow's printed lines, as the caller's onLine takes them; the terminal frames speak through the result or the throw.

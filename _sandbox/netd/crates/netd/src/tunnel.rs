@@ -141,6 +141,18 @@ impl Tunnel {
     }
 
     /// Tells a Node that just said hello where the tunnel stands.
+    /// This copy is on standby and `host` runs the sandbox: nothing is dialled (Node sent no tunnel), and Node is told
+    /// why, until it sends a tunnel again.
+    pub fn superseded(&self, host: String) {
+        if self.running.is_some() {
+            return;
+        }
+        let reason = Outcome::Superseded(host.clone()).reason();
+        tracing::info!(%reason, "this copy of the sandbox is on standby; not dialling the ingress");
+        self.standing.superseded(host, reason);
+        let _ = self.link.tell(&self.standing.report());
+    }
+
     pub fn report_again(&self) {
         let _ = self.link.tell(&self.standing.report());
     }
@@ -206,6 +218,9 @@ async fn run(carrier: Carrier, closed: watch::Receiver<Option<Close>>) {
                 lane, wait = ?next.wait,
                 "the platform deleted this sandbox; no longer dialling the ingress"
             ),
+            Outcome::Superseded(_) => {
+                tracing::info!(lane, %reason, "this copy is on standby; not dialling the ingress")
+            }
             Outcome::Dropped { .. } | Outcome::Demoted => {
                 tracing::warn!(lane, %reason, wait = ?next.wait, "the ingress tunnel dropped")
             }

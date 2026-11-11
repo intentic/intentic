@@ -36,6 +36,7 @@ import {
 } from "../keyring/relay.js";
 import { machineReport } from "../sync/report.js";
 import { runAgentOp } from "./tools/agent.js";
+import { moveSandbox } from "./tools/move/sandbox-move.js";
 import {
     createSandbox,
     forgetShape,
@@ -181,6 +182,19 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
             createSandbox(slug, setupCode, platformUrl, scopes, onLine),
     "runner-up": runnerFlowFor,
     "runner-remove": runnerFlowFor,
+    // One sandbox carried to another computer, a step at a time (tools/move/sandbox-move.ts); `move` is daemon-filled.
+    "move-prepare":
+        ({ slug, move }, scopes) =>
+        (onLine) =>
+            moveSandbox("move-prepare", { slug, move }, scopes, onLine),
+    "move-out":
+        ({ slug, move }, scopes) =>
+        (onLine) =>
+            moveSandbox("move-out", { slug, move }, scopes, onLine),
+    "move-in":
+        ({ slug, move }, scopes) =>
+        (onLine) =>
+            moveSandbox("move-in", { slug, move }, scopes, onLine),
 };
 
 // The flow an order asks for. `to` belongs to a rollback alone, and the egress fields to `set-egress`: an order carrying
@@ -194,6 +208,11 @@ const flowFor: FlowFor = (input, scopes, via) => {
     if ((input.egress !== undefined || input.egressProof !== undefined || input.egressOwnerKeys !== undefined) && input.op !== "set-egress") {
         return () => {
             throw new ORPCError("BAD_REQUEST", { message: `An egress policy, its proof and the owner's passkeys belong to set-egress, not ${input.op}.` });
+        };
+    }
+    if (input.move !== undefined && input.op !== "move-prepare" && input.op !== "move-out" && input.op !== "move-in") {
+        return () => {
+            throw new ORPCError("BAD_REQUEST", { message: `"move" belongs to the steps of a move between computers, not ${input.op}.` });
         };
     }
     return FLOWS[input.op](input, scopes, via);

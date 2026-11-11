@@ -3,18 +3,22 @@ import type { Context } from "hono";
 import { cardDeps } from "../conversations/actor/card-deps.js";
 import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
-import { answerResponse, cliBody } from "../http/cli-answer.js";
+import { answerResponse, type CliAnswer, cliBody } from "../http/cli-answer.js";
+import { z } from "zod";
 import { manageDeviceSandbox,heldHostDevices } from "../hosts/device-reports.js";
 import { hostRunningSelf } from "../hosts/self-host.js";
 import { hostRunningSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { fleetList, fleetProvision, fleetRemove } from "./fleet-client.js";
 import { createSandboxThroughFleet, listFleet, removeSandboxThroughFleet } from "./fleet-gate.js";
+import { approveMove, type MoveGateDeps, type MoveProgress, runMove } from "./move-gate.js";
+import { relayThroughTunnels } from "./move-relay.js";
+import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { soleLiveConversation, turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import { type TurnStanding, turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { holdDepsOf } from "../guard/held-asks.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 
-/* The `sandboxes` CLI's three routes, scoped to the agent token like the wallet's and the capability ask's. */
+/* The `sandboxes` CLI's four routes, scoped to the agent token like the wallet's and the capability ask's. */
 
 // A body field as a non-empty string, or absent. Every field of a create but the name is optional, and the difference
 // between "" and missing is not one worth carrying past the door.
@@ -51,6 +55,42 @@ const withheldFrom = async (services: Services, c: Context<AppEnv>): Promise<Res
     const standing = conversationId === undefined ? undefined : turnStandingOf(services.conversations, conversationId);
     const refused = fleetWithheld(fleet?.id, standing);
     return refused === undefined ? undefined : c.json({ error: { type: "withheld", message: refused } }, 403);
+};
+
+// What the move gate stands on, from this daemon: the readings already held, the card switches, its own slug, and the
+// tunnels a relayed move is pumped through.
+const moveDeps = (services: Services, base: Pick<MoveGateDeps, "runFlow" | "hold"> & ReturnType<typeof cardDeps>): MoveGateDeps => ({
+    ...base,
+    devices: () => heldHostDevices(services),
+    manages: async (card: string) =>
+        (await services.capabilities.list()).some((capability) => capability.kind === "device" && capability.id === card && capability.config.sandboxes === "on"),
+    selfSlug: () => sandboxSlugOf(services.config.sandbox.name),
+    relay: relayThroughTunnels(services.deviceTunnels),
+});
+
+// A move's body: what to move, where, under which manager, and the agent's case. Blank strings read as absent.
+const blank = (value: string | undefined): string | undefined => (value === undefined || value.trim() === "" ? undefined : value.trim());
+const MoveBodySchema = z.object({
+    name: z.string().optional().transform(blank),
+    to: z.string().optional().transform(blank),
+    manager: z.enum(["ic", "compose"]).optional(),
+    why: z.string().optional().transform(blank),
+});
+
+// A move's answer once it is under way: one JSON object a line, its progress as it comes and its outcome last, so a
+// CLI that holds the connection for the hours a copy takes prints where it is rather than nothing.
+const streamedMove = (run: (onProgress: (progress: MoveProgress) => void) => Promise<CliAnswer>): Response => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+        start: async (controller) => {
+            const send = (line: string): void => controller.enqueue(encoder.encode(`${line}\n`));
+            const answer = await run((progress) => send(JSON.stringify({ progress })));
+            // The answer's body is already JSON (cli-answer.ts), carried as it is.
+            send(`{"status":${answer.status},"answer":${answer.body}}`);
+            controller.close();
+        },
+    });
+    return new Response(body, { status: 200, headers: { "content-type": "application/x-ndjson" } });
 };
 
 const createSandboxesRoutes = (services: Services) => {
@@ -94,6 +134,37 @@ const createSandboxesRoutes = (services: Services) => {
             });
             return answerResponse(c, answer);
         },
+        move: async (c: Context<AppEnv>): Promise<Response> => {
+            const withheld = await withheldFrom(services, c);
+            if (withheld !== undefined) {
+                return withheld;
+            }
+            const body = await cliBody(c, "move", '{"name":"…","to":"…"}');
+            if (body instanceof Response) {
+                return body;
+            }
+            const parsed = MoveBodySchema.safeParse(body);
+            const { name, to, manager, why } = parsed.success ? parsed.data : {};
+            if (name === undefined || to === undefined) {
+                return c.json(
+                    { error: { type: "invalid_request", message: "`name` is the sandbox to move, `to` the computer it goes to, and `manager` (optional) ic or compose" } },
+                    400,
+                );
+            }
+            const gate = moveDeps(services, deps);
+            const approved = await approveMove(gate, {
+                name,
+                to,
+                manager,
+                why,
+                conversationId: c.req.header("x-intentic-conversation"),
+                signal: c.req.raw.signal,
+            });
+            if ("status" in approved) {
+                return answerResponse(c, approved);
+            }
+            return streamedMove((onProgress) => runMove(gate, approved.route, { id: approved.id, plan: approved.plan, manager }, onProgress));
+        },
         remove: async (c: Context<AppEnv>): Promise<Response> => {
             const withheld = await withheldFrom(services, c);
             if (withheld !== undefined) {
@@ -127,5 +198,6 @@ export const sandboxesRawRoutes = defineRawRoutes((services: Services) => {
         "GET /sandboxes": sandboxRoutes.list,
         "POST /sandboxes": sandboxRoutes.create,
         "POST /sandboxes/remove": sandboxRoutes.remove,
+        "POST /sandboxes/move": sandboxRoutes.move,
     };
 });

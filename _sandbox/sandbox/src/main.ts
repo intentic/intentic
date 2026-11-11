@@ -37,6 +37,8 @@ import { type BootAttempt, clearBootFailure, failBoot } from "./system/boot/boot
 import { bootFacts } from "./system/boot/restarts/boot-history.js";
 import { claimContainer } from "./system/boot/container-owner.js";
 import { announceStop, type StopCause, tearDown } from "./system/boot/restarts/daemon-stop.js";
+import { standbyForBoot } from "./system/standby/standby.js";
+import { opt } from "./opt.js";
 import { type BootFault, bootFault, CRASH_AFTER_READY_MS } from "./system/boot/fault.js";
 import { finishPrewarm } from "./system/boot/prewarm.js";
 import { listenHost, profileTraits, requireLocalContract } from "./system/boot/profile.js";
@@ -226,7 +228,9 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     );
 
     // What every phase below is handed; a phase reads its inputs from here instead of re-deriving them.
-    const phase: BootPhase = { config, logger, traits, role, services, shutdown, stop };
+    // A copy the platform told is not the one that runs this sandbox boots on standby (system/standby/standby.ts).
+    const standby = await standbyForBoot(role.container ? config.historyRoot : "", logger);
+    const phase: BootPhase = { config, logger, traits, role, services, shutdown, stop, ...opt("standby", standby) };
     startDaemonMetrics(phase);
 
     // Every provider's boot task, declared by its own module, runs through one loop instead of a block per provider.
@@ -281,6 +285,11 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop, sleep, left }: Ready,
         setTimeout(() => process.exit(1), CRASH_AFTER_READY_MS);
     }
 
+    // A standby copy starts nothing that works on its own: its apps, restores, schedules and resumes are the active copy's.
+    if (phase.standby !== undefined) {
+        startPhase(logger, "sweeps", () => startBootSweeps(phase));
+        return;
+    }
     // After the gate, so the editor is live while the dev servers come up; still after the stale-session sweep, which
     // must run before anything starts a session, and after the baseline, so a dev server's first build can't dirty it.
     await startWorkspaceApps(phase, prewarm).catch((error: unknown) =>

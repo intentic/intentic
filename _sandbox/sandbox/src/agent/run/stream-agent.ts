@@ -87,6 +87,7 @@ import { type ReachWatch, reachWatch } from "./placement/turn-reach.js";
 import { turnCloser } from "./placement/turn-close.js";
 import { standingOn } from "../../conversations/actor/parked-cards.js";
 import { AgentDomainRefusedError, agentExecutionScope, assertAgentExecution, withAdmittedAgentExecution, type AgentExecutionAdmission, type AgentExecutionContext } from "../../workload/agent-execution.js";
+import { admitUnlessStandby, refusalCodeOf } from "../../system/standby/standby.js";
 import { errorMessage } from "@intentic/base/errors";
 
 // One turn from placement to settlement (streamAgent): placed, prepared, run on its provider, folded, settled.
@@ -130,15 +131,14 @@ const recordSystemPrompt = (services: Services, input: RoutedTurn, request: Agen
         .catch((error: unknown) => services.logger.warn({ err: error }, "prompt: recording what this turn was told failed"));
 };
 
-// Runs one agent turn, streaming AgentEvents; `input.agent` picks the provider adapter. Owns the turn's control
-// surface: the AbortController /agent/stop cancels, and the SteeringQueue /agent/steer injects into.
+// One agent turn as AgentEvents (`input.agent` picks the adapter); owns the turn's /agent/stop abort and /agent/steer queue.
 export async function* streamAgent(services: Services, sent: TurnInput, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
     // Read before routing, title helpers, placement, or a remote dispatch. An unreadable policy is not root mode.
     let admission: AgentExecutionAdmission;
     try {
-        admission = await services.agentExecution.admit();
+        admission = await admitUnlessStandby(services.agentExecution);
     } catch (error) {
-        yield { kind: "error", code: "agent-domain-refused", message: errorMessage(error) };
+        yield { kind: "error", code: refusalCodeOf(errorMessage(error)), message: errorMessage(error) };
         yield { kind: "done" };
         return;
     }

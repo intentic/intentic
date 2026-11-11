@@ -9,7 +9,8 @@ import { type IcRun, lastLine, newRoundState, type RoundState, type Rounds, runR
 import { fleet, icInFlight, runIc } from "../tools/sandboxes.js";
 
 // A copy of every sandbox on this machine once a day: `ic sandbox backup <slug> --auto` writes an encrypted,
-// incremental backup beside the sandbox's data, and decides everything itself (skipped when one ran in the last day or
+// incremental backup to the sandbox's repository (this machine's disk, or the folder or remote one `ic sandbox backup
+// --repo` saved for it, which ic reads itself), and decides everything itself (skipped when one ran in the last day or
 // so, when the disk is low, or while a swap is in flight). This file only keeps the clock, one sandbox at a time, and
 // backs off from a sandbox whose backups keep failing, as auto-prepare does.
 

@@ -27,16 +27,19 @@ use crate::util::{bail, Fail, Result};
 
 /// How long the copies a move leaves behind are kept before cleanup removes them.
 pub const KEEP_DAYS: u64 = 7;
-const DAY_MS: u64 = 24 * 60 * 60 * 1000;
+/// The `from` of a copy a move to another device left on this one (sandbox/device_move): no engine of this PC, just
+/// the docker this ic runs against.
+pub const DEVICE_FROM: &str = "device";
+pub(crate) const DAY_MS: u64 = 24 * 60 * 60 * 1000;
 /// A running move says it is alive at least this often; one silent for longer died with its ic.
-const STALE_HEARTBEAT_MS: u64 = 10 * 60 * 1000;
+pub(crate) const STALE_HEARTBEAT_MS: u64 = 10 * 60 * 1000;
 /// A copy that moves no byte for this long is stuck, not slow.
-const STALL: Duration = Duration::from_secs(10 * 60);
+pub(crate) const STALL: Duration = Duration::from_secs(10 * 60);
 /// Free space the target must keep beyond what is copied onto it.
-const SPARE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+pub(crate) const SPARE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// Where a volume holding a Docker engine's own data is mounted: its overlay layers carry `trusted.*` attributes and
 /// whiteout device files, which only a privileged helper can read and write back.
-const DOCKER_DATA: &str = "/var/lib/docker";
+pub(crate) const DOCKER_DATA: &str = "/var/lib/docker";
 
 /* ——— The journal: what moved, what it left behind, and a move in progress. ——— */
 
@@ -77,7 +80,7 @@ pub struct Moved {
     pub removed: bool,
 }
 
-fn load_journal() -> Journal {
+pub(crate) fn load_journal() -> Journal {
     paths::moves_path()
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|text| serde_json::from_str(&text).ok())
@@ -95,7 +98,7 @@ fn save_journal(journal: &Journal) -> Result<()> {
     Ok(())
 }
 
-fn update_journal(change: impl FnOnce(&mut Journal)) -> Result<()> {
+pub(crate) fn update_journal(change: impl FnOnce(&mut Journal)) -> Result<()> {
     let mut journal = load_journal();
     change(&mut journal);
     save_journal(&journal)
@@ -358,9 +361,8 @@ pub fn run(args: Args) -> Result<()> {
 
 /// `ic engine cleanup [--now]`: remove the copies a move left behind whose days are up (all of them with `now`).
 pub fn cleanup(now: bool) -> Result<()> {
-    if !cfg!(windows) {
-        return Ok(());
-    }
+    // Off Windows the only copies left behind are a device move's (sandbox/device_move), on this machine's own docker.
+    let device_only = !cfg!(windows);
     let mut acted = false;
     let journal = load_journal();
     let due: Vec<Moved> = if now {
@@ -373,6 +375,10 @@ pub fn cleanup(now: bool) -> Result<()> {
     } else {
         expired(&journal, now_ms())
     };
+    let due: Vec<Moved> = due
+        .into_iter()
+        .filter(|moved| !device_only || moved.from == DEVICE_FROM)
+        .collect();
     if due.is_empty() {
         return Ok(());
     }
@@ -381,6 +387,32 @@ pub fn cleanup(now: bool) -> Result<()> {
     }
     let mut removed: Vec<(String, u64)> = Vec::new();
     for moved in &due {
+        if moved.from == DEVICE_FROM {
+            for container in &moved.containers {
+                let _ = docker::capture_on(
+                    &Target::DockerDesktop,
+                    &["rm", "-f", container],
+                    docker::READ_LIMIT,
+                );
+            }
+            for volume in &moved.volumes {
+                let _ = docker::capture_on(
+                    &Target::DockerDesktop,
+                    &["volume", "rm", volume],
+                    docker::READ_LIMIT,
+                );
+            }
+            if !acted {
+                ui::act("clean up moved copies");
+                acted = true;
+            }
+            ui::quiet(&format!(
+                "removed the copy of {} this device kept after it moved to {}.",
+                moved.slug, moved.to
+            ));
+            removed.push((moved.slug.clone(), moved.at));
+            continue;
+        }
         let Some(kind) = Kind::parse(&moved.from) else {
             continue;
         };
@@ -968,7 +1000,7 @@ fn prepare_volume(
 }
 
 /// `volume` made on `target` with the labels it has on `source` (compose finds its own volumes by them).
-fn create_like(source: &Target, target: &Target, volume: &str) -> Result<()> {
+pub(crate) fn create_like(source: &Target, target: &Target, volume: &str) -> Result<()> {
     let labels = docker::capture_on(
         source,
         &["volume", "inspect", "--format", "{{json .Labels}}", volume],
@@ -1306,13 +1338,13 @@ fn copy_volume(
 }
 
 /// A helper container's name: per sandbox and per end, so one left by a killed run is the next run's to remove.
-fn helper_name(slug: &str, end: &str) -> String {
+pub(crate) fn helper_name(slug: &str, end: &str) -> String {
     format!("intentic-move-{slug}-{end}")
 }
 
 /// GNU tar on both ends (the sandbox image is Debian): numeric owners, extended attributes of every namespace (an
 /// overlay layer's `trusted.overlay.*` are what make its deletions deletions), ACLs, sparse files kept sparse.
-const TAR_OUT: &[&str] = &[
+pub(crate) const TAR_OUT: &[&str] = &[
     "-C",
     "/from",
     "--numeric-owner",
@@ -1324,7 +1356,7 @@ const TAR_OUT: &[&str] = &[
     "-",
     ".",
 ];
-const TAR_IN: &[&str] = &[
+pub(crate) const TAR_IN: &[&str] = &[
     "-C",
     "/to",
     "--numeric-owner",
@@ -1340,7 +1372,12 @@ const TAR_IN: &[&str] = &[
 /// lost nothing. Sockets are left out, since tar does not carry them. Answers (entries, hash).
 const MANIFEST: &str = "cd /v && find . -xdev ! -type d ! -type s -printf '%y %s %p\\n' | LC_ALL=C sort > /tmp/m && wc -l < /tmp/m && sha256sum < /tmp/m";
 
-fn manifest(on: &Target, volume: &str, helper: &str, docker_data: bool) -> Result<(u64, String)> {
+pub(crate) fn manifest(
+    on: &Target,
+    volume: &str,
+    helper: &str,
+    docker_data: bool,
+) -> Result<(u64, String)> {
     let mount = format!("{volume}:/v:ro");
     let mut args: Vec<&str> = vec!["run", "--rm", "--network", "none", "--log-driver", "none"];
     if docker_data {
@@ -1363,7 +1400,7 @@ fn manifest(on: &Target, volume: &str, helper: &str, docker_data: bool) -> Resul
         .ok_or_else(|| Fail(format!("could not read the file list of {volume}")))
 }
 
-fn parse_manifest(out: &str) -> Option<(u64, String)> {
+pub(crate) fn parse_manifest(out: &str) -> Option<(u64, String)> {
     let mut lines = out.lines().map(str::trim).filter(|line| !line.is_empty());
     let count = lines.next()?.parse().ok()?;
     let hash = lines.next()?.split_whitespace().next()?.to_string();
@@ -1372,7 +1409,7 @@ fn parse_manifest(out: &str) -> Option<(u64, String)> {
 
 /// Bulk archives use the engine's TLS endpoint directly. The optional pipe relay can end a tar stream early while
 /// docker still exits 0 (nightly 40291565927); file listings and ordinary commands can keep using the faster relay.
-fn archive_command(on: &Target, args: &[&str]) -> Command {
+pub(crate) fn archive_command(on: &Target, args: &[&str]) -> Command {
     match on {
         Target::Intentic(env) => {
             let mut direct = env.clone();
@@ -1384,7 +1421,7 @@ fn archive_command(on: &Target, args: &[&str]) -> Command {
 }
 
 /// `from`'s stdout into `to`'s stdin, counted for the progress line, and killed if no byte moves for [`STALL`].
-fn pipe(
+pub(crate) fn pipe(
     mut from: Command,
     mut to: Command,
     slug: &str,
@@ -1556,7 +1593,7 @@ fn carry_images(
 
 /// The `repo@sha256:…` `image` was pulled as on `on`, of its own repository; None for an image built or committed
 /// there, which no registry holds.
-fn repo_digest(on: &Target, image: &str) -> Option<String> {
+pub(crate) fn repo_digest(on: &Target, image: &str) -> Option<String> {
     let ran = docker::capture_on(
         on,
         &[
@@ -1579,7 +1616,7 @@ fn repo_digest(on: &Target, image: &str) -> Option<String> {
 
 /// `ghcr.io/intentic/sandbox` of `ghcr.io/intentic/sandbox:latest`: the name less its tag, where a `:` before the
 /// last `/` is a registry's port.
-fn repository_of(image: &str) -> &str {
+pub(crate) fn repository_of(image: &str) -> &str {
     let name = image.split_once('@').map_or(image, |(name, _)| name);
     match name.rfind(':') {
         Some(colon) if !name[colon..].contains('/') => &name[..colon],
@@ -1589,7 +1626,7 @@ fn repository_of(image: &str) -> &str {
 
 /// Pull `digest` on `on` and give it `image`'s name, beating the move's heartbeat while the download runs. False when
 /// the registry could not be reached or refused it: the save is what is left.
-fn pull_as(on: &Target, digest: &str, image: &str, slug: &str, log: &Log) -> bool {
+pub(crate) fn pull_as(on: &Target, digest: &str, image: &str, slug: &str, log: &Log) -> bool {
     say(slug, "image", json!({ "pulling": image }));
     let mut command = docker::command_on(on, &["pull", "-q", digest]);
     command
@@ -1633,7 +1670,9 @@ fn pull_as(on: &Target, digest: &str, image: &str, slug: &str, log: &Log) -> boo
     pulled && run_on(on, &["tag", digest, image], docker::READ_LIMIT).is_ok()
 }
 
-fn tail_of(stream: Option<impl Read + Send + 'static>) -> std::sync::mpsc::Receiver<String> {
+pub(crate) fn tail_of(
+    stream: Option<impl Read + Send + 'static>,
+) -> std::sync::mpsc::Receiver<String> {
     let (send, receive) = std::sync::mpsc::channel();
     if let Some(mut stream) = stream {
         std::thread::spawn(move || {
@@ -1656,7 +1695,7 @@ fn tail_of(stream: Option<impl Read + Send + 'static>) -> std::sync::mpsc::Recei
 }
 
 /// `tail_of` already bounds this text. Tar ends fatal errors with a generic summary, so keep the diagnostic before it.
-fn copy_diagnostic(said: &str) -> &str {
+pub(crate) fn copy_diagnostic(said: &str) -> &str {
     let said = said.trim();
     if said.is_empty() {
         "docker said nothing"
@@ -1665,7 +1704,7 @@ fn copy_diagnostic(said: &str) -> &str {
     }
 }
 
-fn last_words(said: &str) -> String {
+pub(crate) fn last_words(said: &str) -> String {
     said.lines()
         .rev()
         .find(|line| !line.trim().is_empty())
@@ -1674,7 +1713,7 @@ fn last_words(said: &str) -> String {
         .to_string()
 }
 
-fn kill_pid(pid: u32) {
+pub(crate) fn kill_pid(pid: u32) {
     #[cfg(windows)]
     {
         let _ = Command::new("taskkill")
@@ -1695,7 +1734,7 @@ fn kill_pid(pid: u32) {
 
 /* ——— Reading a container, and making one again. ——— */
 
-fn inspect_on(on: &Target, name: &str) -> Result<Value> {
+pub(crate) fn inspect_on(on: &Target, name: &str) -> Result<Value> {
     let ran = docker::capture_on(on, &["inspect", name], docker::READ_LIMIT)?;
     if ran.code != Some(0) {
         bail!("could not read {name}: {}", ran.stderr);
@@ -1708,7 +1747,7 @@ fn inspect_on(on: &Target, name: &str) -> Result<Value> {
         .ok_or_else(|| Fail(format!("docker said nothing about {name}")))
 }
 
-fn env_of(inspect: &Value) -> Vec<String> {
+pub(crate) fn env_of(inspect: &Value) -> Vec<String> {
     inspect["Config"]["Env"]
         .as_array()
         .map(|env| {
@@ -1720,7 +1759,7 @@ fn env_of(inspect: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn env_value(env: &[String], name: &str) -> Option<String> {
+pub(crate) fn env_value(env: &[String], name: &str) -> Option<String> {
     env.iter()
         .find_map(|pair| pair.strip_prefix(&format!("{name}=")))
         .filter(|value| !value.is_empty())
@@ -1736,7 +1775,7 @@ fn uses_gpu(inspect: &Value, env: &[String]) -> bool {
 }
 
 /// Each named volume a container mounts, with where.
-fn named_volumes(inspect: &Value) -> Vec<(String, String)> {
+pub(crate) fn named_volumes(inspect: &Value) -> Vec<(String, String)> {
     inspect["Mounts"]
         .as_array()
         .map(|mounts| {
@@ -1756,7 +1795,7 @@ fn named_volumes(inspect: &Value) -> Vec<(String, String)> {
 
 /// Refuse a missing mounted key while planning, before stopping any sandbox. Docker's `-v` would otherwise create a
 /// directory at its missing source, and neither that directory nor a newly generated key can read the old stores.
-fn mounted_key_file(inspect: &Value) -> Result<Option<std::path::PathBuf>> {
+pub(crate) fn mounted_key_file(inspect: &Value) -> Result<Option<std::path::PathBuf>> {
     let key = key_file(inspect);
     if let Some(path) = &key {
         if !path.is_file() {
@@ -1771,7 +1810,10 @@ fn mounted_key_file(inspect: &Value) -> Result<Option<std::path::PathBuf>> {
 
 /// Run `work` with `key` as the operator's key file (HOST_FILE_ENV), unless the operator named one on this run, then
 /// take the variable away again.
-fn with_key_file<T>(key: Option<&std::path::Path>, work: impl FnOnce() -> Result<T>) -> Result<T> {
+pub(crate) fn with_key_file<T>(
+    key: Option<&std::path::Path>,
+    work: impl FnOnce() -> Result<T>,
+) -> Result<T> {
     let name = sandbox::at_rest::HOST_FILE_ENV;
     let named = std::env::var(name).is_ok_and(|value| !value.is_empty());
     let Some(key) = key.filter(|_| !named) else {
@@ -1785,7 +1827,7 @@ fn with_key_file<T>(key: Option<&std::path::Path>, work: impl FnOnce() -> Result
 
 /// The sandbox, created stopped on the other engine with what the reshape reads off it: its env (the shape and the
 /// side ride there), its volumes where they were, its resolvers and labels. It never runs: its entrypoint exits.
-fn placeholder_args(inspect: &Value, name: &str, image: &str) -> Vec<String> {
+pub(crate) fn placeholder_args(inspect: &Value, name: &str, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec!["create".into(), "--name".into(), name.into()];
     args.extend(["--entrypoint".into(), "true".into()]);
     push_labels(&mut args, inspect);
@@ -1899,7 +1941,7 @@ fn push_labels(args: &mut Vec<String>, inspect: &Value) {
     }
 }
 
-fn strings(value: &Value) -> Vec<String> {
+pub(crate) fn strings(value: &Value) -> Vec<String> {
     value
         .as_array()
         .map(|items| {
@@ -1912,7 +1954,7 @@ fn strings(value: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn ensure_network_on(on: &Target, slug: &str) -> Result<()> {
+pub(crate) fn ensure_network_on(on: &Target, slug: &str) -> Result<()> {
     let network = crate::sandbox::trash::network(slug);
     let exists = docker::capture_on(on, &["network", "inspect", &network], docker::READ_LIMIT)
         .is_ok_and(|ran| ran.code == Some(0));
@@ -1932,14 +1974,14 @@ fn ensure_network_on(on: &Target, slug: &str) -> Result<()> {
 /// The same image on both engines: the same uncompressed layers, in order. Not the image ID, which is the config's
 /// digest on a classic image store and the manifest's on Docker Desktop's containerd store, so one image has two IDs
 /// across them (omen, 2026-10-09: an 8.75 GB image that arrived whole was refused for it).
-fn same_image(source: &Target, target: &Target, image: &str) -> bool {
+pub(crate) fn same_image(source: &Target, target: &Target, image: &str) -> bool {
     match (layers_on(source, image), layers_on(target, image)) {
         (Some(theirs), Some(ours)) => theirs == ours,
         _ => false,
     }
 }
 
-fn layers_on(on: &Target, image: &str) -> Option<String> {
+pub(crate) fn layers_on(on: &Target, image: &str) -> Option<String> {
     docker::capture_on(
         on,
         &[
@@ -1957,7 +1999,7 @@ fn layers_on(on: &Target, image: &str) -> Option<String> {
     .filter(|layers| layers.starts_with('['))
 }
 
-fn image_id_on(on: &Target, image: &str) -> Option<String> {
+pub(crate) fn image_id_on(on: &Target, image: &str) -> Option<String> {
     docker::capture_on(
         on,
         &["image", "inspect", "--format", "{{.Id}}", image],
@@ -1969,7 +2011,7 @@ fn image_id_on(on: &Target, image: &str) -> Option<String> {
     .filter(|id| !id.is_empty())
 }
 
-fn image_bytes(on: &Target, image: &str) -> Option<u64> {
+pub(crate) fn image_bytes(on: &Target, image: &str) -> Option<u64> {
     docker::capture_on(
         on,
         &["image", "inspect", "--format", "{{.Size}}", image],
@@ -1980,7 +2022,7 @@ fn image_bytes(on: &Target, image: &str) -> Option<u64> {
     .and_then(|ran| ran.stdout.trim().parse().ok())
 }
 
-fn volume_bytes(on: &Target, volume: &str, helper: &str) -> Option<u64> {
+pub(crate) fn volume_bytes(on: &Target, volume: &str, helper: &str) -> Option<u64> {
     let mount = format!("{volume}:/v:ro");
     docker::capture_on(
         on,
@@ -2006,7 +2048,7 @@ fn volume_bytes(on: &Target, volume: &str, helper: &str) -> Option<u64> {
     .and_then(|ran| ran.stdout.split_whitespace().next()?.parse().ok())
 }
 
-fn run_on(on: &Target, args: &[&str], limit: Duration) -> Result<()> {
+pub(crate) fn run_on(on: &Target, args: &[&str], limit: Duration) -> Result<()> {
     let ran = docker::capture_on(on, args, limit)?;
     if ran.timed_out {
         bail!(
@@ -2056,7 +2098,7 @@ fn heartbeat() {
 }
 
 /// One `intentic-move:` line for the desktop app's card.
-fn say(slug: &str, step: &str, detail: Value) {
+pub(crate) fn say(slug: &str, step: &str, detail: Value) {
     let mut line = json!({ "slug": slug, "step": step });
     if let (Some(line), Some(detail)) = (line.as_object_mut(), detail.as_object()) {
         for (key, value) in detail {

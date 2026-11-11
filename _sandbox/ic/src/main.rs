@@ -679,10 +679,66 @@ enum SandboxCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Back up the sandbox's /work and /history, encrypted, to this device's own disk outside Docker
+    /// Write a sandbox as a Docker Compose folder (compose.yaml, its .env and a copy of its at-rest key), rendered by
+    /// its own image's run contract, so Compose or a Komodo stack can run it with nothing written by hand
+    Compose {
+        /// The sandbox to write
+        slug: String,
+        /// The folder to write into (default ~/.intentic/compose/<slug>/); one holding another sandbox's file is refused
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+    },
+    /// Move a sandbox to another of the owner's computers, sending half: `--plan-only` says what would move and how
+    /// big; with --peer it stops the sandbox, sends it over one encrypted stream and parks its copy as `.moved`. Run by
+    /// the machine agent for `sandboxes move`; the target runs `ic sandbox move-in`
+    MoveOut {
+        /// The sandbox to move
+        slug: String,
+        /// The move's id, the same on both computers
+        #[arg(long = "move")]
+        move_id: String,
+        /// Only print the plan (`intentic-move: {"step":"plan",…}`); nothing is stopped or sent
+        #[arg(long)]
+        plan_only: bool,
+        /// The target's public key for this move, as its `ready` line printed it
+        #[arg(long)]
+        peer: Option<String>,
+        /// An address the target listens on (repeatable); tried first, directly
+        #[arg(long)]
+        connect: Vec<String>,
+        /// When no address answers, listen on loopback for the calling sandbox's relay
+        #[arg(long)]
+        listen: bool,
+    },
+    /// Move a sandbox to another of the owner's computers, receiving half: with --plan it prepares while the source
+    /// still runs, listens, receives and starts the sandbox as this machine's own; with --peer it hands the waiting run
+    /// the source's key
+    MoveIn {
+        /// The sandbox arriving
+        slug: String,
+        /// The move's id, the same on both computers
+        #[arg(long = "move")]
+        move_id: String,
+        /// The source's plan as JSON, or `-` to read it from stdin
+        #[arg(long)]
+        plan: Option<String>,
+        /// The source's public key for this move, for the run already waiting
+        #[arg(long)]
+        peer: Option<String>,
+        /// Who runs it here: `ic` (the run contract) or `compose` (a Compose folder under ~/.intentic/compose/<slug>)
+        #[arg(long, default_value = "ic")]
+        manager: String,
+    },
+    /// Back up the sandbox's /work and /history, encrypted and with its at-rest key sealed inside, to this device's own
+    /// disk outside Docker, or to the repository `--repo` keeps for it
     Backup {
         /// The sandbox to back up (omit when this device runs exactly one)
         slug: Option<String>,
+        /// Where this sandbox's backups go from now on, this run and every later one: an absolute folder (a NAS share,
+        /// another disk) or a restic URL (sftp:, s3:, rest:, b2:, azure:, gs:, swift:); `default` goes back to this
+        /// device's disk. Credentials come from the environment (RESTIC_*, AWS_*, B2_*, AZURE_*), never from ic
+        #[arg(long)]
+        repo: Option<String>,
         /// Unattended mode (the machine agent's daily tick): skip when a backup ran within a day, the disk is
         /// short, or a swap is in flight
         #[arg(long)]
@@ -711,6 +767,13 @@ enum SandboxCommand {
         /// A sandbox whose volumes the backup is written back into (it is stopped for it and started again)
         #[arg(long)]
         into: Option<String>,
+        /// The repository to restore from, when it is not the one this device keeps for the sandbox: an absolute
+        /// folder or a restic URL
+        #[arg(long)]
+        repo: Option<String>,
+        /// The backup key (restic password file) that opens it, when this device holds none for the sandbox
+        #[arg(long = "key-file")]
+        key_file: Option<std::path::PathBuf>,
         /// Skip the confirmation (scripts)
         #[arg(short = 'y', long = "yes")]
         yes: bool,
@@ -890,6 +953,12 @@ enum SandboxCommand {
     /// Stop a sandbox and its tunnel; its data and anything saved for its next restart are kept
     Stop {
         /// The sandbox to stop (omit when this device runs exactly one)
+        slug: Option<String>,
+    },
+    /// Make this machine the one that runs a sandbox ("run it here"): marks the takeover in its history and starts
+    /// it, or restarts it if it runs; any other copy of it elsewhere goes on standby at its next check-in
+    Claim {
+        /// The sandbox to run here (omit when this device runs exactly one)
         slug: Option<String>,
     },
     /// Restart a sandbox and its tunnel, applying the shape saved for its next restart if there is one
@@ -1195,7 +1264,7 @@ fn main() {
     engine::adopt();
     #[cfg(windows)]
     docker::adopt_program_folder();
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
     // A move between engines stops sandboxes and copies their volumes: nothing else may change them meanwhile, and a
     // background round (the machine agent's watch, keeper, tidy) is told so rather than restarting one mid-copy.
     if engine::moves::in_progress() && !allowed_during_a_move(&cli.command) {
@@ -1205,6 +1274,11 @@ fn main() {
             Some("wait for the move to finish, then run the same command again."),
         ));
         std::process::exit(3);
+    }
+    // A sandbox may be named by the owner's name for it as `ic sandbox list` shows it, as well as by its slug.
+    if let Err(util::Fail(message)) = by_slug(&mut cli.command) {
+        ui::error(&message);
+        std::process::exit(1);
     }
     let result = match cli.command {
         Command::Sandbox(command) => match command {
@@ -1268,7 +1342,41 @@ fn main() {
             }
             SandboxCommand::Swaps { json } => sandbox::swaps::run(json),
             SandboxCommand::Versions { slug, json } => sandbox::versions::run(slug, json),
-            SandboxCommand::Backup { slug, auto, json } => sandbox::backup::run(slug, auto, json),
+            SandboxCommand::Compose { slug, out } => sandbox::compose_out::run(slug, out),
+            SandboxCommand::MoveOut {
+                slug,
+                move_id,
+                plan_only,
+                peer,
+                connect,
+                listen,
+            } => sandbox::device_move::move_out(sandbox::device_move::OutArgs {
+                slug,
+                move_id,
+                plan_only,
+                peer,
+                connect,
+                listen,
+            }),
+            SandboxCommand::MoveIn {
+                slug,
+                move_id,
+                plan,
+                peer,
+                manager,
+            } => sandbox::device_move::move_in(sandbox::device_move::InArgs {
+                slug,
+                move_id,
+                plan,
+                peer,
+                manager,
+            }),
+            SandboxCommand::Backup {
+                slug,
+                repo,
+                auto,
+                json,
+            } => sandbox::backup::run(slug, repo, auto, json),
             SandboxCommand::Backups { slug, json } => sandbox::backup::list(slug, json),
             SandboxCommand::BackupRestore {
                 slug,
@@ -1276,7 +1384,9 @@ fn main() {
                 to,
                 into,
                 yes,
-            } => sandbox::backup::restore(slug, snapshot, to, into, yes),
+                repo,
+                key_file,
+            } => sandbox::backup::restore(slug, snapshot, to, into, yes, repo, key_file),
             SandboxCommand::Tidy {
                 dry_run,
                 json,
@@ -1378,6 +1488,7 @@ fn main() {
                 sandbox::power::run(sandbox::power::Power::Start, slug)
             }),
             SandboxCommand::Stop { slug } => sandbox::power::run(sandbox::power::Power::Stop, slug),
+            SandboxCommand::Claim { slug } => sandbox::takeover::claim(slug),
             SandboxCommand::Restart { slug, no_resume } => resumed(no_resume, || {
                 sandbox::power::run(sandbox::power::Power::Restart, slug)
             }),
@@ -1571,6 +1682,58 @@ fn main() {
     if let Err(util::Fail(message)) = result {
         ui::error(&message);
         std::process::exit(1);
+    }
+}
+
+/// Every name a command gives for a sandbox already on this device turned into its slug (sandbox::slug_for), before
+/// anything runs. Not the names of sandboxes that are not live here: one to restore or purge from the trash, one
+/// arriving in a move.
+fn by_slug(command: &mut Command) -> util::Result<()> {
+    for given in named_sandboxes(command) {
+        *given = sandbox::slug_for(std::mem::take(given))?;
+    }
+    Ok(())
+}
+
+/// The sandbox names a command carries that stand for a sandbox on this device.
+fn named_sandboxes(command: &mut Command) -> Vec<&mut String> {
+    match command {
+        Command::Sandbox(command) => match command {
+            SandboxCommand::Update { slug, .. }
+            | SandboxCommand::Prepare { slug, .. }
+            | SandboxCommand::Rollback { slug, .. }
+            | SandboxCommand::Watch { slug, .. }
+            | SandboxCommand::Versions { slug, .. }
+            | SandboxCommand::Backup { slug, .. }
+            | SandboxCommand::Backups { slug, .. }
+            | SandboxCommand::Dev { slug, .. }
+            | SandboxCommand::Egress { slug, .. }
+            | SandboxCommand::Start { slug, .. }
+            | SandboxCommand::Stop { slug }
+            | SandboxCommand::Claim { slug }
+            | SandboxCommand::Restart { slug, .. }
+            | SandboxCommand::Sleep { slug, .. }
+            | SandboxCommand::Logs { slug, .. }
+            | SandboxCommand::Doctor { slug, .. }
+            | SandboxCommand::Fix { slug, .. } => slug.iter_mut().collect(),
+            SandboxCommand::Rebuild { slug, .. }
+            | SandboxCommand::Compose { slug, .. }
+            | SandboxCommand::MoveOut { slug, .. }
+            | SandboxCommand::BackupRestore { slug, .. }
+            | SandboxCommand::ResetOwner { slug, .. }
+            | SandboxCommand::Session { slug, .. }
+            | SandboxCommand::Reshape { slug, .. }
+            | SandboxCommand::Shape { slug, .. }
+            | SandboxCommand::Inspect { slug, .. } => vec![slug],
+            SandboxCommand::Remove { slugs, .. } => slugs.iter_mut().collect(),
+            _ => Vec::new(),
+        },
+        Command::Os(OsCommand::Screen(
+            ScreenCommand::Allow { slug } | ScreenCommand::Deny { slug },
+        )) => {
+            vec![slug]
+        }
+        _ => Vec::new(),
     }
 }
 
@@ -3085,6 +3248,35 @@ mod tests {
             "def"
         ])
         .is_ok());
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::BackupRestore { repo, key_file, .. }),
+        }) = parse(&[
+            "sandbox",
+            "backup-restore",
+            "abc",
+            "--snapshot",
+            "latest",
+            "--into",
+            "def",
+            "--repo",
+            "s3:host/bucket/abc",
+            "--key-file",
+            "/keys/backup-abc.key",
+        ])
+        else {
+            panic!("a restore from another repository did not parse")
+        };
+        assert_eq!(repo.as_deref(), Some("s3:host/bucket/abc"));
+        assert_eq!(
+            key_file,
+            Some(std::path::PathBuf::from("/keys/backup-abc.key"))
+        );
+        assert!(matches!(
+            parse(&["sandbox", "backup", "abc", "--repo", "/mnt/nas/x"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Backup { repo: Some(_), .. })
+            })
+        ));
         assert!(parse(&["sandbox", "backup-restore", "abc", "--snapshot", "latest"]).is_err());
         assert!(
             parse(&["sandbox", "backup-restore", "abc", "--to", "/tmp/x"]).is_err(),

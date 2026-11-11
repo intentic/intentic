@@ -39,6 +39,12 @@ const FEATURE_GATES: readonly {
         feature: "sleep",
         refusal: (id) => `The agent on "${id}" is too old to put a sandbox to sleep. Nothing was changed. Update that device's agent, or stop the sandbox instead.`,
     },
+    {
+        asks: (input) => isMoveOp(input.op),
+        feature: "sandbox-move",
+        refusal: (id) =>
+            `The agent on "${id}", or the ic it drives, is too old to move a sandbox to another computer. Nothing was changed. Update that device's agent, then try again.`,
+    },
 ];
 
 export const refuseUnsupported = (id: string, facts: Parameters<typeof deviceSupports>[0], input: DeviceSandboxFlow): void => {
@@ -47,3 +53,11 @@ export const refuseUnsupported = (id: string, facts: Parameters<typeof deviceSup
         throw new ORPCError("CONFLICT", { message: gate.refusal(id) });
     }
 };
+
+/* (2026-11-11) A MOVE IS WATCHED FOR HOURS. It carries a whole sandbox's volumes between two computers, which on a home
+connection can take hours: the hour every other flow gets would cut the watching mid-copy, and with it the daemon's half
+of a relayed move. Each side's ic bounds its own stalls (ten minutes with no byte moved) and rolls itself back, so this
+is only a hang bound. */
+const MOVE_FLOW_TIMEOUT_MS = 12 * 60 * 60 * 1000;
+const isMoveOp = (op: DeviceSandboxFlow["op"]): boolean => op === "move-prepare" || op === "move-out" || op === "move-in";
+export const flowTimeoutMs = (op: DeviceSandboxFlow["op"], otherwise: number): number => (isMoveOp(op) ? MOVE_FLOW_TIMEOUT_MS : otherwise);

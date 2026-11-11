@@ -109,6 +109,16 @@ describe(`netd's tunnel reports`, () => {
         expect(withdrawn).toHaveLength(1);
     });
 
+    // 2026-11-11: a copy on standby (system/standby/standby.ts) stood netd down; the owner hears which machine runs it, once.
+    it(`raises one notification for a copy on standby, naming the machine that runs the sandbox`, () => {
+        const { pushed, report } = watch();
+        const superseded = { refusal: "superseded" as const, host: "z440 (linux)" };
+        report(false, dropped("this copy is on standby: z440 (linux) runs this sandbox", superseded));
+        report(false, dropped("this copy is on standby: z440 (linux) runs this sandbox", superseded));
+        expect(pushed).toHaveLength(1);
+        expect(pushed[0]?.body).toContain("This copy is on standby: z440 (linux) runs this sandbox");
+    });
+
     it(`says once that the platform deleted this sandbox`, () => {
         const { lines, report } = watch();
         report(false, dropped("the platform deleted this sandbox", { refusal: "deleted" }));

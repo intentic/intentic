@@ -142,6 +142,7 @@ export const RAW_ROUTES = {
     "GET /sandboxes": { agent: true },
     "POST /sandboxes": { agent: true },
     "POST /sandboxes/remove": { agent: true },
+    "POST /sandboxes/move": { agent: true },
     // The `wallet` CLI; spend is bounded by the owner's policy and the key never enters the container.
     "GET /wallet/status": { agent: true, control: "never" },
     "POST /wallet/fetch": { agent: true, control: "never" },

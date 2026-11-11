@@ -10,6 +10,7 @@ flowchart LR
     hosted["Platform api<br/>hosted machines"] --> run
     run -- "docker run argv" --> docker["Docker engine"]
     run -- "flyMachineConfig" --> fly["Fly Machine"]
+    run -- "compose.yaml + .env" --> compose["Docker Compose<br/>(setup page, ic sandbox compose)"]
 ```
 
 - One definition for every way a sandbox starts. TypeScript callers import it, so drift is a compile error. `ic`
@@ -28,6 +29,21 @@ flowchart LR
   image's run command ignores an env var it does not know but refuses an unknown flag, so a rollback onto one still
   runs. The container is stamped with it, and the daemon's `sandbox.toml` names its base as `<tag>@<digest>`. It is
   never replayed, because the next run may be on another base.
+- `sandboxRunSpec` is the run as data, before any dialect spells it, and it is rendered twice. `sandboxRunArgv` is the
+  `docker run` line, held byte for byte by `golden/run-argv.json` to what the emitter wrote before the spec existed.
+  `./compose` (`sandboxCompose`) is the same run as a Compose service, with what only Compose needs beside it: the
+  approved overlay recipe, which Compose builds on `up` (`build.dockerfile_inline`, comments dropped, heredocs kept
+  whole, `$` doubled), the at-rest key's host path, the HOST_* side stamps, and whether the storage already exists
+  (`external: true`). A credential (`REPLAY_SECRET_ENV`) is only ever `${NAME:?…}` in the file; its value comes back
+  in `env` for the `.env` beside it (`composeEnvFile`). `setupComposeFile` is a new sandbox's file, which the setup
+  page, the docs quickstart and the Environment card's Compose rebuild all render. The CLI prints it as
+  `run-command --format compose`, which `ic sandbox compose` asks the image for. It imports no Node, so a browser
+  takes it. `golden/compose-*.yaml` hold each case of `src/run-cases.testing.ts`.
+  (2026-11-11) Three hand copies of the Compose file (the setup page's, the quickstart's, the rebuild card's snippet)
+  had each missed the key bind, the overlay build, the stop grace, the caps, the directive stamps and the side stamps;
+  a sandbox moved to Compose by hand needed all of them.
+- `AT_REST_KEY_MOUNT` and `AT_REST_KEY_ENV` are where the daemon reads its at-rest key; ic's `at_rest.rs` holds its
+  copies to `golden/at-rest.json`.
 - `localDaemonPort` derives a sandbox's host loopback port from its id, so a recreate lands on the same port and the
   editor and machine agent compute it without being told.
 - `SANDBOX_VOLUMES` lists a sandbox's storage: the workspace, `/history` and the sandbox's own Docker engine. The run
@@ -55,11 +71,11 @@ flowchart LR
 
 ## Key files
 
-- [src/index.ts](src/index.ts) — names, volumes, capabilities, caps, directives, replay env and `sandboxRunArgv`.
+- [src/index.ts](src/index.ts) — names, volumes, capabilities, caps, directives, `sandboxRunSpec` and `sandboxRunArgv`.
+- [src/compose.ts](src/compose.ts) — the same run as a Compose file and its `.env`.
 - [src/fly.ts](src/fly.ts) — the hosted flavour: `flyMachineConfig` and the single-volume layout.
 - [src/quote.ts](src/quote.ts) — quoters to compose outward, one per parser a value crosses.
 - [src/slug.ts](src/slug.ts) — a sandbox's slug and id read back off a container name, an address or a token.
 - [src/setup-progress.ts](src/setup-progress.ts) — a setup's progress read off its output, and the record it is held to.
-- [src/index.test.ts](src/index.test.ts) — the emitted argv and directive handling, by example.
 
 GPU preflight uses `gpuProbeArgv` to exercise an actual Docker `--gpus=all` device request with an image already on the host. `gpuProbePassed` requires a physical GPU listing; a registered NVIDIA runtime or CDI setting alone is insufficient. Fly machines stamp GPU access as unsupported.

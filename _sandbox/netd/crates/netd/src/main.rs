@@ -224,9 +224,14 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
                         tracing::error!(%error, "the loopback certificate is unusable; keeping the one held");
                     }
                 }
-                Pushed::Tunnel(wanted) => {
+                Pushed::Tunnel(wanted, superseded) => {
+                    // Forgotten on a stand-down too, so a standby copy's restarted netd dials nothing before Node speaks.
                     memory.tunnel(wanted.as_ref());
-                    applying.lock().await.configure(wanted);
+                    let mut applying = applying.lock().await;
+                    applying.configure(wanted);
+                    if let Some(host) = superseded {
+                        applying.superseded(host);
+                    }
                 }
                 Pushed::Hello => {
                     applying.lock().await.report_again();

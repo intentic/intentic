@@ -160,8 +160,10 @@ export interface PlanStreamEvent {
 
 // Two copies of one sandbox seen announcing side by side, on the owner's summary: what each copy named itself as
 // (`rog (windows)`, `rog (linux)`), and since when. The tunnel keeps only one of them at a time, so the other is an
-// agent and a disk nobody can reach; the owner is the one who decides which copy goes.
-export const DuplicateCopiesSchema = z.object({ hosts: z.array(z.string()), since: z.string() });
+// agent and a disk nobody can reach; the owner is the one who decides which copy goes. `active` (2026-11-11) names the
+// copy the platform holds to be the one that runs it, in the same words as `hosts`, when one of the two is; the other
+// copy is on standby (api active-host.ts). Absent from an older platform, and while neither copy is the active one.
+export const DuplicateCopiesSchema = z.object({ hosts: z.array(z.string()), since: z.string(), active: z.string().optional() });
 export type DuplicateCopies = z.infer<typeof DuplicateCopiesSchema>;
 
 // A short-lived code the recovery panel puts in the command it hands out, so the run can report back to the page that

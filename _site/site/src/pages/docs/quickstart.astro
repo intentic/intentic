@@ -1,4 +1,6 @@
 ---
+import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
+import { setupComposeFile } from "@intentic/sandbox-run/compose";
 import { APP_URL } from "@intentic/site-content/site";
 import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import DocsLayout from "../../components/docs/DocsLayout.astro";
@@ -24,46 +26,14 @@ const composeBootstrap = `# In the folder holding your docker-compose.yml: run o
 curl -fsS https://api.intentic.dev/setup/claim -d code=<SETUP_CODE> > .env
 docker compose up -d`;
 
-const composeFile = `services:
-    intentic-sandbox:
-        image: ghcr.io/intentic/sandbox:stable
-        pull_policy: always
-        container_name: intentic-sandbox-<SLUG>
-        init: true
-        cap_add: [SYS_ADMIN, SYS_PTRACE]
-        restart: unless-stopped
-        dns: [1.1.1.1, 1.0.0.1]
-        extra_hosts: [host.docker.internal:host-gateway]
-        networks:
-            intentic:
-                aliases: [intentic-sandbox-workspace]
-        logging:
-            driver: json-file
-            options: { max-size: 10m, max-file: "3" }
-        ports: ["127.0.0.1:\${LOCAL_PORT}:8788"]
-        volumes:
-            - work:/work
-            - history:/history
-            - docker-engine:/var/lib/docker
-        environment:
-            CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}
-            OWNER_EMAIL: \${OWNER_EMAIL:-}
-            SANDBOX_PUBLIC_URL: https://<SLUG>.intentic.dev
-            PLATFORM_URL: https://api.intentic.dev
-            GOOGLE_CLIENT_ID: <shown filled in on the setup page>
-            INGRESS_URL: \${INGRESS_URL:-}
-            SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}
-            SANDBOX_MANAGER: compose
-networks:
-    intentic:
-        name: intentic-workspace-<SLUG>
-volumes:
-    work:
-        name: intentic-workspace-<SLUG>
-    history:
-        name: intentic-history-<SLUG>
-    docker-engine:
-        name: intentic-docker-<SLUG>`;
+// Rendered at build time from the run contract (@intentic/sandbox-run/compose), the same function the setup page's
+// Compose tab calls, so this copy cannot drift from what a sandbox actually runs with.
+const composeFile = setupComposeFile({
+    hostname: "<SLUG>.intentic.dev",
+    image: "ghcr.io/intentic/sandbox:stable",
+    googleClientId: "<shown filled in on the setup page>",
+    webOrigin: PLATFORM_WEB_ORIGIN,
+});
 
 const runInline = `IMAGE=ghcr.io/intentic/sandbox:stable
 SLUG='<SLUG>'              # the first label of your sandbox hostname

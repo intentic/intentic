@@ -7,11 +7,14 @@ use crate::checks;
 use crate::docker;
 use crate::logfile::{intentic_home, Log};
 use crate::record::{self, Phase};
+use crate::sandbox::at_rest;
+use crate::sandbox::backup_repo::{self, Location};
+use crate::sandbox::backup_seal::{self, KeyPlan, TargetKey};
 use crate::sandbox::inside::{self, Read};
 use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::side::{self, Side, Unattended};
 use crate::sandbox::{container_of, now_ms, parked_of, resolve_slug};
-use crate::util::{bail, sha256_hex, Fail, Result};
+use crate::util::{bail, Fail, Result};
 
 /* BACKUPS THAT OUTLIVE DOCKER.
 
@@ -21,7 +24,11 @@ the conversion journal's pre-images, the parked container. Docker Desktop's "Pur
 into a restic repository on this machine's own disk, outside Docker (`~/.intentic/backups/<slug>/repo`): incremental,
 deduplicated, and encrypted with a key kept apart from it (`~/.intentic/keys/backup-<slug>.key`), so the repository
 alone reveals nothing, secrets included, to whatever else reads or syncs that folder. restic runs in its own pinned
-image (the deploy engine's, _deploy/state-resolver/src/lib/images.ts), so nothing is installed on the host. */
+image (the deploy engine's, _deploy/state-resolver/src/lib/images.ts), so nothing is installed on the host.
+
+Since 2026-11-11 a backup is self-contained: each snapshot also carries the sandbox's at-rest key, sealed under the backup
+password (backup_seal.rs), so the repository and its key are all a restore on another machine, or into another sandbox,
+needs. And the repository may live elsewhere: a folder or a restic URL saved per sandbox (backup_repo.rs). */
 
 const RESTIC_IMAGE: &str =
     "restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510";
@@ -88,24 +95,17 @@ fn last_path(slug: &str) -> PathBuf {
     backups_dir(slug).join("last-full-backup")
 }
 
-/// 32 random bytes as hex. The standard library's hasher keys come from the operating system's random source on
-/// every platform ic runs on; four of them, hashed together, make a key with no crate to download for it.
-fn random_hex() -> String {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    let mut seed = Vec::new();
-    for round in 0u64..4 {
-        let mut hasher = RandomState::new().build_hasher();
-        hasher.write_u64(round);
-        hasher.write_u128(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|since| since.as_nanos())
-                .unwrap_or(0),
-        );
-        seed.extend_from_slice(&hasher.finish().to_le_bytes());
-    }
-    sha256_hex(&seed)
+/// 32 bytes from the operating system's random source, as hex: the backup password's format since the first backup.
+/// (Until 2026-11-11 it was hashed out of the standard library's hasher seeds, which are random but no CSPRNG; keys
+/// made that way keep working, since restic only ever reads the file.)
+fn random_hex() -> Result<String> {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).map_err(|err| {
+        Fail(format!(
+            "the operating system gave no random bytes for a backup key ({err}). Nothing was changed."
+        ))
+    })?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// The sandbox's backup key, made once and kept readable by this user alone. Losing it loses the backups, so it is
@@ -125,7 +125,7 @@ fn ensure_key(slug: &str) -> Result<PathBuf> {
         options.mode(0o600);
     }
     let mut file = options.open(&path)?;
-    std::io::Write::write_all(&mut file, random_hex().as_bytes())?;
+    std::io::Write::write_all(&mut file, random_hex()?.as_bytes())?;
     file.sync_all()?;
     crate::ui::note(&format!(
         "Made the backup key for {slug}: {}. Keep it with the backups: they cannot be read without it.",
@@ -203,12 +203,45 @@ pub fn worker_name(slug: &str, side: &Side) -> String {
     format!("intentic-backup-{slug}-{side}")
 }
 
+/// A repository and the password file that opens it.
+pub struct Repo {
+    pub location: Location,
+    pub key: PathBuf,
+}
+
+/// Where a sandbox's backups go: the repository saved for it (backup_repo.rs), else this machine's own disk.
+pub fn location_of(slug: &str) -> Location {
+    backup_repo::saved(slug).unwrap_or_else(|| Location::Folder(repo_dir(slug)))
+}
+
+/// The repository a backup writes to, with its key made if this is the first.
+fn for_backup(slug: &str) -> Result<Repo> {
+    Ok(Repo {
+        location: location_of(slug),
+        key: ensure_key(slug)?,
+    })
+}
+
+/// Whether a repository holds backups already, as far as this machine can tell without opening it: a folder's restic
+/// config, or for a remote one the stamp a finished full backup leaves.
+fn has_backups(slug: &str, location: &Location) -> bool {
+    match location {
+        Location::Folder(path) => path.join("config").exists(),
+        Location::Remote(_) => last_path(slug).exists(),
+    }
+}
+
 /// `docker run` of restic with the repository and key mounted, running `script` in the image's shell (restic's image
-/// is Alpine) so the repository can be handed back to this user afterwards.
-fn restic(slug: &str, mounts: &[String], script: &str, log: &Log) -> Result<docker::Bounded> {
-    let repo = repo_dir(slug);
-    std::fs::create_dir_all(&repo)?;
-    let key = ensure_key(slug)?;
+/// is Alpine) so a folder repository can be handed back to this user afterwards. A folder repository runs with no
+/// network at all; a remote one gets the default network, the NAMES of the credential variables set here (docker copies
+/// their values, backup_repo.rs), and for sftp this user's ~/.ssh, copied in so ssh accepts its owner and modes.
+fn restic(
+    slug: &str,
+    repo: &Repo,
+    mounts: &[String],
+    script: &str,
+    log: &Log,
+) -> Result<docker::Bounded> {
     let here = side::here();
     let name = worker_name(slug, &here);
     docker::quiet(&["rm", "-f", &name]);
@@ -217,29 +250,49 @@ fn restic(slug: &str, mounts: &[String], script: &str, log: &Log) -> Result<dock
         crate::sandbox::labels::Kind::BackupWorker,
         &here.wire(),
     );
+    let key_mount = docker::bind_spec(&repo.key, "/key:ro")?;
+    let mut setup: Vec<String> = Vec::new();
+    match &repo.location {
+        Location::Folder(path) => {
+            std::fs::create_dir_all(path)?;
+            setup.extend([
+                "--network".to_string(),
+                "none".to_string(),
+                "-e".to_string(),
+                "RESTIC_REPOSITORY=/repo".to_string(),
+                "-v".to_string(),
+                docker::bind_spec(path, "/repo")?,
+            ]);
+        }
+        Location::Remote(url) => {
+            setup.extend(["-e".to_string(), format!("RESTIC_REPOSITORY={url}")]);
+            setup.extend(backup_repo::passed_env(
+                std::env::vars_os().map(|(name, _)| name.to_string_lossy().to_string()),
+            ));
+            if let Some(ssh) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+                .filter(|home| !home.is_empty())
+                .map(|home| PathBuf::from(home).join(".ssh"))
+                .filter(|ssh| repo.location.is_sftp() && ssh.is_dir())
+            {
+                setup.extend(["-v".to_string(), docker::bind_spec(&ssh, "/host-ssh:ro")?]);
+            }
+        }
+    }
+    let ssh = if repo.location.is_sftp() {
+        "if [ -d /host-ssh ]; then mkdir -p /root/.ssh && cp -R /host-ssh/. /root/.ssh/ && chmod -R go-rwx /root/.ssh; fi; "
+    } else {
+        ""
+    };
     let chown = owner_ids()
+        .filter(|_| !repo.location.is_remote())
         .map(|ids| format!(" ; status=$?; chown -R {ids} /repo; exit $status"))
         .unwrap_or_default();
-    let repo_mount = docker::bind_spec(&repo, "/repo")?;
-    let key_mount = docker::bind_spec(&key, "/key:ro")?;
-    let full_script = format!("{script}{chown}");
+    let full_script = format!("{ssh}{script}{chown}");
     let mut args: Vec<&str> = vec!["run"];
     args.extend(labels.iter().map(String::as_str));
-    args.extend_from_slice(&[
-        "--rm",
-        "--name",
-        &name,
-        "--network",
-        "none",
-        "-e",
-        "RESTIC_REPOSITORY=/repo",
-        "-e",
-        "RESTIC_PASSWORD_FILE=/key",
-        "-v",
-        &repo_mount,
-        "-v",
-        &key_mount,
-    ]);
+    args.extend_from_slice(&["--rm", "--name", &name]);
+    args.extend(setup.iter().map(String::as_str));
+    args.extend_from_slice(&["-e", "RESTIC_PASSWORD_FILE=/key", "-v", &key_mount]);
     for mount in mounts {
         args.extend_from_slice(&["-v", mount]);
     }
@@ -260,7 +313,15 @@ fn quoted(value: &str) -> String {
 }
 
 /// The restic command lines a backup runs, pure over what it knows, so the paths and exclusions are asserted.
-pub fn backup_script(slug: &str, scope: Scope, database_staged: bool, reason: &str) -> String {
+/// `sealed` is the at-rest key sealed under the backup password (backup_seal.rs), written into the worker's own
+/// filesystem and backed up in the same snapshot; None when the sandbox has no at-rest key, and then nothing is.
+pub fn backup_script(
+    slug: &str,
+    scope: Scope,
+    database_staged: bool,
+    reason: &str,
+    sealed: Option<&str>,
+) -> String {
     let mut excludes: Vec<&str> = ALWAYS_EXCLUDED.to_vec();
     if scope == Scope::State {
         excludes.extend_from_slice(&STATE_EXCLUDED);
@@ -281,8 +342,20 @@ pub fn backup_script(slug: &str, scope: Scope, database_staged: bool, reason: &s
         .iter()
         .map(|path| format!(" --exclude {}", quoted(path)))
         .collect();
+    let (stage_key, key_path) = match sealed {
+        Some(sealed) => (
+            format!(
+                "mkdir -p {dir} && printf '%s' {} > {file} && ",
+                quoted(sealed),
+                dir = backup_seal::SEALED_DIR,
+                file = backup_seal::SEALED_FILE,
+            ),
+            format!(" {}", backup_seal::SEALED_DIR),
+        ),
+        None => (String::new(), String::new()),
+    };
     format!(
-        "(restic cat config >/dev/null 2>&1 || restic init >/dev/null) && restic backup --json --quiet --host {} --tag intentic --tag {} --exclude-caches{exclude_args} {paths}",
+        "(restic cat config >/dev/null 2>&1 || restic init >/dev/null) && {stage_key}restic backup --json --quiet --host {} --tag intentic --tag {} --exclude-caches{exclude_args} {paths}{key_path}",
         quoted(slug),
         quoted(reason),
     )
@@ -312,6 +385,8 @@ pub fn take(slug: &str, scope: Scope, reason: &str) -> Result<String> {
         .into_iter()
         .find(|name| docker::container_exists(name))
         .unwrap_or_default();
+    let repo = for_backup(slug)?;
+    let sealed = sealed_key(slug, &container, &repo, &log);
     let staged = !container.is_empty() && stage_database(&container);
     let mounts = vec![
         format!("{work}:/src/work:ro"),
@@ -319,8 +394,9 @@ pub fn take(slug: &str, scope: Scope, reason: &str) -> Result<String> {
     ];
     let ran = restic(
         slug,
+        &repo,
         &mounts,
-        &backup_script(slug, scope, staged, reason),
+        &backup_script(slug, scope, staged, reason, sealed.as_deref()),
         &log,
     )?;
     if staged {
@@ -348,12 +424,58 @@ pub fn take(slug: &str, scope: Scope, reason: &str) -> Result<String> {
         // Old snapshots go on the full, daily run only: a quick pre-update backup never waits on a prune.
         let _ = restic(
             slug,
+            &repo,
             &[],
             &format!("restic forget --host {} --keep-last 3 --keep-daily 7 --keep-weekly 4 --prune >/dev/null", quoted(slug)),
             &log,
         );
     }
     Ok(snapshot)
+}
+
+/// The at-rest key the sandbox's stores are encrypted with, sealed under the backup password: the file its container
+/// mounts (live or parked), else ic's own key for it. None when it has none (encryption at rest off), or when this
+/// machine cannot read the one it mounts (a volume, a file out of its sight), which the log says. The plaintext key is
+/// read here and sealed in memory; it is written nowhere.
+fn sealed_key(slug: &str, container: &str, repo: &Repo, log: &Log) -> Option<String> {
+    let mounted = (!container.is_empty())
+        .then(|| docker::inspect(container, "{{json .}}"))
+        .flatten()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|inspect| at_rest::key_file(&inspect))
+        .map(|file| at_rest::local_path_of(&file));
+    let mounts_key =
+        !container.is_empty() && docker::mount_source(container, at_rest::KEY_MOUNT).is_some();
+    let file = match mounted {
+        Some(file) => file,
+        None if mounts_key => {
+            log.line("the container's at-rest key is not a file this machine can read: this backup carries no key");
+            return None;
+        }
+        // Mounting none, it may still have ic's own (a stopped sandbox's volumes, a container made again since).
+        None => at_rest::sandbox_key(slug),
+    };
+    let content = match std::fs::read(&file) {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound && !mounts_key => return None,
+        Err(err) => {
+            log.line(&format!(
+                "the at-rest key {} could not be read ({err}): this backup carries no key",
+                file.display()
+            ));
+            return None;
+        }
+    };
+    let password = std::fs::read(&repo.key).ok()?;
+    match backup_seal::seal(backup_seal::password_of(&password), &content) {
+        Ok(sealed) => Some(sealed.to_string()),
+        Err(Fail(why)) => {
+            log.line(&format!(
+                "the at-rest key was not sealed into this backup: {why}"
+            ));
+            None
+        }
+    }
 }
 
 /// Where the last backup of a sandbox is said, on its own volume.
@@ -484,10 +606,27 @@ pub fn auto_skip(
     None
 }
 
-/// `ic sandbox backup [slug] [--auto] [--json]`.
-pub fn run(slug: Option<String>, auto: bool, as_json: bool) -> Result<()> {
+/// What `--repo default` says: back to this machine's own disk.
+pub const DEFAULT_REPO: &str = "default";
+
+/// `ic sandbox backup [slug] [--repo <where>] [--auto] [--json]`. `--repo` is kept for the sandbox (backup_repo.rs), and
+/// every later backup of it, the unattended ones included, goes there.
+pub fn run(slug: Option<String>, repo: Option<String>, auto: bool, as_json: bool) -> Result<()> {
     docker::require_daemon()?;
     let slug = resolve_slug(slug, "ic sandbox backup")?;
+    if let Some(raw) = &repo {
+        let location = (raw.trim() != DEFAULT_REPO)
+            .then(|| backup_repo::parse(raw))
+            .transpose()?;
+        backup_repo::save(&slug, location.as_ref())?;
+        if !as_json {
+            crate::ui::note(&format!(
+                "{slug}'s backups go to {} from now on.",
+                location_of(&slug).spelled()
+            ));
+        }
+    }
+    let shown = location_of(&slug).spelled();
     // The daily backup of a sandbox is its own side's: the other side's machine agent backs it up into its own repo,
     // for as long as it looks after it (side.rs).
     let unattended = if auto {
@@ -507,7 +646,7 @@ pub fn run(slug: Option<String>, auto: bool, as_json: bool) -> Result<()> {
             }
             if let Some(snapshot) = snapshot {
                 line["snapshot"] = json!(snapshot);
-                line["repo"] = json!(repo_dir(&slug).display().to_string());
+                line["repo"] = json!(shown);
             }
             if let Some(reason) = reason {
                 line["reason"] = json!(reason);
@@ -519,8 +658,7 @@ pub fn run(slug: Option<String>, auto: bool, as_json: bool) -> Result<()> {
                 crate::ui::note(&format!("{slug}: {}", adoption.sentence()));
             }
             crate::ui::done(&format!(
-                "Backed up {slug} (snapshot {snapshot}) to {}.",
-                repo_dir(&slug).display()
+                "Backed up {slug} (snapshot {snapshot}) to {shown}."
             ));
             crate::ui::later(&[("see them".to_string(), format!("ic sandbox backups {slug}"))]);
         } else {
@@ -567,7 +705,7 @@ pub fn run(slug: Option<String>, auto: bool, as_json: bool) -> Result<()> {
 /// The quick backup before a swap: only when this sandbox already has a repository (a first, full backup can take a
 /// long time, and a person waiting on an update is not the one to pay for it), and never a reason to refuse the swap.
 pub fn before_swap(slug: &str) {
-    if !repo_dir(slug).join("config").exists() {
+    if !has_backups(slug, &location_of(slug)) {
         return;
     }
     match take(slug, Scope::State, "pre-update") {
@@ -587,19 +725,28 @@ pub fn before_swap(slug: &str) {
 pub fn list(slug: Option<String>, as_json: bool) -> Result<()> {
     docker::require_daemon()?;
     let slug = resolve_slug(slug, "ic sandbox backups")?;
-    if !repo_dir(&slug).join("config").exists() {
+    let location = location_of(&slug);
+    if !has_backups(&slug, &location) || !key_path(&slug).is_file() {
         if as_json {
             // allow(terminal-output): the --json answer, an empty list.
             println!("[]");
         } else {
-            crate::ui::quiet(&format!("{slug} has no backups on this device yet."));
+            crate::ui::quiet(&format!(
+                "{slug} has no backups in {} yet.",
+                location.spelled()
+            ));
             crate::ui::later(&[("take one".to_string(), format!("ic sandbox backup {slug}"))]);
         }
         return Ok(());
     }
     let log = Log::create_named("backup", &format!("backups-{slug}"))?;
+    let repo = Repo {
+        location,
+        key: key_path(&slug),
+    };
     let ran = restic(
         &slug,
+        &repo,
         &[],
         &format!("restic snapshots --json --host {}", quoted(&slug)),
         &log,
@@ -629,7 +776,7 @@ pub fn list(slug: Option<String>, as_json: bool) -> Result<()> {
     }
     crate::ui::report(
         &format!("intentic · {slug} backups"),
-        Some(&repo_dir(&slug).display().to_string()),
+        Some(&repo.location.spelled()),
     );
     if snapshots.is_empty() {
         crate::ui::quiet("There are no snapshots yet.");
@@ -661,30 +808,62 @@ pub fn list(slug: Option<String>, as_json: bool) -> Result<()> {
     Ok(())
 }
 
-/// `ic sandbox backup-restore <slug> --snapshot <id> (--to <folder> | --into <slug>)`: the backup's files into a
-/// folder on this machine to look through, or back into a sandbox's own volumes (stopped for it, and started again),
-/// which is how a sandbox whose volumes were lost is brought back into a new one.
+/// `ic sandbox backup-restore <slug> --snapshot <id> (--to <folder> | --into <slug>) [--repo <where> --key-file <file>]`:
+/// the backup's files into a folder on this machine to look through, or back into a sandbox's own volumes (stopped for
+/// it, and started again), which is how a sandbox whose volumes were lost is brought back into a new one. The
+/// repository is the one saved for `<slug>` on this machine unless `--repo` names another, and `--key-file` its
+/// password file when this machine holds none for `<slug>`: a repository copied from another machine, a NAS, a bucket.
 pub fn restore(
     from: String,
     snapshot: String,
     to: Option<PathBuf>,
     into: Option<String>,
     yes: bool,
+    repo: Option<String>,
+    key_file: Option<PathBuf>,
 ) -> Result<()> {
     docker::require_daemon()?;
-    if !repo_dir(&from).join("config").exists() {
+    let location = match &repo {
+        Some(raw) => backup_repo::parse(raw)?,
+        None => location_of(&from),
+    };
+    let key = match key_file {
+        Some(file) => std::path::absolute(file)?,
+        None => key_path(&from),
+    };
+    if !key.is_file() {
         bail!(
             "{}",
             crate::ui::explain(
                 "Nothing was restored.",
                 Some(&format!(
-                    "{from} has no backups on this device: {} is empty.",
-                    repo_dir(&from).display()
+                    "this device holds no key for {from}'s backups ({} is not there).",
+                    key.display()
                 )),
-                Some("ic sandbox backups"),
+                Some("add --key-file <the backup key file>"),
             )
         );
     }
+    if let Location::Folder(path) = &location {
+        if !path.join("config").exists() {
+            bail!(
+                "{}",
+                crate::ui::explain(
+                    "Nothing was restored.",
+                    Some(&format!(
+                        "there are no backups of {from} at {}.",
+                        path.display()
+                    )),
+                    Some(if repo.is_some() {
+                        "check --repo: it names the folder holding the repository's `config`"
+                    } else {
+                        "ic sandbox backups, or --repo <where the repository is>"
+                    }),
+                )
+            );
+        }
+    }
+    let repo = Repo { location, key };
     let log = Log::create_named("backup", &format!("restore-{from}"))?;
     match (to, into) {
         (Some(folder), None) => {
@@ -694,8 +873,13 @@ pub fn restore(
             let target = docker::bind_spec(&folder, "/out")?;
             let ran = restic(
                 &from,
+                &repo,
                 &[target],
-                &format!("restic restore {} --target /out", quoted(&snapshot)),
+                &format!(
+                    "restic restore {} --exclude {} --target /out",
+                    quoted(&snapshot),
+                    quoted(backup_seal::SEALED_DIR)
+                ),
                 &log,
             )?;
             if ran.code != Some(0) {
@@ -717,7 +901,7 @@ pub fn restore(
             ));
             Ok(())
         }
-        (None, Some(into)) => restore_into(&from, &snapshot, &into, yes, &log),
+        (None, Some(into)) => restore_into(&from, &repo, &snapshot, &into, yes, &log),
         _ => bail!(
             "{}",
             crate::ui::explain(
@@ -729,11 +913,91 @@ pub fn restore(
     }
 }
 
-fn restore_into(from: &str, snapshot: &str, into: &str, yes: bool, log: &Log) -> Result<()> {
+/// The at-rest key a snapshot carries (backup_seal.rs), unsealed with the repository's password. None for a snapshot
+/// from before keys travelled or of a sandbox with encryption at rest off, and, said, for one that does not open.
+fn carried_key(repo: &Repo, from: &str, snapshot: &str, log: &Log) -> Option<backup_seal::Carried> {
+    let ran = restic(
+        from,
+        repo,
+        &[],
+        &format!(
+            "restic dump --quiet {} {} 2>/dev/null || true",
+            quoted(snapshot),
+            backup_seal::SEALED_FILE
+        ),
+        log,
+    )
+    .ok()?;
+    let sealed: Value = serde_json::from_str(ran.stdout.trim()).ok()?;
+    let password = std::fs::read(&repo.key).ok()?;
+    match backup_seal::unseal(backup_seal::password_of(&password), &sealed) {
+        Ok(carried) => Some(carried),
+        Err(Fail(why)) => {
+            crate::ui::warn(&format!(
+                "the at-rest key in {from}'s snapshot {snapshot} is not used: {why}."
+            ));
+            None
+        }
+    }
+}
+
+/// What the sandbox's container mounts as its at-rest key, as backup_seal::plan reads it.
+fn target_key(container: &str) -> TargetKey {
+    if docker::mount_source(container, at_rest::KEY_MOUNT).is_none() {
+        return TargetKey::None;
+    }
+    at_rest::mounted_key_id(container).map_or(TargetKey::Unknown, TargetKey::Known)
+}
+
+/// Recreate the sandbox where it is, on its own image, so it mounts its keys again: with `previous` as its previous
+/// at-rest key when given, by the door an operator's rotation uses (PREVIOUS_HOST_FILE_ENV, recreate.rs).
+fn remount(slug: &str, previous: Option<&std::path::Path>) -> Result<()> {
+    let name = at_rest::PREVIOUS_HOST_FILE_ENV;
+    let before = std::env::var_os(name);
+    if let Some(previous) = previous {
+        std::env::set_var(name, previous);
+    }
+    let made = crate::sandbox::recreate::run(
+        crate::sandbox::recreate::Mode::Reshape(crate::shape::Ask::default()),
+        Some(slug.to_string()),
+        crate::sandbox::recreate::Preflight::Skip,
+    );
+    match before {
+        Some(value) => std::env::set_var(name, value),
+        None => std::env::remove_var(name),
+    }
+    made
+}
+
+/// What a person is told about the credential stores before and after a restore into a sandbox. Pure.
+fn credentials_sentence(plan: KeyPlan, from: &str, into: &str) -> Option<String> {
+    match plan {
+        KeyPlan::AsIs => None,
+        KeyPlan::Exclude => Some(format!(" {from}'s stored credentials are left out: they are encrypted with {from}'s own key, which this backup does not carry, and {into} keeps its own.")),
+        KeyPlan::Previous => Some(format!(" {from}'s stored credentials come too: the at-rest key this backup carries is given to {into} as its previous key, and {into} re-encrypts them under its own as it starts.")),
+        KeyPlan::Mount => Some(format!(" {into}'s at-rest key comes back out of the backup, and {into} is restarted once first to mount it.")),
+    }
+}
+
+fn restore_into(
+    from: &str,
+    repo: &Repo,
+    snapshot: &str,
+    into: &str,
+    yes: bool,
+    log: &Log,
+) -> Result<()> {
     let _held = lock::hold_for_person(into)?;
     let container = container_of(into);
     if !docker::container_exists(&container) {
-        bail!("{}", crate::sandbox::missing(into));
+        bail!(
+            "{}",
+            crate::ui::explain(
+                &format!("Nothing was restored: there is no sandbox named {into} on this device."),
+                Some("a backup is restored into a sandbox's volumes, so the sandbox has to exist first."),
+                Some("set one up (it may be a new one, under any name), then run this again with --into <its name>."),
+            )
+        );
     }
     let (Some(work), Some(history)) = (
         docker::mount_source(&container, "/work"),
@@ -750,12 +1014,24 @@ fn restore_into(from: &str, snapshot: &str, into: &str, yes: bool, log: &Log) ->
             )
         );
     };
-    // Another sandbox's snapshot holds its credential stores encrypted with ITS at-rest key (at_rest.rs). Written over
-    // this one's they could not be read here, and the daemon refuses to boot over stores it cannot authenticate, so they
-    // stay out and this sandbox keeps its own.
-    let credentials = (from != into).then(|| {
-        format!(" {from}'s stored credentials are left out: they are encrypted with {from}'s own key, and {into} keeps its own.")
-    });
+    /* THE CREDENTIAL STORES. A snapshot holds them encrypted with the at-rest key of the sandbox it was taken of, and the
+    daemon refuses to boot over stores it cannot authenticate. A snapshot that carries that key (backup_seal.rs) brings it
+    back: as the same sandbox's own key, or as the target's PREVIOUS key, so its daemon re-encrypts them under its own at
+    boot. One that carries none (taken before 2026-11-11, or with encryption at rest off) restores into another sandbox
+    as it always did: without them. */
+    let same = from == into;
+    let carried = carried_key(repo, from, snapshot, log);
+    let own = same
+        .then(|| std::fs::read(at_rest::sandbox_key(into)).ok())
+        .flatten()
+        .and_then(|content| at_rest::key_id_of(&content));
+    let plan = backup_seal::plan(
+        same,
+        carried.as_ref().map(|carried| carried.key_id.as_str()),
+        &target_key(&container),
+        own.as_deref(),
+    );
+    let credentials = credentials_sentence(plan, from, into);
     if !crate::ui::confirm(
         &format!("Restore {from}'s snapshot {snapshot} into {into}?"),
         &format!(
@@ -767,6 +1043,32 @@ fn restore_into(from: &str, snapshot: &str, into: &str, yes: bool, log: &Log) ->
         crate::ui::cancelled();
         return Ok(());
     }
+    // The keys first, before any file is written: a recreate that fails leaves the sandbox as it was.
+    if let Some(carried) = &carried {
+        if same {
+            let own_path = at_rest::sandbox_key(into);
+            if at_rest::place(&own_path, &carried.content)? {
+                crate::ui::note(&format!(
+                    "{into}'s at-rest key is back from the backup: {}. Keep that file: without it its credentials cannot be read.",
+                    own_path.display()
+                ));
+            }
+        }
+        match plan {
+            KeyPlan::Previous => {
+                let previous = at_rest::place_previous(into, &carried.content)?;
+                crate::ui::act(&format!(
+                    "Restarting {into} with the backup's at-rest key as its previous key"
+                ));
+                remount(into, Some(&previous))?;
+            }
+            KeyPlan::Mount => {
+                crate::ui::act(&format!("Restarting {into} with its at-rest key"));
+                remount(into, None)?;
+            }
+            KeyPlan::AsIs | KeyPlan::Exclude => {}
+        }
+    }
     crate::ui::act(&format!(
         "Restoring {from}'s snapshot {snapshot} into {into}"
     ));
@@ -775,17 +1077,16 @@ fn restore_into(from: &str, snapshot: &str, into: &str, yes: bool, log: &Log) ->
         format!("{work}:/src/work"),
         format!("{history}:/src/history"),
     ];
-    let exclude = if credentials.is_some() {
-        format!(" --exclude {}", quoted(AUTH_SRC))
-    } else {
-        String::new()
-    };
+    let mut exclude = format!(" --exclude {}", quoted(backup_seal::SEALED_DIR));
+    if plan == KeyPlan::Exclude {
+        exclude.push_str(&format!(" --exclude {}", quoted(AUTH_SRC)));
+    }
     // The consistent database copy the backup holds becomes the database, and a log from another moment goes.
     let script = format!(
         "restic restore {}{exclude} --target / && if [ -f {STAGED_DB_SRC} ]; then rm -f /src/history/conversations.db-wal /src/history/conversations.db-shm && mv {STAGED_DB_SRC} /src/history/conversations.db; fi",
         quoted(snapshot),
     );
-    let ran = restic(from, &mounts, &script, log);
+    let ran = restic(from, repo, &mounts, &script, log);
     docker::quiet(&["start", &container]);
     let ran = ran?;
     if ran.code != Some(0) {
@@ -821,7 +1122,7 @@ mod tests {
 
     #[test]
     fn a_full_backup_covers_both_volumes_and_leaves_out_what_regrows() {
-        let script = backup_script("abc", Scope::Full, true, "daily");
+        let script = backup_script("abc", Scope::Full, true, "daily", None);
         assert!(script.ends_with(" /src/work /src/history"), "{script}");
         assert!(
             script.contains("--host 'abc' --tag intentic --tag 'daily'"),
@@ -853,7 +1154,7 @@ mod tests {
 
     #[test]
     fn the_quick_backup_before_a_swap_takes_the_state_an_update_converts() {
-        let script = backup_script("abc", Scope::State, false, "pre-update");
+        let script = backup_script("abc", Scope::State, false, "pre-update", None);
         assert!(
             script.ends_with(" /src/work/.intentic /src/history"),
             "{script}"
@@ -864,6 +1165,45 @@ mod tests {
         );
         // Without a consistent copy the database files themselves are the backup.
         assert!(!script.contains("conversations.db"), "{script}");
+    }
+
+    #[test]
+    fn the_sealed_at_rest_key_rides_in_the_same_snapshot_only_when_there_is_one() {
+        let sealed = r#"{"v":1,"keyId":"0123456789abcdef","nonce":"00","ciphertext":"11"}"#;
+        let script = backup_script("abc", Scope::Full, false, "daily", Some(sealed));
+        assert!(
+            script.contains(&format!(
+                "mkdir -p /src/ic && printf '%s' {} > /src/ic/at-rest-key.sealed.json && restic backup",
+                quoted(sealed)
+            )),
+            "{script}"
+        );
+        assert!(
+            script.ends_with(" /src/work /src/history /src/ic"),
+            "{script}"
+        );
+        let state = backup_script("abc", Scope::State, false, "pre-update", Some(sealed));
+        assert!(
+            state.ends_with(" /src/work/.intentic /src/history /src/ic"),
+            "{state}"
+        );
+        let off = backup_script("abc", Scope::Full, false, "daily", None);
+        assert!(!off.contains("/src/ic"), "{off}");
+    }
+
+    #[test]
+    fn a_restore_says_what_becomes_of_the_credentials() {
+        assert_eq!(credentials_sentence(KeyPlan::AsIs, "a", "a"), None);
+        let excluded = credentials_sentence(KeyPlan::Exclude, "a", "b").unwrap();
+        assert!(excluded.contains("left out"), "{excluded}");
+        let rotated = credentials_sentence(KeyPlan::Previous, "a", "b").unwrap();
+        assert!(
+            rotated.contains("previous key") && rotated.contains("re-encrypts"),
+            "{rotated}"
+        );
+        assert!(credentials_sentence(KeyPlan::Mount, "a", "a")
+            .unwrap()
+            .contains("restarted once"));
     }
 
     #[test]
@@ -918,7 +1258,7 @@ mod tests {
 
     #[test]
     fn a_key_is_sixty_four_hex_characters_and_never_the_same_twice() {
-        let (first, second) = (random_hex(), random_hex());
+        let (first, second) = (random_hex().unwrap(), random_hex().unwrap());
         assert_eq!(first.len(), 64);
         assert!(first.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(first, second);

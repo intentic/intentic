@@ -279,46 +279,44 @@ pub fn prepare(source: &Source, slug: &str, auth: Option<&str>, make: bool) -> R
     Ok(())
 }
 
-/// Make the key at `path` unless it exists: 32 bytes from the operating system's random source, written to a temporary
-/// file beside it and moved into place only when whole and only if nothing is there by then, so neither a crash nor a
-/// second ic run making the same key (two sandboxes sharing a logins volume) leaves a short one or replaces one. Readable
-/// by this user alone on Unix; on Windows it takes the ACL of the profile folder it is in, as the backup key does. True
+/// Make the key at `path` unless it exists: 32 bytes from the operating system's random source, placed by `place`. True
 /// when this call made it.
 pub fn ensure(path: &Path) -> Result<bool> {
-    match std::fs::metadata(path) {
-        Ok(meta) if meta.is_file() => return Ok(false),
-        Ok(_) => bail!(
-            "{} is not a file, so it cannot be an at-rest key. Nothing was changed.",
-            path.display()
-        ),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => bail!("could not read {}: {err}", path.display()),
+    if is_key_file(path)? {
+        return Ok(false);
     }
-    let dir = path.parent().expect("a key path has a parent");
-    let mut folder = std::fs::DirBuilder::new();
-    folder.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        folder.mode(0o700);
-    }
-    folder.create(dir)?;
     let mut key = [0u8; KEY_LEN];
     getrandom::fill(&mut key).map_err(|err| {
         Fail(format!(
             "the operating system gave no random bytes for an at-rest key ({err}). Nothing was changed."
         ))
     })?;
-    let mut builder = tempfile::Builder::new();
-    builder.prefix(".at-rest-").suffix(".part");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        builder.permissions(std::fs::Permissions::from_mode(0o600));
+    place(path, &key)
+}
+
+/// Whether a key file stands at `path`; refused when something else does, which can never be a key.
+fn is_key_file(path: &Path) -> Result<bool> {
+    match std::fs::metadata(path) {
+        Ok(meta) if meta.is_file() => Ok(true),
+        Ok(_) => bail!(
+            "{} is not a file, so it cannot be an at-rest key. Nothing was changed.",
+            path.display()
+        ),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) => bail!("could not read {}: {err}", path.display()),
     }
-    let mut file = builder.tempfile_in(dir)?;
-    std::io::Write::write_all(&mut file, &key)?;
-    file.as_file().sync_all()?;
+}
+
+/// Write `bytes` as the key at `path` unless one is there: to a temporary file beside it, moved into place only when
+/// whole and only if nothing is there by then, so neither a crash nor a second ic run making the same key (two sandboxes
+/// sharing a logins volume) leaves a short one or replaces one. Readable by this user alone on Unix; on Windows it takes
+/// the ACL of the profile folder it is in, as the backup key does. Shared with a restore that brings a sandbox's key back
+/// out of its backup (backup.rs). True when this call wrote it.
+pub fn place(path: &Path, bytes: &[u8]) -> Result<bool> {
+    if is_key_file(path)? {
+        return Ok(false);
+    }
+    let file = staged(path, bytes)?;
     match file.persist_noclobber(path) {
         Ok(_) => Ok(true),
         // Another ic run made it since the look above: that one is the key.
@@ -329,6 +327,117 @@ pub fn ensure(path: &Path) -> Result<bool> {
             err.error
         ))),
     }
+}
+
+/// `bytes` in a whole, synced temporary file beside `path`, in a keys folder only this user can open.
+fn staged(path: &Path, bytes: &[u8]) -> Result<tempfile::NamedTempFile> {
+    let dir = path.parent().expect("a key path has a parent");
+    let mut folder = std::fs::DirBuilder::new();
+    folder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        folder.mode(0o700);
+    }
+    folder.create(dir)?;
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(".at-rest-").suffix(".part");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o600));
+    }
+    let mut file = builder.tempfile_in(dir)?;
+    std::io::Write::write_all(&mut file, bytes)?;
+    file.as_file().sync_all()?;
+    Ok(file)
+}
+
+/* A KEY CARRIED IN FROM ANOTHER SANDBOX'S BACKUP (backup.rs). Restored stores encrypted under another sandbox's key are
+handed to this one's daemon as its PREVIOUS key, the rotation door it already has: at boot it reads each store with
+whichever key's id the store names and writes it back under this sandbox's own (migrateAtRestStores in the daemon's
+at-rest.ts). The file is ic's, beside the sandbox's own key; a later restore carrying another key replaces it, because by
+then the boot after the last one has re-encrypted everything the old one opened. */
+
+/// Where a carried key waits for the daemon to rotate away from it. Pure.
+fn previous_key_in(home: &Path, slug: &str) -> PathBuf {
+    keys_dir(home).join(format!("at-rest-previous-{slug}.key"))
+}
+
+pub fn previous_key(slug: &str) -> PathBuf {
+    previous_key_in(&intentic_home(), slug)
+}
+
+/// Write a carried key as `slug`'s previous key, replacing one an earlier restore left.
+pub fn place_previous(slug: &str, bytes: &[u8]) -> Result<PathBuf> {
+    let path = previous_key(slug);
+    let file = staged(&path, bytes)?;
+    file.persist(&path)
+        .map_err(|err| Fail(format!("could not write {}: {}", path.display(), err.error)))?;
+    Ok(path)
+}
+
+/// The id the daemon gives a key (`fingerprint` in at-rest.ts): the first 16 hex digits of the SHA-256 of its 32 bytes,
+/// read off a key file the way `keyFromFile` reads one (raw bytes, 64 hex digits, or base64). None for what the daemon
+/// would refuse as a key. Pure.
+pub fn key_id_of(content: &[u8]) -> Option<String> {
+    let bytes: Vec<u8> = if content.len() == KEY_LEN {
+        content.to_vec()
+    } else {
+        let text = std::str::from_utf8(content).ok()?.trim();
+        if text.len() == 64 && text.chars().all(|c| c.is_ascii_hexdigit()) {
+            (0..64)
+                .step_by(2)
+                .map(|at| u8::from_str_radix(&text[at..at + 2], 16).ok())
+                .collect::<Option<Vec<u8>>>()?
+        } else {
+            base64_decode(text).filter(|bytes| bytes.len() == KEY_LEN)?
+        }
+    };
+    (bytes.len() == KEY_LEN).then(|| sha256_hex(&bytes)[..16].to_string())
+}
+
+/// Standard base64 with padding, the one spelling `keyFromFile` accepts besides raw and hex. Pure.
+fn base64_decode(text: &str) -> Option<Vec<u8>> {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let body = text.trim_end_matches('=');
+    if !text.len().is_multiple_of(4) || text.len() - body.len() > 2 {
+        return None;
+    }
+    let mut out = Vec::new();
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for c in body.bytes() {
+        let value = ALPHABET.iter().position(|&a| a == c)? as u32;
+        acc = (acc << 6) | value;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+    Some(out)
+}
+
+/// The key id of the key file a container mounts, when this machine can read that file. None when it mounts none, or
+/// one this machine cannot open (a volume, the other side of WSL).
+pub fn mounted_key_id(container: &str) -> Option<String> {
+    let inspect: Value = serde_json::from_str(&docker::inspect(container, "{{json .}}")?).ok()?;
+    let file = local_path_of(&key_file(&inspect)?);
+    key_id_of(&std::fs::read(file).ok()?)
+}
+
+/// The env a recreate replays with the previous key named where the daemon reads it. Pure.
+pub fn with_previous_key_env(env: &[u8]) -> Vec<u8> {
+    let mut env = env.to_vec();
+    if env_value(&env, PREVIOUS_KEY_ENV).is_none() {
+        if !env.is_empty() && !env.ends_with(&[0]) {
+            env.push(0);
+        }
+        env.extend_from_slice(format!("{PREVIOUS_KEY_ENV}={PREVIOUS_KEY_MOUNT}").as_bytes());
+        env.push(0);
+    }
+    env
 }
 
 /// The env a recreate replays, naming the key it mounts: a container that had none, or that was made through an image
@@ -883,6 +992,42 @@ mod tests {
         let path = own_key_in(home.path(), "sandbox-abc", Some("intentic-dev-agent-auth"));
         assert!(ensure(&path).unwrap());
         assert_eq!(std::fs::read(&path).unwrap().len(), KEY_LEN);
+    }
+
+    #[test]
+    fn a_key_id_matches_the_daemons_fingerprint_in_every_spelling_it_reads() {
+        let raw = [7u8; KEY_LEN];
+        let id = sha256_hex(&raw)[..16].to_string();
+        assert_eq!(key_id_of(&raw).as_deref(), Some(id.as_str()));
+        let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(
+            key_id_of(format!("{hex}\n").as_bytes()).as_deref(),
+            Some(id.as_str())
+        );
+        // base64 of 32 bytes of 7: "BwcH" repeated, 43 characters and one '='.
+        let b64 = format!("{}Bwc=", "BwcH".repeat(10));
+        assert_eq!(key_id_of(b64.as_bytes()).as_deref(), Some(id.as_str()));
+        assert_eq!(key_id_of(b"not a key"), None);
+        assert_eq!(key_id_of(&[1u8; 31]), None);
+    }
+
+    #[test]
+    fn a_carried_key_is_placed_only_where_none_is_and_a_previous_one_is_replaced() {
+        let home = tempfile::tempdir().unwrap();
+        let path = sandbox_key_in(home.path(), "sandbox-abc");
+        assert!(place(&path, &[1u8; KEY_LEN]).unwrap());
+        assert!(!place(&path, &[2u8; KEY_LEN]).unwrap());
+        assert_eq!(std::fs::read(&path).unwrap(), vec![1u8; KEY_LEN]);
+        assert_eq!(
+            previous_key_in(home.path(), "sandbox-abc"),
+            home.path().join("keys/at-rest-previous-sandbox-abc.key")
+        );
+        let env = with_previous_key_env(b"A=b\0");
+        assert_eq!(
+            env_value(&env, PREVIOUS_KEY_ENV).as_deref(),
+            Some(PREVIOUS_KEY_MOUNT)
+        );
+        assert_eq!(with_previous_key_env(&env), env);
     }
 
     #[test]

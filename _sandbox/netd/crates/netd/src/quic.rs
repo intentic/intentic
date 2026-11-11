@@ -75,6 +75,9 @@ pub async fn run(
             Outcome::Deleted => {
                 tracing::warn!(wait = ?next.wait, "the platform deleted this sandbox; no longer dialling QUIC");
             }
+            Outcome::Superseded(_) => {
+                tracing::info!(%reason, "this copy is on standby; not dialling QUIC");
+            }
             Outcome::Demoted => {
                 tracing::warn!(wait = ?next.wait, "the edge demoted the QUIC tunnel; the WebSocket carries it meanwhile");
             }

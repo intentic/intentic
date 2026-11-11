@@ -298,6 +298,14 @@ model Sandbox {
     // Since when two copies have been announcing side by side, and null while one copy announces alone. Set by the
     // announce that proves the overlap, cleared by the first announce after the other copy has been silent an hour.
     duplicateSince     DateTime?
+    // The copy that runs this sandbox, as {machineId?, host, os?, env?, manager, since} (api-contract ActiveHostSchema):
+    // set by the first copy to announce, and moved since only by an announce carrying a newer takeover, the marker `ic`
+    // writes on a move or `ic sandbox claim` (api active-host.ts). Every other copy is told it is not the active one and
+    // goes on standby. Backfilled from the newest of seenInstances (2026-11-11); null until a copy that names its host
+    // announces.
+    activeHost         Json?
+    // How many takeovers have moved activeHost: a copy compares it to tell a takeover it has not seen yet.
+    activeEpoch        Int             @default(0)
     // Which machine redeemed the CURRENT setup code first, as {host, os, instance, at}, from what `ic` named in its
     // claim; null until a claim names itself. A second claim naming a different machine is refused while the code
     // lives, so one pasted command cannot start two copies (api app.ts). Cleared on every mint, like the stamp above.

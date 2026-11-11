@@ -1016,7 +1016,12 @@ flowchart LR
 - `agent/` runs one turn: its prompt, tools, provider seam and the pipeline in `agent/run/stream-agent.ts`.
   `conversations/` is what turns belong to: the actors, the registry, each conversation's worktree and its land.
   `system/` is this container and its link to the platform: boot, resources and memory admission, TLS, listeners and
-  the platform client. `sandboxes/` creates other sandboxes on the owner's account; `links/` hands tasks to them and
+  the platform client. `sandboxes/` creates other sandboxes on the owner's account, removes them, and (2026-11-11, `sandboxes move`,
+  `move-gate.ts`) moves one between two of the owner's computers: resolved from the readings held, refused when either
+  computer lacks `sandbox-move` or "Manage sandboxes", when they are one computer, or when it is this sandbox; then
+  the source's read-only plan, the owner's card naming the size and the downtime, and the two machines' `ic` runs
+  copying it to each other end to end encrypted, this daemon carrying only their public keys between the flows and, when
+  they cannot dial each other, pumping their ciphertext through two `devices reach` tunnels (`move-relay.ts`); `links/` hands tasks to them and
   takes tasks from them over owner-made links (docs/architecture/links.md); `hosts/` holds the owner's own computers,
   desktop sync included.
 - Each subsystem declares its part of `Services` beside its code (`auth/auth-slice.ts`,

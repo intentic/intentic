@@ -143,6 +143,7 @@ async fn the_edge_reaches_node_and_upgrades_through_the_tunnel() {
                     "POST /extensions/{id}/bundle".into(),
                 ],
             }),
+            superseded: None,
         })
         .await;
     harness.hello().await;
@@ -309,6 +310,7 @@ async fn dialling(harness: &Harness, port: u16) {
                 grant: GRANT.into(),
                 bulk: vec![],
             }),
+            superseded: None,
         })
         .await;
     harness.hello().await;

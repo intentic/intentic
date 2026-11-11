@@ -35,52 +35,53 @@ test("the compose file mirrors connect.sh: slugged names, origin alias, .env gua
     expect(yaml).toContain(`aliases: [intentic-sandbox-workspace]`);
     expect(yaml).toContain(`cap_add: [SYS_ADMIN, SYS_PTRACE]`);
     expect(yaml).toContain(`CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`);
-    expect(yaml).toContain(`SANDBOX_PUBLIC_URL: https://sandbox-0f00ba4dd12b.intentic.dev`);
-    expect(yaml).toContain(`PLATFORM_URL: https://api.intentic.dev`);
+    expect(yaml).toContain(`SANDBOX_PUBLIC_URL: "https://sandbox-0f00ba4dd12b.intentic.dev"`);
+    expect(yaml).toContain(`PLATFORM_URL: "https://api.intentic.dev"`);
     expect(yaml).not.toContain(`CLOUDFLARE_API_TOKEN`);
     expect(yaml).not.toContain(`agent-auth`);
 });
 
 test("the compose file tells the daemon Compose runs it, so its update card offers the compose update", () => {
-    expect(composeFile(base)).toContain(`SANDBOX_MANAGER: compose`);
+    expect(composeFile(base)).toContain(`SANDBOX_MANAGER: "compose"`);
 });
 
-test("a local-only dev image is marked pull_policy: never so `compose pull` skips it instead of failing", () => {
-    expect(composeFile({ ...base, image: `intentic-sandbox:dev`, platformUrl: `https://localhost:6480` })).toContain(`pull_policy: never`);
+test("a local-only dev image is pulled only when missing, so `compose pull` does not fail on a tag no registry has", () => {
+    expect(composeFile({ ...base, image: `intentic-sandbox:dev`, platformUrl: `https://localhost:6480` })).toContain(`pull_policy: missing`);
 });
 
 test("the production registry image is pull_policy: always so it tracks the moving :stable release", () => {
     const yaml = composeFile(base);
-    expect(yaml).toContain(`image: ghcr.io/intentic/sandbox:stable`);
+    expect(yaml).toContain(`image: "ghcr.io/intentic/sandbox:stable"`);
     expect(yaml).toContain(`pull_policy: always`);
-    expect(yaml).not.toContain(`pull_policy: never`);
 });
 
+// The identity the run contract stamps (SANDBOX_NAME, SANDBOX_IMAGE) rides, as it does on every other way a sandbox starts.
 test("daemon-defaulted vars are omitted: the environment block stays minimal", () => {
     const yaml = composeFile(base);
-    for (const noise of [
-        `WORKSPACE_ROOT`,
-        `HISTORY_ROOT`,
-        `SANDBOX_HOST`,
-        `SANDBOX_PORT`,
-        `PREVIEW_PORT`,
-        `SANDBOX_NAME:`,
-        `SANDBOX_IMAGE`,
-        `SYNC_PAIR_TOKEN`,
-    ]) {
+    for (const noise of [`WORKSPACE_ROOT`, `HISTORY_ROOT`, `SANDBOX_HOST`, `SANDBOX_PORT`, `PREVIEW_PORT`, `SYNC_PAIR_TOKEN`]) {
         expect(yaml, `${noise} should ride the daemon default`).not.toContain(noise);
     }
 });
 
 test("an SPA served anywhere but the hosted app names itself as the daemon's CORS origin", () => {
-    expect(composeFile({ ...base, webOrigin: `https://localhost:47145` })).toContain(`WEB_ORIGIN: https://localhost:47145`);
+    expect(composeFile({ ...base, webOrigin: `https://localhost:47145` })).toContain(`WEB_ORIGIN: "https://localhost:47145"`);
     expect(composeFile(base)).not.toContain(`WEB_ORIGIN`);
 });
 
 test("local dev rewrites the container-visible platform url and mounts the shared agent-auth volume", () => {
     const yaml = composeFile({ ...base, platformUrl: `https://localhost:6480`, image: `intentic-sandbox:dev` });
-    expect(yaml).toContain(`PLATFORM_URL: https://host.docker.internal:6480`);
-    expect(yaml).toContain(`- agent-auth:/agent-auth`);
-    expect(yaml).toContain(`AGENT_AUTH_DIR: /agent-auth`);
+    expect(yaml).toContain(`PLATFORM_URL: "https://host.docker.internal:6480"`);
+    expect(yaml).toContain(`- "intentic-dev-agent-auth:/agent-auth"`);
+    expect(yaml).toContain(`AGENT_AUTH_DIR: "/agent-auth"`);
     expect(yaml).toContain(`name: intentic-dev-agent-auth`);
+});
+
+// What the hand-written file missed against the run line (2026-11-11), now that both are rendered from one spec.
+test("the file carries the run line's stop grace and no cgroup cap sized for a machine it does not know", () => {
+    const yaml = composeFile(base);
+    expect(yaml).toContain(`stop_grace_period: 30s`);
+    expect(yaml).not.toContain(`mem_limit`);
+    // A new sandbox's storage is Compose's to create; a rebuild's already exists.
+    expect(yaml).not.toContain(`external: true`);
+    expect(composeFile({ ...base, existingStorage: true })).toContain(`external: true`);
 });

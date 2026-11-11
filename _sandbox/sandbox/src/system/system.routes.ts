@@ -1,4 +1,5 @@
 import { noteAudit } from "../audit/audit-http.js";
+import { standbyInfo } from "./standby/standby.js";
 import { type Fence, fenceReaches } from "@intentic/sandbox-contract/policy/fence-paths";
 import type { Hello, RosterFrames, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import type { TerminalsList } from "@intentic/sandbox-contract/schemas/terminal";
@@ -389,6 +390,7 @@ export const createSystemRoutes = (services: Services) => {
                 ...opt("withdrawn", withdrawn),
                 ...opt("skippedVersion", skippedVersion),
                 ...opt("autoUpdate", autoUpdate),
+                ...opt("standby", standbyInfo()),
             };
         }),
         // The sandbox's copy of its name and logo (presentation-mirror.ts), read from /history on every ask: small, and

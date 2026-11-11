@@ -5,6 +5,10 @@ import type { QuietProbes } from "../system/quiet-watch.js";
 import { anyConnected } from "../ports/established.js";
 import { fileRestartResume } from "../system/restart-resume.js";
 import type { BootPhase } from "./boot-phase.js";
+import type { ActiveHost } from "@intentic/api-contract/ingress";
+import { clearStandby, standbyNotice, standbyTurn, writeStandby } from "../system/standby/standby.js";
+import { LINK_LOST_EXIT } from "../system/boot/restarts/daemon-stop.js";
+import { opt } from "../opt.js";
 import { nextPromisedWake } from "./promised-wakes.js";
 import { workingNow } from "./working-now.js";
 import { createHostedSleep } from "../system/sleep/hosted-sleep.js";
@@ -73,12 +77,41 @@ const startOrgReactions = ({ config, logger, services, shutdown }: Pick<BootPhas
     );
 };
 
+/* WHICH COPY RUNS THIS SANDBOX (system/standby/standby.ts). The platform's answer to an announce says whether this copy is
+ * the one; a change either way is written to /history/.ic/standby.json (or cleared) and the daemon restarts into it,
+ * netd starting it again, since the boot is what decides what starts. An answer that says nothing changes nothing. */
+const followStanding = async (
+    { config, logger, stop, standby }: Pick<BootPhase, "config" | "logger" | "stop"> & { readonly standby: BootPhase["standby"] | undefined },
+    standing: { active: boolean; activeHost?: ActiveHost; activeEpoch?: number },
+): Promise<void> => {
+    const turn = standbyTurn(standing.active, standby !== undefined);
+    if (turn === undefined) {
+        return;
+    }
+    if (turn === "enter") {
+        await writeStandby(config.historyRoot, { v: 1, since: Date.now(), ...opt("activeHost", standing.activeHost), ...opt("activeEpoch", standing.activeEpoch) });
+    } else {
+        await clearStandby(config.historyRoot);
+    }
+    const reason =
+        turn === "enter"
+            ? `${standbyNotice(standing.activeHost)}: this copy restarts on standby`
+            : "the platform holds this copy to be the one that runs the sandbox again: it restarts to take it up";
+    logger.warn({ activeHost: standing.activeHost, activeEpoch: standing.activeEpoch }, reason);
+    // EX_TEMPFAIL, so netd starts the daemon again rather than ending the container (daemon-stop.ts).
+    stop(LINK_LOST_EXIT, { action: "restart", reason });
+};
+
 // Container role only: a guest daemon or a local folder speaks for nobody.
-export const startPlatformPresence = ({ config, logger, role, services, shutdown }: BootPhase, reach: ReachPosture): void => {
+export const startPlatformPresence = ({ config, logger, role, services, shutdown, stop, standby }: BootPhase, reach: ReachPosture): void => {
     // Started with the listeners so it can't queue behind the sweeps it reports through.
     if (config.platform.url !== "" && config.sandbox.publicUrl !== "" && config.connectToken !== "" && role.container) {
+        services.announcer.onStanding((standing) => void followStanding({ config, logger, stop, standby }, standing));
         services.announcer.start();
-        services.reach.start(reach);
+        // A standby copy reports no reach: its boot report would overwrite the active copy's with an address it never dials.
+        if (standby === undefined) {
+            services.reach.start(reach);
+        }
     }
     // The organisation policy, from the same platform over the same token; a personal sandbox is answered null each time.
     // Its reactions start whether or not the platform is configured: a held policy is enforced either way.

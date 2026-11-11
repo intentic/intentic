@@ -21,6 +21,7 @@ import { DaemonVersionSchema } from "./sandbox/daemon-version.js";
 import { identityField, isTombstoned } from "./sandbox/recovery.js";
 import { identityKeyOf } from "./sign-in.js";
 import { announcedCopyOf, noteAnnounce, seenCopiesOf } from "./sandbox/announce-copies.js";
+import { announceActive } from "./sandbox/active/active-host-announce.js";
 import { claimerOf, heldClaimerOf, namesMachine, secondMachine } from "./sandbox/setup-code.js";
 import { recoveryHttpRoutes } from "./sandbox/recovery.routes.js";
 import type { Config } from "./config.js";
@@ -322,15 +323,15 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
         if (announced.count === 0) {
             return kit.refuse(404, `unknown sandbox`);
         }
-        // The identity key rides along so the daemon can verify the platform's identity assertions (sign-in.ts), the
-        // row's own id, so the machine that runs it can open it by that id with no network, and the digest of its name
-        // and logo, so the daemon asks for those again only when they changed (ingress-schemas.ts).
+        // With the identity key for the platform's assertions (sign-in.ts), the row's id for opening it offline, the digest
+        // of its name and logo (ingress-schemas.ts), and whether this copy is the one that runs it (active-host-announce.ts).
         return kit.answer({
             ok: true as const,
             ...(await identityField(prisma)),
             platformId: sandbox.id,
             identityKey: identityKeyOf(config),
             presentationDigest: await presentationDigest(sandbox.name, sandbox.image),
+            ...(await announceActive(prisma, { sandbox, copy, body, now, logger: c.get(`logger`) })),
         });
     });
 

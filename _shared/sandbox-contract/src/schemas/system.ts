@@ -141,6 +141,12 @@ export const InfoSchema = z.object({
         "Whether and when this sandbox takes a downloaded update by itself, and what it is waiting on. Absent where it cannot: a hosted sandbox, one built from a checkout, or one older than automatic updates.",
     ),
     // What answers now, for a page telling a swap it pressed from one still running; absent from a daemon older than it.
+    standby: z
+        .object({ host: z.string(), since: z.string() })
+        .optional()
+        .describe(
+            "Set while this copy is on standby (2026-11-11): the machine the platform holds to run the sandbox (`host`, its label and side) and since when this copy stood down (ISO). No turn starts here meanwhile. Absent on the active copy and from an older daemon.",
+        ),
     running: RunningSandboxSchema.optional().describe(
         "Which build answers and when its daemon started, so a page that asked for a rebuild, an update or a rollback can tell when the new container is the one answering. Absent from a sandbox older than this field.",
     ),

@@ -88,6 +88,7 @@ async fn round_trips_through_a_real_edge() {
                 grant,
                 bulk: vec![],
             }),
+            superseded: None,
         })
         .await;
     harness.hello().await;

@@ -17,7 +17,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/hosts";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { ORPCError } from "@orpc/server";
-import { refuseUnsupported } from "./device-feature-gates.js";
+import { flowTimeoutMs, refuseUnsupported } from "./device-feature-gates.js";
 import { commandingCards, withHostShell } from "./egress/host-shell.js";
 import { withEgressOwnerKeys } from "./egress/owner-keys.js";
 import type { Services } from "../composition.js";
@@ -54,7 +54,8 @@ const PULL_TIMEOUT_MS = 8_000;
 // How long a half that missed the reading's deadline is still waited for: a machine slower than the reading is slow, not gone.
 const PULL_GIVE_UP_MS = 60_000;
 
-// Ceiling on a management flow; the machine bounds its own work, a cutoff here only ends the watching.
+// Ceiling on a management flow; the machine bounds its own work, a cutoff here only ends the watching. A move's copy
+// can take hours, so its ops get their own (device-feature-gates.ts `flowTimeoutMs`).
 const FLOW_TIMEOUT_MS = 60 * 60 * 1000;
 
 // Ceiling for watching an update: above the download, below the flow ceiling; the view then polls the version.
@@ -551,7 +552,7 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
                 : input;
     try {
         // The machine bounds its own work; this ceiling only ever catches a socket that is gone but not closed.
-        for await (const line of await client.runSandboxFlow(flow, { signal: AbortSignal.timeout(FLOW_TIMEOUT_MS) })) {
+        for await (const line of await client.runSandboxFlow(flow, { signal: AbortSignal.timeout(flowTimeoutMs(flow.op, FLOW_TIMEOUT_MS)) })) {
             // Forgets a removed runner only on success; a failed removal leaves the container running still.
             if (line.kind === "result" && input.op === "runner-remove") {
                 services.runnerHub.disconnect(input.slug, "this runner was removed from its machine");

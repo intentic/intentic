@@ -1,0 +1,78 @@
+# intentic-sandbox-abc-123, rendered from the intentic run contract (@intentic/sandbox-run/compose).
+# Regenerate it rather than editing it: `ic sandbox compose <slug>` on the machine running it.
+services:
+    intentic-sandbox:
+        image: "intentic-sandbox-env-abc-123:0123456789ab"
+        pull_policy: build
+        build:
+            pull: true
+            dockerfile_inline: |
+                FROM ghcr.io/intentic/sandbox:stable
+                RUN ln -sf "/opt/x-$$(node -p 'process.arch')" /usr/local/bin/x
+                RUN <<EOF cat > /usr/local/bin/hello
+                #!/bin/sh
+
+                echo hi
+                EOF
+        container_name: intentic-sandbox-abc-123
+        init: true
+        restart: unless-stopped
+        stop_grace_period: 30s
+        cap_add: [SYS_ADMIN, SYS_PTRACE, NET_ADMIN]
+        privileged: true
+        devices: ["/dev/net/tun:/dev/net/tun"]
+        mem_limit: 12g
+        memswap_limit: 14g
+        cpus: 4
+        dns: [1.1.1.1]
+        extra_hosts: ["host.docker.internal:host-gateway"]
+        networks:
+            intentic:
+                aliases: [intentic-sandbox-workspace]
+        logging:
+            driver: json-file
+            options: { max-size: "10m", max-file: "3" }
+        ports:
+            - "127.0.0.1:${LOCAL_PORT:?run the .env bootstrap first}:8788"
+        volumes:
+            - work:/work
+            - history:/history
+            - docker-engine:/var/lib/docker
+            - "shared-auth:/agent-auth"
+            - "./at-rest.key:/run/secrets/intentic-at-rest-key:ro"
+        environment:
+            SANDBOX_NAME: "intentic-sandbox-abc-123"
+            SANDBOX_IMAGE: "intentic-sandbox-env-abc-123:0123456789ab"
+            SANDBOX_BASE_IMAGE: "base:tag"
+            SANDBOX_ENVIRONMENT_HASH: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            SANDBOX_CHANNEL: "stable"
+            SANDBOX_PREVIOUS_IMAGE: "base:old"
+            SANDBOX_BASE_DIGEST: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            SANDBOX_DEFINITION_SEED: "bmFtZSA9ICJzZWVkZWQiCiMgw7xuw69jb2RlCg=="
+            SANDBOX_OVERLAY_RUNTIME: "--privileged"
+            OWNER_EMAIL: "a@b.c"
+            CONNECT_TOKEN: ${CONNECT_TOKEN:?run the .env bootstrap first}
+            HOST_SSH_KEY: ${HOST_SSH_KEY:?run the .env bootstrap first}
+            SANDBOX_SWAP: "2g"
+            INTENTIC_AT_REST_KEY_FILE: "/run/secrets/intentic-at-rest-key"
+            HOST_PLATFORM: "linux"
+            HOST_LABEL: "z440"
+            HOST_ENV: "native"
+            SANDBOX_MANAGER: "compose"
+networks:
+    intentic:
+        name: intentic-workspace-abc-123
+        external: true
+volumes:
+    work:
+        name: intentic-workspace-abc-123
+        external: true
+    history:
+        name: intentic-history-abc-123
+        external: true
+    docker-engine:
+        name: intentic-docker-abc-123
+        external: true
+    shared-auth:
+        name: shared-auth
+        external: true

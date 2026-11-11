@@ -552,6 +552,13 @@
             "const": "tunnel",
             "type": "string"
           },
+          "superseded": {
+            "description": "With no `tunnel`: this copy of the sandbox is on standby, and `superseded` names the host the platform holds to\nrun it (2026-11-11). netd dials nothing until Node sends a tunnel again, and tells Node `Superseded` rather than\na plain \"off\". A netd older than it reads the frame as a bare stand-down, which stops dialling all the same.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "tunnel": {
             "anyOf": [
               {
@@ -812,6 +819,23 @@
             },
             "required": [
               "refusal"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Another copy of this sandbox, on `host`, is the one the platform holds to run it: Node put this copy on standby\nand told netd to stand down, and netd dials nothing until Node sends a tunnel again (2026-11-11). Rejected: the\n15-minute redial `Elsewhere` keeps, under which a standby copy would take the address back whenever the active\none dropped for a moment.",
+            "properties": {
+              "host": {
+                "type": "string"
+              },
+              "refusal": {
+                "const": "superseded",
+                "type": "string"
+              }
+            },
+            "required": [
+              "refusal",
+              "host"
             ],
             "type": "object"
           }

@@ -7,6 +7,7 @@ import { agentEntrant, namespaceTargetOf, nsenterArgv, type NamespaceEntryRefere
 import { errorMessage } from "@intentic/base/errors";
 import { opt } from "../opt.js";
 
+
 // Daemon-local handles, never request/wire shapes. Public fields describe the view; only the private registries below
 // authorize its use. Worktree placement and workload scheduling are not execution authority.
 export interface AgentExecutionAdmission { readonly mode: AgentDomainPolicy["agentDomain"] }

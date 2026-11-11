@@ -141,6 +141,7 @@ impl StandIn {
                     grant: GRANT.into(),
                     bulk: vec![],
                 }),
+                superseded: None,
             })
             .await;
         harness.hello().await;

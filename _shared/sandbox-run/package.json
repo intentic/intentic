@@ -28,6 +28,17 @@
                 "default": "./dist/index.js"
             }
         },
+        "./compose": {
+            "types": "./dist/compose.d.ts",
+            "import": {
+                "@intentic/src": "./src/compose.ts",
+                "default": "./dist/compose.js"
+            },
+            "require": {
+                "@intentic/src": "./src/compose.ts",
+                "default": "./dist/compose.js"
+            }
+        },
         "./fly": {
             "types": "./dist/fly.d.ts",
             "import": {

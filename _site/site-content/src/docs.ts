@@ -162,6 +162,18 @@ export const docsBook: Book = {
                             },
                         },
                         {
+                            // Beside keeping a sandbox running: where it runs is part of keeping it.
+                            id: "move-sandbox",
+                            title: "Move to another computer",
+                            blurb: "One sandbox from one of your computers to another, behind one card",
+                            meta: {
+                                title: "Move a sandbox to another computer · intentic docs",
+                                description:
+                                    "Move one sandbox, its files, history, credentials and keys, from one of your computers to another with `sandboxes move`: one owner card, no SSH, an encrypted copy, and the old copy kept for 7 days.",
+                                datePublished: "2026-11-11",
+                            },
+                        },
+                        {
                             // Includes agent-side symptoms too: a reader here often cannot tell which half broke.
                             id: "troubleshooting",
                             title: "Troubleshooting",

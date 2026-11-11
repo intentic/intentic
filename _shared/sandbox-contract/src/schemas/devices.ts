@@ -9,6 +9,7 @@ import {
     type SandboxShapeWhen,
 } from "./device-resources.js";
 import { PortNumberSchema } from "./device-commands.js";
+import { DeviceSandboxMoveSchema } from "./device-move.js";
 import { DeviceBridgeHoldSchema, DeviceConflictSchema, DeviceCopySchema, DeviceLowDiskSchema } from "./device-folder.js";
 import { parseHostConnection, type DeviceFacts, DeviceFactsSchema, MachineIdentitySchema, MachineIdSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
 import { EgressOwnerKeysSchema, EgressPolicySchema, EgressProofSchema, EgressStatusSchema } from "./egress.js";
@@ -117,6 +118,13 @@ export const DeviceSandboxOpSchema = z.enum([
     "create",
     "runner-up",
     "runner-remove",
+    // (2026-11-11) A sandbox carried to another of the owner's computers (`sandboxes move`, the daemon's move-gate.ts),
+    // each through `ic` with the flow's `move` object: `move-out` on the computer that runs it (its plan, then the send),
+    // `move-prepare` on the one it goes to (checks, image, then the receive, one long run), and `move-in` there to hand
+    // the waiting receive the sender's public key. Sent only to an agent advertising `sandbox-move`.
+    "move-prepare",
+    "move-out",
+    "move-in",
 ]);
 export type DeviceSandboxOp = z.infer<typeof DeviceSandboxOpSchema>;
 // STRICT, like every input a device is sent: an agent rejects a field it does not know instead of dropping it and doing
@@ -162,6 +170,8 @@ export const DeviceSandboxFlowSchema = z.strictObject({
     definition: z.string().optional(),
     overlay: z.string().optional(),
     overlayHash: z.string().optional(),
+    // The three move ops only, daemon-filled (DeviceSandboxMoveSchema).
+    move: DeviceSandboxMoveSchema.optional(),
 });
 export type DeviceSandboxFlow = z.infer<typeof DeviceSandboxFlowSchema>;
 // The `ic` argv for the shape and power ops, the one place any caller spells them: the machine agent runs it and the
@@ -211,6 +221,7 @@ export type DeviceAgentFlow = z.infer<typeof DeviceAgentFlowSchema>;
 export const DeviceAgentFlowInputSchema = DeviceAgentFlowSchema.extend({ id: z.string().min(1) });
 export type DeviceAgentFlowInput = z.infer<typeof DeviceAgentFlowInputSchema>;
 export * from "./device-commands.js";
+export * from "./device-move.js";
 
 // What a synced folder reports beyond Mutagen's word, its conflicts and what the device holds back (device-folder.ts).
 export * from "./device-folder.js";

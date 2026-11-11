@@ -311,6 +311,9 @@ pub fn run(dry_run: bool, as_json: bool, auto: bool) -> Result<()> {
     // The copies a move between engines left on the other engine, once their days are up (engine/moves.rs): they sit
     // where this tidy's own listing never looks, so they are named to the move's own cleanup instead.
     if !dry_run {
+        // A move to another computer whose ic died halfway is settled first (device_move): its partial copy removed, or
+        // the sandbox it stopped started again.
+        crate::sandbox::device_move::recover();
         if let Err(crate::util::Fail(reason)) = crate::engine::moves::cleanup(false) {
             crate::ui::warn(&format!(
                 "the copies an engine move left behind were not removed this time: {reason}"

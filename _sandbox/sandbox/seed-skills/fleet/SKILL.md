@@ -1,6 +1,6 @@
 ---
 name: fleet
-description: Create sandboxes on the owner's intentic account from inside this one, via the `sandboxes` CLI, read what the account already runs, and remove one a task is done with. Use when a task needs a SEPARATE sandbox — a second project, a specialized agent with its own tools and access, a box for a role that should not share this one's environment — instead of asking the owner to make one in the browser.
+description: Create sandboxes on the owner's intentic account from inside this one, via the `sandboxes` CLI, read what the account already runs, move one to another of the owner's computers, and remove one a task is done with. Use when a task needs a SEPARATE sandbox — a second project, a specialized agent with its own tools and access, a box for a role that should not share this one's environment — instead of asking the owner to make one in the browser.
 ---
 
 # The owner's other sandboxes
@@ -20,11 +20,26 @@ sandboxes create storefront \
     --definition ./team/reviewer.sandbox.toml \
     --why "one line on why this job needs its own box"
 sandboxes remove storefront --why "…"        # take one off the account, the owner's card first
+sandboxes move translations --to z440 \
+    [--manager compose] --why "…"           # carry one to another of the owner's computers, the owner's card first
 ```
 
 `create` holds its connection through both slow halves — the owner deciding, then `ic` pulling an image and
 starting a container out on the machine. Minutes, either one. Hold it open rather than timing it out; every
 line the machine printed comes back with the answer, and when a create fails those lines are the diagnosis.
+
+## Moving a sandbox to another computer
+
+`sandboxes move <name|slug> --to <device>` carries a sandbox, whole, from the computer that runs it to another of the
+owner's computers: its workspace, its history, its Docker data, its at-rest and backup keys and its settings. Both
+computers must be linked to THIS sandbox with "Manage sandboxes" on and a current agent; the command says which one to
+fix when not. The card names the size, and the sandbox is offline for the whole copy. The two computers copy to each
+other directly, encrypted end to end; nothing passes through you, and no key is ever shown. When they cannot reach each
+other, this sandbox relays their encrypted bytes, which needs "Run commands" or "Run programs" on both. The answer
+streams progress, then says where it ended up. A failure puts it back where it was; after a success the old computer
+keeps a stopped copy for 7 days. `--manager compose` hands it to Docker Compose on the target instead of `ic`.
+
+It never moves the sandbox it runs in (that would stop the move halfway): run it from another sandbox.
 
 ## When a new sandbox is the right answer
 

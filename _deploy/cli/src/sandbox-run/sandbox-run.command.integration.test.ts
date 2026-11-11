@@ -189,3 +189,53 @@ test("host-probes asks about the owner's optional directives exactly as the over
     expect(owner.stdout.trim().split("\n")).toEqual(["--gpus=all\truntime\tnvidia"]);
     expect(both.stdout.trim().split("\n")).toEqual(["--gpus=all\truntime\tnvidia"]);
 });
+
+// `--format compose` is the same run through the Compose renderer: the file plus the credentials for its `.env`, which
+// the file names only as variables.
+test("--format compose prints the Compose file and the .env it reads, credentials only in the latter", async () => {
+    const token = "ict_live_0123456789abcdef0123456789abcdef";
+    const recipe = Buffer.from("FROM img:base\n# intentic:runtime --privileged\nRUN echo $HOME\n", "utf8").toString("base64");
+    const { stdout, code } = await runVerb(
+        [
+            "--slug",
+            "s7",
+            "--image",
+            "img:new",
+            "--base-image",
+            "img:base",
+            "--environment-hash",
+            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "--recipe-b64",
+            recipe,
+            "--at-rest-key",
+            "./at-rest.key",
+            "--host-platform",
+            "linux",
+            "--host-label",
+            "z440",
+            "--format",
+            "compose",
+        ],
+        `CONNECT_TOKEN=${token}\0OWNER_EMAIL=a@b.c\0`,
+    );
+    expect(code).toBe(0);
+    // SAFETY: the verb prints exactly this shape for --format compose; the assertions below read each field.
+    const printed = JSON.parse(stdout) as { compose: string; env: Record<string, string>; envFile: string };
+    expect(printed.compose).not.toContain(token);
+    expect(printed.compose).toContain("CONNECT_TOKEN: ${CONNECT_TOKEN:?run the .env bootstrap first}");
+    expect(printed.compose).toContain("privileged: true");
+    expect(printed.compose).toContain("RUN echo $$HOME");
+    expect(printed.compose).toContain(`- "./at-rest.key:/run/secrets/intentic-at-rest-key:ro"`);
+    expect(printed.compose).toContain(`HOST_LABEL: "z440"`);
+    expect(printed.compose).toContain("stop_grace_period: 30s");
+    expect(printed.env["CONNECT_TOKEN"]).toBe(token);
+    expect(printed.envFile).toContain(`CONNECT_TOKEN='${token}'`);
+    const sandboxId = sandboxIdFromToken(token);
+    expect(printed.env["LOCAL_PORT"]).toBe(sandboxId === undefined ? undefined : String(localDaemonPort(sandboxId)));
+});
+
+test("--format compose refuses a recipe without the hash that names the image built from it", async () => {
+    const { code, stderr } = await runVerb(["--slug", "s7", "--image", "i", "--base-image", "i", "--recipe-b64", "RlJPTSBp", "--format", "compose"], "");
+    expect(code).not.toBe(0);
+    expect(stderr).toContain("--environment-hash");
+});

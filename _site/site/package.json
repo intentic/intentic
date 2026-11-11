@@ -24,6 +24,7 @@
         "@intentic/entry-css": "workspace:*",
         "@intentic/registry": "workspace:*",
         "@intentic/sandbox-openapi": "workspace:*",
+        "@intentic/sandbox-run": "workspace:*",
         "@tailwindcss/vite": "catalog:",
         "astro": "catalog:",
         "sharp": "catalog:",

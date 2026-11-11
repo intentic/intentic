@@ -1,6 +1,7 @@
-import { AnnounceBodySchema, type DuplicateCopies } from "@intentic/api-contract";
+import { type ActiveHost, AnnounceBodySchema, type DuplicateCopies } from "@intentic/api-contract";
 import { z } from "zod";
 import { HOUR_MS } from "../durations.js";
+import { isActiveCopy } from "./active/active-host.js";
 
 /* Track the last two announced container instances; a connect token can be copied, causing competing tunnels.
  * Duplicates require both copies heard within an hour and overlapping lifetimes of at least SIDE_BY_SIDE_MS, excluding restarts/cutovers.
@@ -105,11 +106,22 @@ const copyWords = (copy: SeenCopy): string => {
     return copy.os === undefined ? host : `${host} (${copy.os})`;
 };
 
-// The owner's summary: both copies and since when, while either still announces; null otherwise.
-export const duplicateCopiesOf = (stored: unknown, duplicateSince: Date | null, now: Date): DuplicateCopies | null => {
+// The owner's summary: both copies and since when, while either still announces, and which of them is the active one
+// (active-host.ts) when one is; null otherwise.
+export const duplicateCopiesOf = (
+    stored: unknown,
+    duplicateSince: Date | null,
+    now: Date,
+    activeHost: ActiveHost | null = null,
+): DuplicateCopies | null => {
     const seen = seenCopiesOf(stored);
     if (duplicateSince === null || seen.length < 2 || now.getTime() - Math.max(...seen.map((copy) => Date.parse(copy.at))) > QUIET_MS) {
         return null;
     }
-    return { hosts: seen.map(copyWords), since: duplicateSince.toISOString() };
+    const summary: DuplicateCopies = { hosts: seen.map(copyWords), since: duplicateSince.toISOString() };
+    const active = activeHost === null ? undefined : seen.find((copy) => isActiveCopy(activeHost, copy));
+    if (active !== undefined) {
+        summary.active = copyWords(active);
+    }
+    return summary;
 };

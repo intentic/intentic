@@ -4,6 +4,8 @@ import type { Services } from "../composition.js";
 import type { Config } from "../env.config.js";
 import type { ContainerRole } from "../system/boot/container-owner.js";
 import type { ProfileTraits } from "../system/boot/profile.js";
+import type { StopCause } from "../system/boot/restarts/daemon-stop.js";
+import type { StandbyRecord } from "../system/standby/standby.js";
 
 // What every phase of boot is handed, so a phase reads its inputs instead of re-deriving them: the config this daemon
 // was started with, the services built from it, the profile's named traits, the role it claimed over the container,
@@ -11,11 +13,14 @@ import type { ProfileTraits } from "../system/boot/profile.js";
 export interface BootPhase {
     // The daemon's one deliberate stop: everything registered with `shutdown` is torn down, then the process exits with
     // `exitCode` (0 unless the cause asks netd for another start, system/boot/daemon-stop.ts). The first call decides.
-    readonly stop: (exitCode?: number) => void;
+    readonly stop: (exitCode?: number, cause?: StopCause) => void;
     readonly config: Config;
     readonly logger: Logger;
     readonly traits: ProfileTraits;
     readonly role: ContainerRole;
     readonly services: Services;
     readonly shutdown: DisposableStore;
+    // (2026-11-11) This copy is on standby: another host runs the sandbox (system/standby/standby.ts). Read once at boot; set
+    // only on the container's own daemon. Nothing that starts work on its own starts while it is.
+    readonly standby?: StandbyRecord;
 }

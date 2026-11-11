@@ -107,6 +107,7 @@ export const FAILURE_CODES = {
     "tools-unenforced": { kind: "held", course: "door" },
     // The protected execution boundary refused admission, not an executed provider/runtime failure.
     "agent-domain-refused": { kind: "held", course: "door" },
+    standby: { kind: "held", course: "door" },
     // The privacy shield found personal data in instructions a runtime loads itself, where it could not mask them.
     "privacy-instructions": { kind: "privacy", course: "door" },
     "context-overflow": { kind: "contextFull", course: "overflow" },

@@ -16,7 +16,13 @@ export type Endpoint = { host: string, port: number, };
 /**
  * Everything Node sends netd.
  */
-export type FromNode = { "kind": "hello", build: string, pid: number, generation?: number, } | { "kind": "listen", config: ListenConfig, } | { "kind": "certificate", certificate?: Certificate, } | { "kind": "tunnel", tunnel?: TunnelConfig, } | { "kind": "ask", id: number, question: NetdQuestion, } | { "kind": "answer", id: number, answer: Answer, } | { "kind": "refused", id: number, message: string, } | { "kind": "revoke", member?: string, } | { "kind": "watch", checkout: WatchedCheckout, } | { "kind": "unwatch", dir: string, };
+export type FromNode = { "kind": "hello", build: string, pid: number, generation?: number, } | { "kind": "listen", config: ListenConfig, } | { "kind": "certificate", certificate?: Certificate, } | { "kind": "tunnel", tunnel?: TunnelConfig, 
+/**
+ * With no `tunnel`: this copy of the sandbox is on standby, and `superseded` names the host the platform holds to
+ * run it (2026-11-11). netd dials nothing until Node sends a tunnel again, and tells Node `Superseded` rather than
+ * a plain "off". A netd older than it reads the frame as a bare stand-down, which stops dialling all the same.
+ */
+superseded?: string, } | { "kind": "ask", id: number, question: NetdQuestion, } | { "kind": "answer", id: number, answer: Answer, } | { "kind": "refused", id: number, message: string, } | { "kind": "revoke", member?: string, } | { "kind": "watch", checkout: WatchedCheckout, } | { "kind": "unwatch", dir: string, };
 
 /**
  * Every port netd binds, as Node's config names them; an absent one is not bound.
@@ -119,7 +125,7 @@ export type TunnelConfig = { url: string, grant: string, bulk: Array<string>, };
 /**
  * Why netd stopped dialling the ingress at its usual pace, past an ordinary drop it redials at once.
  */
-export type TunnelRefusal = { "refusal": "elsewhere", host: string, } | { "refusal": "deleted" };
+export type TunnelRefusal = { "refusal": "elsewhere", host: string, } | { "refusal": "deleted" } | { "refusal": "superseded", host: string, };
 
 /**
  * A local upstream a preview host relays to.

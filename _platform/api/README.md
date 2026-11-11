@@ -226,6 +226,15 @@ flowchart LR
   (`seenInstances`), and when their running stretches overlap by ten minutes or more, `duplicateSince` says since when;
   the owner's `sandbox.list` row carries `duplicateCopies: { hosts, since }` until one copy has been silent an hour
   (`src/sandbox/announce-copies.ts`). A label that is too long is dropped, never a reason to refuse the announce.
+- (2026-11-11) One active host per sandbox (`src/sandbox/active/active-host.ts`, the rules; `active/active-host-announce.ts`, the
+  write). The row names the copy that runs it (`activeHost`: `host`, `os`, `env` the engine, `manager` ic, compose or
+  other, `machineId`, `since`) and counts the takeovers that moved it (`activeEpoch`). The first announce of a copy
+  that names its host sets it; after that only an announce carrying a `takeover` (the marker `ic` writes on a move or
+  `ic sandbox claim`) newer than `since` moves it, written over the row as it was read, so two racing announces cannot
+  both win. Every other announce changes nothing. The answer says `active`, `activeHost` and `activeEpoch` whenever
+  the copy names a host; a copy that is not the active one goes on standby (the daemon's `standby.ts`).
+  `duplicateCopies.active` names which of two copies is the active one. Rejected: "the last copy to announce wins",
+  which is the fight it ends, and "the newest container wins", which a stale copy restarted by its keeper would win.
 - (2026-10-05) `POST /setup/claim` takes optional `host`, `os` and `instance` form fields beside `code`
   (`SetupClaimerSchema`). The first claim that names a machine is kept (`setupClaimedBy`, cleared by every mint and by
   a release), and a claim of the same live code naming a different machine (another name, case aside, or another

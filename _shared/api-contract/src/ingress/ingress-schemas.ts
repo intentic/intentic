@@ -73,6 +73,41 @@ export const BootReportSchema = z.object({
 });
 export type BootReport = z.infer<typeof BootReportSchema>;
 
+/* ONE ACTIVE HOST PER SANDBOX (2026-11-11). A connect token copied to a second machine starts a second copy, and the
+ * edge keeps whichever dialled first, so a stale copy could hold the address while the real one sat refused. The
+ * platform now records which copy is the active one (`ActiveHostSchema`) and tells each announcing copy whether it is.
+ * The first copy to announce becomes active; after that only a takeover moves it: a marker `ic` writes into the
+ * container's history when the owner moves a sandbox to this machine or says "run it here" (`ic sandbox claim`), at
+ * `/history/.ic/takeover.json`, which the daemon reads and sends with its next announce. */
+
+// Who wrote a takeover: a move to this machine, or the owner's "run it here".
+export const TakeoverSchema = z.object({
+    v: z.literal(1),
+    // When ic wrote it (epoch ms): a takeover moves the active host only when it is newer than the one it replaces.
+    at: z.number().int().positive().max(8_640_000_000_000_000),
+    by: z.enum(["move", "claim"]),
+    machineId: z.string().trim().max(120).optional().catch(undefined),
+    host: z.string().trim().max(120).optional().catch(undefined),
+});
+export type Takeover = z.infer<typeof TakeoverSchema>;
+
+// What starts and stops a copy's container: `ic`, Docker Compose (a stack such as Komodo runs), or anything else.
+export const HostManagerSchema = z.enum(["ic", "compose", "other"]);
+export type HostManager = z.infer<typeof HostManagerSchema>;
+
+// The copy the platform holds to be the one that runs a sandbox: the machine's own name (HOST_LABEL), its `ic` machine
+// id when a takeover named one, the side it runs on (the announce's `os`), the container engine (`env`, the announce's
+// `engine`), what manages it, and since when (ISO; a takeover's own `at`).
+export const ActiveHostSchema = z.object({
+    machineId: z.string().optional(),
+    host: z.string(),
+    os: z.string().optional(),
+    env: z.string().optional(),
+    manager: HostManagerSchema,
+    since: z.string(),
+});
+export type ActiveHost = z.infer<typeof ActiveHostSchema>;
+
 /* WHAT A DAEMON'S ANNOUNCE CARRIES (POST /sandbox/announce, the connect token in `x-intentic-connect`): the address it
  * answers on, its version, and, from a daemon new enough (2026-10-05), which copy of the sandbox it is. `instance` is
  * minted once per container start (netd's INTENTIC_INSTANCE, else once per daemon process), `host` is the
@@ -89,6 +124,11 @@ export const AnnounceBodySchema = z.object({
     // The container engine the copy runs on (HOST_ENGINE, which `ic` stamps on every container it makes):
     // `dockerDesktop`, `intentic` (Intentic's own engine in WSL), `own` (Rancher Desktop), `native`.
     engine: label(40),
+    // (2026-11-11) What starts and stops this copy's container (`HostManagerSchema`), as far as the daemon can tell.
+    manager: HostManagerSchema.optional().catch(undefined),
+    // (2026-11-11) The one-shot takeover marker `ic` left for this copy (`TakeoverSchema`): sent until an announce is
+    // accepted, then deleted. A malformed one is dropped, never fatal.
+    takeover: TakeoverSchema.optional().catch(undefined),
 });
 export type AnnounceBody = z.input<typeof AnnounceBodySchema>;
 
@@ -281,6 +321,12 @@ export const AnnounceAcceptedSchema = z.object({
     identityKey: z.string().min(1).optional(),
     platformId: z.string().min(1).optional(),
     presentationDigest: z.string().min(1).optional(),
+    // (2026-11-11) Whether the announcing copy is the active one, which one is, and how many takeovers this sandbox has
+    // seen. Absent from an older platform, and while the platform cannot tell (no active host yet, or a copy that names
+    // no host): a daemon reads absence as active, as it always has.
+    active: z.boolean().optional(),
+    activeHost: ActiveHostSchema.optional(),
+    activeEpoch: z.number().int().nonnegative().optional(),
 });
 
 // `POST /sandbox/adopt`: the owner's adoption ticket the browser handed the daemon, the grant this platform signed for

@@ -335,6 +335,12 @@ pub enum FromNode {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         tunnel: Option<TunnelConfig>,
+        /// With no `tunnel`: this copy of the sandbox is on standby, and `superseded` names the host the platform holds to
+        /// run it (2026-11-11). netd dials nothing until Node sends a tunnel again, and tells Node `Superseded` rather than
+        /// a plain "off". A netd older than it reads the frame as a bare stand-down, which stops dialling all the same.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        superseded: Option<String>,
     },
     Ask {
         id: u32,
@@ -375,6 +381,11 @@ pub enum TunnelRefusal {
     Elsewhere { host: String },
     /// The platform deleted this sandbox: the edge closed its tunnel for that, and netd stopped dialling.
     Deleted,
+    /// Another copy of this sandbox, on `host`, is the one the platform holds to run it: Node put this copy on standby
+    /// and told netd to stand down, and netd dials nothing until Node sends a tunnel again (2026-11-11). Rejected: the
+    /// 15-minute redial `Elsewhere` keeps, under which a standby copy would take the address back whenever the active
+    /// one dropped for a moment.
+    Superseded { host: String },
 }
 
 /// Everything netd sends Node.
@@ -656,7 +667,36 @@ mod tests {
         let json = serde_json::to_string(&FromNode::Certificate { certificate: None }).unwrap();
         assert_eq!(json, r#"{"kind":"certificate"}"#);
         let back: FromNode = serde_json::from_str(r#"{"kind":"tunnel"}"#).unwrap();
-        assert_eq!(back, FromNode::Tunnel { tunnel: None });
+        assert_eq!(
+            back,
+            FromNode::Tunnel {
+                tunnel: None,
+                superseded: None
+            }
+        );
+    }
+
+    // A standby copy's stand-down names the active host; the refusal netd answers with says the same.
+    #[test]
+    fn a_stand_down_names_the_host_that_runs_the_sandbox() {
+        let stand_down = FromNode::Tunnel {
+            tunnel: None,
+            superseded: Some("z440 (linux)".into()),
+        };
+        let json = serde_json::to_string(&stand_down).unwrap();
+        assert_eq!(json, r#"{"kind":"tunnel","superseded":"z440 (linux)"}"#);
+        assert_eq!(serde_json::from_str::<FromNode>(&json).unwrap(), stand_down);
+        let refused = ToNode::Tunnel {
+            connected: false,
+            reason: None,
+            refused: Some(TunnelRefusal::Superseded {
+                host: "z440 (linux)".into(),
+            }),
+        };
+        assert_eq!(
+            serde_json::to_string(&refused).unwrap(),
+            r#"{"kind":"tunnel","connected":false,"refused":{"refusal":"superseded","host":"z440 (linux)"}}"#
+        );
     }
 
     // Node names the guard beside the rest of the listen config; a config from before it has none, and every preview host

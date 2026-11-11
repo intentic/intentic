@@ -913,7 +913,16 @@ fn recreate(
         env_nul = at_rest::with_key_env(&env_nul);
     }
     stamped_run.extend(at_rest::stamp(&key));
-    if let Some(previous) = docker::mount_source(&container, at_rest::PREVIOUS_KEY_MOUNT) {
+    /* A previous key named on this run (PREVIOUS_HOST_FILE_ENV, as `connect` reads it: an operator's rotation, or a
+    restore bringing another sandbox's stores in with the key they are encrypted with, backup.rs) replaces the one the
+    container mounts; without one, that one is replayed. */
+    if let Some(path) = at_rest::host_file(at_rest::PREVIOUS_HOST_FILE_ENV)? {
+        mounts.push(docker::bind_spec(
+            &path,
+            &format!("{}:ro", at_rest::PREVIOUS_KEY_MOUNT),
+        )?);
+        env_nul = at_rest::with_previous_key_env(&env_nul);
+    } else if let Some(previous) = docker::mount_source(&container, at_rest::PREVIOUS_KEY_MOUNT) {
         mounts.push(format!("{previous}:{}:ro", at_rest::PREVIOUS_KEY_MOUNT));
     }
     mounts.extend(dev_mounts());

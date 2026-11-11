@@ -888,6 +888,41 @@ describe(`POST /sandbox/announce`, () => {
         expect(written.data.duplicateSince).toEqual(written.data.lastSeenAt);
     });
 
+    // (2026-11-11) Which copy runs the sandbox (active-host.ts): a copy on another machine is told it is not the one, and
+    // moves nothing, until it announces with a takeover newer than the active host's; then the row moves, guarded by the
+    // epoch it was read at, and the copy is told it is now the active one.
+    it(`tells a copy whether it is the active one, and moves the active host only on a newer takeover`, async () => {
+        const since = new Date(Date.now() - 60 * 60_000).toISOString();
+        const row = {
+            id: `s1`,
+            token: `tok`,
+            setupPayload: null,
+            daemonUrl: null,
+            hosted: null,
+            seenInstances: null,
+            duplicateSince: null,
+            activeHost: { host: `RADARSU-ROG`, os: `archlinux`, manager: `ic`, since },
+            activeEpoch: 4,
+        };
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(row), updateMany } });
+        const post = (extra: Record<string, unknown>) =>
+            createApp(config, prisma, logger).app.request(`/sandbox/announce`, {
+                method: `POST`,
+                headers: { "content-type": `application/json`, "x-intentic-connect": `tok` },
+                body: JSON.stringify({ daemonUrl: `https://sandbox-abc.intentic.dev`, instance: `z`, host: `z440`, os: `linux`, ...extra }),
+            });
+
+        expect(await (await post({ manager: `compose` })).json()).toMatchObject({ active: false, activeHost: row.activeHost, activeEpoch: 4 });
+        expect(updateMany).toHaveBeenCalledTimes(1);
+
+        const at = Date.now() - 60_000;
+        const answer = await (await post({ manager: `compose`, takeover: { v: 1, at, by: `claim`, machineId: `m-z440`, host: `z440` } })).json();
+        const moved = { machineId: `m-z440`, host: `z440`, os: `linux`, manager: `compose`, since: new Date(at).toISOString() };
+        expect(answer).toMatchObject({ active: true, activeHost: moved, activeEpoch: 5 });
+        expect(updateMany).toHaveBeenLastCalledWith({ where: { id: `s1`, activeEpoch: 4 }, data: { activeHost: moved, activeEpoch: 5 } });
+    });
+
     // A version is short and semver-shaped; anything else is not trusted, and costs the announce nothing.
     it.each([[`latest`], [`1.2`], [`1.2.3 ; drop table`], [`1.2.${`9`.repeat(80)}`], [42]])(
         `announces but stores no version for %j`,

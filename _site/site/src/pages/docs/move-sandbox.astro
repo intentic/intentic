@@ -1,0 +1,112 @@
+---
+import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
+import DocsRelated from "../../components/docs/DocsRelated.astro";
+
+/* A move is `sandboxes move` in one sandbox, the machine agents on two computers, and two `ic` runs
+   (_sandbox/ic/src/sandbox/device_move/), so the steps and rules below are theirs. */
+
+const move = `sandboxes move translations --to z440 --why "z440 has the disk and stays on at night"`;
+
+const compose = `sandboxes move translations --to z440 --manager compose`;
+
+const back = `# On the computer it left, within 7 days: start the copy kept there.
+ic sandbox start translations`;
+---
+
+<DocsLayout
+    pageId="move-sandbox"
+    heading="Move a sandbox to another computer"
+    lead="Move one sandbox, with its files, its conversations, its credentials and its keys, from one of your computers to another. You approve one card. Nobody opens SSH, copies a volume or writes a Compose file by hand."
+>
+    <h2 id="before">What you need</h2>
+    <ul>
+        <li>Both computers run the machine agent and are connected to the sandbox you run the move from.</li>
+        <li>On both, the <strong>Manage sandboxes on this device</strong> switch is on, and the agent is current enough to offer moves.</li>
+        <li>
+            You run the move from a <em>different</em> sandbox than the one you move. A sandbox cannot move itself: it would cut off the
+            conversation running the move halfway through.
+        </li>
+    </ul>
+
+    <h2 id="run">Run it</h2>
+    <p>Ask an agent in any of your sandboxes, or run it in its terminal:</p>
+    <DocsCodeBlock code={move} lang="bash" title="In another sandbox" />
+    <p>
+        You can name the sandbox by the name the app shows or by its slug. First it looks at the sandbox where it runs now and works out
+        how much data will be copied. Then a card in your chat names the sandbox, the computer it leaves, the computer it goes to and the
+        size, and says that the sandbox is offline while it is copied. Nothing happens until you approve.
+    </p>
+    <p>After you approve, the move runs in this order:</p>
+    <ol>
+        <li>
+            <strong>The new computer gets ready while the sandbox keeps running.</strong> It checks Docker and free disk space (the data plus
+            2 GB), downloads the same sandbox image, and builds your environment from the same recipe.
+        </li>
+        <li>
+            <strong>The sandbox stops and is copied.</strong> Its workspace, its history and its Docker data go across in one encrypted stream,
+            with its credentials and its at-rest key. Each volume is checked file by file when it arrives.
+        </li>
+        <li>
+            <strong>It starts on the new computer</strong>, set up as that computer's own sandbox. The move counts as done only when its tunnel
+            is up again, so its address keeps working.
+        </li>
+        <li>
+            <strong>The old computer keeps its copy</strong>, stopped, for 7 days. After that it is removed on its own.
+        </li>
+    </ol>
+    <p>The command prints each step and how many bytes have been copied, and ends with where the sandbox runs now.</p>
+
+    <h2 id="compose">Run it with Docker Compose</h2>
+    <p>
+        By default the new computer runs the sandbox the way <code>ic</code> runs every sandbox. On a server you manage with Docker Compose or
+        Komodo, ask for a Compose folder:
+    </p>
+    <DocsCodeBlock code={compose} lang="bash" title="Compose on the new computer" />
+    <p>
+        The sandbox then runs from <code>~/.intentic/compose/&lt;slug&gt;/</code> on that computer (<code>compose.yaml</code>, its{" "}
+        <code>.env</code> and a copy of its at-rest key). For a Komodo stack, point the stack at that folder.
+    </p>
+
+    <h2 id="safety">What keeps it safe</h2>
+    <ul>
+        <li>
+            <strong>Nobody handles keys.</strong> Each computer makes a one-time key for this move. The sandbox running the move passes only the
+            public halves between them, and no agent ever sees them.
+        </li>
+        <li>
+            <strong>The copy is encrypted end to end.</strong> The two computers connect directly on your network when they can. If they
+            cannot, the sandbox running the move relays the stream between them, and all it sees is encrypted bytes. A stream that is changed,
+            cut short or reordered is refused.
+        </li>
+        <li>
+            <strong>A key is never overwritten.</strong> If the new computer already has a different at-rest key for this sandbox, the move
+            stops before anything is stopped.
+        </li>
+        <li>
+            <strong>Volumes are never overwritten.</strong> A volume with the same name and data already on the new computer stops the move,
+            unless it is the copy an earlier move from that computer left behind.
+        </li>
+    </ul>
+
+    <h2 id="fails">If something fails</h2>
+    <p>
+        Before the new copy is up, any failure undoes both sides. The new computer removes what it created, and the old one starts the
+        sandbox again as it was. Each computer does this on its own, so it still works if the sandbox running the move goes away. A computer
+        that restarts in the middle of a move cleans up the next time <code>ic</code> runs there.
+    </p>
+    <p>
+        In one case the old computer cannot tell what happened: everything was sent, and then the connection broke before the new computer
+        said whether the sandbox started. The old copy then stays stopped, so two copies never run at once, and the command says so. Check
+        the new computer. If the sandbox is not running there, start the old copy:
+    </p>
+    <DocsCodeBlock code={back} lang="bash" title="Bring it back" />
+
+    <DocsRelated
+        links={[
+            { href: "/docs/your-machine/", title: "Your own machine", why: "the machine agent both computers run, and its switches." },
+            { href: "/docs/docker/", title: "Docker setup", why: "the containers and volumes a sandbox is made of, which a move copies." },
+            { href: "/docs/troubleshooting/", title: "Troubleshooting", why: "when a sandbox does not come up after a move." },
+        ]}
+    />
+</DocsLayout>

@@ -201,6 +201,7 @@ async fn measure(quic: bool, announced: bool) -> Measured {
                     vec![]
                 },
             }),
+            superseded: None,
         })
         .await;
     harness.hello().await;

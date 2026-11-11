@@ -39,6 +39,18 @@ fn run_command_argv(
     unsupported: &[String],
     seeds: &[Seed],
 ) -> Vec<String> {
+    run_command_argv_as(request, no_local_publish, unsupported, seeds, "json", &[])
+}
+
+/// The same question in another `--format`, with the flags only that format reads after it (`compose_command`).
+fn run_command_argv_as(
+    request: &RunRequest,
+    no_local_publish: bool,
+    unsupported: &[String],
+    seeds: &[Seed],
+    format: &str,
+    format_flags: &[String],
+) -> Vec<String> {
     let mut args: Vec<String> = ["run", "-i", "--rm"]
         .iter()
         .map(|s| s.to_string())
@@ -88,7 +100,8 @@ fn run_command_argv(
         flag("--definition-b64", definition);
     }
     args.push("--format".to_string());
-    args.push("json".to_string());
+    args.push(format.to_string());
+    args.extend(format_flags.iter().cloned());
     if no_local_publish {
         args.push("--no-local-publish".to_string());
     }
@@ -143,6 +156,48 @@ pub fn run_command(
         );
     }
     Ok(argv)
+}
+
+/// What an image answers to `run-command --format compose`: the Compose file and the `.env` it reads (sandbox-run's
+/// compose.ts renders both; ic writes them as they come).
+#[derive(serde::Deserialize, Debug)]
+pub struct ComposeAnswer {
+    pub compose: String,
+    #[serde(rename = "envFile")]
+    pub env_file: String,
+}
+
+/// Ask `image` for this sandbox as a Compose file: the same run as `run_command`, rendered by the image's own contract,
+/// with `format_flags` (`--recipe-b64`, `--at-rest-key`, `--host-*`) that only that rendering reads. An image from before
+/// the format refuses its flags or prints a run line instead, which reads as "update first".
+pub fn compose_command(
+    request: &RunRequest,
+    env_nul: &[u8],
+    unsupported: &[String],
+    format_flags: &[String],
+    log: &Log,
+) -> Result<ComposeAnswer> {
+    let args = run_command_argv_as(
+        request,
+        false,
+        unsupported,
+        &with_base_digest(
+            with_env_seed(&[], std::env::var("SANDBOX_MEMORY").ok()),
+            crate::sandbox::identity::base_digest(request.image, request.base_image),
+        ),
+        "compose",
+        format_flags,
+    );
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let too_old = || {
+        crate::util::Fail(format!(
+            "{} cannot write a Compose file: its run contract is from before `--format compose`. Update the sandbox (`ic sandbox update`) and try again. Log: {}",
+            request.image,
+            log.path.display()
+        ))
+    };
+    let output = docker::capture_with_stdin(&arg_refs, env_nul, log).map_err(|_| too_old())?;
+    serde_json::from_str(output.trim()).map_err(|_| too_old())
 }
 
 /* The one seed a flow may pick up from ITS OWN environment: `SANDBOX_MEMORY=10g ic sandbox connect`, the headless spelling that predates `reshape`. */

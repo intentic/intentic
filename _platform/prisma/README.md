@@ -24,6 +24,9 @@ flowchart LR
   columns let a turn that started with allowance left finish past it, up to `TRIAL_GRACE_STEPS` (default 25) more
   calls a day (`20261019120000_trial_turn_grace`). A turn the daemon opened and never closed stops counting an hour
   after it opened.
+- A sandbox's `activeHost` and `activeEpoch` name the one copy that runs it and how many takeovers moved it
+  (`20261111120000_active_host`, backfilled from the newest copy in `seenInstances`); the rules are in the api's
+  `src/sandbox/active/active-host.ts`.
 - Some database state lives only in SQL. `20261002120000_platform_memory` adds a trigger on `sandbox` that
   writes a `sandbox_tombstone` for the tunnel id of every deleted row and rotated token (cascades included), and the
   one `platform_identity` row that migration minted for its database. Neither appears in a `migrate diff`, and both are

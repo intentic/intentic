@@ -6,6 +6,7 @@
     "background-prepare",
     "sleep",
     "reachable-ways-back",
-    "egress"
+    "egress",
+    "sandbox-move"
   ]
 }

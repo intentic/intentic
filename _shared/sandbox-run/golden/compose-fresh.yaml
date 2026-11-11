@@ -1,0 +1,41 @@
+# intentic-sandbox-abc-123, rendered from the intentic run contract (@intentic/sandbox-run/compose).
+services:
+    intentic-sandbox:
+        image: "ghcr.io/intentic/sandbox:stable"
+        pull_policy: always
+        container_name: intentic-sandbox-abc-123
+        init: true
+        restart: unless-stopped
+        stop_grace_period: 30s
+        cap_add: [SYS_ADMIN, SYS_PTRACE]
+        dns: [1.1.1.1, 1.0.0.1]
+        extra_hosts: ["host.docker.internal:host-gateway"]
+        networks:
+            intentic:
+                aliases: [intentic-sandbox-workspace]
+        logging:
+            driver: json-file
+            options: { max-size: "10m", max-file: "3" }
+        ports:
+            - "127.0.0.1:${LOCAL_PORT:?run the .env bootstrap first}:8788"
+        volumes:
+            - work:/work
+            - history:/history
+            - docker-engine:/var/lib/docker
+        environment:
+            SANDBOX_NAME: "intentic-sandbox-abc-123"
+            SANDBOX_IMAGE: "ghcr.io/intentic/sandbox:stable"
+            SANDBOX_BASE_IMAGE: "ghcr.io/intentic/sandbox:stable"
+            SANDBOX_MANAGER: "compose"
+            CONNECT_TOKEN: ${CONNECT_TOKEN:?run the .env bootstrap first}
+            OWNER_EMAIL: ${OWNER_EMAIL:-}
+networks:
+    intentic:
+        name: intentic-workspace-abc-123
+volumes:
+    work:
+        name: intentic-workspace-abc-123
+    history:
+        name: intentic-history-abc-123
+    docker-engine:
+        name: intentic-docker-abc-123

@@ -69,8 +69,8 @@ flowchart LR
   - Unless you bring your own, ic makes the key once, from the operating system's random source, at
     `~/.intentic/keys/at-rest-<slug>.key` (`%USERPROFILE%\.intentic\keys` on Windows). On Linux and macOS only you
     can read it; on Windows it has your profile folder's permissions. That folder is never mounted into a sandbox, so
-    the sandbox can read its key but not change it, and a copy of its volume or one of ic's backups does not contain
-    it. A key that exists is never made again: every later update, rollback and reinstall reuses it. Dev sandboxes
+    the sandbox can read its key but not change it, and a copy of its volume does not contain it. ic's own backups
+    carry it sealed under the backup key (see Backups below), so a backup and its key restore anywhere. A key that exists is never made again: every later update, rollback and reinstall reuses it. Dev sandboxes
     that share a logins volume (`INTENTIC_AGENT_AUTH_VOLUME`) keep their credentials in that volume, so they share
     one key for it, `~/.intentic/keys/at-rest-shared/<volume>.key`; when ic makes it, it names the sibling sandboxes
     that cannot read those credentials until their own next update gives them the same key.
@@ -92,8 +92,10 @@ flowchart LR
     the sandbox went). A shared key goes when its logins volume is removed. Your own key file is never deleted.
   - Going back to a version from before encryption at rest (2026-10-13) is allowed, with a warning: that version
     cannot read the encrypted credentials until the sandbox is updated again. `backup-restore` of one sandbox's backup
-    into another leaves out the first one's credentials (`/work/.intentic/secrets/auth`), which are encrypted with its
-    key, and the target keeps its own. A container that was given a key it no longer mounts, and not one of ic's, is
+    into another brings its credentials along when the backup carries its key (every backup since 2026-11-11), handing
+    that key to the target as its previous key so the target re-encrypts them under its own as it starts; an older backup
+    leaves them out (`/work/.intentic/secrets/auth`) and the target keeps its own. `INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE`
+    is honoured by every recreate, not only `connect`. A container that was given a key it no longer mounts, and not one of ic's, is
     left as it is, with a stop that asks for the key file in `INTENTIC_AT_REST_KEY_HOST_FILE`.
 - A sandbox for one folder of the owner's (`SYNC_REMOTE_DIR=/work/<name>` with `SYNC_PROJECT=1`, beside `SYNC_DIR`)
   is checked before anything starts (`project_dir.rs`, the contract's name rule), hands the sync installer both, and
@@ -141,6 +143,14 @@ flowchart LR
   does the fix engine when it finds the container running. The keeper's `fix --auto` reads a sandbox asleep as
   healthy and skips its daemon, registration and tunnel checks; an attended `fix` starts it. `ic sandbox list` says
   `asleep` (`"asleep": true` in `--json`).
+- (2026-11-11) One active host per sandbox. `ic sandbox claim [slug]` ("run it here") writes the takeover marker
+  `/history/.ic/takeover.json` (`{v, at, by: claim|move, machineId, host}`, `takeover.rs`, `mark`) and starts the
+  sandbox, or restarts it, so its daemon announces the takeover now; the platform makes this copy the active one and
+  every other copy goes on standby at its next announce. `fix` (and the keeper's `fix --auto`) settles a copy whose
+  history holds `/history/.ic/standby.json` as `elsewhere`, stops it as `ic sandbox stop` does (held) and never starts
+  it, unless a takeover is waiting (`fix/away.rs`). An unattended run never starts a stopped container Docker Compose
+  owns: it reports it `elsewhere`, managed by Compose, with the folder its `working_dir` label names (2026-11-10:
+  Compose's stop ends in a SIGKILL after 10 s, an exit 137 the keeper read as a crash and undid).
 - Before a swap touches the running container, it pre-flights the target image's state conversions against
   read-only mounts of the container's data (`/work`, `/history`, and `/agent-auth` where the container has it: the run
   contract's `DATA_MOUNTS`, held to it by a golden test) (`preflight.rs`) and refuses if one would fail;
@@ -157,6 +167,46 @@ flowchart LR
   few seconds and removed when it ends, so the card draws the download in progress instead of a button for it. It also refuses a
   run line that would put the sandbox on other storage than it has (`storage.rs`: a renamed or dropped volume would
   otherwise boot a healthy-looking sandbox on empty volumes).
+- **A running sandbox can be written out as a Compose folder.** `ic sandbox compose <slug> [--out <dir>]`
+  (`compose_out.rs`) writes `compose.yaml`, its `.env` (0600) and `at-rest.key` (0400, a copy of the key the container
+  mounts, which the file binds as `./at-rest.key`) into `~/.intentic/compose/<slug>/` by default, and refuses a folder
+  holding another sandbox's file. The file is not ic's: ic asks the sandbox's own image for it
+  (`intentic sandbox run-command --format compose`), handing it the container's env, the approved recipe, where the key
+  sits and the side stamps, the way it asks for a run line. So the file carries what the run line does: the 30 s stop
+  grace, the caps, the directives and their stamps, the overlay as a `build:` with `SANDBOX_ENVIRONMENT_HASH`, and
+  HOST_PLATFORM/HOST_LABEL/HOST_ENV, without which every ic reads the container as its own. Credentials go only into
+  the `.env`. The volumes and the network are `external: true`: they already exist, and `compose down` must never
+  delete a workspace. To hand the sandbox over, stop it through ic, `docker rm` its container (the volumes stay), then
+  run `docker compose up -d` in the folder, or point a Komodo stack at it (files on host). `write_folder` is the same
+  thing as a library call, for a move to another device. An image from before the format is refused with "update
+  first". (2026-11-11: the "translations" move from rog to z440 needed every one of those lines written by hand.)
+- **A sandbox moves to another of the owner's computers in one stream (2026-11-11).** `ic sandbox move-out` and
+  `ic sandbox move-in` (`sandbox/device_move/`) are the two halves `sandboxes move` drives through the machine agents;
+  nothing else touches the bytes. The source plans first (`--plan-only`: image, base and its registry digest, the
+  overlay recipe whose hash the image's tag names, each volume's size, the at-rest key's id; never the env), and the
+  target prepares from that plan while the sandbox still runs: docker, free disk (the data plus 2 GiB), no sandbox,
+  volume or different at-rest key of that name, the base pulled by digest, the overlay built from the recipe under the
+  very tag it runs (`needs_carrying`: an image neither a registry nor a recipe can make rides the stream instead). It
+  then listens and prints an ephemeral X25519 public key; the source's key reaches it through the daemon
+  (`move-in --peer`, a file the waiting run reads). The source dials the target's LAN addresses, or listens on loopback
+  for the calling sandbox's relay; a greeting naming any other key is dropped before agreement. HKDF-SHA256 over the
+  shared secret, salted with the move id and bound to both keys, gives one AES-256-GCM key per direction; records are
+  ≤ 1 MiB, sealed under their counter as nonce, and a stream ends with an authenticated END naming its record count,
+  so a cut, tampered or reordered stream fails rather than arriving short (`wire.rs`; no new crate, `ring` already
+  builds). Only after the target says it is ready does the source stop the sandbox (held), then send the manifest (the
+  whole inspect, env included, and the channel record), the keys, the image when asked, and each volume as a tar
+  checked against `engine/moves.rs`'s file manifest. The target makes it with this machine's side stamps (HOST_PLATFORM,
+  HOST_ENV, HOST_ENGINE and the side label dropped, HOST_LABEL this machine's), through the run contract (a stopped
+  placeholder and a reshape, as an engine move does) or as a Compose folder (`compose_out::write_folder_as` and
+  `docker compose up -d`), writes the takeover marker (`takeover.rs`, `/history/.ic/takeover.json`, shared with the
+  one-active-host work) before its first boot, starts it and waits for its tunnel. Only its verdict lets the source
+  rename its copy `<container>.moved`, recorded in `moves.json` as `from: "device"` and removed after `KEEP_DAYS` by
+  the same cleanup an engine move's copies are (now on every platform for these). Any failure before that undoes both
+  halves, each on its own; each run journals itself with a heartbeat in `~/.intentic/device-moves.json`, and the next
+  `move-*` or `ic sandbox tidy` settles a run that died (removes a target's partial copy, starts a source it stopped).
+  A source that sent everything and never heard the verdict stays stopped and says so: the target may be up, and two
+  copies must not run. Not carried: a Windows sandbox's dind deploy target container (its volume goes if the sandbox
+  mounts it), and host bind mounts other than the key. Advertised as the `sandbox-move` feature.
 - **Nothing old is let go until the new version has proved itself.** A swap parks the old container, and a new version
   that never answers, never commits its state journal, reports its conversion failed, or keeps crashing is undone at
   once. Crashing is netd's word (`health.rs`): three restarts of the daemon in ten minutes with it down again, read off
@@ -244,10 +294,30 @@ flowchart LR
   (`labels.rs`): `dev.intentic.sandbox`, `dev.intentic.kind`, `dev.intentic.side` (`linux/archlinux`) and
   `dev.intentic.ic`; objects made before keep working by name.
 - **Backups outside Docker.** `ic sandbox backup` copies `/work` and `/history` into an encrypted, incremental restic
-  repository in `~/.intentic/backups/<slug>/`, keyed by `~/.intentic/keys/backup-<slug>.key` (`backup.rs`), so a Docker
-  reset or a lost WSL disk does not take the sandbox with it. The machine agent runs it daily (`--auto`); every swap
-  takes a quick one of the state an update converts first. `backups` lists them, and `backup-restore` puts one into a
-  folder or back into a sandbox's volumes. Each backup says so on the sandbox's volume (`/history/.ic/backup.json`,
+  repository in `~/.intentic/backups/<slug>/`, keyed by `~/.intentic/keys/backup-<slug>.key` (64 hex digits from the
+  operating system's random source; `backup.rs`), so a Docker reset or a lost WSL disk does not take the sandbox with it.
+  The machine agent runs it daily (`--auto`); every swap takes a quick one of the state an update converts first.
+  `backups` lists them and names the repository, and `backup-restore` puts one into a folder or back into a sandbox's
+  volumes.
+  - **Self-contained** (2026-11-11). Every snapshot also holds the sandbox's at-rest key, sealed under a key derived from
+    the backup key (HKDF-SHA256, AES-256-GCM; `backup_seal.rs`), as `/src/ic/at-rest-key.sealed.json` in the same
+    snapshot (`restic dump <id> /src/ic/at-rest-key.sealed.json` shows it). The repository and its backup key are all a
+    restore needs; the plain key is only ever written to `~/.intentic/keys`. A sandbox with encryption at rest off
+    carries none. The key travels only in backups and in moves: never to the platform or a keyring.
+  - **Elsewhere.** `ic sandbox backup --repo <where>` sends the sandbox's backups to an absolute folder (a NAS share,
+    another disk) or a restic URL (`sftp:`, `s3:`, `rest:`, `b2:`, `azure:`, `gs:`, `swift:`), and keeps that choice in
+    `~/.intentic/backups/<slug>/repo.json`, so the daily `--auto` run and the pre-update backup go there too
+    (`--repo default` goes back to this disk; `backup_repo.rs`). ic stores no credential for it: restic reads them from
+    the environment ic runs in, whose `RESTIC_*`, `AWS_*`, `B2_*` and `AZURE_*` variables are passed to the restic
+    container by name only, and a URL with a password in it is refused. An sftp repository uses your `~/.ssh`.
+  - **Restore anywhere.** `ic sandbox backup-restore <slug> --snapshot <id> --into <target>` takes `--repo` and
+    `--key-file` for a repository this machine does not keep (copied from another machine, on a NAS, in a bucket). The
+    target must exist (set it up first, under any name). Into the same slug, the carried key is written back to
+    `~/.intentic/keys/at-rest-<slug>.key` if none is there (never over one); if the sandbox mounts another key, or the
+    target is another sandbox, ic writes the carried key to `~/.intentic/keys/at-rest-previous-<target>.key`, restarts
+    the target once with it as its previous key, then restores, and the daemon re-encrypts the restored stores under the
+    target's own key as it boots. Only a backup carrying no key leaves another sandbox's credentials out, as before.
+  - Each backup says so on the sandbox's volume (`/history/.ic/backup.json`,
   `{side, env, at, snapshot, scope}`), and its worker container is named per side (`intentic-backup-<slug>-<side>`)
   (2026-10-05: one shared name let each side's `rm -f` kill the other's backup mid-run).
 - `ic sandbox tidy` removes what updates leave behind (images and records of sandboxes that are gone, superseded
@@ -270,7 +340,10 @@ flowchart LR
   the daemon last heard them from the platform, read off `/history/presentation.json` beside the row's id, so the
   desktop app still shows them while the platform is down (2026-11-09). `displayName` is the file's `name` when not
   empty, `logo` its `image` only when that is a `data:image/` URL; a missing or unreadable file makes both null and is
-  never an error. Each file is one `docker cp`, every one of them at once. `ic sandbox session <slug> --json` ([`session.rs`](src/sandbox/session.rs))
+  never an error. Each file is one `docker cp`, every one of them at once. The text listing shows the same name after
+  the slug (`running   sandbox-3c469e9d6c58  Work`), and every verb that names a sandbox on this device takes that
+  name in place of its slug (2026-11-11, `sandbox::slug_for`): a slug or a 12-hex id still wins, the name matches
+  whatever its case, and a name two sandboxes share is refused with both slugs. `ic sandbox session <slug> --json` ([`session.rs`](src/sandbox/session.rs))
   prints one line `{"slug","sandboxId","platformId","localPort","email","token","expiresAt"}`: a daemon session for
   the bound owner, minted by `docker exec`ing the image's `host-session-cli.js` (the daemon's README says why the machine is
   a proof). It refuses a sandbox nobody has signed in to yet, and one too old to have the script (update it). The token
@@ -621,7 +694,7 @@ flowchart LR
   [src/sandbox/inside.rs](src/sandbox/inside.rs) reads and writes the files every side shares under `/history/.ic/`.
 - [src/sandbox/egress/](src/sandbox/egress/) — `ic sandbox egress`: the policy, the match, the nftables rules and
   their goldens, the status.
-- [src/contract.rs](src/contract.rs) — asks the image for its `docker run` command.
+- [src/contract.rs](src/contract.rs) — asks the image for its `docker run` command, or its Compose file (`compose_out.rs`).
 - [src/os/](src/os/) — `ic os`: Intentic OS's status, updates, orderly reboots, boot health and first-boot pairing;
   [src/os/policy.rs](src/os/policy.rs) is the isolation policy every sandbox run line passes through.
 - [src/sandbox/host_files.rs](src/sandbox/host_files.rs) — holds every file ic and the daemon share inside the

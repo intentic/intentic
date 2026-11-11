@@ -36,6 +36,7 @@ import { visitWorkspaceApp } from "../scaffold/app-rest.js";
 import { allowedOriginsOf } from "../auth/browser-origins.js";
 import type { BootPhase } from "./boot-phase.js";
 import { OPERATORS } from "../push/push-audience.js";
+import { hostWords, standbyNotice } from "../system/standby/standby.js";
 
 // The daemon behind intentic-netd (_sandbox/netd): HTTP on a Unix socket only netd dials, and every port, the
 // loopback certificate and the ingress tunnel handed to netd over its control socket. Node decides; netd
@@ -105,6 +106,13 @@ const elsewhereNotice = (host: string) => ({
     requireInteraction: true,
 });
 
+const standbyPush = (host: string) => ({
+    title: "This copy of the sandbox is on standby",
+    body: `${standbyNotice({ host, manager: "other", since: "" })}. To run it here instead: ic sandbox claim on this machine.`,
+    tag: ELSEWHERE_TAG,
+    requireInteraction: true,
+});
+
 const heldAgainNotice = () => ({
     title: "This sandbox is reachable again",
     body: "The other copy stopped, and this one holds its address again.",
@@ -124,6 +132,27 @@ export const tunnelReports = (
     let reason: string | undefined;
     let elsewhere: string | undefined;
     let deleted = false;
+    // Why netd stopped dialling at its usual pace, said once per holder: another copy holds the address, this copy is on
+    // standby (system/standby/standby.ts), or the sandbox was deleted.
+    const noteRefusal = (refused: TunnelReport["refused"]): void => {
+        if (refused?.refusal === "elsewhere" && refused.host !== elsewhere) {
+            elsewhere = refused.host;
+            logger.warn(
+                { host: refused.host },
+                `another copy of this sandbox is running on ${machineNamed(refused.host)} and holds its address; this one dials the ingress every 15 minutes until it stops`,
+            );
+            void push.notifyIfAway(elsewhereNotice(refused.host), OPERATORS);
+        }
+        if (refused?.refusal === "superseded" && refused.host !== elsewhere) {
+            elsewhere = refused.host;
+            logger.warn({ host: refused.host }, `this copy is on standby: ${refused.host} runs this sandbox, and netd dials nothing`);
+            void push.notifyIfAway(standbyPush(refused.host), OPERATORS);
+        }
+        if (refused?.refusal === "deleted" && !deleted) {
+            deleted = true;
+            logger.error("the platform deleted this sandbox: netd stopped dialling the ingress");
+        }
+    };
     return (connected, report) => {
         if (connected) {
             if (!up) {
@@ -144,19 +173,7 @@ export const tunnelReports = (
         }
         up = false;
         reason = report.reason;
-        const refused = report.refused;
-        if (refused?.refusal === "elsewhere" && refused.host !== elsewhere) {
-            elsewhere = refused.host;
-            logger.warn(
-                { host: refused.host },
-                `another copy of this sandbox is running on ${machineNamed(refused.host)} and holds its address; this one dials the ingress every 15 minutes until it stops`,
-            );
-            void push.notifyIfAway(elsewhereNotice(refused.host), OPERATORS);
-        }
-        if (refused?.refusal === "deleted" && !deleted) {
-            deleted = true;
-            logger.error("the platform deleted this sandbox: netd stopped dialling the ingress");
-        }
+        noteRefusal(report.refused);
     };
 };
 
@@ -269,8 +286,13 @@ const handCertificate = (phase: BootPhase, link: NetdLink): void => {
     shutdown.push(() => renewal.stop());
 };
 
-const handTunnel = ({ config, logger, traits }: BootPhase, link: NetdLink): ReachPosture => {
+const handTunnel = ({ config, logger, traits, standby }: BootPhase, link: NetdLink): ReachPosture => {
     const reach = reachPosture({ url: config.ingress.url, grant: config.sandbox.grant, frontDoor: traits.extraListeners });
+    // A standby copy dials nothing: netd stands down until a later boot of the active copy hands it a tunnel again.
+    if (reach.by === "tunnel" && standby !== undefined) {
+        link.tell({ kind: "tunnel", superseded: hostWords(standby.activeHost) });
+        return reach;
+    }
     if (reach.by === "tunnel") {
         link.tell({ kind: "tunnel", tunnel: { url: tunnelUrl(config.ingress.url), grant: config.sandbox.grant, bulk: tunnelBulkRoutes() } });
         return reach;

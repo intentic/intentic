@@ -117,4 +117,12 @@ describe(`duplicateCopiesOf`, () => {
         expect(duplicateCopiesOf(seen, null, at(110))).toBeNull();
         expect(duplicateCopiesOf(`not a list`, at(105), at(110))).toBeNull();
     });
+
+    // (2026-11-11) The summary names the copy the platform holds active (active-host.ts), so the owner sees which one runs.
+    it(`names which of the two copies is the active one`, () => {
+        const active = { host: `rog`, os: `windows`, manager: `ic` as const, since: at(0).toISOString() };
+        expect(duplicateCopiesOf(seen, at(105), at(110), active)?.active).toBe(`ROG (windows)`);
+        expect(duplicateCopiesOf(seen, at(105), at(110), { ...active, os: `linux` })?.active).toBe(`rog (linux)`);
+        expect(duplicateCopiesOf(seen, at(105), at(110), { ...active, host: `z440` })?.active).toBeUndefined();
+    });
 });

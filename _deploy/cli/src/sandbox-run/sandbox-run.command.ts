@@ -15,6 +15,7 @@ import {
     sandboxRunArgv,
     sandboxRunCommand,
 } from "@intentic/sandbox-run";
+import { composeEnvFile, sandboxCompose, type ComposeHost, type ComposeInputs } from "@intentic/sandbox-run/compose";
 import { buildCommand, type CommandContext } from "@stricli/core";
 
 // Reads the docker engine's memory from /proc/meminfo inside this throwaway probe container: the engine total is what a
@@ -70,6 +71,39 @@ const runnerFacts = (flags: {
     };
 };
 
+// What only the Compose rendering reads (`--format compose`), from its own flags; each one only when it carried something.
+const composeInputsOf = (flags: {
+    recipeB64?: string;
+    environmentHash?: string;
+    atRestKey?: string;
+    hostPlatform?: string;
+    hostLabel?: string;
+    hostEnv?: string;
+}): ComposeInputs => {
+    const inputs: { -readonly [K in keyof ComposeInputs]: ComposeInputs[K] } = {};
+    if (flags.recipeB64 !== undefined && flags.recipeB64 !== "") {
+        if (flags.environmentHash === undefined || flags.environmentHash === "") {
+            throw new Error("--recipe-b64 needs --environment-hash: the hash names the image Compose builds from it");
+        }
+        inputs.recipe = { content: Buffer.from(flags.recipeB64, "base64").toString("utf8"), hash: flags.environmentHash };
+    }
+    if (flags.atRestKey !== undefined && flags.atRestKey !== "") {
+        inputs.atRestKey = flags.atRestKey;
+    }
+    const host: ComposeHost = {};
+    if (flags.hostPlatform !== undefined) {
+        host.platform = flags.hostPlatform;
+    }
+    if (flags.hostLabel !== undefined) {
+        host.label = flags.hostLabel;
+    }
+    if (flags.hostEnv !== undefined) {
+        host.env = flags.hostEnv;
+    }
+    inputs.host = host;
+    return inputs;
+};
+
 // Lets curl|sh scripts ask the image for its run command instead of hand-copying it. Env rides stdin as NUL-framed
 // `printenv -0`; output is a quoted command line or a JSON argv.
 export const sandboxRunCommandCli = buildCommand<{
@@ -86,6 +120,11 @@ export const sandboxRunCommandCli = buildCommand<{
     format?: string;
     noLocalPublish: boolean;
     unsupported?: string;
+    recipeB64?: string;
+    atRestKey?: string;
+    hostPlatform?: string;
+    hostLabel?: string;
+    hostEnv?: string;
 }>({
     docs: { brief: "Print the canonical docker-run command for a sandbox container (used by connect.sh/recreate.sh)" },
     parameters: {
@@ -139,7 +178,27 @@ export const sandboxRunCommandCli = buildCommand<{
                 optional: true,
                 brief: "A sandbox definition (sandbox.toml), base64 — seeds an empty workspace on first boot (SANDBOX_DEFINITION_SEED)",
             },
-            format: { kind: "parsed", parse: String, optional: true, brief: "sh (default): one quoted command line; json: the docker argv" },
+            format: {
+                kind: "parsed",
+                parse: String,
+                optional: true,
+                brief: "sh (default): one quoted command line; json: the docker argv; compose: JSON {compose, env, envFile} for a Compose folder",
+            },
+            recipeB64: {
+                kind: "parsed",
+                parse: String,
+                optional: true,
+                brief: "compose only: the approved overlay recipe (environment.approved.Dockerfile), base64; Compose builds it on up",
+            },
+            atRestKey: {
+                kind: "parsed",
+                parse: String,
+                optional: true,
+                brief: "compose only: the at-rest key's path on the Compose host, as the file names it (e.g. ./at-rest.key)",
+            },
+            hostPlatform: { kind: "parsed", parse: String, optional: true, brief: "compose only: HOST_PLATFORM of the machine Compose runs on" },
+            hostLabel: { kind: "parsed", parse: String, optional: true, brief: "compose only: HOST_LABEL of the machine Compose runs on" },
+            hostEnv: { kind: "parsed", parse: String, optional: true, brief: "compose only: HOST_ENV of the machine Compose runs on" },
             noLocalPublish: {
                 kind: "boolean",
                 brief: "Drop the loopback shortcut's -p, what a flow re-asks for when docker refused the derived port",
@@ -183,6 +242,16 @@ export const sandboxRunCommandCli = buildCommand<{
             mounts: (flags.mounts ?? "").split("\n").filter((mount) => mount !== ""),
             dns: (flags.dns ?? "").split(/\s+/).filter((server) => server !== ""),
         };
+        if (flags.format === "compose") {
+            // The overlay's directives come from the recipe itself when one is given, as they do for the run line.
+            const inputs = composeInputsOf(flags);
+            const compose = sandboxCompose(
+                inputs.recipe === undefined ? run : { ...run, runtime: [...run.runtime, ...runtimeDirectivesOf(inputs.recipe.content)] },
+                inputs,
+            );
+            this.process.stdout.write(`${JSON.stringify({ ...compose, envFile: composeEnvFile(compose.env) })}\n`);
+            return;
+        }
         this.process.stdout.write(flags.format === "json" ? `${JSON.stringify(sandboxRunArgv(run))}\n` : `${sandboxRunCommand(run)}\n`);
     },
 });

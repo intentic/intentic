@@ -18,7 +18,12 @@
 // timeout would kill the wait with the card still up.
 //
 // Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
-// three /sandboxes routes and nothing credential-shaped.
+// four /sandboxes routes and nothing credential-shaped.
+//
+// A MOVE (2026-11-11) carries one sandbox to another of the owner's computers: the same card first, naming the size
+// and that the sandbox is offline for the copy, then the two computers' ic runs copy it to each other, encrypted end to
+// end. Its answer streams one JSON object a line (sandboxes/sandboxes.routes.ts), progress then the outcome, since a
+// copy takes as long as the sandbox is big.
 
 import { readFileSync } from "node:fs";
 import { request } from "node:http";
@@ -51,6 +56,16 @@ const USAGE = `sandboxes — the owner's sandboxes, and how a new one is made
                                        Removed on the machine that runs it when this sandbox reaches it
                                        (files kept there for a week), else the account entry alone; either
                                        way the owner can bring it back for a week. Never this sandbox.
+
+  sandboxes move <name|slug> --to <device> [--manager ic|compose] [--why "…"]
+                                       carry a sandbox to another of the owner's computers: its files, its keys
+                                       and its settings, encrypted end to end, with no SSH. ASKS IN CHAT FIRST,
+                                       naming the size; the sandbox is offline for the copy. Both computers need
+                                       "Manage sandboxes" on and a current agent. Never this sandbox: run it
+                                       from another one linked to both computers.
+                                       --to        the connected computer it goes to
+                                       --manager   what runs it there: ic (the default), or docker compose
+                                       --why       your one-line case for it, shown on the card
 
 The create holds its connection while the owner decides and while the machine builds: minutes, both halves.
 Hold it open rather than timing it out. A declined or expired ask answers with a sentence to act on —
@@ -201,6 +216,71 @@ const remove = async (args) => {
     process.stdout.write(`\nRemoved "${removed.name}" ${back}.\n`);
 };
 
+const gigabytes = (bytes) => `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+
+// One progress object as a line a person reads: which computer, its step, and a volume's bytes as they move.
+const progressLine = (progress) => {
+    const side = progress.side === "target" ? "there" : "here";
+    if (typeof progress.text === "string") {
+        return `  [${side}] ${progress.text}`;
+    }
+    const bytes = typeof progress.done === "number" ? ` ${gigabytes(progress.done)}${typeof progress.total === "number" ? ` of ${gigabytes(progress.total)}` : ""}` : "";
+    const what = progress.volume ?? progress.image ?? progress.reason ?? "";
+    return `[${side}] ${progress.step}${what === "" ? "" : ` ${what}`}${bytes}`;
+};
+
+// The move's streamed answer: progress lines as they come, the outcome last. A refusal before the card (and the card's
+// own no) arrives as a plain JSON answer instead.
+const move = (args) =>
+    new Promise((resolve, reject) => {
+        const { rest, flags } = flagsOf(args, ["to", "manager", "why"]);
+        const [name] = rest;
+        if (name === undefined || name === "" || !flags.to) {
+            die(USAGE);
+            return;
+        }
+        const body = JSON.stringify({ name, to: flags.to, ...(flags.manager ? { manager: flags.manager } : {}), ...(flags.why ? { why: flags.why } : {}) });
+        const req = request({ host: "127.0.0.1", port: PORT, path: "/sandboxes/move", method: "POST" }, (response) => {
+            const streamed = (response.headers["content-type"] ?? "").includes("ndjson");
+            let raw = "";
+            let outcome;
+            response.on("data", (chunk) => {
+                raw += chunk.toString();
+                if (!streamed) return;
+                const lines = raw.split("\n");
+                raw = lines.pop() ?? "";
+                for (const line of lines.filter((each) => each.trim() !== "")) {
+                    const parsed = JSON.parse(line);
+                    if (parsed.progress !== undefined) {
+                        process.stdout.write(`${progressLine(parsed.progress)}\n`);
+                    } else {
+                        outcome = parsed;
+                    }
+                }
+            });
+            response.on("end", () => {
+                if (!streamed) {
+                    const status = response.statusCode ?? 502;
+                    if (status < 200 || status >= 300) die(`sandboxes: ${refusalOf(raw)}`);
+                    resolve();
+                    return;
+                }
+                if (outcome === undefined) die("sandboxes: the daemon stopped answering before the move ended; check the sandbox on both computers.");
+                if (outcome.status !== 200) die(`sandboxes: ${outcome.answer?.error?.message ?? "the move failed"}`);
+                const moved = outcome.answer;
+                process.stdout.write(`\nMoved "${moved.moved}" from ${moved.from} to ${moved.to} (${moved.manager}). The stopped copy stays on ${moved.from} for 7 days.\n`);
+                resolve();
+            });
+        });
+        req.on("error", reject);
+        req.setHeader("x-intentic-agent", token());
+        if (CONVERSATION !== "") {
+            req.setHeader("x-intentic-conversation", CONVERSATION);
+        }
+        req.setHeader("content-type", "application/json");
+        req.end(body);
+    });
+
 const main = async () => {
     const [command, ...rest] = process.argv.slice(2);
     if (command === "ls") {
@@ -211,6 +291,9 @@ const main = async () => {
     }
     if (command === "remove") {
         return remove(rest);
+    }
+    if (command === "move") {
+        return move(rest);
     }
     return die(USAGE);
 };

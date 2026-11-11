@@ -1,17 +1,20 @@
-<!-- The rebuild of a sandbox Docker Compose runs: the edit its compose file needs (composeRebuild.ts), then Compose's
-     own redeploy. No button and no `ic` command: nothing on this page reaches the file, and a swap would start a container
+<!-- The rebuild of a sandbox Docker Compose runs: its whole Compose file again, building the approved recipe
+     (composeRebuild.ts), then Compose's own redeploy. No button and no `ic` command: nothing on this page reaches the file, and a swap would start a container
      Compose does not know.
 
      Numbered steps, each a few words and a Copy over the block it copies. It used to be a paragraph for every block (a
      lead, a label saying the lead again, a sentence per line to paste), with the YAML scrolling sideways AND folded behind
      "Show all": the reader came to copy three things, so three things to copy is what it shows. Copy sits in the step's
-     row rather than on the block, so the block keeps its whole width on a phone. -->
+     row rather than on the block, so the block keeps its whole width on a phone. (2026-11-11) Two steps, where there were
+     three: the file is the whole file, hash included, rather than service keys and a hash line to splice in. -->
 <script setup lang="ts">
 import type { ShikiLang } from "@intentic/code-read/langs";
 import { COMPOSE_UPDATE_COMMAND } from "@intentic/sandbox-run";
 import { Code, CopyButton, toneFill } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { environment } from "../../../../app/environments/environment";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { composeRebuildOf } from "./composeRebuild";
 
 const props = defineProps<{
@@ -22,7 +25,25 @@ const props = defineProps<{
 
 const t = useT();
 
-const edit = computed(() => composeRebuildOf(props.hash, props.content));
+const { active } = useSandbox();
+
+// The facts the setup page renders the file from: the sandbox's public hostname (the address the editor reaches it at),
+// and this editor's own platform, Google client and origin.
+// A local-dev platform only (setup's platformUrlOf, not imported: features/setup already depends on this feature).
+const api = new URL(environment.api.url);
+const platformUrl = api.hostname === `localhost` || api.hostname === `127.0.0.1` ? api.origin : undefined;
+const hostname = computed(() => {
+    const url = active.value?.daemonUrl;
+    return url !== undefined && url !== null && URL.canParse(url) ? new URL(url).hostname : ``;
+});
+const edit = computed(() =>
+    composeRebuildOf(props.hash, props.content, {
+        hostname: hostname.value,
+        googleClientId: environment.auth.googleClientId,
+        webOrigin: globalThis.location.origin,
+        platformUrl,
+    }),
+);
 
 interface Step {
     readonly key: string;
@@ -35,12 +56,15 @@ interface Step {
     readonly lines?: number;
 }
 
-// The service's keys only when the recipe has any (a recipe the base image already satisfies is the hash alone).
 const steps = computed<Step[]>(() => [
-    ...(edit.value.snippet === ``
-        ? []
-        : [{ key: `service`, label: t(`sandbox.environmentCard.composeStepService`), code: edit.value.snippet, lang: `yaml` as const, lines: 12 }]),
-    { key: `environment`, label: t(`sandbox.environmentCard.composeStepEnvironment`), code: edit.value.hashEnv, lang: `dotenv` },
+    {
+        key: `file`,
+        label: t(`sandbox.environmentCard.composeStepFile`),
+        code: edit.value.file,
+        lang: `yaml`,
+        hint: t(`sandbox.environmentCard.composeStepFileElsewhere`),
+        lines: 12,
+    },
     {
         key: `redeploy`,
         label: t(`sandbox.environmentCard.composeStepRedeploy`),

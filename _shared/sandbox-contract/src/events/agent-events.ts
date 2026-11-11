@@ -78,6 +78,8 @@ export const AgentErrorCodeSchema = z.enum([
     "tools-unenforced",
     // The protected execution-domain policy is unsupported or unreadable; refused before any model/helper ran.
     "agent-domain-refused",
+    // (2026-11-11) This copy of the sandbox is on standby: another machine runs it, and no turn starts here.
+    "standby",
     // The privacy shield found personal data in instructions the runtime loads itself, past every channel it
     // could mask (Cursor's project rules, AGENTS.md), refused before sending; the words wait for the owner to
     // let the provider read this conversation, trust it, or take the data out of those files.

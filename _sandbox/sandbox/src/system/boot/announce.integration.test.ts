@@ -1,4 +1,8 @@
 import { EventEmitter } from "node:events";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { version } from "../../version.js";
 
@@ -93,8 +97,49 @@ describe("createAnnouncer", () => {
         outcomes.push({ status: 200 });
         createAnnouncer(config, logger).start();
         expect(calls).toEqual([
-            { path: "/sandbox/announce", body: { daemonUrl: "https://sandbox-x.intentic.dev", version, instance: expect.any(String) } },
+            { path: "/sandbox/announce", body: { daemonUrl: "https://sandbox-x.intentic.dev", version, instance: expect.any(String), manager: "other" } },
         ]);
+    });
+
+    /* ONE ACTIVE HOST (2026-11-11): a takeover ic left rides the announce until one is accepted, then goes; the answer's
+     * word on which copy runs the sandbox reaches whoever the boot set. */
+    describe("takeover and standing", () => {
+        it("sends the takeover marker, deletes it once accepted, and tells whether this copy is the active one", async () => {
+            const historyRoot = mkdtempSync(join(tmpdir(), "announce-takeover-"));
+            mkdirSync(join(historyRoot, ".ic"));
+            const takeover = { v: 1, at: 1_762_800_000_000, by: "claim", machineId: "m-1", host: "z440" };
+            writeFileSync(join(historyRoot, ".ic/takeover.json"), JSON.stringify(takeover));
+            const activeHost = { host: "z440", manager: "compose", since: "2025-11-10T18:40:00.000Z" };
+            outcomes.push({ status: 200, body: JSON.stringify({ ok: true, active: true, activeHost, activeEpoch: 3 }) });
+            const heard: unknown[] = [];
+            const announcer = createAnnouncer({ ...config, historyRoot }, logger);
+            announcer.onStanding((standing) => heard.push(standing));
+            announcer.start();
+            await advanceTimersByTimeAsync(0);
+            expect(calls[0]?.body).toMatchObject({ takeover });
+            expect(heard).toEqual([{ active: true, activeHost, activeEpoch: 3 }]);
+            // The removal is real file I/O, which no fake timer moves: a few real round trips to the disk let it land.
+            for (let tries = 0; tries < 50 && existsSync(join(historyRoot, ".ic/takeover.json")); tries += 1) {
+                await stat(historyRoot);
+            }
+            expect(existsSync(join(historyRoot, ".ic/takeover.json"))).toBe(false);
+            announcer.stop();
+        });
+
+        it("keeps the marker while no announce is accepted, and tells nothing from an answer that says nothing", async () => {
+            const historyRoot = mkdtempSync(join(tmpdir(), "announce-takeover-"));
+            mkdirSync(join(historyRoot, ".ic"));
+            writeFileSync(join(historyRoot, ".ic/takeover.json"), JSON.stringify({ v: 1, at: 5, by: "move" }));
+            outcomes.push({ err: true });
+            const heard: unknown[] = [];
+            const announcer = createAnnouncer({ ...config, historyRoot }, logger);
+            announcer.onStanding((standing) => heard.push(standing));
+            announcer.start();
+            await advanceTimersByTimeAsync(0);
+            expect(existsSync(join(historyRoot, ".ic/takeover.json"))).toBe(true);
+            expect(heard).toEqual([]);
+            announcer.stop();
+        });
     });
 
     /* WHICH COPY (2026-10-05): one id for this process's life, or netd's for the container's; and where it runs. */

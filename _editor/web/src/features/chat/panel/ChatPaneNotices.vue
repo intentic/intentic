@@ -7,6 +7,8 @@ import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { lowHoursNotice } from "../../../models/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
+import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
+import { standbyNotice } from "./standby/standbyNotice";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
 import ChatPrivacyStrip from "./privacy/ChatPrivacyStrip.vue";
 import ChatTrialStrip from "./ChatTrialStrip.vue";
@@ -36,6 +38,9 @@ const { reachable, active } = useSandbox();
 // sandbox, only its owner (a guest can't buy more), only in the last stretch (hostedHours.ts's threshold) rather than
 // from the first minute. The account's free hours or the machine's own month on its slot, whichever it spends.
 const { state: hostedPlan, offered: planOffered } = useHostedPlan();
+// A copy on standby says which machine runs the sandbox, and that nothing starts here (standbyNotice.ts).
+const { info: sandboxInfo } = useSandboxVersion();
+const standbyLine = computed(() => standbyNotice(sandboxInfo.value));
 const hoursNotice = computed(() =>
     (active.value?.hosted ?? null) === null || active.value?.role !== `owner` ? undefined : lowHoursNotice(hostedPlan.value, active.value?.id),
 );
@@ -115,6 +120,7 @@ const activeAccountReauth = computed(() => {
     <!-- Whether the privacy shield lets this conversation's provider run, said before the send rather than after it. -->
     <ChatPrivacyStrip />
     <!-- The free plan's last hours: the meter's own line, amber, with the door to Billing. -->
+    <Notice v-if="standbyLine" tone="warning" size="sm">{{ standbyLine }}</Notice>
     <Notice v-if="hoursNotice" tone="warning" icon="clock" size="sm">
         {{ hoursNotice }}
         <template v-if="planOffered" #actions>

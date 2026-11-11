@@ -21,6 +21,7 @@ import { assertScope } from "../policy.js";
 import { ensureCurrentIc, icCandidates, icOutOfDate } from "./ic-binary.js";
 import { inFlightMarks } from "../sandbox-rounds/in-flight.js";
 import { swapOnlyNow } from "./shape-now.js";
+import { withName } from "./listing/listed-name.js";
 
 // The Intentic sandboxes running on this machine. A sandbox can't see its siblings itself (its docker socket
 // isn't mounted), so this is the only place "what runs here, start that one back up" can be answered. Scopes
@@ -45,7 +46,8 @@ const REQUIRED_FIELDS: ReadonlySet<string> = new Set(["slug", "container", "runn
 
 // A row read as the contract's, dropping only the optional fields that do not parse, so a newer ic's answer about one
 // of them costs that field rather than the whole listing. A row whose identity does not parse is no row at all.
-const rowFrom = (row: ListedRow): DeviceSandbox | undefined => {
+const rowFrom = (listed: ListedRow): DeviceSandbox | undefined => {
+    const row = withName(listed);
     const whole = DeviceSandboxSchema.safeParse(row);
     if (whole.success) {
         return whole.data;
@@ -531,11 +533,11 @@ export const icFlow = async (
     slug: string,
     args: readonly string[],
     onLine: (line: string) => void,
-    { env = {}, moves }: { readonly env?: Readonly<Record<string, string>>; readonly moves: boolean },
+    { env = {}, moves, input }: { readonly env?: Readonly<Record<string, string>>; readonly moves: boolean; readonly input?: string | undefined },
 ): Promise<{ code: number; output: string }> => {
     const release = holdIcFlow(slug, { moves });
     try {
-        return await runIc(args, onLine, env);
+        return await runIc(args, onLine, env, { input });
     } finally {
         release();
     }

@@ -36,6 +36,18 @@ describe("bodies an older machine sends still parse", () => {
         expect(AnnounceBodySchema.parse(body)).toEqual({ daemonUrl: "https://abc123def456.intentic.dev", os: "windows" });
     });
 
+    it("an announce keeps a takeover marker and the manager, and drops a malformed takeover rather than the announce", () => {
+        const takeover = { v: 1 as const, at: 1_762_800_000_000, by: "claim" as const, machineId: "m-1", host: "z440" };
+        expect(AnnounceBodySchema.parse({ daemonUrl: "https://abc123def456.intentic.dev", manager: "compose", takeover })).toEqual({
+            daemonUrl: "https://abc123def456.intentic.dev",
+            manager: "compose",
+            takeover,
+        });
+        expect(
+            AnnounceBodySchema.parse({ daemonUrl: "https://abc123def456.intentic.dev", manager: "kubernetes", takeover: { v: 2, at: "soon" } }),
+        ).toEqual({ daemonUrl: "https://abc123def456.intentic.dev" });
+    });
+
     it("an announce at an address that is not https is refused", () => {
         expect(AnnounceBodySchema.safeParse({ daemonUrl: "http://abc123def456.intentic.dev" }).success).toBe(false);
     });

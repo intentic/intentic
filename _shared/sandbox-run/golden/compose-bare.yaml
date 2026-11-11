@@ -1,0 +1,45 @@
+# intentic-sandbox-abc-123, rendered from the intentic run contract (@intentic/sandbox-run/compose).
+# Regenerate it rather than editing it: `ic sandbox compose <slug>` on the machine running it.
+services:
+    intentic-sandbox:
+        image: "img:1"
+        pull_policy: missing
+        container_name: intentic-sandbox-abc-123
+        init: true
+        restart: unless-stopped
+        stop_grace_period: 30s
+        cap_add: [SYS_ADMIN, SYS_PTRACE]
+        mem_limit: 7g
+        memswap_limit: 9g
+        extra_hosts: ["host.docker.internal:host-gateway"]
+        networks:
+            intentic:
+                aliases: [intentic-sandbox-workspace]
+        logging:
+            driver: json-file
+            options: { max-size: "10m", max-file: "3" }
+        ports:
+            - "127.0.0.1:${LOCAL_PORT:?run the .env bootstrap first}:8788"
+        volumes:
+            - work:/work
+            - history:/history
+            - docker-engine:/var/lib/docker
+        environment:
+            SANDBOX_NAME: "intentic-sandbox-abc-123"
+            SANDBOX_IMAGE: "img:1"
+            SANDBOX_BASE_IMAGE: "img:1"
+            SANDBOX_MANAGER: "compose"
+networks:
+    intentic:
+        name: intentic-workspace-abc-123
+        external: true
+volumes:
+    work:
+        name: intentic-workspace-abc-123
+        external: true
+    history:
+        name: intentic-history-abc-123
+        external: true
+    docker-engine:
+        name: intentic-docker-abc-123
+        external: true

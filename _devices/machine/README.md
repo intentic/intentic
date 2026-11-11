@@ -85,6 +85,16 @@ flowchart LR
   as the loopback ("Run commands" or "Run programs this sandbox sends"), since either already lets the sandbox reach
   whatever this machine reaches. A failed dial says why in words (a name it cannot resolve, a refused port, no route,
   no answer within 10 s), and the agent advertises `reach-network` so an older one is never sent a host.
+- (2026-11-11) **A sandbox carried to another of the owner's computers** ([`tools/move/sandbox-move.ts`](src/device/tools/move/sandbox-move.ts)).
+  `sandboxes move` in a sandbox linked to both computers runs three ops, each one `ic` run behind "Manage sandboxes":
+  `move-out` here when this computer runs the sandbox (stage `plan`: `ic sandbox move-out <slug> --plan-only`, read-only,
+  for the owner's card; stage `send`: the send itself, `--peer`, `--connect`, `--listen`), `move-prepare` when it is the
+  target (`ic sandbox move-in <slug> --plan -`, the plan on stdin; refused when a sandbox of that slug is already here),
+  and `move-in` there to hand that waiting run the sender's public key (`--peer`). The two ics talk to each other
+  directly, encrypted end to end; the agent only starts them and relays what they print, and never holds a key. The
+  send and the receive are marked as moving a container, so the agent does not restart under them, and run in their
+  own process group like every `ic` flow. The agent advertises `sandbox-move` exactly when the ic it drives does
+  (`ic features --json`), so an older ic is never sent the ops.
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
   `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
   logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). The "Manage sandboxes"

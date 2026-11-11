@@ -1,0 +1,4 @@
+{
+  "keyMount": "/run/secrets/intentic-at-rest-key",
+  "keyEnv": "INTENTIC_AT_REST_KEY_FILE"
+}

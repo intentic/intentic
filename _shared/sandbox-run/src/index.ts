@@ -1,6 +1,9 @@
 import { DAEMON_PORT, HISTORY_ROOT, LOCAL_PORT, WORKSPACE_ROOT } from "@intentic/constants";
 import { shellQuote } from "./quote.js";
+import { SANDBOX_SWAP_ENV } from "./replay.js";
 import { SANDBOX_CONTAINER_PREFIX } from "./slug.js";
+
+export { parseNulEnv, REPLAY_ENV, REPLAY_SECRET_ENV, REPLAY_VARS, replayableEnv, SANDBOX_SWAP_ENV } from "./replay.js";
 
 // The sandbox container's run contract: every way a sandbox starts, composed from one definition instead of four
 // hand-copied dialects. TS consumers import it (drift is a compile error); scripts that can't import execute `intentic
@@ -40,6 +43,12 @@ export const sandboxNames = (slug: string): SandboxNames => ({
 
 // Where a dev sandbox's shared AI-provider logins are mounted, a mount and AGENT_AUTH_DIR together (`mounts` carries it).
 export const AGENT_AUTH_ROOT = "/agent-auth";
+
+// Where the daemon reads its at-rest key, and the variable naming that path (the daemon's at-rest.ts keyFromFile). `ic`
+// mounts the key read-only there on every run line (at_rest.rs KEY_MOUNT, KEY_ENV, held to golden/at-rest.json); the
+// Compose rendering mounts it from the host path it is given.
+export const AT_REST_KEY_MOUNT = "/run/secrets/intentic-at-rest-key";
+export const AT_REST_KEY_ENV = "INTENTIC_AT_REST_KEY_FILE";
 
 // The registry digest of the base an image was built on, stamped on the container for the daemon. ic hands it to the
 // run command as an env var on the probe rather than a flag: an older image's run command ignores an env var it does
@@ -121,10 +130,6 @@ const SANDBOX_MEMORY_FLOOR = 4 * GIB;
 // mirrors it for its placeholder. Change it here, change the copies.
 const SANDBOX_SWAP_SHARE = 0.25;
 const SANDBOX_SWAP_MAX_GIB = 4;
-
-// The env var the owner's swap ask rides on (`<n>g`, whole GiB of swap alone, not memory plus swap): replayed like the
-// caps, and read back by the sandbox to bound its workload leaf. memory-records.ts SWAP_ENV names the same variable.
-export const SANDBOX_SWAP_ENV = "SANDBOX_SWAP";
 
 // The default swap in whole GiB for a cap of `capGib` GiB, floored to whole GiB first (the sandbox passes its cgroup's
 // bytes over a GiB): a quarter of it, rounded up, at least 1 and at most 4.
@@ -273,110 +278,6 @@ export const hostRuntimeOf = (value: string | undefined): string[] => allowliste
 // Stamps the overlay's demand as provenance: inspect alone can't tell overlay privilege from owner's.
 export const OVERLAY_RUNTIME_ENV = "SANDBOX_OVERLAY_RUNTIME";
 
-// What a replayed variable says about the sandbox, which decides what a recreate elsewhere keeps of it: a move to another
-// machine keeps all but `machine`, a copy keeps neither `identity` nor `machine`.
-// - layout: where things are inside the container (roots, key files, the daemon's listeners)
-// - platform: which platform, editor and edge it answers to; the same for every sandbox of one deployment
-// - identity: who this sandbox is to the platform and the edge, and to the parent it runs for
-// - machine: the computer it runs on, and what that computer paired with it at setup
-// - choice: the owner's standing asks of the container
-// - purpose: what the sandbox was made for
-type ReplayRole = "layout" | "platform" | "identity" | "machine" | "choice" | "purpose";
-
-interface ReplayVar {
-    readonly name: string;
-    readonly role: ReplayRole;
-    // A credential: the daemon seals it out of its own environment at boot, alongside its config schema's own secret
-    // leaves, so no process it spawns inherits one (sandbox src/seams/sealed-env.ts); a replayed name the daemon's schema
-    // also reads must agree with it, which the daemon's suite checks.
-    readonly secret?: true;
-}
-
-// Vars a recreate replays, in order; image-identity vars are absent, derived from the emitter's own inputs.
-export const REPLAY_VARS = [
-    { name: "WORKSPACE_ROOT", role: "layout" },
-    { name: "HISTORY_ROOT", role: "layout" },
-    { name: "AGENT_AUTH_DIR", role: "layout" },
-    // The paths of the mounted at-rest keys, never their contents.
-    { name: "INTENTIC_AT_REST_KEY_FILE", role: "layout" },
-    { name: "INTENTIC_AT_REST_PREVIOUS_KEY_FILE", role: "layout" },
-    { name: "SANDBOX_HOST", role: "layout" },
-    { name: "SANDBOX_PORT", role: "layout" },
-    { name: "SANDBOX_NAME", role: "identity" },
-    { name: "PREVIEW_PORT", role: "layout" },
-    { name: "GOOGLE_CLIENT_ID", role: "platform" },
-    { name: "CONNECT_TOKEN", role: "identity", secret: true },
-    { name: "OWNER_EMAIL", role: "identity" },
-    { name: "WEB_ORIGIN", role: "platform" },
-    { name: "SANDBOX_PUBLIC_URL", role: "identity" },
-    { name: "PLATFORM_URL", role: "platform" },
-    // Reachability: the signed grant and the edge it dials; replaying it keeps the same public name.
-    { name: "SANDBOX_GRANT", role: "identity", secret: true },
-    { name: "INGRESS_URL", role: "platform" },
-    // The owner's own Cloudflare account, on the path where they mint their own tunnels.
-    { name: "CLOUDFLARE_API_TOKEN", role: "platform", secret: true },
-    // A multi-line private key for self-hosted deploys: this machine wired as a deploy target.
-    { name: "HOST_SSH_KEY", role: "machine", secret: true },
-    { name: "SELF_HOST_USER", role: "machine" },
-    { name: "SYNC_PAIR_TOKEN", role: "machine", secret: true },
-    // Describes the machine, which a recreate doesn't move off; the daemon can't re-derive it.
-    { name: "HOST_PAIR_TOKEN", role: "machine", secret: true },
-    { name: "HOST_PLATFORM", role: "machine" },
-    { name: "HOST_LABEL", role: "machine" },
-    { name: "SELF_HOST_ADDRESS", role: "machine" },
-    { name: "SELF_HOST_VIA", role: "machine" },
-    // The owner's explicit cgroup cap; replayed so it re-emits, unlike docker update's silent retune.
-    { name: "SANDBOX_MEMORY", role: "choice" },
-    // The owner's other standing asks, replayed like the memory cap: CPU ceiling and runtime directives.
-    { name: "SANDBOX_CPUS", role: "choice" },
-    { name: "SANDBOX_RUNTIME", role: "choice" },
-    // (2026-11-05) The swap the sandbox's work may page into (SANDBOX_SWAP_ENV), replayed so `--memory-swap` is sized by it
-    // and the sandbox holds its workload leaf to it. Images published before this row drop it, so `ic` also stamps it on
-    // the run line itself when the contract left it off (its shape.rs `swap_stamp`); never both, and never empty.
-    { name: SANDBOX_SWAP_ENV, role: "choice" },
-    // A runner's parent sandbox and pairing token, replayed since a recreate can't re-derive either.
-    { name: "RUNNER_PARENT_URL", role: "identity" },
-    { name: "RUNNER_PAIR_TOKEN", role: "identity", secret: true },
-    // The dev checkout this container was launched from; allowlisted so `INTENTIC_SET_ENV` can deliver it and every
-    // later dev recreate keeps it. A path on the host, meaningless in here except as an argument sent back out.
-    { name: "SANDBOX_DEV_ROOT", role: "machine" },
-    // The arriving profile's own sandbox definition. Replayed rather than consumed, because a recreate is how a
-    // workspace that never filled gets a second chance at it; the daemon applies it only to one that arrived empty.
-    { name: "SANDBOX_DEFINITION_SEED", role: "purpose" },
-    // The folder of the owner's computer this sandbox was made for, synced into `/work/<name>` (connect.rs). What the
-    // sandbox IS rather than a setting: a recreate that dropped it would seed a starter site beside the owner's project.
-    { name: "SANDBOX_PROJECT_DIR", role: "purpose" },
-    // (2026-10-21) SANDBOX_PROJECTS_HOST, the desktop app's one sandbox per computer that folders attached to, is no
-    // longer replayed: every folder gets a sandbox of its own, and such a sandbox's next recreate is an ordinary one.
-] as const satisfies readonly ReplayVar[];
-
-type ReplayName = (typeof REPLAY_VARS)[number]["name"];
-
-// The replayed names, in order.
-export const REPLAY_ENV: readonly ReplayName[] = REPLAY_VARS.map(({ name }) => name);
-
-// The replayed names whose value is a credential (ReplayVar's `secret`).
-export const REPLAY_SECRET_ENV: ReadonlySet<ReplayName> = new Set(REPLAY_VARS.flatMap((entry) => ("secret" in entry ? [entry.name] : [])));
-
-// `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values:
-// HOST_SSH_KEY is a multi-line private key, so anything line-based re-splits it.
-export const parseNulEnv = (dump: string): [string, string][] =>
-    dump
-        .split("\0")
-        .filter((entry) => entry.includes("="))
-        .map((entry) => {
-            const eq = entry.indexOf("=");
-            return [entry.slice(0, eq), entry.slice(eq + 1)];
-        });
-
-// The pairs a recreate actually replays: allowlisted, empties dropped (an empty secret must not shadow the workspace
-// .env), in REPLAY_ENV's canonical order.
-export const replayableEnv = (pairs: readonly (readonly [string, string])[]): [string, string][] =>
-    REPLAY_ENV.flatMap((name) => {
-        const value = pairs.find(([key]) => key === name)?.[1];
-        return value === undefined || value === "" ? [] : [[name, value] as [string, string]];
-    });
-
 // Every flow gates on /health with the same patience, so a crash-loop never reads as success.
 export const HEALTH = { url: `http://localhost:${DAEMON_PORT}/health`, attempts: 15, intervalSeconds: 2 } as const;
 
@@ -437,25 +338,33 @@ export interface SandboxRun {
     readonly alias?: boolean;
 }
 
-// The `docker …` argv for a sandbox container, ordered the way connect.sh always wrote it; one builder shared by every
-// dialect (sh, PowerShell, the SSH provider).
-// Cgroup ceilings, local shape only (`init: false` sizes elsewhere). A bounded `--memory-swap` always rides with a cap so
-// an overrun pages for a while instead of livelocking, then stops inside the sandbox; `--cpus` only when the owner asked.
+// Cgroup ceilings, local shape only (`init: false` sizes elsewhere). A bounded swap always rides with a cap so an overrun
+// pages for a while instead of livelocking, then stops inside the sandbox; a CPU ceiling only when the owner asked.
 // The swap comes from the replayed SANDBOX_SWAP, which `env` also puts on the container: an engine that ignores
 // `--memory-swap` (one without swap-limit support, rog's on 2026-11-05) still has the sandbox hold its own workload leaf
 // to the same number.
-const resourceArgs = (run: SandboxRun): string[] => {
+const resourcesOf = (run: SandboxRun): SandboxRunSpec["resources"] => {
     if (run.init === false) {
-        return [];
+        return undefined;
     }
     const memory = run.memory ?? LOCAL_SANDBOX_MEMORY;
     const swap = run.env?.find(([name]) => name === SANDBOX_SWAP_ENV)?.[1];
-    return ["--memory", memory, "--memory-swap", localSandboxMemorySwap(memory, swap), ...(run.cpus === undefined ? [] : ["--cpus", run.cpus])];
+    return { memory, memorySwap: localSandboxMemorySwap(memory, swap), cpus: run.cpus };
 };
+
+type EnvPair = [string, string];
+
+// One pair when the value was set, none when it was not.
+const pairIf = (name: string, value: string | undefined): EnvPair[] => (value === undefined ? [] : [[name, value]]);
 
 // Resolves both directive sources into one deduped union; everything downstream sees only the union, so an owner-asked
 // GPU is probed and dropped exactly like a capability-asked one. `stamps` also names the overlay's half alone.
-const directiveArgs = (run: SandboxRun): { readonly flags: string[]; readonly stamps: string[] } => {
+interface ResolvedDirectives {
+    readonly flags: string[];
+    readonly stamps: EnvPair[];
+}
+
+const directivesOf = (run: SandboxRun): ResolvedDirectives => {
     const overlay = run.runtime ?? [];
     const union = new Set<string>([...overlay, ...(run.hostRuntime ?? [])]);
     const asked = OPTIONAL_DIRECTIVES.filter((entry) => union.has(entry.token));
@@ -463,73 +372,144 @@ const directiveArgs = (run: SandboxRun): { readonly flags: string[]; readonly st
     return {
         flags: Array.from(union).filter((token) => !dropped.has(token)),
         stamps: [
-            ...asked.flatMap((entry) => ["-e", `${entry.env}=${dropped.has(entry.token) ? "unsupported" : "all"}`]),
-            ...(overlay.length === 0 ? [] : ["-e", `${OVERLAY_RUNTIME_ENV}=${Array.from(new Set(overlay)).join(" ")}`]),
+            ...asked.map((entry): EnvPair => [entry.env, dropped.has(entry.token) ? "unsupported" : "all"]),
+            ...pairIf(OVERLAY_RUNTIME_ENV, overlay.length === 0 ? undefined : Array.from(new Set(overlay)).join(" ")),
         ],
     };
 };
 
 // The hosted provider's real ingress ports, then the loopback shortcut; the one part of the run allowed to drop on
 // retry, since its failure doesn't mean a broken sandbox.
-const publishArgs = (run: SandboxRun): string[] => [
-    ...(run.ports ?? []).flatMap((port) => ["-p", port]),
-    ...(run.sandboxId !== undefined && run.localPublish !== false ? ["-p", `127.0.0.1:${localDaemonPort(run.sandboxId)}:${LOCAL_PORT}`] : []),
+const publishOf = (run: SandboxRun): string[] => [
+    ...(run.ports ?? []),
+    ...(run.sandboxId !== undefined && run.localPublish !== false ? [`127.0.0.1:${localDaemonPort(run.sandboxId)}:${LOCAL_PORT}`] : []),
 ];
+
+// UTF-8 text as base64 without Node's Buffer, so the spec renders in a browser too (the setup page's Compose file).
+const base64Utf8 = (text: string): string => {
+    let binary = "";
+    for (const byte of new TextEncoder().encode(text)) {
+        binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
+};
 
 // What this container is, as env: name, image, base image, plus the runner-decided facts (hash, channel, rollback
 // target, seed) when set.
-const identityEnv = (run: SandboxRun): string[] => [
-    "-e",
-    `SANDBOX_NAME=${run.names.container}`,
-    "-e",
-    `SANDBOX_IMAGE=${run.image}`,
-    "-e",
-    `SANDBOX_BASE_IMAGE=${run.baseImage}`,
-    ...(run.environmentHash === undefined ? [] : ["-e", `SANDBOX_ENVIRONMENT_HASH=${run.environmentHash}`]),
-    ...(run.channel === undefined ? [] : ["-e", `SANDBOX_CHANNEL=${run.channel}`]),
-    ...(run.previousImage === undefined ? [] : ["-e", `SANDBOX_PREVIOUS_IMAGE=${run.previousImage}`]),
-    ...(run.baseDigest === undefined ? [] : ["-e", `${BASE_DIGEST_ENV}=${run.baseDigest}`]),
-    ...(run.definition === undefined ? [] : ["-e", `SANDBOX_DEFINITION_SEED=${Buffer.from(run.definition, "utf8").toString("base64")}`]),
+const identityEnv = (run: SandboxRun): EnvPair[] => [
+    ["SANDBOX_NAME", run.names.container],
+    ["SANDBOX_IMAGE", run.image],
+    ["SANDBOX_BASE_IMAGE", run.baseImage],
+    ...pairIf("SANDBOX_ENVIRONMENT_HASH", run.environmentHash),
+    ...pairIf("SANDBOX_CHANNEL", run.channel),
+    ...pairIf("SANDBOX_PREVIOUS_IMAGE", run.previousImage),
+    ...pairIf(BASE_DIGEST_ENV, run.baseDigest),
+    ...pairIf("SANDBOX_DEFINITION_SEED", run.definition === undefined ? undefined : base64Utf8(run.definition)),
 ];
 
-// How long `docker stop` waits before its SIGKILL: past the 25 s intentic-netd gives the daemon to dispose every
-// subsystem on SIGTERM (STOP_GRACE in _sandbox/netd/crates/netd/src/supervise.rs), with room for netd to close
-// its tunnel after, where Docker's default of 10 s cut that stop short.
-const STOP_TIMEOUT_SECONDS = "30";
+// How long a stop waits before its SIGKILL: past the 25 s intentic-netd gives the daemon to dispose every subsystem on
+// SIGTERM (STOP_GRACE in _sandbox/netd/crates/netd/src/supervise.rs), with room for netd to close its tunnel after,
+// where Docker's (and Compose's) default of 10 s cut that stop short.
+export const STOP_TIMEOUT_SECONDS = 30;
 
+// The json-file log rotation every sandbox container runs with.
+const LOG_OPTIONS = [
+    ["max-size", "10m"],
+    ["max-file", "3"],
+] as const;
+
+// The run contract as data, before any dialect spells it: `sandboxRunArgv` renders it as a `docker run` line and
+// compose.ts as a Compose service, so the two cannot disagree about what a sandbox is. Every field is in the order the
+// argv has always written it.
+export interface SandboxRunSpec {
+    readonly container: string;
+    readonly init: boolean;
+    readonly restart: "unless-stopped";
+    readonly stopTimeoutSeconds: number;
+    readonly labels: readonly string[];
+    readonly network: string;
+    readonly networkAlias: string | undefined;
+    readonly extraHosts: readonly string[];
+    readonly dns: readonly string[];
+    readonly logOptions: readonly (readonly [string, string])[];
+    // Absent on the hosted shape, which is sized elsewhere; `cpus` only when the owner asked for a ceiling.
+    readonly resources: { readonly memory: string; readonly memorySwap: string; readonly cpus: string | undefined } | undefined;
+    readonly capabilities: readonly string[];
+    // Allowlisted runtime directive tokens that ride (RUNTIME_DIRECTIVES), the dropped optional ones already removed.
+    readonly directives: readonly string[];
+    // `-p` specs: the hosted ports, then the loopback shortcut.
+    readonly publish: readonly string[];
+    // The sandbox's own named volumes (SANDBOX_VOLUMES), with the volume each one is.
+    readonly volumes: readonly { readonly name: string; readonly destination: string; readonly volume: SandboxVolume }[];
+    // Extra `-v` specs, verbatim.
+    readonly mounts: readonly string[];
+    // Identity, then the directive stamps, then the replayed pairs: the order `-e` has always carried them in.
+    readonly env: readonly (readonly [string, string])[];
+    readonly image: string;
+}
+
+export const sandboxRunSpec = (run: SandboxRun): SandboxRunSpec => {
+    const directives = directivesOf(run);
+    return {
+        container: run.names.container,
+        init: run.init !== false,
+        restart: "unless-stopped",
+        stopTimeoutSeconds: STOP_TIMEOUT_SECONDS,
+        labels: run.labels ?? [],
+        network: run.names.network,
+        networkAlias: run.alias === false ? undefined : ORIGIN_HOST,
+        extraHosts: ["host.docker.internal:host-gateway"],
+        dns: run.dns ?? [],
+        logOptions: LOG_OPTIONS,
+        resources: resourcesOf(run),
+        capabilities: SANDBOX_CAPABILITIES,
+        directives: directives.flags,
+        publish: publishOf(run),
+        volumes: SANDBOX_VOLUMES.map((volume) => ({ name: run.names[volume.volume], destination: volume.destination, volume })),
+        mounts: run.mounts ?? [],
+        env: [...identityEnv(run), ...directives.stamps, ...(run.env ?? [])],
+        image: run.image,
+    };
+};
+
+// The `docker …` argv for a sandbox container, ordered the way connect.sh always wrote it; one builder shared by every
+// dialect (sh, PowerShell, the SSH provider). golden/run-argv.json holds it byte-for-byte to what it emitted before the
+// spec existed.
 export const sandboxRunArgv = (run: SandboxRun): string[] => {
-    const directives = directiveArgs(run);
+    const spec = sandboxRunSpec(run);
     return [
         "run",
         "-d",
-        ...(run.init === false ? [] : ["--init"]),
+        ...(spec.init ? ["--init"] : []),
         "--restart",
-        "unless-stopped",
+        spec.restart,
         "--stop-timeout",
-        STOP_TIMEOUT_SECONDS,
+        String(spec.stopTimeoutSeconds),
         "--name",
-        run.names.container,
-        ...(run.labels ?? []).flatMap((label) => ["--label", label]),
+        spec.container,
+        ...spec.labels.flatMap((label) => ["--label", label]),
         "--network",
-        run.names.network,
-        ...(run.alias === false ? [] : ["--network-alias", ORIGIN_HOST]),
-        "--add-host",
-        "host.docker.internal:host-gateway",
-        ...(run.dns ?? []).flatMap((server) => ["--dns", server]),
-        "--log-opt",
-        "max-size=10m",
-        "--log-opt",
-        "max-file=3",
-        ...resourceArgs(run),
-        ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
-        ...directives.flags,
-        ...publishArgs(run),
-        ...SANDBOX_VOLUMES.flatMap(({ destination, volume }) => ["-v", `${run.names[volume]}:${destination}`]),
-        ...(run.mounts ?? []).flatMap((mount) => ["-v", mount]),
-        ...identityEnv(run),
-        ...directives.stamps,
-        ...(run.env ?? []).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
-        run.image,
+        spec.network,
+        ...(spec.networkAlias === undefined ? [] : ["--network-alias", spec.networkAlias]),
+        ...spec.extraHosts.flatMap((host) => ["--add-host", host]),
+        ...spec.dns.flatMap((server) => ["--dns", server]),
+        ...spec.logOptions.flatMap(([key, value]) => ["--log-opt", `${key}=${value}`]),
+        ...(spec.resources === undefined
+            ? []
+            : [
+                  "--memory",
+                  spec.resources.memory,
+                  "--memory-swap",
+                  spec.resources.memorySwap,
+                  ...(spec.resources.cpus === undefined ? [] : ["--cpus", spec.resources.cpus]),
+              ]),
+        ...spec.capabilities.map((cap) => `--cap-add=${cap}`),
+        ...spec.directives,
+        ...spec.publish.flatMap((port) => ["-p", port]),
+        ...spec.volumes.flatMap(({ name, destination }) => ["-v", `${name}:${destination}`]),
+        ...spec.mounts.flatMap((mount) => ["-v", mount]),
+        ...spec.env.flatMap(([name, value]) => ["-e", `${name}=${value}`]),
+        spec.image,
     ];
 };
 

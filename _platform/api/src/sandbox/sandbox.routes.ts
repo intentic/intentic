@@ -30,6 +30,7 @@ import { recordHostedProvision } from "./hosted/abuse/hosted-source.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { hostReportsOf, mintFixCode, sleepOf } from "./host-report.js";
 import { duplicateCopiesOf } from "./announce-copies.js";
+import { activeHostOf } from "./active/active-host.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, SandboxHeldByOrganisation, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
 import { arrivalMode, definitionSeedFor } from "./profiles/profiles.js";
@@ -116,6 +117,8 @@ const toSummary = async (
         // Absent likewise; reads as one copy announcing.
         seenInstances?: Prisma.JsonValue;
         duplicateSince?: Date | null;
+        // Absent likewise; reads as no active copy known.
+        activeHost?: Prisma.JsonValue;
         // Hosted machine relation; optional so a caller that skipped the include reads as not-hosted, never crashes.
         hosted?: { region: string; warm: boolean; previousImage?: string | null; appName?: string; machineId?: string } | null;
         token: string;
@@ -149,7 +152,7 @@ const toSummary = async (
         token: connectTokenFor(context.config, sandbox.token, role),
         hostReport: hostReports[0] ?? null,
         ...(role === `owner` && hosted === null ? { hostReporters: hostReports } : {}),
-        duplicateCopies: role === `owner` ? duplicateCopiesOf(sandbox.seenInstances, sandbox.duplicateSince ?? null, new Date()) : null,
+        duplicateCopies: role === `owner` ? duplicateCopiesOf(sandbox.seenInstances, sandbox.duplicateSince ?? null, new Date(), activeHostOf(sandbox.activeHost ?? null)) : null,
         role,
         providedAddress,
         // Derived from the loopback zone, never `daemonUrl`: they are two different zones now.

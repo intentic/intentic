@@ -33,8 +33,9 @@ barrier against the agent.
 An `ic` sandbox gets its key when it is set up, or on its first update if it is older: `ic` makes 32 random bytes once
 at `~/.intentic/keys/at-rest-<slug>.key` on the host (readable by that user alone), mounts the file read-only at
 `/run/secrets/intentic-at-rest-key`, and sets `INTENTIC_AT_REST_KEY_FILE` in the container. That folder is outside all
-sandbox volumes, and `ic`'s own backups do not contain it, so **copy the key into the office's key store**: without it,
-encrypted stores cannot be opened. To keep the key in the key store instead, expose it as a host file **outside all
+sandbox volumes, so **copy the key into the office's key store**: without it, encrypted stores cannot be opened. `ic`'s
+own backups (since 2026-11-11) carry it sealed under the backup key, so a backup restores on another machine with just its
+repository and backup key; keep the backup key apart from the repository. To keep the key in the key store instead, expose it as a host file **outside all
 sandbox volumes** and set `INTENTIC_AT_REST_KEY_HOST_FILE` to its absolute path when connecting the sandbox; it wins over
 the one `ic` would make. The file may contain 32 raw bytes, 64 hex digits, or base64 of 32 bytes. If the disks are
 already encrypted and you want no second key, set `INTENTIC_AT_REST=off` when connecting; the sandbox keeps that choice

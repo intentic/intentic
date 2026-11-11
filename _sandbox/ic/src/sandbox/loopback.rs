@@ -172,6 +172,40 @@ pub fn volume_facts(
     })
 }
 
+/// The owner's name for each sandbox, in the order given, None where the daemon kept none (or docker would not say):
+/// what `ic sandbox list` shows beside a slug, and what a verb given a name instead of a slug looks it up in. Read side
+/// by side, off the live container or else the one a swap parked; HISTORY_ROOT comes from its inspect.
+pub fn display_names(slugs: &[String]) -> Vec<(String, Option<String>)> {
+    std::thread::scope(|scope| {
+        let reads: Vec<_> = slugs
+            .iter()
+            .map(|slug| {
+                scope.spawn(move || {
+                    [
+                        crate::sandbox::container_of(slug),
+                        crate::sandbox::parked_of(slug),
+                    ]
+                    .into_iter()
+                    .find_map(|container| {
+                        let inspected: Value = serde_json::from_str(&crate::docker::inspect(
+                            &container,
+                            "{{json .}}",
+                        )?)
+                        .ok()?;
+                        history_file(&container, Some(&inspected), PRESENTATION_FILE)
+                    })
+                    .and_then(|file| presentation_from(&file).0)
+                })
+            })
+            .collect();
+        slugs
+            .iter()
+            .cloned()
+            .zip(reads.into_iter().map(|read| read.join().ok().flatten()))
+            .collect()
+    })
+}
+
 /// The listing's rows with `sandboxId`, `localPort`, `platformId`, `displayName` and `logo` added, each null when
 /// unknown. A row whose container was not inspected gets none of them: nothing is known, which is not the same as known
 /// to be absent. Pure.

@@ -28,7 +28,8 @@ pub type NodeState = Option<u64>;
 pub enum Pushed {
     Listen(netd_wire::ListenConfig),
     Certificate(Option<netd_wire::Certificate>),
-    Tunnel(Option<netd_wire::TunnelConfig>),
+    /// The tunnel to dial, or none; with none, the host that runs the sandbox when Node put this copy on standby.
+    Tunnel(Option<netd_wire::TunnelConfig>, Option<String>),
     /// A new Node said hello: anything netd reports must be told again.
     Hello,
     /// Close the member's terminals, or every member's.
@@ -483,8 +484,8 @@ impl Link {
             FromNode::Certificate { certificate } => {
                 let _ = self.pushed.send(Pushed::Certificate(certificate));
             }
-            FromNode::Tunnel { tunnel } => {
-                let _ = self.pushed.send(Pushed::Tunnel(tunnel));
+            FromNode::Tunnel { tunnel, superseded } => {
+                let _ = self.pushed.send(Pushed::Tunnel(tunnel, superseded));
             }
             FromNode::Revoke { member } => {
                 let _ = self.pushed.send(Pushed::Revoke(member));

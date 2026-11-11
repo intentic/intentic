@@ -276,34 +276,38 @@ it(`names what a waiting rebuild brings, and sends a capability's block to where
 });
 
 // A Komodo-run sandbox was handed the `ic` one-liner, which had nowhere to run and would have taken the container from
-// Compose: under Compose the step is the compose file's edit, and no host command at all.
-it(`gives a sandbox Docker Compose runs the edit to its compose file instead of a host command`, () => {
+// Compose: under Compose the step is the sandbox's compose file, and no host command at all.
+it(`gives a sandbox Docker Compose runs its compose file instead of a host command`, () => {
     pending.value = { content: `FROM ghcr.io/intentic/sandbox:stable\n# intentic:runtime --privileged\n`, hash: `f00d` };
     state.value = { ...environment, manager: `compose` };
     const el = mount();
     expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
     const step = el.querySelector(`[data-executor="compose"]`);
-    expect(step?.textContent).toContain(`SANDBOX_ENVIRONMENT_HASH=f00d`);
+    expect(step?.textContent).toContain(`SANDBOX_ENVIRONMENT_HASH: "f00d"`);
     expect(step?.textContent).not.toContain(`curl`);
 });
 
 // The owner found the edit drawn as a paragraph per block, its YAML scrolling sideways and folded behind "Show all" at
-// once: it is numbered steps, a few words over each thing to copy, every block wrapped and none folded.
-it(`hands a Compose-run sandbox its edit as numbered steps to copy, wrapped and never folded`, async () => {
+// once: it is numbered steps, a few words over each thing to copy, every block wrapped and none folded. (2026-11-11) The
+// whole file and the redeploy, where it was service keys, a hash line and the redeploy.
+it(`hands a Compose-run sandbox its file as numbered steps to copy, wrapped and never folded`, async () => {
     state.value = { ...environment, manager: `compose` };
     pending.value = { content: `FROM ghcr.io/intentic/sandbox:stable\n# intentic:runtime --privileged\n`, hash: `f00d` };
     const el = mount();
     const steps = (): string[] => [...el.querySelectorAll(`[data-executor="compose"] ol > li`)].map((li) => li.querySelector(`p`)?.textContent?.trim() ?? ``);
-    expect(steps()).toEqual([`Paste into the sandbox's service`, `Add to its environment`, `Redeploy or press Deploy in Komodo or Portainer`]);
+    expect(steps()).toEqual([
+        `Replace the sandbox's Compose file with this one (its .env stays) or run ic sandbox compose on its machine, which writes it with its .env`,
+        `Redeploy or press Deploy in Komodo or Portainer`,
+    ]);
     const blocks = [...el.querySelectorAll(`[data-executor="compose"] .ui-code`)];
-    expect(blocks).toHaveLength(3);
+    expect(blocks).toHaveLength(2);
     expect(blocks.every((code) => code.classList.contains(`ui-code-wrap`) && !code.classList.contains(`ui-code-clamp`))).toBe(true);
     // One Copy per step, in the step's own row.
-    expect(el.querySelectorAll(`[data-executor="compose"] li > div button`)).toHaveLength(3);
-    // A base that already is the environment needs only the hash and the redeploy.
-    pending.value = { content: `FROM ghcr.io/intentic/sandbox:stable\n`, hash: `f00d` };
+    expect(el.querySelectorAll(`[data-executor="compose"] li > div button`)).toHaveLength(2);
+    // A recipe with steps is built by Compose from the file itself.
+    pending.value = { content: `FROM ghcr.io/intentic/sandbox:stable\nRUN true\n`, hash: `f00d` };
     await nextTick();
-    expect(steps()).toEqual([`Add to its environment`, `Redeploy or press Deploy in Komodo or Portainer`]);
+    expect(el.querySelector(`[data-executor="compose"]`)?.textContent).toContain(`pull_policy: build`);
 });
 
 // The daemon marks a block as arriving after a rebuild only while one is pending (contents.ts), so the card has no

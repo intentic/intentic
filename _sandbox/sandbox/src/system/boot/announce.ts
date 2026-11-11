@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { Latest, SingleFlight, sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import type { AnnounceBody, IngressOutput } from "@intentic/api-contract/ingress";
+import type { ActiveHost, AnnounceBody, IngressOutput } from "@intentic/api-contract/ingress";
 import type { AnnounceState, RelinkAnswer } from "@intentic/sandbox-contract/schemas/platform-link";
 import { INSTANCE_ENV } from "@intentic/sandbox-contract/netd-wire";
 import type { Logger } from "pino";
 import type { Config } from "../../env.config.js";
 import { version } from "../../version.js";
 import { callIngress, type IngressAnswer } from "../platform-client.js";
+import { readTakeoverNow, removeTakeover } from "../standby/standby.js";
+import { opt } from "../../opt.js";
 
 // Registration with the platform: tells it this sandbox's public URL at boot, then again every hour while it runs, as its
 // heartbeat (the browser's own SSE probe is still what says it is reachable). Authenticated by the connect token, the
@@ -59,6 +61,16 @@ export const whereThisRuns = (config: Config, env: NodeJS.ProcessEnv = process.e
     };
 };
 
+// What starts and stops this copy's container, as far as it can tell: Compose when its file says so (SANDBOX_MANAGER), `ic`
+// when ic made it (it stamps HOST_ENGINE on every container), anything else otherwise. The platform keeps it on the
+// active host (api active-host.ts).
+const managerOf = (config: Config, env: NodeJS.ProcessEnv = process.env): "ic" | "compose" | "other" => {
+    if (config.sandbox.manager !== undefined) {
+        return "compose";
+    }
+    return (env["HOST_ENGINE"] ?? "").trim() === "" ? "other" : "ic";
+};
+
 // What the owner's Reconnect carries when the platform may need to adopt this sandbox (POST /platform/relink).
 export interface Adoption {
     readonly ticket: string;
@@ -76,6 +88,9 @@ export interface Announcer {
     // Registers now, the owner having asked. With an adoption, a platform with no record of this sandbox (404) is
     // asked to make one first and then registered with again. Resolves with where the link ends up.
     readonly relink: (adoption?: Adoption) => Promise<RelinkAnswer>;
+    // Who hears whether this copy is the one that runs the sandbox, at every accepted announce that says (standby.ts);
+    // the boot sets it once it can stop the daemon. The last one set is the one told.
+    readonly onStanding: (listener: NonNullable<AnnounceListeners["standing"]>) => void;
 }
 
 // The platform's answer, in the owner's terms; the identity rides a 200 from a platform new enough to send it, and a
@@ -111,6 +126,8 @@ const verdictOf = (answer: IngressAnswer<IngressOutput<"announce">>, at: number)
 // this sandbox's row (store/platform-row.ts), and the digest of the sandbox's name and logo as the platform holds them
 // (system/presentation/presentation-mirror.ts). And from an adoption the platform took, the name and logo it was sent.
 export interface AnnounceListeners {
+    // (2026-11-11) Whether this copy is the one that runs the sandbox, from a platform new enough to say (standby.ts).
+    readonly standing?: (standing: { active: boolean; activeHost?: ActiveHost; activeEpoch?: number }) => void;
     readonly identityKey?: (pem: string) => void;
     readonly platformId?: (id: string) => void;
     readonly presentationDigest?: (digest: string) => void;
@@ -129,6 +146,56 @@ const handOn = (answer: IngressAnswer<IngressOutput<"announce">>, listeners: Ann
     if (accepted?.presentationDigest !== undefined) {
         listeners.presentationDigest?.(accepted.presentationDigest);
     }
+    if (accepted?.active !== undefined) {
+        listeners.standing?.({ active: accepted.active, ...opt("activeHost", accepted.activeHost), ...opt("activeEpoch", accepted.activeEpoch) });
+    }
+};
+
+// The same body on every announce, the heartbeat's included, fixed for this process's life; only a takeover ic left for
+// this copy rides beside it (announceOnce).
+const announceBodyOf = (config: Config): AnnounceBody => ({
+    daemonUrl: config.sandbox.publicUrl,
+    version,
+    instance: instanceId(),
+    ...whereThisRuns(config),
+    manager: managerOf(config),
+});
+
+// The listeners as given, with whoever the boot set through `onStanding` told as well.
+const withStanding = (listeners: AnnounceListeners, current: () => AnnounceListeners["standing"]): AnnounceListeners => ({
+    ...listeners,
+    standing: (standing) => {
+        listeners.standing?.(standing);
+        current()?.(standing);
+    },
+});
+
+// One announce: the fixed body, with the takeover ic left for this copy when there is one (deleted once an announce
+// carrying it is accepted), and the platform's answer handed on and read as a verdict.
+const announceOnce = async (
+    { config, logger, listeners, body }: { config: Config; logger: Logger; listeners: AnnounceListeners; body: AnnounceBody },
+    signal: AbortSignal,
+): Promise<AnnounceState> => {
+    // A daemon with no history volume (a headless run's) has no takeover to send.
+    const historyRoot = config.historyRoot;
+    const takeover = readTakeoverNow(historyRoot);
+    let answer: IngressAnswer<IngressOutput<"announce">>;
+    try {
+        answer = await callIngress(config, { route: "announce", input: takeover === undefined ? body : { ...body, takeover }, signal });
+    } catch (error) {
+        return {
+            state: "unreachable",
+            detail: `the platform could not be reached from inside the sandbox: ${errorMessage(error)}`,
+            retrying: true,
+            at: Date.now(),
+        };
+    }
+    if (answer.status === 200 && takeover !== undefined) {
+        void removeTakeover(historyRoot).catch((error: Error) => logger.warn({ err: error }, "announce: the takeover marker could not be removed"));
+        logger.info({ by: takeover.by, active: answer.data?.active }, "announce: the platform took this copy's takeover");
+    }
+    handOn(answer, listeners);
+    return verdictOf(answer, Date.now());
 };
 
 export const createAnnouncer = (config: Config, logger: Logger, listeners: AnnounceListeners = {}): Announcer => {
@@ -145,24 +212,14 @@ export const createAnnouncer = (config: Config, logger: Logger, listeners: Annou
     const turn = new Latest();
     // One registration at a time: a Reconnect pressed mid-attempt shares the attempt rather than racing it.
     const flight = new SingleFlight<"announce", AnnounceState>();
-    // The same body on every announce, the heartbeat's included: fixed for this process's life.
-    const announceBody: AnnounceBody = { daemonUrl: config.sandbox.publicUrl, version, instance: instanceId(), ...whereThisRuns(config) };
+    // The same body on every announce, the heartbeat's included, fixed for this process's life; only a takeover ic left
+    // for this copy rides beside it, read fresh each time and deleted once an announce carrying it is accepted.
+    let standingListener: AnnounceListeners["standing"];
+    const heard = withStanding(listeners, () => standingListener);
+    const announceBody = announceBodyOf(config);
 
     const register = (signal: AbortSignal): Promise<AnnounceState> =>
-        flight.run("announce", () =>
-            callIngress(config, { route: "announce", input: announceBody, signal }).then(
-                (answer) => {
-                    handOn(answer, listeners);
-                    return verdictOf(answer, Date.now());
-                },
-                (error: Error): AnnounceState => ({
-                    state: "unreachable",
-                    detail: `the platform could not be reached from inside the sandbox: ${errorMessage(error)}`,
-                    retrying: true,
-                    at: Date.now(),
-                }),
-            ),
-        );
+        flight.run("announce", () => announceOnce({ config, logger, listeners: heard, body: announceBody }, signal));
 
     // Every attempt while fast, then once per quiet window, so a sandbox the platform forgot doesn't fill its log. A
     // heartbeat that lands is logged only when it is news: the first registration, or one after a failure.
@@ -249,6 +306,9 @@ export const createAnnouncer = (config: Config, logger: Logger, listeners: Annou
         },
         stop: () => running.abort(),
         status: () => status,
+        onStanding: (listener) => {
+            standingListener = listener;
+        },
         relink: async (adoption) => {
             // Never started (a headless run, nothing to register with) or stopped: a Reconnect starts nothing again.
             const run = running.current;

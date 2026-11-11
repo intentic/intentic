@@ -48,9 +48,14 @@ flowchart LR
   hello waits 15 s (past the edge's slowest answer; at 5 s the edge could register a connection netd had given
   up on) and is acknowledged before the edge registers it, and a dead accept loop closes its QUIC connection.
 - Node hears where the tunnel stands on every change (`ToNode::Tunnel`): `connected`, netd's `reason` when it is
-  not held, and `refused` when netd slowed or stopped (`elsewhere` with the holder's host, or `deleted`). Node logs
-  each change with its reason and raises one push notification while another copy holds the tunnel (2026-10-05: Node
-  logged "the ingress tunnel dropped" with no reason, once a minute for four hours).
+  not held, and `refused` when netd slowed or stopped (`elsewhere` with the holder's host, `deleted`, or `superseded`).
+  Node logs each change with its reason and raises one push notification while another copy holds the tunnel
+  (2026-10-05: Node logged "the ingress tunnel dropped" with no reason, once a minute for four hours).
+- (2026-11-11) A copy the platform says is not the one that runs the sandbox stands netd down: Node sends
+  `FromNode::Tunnel` with no tunnel and `superseded` naming the active host, and netd forgets the remembered tunnel,
+  dials nothing and answers `refused: superseded` until Node sends a tunnel again. Rejected: leaving it on the
+  15-minute redial `elsewhere` keeps, which took the address back whenever the active copy dropped for a moment. A
+  netd older than the field reads the frame as a bare stand-down and stops dialling all the same.
 - Terminals are netd's own: `GET /system/terminal` never reaches Node's HTTP. Node answers once what a socket may
   open, and netd serves it with one `tmux -C` client per session shared by every viewer; one that falls behind
   gets a snapshot instead of a backlog. The shared grid is the minimum columns and rows across the viewers showing
