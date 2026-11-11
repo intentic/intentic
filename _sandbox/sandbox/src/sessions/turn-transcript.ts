@@ -4,6 +4,7 @@ import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/
 import { cancelledRequests } from "@intentic/sandbox-contract/policy/request-status";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { isAwaitingDecision, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { editorContextPointer, type TranscriptEditorContext } from "@intentic/sandbox-contract/events/prompt-origins";
 import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
 import { RESTART_LOSSES, resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
 import type { TurnErrand, TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
@@ -32,6 +33,7 @@ export const openingRows = (
     turn: {
         readonly prompt: string;
         readonly attachments?: readonly string[] | undefined;
+        readonly editorContext?: TranscriptEditorContext | undefined;
         readonly messageId?: string | undefined;
         readonly speaker?: TurnSpeaker | undefined;
         readonly errand?: TurnErrand | undefined;
@@ -54,7 +56,12 @@ export const openingRows = (
         return [];
     }
     // Who spoke it and what a composed one is for ride the row, so a reader never shows the sandbox's words as the owner's.
-    const row: TranscriptRow = { ...userRow(spoken, sentAt, attachments, messageIdOf(turn)), ...opt("speaker", turn.speaker), ...opt("errand", turn.errand) };
+    const row: TranscriptRow = {
+        ...userRow(spoken, sentAt, attachments, messageIdOf(turn)),
+        ...opt("editorContext", turn.editorContext === undefined ? undefined : editorContextPointer(turn.editorContext)),
+        ...opt("speaker", turn.speaker),
+        ...opt("errand", turn.errand),
+    };
     // An answered-park resume's note rides the user's own row, like every other daemon note.
     return [resume?.kind === "note" ? { ...row, notes: [resume.note] } : row];
 };

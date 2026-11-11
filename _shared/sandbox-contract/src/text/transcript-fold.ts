@@ -397,19 +397,15 @@ export class TranscriptFold {
         }
         // A steer also closes the bubble, or the next answer would print over it mid-call.
         const row: TranscriptRow = { role: "user", text: event.text, sentAt: event.sentAt };
-        if (event.attachments !== undefined) {
-            row.attachments = [...event.attachments];
-        }
-        if (event.messageId !== undefined) {
-            row.messageId = event.messageId;
+        for (const key of ["attachments", "editorContext", "messageId", "errand"] as const) {
+            if (event[key] !== undefined) {
+                Object.assign(row, { [key]: structuredClone(event[key]) });
+            }
         }
         // The sandbox's own words say so on the row, so a reader never shows them as the owner's; an agent's words
         // come as their own card (agentWords), which names the agent.
         if (event.voice === "sandbox") {
             row.speaker = { kind: "sandbox" };
-        }
-        if (event.errand !== undefined) {
-            row.errand = event.errand;
         }
         const patches = this.pushRow(row);
         // Anchors pair by position with the checkpoints only a person's steer reserves.

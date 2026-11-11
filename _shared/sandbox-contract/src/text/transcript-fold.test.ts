@@ -63,6 +63,14 @@ describe("foldTurn", () => {
         ]);
     });
 
+    // The composer's "Viewing" chip rides a steer as a pointer, so the row can say what "this" meant.
+    it("keeps the file a person was looking at on their steer's row", () => {
+        const events: AgentEvent[] = [{ kind: "steer", text: "fix this", sentAt: SENT_AT + 1, editorContext: { file: "src/app.ts", startLine: 3, endLine: 9 } }];
+        expect(foldOf("ship it", events).slice(1)).toEqual([
+            { role: "user", text: "fix this", sentAt: SENT_AT + 1, editorContext: { file: "src/app.ts", startLine: 3, endLine: 9 } },
+        ]);
+    });
+
     it("does not retire a bubble that has written no prose", () => {
         const events: AgentEvent[] = [
             { kind: "tool_call", id: "t1", name: "Read", category: "read", status: "completed" },

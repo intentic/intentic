@@ -50,6 +50,7 @@ import ChatContinueStrip from "./ChatContinueStrip.vue";
 import ChatWayOutStrip from "./endings/ChatWayOutStrip.vue";
 import ChatLeftRunning from "./jobs/ChatLeftRunning.vue";
 import ChatQueue from "../composer/later/ChatQueue.vue";
+import ComposerMentionMarks from "../composer/mentions/ComposerMentionMarks.vue";
 import ChatWaitingBar from "./pane/ChatWaitingBar.vue";
 import ChatHeldMessages from "../transcript/held/ChatHeldMessages.vue";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
@@ -277,7 +278,8 @@ const { dragDepth } = staging;
 useQueuedAttachments({ conversationId: () => props.conversation.conversationId, reachable: () => reachable.value, attach: staging.attach });
 
 // The chip offering the file the user is looking at, only for a conversation running where that file lives.
-const { target: editorTarget, include: includeEditorContext, label: editorChipLabel, forSend: editorContextForSend } = useEditorContextChip();
+const editorContextChip = useEditorContextChip(() => draft.value);
+const { target: editorTarget, include: includeEditorContext, label: editorChipLabel, forSend: editorContextForSend } = editorContextChip;
 const editorChip = computed(() => editorTarget.value !== undefined && !remote.value);
 // The chip row above the text. Its gap to the text is its own bottom padding rather than the textarea's top: that one
 // scrolls away with a draft past the box's height, and the first line then ran into the chips.
@@ -614,37 +616,43 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     class="flex-wrap px-3 pt-3 pb-2"
                                     @remove="staging.remove"
                                 >
-                                    <!-- The editor-context chip attaches the open file or selection when enabled. -->
+                                    <!-- "I am looking at this", not an attachment: the eye and "Viewing" set it apart from files. -->
                                     <button
                                         v-if="editorChip"
+                                        v-tooltip.top="editorContextChip.hint.value"
                                         type="button"
                                         :class="
                                             ui.chip({ on: includeEditorContext }, !includeEditorContext && `border-dashed border-line`)
                                         "
                                         @click="includeEditorContext = !includeEditorContext"
                                         :aria-pressed="includeEditorContext"
-                                        :aria-label="t(`chat.chatPane.attachEditorContext`)"
+                                        :aria-label="t(`chat.chatPane.viewingLabel`, { file: editorChipLabel })"
                                     >
-                                        <Icon name="code" class="shrink-0 text-2xs" />
-                                        <span class="max-w-36 truncate">{{ editorChipLabel }}</span>
+                                        <Icon name="eye" class="shrink-0 text-2xs" />
+                                        <span class="max-w-44 truncate"
+                                            ><span class="text-muted">{{ t(`chat.chatPane.viewing`) }}</span> {{ editorChipLabel }}</span
+                                        >
                                     </button>
                                 </ChatAttachmentStrip>
-                                <!-- The composer uses transcript body sizing on desktop. -->
-                                <textarea
-                                    ref="input"
-                                    rows="1"
-                                    v-model="draft"
-                                    name="draft"
-                                    :placeholder="composerPlaceholder"
-                                    class="field-bare block w-full resize-none overflow-y-auto px-4 pb-3 leading-relaxed md:text-xs"
-                                    :class="chipRow ? `pt-1` : `pt-3`"
-                                    :style="{ maxHeight: `${composerCap}px` }"
-                                    @input="onInput"
-                                    @keydown="onKeydown"
-                                    @keyup="syncCaret"
-                                    @click="syncCaret"
-                                    @paste="staging.onPaste"
-                                ></textarea>
+                                <!-- The composer uses transcript body sizing on desktop; sent @-mentions are marked behind its words. -->
+                                <div class="relative">
+                                    <ComposerMentionMarks :text="draft" :input="input" />
+                                    <textarea
+                                        ref="input"
+                                        rows="1"
+                                        v-model="draft"
+                                        name="draft"
+                                        :placeholder="composerPlaceholder"
+                                        class="field-bare relative block w-full resize-none overflow-y-auto px-4 pb-3 leading-relaxed md:text-xs"
+                                        :class="chipRow ? `pt-1` : `pt-3`"
+                                        :style="{ maxHeight: `${composerCap}px` }"
+                                        @input="onInput"
+                                        @keydown="onKeydown"
+                                        @keyup="syncCaret"
+                                        @click="syncCaret"
+                                        @paste="staging.onPaste"
+                                    ></textarea>
+                                </div>
 
                                 <!-- The control row keeps model controls and actions in separate groups. -->
                                 <!-- In a narrow composer every chip is its glyph alone, as square as the presses

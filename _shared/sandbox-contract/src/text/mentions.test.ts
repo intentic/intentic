@@ -1,5 +1,5 @@
 import { AgentTurnSchema } from "../schemas/agent.js";
-import { MENTION_LIMIT, mentionedPathTokens, mentionPaths } from "./mentions.js";
+import { MENTION_LIMIT, mentionedPathTokens, mentionPaths, mentionRanges } from "./mentions.js";
 
 describe(`mentionPaths`, () => {
     it(`extracts path-looking tokens, deduped, with trailing punctuation stripped`, () => {
@@ -35,5 +35,20 @@ describe(`mentionPaths`, () => {
 describe(`mentionedPathTokens`, () => {
     it(`keeps the package-script shape the composer refuses, so a transcript can still recognise it inline`, () => {
         expect(mentionedPathTokens(`@intentic/iq-engine:test: failed\nsee @src/app.ts`)).toEqual([`intentic/iq-engine:test`, `src/app.ts`]);
+    });
+});
+
+describe(`mentionRanges`, () => {
+    it(`marks each sent mention where it stands, the @ included and trailing punctuation left out`, () => {
+        const text = `In @integra/bench/OPTIMIZATIONS.md, see @src/app.ts.`;
+        expect(mentionRanges(text).map(({ start, end, path }) => [text.slice(start, end), path])).toEqual([
+            [`@integra/bench/OPTIMIZATIONS.md`, `integra/bench/OPTIMIZATIONS.md`],
+            [`@src/app.ts`, `src/app.ts`],
+        ]);
+    });
+
+    it(`marks every occurrence of a repeated mention and nothing that is not sent`, () => {
+        const text = `@a.ts then @a.ts, thanks @radarsu, curl --data @/tmp/x.json`;
+        expect(mentionRanges(text).map(({ start }) => start)).toEqual([0, 11]);
     });
 });

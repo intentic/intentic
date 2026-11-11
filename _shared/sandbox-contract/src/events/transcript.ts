@@ -8,6 +8,7 @@ import { HeldEndingSchema, MemoryKillMarkSchema, RetryLadderSchema } from "../sc
 import { HandoffOfferSchema } from "../schemas/providers/handoff.js";
 import { NoticeCodeSchema } from "./sandbox-notice.js";
 import { TranscriptAgentNoticeSchema } from "./agent-ui.js";
+import { TranscriptAgentWordsSchema, TranscriptEditorContextSchema, TranscriptNeedWakeSchema, TranscriptWatchWakeSchema } from "./prompt-origins.js";
 import { ReviewFindingsSchema } from "./review.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "./requests.js";
 import {
@@ -31,6 +32,7 @@ import {
     ToolCallStatusSchema,
     ToolKindSchema,
 } from "./requests.js";
+export * from "./prompt-origins.js";
 
 // A conversation as recorded and replayed: the rows, the cards they carry, and the patches that change them while a
 // turn runs. One shape for the live row and the recorded one, since they're the same row.
@@ -216,46 +218,6 @@ export interface TranscriptTool {
     exitCode?: number | undefined;
 }
 
-// Every ending that wakes a conversation off a condition watch; composing and parsing the wake is watch-wake.ts.
-export const WatchOutcomeSchema = z.enum(["met", "timeout", "restart-expired", "broken"]);
-export type WatchOutcome = z.infer<typeof WatchOutcomeSchema>;
-
-// A condition watch waking the conversation, as the row carries it. The wake arrives as an ordinary turn prompt that
-// nobody typed, so the row keeps that prompt verbatim rather than a summary of it.
-export const TranscriptWatchWakeSchema = z.object({
-    outcome: WatchOutcomeSchema.describe("How the watch ended: the condition held, the deadline passed, or a restart cut it short."),
-    note: z.string().describe("The agent's own line on what it was waiting for."),
-    elapsed: z
-        .string()
-        .describe("How long the watch stood, already worded ('43m'): carried rather than recomputed, since the arming instant is not on the row."),
-    sent: z.string().describe("The whole prompt the model was woken with, disclosed under the row."),
-});
-export type TranscriptWatchWake = z.infer<typeof TranscriptWatchWakeSchema>;
-
-// A need's answer that reached this conversation as a prompt (need-wake.ts); the row keeps the prompt and names the need.
-export const TranscriptNeedWakeSchema = z.object({
-    outcome: z.enum(["met", "declined"]).describe("How the need ended: a person gave it, or said no."),
-    title: z.string().describe("The need, as its card leads with it."),
-    id: z.string().describe("The need's handle, which its live card is keyed by."),
-    sent: z.string().describe("The whole prompt the model received, disclosed under the row."),
-});
-export type TranscriptNeedWake = z.infer<typeof TranscriptNeedWakeSchema>;
-
-// Another agent's words that reached this conversation as a prompt; the row keeps the prompt and names the sender.
-export const TranscriptAgentWordsSchema = z.object({
-    kind: z.enum(["peer", "child"]).describe("Who sent it: another conversation in the workspace, or a subagent this one started."),
-    from: z.string().describe("The sending conversation's id."),
-    title: z.string().optional().describe("The sender's title, when it had one."),
-    failed: z.boolean().optional().describe("A child's report on a turn that failed rather than finished."),
-    machine: z.string().optional().describe("The runner a child's turn ran on; absent for a child that ran in this sandbox."),
-    review: z
-        .enum(["review", "test"])
-        .optional()
-        .describe("A child's report from a code review or test pass a person opened on this conversation's work, not a subagent it spawned."),
-    sent: z.string().describe("The whole prompt the model received, disclosed under the row."),
-});
-export type TranscriptAgentWords = z.infer<typeof TranscriptAgentWordsSchema>;
-
 // A command the agent left running past its own call; how it is doing now is live state on the card (AgentSummary.jobs).
 export const TranscriptBackgroundJobSchema = z.object({
     id: z.string().describe("The daemon's handle for the job, which its live state on the conversation's card is keyed by."),
@@ -333,6 +295,8 @@ export const TranscriptRowSchema = z.object({
         ),
     // Uploaded files only (user rows); a path already @-mentioned inline is not drawn again as a chip.
     attachments: z.array(z.string()).optional().describe("Files attached to this message, as workspace paths."),
+    // The composer's "Viewing" chip as it went; the selected text itself rode the prompt only.
+    editorContext: TranscriptEditorContextSchema.optional().describe("The file, and lines if any, the person had open in the editor and sent along."),
     // Never stored: looked up each read from the daemon's rewind points, matching what's still there.
     checkpointId: z
         .string()

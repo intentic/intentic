@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
 import { type MessageReceipt, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { MENTION_LIMIT } from "@intentic/sandbox-contract/text/mentions";
+import { editorContextPointer } from "@intentic/sandbox-contract/events/prompt-origins";
 import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { type Booking, holdOf, type QueuedItem, together, waitingOf } from "../../../conversations/actor/conversation-queue.js";
@@ -76,6 +77,7 @@ export const steerPerson = async (services: Services, conversationId: string, st
         sentAt: Date.now(),
         messageId: steer.messageId ?? randomUUID(),
         ...((steer.attachments ?? []).length > 0 ? { attachments: [...(steer.attachments ?? [])] } : {}),
+        ...opt("editorContext", steer.editorContext === undefined ? undefined : editorContextPointer(steer.editorContext)),
     });
     // Reserves this steer's rewind slot in the same synchronous breath as the frame. The capture that fills it is not
     // waited for: under load its git queued for seconds, and the answer to the person's message with it. The settle

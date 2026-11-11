@@ -36,6 +36,14 @@ describe("openingRows", () => {
         ]);
     });
 
+    // What the person was looking at rides the row as a pointer: the file and lines, never the selected text.
+    it("keeps the editor context's file and lines on the row and drops the selection", () => {
+        const editorContext = { file: "src/app.ts", startLine: 3, endLine: 4, selection: "const a = 1;\nconst b = 2;" };
+        expect(openingRows({ prompt: "fix this", messageId: "m-2", editorContext }, "/work", SENT_AT)).toEqual([
+            { role: "user", text: "fix this", sentAt: SENT_AT, messageId: "m-2", editorContext: { file: "src/app.ts", startLine: 3, endLine: 4 } },
+        ]);
+    });
+
     // Nothing in the frame log timestamps an individual assistant block, so only the user row can be.
     it("stamps the user's row with the turn's start and leaves the answer unstamped", () => {
         const events: AgentEvent[] = [{ kind: "delta", text: "on it" }];

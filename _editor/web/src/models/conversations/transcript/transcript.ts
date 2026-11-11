@@ -1,5 +1,6 @@
 import { cancelledRequests } from "@intentic/sandbox-contract/policy/request-status";
-import { holdsRequest, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { editorContextPointer, holdsRequest, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import type { EditorContext } from "@intentic/sandbox-contract/schemas/agent";
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import { formatDate } from "@intentic/ui/format";
 import { errandOf } from "../run/errands";
@@ -199,10 +200,24 @@ export interface ChatAttachment {
     readonly path: string;
 }
 
+// The user's bubble a send draws before the daemon's row arrives, saying what that row will: the words, the files, and
+// the file (and lines) the person was looking at, never the selected text itself.
+export const sentBubble = (text: string, attachments: readonly ChatAttachment[], editorContext?: EditorContext): Omit<ChatMessage, "id"> => {
+    const row: Omit<ChatMessage, "id"> = { role: `user`, text };
+    if (attachments.length > 0) {
+        row.attachments = attachments.map((file) => file.path);
+    }
+    if (editorContext !== undefined) {
+        row.editorContext = editorContextPointer(editorContext);
+    }
+    return row;
+};
+
 // Freezes any cards a stopped bubble is parked on as `cancelled`, since the aborted stream will never answer them.
 // Returns the same message when it holds none, so a Stop only re-renders bubbles that actually changed.
 export const withCancelledCards = (message: ChatMessage): ChatMessage => {
     const cards = cancelledRequests(message);
+
     return cards === message ? message : { ...message, ...cards };
 };
 

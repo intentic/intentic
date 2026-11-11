@@ -33,7 +33,21 @@ const PACKAGE_SCRIPT = /^[^/]+\/[^/]+:[^/]+$/u;
 const OUTSIDE_WORKSPACE = /^(?:[/~]|[A-Za-z]:[\\/]|\.\.(?:[/\\]|$))/u;
 // How many a turn may carry; the tokenizer stops here rather than letting a pasted log's 21st token refuse the turn.
 export const MENTION_LIMIT = 20;
-export const mentionPaths = (text: string): string[] =>
-    mentionedPathTokens(text)
-        .filter((token) => !PACKAGE_SCRIPT.test(token) && !OUTSIDE_WORKSPACE.test(token))
-        .slice(0, MENTION_LIMIT);
+const isMention = (token: string): boolean => !PACKAGE_SCRIPT.test(token) && !OUTSIDE_WORKSPACE.test(token);
+export const mentionPaths = (text: string): string[] => mentionedPathTokens(text).filter(isMention).slice(0, MENTION_LIMIT);
+
+// Where each mention mentionPaths would send sits in the text, `@` included, so a composer can mark the very words that
+// ride as files and no others. Past the limit nothing is marked, since nothing past it is sent.
+export const mentionRanges = (text: string): { readonly start: number; readonly end: number; readonly path: string }[] => {
+    const sent = new Set(mentionPaths(text));
+    const ranges: { start: number; end: number; path: string }[] = [];
+    for (const match of text.matchAll(/(^|\s)@([^\s@]+)/g)) {
+        const [, lead = ``, token = ``] = match;
+        const path = withoutTrailingPunctuation(token);
+        if (sent.has(path)) {
+            const start = match.index + lead.length;
+            ranges.push({ start, end: start + 1 + path.length, path });
+        }
+    }
+    return ranges;
+};

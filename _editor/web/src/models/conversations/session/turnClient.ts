@@ -28,7 +28,7 @@ import { type ContinueOptions, type PressedOn, withHandoffChosen } from "../endi
 import { type AttachHead, type FollowEnd, followRun, type SentMessage, type TurnContext } from "../../../client/sandbox/streams/turnStream";
 import { noteTurnCompleted, track } from "../../../app/analytics";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
-import { type ChatAttachment, continuationFor } from "../transcript/transcript";
+import { type ChatAttachment, continuationFor, sentBubble } from "../transcript/transcript";
 import { refusalWords } from "../transcript/sandboxNotice";
 import type { TurnHost } from "./turnHost";
 import { followSteered, type Heard, leftTo, type LeftTo } from "./steeredWords";
@@ -46,6 +46,9 @@ interface OpenedTurn {
     readonly controller: AbortController;
     readonly session: SessionRef | undefined;
 }
+
+// What opens a turn beyond its words: an errand's words not written yet, or the file the person was looking at.
+type OpeningHow = { readonly composing?: boolean; readonly editorContext?: EditorContext | undefined };
 
 // How long after a turn ends this window looks for the one its conversation's queue starts behind it, from a sandbox
 // too old to wait for that run itself (attach `after`): the daemon starts it once the ended turn's record is written, a
@@ -192,7 +195,7 @@ export class TurnClient {
             return false;
         }
         let took = false;
-        await this.deliverTurn(this.openTurn(text, attachments, settings), text, attachments, settings, editorContext, (taken) => {
+        await this.deliverTurn(this.openTurn(text, attachments, settings, { editorContext }), text, attachments, settings, editorContext, (taken) => {
             took = taken;
         });
         return took;
@@ -243,7 +246,7 @@ export class TurnClient {
         // The turn's own bubble draws them from here, in the same frame.
         this.sending.end(sending);
         const settings = this.host.selection.turnSettings();
-        await this.deliverTurn(this.openTurn(trimmed, attachments, settings), trimmed, attachments, settings, editorContext);
+        await this.deliverTurn(this.openTurn(trimmed, attachments, settings, { editorContext }), trimmed, attachments, settings, editorContext);
     }
 
     /**
@@ -316,7 +319,7 @@ export class TurnClient {
             return true;
         }
         const settings = this.host.selection.turnSettings();
-        const opened = this.openTurn(opening, [], settings, true);
+        const opened = this.openTurn(opening, [], settings, { composing: true });
         const composed = compose(opened.controller.signal);
         // A read abandoned by a Stop may still fail later, and nobody is left to hear it.
         composed.catch(() => undefined);
@@ -355,7 +358,7 @@ export class TurnClient {
 
     // What a turn does before its words leave, in the order a send always did it; the bubble and the working line draw
     // here, so whatever follows may be a wait. An errand opens `composing`, its words not written yet.
-    private openTurn(text: string, attachments: readonly ChatAttachment[], settings: TurnSettings, composing = false): OpenedTurn {
+    private openTurn(text: string, attachments: readonly ChatAttachment[], settings: TurnSettings, how: OpeningHow = {}): OpenedTurn {
         // A pending reattach probe must not race this send's stream, nor must a superseded resume fire one later.
         this.abortProbes();
         this.host.failures.cancelProbe();
@@ -364,15 +367,11 @@ export class TurnClient {
         const session = this.host.session.value;
         this.host.selection.apply({ kind: `sent` });
         // The user's bubble, drawn now so the send reads as sent, replaced once the daemon's row arrives, same id.
-        const bubble = this.host.transcript.append({
-            role: `user`,
-            text,
-            ...(attachments.length > 0 ? { attachments: attachments.map((file) => file.path) } : {}),
-        });
+        const bubble = this.host.transcript.append(sentBubble(text, attachments, how.editorContext));
         // This turn starts from the user's pick; the previous turn's live posture is history by the time this runs.
         this.liveMode.value = undefined;
         const controller = new AbortController();
-        this.beginTurn({ kind: `open`, composing, controller, startedAt: Date.now() });
+        this.beginTurn({ kind: `open`, composing: how.composing === true, controller, startedAt: Date.now() });
         return { bubble, controller, session };
     }
 

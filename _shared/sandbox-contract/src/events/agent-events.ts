@@ -15,6 +15,7 @@ import { FreshStartSchema, HandedOffSchema, HandoffOfferSchema } from "../schema
 import { SwitchedSchema } from "../schemas/providers/switched.js";
 import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, pageAskRequest, PageSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./transcript.js";
+import { TranscriptEditorContextSchema } from "./prompt-origins.js";
 import { ReviewFindingsSchema } from "./review.js";
 import { agentNoticeEvent, agentStatusEvent } from "./agent-ui.js";
 
@@ -174,6 +175,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         text: z.string(),
         sentAt: z.number(),
         attachments: z.array(z.string()).optional(),
+        // The file (and lines) the person was looking at, stamped on the row it becomes (TranscriptRow.editorContext).
+        editorContext: TranscriptEditorContextSchema.optional(),
         voice: z.enum(["sandbox", "agent"]).optional(),
         // What a composed message is for, stamped on the row it becomes (TranscriptRow.errand).
         errand: TurnErrandSchema.optional(),

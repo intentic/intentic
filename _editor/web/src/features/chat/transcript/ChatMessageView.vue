@@ -23,6 +23,7 @@ import { openLoopbackPreview } from "../../../models/terminal/portPreview";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatReadAloud from "../voice/ChatReadAloud.vue";
+import ChatViewingChip from "./attachments/ChatViewingChip.vue";
 import ChatBrowserHelpCard from "./cards/ChatBrowserHelpCard.vue";
 import ChatCapabilityCard from "./cards/ChatCapabilityCard.vue";
 import NeedCard from "../../needs/NeedCard.vue";
@@ -403,11 +404,7 @@ const toggleExpanded = (): void => {
 
 // Resolves thumbnails by path: an object URL minted here if staged locally, else re-minted from workspace bytes.
 const attachmentThumbs = computed(() =>
-    (props.message.attachments ?? []).map((path) => ({
-        name: basename(path),
-        path,
-        previewUrl: attachmentPreview(path),
-    })),
+    (props.message.attachments ?? []).map((path) => ({ name: basename(path), path, previewUrl: attachmentPreview(path) })),
 );
 
 // Whether a single image attachment may sit beside the prompt instead of stacking above it (width is handled separately
@@ -479,6 +476,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             </template>
         </ChatAsideLane>
         <div v-else-if="message.role === 'user'" class="group relative flex max-w-[85%] flex-col items-end gap-1.5">
+            <ChatViewingChip v-if="message.editorContext" :context="message.editorContext" />
             <!-- Attachments stack above the prompt when they cannot fit beside it. -->
             <ChatAttachmentStrip
                 v-if="attachmentThumbs.length"
