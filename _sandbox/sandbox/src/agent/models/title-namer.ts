@@ -129,10 +129,12 @@ const namingRequest = async (services: Services, entry: PersistedAgent, prompt: 
 };
 
 // No-ops whenever there is nothing to do, including no model set for this role. A history read or naming failure is
-// logged by the caller and leaves the existing title standing for the next turn to retry.
+// logged by the caller and leaves the existing title standing for the next turn to retry. A runner's mirror names
+// nothing: the parent that dispatched the turn names the conversation where people see it, with the accounts the job's
+// model setting names, which a runner does not hold (it warned "title naming failed" on every turn, 2026-11-11).
 export const nameAgentTitle = async (services: Services, execution: AgentExecutionContext, conversationId: string, prompt: string): Promise<void> => {
     const entry = services.agents.entry(conversationId);
-    if (entry === undefined || entry.identity.home === true || entry.social.title?.source === "user" || !(await roleModelIsSet(services, `session-title`))) {
+    if (services.runnerParent.current !== undefined || entry === undefined || entry.identity.home === true || entry.social.title?.source === "user" || !(await roleModelIsSet(services, `session-title`))) {
         return;
     }
     // Broken replies and bare labels count as no automatic name, regardless of their old source rank.

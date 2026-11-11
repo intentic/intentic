@@ -3,6 +3,7 @@ import type { Services } from "../composition.js";
 import { parentCredentialSource } from "./runner-credentials.js";
 import { ensureRunnerIdentity, readRunnerIdentity } from "./runner-identity.js";
 import { startRunnerLink } from "./runner-link.js";
+import { parentWake } from "./ownership/wake.js";
 
 // The same image, told at container creation that it's a parent's execution container, not a person's. A posture, not a
 // fork: the daemon boots as any loopback sandbox, then adds the one thing a runner has, an outbound link to its parent.
@@ -36,6 +37,7 @@ export const startRunnerMode = async (services: Services, env: RunnerModeEnv | u
         return;
     }
     // Before the link, so the very first dispatched turn already resolves against the origin's providers.
-    services.runnerParent.current = parentCredentialSource(identity, services.logger);
+    // And the owner of every conversation it runs: its own wakes go there (runners/ownership/wake.ts).
+    services.runnerParent.current = { ...parentCredentialSource(identity, services.logger), wake: parentWake(identity, services.logger) };
     startRunnerLink(services, identity, working);
 };

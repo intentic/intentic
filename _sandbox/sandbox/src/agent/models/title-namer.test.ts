@@ -104,6 +104,7 @@ const servicesWith = (title: Social["title"], setTitle: Mock<Services["agents"][
     unstubbed<Services>("services", {
         privacyShield: privacySliceFake().privacyShield,
         agentExecution: rootExecutionService(),
+        runnerParent: {},
         agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(turns, { identity, social: { title, reactions: [] } }), setTitle }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
             page: async (...args) => {
@@ -254,6 +255,16 @@ test.each(["model", "plan"] as const)("repairs a bare %s title from the original
 test.each(["Intentic", "boot.test.ts", ...STOLEN_TITLES])("preserves an explicit user rename reading %s", async (title) => {
     const setTitle = jest.fn<Services["agents"]["setTitle"]>();
     await nameAgentTitle(servicesWith({ text: title, source: "user" }, setTitle, 2), "c1", "Continue");
+    expect(ask).not.toHaveBeenCalled();
+    expect(setTitle).not.toHaveBeenCalled();
+});
+
+test("a runner's mirror names nothing: the parent that dispatched the turn names the conversation", async () => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    const services = { ...servicesWith({ text: "Fix the auth tests", source: "derived" }, setTitle), runnerParent: { current: { resolve: async () => ({ ok: true as const, credentials: {} }) } } };
+
+    await nameAgentTitle(services, "c1", "fix the auth tests");
+
     expect(ask).not.toHaveBeenCalled();
     expect(setTitle).not.toHaveBeenCalled();
 });

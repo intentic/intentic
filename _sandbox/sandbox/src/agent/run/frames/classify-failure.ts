@@ -17,6 +17,7 @@ import type { StoredModelRefusal } from "../../../usage/model-refusals.js";
 import { opt } from "../../../opt.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldTurn } from "../turn/holds/held-turn.js";
+import type { AgentRequest } from "../../providers/agent-request.js";
 import { heldReopensAt } from "../../../conversations/actor/limit-booking.js";
 import type { Attribution } from "./frame-decorators.js";
 import { withClause } from "./frame-clause.js";
@@ -564,6 +565,12 @@ const dress = async (event: ErrorFrame, context: FailureContext, queries: Failur
             return bare(event);
     }
 };
+
+// Only a stored Claude account's credential is re-minted, never on the re-mint itself: refused again, it is dead.
+export const remintFor = (input: RoutedTurn, account: string | undefined, request: AgentRequest): FailureContext["remint"] =>
+    input.conversationId !== undefined && account !== undefined && request.credential.kind === "claude-oauth" && input.resume !== "auth"
+        ? { account, refusedToken: request.credential.token }
+        : undefined;
 
 export const classifyFailure = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<FailurePlan> => {
     const asked = await namedVerification(event, context, queries);

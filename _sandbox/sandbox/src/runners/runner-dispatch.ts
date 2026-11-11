@@ -12,6 +12,7 @@ import type { ConversationWorktree,AgentWorktrees } from "../conversations/workt
 import type { Services } from "../composition.js";
 import type { RunnerHub } from "./runner-peer.js";
 import { forgetRemoteRequest, forgetRemoteRequestsOf, noteRemoteRequest } from "./runner-requests.js";
+import { openRunnerTurn } from "./ownership/account-holds.js";
 import { collectHeld, payOwedStop, type RelayContext, relayTurn, stopRemoteTurn } from "./held-turns/runner-relay.js";
 
 // One turn executed on a runner, the parent's side of the dispatch: mirrors the
@@ -177,6 +178,9 @@ export async function* dispatchRemoteTurn(
     // Stop must reach the runner explicitly: closing the stream alone races the provider, still spending unseen. A
     // Stop during the sync round trip lands on an already-aborted signal a bare listener misses.
     const unwatchAbort = whenAborted(signal, () => stopRemoteTurn(context));
+    // Every Claude account the runner borrows while this turn is open is held here, so no rotation revokes it under the
+    // turn (runners/ownership/account-holds.ts).
+    const closeHolds = openRunnerTurn(runnerId);
     try {
         await payOwedStop(context, client);
         // A turn the runner still holds from before (one this sandbox lost) comes home first: a pull would reset it.
@@ -207,6 +211,7 @@ export async function* dispatchRemoteTurn(
         }
     } finally {
         unwatchAbort();
+        closeHolds();
         // The turn is over: nothing it raised can still be answered, so a stale id must not outlive it.
         forgetRemoteRequestsOf(conversationId);
         await deliverBranch(services, runnerId, sync("push"), worktree);

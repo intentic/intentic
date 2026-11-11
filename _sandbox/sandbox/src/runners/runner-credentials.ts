@@ -8,6 +8,8 @@ import {
     runnerTranslatorUrl,
 } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
+import type { MessageReceipt } from "@intentic/sandbox-contract/schemas/agent";
+import type { Said, Unsaid } from "../seams/turn-starter.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
 // The runner's side of the credential doors: a dispatched turn asks the origin sandbox for its credential per turn over
@@ -19,6 +21,8 @@ const RESOLVE_TIMEOUT_MS = 30_000;
 
 export interface ParentCredentials {
     readonly resolve: (input: { readonly agent?: string; readonly account?: string; readonly model?: string }) => Promise<HarnessCredentialsResult>;
+    // Hands a wake for one of the parent's conversations to the parent (runners/ownership/wake.ts); undefined keeps it here.
+    readonly wake?: (said: Said) => Promise<MessageReceipt | Unsaid | undefined>;
 }
 
 const post = async (url: string, token: string, body: object, timeoutMs: number): Promise<unknown> => {

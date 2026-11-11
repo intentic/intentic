@@ -75,6 +75,7 @@ const stopTurn = async (
 // one that walked its own ladder (an automation's fire, a runner's dispatched turn) is not re-pinned.
 export const turnDoors = (services: () => Services, body: TurnStarter["stream"]): TurnStarter => {
     const start: TurnStarter["start"] = (turn, options) => startConversationTurn(services(), body, turn, options);
+    const admission = createAdmission(services, start);
     return {
         start,
         resume: (conversationId, routing) => fireHeldResume(services(), conversationId, routing),
@@ -109,7 +110,9 @@ export const turnDoors = (services: () => Services, body: TurnStarter["stream"])
         reply: (reply) => applyReply(services(), reply),
         stop: (target) => stopTurn(services(), target),
         // A person's message, one at a time per conversation.
-        ...createAdmission(services, start),
+        ...admission,
+        // A runner's own wake goes to the parent that owns the conversation, which dispatches its turn (runners/ownership/wake.ts).
+        say: async (said) => (await services().runnerParent.current?.wake?.(said)) ?? (await admission.say(said)),
     };
 };
 

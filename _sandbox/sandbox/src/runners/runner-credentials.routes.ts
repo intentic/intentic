@@ -6,13 +6,16 @@ import {
     runnerTranslatorPath,
 } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { Context } from "hono";
-import { replaceRejectedToken } from "../agent/providers/claude/claude-credentials.js";
+import { holdAccount, replaceRejectedToken } from "../agent/providers/claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
 import { bearerPeer } from "../peers/peer-store.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 import { resolveHarnessCredentials } from "../agent/providers/harness-credentials.js";
 import { forwardToTranslator, toRunnerCredential } from "../sandboxes/credential-lending.js";
+import { opt } from "../opt.js";
+import { lentToRunner } from "./ownership/account-holds.js";
+import { createRunnerWakeRoute } from "./ownership/wake.routes.js";
 
 // The rules for what leaves this sandbox live beside the link doors that lend the same way (sandboxes/credential-lending.ts).
 export { toRunnerCredential } from "../sandboxes/credential-lending.js";
@@ -21,6 +24,7 @@ export { toRunnerCredential } from "../sandboxes/credential-lending.js";
 // POST /system/runners/credentials: resolves one turn's credential, stripped to what may travel.
 // POST /system/runners/credentials/refresh: re-mints a rejected access token against the local store.
 // ALL /system/runners/translator/*: proxies the loopback translator so its local bearer never leaves.
+// POST /system/runners/wake: says a runner's own wake (a watch, a job) here, so the turn it starts is this sandbox's.
 // Never travels: refresh tokens, the translator's local bearer, or the per-model allowance (reads parent-local state).
 
 // How this sandbox resolves one turn's credential, the way its own turns do; the app hands in the engine's.
@@ -51,8 +55,16 @@ const createRunnerCredentialsRoute =
             ...(body.data.account !== undefined ? { account: body.data.account } : {}),
             ...(body.data.model !== undefined ? { model: body.data.model } : {}),
         });
-        services.logger.info({ runner, agent: body.data.agent ?? DEFAULT_PROVIDER, ok: resolved.ok }, "runner: credential resolved for a remote turn");
-        return c.json(toRunnerCredential(resolved, services.config.translator.url, services.config.claudeCodeOauthToken));
+        services.logger.info(
+            { runner, agent: body.data.agent ?? DEFAULT_PROVIDER, ok: resolved.ok, ...opt("account", resolved.ok ? resolved.credentials.account : undefined) },
+            "runner: credential resolved for a remote turn",
+        );
+        const answer = toRunnerCredential(resolved, services.config.translator.url, services.config.claudeCodeOauthToken);
+        // A stored account's token is held here while the runner's turn holds it there (runners/ownership/account-holds.ts).
+        if (answer.ok && answer.kind === "oauth" && answer.account !== undefined) {
+            lentToRunner(runner, answer.account, answer.accessToken, holdAccount);
+        }
+        return c.json(answer);
     };
 
 const createRunnerCredentialRefreshRoute =
@@ -70,6 +82,9 @@ const createRunnerCredentialRefreshRoute =
             services.logger.warn({ err: error, runner, account: body.data.account }, "runner: mid-turn token re-mint failed");
             return undefined;
         });
+        if (accessToken !== undefined) {
+            lentToRunner(runner, body.data.account, accessToken, holdAccount);
+        }
         return c.json(accessToken !== undefined ? { accessToken } : {});
     };
 
@@ -88,4 +103,5 @@ export const runnerCredentialRawRoutes = defineRawRoutes((services: Services) =>
     "POST /system/runners/credentials": createRunnerCredentialsRoute(services, (input) => resolveHarnessCredentials(services, input)),
     "POST /system/runners/credentials/refresh": createRunnerCredentialRefreshRoute(services),
     "ALL /system/runners/translator/*": createRunnerTranslatorProxyRoute(services),
+    "POST /system/runners/wake": createRunnerWakeRoute(services),
 }));

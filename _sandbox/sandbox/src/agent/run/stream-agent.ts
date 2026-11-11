@@ -53,6 +53,7 @@ import type { HeldTurn } from "./turn/holds/held-turn.js";
 import { keepableOf, keptWarmOf, noteKeepable } from "./turn/cache-keepwarm.js";
 import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
+import { remoteFailuresHere, unbooked } from "../../runners/held-turns/remote-failure.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
 import { withRuntimeHistory } from "../../sessions/vocabulary/runtime-history.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
@@ -62,7 +63,7 @@ import { trimDelivery, type ColdTrimBasis } from "./turn/cold-trim.js";
 import { carriedOffOf, keptHandoffOf, type Replaced, replaceHeld, withUnsentWords } from "./turn/holds/handoff-way.js";
 import { continuationInput, continuationOf, continuationTrim, type HomeContinuation, homeContinuationOf } from "./turn/holds/turn-continuation.js";
 import { planTurn, type TurnPlan, type TurnExperimentStamps } from "./turn/turn-plan.js";
-import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "./frames/classify-failure.js";
+import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries, remintFor } from "./frames/classify-failure.js";
 import { codedFailure } from "./frames/error-frames.js";
 import { privacyTurnRefusal, type TurnRefusal } from "../providers/adapter.js";
 import { abortSuppresses, type Attribution, decorateFrame, silenceOf, silentEnding, withSilentEnding } from "./frames/frame-decorators.js";
@@ -201,7 +202,8 @@ const placementOf = (
             { conversationId: id, snapshot, runner },
             {
                 compose: () => ensureComposedWorktree(services, input, id, input.worktreeBase, entersNamespace(input)),
-                dispatch: (worktree) => dispatchRemoteTurn(services, { ...input, conversationId: id }, runner, worktree, signal),
+                // What carries a failed turn on is this sandbox's to decide, never the runner's (remote-failure.ts).
+                dispatch: (worktree) => remoteFailuresHere(services, { ...input, conversationId: id }, runner, dispatchRemoteTurn(services, { ...input, conversationId: id }, runner, worktree, signal)),
             },
         );
     }
@@ -788,12 +790,6 @@ async function* prepareTurn(
     return { asked, plan, request: wire.request, isolation, effectiveCwd, frames, carriedOff, keptHandoff: keptHandoffOf(replaced) };
 }
 
-// Only a stored Claude account's credential is re-minted, never on the re-mint itself: refused again, it is dead.
-const remintFor = (input: RoutedTurn, account: string | undefined, request: AgentRequest): FailureContext["remint"] =>
-    input.conversationId !== undefined && account !== undefined && request.credential.kind === "claude-oauth" && input.resume !== "auth"
-        ? { account, refusedToken: request.credential.token }
-        : undefined;
-
 // The questions a failure's classification asks: the daemon's records, and this conversation's own resume state.
 const failureQueries = (services: Services, openedAt: number): FailureQueries => ({
     ...recordQueries(services, openedAt),
@@ -857,10 +853,12 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
     );
     services.logger[failure.log.level](failure.log.fields, failure.log.message);
     performFailureWrites(services, failure.writes);
-    frames.hold(failure.held);
+    // A runner's mirror holds and carries on nothing: its parent does, and dispatches it (runners/held-turns/remote-failure.ts).
+    const mirror = services.runnerParent.current !== undefined;
+    frames.hold(mirror ? undefined : failure.held);
     // Shown as words, after classification read the raw text: a vendor's JSON body is replaced by the message it carries.
     // A cap reached mid-work carries on by itself once this run settles (cap-continuation.ts), and its notice says so.
-    const capped = continueCappedTurn(services, failure.frame, turn);
+    const capped = mirror ? unbooked(failure.frame) : continueCappedTurn(services, failure.frame, turn);
     const frame = { ...capped, message: readableProviderText(capped.message) };
     // The account that actually served (or was refused for) the turn rides on its frame, so no window guesses it.
     return turn.account === undefined || frame.account !== undefined ? frame : { ...frame, account: turn.account };

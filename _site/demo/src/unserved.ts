@@ -135,6 +135,7 @@ export const UNSERVED = {
     "POST /system/runners/git/{repo}/git-receive-pack": NOT_THE_EDITORS,
     "POST /system/runners/git/{repo}/git-upload-pack": NOT_THE_EDITORS,
     "POST /system/runners/pair": NOT_THE_EDITORS,
+    "POST /system/runners/wake": NOT_THE_EDITORS,
     "POST /system/sync/report": NOT_THE_EDITORS,
     "POST /system/webext/enroll": NOT_THE_EDITORS,
     "POST /system/webext/grants-changed": NOT_THE_EDITORS,

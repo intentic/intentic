@@ -270,6 +270,8 @@ export const RAW_ROUTES = {
     "POST /system/runners/git/{repo}/git-receive-pack": { auth: "door", control: "never", lane: "bulk" },
     "POST /system/runners/credentials": { auth: "door", control: "never" },
     "POST /system/runners/credentials/refresh": { auth: "door", control: "never" },
+    // A runner's wake for a conversation dispatched there (runner-wake.ts): said here, so its turn is the parent's.
+    "POST /system/runners/wake": { auth: "door", control: "never" },
     [`ALL ${runnerTranslatorPath}/*` as const]: { auth: "door", control: "never" },
     // The privacy shield's gateway: every shielded runtime's model requests, on the signed session its base URL carries
     // (privacy/gateway/session-token.ts), which names the provider and the only upstream it may forward to. Held open
