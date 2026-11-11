@@ -13,8 +13,10 @@ export const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== 
 export const ahead = (repo: RepoChanges): number => repo.remote?.ahead ?? 0;
 export const behind = (repo: RepoChanges): number => repo.remote?.behind ?? 0;
 // A branch with a remote but no upstream; its own state, not a large `ahead`, since git reports no count for
-// an untracked branch.
-export const unpublished = (repo: RepoChanges): boolean => syncable(repo) && repo.remote?.upstream === undefined;
+// an untracked branch. Only for a named branch: detached HEAD and a branch with no commit yet (a clone of an empty
+// repository) carry no `branch`, and have nothing a push could send.
+export const unpublished = (repo: RepoChanges): boolean =>
+    syncable(repo) && repo.remote?.branch !== undefined && repo.remote.upstream === undefined;
 
 // Work that exists on this disk and nowhere else. Outgoing only: `behind` is only as fresh as the last fetch,
 // so acting on it would be wrong in both directions; `ahead` and an unpublished branch are risks the sandbox alone

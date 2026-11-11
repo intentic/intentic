@@ -127,7 +127,7 @@ describe(`shipStripOf, pushing`, () => {
             verb: `sync`,
             targets: [{ repo: `root`, pull: true, push: true }],
         });
-        const fresh = committed({ remote: { remote: `origin`, ahead: 0, behind: 0 } });
+        const fresh = committed({ remote: { remote: `origin`, branch: `main`, ahead: 0, behind: 0 } });
         expect(shipStripOf(facts({ repos: [fresh], commits: { root: 1 } }))).toMatchObject({ verb: `publish`, commits: 0 });
     });
 

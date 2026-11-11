@@ -31,9 +31,15 @@ describe(`a repo's standing against its remote`, () => {
     it(`treats a branch that tracks nothing as unpublished, not as zero commits ahead`, () => {
         // git reports no ahead count without an upstream: 0 here is an absence, not a fact; publishing is its own
         // state.
-        const fresh = repo({ remote: `origin`, ahead: 0, behind: 0 });
+        const fresh = repo({ remote: `origin`, branch: `feature`, ahead: 0, behind: 0 });
         expect(unpublished(fresh)).toBe(true);
         expect(ahead(fresh)).toBe(0);
+    });
+
+    it(`offers no publish for a clone of an empty repository, whose branch has no commit to send`, () => {
+        // The daemon names no branch for an unborn one (or a detached HEAD); a Publish there is a push git refuses.
+        expect(unpublished(repo({ remote: `origin`, ahead: 0, behind: 0 }))).toBe(false);
+        expect(outgoingWork([repo({ remote: `origin`, ahead: 0, behind: 0 })])).toBeUndefined();
     });
 });
 
@@ -57,7 +63,7 @@ describe(`what a clean tree still owes`, () => {
     });
 
     it(`counts an unpublished branch as outgoing even though it has no commits to count`, () => {
-        expect(outgoingWork([repo({ remote: `origin`, ahead: 0, behind: 0 })])).toEqual({ commits: 0, repos: 1, publish: true });
+        expect(outgoingWork([repo({ remote: `origin`, branch: `main`, ahead: 0, behind: 0 })])).toEqual({ commits: 0, repos: 1, publish: true });
     });
 
     it(`ignores a repo git could not scan`, () => {

@@ -410,7 +410,7 @@ test(`a refused push retries in its original checkout`, async () => {
 // A repo as the changes read lists it, with the remote state the verdict is judged against.
 // SAFETY: the flow reads only `repo`, `error` and `remote` off a listed repo; the file lists stay empty.
 const listed = (remote: { ahead?: number; behind?: number; upstream?: string }, over: Partial<RepoChanges> = {}): RepoChanges =>
-    ({ repo: `intentic`, staged: [], unstaged: [], conflicted: [], remote: { remote: `origin`, upstream: `origin/main`, ...remote }, ...over }) as RepoChanges;
+    ({ repo: `intentic`, staged: [], unstaged: [], conflicted: [], remote: { remote: `origin`, branch: `main`, upstream: `origin/main`, ...remote }, ...over }) as RepoChanges;
 
 test(`a verdict whose commits were pushed some other way retires, card, badge and the repo's failure alike`, async () => {
     const loaded = await load();

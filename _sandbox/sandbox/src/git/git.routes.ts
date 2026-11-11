@@ -206,8 +206,8 @@ export const routesInView = (services: Services, view?: GitView) => {
                     }),
                 ]);
                 // A clean repo still appears if there's remote work to do: ahead/behind upstream, or publishable
-                // (remote but no upstream yet); the sync controls must be able to see it.
-                const publishable = branch !== undefined && remote.remote !== undefined && remote.upstream === undefined;
+                // (remote but no upstream yet, and a commit to send: `remote.branch` is absent for an unborn one).
+                const publishable = remote.branch !== undefined && remote.remote !== undefined && remote.upstream === undefined;
                 if (
                     conflicted.length > 0 ||
                     staged.length > 0 ||

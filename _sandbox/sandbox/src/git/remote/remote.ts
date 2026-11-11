@@ -30,7 +30,7 @@ const configuredRemote = async (dir: string, git: GitRunner): Promise<string | u
     return names.includes("origin") ? "origin" : names[0];
 };
 
-// The checked-out branch, or undefined when detached or unborn.
+// The checked-out branch, or undefined when detached. An unborn branch is named (`branch --show-current` prints it).
 // allow(silent-catch): a repo git cannot read has no branch to name either, and every caller answers that case already.
 const currentBranch = async (dir: string, git: GitRunner): Promise<string | undefined> =>
     (await git(dir, ["branch", "--show-current"]).catch(() => undefined))?.stdout.trim() || undefined;
@@ -47,12 +47,24 @@ export const remoteState = async (
 ): Promise<GitRemoteState> => {
     const branch = known.branch ?? (await currentBranch(dir, git));
     const remotes = (): Promise<string | undefined> => readOnFeed("configured-remote", dir, git, () => configuredRemote(dir, git));
-    // No branch (detached HEAD, unborn repo): report the configured remote so a sync bar still shows.
-    if (branch === undefined || branch === "") {
+    // No branch to send (detached HEAD, or one with no commit yet): report the configured remote so a sync bar still shows.
+    const branchless = async (): Promise<GitRemoteState> => {
+        const state: GitRemoteState = { ahead: 0, behind: 0 };
         const configured = await remotes();
-        return { ahead: 0, behind: 0, ...(configured !== undefined ? { remote: configured } : {}) };
+        if (configured !== undefined) {
+            state.remote = configured;
+        }
+        return state;
+    };
+    if (branch === undefined || branch === "") {
+        return branchless();
     }
     const tracking = await readOnFeed(`upstream\u0000${branch}`, dir, git, () => upstreamOf(dir, branch, git)).catch(() => undefined);
+    // Unborn (a clone of an empty repository) reads as branchless: read as "remote, no upstream" it would offer a
+    // Publish whose push git refuses (`src refspec … does not match any`).
+    if (tracking?.unborn === true) {
+        return branchless();
+    }
     if (tracking?.upstream !== undefined && tracking.upstream !== "" && tracking.remote !== undefined) {
         return { remote: tracking.remote, branch, upstream: tracking.upstream, ahead: tracking.ahead, behind: tracking.behind };
     }
@@ -126,8 +138,11 @@ interface Destination {
     readonly tracked: boolean;
 }
 
-const destinationOf = async (dir: string, branch: string, git: GitRunner): Promise<Destination | undefined> => {
+const destinationOf = async (dir: string, branch: string, git: GitRunner): Promise<Destination | "unborn" | undefined> => {
     const tracking = await upstreamOf(dir, branch, git);
+    if (tracking.unborn === true) {
+        return "unborn";
+    }
     const remote = tracking.remote ?? (await configuredRemote(dir, git));
     return remote === undefined ? undefined : { remote, upstream: tracking.upstream ?? `${remote}/${branch}`, tracked: tracking.upstream !== undefined };
 };
@@ -138,7 +153,8 @@ const pullTarget = async (dir: string, git: GitRunner): Promise<(Destination & {
         return undefined;
     }
     const destination = await destinationOf(dir, branch, git);
-    return destination === undefined ? undefined : { branch, ...destination };
+    // Unborn: git's own pull fast-forwards onto whatever the remote has since gained.
+    return destination === undefined || destination === "unborn" ? undefined : { branch, ...destination };
 };
 
 // Levels a branch with its upstream, never with a merge commit: behind-only fast-forwards, diverged replays the
@@ -201,11 +217,14 @@ export const pushPlan = async (dir: string, options: { readonly branch?: string 
     }
     // A failed upstream read is refused, never planned as a first push: that would send the branch with `-u` to another
     // remote and repoint its upstream there.
-    let destination: Destination | undefined;
+    let destination: Destination | "unborn" | undefined;
     try {
         destination = await destinationOf(dir, branch, git);
     } catch (error) {
         return { ok: false, reason: gitFailureReason(error, "could not read the branch's upstream") };
+    }
+    if (destination === "unborn") {
+        return { ok: false, reason: `${branch} has no commits yet, so there is nothing to push; commit something first` };
     }
     if (destination === undefined) {
         return { ok: false, reason: "no remote configured" };

@@ -19,14 +19,19 @@ const parseTrack = (track: string): { ahead: number; behind: number; gone: boole
 };
 
 // One branch's upstream, remote and ahead/behind in one `for-each-ref`; `%(upstream:remotename)` is this branch's own
-// remote (not necessarily `git remote`'s first). No upstream reads as all-absent, not a throw.
+// remote (not necessarily `git remote`'s first). No upstream reads as all-absent, not a throw. `unborn` is a branch with
+// no commit yet (a fresh `git init`, a clone of an empty repository): the ref does not exist, so the read prints nothing,
+// while git may still hold the upstream config a clone wrote for it.
 export const upstreamOf = async (
     dir: string,
     branch: string,
     git: GitRunner = defaultGit,
-): Promise<{ upstream?: string; remote?: string; ahead: number; behind: number }> => {
+): Promise<{ upstream?: string; remote?: string; ahead: number; behind: number; unborn?: true }> => {
     const format = ["%(upstream:short)", "%(upstream:remotename)", "%(upstream:track)"].join(US);
     const { stdout } = await git(dir, ["for-each-ref", `--format=${format}`, `refs/heads/${branch}`]);
+    if (stdout.trim() === "") {
+        return { ahead: 0, behind: 0, unborn: true };
+    }
     const [upstream, remote, track] = (stdout.split("\n")[0] ?? "").split(US);
     const { ahead, behind } = parseTrack(track ?? "");
     return {

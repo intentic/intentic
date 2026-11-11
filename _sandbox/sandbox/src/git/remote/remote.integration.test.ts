@@ -81,11 +81,35 @@ test("remoteState counts upstream commits as behind, but only after a fetch", as
 test("remoteState is total on a repo with no remote and no commits", async () => {
     const dir = await temp();
     await sh(dir, "init", "-q");
-    // Branch name is still reported (from init.defaultBranch); pushBranch reads its refspec from it.
+    // No branch either: one with no commit has nothing a push could send.
     const state = await remoteState(dir);
-    expect(state.remote).toBeUndefined();
-    expect(state.upstream).toBeUndefined();
-    expect(state).toMatchObject({ ahead: 0, behind: 0 });
+    expect(state).toEqual({ ahead: 0, behind: 0 });
+});
+
+// A clone of an empty repository: git checks out the default branch unborn and still writes its upstream config, so the
+// branch reads as "remote, no upstream", which is a Publish whose push git refuses (`src refspec main does not match any`).
+const emptyClone = async (): Promise<string> => {
+    const origin = await temp();
+    await sh(origin, "init", "-q", "--bare", "-b", "main");
+    const clone = await temp();
+    await exec("git", ["clone", "-q", origin, clone]);
+    return clone;
+};
+
+test("remoteState offers nothing to publish for a clone of an empty repository", async () => {
+    const clone = await emptyClone();
+    expect(await remoteState(clone)).toEqual({ remote: "origin", ahead: 0, behind: 0 });
+    // The Changes scan passes the branch its status read named, unborn or not.
+    expect(await remoteState(clone, { branch: "main" })).toEqual({ remote: "origin", ahead: 0, behind: 0 });
+});
+
+test("pushBranch refuses a branch with no commits in its own words, and publishes it once it has one", async () => {
+    const clone = await emptyClone();
+    expect(await pushBranch(clone, {})).toEqual({ ok: false, reason: "main has no commits yet, so there is nothing to push; commit something first" });
+
+    await commit(clone, "a.txt", "one");
+    expect(await pushBranch(clone, {})).toEqual({ ok: true });
+    expect(await remoteState(clone)).toMatchObject({ remote: "origin", branch: "main", upstream: "origin/main", ahead: 0 });
 });
 
 test("remoteState reports a remote but no upstream for a branch never pushed", async () => {
