@@ -9,7 +9,7 @@ export const railFrame = (size: IconRailSize) => {
     const compact = size === `compact`;
     return {
         "--icon-rail-width": rail(`${ICON_RAIL_WIDTH_REM[size]}rem`),
-        "--icon-rail-tile-size": rail(compact ? `2.125rem` : `2.375rem`),
+        "--icon-rail-tile-size": rail(compact ? `2.25rem` : `2.375rem`),
         "--icon-rail-account-size": rail(compact ? `2rem` : `2.25rem`),
         "--icon-rail-divider-width": rail(compact ? `1.75rem` : `2rem`),
         "--icon-rail-gap": rail(compact ? `0.375rem` : `0.5rem`),
