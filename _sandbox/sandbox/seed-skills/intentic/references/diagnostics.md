@@ -4,7 +4,7 @@ The daemon writes everything down. Ask the records instead of re-instrumenting c
 with `ToolSearch` `+diagnostics`; they read `/history/logs`, `/history/activity.jsonl` and the spend ledger over a
 window you choose. They cannot write, and nothing in this playbook restarts anything.
 
-The same queries answer from a shell as the `diagnostics` command (`diagnostics errors|timeline|turns|restarts|slow|resources`,
+The same queries answer from a shell as the `diagnostics` command (`diagnostics errors|timeline|turns|restarts|slow|resources|failures`,
 `--help` for the flags), for every runtime and for a person in a terminal. `errors --from <ISO> --until <ISO>` reads the
 log lines around a moment you already know, which a window reaching back from now cannot once the log has moved on.
 
@@ -25,6 +25,11 @@ log lines around a moment you already know, which a window reaching back from no
   `only: "unproven"`. That is the turn's own record, since nothing checks a turn when it ends or after it lands.
   Whether main passes is CI's answer for what the owner pushed: the **Pipelines** view, where a failing main shows the
   fix agent on it above the runs (`checks-and-ci.md`).
+- A command keeps failing for agents (a tool that is not there, a script that needs a variable, a host it cannot
+  reach) → `diagnostics failures`: every shell command an agent ran that failed, kept a month, grouped by program and
+  error across conversations, each kind marked `ongoing`, `stopped` (its program has since run clean in two other
+  conversations) or `quiet`, with what the agent ran instead. `--conversation <id>` lists one conversation's failures
+  one by one. Only the shell command answers it; there is no `mcp__diagnostics__` tool for it.
 - Something errored in the daemon (an automation, a sync, a land, a refused provider) → `mcp__diagnostics__errors`
   (`sinceMinutes`; `contains` a conversation id, route or code; `level`). Many matches come back grouped by message
   with a count and first/last time; `group: false` lists every line, `stacks: true` adds the stacks.
@@ -71,7 +76,9 @@ A bug the owner met in ANOTHER of their sandboxes is read from here, never by `d
 /history/logs/        daemon.log (+ daemon.log.1), perf.jsonl (slow spans only), perf-rollups.jsonl (every
                       span, as ten-minute histograms; older ones gzipped beside it), restarts.jsonl,
                       resource-metrics.jsonl, client.jsonl (what the editor reported about itself),
-                      filter-stats.jsonl (what the output filter cut from each Bash call), raw-output/ (a
+                      filter-stats.jsonl (what the output filter cut from each Bash call),
+                      command-runs.jsonl (failed commands and each turn's clean runs; older ones gzipped beside it,
+                      kept a month), raw-output/ (a
                       filtered call's whole output), terminals/ (every pane's lossless log)
 /history/activity.jsonl                              turns started, completed or failed, CI repairs, refused pushes
 /history/conversations/<id>/transcript.jsonl.zst     a conversation's transcript

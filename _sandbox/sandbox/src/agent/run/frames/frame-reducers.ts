@@ -6,6 +6,7 @@ import { createViewFrameLedger, type ViewFrameLedger } from "../../verification/
 import { createTurnMetrics, type TurnMetrics } from "@intentic/agent-context/turn-metrics";
 import type { HeldReason, HeldTurn } from "../turn/holds/held-turn.js";
 import { sumUsage, type UsageFrame } from "../turn/turn-usage.js";
+import { type CommandRunsFold, createCommandRuns } from "./command-runs.js";
 
 // One fold per concern over a turn's frames, walked once in stream order: each owns its state and answers a reading at
 // any point, final once the stream is. The proof ledgers and the call metrics fold the same frames beside them.
@@ -167,6 +168,8 @@ export interface TurnFrames {
     readonly reach: ReachFrameLedger;
     // What the turn did before its first edit.
     readonly metrics: TurnMetrics;
+    // Which of its commands failed, and what ran clean (command-runs.ts).
+    readonly commands: CommandRunsFold;
 }
 
 // `root` is the tree as the agent sees it; `resumed` is the session the turn starts on until the stream names its own.
@@ -184,6 +187,7 @@ export const createTurnFrames = (root: string, resumed: string | undefined, open
     const viewing = createViewFrameLedger();
     const reach = createReachFrameLedger(root);
     const metrics = createTurnMetrics(root);
+    const commands = createCommandRuns();
     // The call ledger is runtime-neutral (it also scores Claude Code transcripts for the plugin); this is its fold over
     // frames. Only `tool_call` is a call: `tool_call_update` is a later SNAPSHOT of one already counted, and the one
     // reading taken off it is whether the call failed, which is not known when it starts. A frame nested under another
@@ -210,6 +214,7 @@ export const createTurnFrames = (root: string, resumed: string | undefined, open
         viewing,
         reach,
         callMetrics,
+        commands,
     ];
     // Moved from both sides, by frames and by classifications, so one state both fold into.
     let held: HeldTurn | undefined;
@@ -244,5 +249,6 @@ export const createTurnFrames = (root: string, resumed: string | undefined, open
         viewing,
         reach,
         metrics,
+        commands,
     };
 };

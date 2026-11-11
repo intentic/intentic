@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // The in-sandbox DIAGNOSTICS command: read-only questions over what the daemon already recorded (its log, the editor's
-// reports, the turn ledger, its boots, slow operations, the resource series, one conversation's timeline), answered by
+// reports, the turn ledger, its boots, slow operations, the resource series, one conversation's timeline, the commands
+// agents ran that failed), answered by
 // the daemon in the same words the `diagnostics` tools give a Claude turn (src/logs/diagnostics-queries.ts). A shell is
 // what every other runtime has, and a person in a terminal too, so this is the same door for them.
 //
@@ -31,6 +32,10 @@ const USAGE = `diagnostics — what this sandbox's daemon recorded, read-only. A
   diagnostics turns [--conversation <id>] [--only failed|unproven|silent|interrupted] [--since <minutes>] [--limit <n>]
                                  how recent turns ended: the model that ran, the error and the provider's
                                  sentence, and whether anything checked the work
+  diagnostics failures [--conversation <id>] [--contains <text>] [--group | --no-group] [--since <minutes>] [--limit <n>]
+                                 shell commands agents ran that failed, kept a month: grouped by program and
+                                 error across conversations, each kind marked ongoing, stopped (ran clean
+                                 elsewhere since) or quiet, with what the agent ran instead
   diagnostics restarts [--since <minutes>] [--limit <n>]
                                  the daemon's boots, and why each run before ended (who stopped it, a kill,
                                  an update, memory)
@@ -106,6 +111,9 @@ const QUERIES = {
     },
     timeline: { positional: "conversationId", flags: { ...COMMON, level: ["level", TEXT()] } },
     turns: { flags: { ...COMMON, conversation: ["conversationId", TEXT()], only: ["only", TEXT()] } },
+    failures: {
+        flags: { ...COMMON, conversation: ["conversationId", TEXT()], contains: ["contains", TEXT()], group: ["group", true], "no-group": ["group", false] },
+    },
     restarts: { flags: COMMON },
     slow: { flags: { ...COMMON, source: ["source", TEXT()], op: ["op", TEXT()], "group-by": ["groupBy", TEXT()] } },
     resources: { positional: "field", flags: COMMON },

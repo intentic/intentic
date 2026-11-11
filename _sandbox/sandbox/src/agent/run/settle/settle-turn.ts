@@ -1,4 +1,5 @@
 import type { Services } from "../../../composition.js";
+import { appendCommandRuns } from "../../../logs/command-runs-log.js";
 import { readSettledUsage } from "../frames/settled-usage.js";
 import type { TurnActivity } from "../frames/frame-effects.js";
 import type { ReachFrames } from "../../verification/agent-reach.js";
@@ -18,7 +19,7 @@ const recordResumes = (deps: Pick<Services, "conversations">, { hold }: Settleme
 };
 
 export const performSettlement = (
-    deps: Pick<Services, "usage" | "headroom" | "events" | "logger" | "conversations" | "cliProxy">,
+    deps: Pick<Services, "usage" | "headroom" | "events" | "logger" | "conversations" | "cliProxy" | "config">,
     plan: SettlementPlan,
     turn: {
         // Appends one of the turn's own rows to the activity log.
@@ -42,6 +43,7 @@ export const performSettlement = (
         void deps.headroom.refresh(plan.headroomRefresh);
     }
     void deps.usage.record(plan.usage).catch((error: unknown) => deps.logger.warn({ err: error }, "usage: ledger append failed"));
+    void appendCommandRuns(deps.config.historyRoot, plan.commands).catch((error) => deps.logger.warn({ err: error }, "commands: record append failed"));
     turn.flush();
     // Last and never awaited: the allowance reading must not hold what waits on the turn's settle (frames/settled-usage.ts).
     if (plan.settledUsage !== undefined) {

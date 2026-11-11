@@ -9,6 +9,7 @@ import { type LevelName, readLogLines, readMetricSeries, readSlowSpans } from ".
 import { readRestarts, readTimeline } from "./diagnostics-history.js";
 import { renderLines, renderRestarts, renderRollups, renderSeries, renderSpans, renderTimeline, type Window } from "./diagnostics-render.js";
 import { readRollups } from "./diagnostics-rollups.js";
+import { commandFailuresAnswer } from "./command-runs-log.js";
 
 // THE DIAGNOSTICS QUERIES, answered: read-only questions over what the daemon already recorded, each worded as text to
 // be read. One function behind every door that asks them (schemas/diagnostics.ts): the `diagnostics` tools a turn
@@ -230,6 +231,16 @@ const timeline = async (deps: DiagnosticsDeps, now: number, ask: QueryOf<"timeli
     return renderTimeline(result, ask.conversationId, window);
 };
 
+const failures = async (deps: DiagnosticsDeps, now: number, ask: QueryOf<"failures">): Promise<string> =>
+    commandFailuresAnswer(deps.historyRoot, {
+        window: windowOf(now, ask.sinceMinutes),
+        sinceMs: sinceOf(now, ask.sinceMinutes),
+        conversationId: ask.conversationId,
+        contains: ask.contains,
+        group: ask.group ?? ask.conversationId === undefined,
+        limit: ask.limit,
+    });
+
 /** One diagnostics query, answered as text. */
 export const runDiagnosticsQuery = async (deps: DiagnosticsDeps, ask: DiagnosticsQuery): Promise<string> => {
     const now = (deps.now ?? Date.now)();
@@ -246,5 +257,7 @@ export const runDiagnosticsQuery = async (deps: DiagnosticsDeps, ask: Diagnostic
             return restarts(deps, now, ask);
         case "timeline":
             return timeline(deps, now, ask);
+        case "failures":
+            return failures(deps, now, ask);
     }
 };

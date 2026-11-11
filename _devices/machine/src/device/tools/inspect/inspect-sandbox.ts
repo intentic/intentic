@@ -17,7 +17,7 @@ export type InspectCommand = z.infer<typeof InspectCommandSchema>;
 
 export const INSPECT_READS = {
     agents: ["ls", "show", "find", "bundle"],
-    diagnostics: ["errors", "slow", "turns", "resources", "restarts", "timeline"],
+    diagnostics: ["errors", "slow", "turns", "resources", "restarts", "timeline", "failures"],
 } as const satisfies Record<InspectCommand, readonly string[]>;
 
 // A read is a verb, a handle and a few flags; past these it is not a read anyone typed.

@@ -1013,8 +1013,8 @@ enum SandboxCommand {
         tail: u32,
     },
     /// Read a sandbox's conversations, transcripts and diagnostics through its own `agents` and `diagnostics`
-    /// commands, read-only: agents ls, show, find or bundle; diagnostics errors, slow, turns, resources, restarts or
-    /// timeline. Anything that writes or reads another sandbox (--on, --out, every other verb) is refused. Runs as a
+    /// commands, read-only: agents ls, show, find or bundle; diagnostics errors, slow, turns, resources, restarts,
+    /// timeline or failures. Anything that writes or reads another sandbox (--on, --out, every other verb) is refused. Runs as a
     /// caller with no conversation, which the sandbox answers only about conversations that are nobody's home and not
     /// private. Its output and exit code are the command's
     Inspect {

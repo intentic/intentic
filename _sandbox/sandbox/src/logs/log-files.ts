@@ -39,10 +39,14 @@ const GROUP_CAPS = new Map([
     ["output-cache", 100],
 ]);
 
+// The agents' failed commands and clean runs (command-runs-log.ts); named here, where its retention is, so the pruner
+// needs nothing of the reader.
+export const COMMAND_RUNS_FILE = "command-runs.jsonl";
+
 // Logs whose cut keeps an older segment: what the diagnostics tools read, so a cut never swings their reach from five
 // days down to one. Before 2026-10-11 the cut dropped four fifths of daemon.log, and an investigation found the night
 // it needed gone. Copy-and-truncate rather than rename, since pino's destination keeps writing to the file it opened.
-const ROTATED = new Set(["daemon.log", "perf.jsonl", "client.jsonl", PERF_ROLLUPS_FILE]);
+const ROTATED = new Set(["daemon.log", "perf.jsonl", "client.jsonl", PERF_ROLLUPS_FILE, COMMAND_RUNS_FILE]);
 
 const DAY_MS = 24 * 3_600_000;
 
@@ -56,6 +60,9 @@ const DAY_MS = 24 * 3_600_000;
 const ARCHIVED = new Map([
     ["perf.jsonl", { keepMs: 8 * DAY_MS, maxBytes: 32_000_000 }],
     [PERF_ROLLUPS_FILE, { keepMs: 15 * DAY_MS, maxBytes: 16_000_000 }],
+    // The agents' failed commands (command-runs-log.ts) are kept a month whatever their volume, since telling a failure
+    // that stopped from one that still recurs takes weeks of conversations; a line is a few hundred bytes.
+    [COMMAND_RUNS_FILE, { keepMs: 31 * DAY_MS, maxBytes: 16_000_000 }],
 ]);
 
 // `<log>.<ISO time with - for :>.gz`, so names sort as times do.

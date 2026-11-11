@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 // THE DIAGNOSTICS QUERIES: read-only questions over what a sandbox's daemon already recorded (its log, the editor's
-// reports, slow spans and rollups, the turn ledger, the resource series, its boots, one conversation's timeline). One
+// reports, slow spans and rollups, the turn ledger, the resource series, its boots, one conversation's timeline, the
+// commands agents ran that failed). One
 // set of arguments serves every door that asks them: the `diagnostics` tools a turn mounts, the `diagnostics` command on
 // the agent's PATH (POST /diagnostics), and a linked sandbox reading this one's records (POST /link/records/diagnostics).
 // Each answers with text written to be read, never the raw lines, and each takes a window.
@@ -102,6 +103,21 @@ export const DiagnosticsTimelineArgs = {
     limit: z.number().int().min(1).max(DIAGNOSTICS_MAX_LINES).optional().describe("The newest this many events. Defaults to 100."),
 };
 
+/** `failures`: the shell commands agents ran that failed, kept a month, grouped by kind across conversations. */
+export const DiagnosticsFailuresArgs = {
+    sinceMinutes: minutes().describe("How far back to look. Leave it out for everything kept (about a month)."),
+    conversationId: z.string().max(200).optional().describe("Narrow to one conversation; its failures are then listed one by one."),
+    contains: z.string().max(200).optional().describe("Case-insensitive substring of the failure's line: a program, a path, an error."),
+    group: z
+        .boolean()
+        .optional()
+        .describe(
+            "true: one row per kind of failure (program and error), most widespread first, each marked ongoing, stopped or quiet. " +
+                "false: every failure, newest first. Left out, kinds are grouped unless a conversation is named.",
+        ),
+    limit: limit(),
+};
+
 // One query, named by `query`, with that query's own arguments.
 export const DiagnosticsQuerySchema = z.discriminatedUnion("query", [
     z.object({ query: z.literal("errors"), ...DiagnosticsErrorsArgs }),
@@ -110,10 +126,11 @@ export const DiagnosticsQuerySchema = z.discriminatedUnion("query", [
     z.object({ query: z.literal("resources"), ...DiagnosticsResourcesArgs }),
     z.object({ query: z.literal("restarts"), ...DiagnosticsRestartsArgs }),
     z.object({ query: z.literal("timeline"), ...DiagnosticsTimelineArgs }),
+    z.object({ query: z.literal("failures"), ...DiagnosticsFailuresArgs }),
 ]);
 export type DiagnosticsQuery = z.infer<typeof DiagnosticsQuerySchema>;
 export type DiagnosticsQueryName = DiagnosticsQuery["query"];
-export const DIAGNOSTICS_QUERY_NAMES = ["errors", "slow", "turns", "resources", "restarts", "timeline"] as const satisfies readonly DiagnosticsQueryName[];
+export const DIAGNOSTICS_QUERY_NAMES = ["errors", "slow", "turns", "resources", "restarts", "timeline", "failures"] as const satisfies readonly DiagnosticsQueryName[];
 
 // POST /diagnostics: one query of this sandbox's records, or, with `on`, of the linked sandbox that card names, read
 // through the link (its owner must share records on it).

@@ -20,13 +20,14 @@ pub const LIMIT: Duration = Duration::from_secs(60);
 pub const AGENTS_READS: [&str; 4] = ["ls", "show", "find", "bundle"];
 
 /// The `diagnostics` verbs, every one of them a read of the sandbox's own records.
-pub const DIAGNOSTICS_READS: [&str; 6] = [
+pub const DIAGNOSTICS_READS: [&str; 7] = [
     "errors",
     "slow",
     "turns",
     "resources",
     "restarts",
     "timeline",
+    "failures",
 ];
 
 /// Flags no read may carry, wherever they stand: `--on` reads a LINKED sandbox instead of this one, and `--out` writes
@@ -303,7 +304,7 @@ mod tests {
         assert!(argv("agents", &strings(&["timeline", "x"])).is_err());
         assert_eq!(
             allowed(),
-            "Allowed: agents ls, show, find or bundle; diagnostics errors, slow, turns, resources, restarts or timeline; or either one's --help."
+            "Allowed: agents ls, show, find or bundle; diagnostics errors, slow, turns, resources, restarts, timeline or failures; or either one's --help."
         );
     }
 

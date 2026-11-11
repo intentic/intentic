@@ -16,6 +16,7 @@ import { opt } from "../../../opt.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { TurnPlan } from "../turn/turn-plan.js";
 import type { UsageFrame } from "../turn/turn-usage.js";
+import { type CommandRunLine, commandRunLines } from "../../../logs/command-runs-log.js";
 import type { HeldTurn } from "../turn/holds/held-turn.js";
 
 // What a finished turn leaves behind, decided as data from its readings: the records a held turn is re-run from, the
@@ -60,6 +61,8 @@ export interface SettlementPlan {
     readonly snapshot: string | undefined;
     // What the account's allowance is re-read from once the turn has settled, never awaited (frames/settled-usage.ts).
     readonly settledUsage?: SettledTurn;
+    // Its failed commands and clean runs, for the command record (logs/command-runs-log.ts); empty when it ran none.
+    readonly commands: readonly CommandRunLine[];
 }
 
 // How the turn ended, as far as settling it goes.
@@ -82,7 +85,7 @@ export interface TurnEnd {
     // The namespace the turn ran in, if it entered one.
     readonly isolation: TurnPlacement | undefined;
     readonly experiments: Extract<TurnPlan, { readonly ok: true }>["experiments"];
-    readonly frames: Pick<TurnFrames, "readings" | "verification" | "viewing" | "reach" | "metrics">;
+    readonly frames: Pick<TurnFrames, "readings" | "verification" | "viewing" | "reach" | "metrics" | "commands">;
     // When the runtime was started (epoch ms): the turn's own clock, for the duration a provider did not report.
     readonly startedAt: number;
 }
@@ -253,5 +256,15 @@ export const settleTurn = (end: TurnEnd, now: number = Date.now()): SettlementPl
         reach: end.input.conversationId === undefined ? undefined : end.frames.reach.reading(),
         snapshot: end.isolated ? undefined : end.input.prompt,
         settledUsage: { provider: end.provider, account: end.account, request: end.request, aborted: end.aborted },
+        commands: commandRunLines(
+            {
+                at: now,
+                conversationId: end.input.conversationId,
+                turnId: end.turnId,
+                runtime: capabilitiesOf(end.provider, end.input.harness).runtime,
+                model: end.request.spec.model,
+            },
+            end.frames.commands.reading(),
+        ),
     };
 };
