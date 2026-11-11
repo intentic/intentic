@@ -16,7 +16,13 @@ ic never keeps a credential for a remote repository. restic reads them from its 
 container the NAMES of the variables set where it runs (RESTIC_*, AWS_*, B2_*, AZURE_*, see PASSED) and docker copies
 their values from ic's own environment: they appear on no command line, in no log, and in no file of ic's. A URL that
 spells a password into itself is refused for the same reason; restic reads a REST server's login from
-RESTIC_REST_USERNAME and RESTIC_REST_PASSWORD. An sftp repository uses this user's ~/.ssh, copied into the worker. */
+RESTIC_REST_USERNAME and RESTIC_REST_PASSWORD. An sftp repository uses this user's ~/.ssh, copied into the worker.
+
+The unattended runs (the machine agent's daily `--auto`, the quick backup before an update it starts) do not run in the
+shell the owner typed `--repo` in, and may not have those variables. So `--repo` also keeps the NAMES of the credential
+variables set when it was given (`needs` in repo.json, never a value), and a run missing any of them knows before it
+starts: a person's run stops and names them; an unattended one backs up to this machine's own disk for that run and says
+so in its answer (backup.rs), rather than failing every day where nobody reads the machine agent's log. */
 
 /// The repository schemes the pinned restic image reaches by itself (rclone needs a binary it does not carry).
 const SCHEMES: [&str; 7] = ["sftp:", "s3:", "rest:", "b2:", "azure:", "gs:", "swift:"];
@@ -128,13 +134,58 @@ pub fn saved(slug: &str) -> Option<Location> {
     saved_in(&intentic_home(), slug)
 }
 
-/// Keep `location` as the sandbox's repository; None goes back to this machine's own disk.
-pub fn save_in(home: &Path, slug: &str, location: Option<&Location>) -> Result<()> {
+/// The credential variable names the saved repository was given with (`needs`); none for a file from before they were
+/// kept, or a repository saved with none set.
+pub fn needs_in(home: &Path, slug: &str) -> Vec<String> {
+    std::fs::read_to_string(file_in(home, slug))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|value| {
+            value["needs"].as_array().map(|names| {
+                names
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+        })
+        .unwrap_or_default()
+}
+
+pub fn needs(slug: &str) -> Vec<String> {
+    needs_in(&intentic_home(), slug)
+}
+
+/// The names in `needs` that `present` lacks, in order. Pure.
+pub fn missing<I: IntoIterator<Item = String>>(needs: &[String], present: I) -> Vec<String> {
+    let present: Vec<String> = present.into_iter().collect();
+    needs
+        .iter()
+        .filter(|name| !present.contains(name))
+        .cloned()
+        .collect()
+}
+
+/// The credential variables set in this process's environment, by name (credential_names).
+pub fn names_here() -> Vec<String> {
+    credential_names(std::env::vars_os().map(|(name, _)| name.to_string_lossy().to_string()))
+}
+
+/// Keep `location` as the sandbox's repository, with the credential variable names it needs; None goes back to this
+/// machine's own disk.
+pub fn save_in(
+    home: &Path,
+    slug: &str,
+    location: Option<&Location>,
+    needs: &[String],
+) -> Result<()> {
     let path = file_in(home, slug);
     match location {
         Some(location) => {
             std::fs::create_dir_all(path.parent().expect("repo.json has a parent"))?;
-            let body = json!({ "repo": location.spelled() });
+            // A folder needs no credentials, whatever happens to be set.
+            let needs: &[String] = if location.is_remote() { needs } else { &[] };
+            let body = json!({ "repo": location.spelled(), "needs": needs });
             std::fs::write(&path, format!("{body}\n"))
                 .map_err(|err| Fail(format!("could not write {}: {err}", path.display())))?;
         }
@@ -148,12 +199,12 @@ pub fn save_in(home: &Path, slug: &str, location: Option<&Location>) -> Result<(
 }
 
 pub fn save(slug: &str, location: Option<&Location>) -> Result<()> {
-    save_in(&intentic_home(), slug, location)
+    save_in(&intentic_home(), slug, location, &names_here())
 }
 
-/// The `-e NAME` pairs that hand a remote repository's credentials to the restic container: each name set in `names`
-/// that starts with one of PASSED and is not one ic sets, value left for docker to copy. Pure.
-pub fn passed_env<I: IntoIterator<Item = String>>(names: I) -> Vec<String> {
+/// The credential variable names among `names`: each that starts with one of PASSED and is not one ic sets, sorted and
+/// once each. Pure.
+pub fn credential_names<I: IntoIterator<Item = String>>(names: I) -> Vec<String> {
     let mut picked: Vec<String> = names
         .into_iter()
         .filter(|name| PASSED.iter().any(|prefix| name.starts_with(prefix)))
@@ -162,6 +213,12 @@ pub fn passed_env<I: IntoIterator<Item = String>>(names: I) -> Vec<String> {
     picked.sort();
     picked.dedup();
     picked
+}
+
+/// The `-e NAME` pairs that hand a remote repository's credentials to the restic container: each credential name set
+/// in `names` (credential_names), value left for docker to copy. Pure.
+pub fn passed_env<I: IntoIterator<Item = String>>(names: I) -> Vec<String> {
+    credential_names(names)
         .into_iter()
         .flat_map(|name| ["-e".to_string(), name])
         .collect()
@@ -217,14 +274,60 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         assert_eq!(saved_in(home.path(), "abc"), None);
         let remote = Location::Remote("s3:host/bucket/abc".to_string());
-        save_in(home.path(), "abc", Some(&remote)).unwrap();
+        save_in(home.path(), "abc", Some(&remote), &[]).unwrap();
         assert_eq!(saved_in(home.path(), "abc"), Some(remote));
         assert_eq!(saved_in(home.path(), "def"), None);
         let text = std::fs::read_to_string(home.path().join("backups/abc/repo.json")).unwrap();
         assert!(text.contains("s3:host/bucket/abc"), "{text}");
-        save_in(home.path(), "abc", None).unwrap();
+        save_in(home.path(), "abc", None, &[]).unwrap();
         assert_eq!(saved_in(home.path(), "abc"), None);
-        save_in(home.path(), "abc", None).unwrap();
+        save_in(home.path(), "abc", None, &[]).unwrap();
+    }
+
+    #[test]
+    fn a_remote_repository_keeps_the_names_of_the_credentials_it_needs_never_their_values() {
+        let home = tempfile::tempdir().unwrap();
+        let needs = vec![
+            "AWS_ACCESS_KEY_ID".to_string(),
+            "AWS_SECRET_ACCESS_KEY".to_string(),
+        ];
+        let remote = Location::Remote("s3:host/bucket/abc".to_string());
+        save_in(home.path(), "abc", Some(&remote), &needs).unwrap();
+        assert_eq!(needs_in(home.path(), "abc"), needs);
+        // A folder needs none, whatever was set when it was saved.
+        save_in(
+            home.path(),
+            "def",
+            Some(&Location::Folder(PathBuf::from("/x"))),
+            &needs,
+        )
+        .unwrap();
+        assert!(needs_in(home.path(), "def").is_empty());
+        // A repo.json from before names were kept needs none.
+        std::fs::write(
+            home.path().join("backups/abc/repo.json"),
+            r#"{"repo":"s3:host/bucket/abc"}"#,
+        )
+        .unwrap();
+        assert!(needs_in(home.path(), "abc").is_empty());
+        assert!(needs_in(home.path(), "nothing").is_empty());
+    }
+
+    #[test]
+    fn what_a_run_lacks_is_the_needed_names_its_environment_does_not_set() {
+        let needs = vec![
+            "AWS_ACCESS_KEY_ID".to_string(),
+            "AWS_SECRET_ACCESS_KEY".to_string(),
+        ];
+        assert_eq!(
+            missing(
+                &needs,
+                ["AWS_ACCESS_KEY_ID".to_string(), "HOME".to_string()]
+            ),
+            vec!["AWS_SECRET_ACCESS_KEY".to_string()]
+        );
+        assert!(missing(&needs, needs.clone()).is_empty());
+        assert!(missing(&[], Vec::<String>::new()).is_empty());
     }
 
     #[test]

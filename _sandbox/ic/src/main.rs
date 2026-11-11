@@ -376,7 +376,7 @@ enum OsDrivesCommand {
     Import {
         /// The drive, as `ic os drives list` names it (/dev/sdb1)
         device: String,
-        /// The sandbox to copy into, by its slug
+        /// The sandbox to copy into, by its slug or its name
         #[arg(long)]
         to: String,
         /// A folder inside the sandbox's /work to copy into instead (Photos/2026)
@@ -1686,8 +1686,10 @@ fn main() {
 }
 
 /// Every name a command gives for a sandbox already on this device turned into its slug (sandbox::slug_for), before
-/// anything runs. Not the names of sandboxes that are not live here: one to restore or purge from the trash, one
-/// arriving in a move.
+/// anything runs, and only here: each lookup of a name that is not a slug asks docker about every sandbox, so the verbs
+/// take the slug as given (sandbox::resolve_slug resolves nothing). Not the names of sandboxes that are not live here:
+/// one to restore or purge from the trash, one arriving in a move, and the backup a `backup-restore` reads from, which
+/// names a backup, possibly another machine's, and must never be swapped for a local sandbox that shares its name.
 fn by_slug(command: &mut Command) -> util::Result<()> {
     for given in named_sandboxes(command) {
         *given = sandbox::slug_for(std::mem::take(given))?;
@@ -1719,15 +1721,17 @@ fn named_sandboxes(command: &mut Command) -> Vec<&mut String> {
             SandboxCommand::Rebuild { slug, .. }
             | SandboxCommand::Compose { slug, .. }
             | SandboxCommand::MoveOut { slug, .. }
-            | SandboxCommand::BackupRestore { slug, .. }
             | SandboxCommand::ResetOwner { slug, .. }
             | SandboxCommand::Session { slug, .. }
             | SandboxCommand::Reshape { slug, .. }
             | SandboxCommand::Shape { slug, .. }
             | SandboxCommand::Inspect { slug, .. } => vec![slug],
             SandboxCommand::Remove { slugs, .. } => slugs.iter_mut().collect(),
+            // The sandbox written over is one on this device; the backup's own slug is matched exactly (backup.rs).
+            SandboxCommand::BackupRestore { into, .. } => into.iter_mut().collect(),
             _ => Vec::new(),
         },
+        Command::Os(OsCommand::Drives(OsDrivesCommand::Import { to, .. })) => vec![to],
         Command::Os(OsCommand::Screen(
             ScreenCommand::Allow { slug } | ScreenCommand::Deny { slug },
         )) => {
@@ -3321,6 +3325,50 @@ mod tests {
                 command: Command::Sandbox(SandboxCommand::Attention { json: true }),
             })
         ));
+    }
+
+    /// A restore's source names a backup (possibly another machine's), so only the sandbox it is written into is
+    /// looked up by name; the drive import's target is a sandbox here like any other.
+    #[test]
+    fn only_the_restore_target_is_looked_up_by_name() {
+        let Ok(mut cli) = parse(&[
+            "sandbox",
+            "backup-restore",
+            "Translations",
+            "--snapshot",
+            "latest",
+            "--into",
+            "Other",
+        ]) else {
+            panic!("a restore did not parse")
+        };
+        let named: Vec<String> = named_sandboxes(&mut cli.command)
+            .into_iter()
+            .map(|given| given.clone())
+            .collect();
+        assert_eq!(named, vec!["Other".to_string()]);
+        let Ok(mut cli) = parse(&[
+            "sandbox",
+            "backup-restore",
+            "abc",
+            "--snapshot",
+            "latest",
+            "--to",
+            "/tmp/x",
+        ]) else {
+            panic!("a restore to a folder did not parse")
+        };
+        assert!(named_sandboxes(&mut cli.command).is_empty());
+        let Ok(mut cli) = parse(&["os", "drives", "import", "/dev/sdb1", "--to", "Photos"]) else {
+            panic!("a drive import did not parse")
+        };
+        assert_eq!(
+            named_sandboxes(&mut cli.command)
+                .into_iter()
+                .map(|given| given.clone())
+                .collect::<Vec<_>>(),
+            vec!["Photos".to_string()]
+        );
     }
 
     #[test]

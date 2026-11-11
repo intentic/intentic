@@ -129,8 +129,22 @@ pub enum Preflight {
 }
 
 pub fn run(mode: Mode, slug: Option<String>, preflight: Preflight) -> Result<()> {
+    run_with_previous_key(mode, slug, preflight, None)
+}
+
+/// `run`, with `previous_key` (a host file) mounted as the sandbox's PREVIOUS at-rest key in place of the one it
+/// mounts now. Only a restore asks for one (backup.rs: another sandbox's stores come in with the key they are
+/// encrypted with). It is a parameter, never read from the environment here: an `INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE`
+/// left set in a shell would otherwise replace the previous key on every update, and fail every update once its file
+/// was gone. `connect` reads that variable itself, for an operator's rotation.
+pub fn run_with_previous_key(
+    mode: Mode,
+    slug: Option<String>,
+    preflight: Preflight,
+    previous_key: Option<&Path>,
+) -> Result<()> {
     let named = slug.clone();
-    recreate(mode, slug, Reach::Applied, false, preflight)?;
+    recreate(mode, slug, Reach::Applied, false, preflight, previous_key)?;
     // The new container's egress rules (sandbox/egress), once the swap has settled.
     crate::sandbox::egress::after_start_of(named.as_deref());
     Ok(())
@@ -155,6 +169,7 @@ pub fn prepare(slug: Option<String>, channel: Option<String>, auto: bool) -> Res
         auto,
         // Never reached: a prepare stops at the seam, before the pre-flight and everything after it.
         Preflight::Run,
+        None,
     )
 }
 
@@ -164,6 +179,7 @@ fn recreate(
     reach: Reach,
     auto: bool,
     preflight: Preflight,
+    previous_key: Option<&Path>,
 ) -> Result<()> {
     if !docker::cli_present() {
         bail!(
@@ -913,12 +929,12 @@ fn recreate(
         env_nul = at_rest::with_key_env(&env_nul);
     }
     stamped_run.extend(at_rest::stamp(&key));
-    /* A previous key named on this run (PREVIOUS_HOST_FILE_ENV, as `connect` reads it: an operator's rotation, or a
-    restore bringing another sandbox's stores in with the key they are encrypted with, backup.rs) replaces the one the
-    container mounts; without one, that one is replayed. */
-    if let Some(path) = at_rest::host_file(at_rest::PREVIOUS_HOST_FILE_ENV)? {
+    /* A previous key handed to this run (a restore bringing another sandbox's stores in with the key they are encrypted
+    with, backup.rs; see run_with_previous_key) replaces the one the container mounts; without one, that one is
+    replayed. */
+    if let Some(path) = previous_key {
         mounts.push(docker::bind_spec(
-            &path,
+            path,
             &format!("{}:ro", at_rest::PREVIOUS_KEY_MOUNT),
         )?);
         env_nul = at_rest::with_previous_key_env(&env_nul);
@@ -1485,6 +1501,7 @@ pub fn reshape(slug: String, ask: Ask, preflight: Preflight) -> Result<()> {
         Reach::Applied,
         false,
         preflight,
+        None,
     )?;
     crate::sandbox::egress::after_start(&slug);
     Ok(())
@@ -1507,6 +1524,7 @@ pub fn check_shape(slug: &str, shape: &Shape) -> Result<()> {
         Reach::Checked,
         false,
         Preflight::Skip,
+        None,
     )
 }
 

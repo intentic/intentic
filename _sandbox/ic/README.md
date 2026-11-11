@@ -95,7 +95,8 @@ flowchart LR
     into another brings its credentials along when the backup carries its key (every backup since 2026-11-11), handing
     that key to the target as its previous key so the target re-encrypts them under its own as it starts; an older backup
     leaves them out (`/work/.intentic/secrets/auth`) and the target keeps its own. `INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE`
-    is honoured by every recreate, not only `connect`. A container that was given a key it no longer mounts, and not one of ic's, is
+    is read by `connect` alone: the restore hands its key to the one recreate it runs, and an update, rebuild, rollback
+    or reshape replays the previous key the container already mounts, whatever the environment says. A container that was given a key it no longer mounts, and not one of ic's, is
     left as it is, with a stop that asks for the key file in `INTENTIC_AT_REST_KEY_HOST_FILE`.
 - A sandbox for one folder of the owner's (`SYNC_REMOTE_DIR=/work/<name>` with `SYNC_PROJECT=1`, beside `SYNC_DIR`)
   is checked before anything starts (`project_dir.rs`, the contract's name rule), hands the sync installer both, and
@@ -310,13 +311,23 @@ flowchart LR
     (`--repo default` goes back to this disk; `backup_repo.rs`). ic stores no credential for it: restic reads them from
     the environment ic runs in, whose `RESTIC_*`, `AWS_*`, `B2_*` and `AZURE_*` variables are passed to the restic
     container by name only, and a URL with a password in it is refused. An sftp repository uses your `~/.ssh`.
+    `repo.json` also keeps the NAMES of those variables set when `--repo` was given (`needs`). A run missing any of
+    them never reaches restic: run by hand it stops and names them; the unattended ones (the daily `--auto`, the
+    backup before a swap) back up to this machine's disk for that run instead and say so, the daily one as
+    `result: "fell-back"` with the reason in its `--json` answer, so a sandbox does not silently stop being backed up.
+    Which repository the last full backup went into is kept with it (`last-full-backup`, `{at, repo}`), so a newly
+    chosen repository is not taken for one that already has backups; `ic sandbox backups` on a repository with none
+    (restic exit 10) says there are none yet.
   - **Restore anywhere.** `ic sandbox backup-restore <slug> --snapshot <id> --into <target>` takes `--repo` and
     `--key-file` for a repository this machine does not keep (copied from another machine, on a NAS, in a bucket). The
     target must exist (set it up first, under any name). Into the same slug, the carried key is written back to
     `~/.intentic/keys/at-rest-<slug>.key` if none is there (never over one); if the sandbox mounts another key, or the
     target is another sandbox, ic writes the carried key to `~/.intentic/keys/at-rest-previous-<target>.key`, restarts
     the target once with it as its previous key, then restores, and the daemon re-encrypts the restored stores under the
-    target's own key as it boots. Only a backup carrying no key leaves another sandbox's credentials out, as before.
+    target's own key as it boots. Only a backup carrying no key leaves another sandbox's credentials out, as before; a
+    snapshot that cannot be read to tell (a repository that does not answer) stops the restore before anything changes.
+    `<slug>` names the backup, so it is matched exactly (or as `sandbox-<id>` for a bare id), never by a sandbox's name:
+    it may be another machine's. `--into`, a sandbox here, may be given by its name as `ic sandbox list` shows it.
   - Each backup says so on the sandbox's volume (`/history/.ic/backup.json`,
   `{side, env, at, snapshot, scope}`), and its worker container is named per side (`intentic-backup-<slug>-<side>`)
   (2026-10-05: one shared name let each side's `rm -f` kill the other's backup mid-run).

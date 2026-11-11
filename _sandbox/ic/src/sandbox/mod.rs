@@ -151,10 +151,10 @@ pub fn missing(slug: &str) -> String {
 
 /// An explicit slug names the sandbox; only its absence falls back to detecting the single one — never
 /// guess which sandbox to touch when the device runs several (`verb` names the re-run, e.g. "ic sandbox
-/// update").
+/// update"). A name the owner gave is already a slug here: main.rs turns it into one once, before the verb runs
+/// (slug_for asks docker about every sandbox for a name that is not a slug, so it is not asked twice).
 pub fn resolve_slug(given: Option<String>, verb: &str) -> Result<String> {
-    if let Some(given) = given {
-        let slug = slug_for(given)?;
+    if let Some(slug) = given {
         // A name no sandbox can have is one this device does not have, said before anything is made in its name.
         if !is_slug(&slug) {
             bail!("{}", missing(&slug));
