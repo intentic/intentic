@@ -13,7 +13,7 @@ test("every code the wire names has a row, and the table names no code the wire 
 });
 
 // The door course names the codes refused before the model saw a word.
-test("the codes turned away at the door are exactly the twenty refused before the model saw a word", () => {
+test("the codes turned away at the door are exactly the twenty-one refused before the model saw a word", () => {
     const door = codesWhere((code) => failureCourseOf(code) === "door");
     expect(door).toEqual(
         [
@@ -37,6 +37,7 @@ test("the codes turned away at the door are exactly the twenty refused before th
             "trial-exhausted",
             "model-unavailable",
             "engine-version-floor",
+            "standby",
         ].toSorted(),
     );
     expect(codesWhere(turnedAwayCode)).toEqual(door);
@@ -109,6 +110,7 @@ test("every code keeps the kind the board named it by", () => {
         "harness-incomplete": "cutShort",
         "privacy-unshielded": "privacy",
         "privacy-instructions": "privacy",
+        standby: "held",
     } as const;
     expect(Object.fromEntries(Object.entries(FAILURE_CODES).map(([code, traits]) => [code, traits.kind]))).toEqual(pinned);
 });

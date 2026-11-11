@@ -115,6 +115,9 @@ const RAW_JSON_WRITERS = [
     // The platform's last name and logo for this sandbox, read by the machine that runs it through `docker cp` while the
     // platform is down: a host that is not this build, so its shape is fixed in the module, as platform-row.ts's is.
     "system/presentation/presentation-store.ts",
+    // `standby.json` in /history/.ic, read by `ic` (sandbox/takeover.rs) as well as the next boot: a file for a program
+    // that is not this build, so its shape is fixed in the module (StandbyRecordSchema, `v: 1`), as the takeover is.
+    "system/standby/standby.ts",
 ];
 
 test("JSON written whole outside the store goes through a document, or is one of the few named above", () => {

@@ -14,6 +14,7 @@ type Unserved = Exclude<PlatformRoute, Served>;
 const OPERATORS = `The operators' console: only the platform's own staff reach it, and the demo account is not one of them.`;
 const NOT_THE_BROWSER = `Sent by the desktop app or a phone, never by the editor in a browser tab.`;
 const NOT_THE_EDITORS = `Sent by a sandbox's daemon to wake a phone, never by the editor.`;
+const NO_GOOGLE_CLIENT = `The demo platform holds no Google OAuth client, so it answers as such a platform does (404), and the card offers the owner's own client instead.`;
 
 const PLATFORM_UNSERVED = {
     "admin.attention": OPERATORS,
@@ -27,6 +28,8 @@ const PLATFORM_UNSERVED = {
     "admin.userSuspend": OPERATORS,
     "admin.userUnsuspend": OPERATORS,
     "admin.users": OPERATORS,
+    "googleConnect.begin": NO_GOOGLE_CLIENT,
+    "googleConnect.finish": NO_GOOGLE_CLIENT,
     "push.send": NOT_THE_EDITORS,
     "push.unregister": NOT_THE_BROWSER,
 } as const satisfies Readonly<Record<Unserved, string>>;

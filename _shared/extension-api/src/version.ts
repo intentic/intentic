@@ -23,4 +23,9 @@
 // @intentic/sandbox-contract/app-routes), and `api.navigate` and `api.href` take the link one makes, drawn in the frame
 // and the sandbox the reader is in. A path is still taken, deprecated: read as an address from before the editor's
 // frames, it opens where a link to its page would. Additive. The recorded surface grows `api`.
-export const extensionApiVersion = "2.41.0";
+// 2.42.0 grows a capability card's fields and test: `signIn` (`google`, `microsoft`) fills a refresh token from a sign-in
+// button, `refreshToken.deviceCode` declares the device-code sign-in a `microsoft` one runs, `connection` answers a field
+// by picking an existing connection, `keyValue` draws one as name and value rows, `keyRequest` has the sandbox keep a
+// private key and show its certificate request, `probe.oauth` takes the `client_credentials` grant too, and `probe.ok`
+// names where a 200 answer says it worked. Additive. The recorded surface grows the manifest schema.
+export const extensionApiVersion = "2.42.0";

@@ -15,4 +15,12 @@ export const capabilitiesSamples: GroupSamples<`capabilities`> = () => ({
     marketplace: { url: `https://github.com/acme/registry` },
     refs: { url: `https://github.com/acme/registry` },
     dismiss: { entry: `cloudflare` },
+    // A form's own sign-ins and key request (connectionSignIns.ts). Each wait names a flow its start may not have made in
+    // this run; lapsed and still waiting are both answers the schema reads.
+    mcpAuth: { url: `https://mcp.linear.app/mcp` },
+    mcpSignIn: { url: `https://mcp.linear.app/mcp` },
+    mcpSignInWait: { flow: `mcp-1` },
+    deviceSignIn: { id: `microsoft365`, kind: `cli`, config: { provider: `microsoft365` } },
+    deviceSignInWait: { flow: `device-1` },
+    certificateRequest: { kind: `cli`, provider: `e-doreczenia`, field: `privateKey`, values: { organization: `Acme`, commonName: `acme-shop`, country: `PL` } },
 });
