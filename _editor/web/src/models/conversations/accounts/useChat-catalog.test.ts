@@ -96,7 +96,7 @@ test(`takes the providers this box adds from the daemon's own answer`, async () 
 // "available" with no endpoint to run on, and nothing could send until the picker was opened and read the list again.
 test(`reads the list again when the allowance read finds a trial the list was read without`, async () => {
     serves([`auto`]);
-    const trialEndpoint = { id: `endpoint/free-trial`, label: `Free trial`, kind: `endpoint` };
+    const trialEndpoint = { id: `endpoint/free-trial`, label: `Free trial`, kind: `endpoint` } as const;
     providersList.mockResolvedValueOnce({ native: [], agents: [], endpoints: [] }).mockResolvedValue({ native: [], agents: [], endpoints: [trialEndpoint] });
     trial.mockResolvedValue(TrialStatusSchema.parse({ available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` }));
 
