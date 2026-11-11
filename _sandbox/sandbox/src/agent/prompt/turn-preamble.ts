@@ -66,11 +66,11 @@ export const ownCheckoutNote = (root: string, hidden: boolean): TurnNote => ({
         `${WORKTREE_NOTE_HEADER}\n\n` +
         `\`${root}\` here is this conversation's own checkout, on its own branch; its finished work lands in the shared ` +
         `workspace, which is not on this filesystem. So nothing run here can repair that workspace (a branch it is stuck on, ` +
-        `a refused land): tell the person to press Back to main in the Changes view. ` +
-        (hidden
+        `a refused land): tell the person to press Back to main in the Changes view. ${ 
+        hidden
             ? "Other conversations' checkouts are hidden too, so git lists them as prunable; they are not. "
-            : "Other conversations' checkouts are their own: read them, never edit them. ") +
-        `Worktree records and the main line belong to the sandbox: it refuses \`git worktree prune\`, \`repair\`, ` +
+            : "Other conversations' checkouts are their own: read them, never edit them. " 
+        }Worktree records and the main line belong to the sandbox: it refuses \`git worktree prune\`, \`repair\`, ` +
         `\`move\` and \`remove\`, and switching this checkout to the main line.`,
 });
 
