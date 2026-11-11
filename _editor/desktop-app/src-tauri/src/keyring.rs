@@ -558,7 +558,10 @@ mod tests {
         // A setup's passphrase rides stdin too: the arguments only say one is coming. The recovery key is made by the
         // keyring and comes back in its answer.
         assert_eq!(setup_args(true, false), ["keyring", "setup", "--json"]);
-        assert_eq!(setup_args(true, true), ["keyring", "setup", "--stdin", "--json"]);
+        assert_eq!(
+            setup_args(true, true),
+            ["keyring", "setup", "--stdin", "--json"]
+        );
         assert_eq!(plain_args("upgrade"), ["keyring", "upgrade", "--json"]);
         assert_eq!(
             setup_args(false, false),
