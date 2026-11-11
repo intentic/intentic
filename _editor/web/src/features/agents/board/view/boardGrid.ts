@@ -12,15 +12,20 @@ import type { LaneContent } from "./phoneLanes";
 // shapes: Attention, Active, Finished.
 const NARROW_BOARD_REM = 48;
 const PAIRED_BOARD_REM = 72;
+// From here three columns give each lane some 520px, enough for a card's title and facts on one line: reshaping a board
+// this wide would only stretch the cards (two columns of 900px put a card's time a screen's width from its title), so a
+// roomy board keeps its three lanes whatever they hold.
+const ROOMY_BOARD_REM = 100;
 
 // AND BY WHAT THE LANES HOLD. On a wide board an empty lane still took a third of it for one sentence, while the lane
 // with something to read cut its titles short beside it. So an empty lane gives its column away and says its sentence
 // on its header's line:
-// - paired:  Attention or Active empty: the two share the first column at any width, Finished has the second.
+// - paired:  Attention or Active empty: the two share the first column, Finished has the second.
 // - tucked:  Finished empty: Attention has the first column, Active the second with Finished's line under it.
 // - ledger:  only one lane holds anything: the empty two share a line on top and that lane spans the board under them,
 //            its cards in two columns.
-// A board with nothing in any lane keeps its width's layout, each lane saying what will land in it.
+// A board with nothing in any lane keeps its width's layout, each lane saying what will land in it, and so does a roomy
+// one (ROOMY_BOARD_REM), whose three columns are not cramped by anything.
 export type BoardLayout = `stacked` | `three` | `paired` | `tucked` | `ledger`;
 
 // Which lanes have nothing to draw (phoneLanes' content is not `rows`: no cards, runs, held wakes or launches).
@@ -36,9 +41,12 @@ export interface LaneLayout {
 
 const LANES: readonly FleetLane[] = [`attention`, `active`, `finished`];
 
-export const boardLayout = (narrow: boolean, underThree: boolean, quiet: QuietLanes): LaneLayout => {
+export const boardLayout = (narrow: boolean, underThree: boolean, quiet: QuietLanes, roomy = false): LaneLayout => {
     if (narrow) {
         return { kind: `stacked` };
+    }
+    if (roomy) {
+        return { kind: `three` };
     }
     const full = LANES.filter((lane) => !quiet[lane]);
     if (full.length === 1) {
@@ -96,6 +104,7 @@ export interface BoardGridHost {
 export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering, first, waiting, dragging }: BoardGridHost) => {
     const narrow = useNarrow(board, NARROW_BOARD_REM);
     const underThree = useNarrow(board, PAIRED_BOARD_REM);
+    const underRoomy = useNarrow(board, ROOMY_BOARD_REM);
     const quiet = computed<QuietLanes>(() => ({
         attention: content(`attention`) !== `rows`,
         active: content(`active`) !== `rows`,
@@ -114,7 +123,7 @@ export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering,
         },
         { immediate: true },
     );
-    const layout = computed(() => boardLayout(narrow.value, underThree.value, judged.value));
+    const layout = computed(() => boardLayout(narrow.value, underThree.value, judged.value, !underRoomy.value));
     const kind = computed(() => layout.value.kind);
     // The paired grid starts at the board's height rather than being held to it (PLACE), and so do the layouts built on it.
     const placed = computed(() => kind.value !== `stacked` && kind.value !== `three`);

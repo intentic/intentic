@@ -33,6 +33,12 @@ describe(`boardLayout`, () => {
         expect(boardLayout(false, true, quiet(`active`, `finished`))).toEqual({ kind: `ledger`, wide: `attention` });
     });
 
+    it(`keeps three columns on a roomy board whatever its lanes hold, since none of them is cramped`, () => {
+        expect(boardLayout(false, false, quiet(`attention`), true)).toEqual({ kind: `three` });
+        expect(boardLayout(false, false, quiet(`attention`, `active`), true)).toEqual({ kind: `three` });
+        expect(boardLayout(true, true, quiet(`finished`), true)).toEqual({ kind: `stacked` });
+    });
+
     it(`keeps the width's layout on a board with nothing in any lane`, () => {
         expect(boardLayout(false, false, quiet(`attention`, `active`, `finished`))).toEqual({ kind: `three` });
         expect(boardLayout(false, true, quiet(`attention`, `active`, `finished`))).toEqual({ kind: `paired` });
