@@ -69,5 +69,5 @@ export const usePhoneLanes = (host: PhoneLanesHost) => {
     const bareLane = (key: FleetLane): boolean => mobile.value && !lanes.first.value && !dragging.value && content(key) === `header`;
     const saysEmpty = (key: FleetLane): boolean =>
         !bareLane(key) && rows(key) === 0 && !(key === `attention` && scope.scopedHeld.value.length > 0);
-    return { drawnLanes, bareLane, saysEmpty };
+    return { drawnLanes, bareLane, saysEmpty, content };
 };

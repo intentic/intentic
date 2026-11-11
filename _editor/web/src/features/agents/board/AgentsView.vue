@@ -69,7 +69,7 @@ import { useAttentionAsk } from "./view/attentionAsk";
 import { useBoardPresses } from "./view/boardPresses";
 import { useBoardScope } from "../../../models/fleet/board/boardScope";
 import { useBoardView } from "./view/boardView";
-import { PAIRED_PLACE, useBoardGrid } from "./view/boardGrid";
+import { useBoardGrid } from "./view/boardGrid";
 import { useCardMenu } from "./view/cardMenu";
 import { useFamilyArchive } from "./view/familyArchive";
 import { useCardFocus, useCardRing } from "./view/cardSelection";
@@ -264,8 +264,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     drag.begin(event, agent, card);
 };
 const boardEl = ref<HTMLElement | undefined>(undefined);
-// The lanes' grid at the board's measured width, and the Finished fold that lands on the lane's header (boardGrid.ts).
-const { narrow, paired, laneGrid, toggleFinished } = useBoardGrid({ board: boardEl, view, move });
 const LANES = computed(laneHeads);
 // A wallpaper shows through the lanes (wallpapers.css), so their headers drop the canvas band they pin on; a pinned
 // header with nothing behind it would slide over the cards scrolling under it, so they scroll away with the lane.
@@ -289,7 +287,9 @@ const workspaceChanges = useChanges();
 const starters = computed(() => boardStarters(workspaceRepos.value.length, workspaceChanges.count.value));
 const launching = useBoardLaunches(computed(() => view.value.archive));
 // A phone draws only the lanes with something in them (phoneLanes.ts).
-const { drawnLanes, bareLane, saysEmpty } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, launching, waiting });
+const { drawnLanes, bareLane, saysEmpty, content } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, launching, waiting });
+// The lanes' grid at the board's width and by which in-flight lanes are empty, and Finished's fold (boardGrid.ts).
+const { narrow, placed, laneGrid, placeOf, spans, sayInHeader, toggleFinished } = useBoardGrid({ board: boardEl, view, move, content, saysEmpty, filtering, first, waiting, dragging });
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
@@ -394,7 +394,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                  scroller already cut it at; a clip rather than a scroller, so the sticky headers still pin to the board's. -->
             <div
                 class="grid gap-3.5 overflow-x-clip p-3.5 sm:gap-4 sm:p-4"
-                :class="[laneGrid, noMatches ? '' : paired ? 'min-h-full' : 'h-full', mobile ? 'pb-24' : '']"
+                :class="[laneGrid, noMatches ? '' : placed ? 'min-h-full' : 'h-full', mobile ? 'pb-24' : '']"
             >
                 <section
                     v-for="lane in drawnLanes"
@@ -403,7 +403,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     :data-reveal-column="narrow ? undefined : ``"
                     :data-drop="lane.key === 'finished' && view.archive ? undefined : lane.key"
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
-                    :class="[!dragging && !narrow && !paired ? 'min-h-0' : '', paired ? PAIRED_PLACE[lane.key] : '', laneDropClass(lane.key)]"
+                    :class="[!dragging && !narrow && !placed ? 'min-h-0' : '', placeOf(lane.key), laneDropClass(lane.key)]"
                 >
                     <!-- Finished's header doubles as the archive's window, swapping its label and growing a way back; pinned while scrolling, unless a wallpaper shows through. -->
                     <LaneHeader :label="lane.label" class="rounded-t-xl px-1" :class="papered ? '' : 'sticky top-0 z-10 bg-canvas'">
@@ -421,6 +421,9 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         <template v-if="lane.key === 'finished' && view.archive" #label>{{ t(`shared.archived`) }}</template>
                         <template v-if="lane.key === 'finished' && view.archive && archiveLoading" #info>
                             <Icon name="spinner" spin class="text-2xs text-muted" />
+                        </template>
+                        <template v-else-if="sayInHeader(lane.key)" #info>
+                            <span class="ml-2 min-w-0 truncate text-2xs text-subtle">{{ filtering ? t(`agents.agentsView.noMatchesInLane`) : lane.empty }}</span>
                         </template>
                         <template #actions>
                             <template v-if="lane.key === 'finished' && !view.archive">
@@ -527,13 +530,20 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     >
                         <FirstAgentSlot :starters="starters" />
                     </div>
-                    <!-- An emptied lane keeps its header rather than collapsing: three columns shrinking to one mid-keystroke would jump the whole board under the cursor. -->
-                    <p v-else-if="saysEmpty(lane.key)" class="px-1 pb-3 text-2xs text-subtle">
-                        {{ filtering ? t(`agents.agentsView.noMatchesInLane`) : first ? lane.first : lane.empty }}
-                    </p>
-                    <div v-else-if="!bareLane(lane.key)" class="relative flex flex-col gap-4.5 pb-2.5">
+                    <!-- An emptied lane keeps its header; where its column went to the others, its sentence rides that header (boardGrid.ts). -->
+                    <template v-else-if="saysEmpty(lane.key)">
+                        <p v-if="!sayInHeader(lane.key)" class="px-1 pb-3 text-2xs text-subtle">
+                            {{ filtering ? t(`agents.agentsView.noMatchesInLane`) : first ? lane.first : lane.empty }}
+                        </p>
+                    </template>
+                    <!-- A lane spanning the board (boardGrid's ledger) takes two columns of cards rather than one line each. -->
+                    <div
+                        v-else-if="!bareLane(lane.key)"
+                        class="relative gap-4.5 pb-2.5"
+                        :class="spans(lane.key) ? 'grid grid-cols-2 items-start' : 'flex flex-col'"
+                    >
                         <template v-for="(group, at) in lanes.groupsFor(lane.key)" :key="group.key">
-                            <ActiveGroupHead v-if="group.headed" :group="group" :first="at === 0" />
+                            <ActiveGroupHead v-if="group.headed" :group="group" :first="at === 0" class="col-span-full" />
                             <!-- Skips a card whose inputs haven't changed (the roster ticks about once a second per running turn); keyed by box and id, since across sandboxes an id is not a card (a person's home conversation is named alike in every one). -->
                             <Transition
                                 v-for="agent in group.shown"
