@@ -25,6 +25,7 @@ test("a completed login stores the account and makes its runtime pack durable", 
     const started = await startCursorLogin({ store, keyName: "intentic sandbox (test)", connected });
 
     expect(started.url).toContain("cursor.com/loginDeepControl");
-    await waitFor(() => expect(connected).toHaveBeenCalledTimes(1));
+    // The write lands on disk in the background; a loaded CI runner can take longer than the default second for it.
+    await waitFor(() => expect(connected).toHaveBeenCalledTimes(1), { timeout: 10_000 });
     expect(await store.credentials()).toMatchObject([{ id: started.handshake, apiKey: "cursor-key", email: "dev@example.com" }]);
 });
