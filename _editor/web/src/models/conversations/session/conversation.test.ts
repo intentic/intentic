@@ -2311,7 +2311,8 @@ describe(`Conversation`, () => {
         const press = daemon.mock.calls.find(([procedure]) => procedure === `agent.resume`)!;
         expect(wire(press[1])).toEqual({
             conversationId: `c1`,
-            routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus`, effort: `high` },
+            // Named as a hand pick, so the daemon runs it there even where its records call that account spent.
+            routing: { agent: `claude`, harness: `native`, account: `with-room`, accountPicked: true, model: `opus`, effort: `high` },
         });
         // The daemon seeds a fresh session on the new credential and says so; this window takes its word, not a guess.
         expect(conversation.session.value).toEqual({ id: `s-2`, provider: `claude`, account: `with-room`, harness: `native` });
@@ -2415,7 +2416,7 @@ describe(`Conversation`, () => {
         const press = daemon.mock.calls.find(([procedure]) => procedure === `agent.resume`)!;
         expect(wire(press[1])).toEqual({
             conversationId: `c1`,
-            routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus`, effort: `high` },
+            routing: { agent: `claude`, harness: `native`, account: `with-room`, accountPicked: true, model: `opus`, effort: `high` },
         });
         // Run there, the pick is spent: the next turn follows the daemon's record, which now says the same.
         expect(conversation.selection.state.value.accountPicked).toBe(false);
