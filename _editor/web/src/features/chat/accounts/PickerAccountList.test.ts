@@ -110,6 +110,27 @@ it(`dims a row that can take no turn but keeps its reason legible, and says when
     expect(picks).toEqual([`work`]);
 });
 
+it(`names the model's own pool when only that is spent, so the row never reads as the whole account used up`, () => {
+    // The reported case: Fable's weekly slice at 100% while the weekly allowance for every model still had 16% left.
+    const sliceSpent: Partial<OauthAccount> = {
+        usage: {
+            measuredAt: Date.now(),
+            windows: [
+                { kind: `seven_day`, utilization: 84, resetsAt: 1_900_000_000, gates: `all` },
+                { kind: `model:Fable`, label: `Fable`, utilization: 100, resetsAt: 1_900_000_000, gates: { models: [`Fable`] } },
+            ],
+        },
+    };
+    listed = [account(`fable`, sliceSpent), account(`drained`, SPENT), account(`personal`, room(40))];
+    const element = mount({ model: `claude-fable-5-2` });
+    const row = (id: string): HTMLElement => rows(element).find((candidate) => labelOf(candidate) === `${id}@example.com`)!;
+
+    expect(row(`fable`).textContent).toContain(`Fable allowance used up, reopens`);
+    // An allowance every model spends is still the account's own.
+    expect(row(`drained`).textContent).toContain(`Allowance used up, reopens`);
+    expect(row(`drained`).textContent).not.toContain(`Fable`);
+});
+
 it(`ticks a pick the turn names whatever its state, as the one the turn is tried on`, () => {
     const element = mount({ account: `work` });
 

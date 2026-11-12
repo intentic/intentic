@@ -74,9 +74,16 @@ export const identityNote = (
 // Why a dimmed row is dimmed: a spent allowance and when it reopens, or a bench that lifts by itself and when.
 export const waitingLine = (state: AccountState): string | undefined => {
     if (state.kind === `spent`) {
-        return state.reopensAt === undefined
+        // A pool one model meters apart is named, so a spent slice never reads as the whole account spent.
+        const { pool, reopensAt } = state;
+        if (pool !== undefined) {
+            return reopensAt === undefined
+                ? t(`sandbox.aiAccountSection.poolUsedUp`, { pool })
+                : t(`sandbox.aiAccountSection.poolUsedUpReopens`, { pool, when: formatReset(reopensAt) });
+        }
+        return reopensAt === undefined
             ? t(`sandbox.aiAccountSection.allowanceUsedUp`)
-            : t(`sandbox.aiAccountSection.allowanceUsedUpReopens`, { when: formatReset(state.reopensAt) });
+            : t(`sandbox.aiAccountSection.allowanceUsedUpReopens`, { when: formatReset(reopensAt) });
     }
     if (state.kind === `blocked` && state.fix === `wait`) {
         // The sentence's own stop is the template's to put, so a provider's full stop never doubles it.

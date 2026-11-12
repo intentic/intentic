@@ -79,14 +79,22 @@ export const pickerOrder = <T extends { readonly state: AccountState }>(provider
     return rows.toSorted((left, right) => tier(left) - tier(right));
 };
 
-// Why a spent row is dimmed, and until when: a dimmed name with nothing beside it reads as broken, not as waiting.
+// Why a spent row is dimmed, and until when: a dimmed name with nothing beside it reads as broken, not as waiting. A pool
+// one model meters apart (Claude's Fable slice) is named: "Allowance used up" there read as the whole account spent
+// while its weekly allowance for every other model still had room.
 const spentLine = (state: AccountState): string | undefined => {
     if (state.kind !== `spent`) {
         return undefined;
     }
-    return state.reopensAt === undefined
+    const { pool, reopensAt } = state;
+    if (pool !== undefined) {
+        return reopensAt === undefined
+            ? t(`chat.pickerAccounts.poolUsedUp`, { pool })
+            : t(`chat.pickerAccounts.poolUsedUpReopens`, { pool, when: formatReset(reopensAt) });
+    }
+    return reopensAt === undefined
         ? t(`chat.pickerAccounts.allowanceUsedUp`)
-        : t(`chat.pickerAccounts.allowanceUsedUpReopens`, { when: formatReset(state.reopensAt) });
+        : t(`chat.pickerAccounts.allowanceUsedUpReopens`, { when: formatReset(reopensAt) });
 };
 
 // Filters a folded list against everything a row shows (label and subtitle), since a pool of

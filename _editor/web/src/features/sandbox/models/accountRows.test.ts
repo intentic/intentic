@@ -1,4 +1,4 @@
-import { type AccountReader, ambiguousLabels, connectorNote, connectWays, identityNote, mayChangeAccount, rowNote, type WayFacts } from "./accountRows";
+import { type AccountReader, ambiguousLabels, connectorNote, connectWays, identityNote, mayChangeAccount, rowNote, waitingLine, type WayFacts } from "./accountRows";
 
 // One account's row in a provider's panel: who connected it, which presses the reader gets on it, and the ways in they may
 // take. Full access keeps every press; someone given AI accounts of their own changes only the accounts they connected and
@@ -103,5 +103,17 @@ describe(`a row's quiet facts`, () => {
         expect(ambiguous.has(`Claude`)).toBe(true);
         expect(identityNote(accounts[0]!, ambiguous, now)).toMatch(/^connected /);
         expect(identityNote({ label: `Solo`, connectedAt: now }, ambiguous, now)).toBeUndefined();
+    });
+});
+
+describe(`waitingLine`, () => {
+    it(`names the model's own pool when only that is spent, never the whole account`, () => {
+        expect(waitingLine({ kind: `spent`, pool: `Fable`, reopensAt: 1_900_000_000 })).toMatch(/^Fable allowance used up, reopens .+\.$/);
+        expect(waitingLine({ kind: `spent`, pool: `Fable` })).toBe(`Fable allowance used up.`);
+    });
+
+    it(`says the allowance is used up when the pool every model spends is`, () => {
+        expect(waitingLine({ kind: `spent`, reopensAt: 1_900_000_000 })).toMatch(/^Allowance used up, reopens .+\.$/);
+        expect(waitingLine({ kind: `spent` })).toBe(`Allowance used up.`);
     });
 });
