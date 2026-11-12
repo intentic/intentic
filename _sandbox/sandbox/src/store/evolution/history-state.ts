@@ -120,6 +120,9 @@ export const HISTORY_FILES_WITHOUT_DOCUMENT: readonly StateFile[] = [
     // Signs the passes members open guarded previews with (auth/previews/preview-guard.ts); the target signs its own, and a
     // member's browser fetches a fresh pass the next time it opens one.
     { path: "preview-pass.key", portability: "identity" },
+    // Signs the media manifests shown pages keep (agent/pages/page-media.ts); a page carried to the target is shown
+    // without its video and audio until it is shown again there.
+    { path: "page-media.key", portability: "identity", note: "Pages that played video or audio show it again once re-shown." },
     // The platform's id for this sandbox's row, as its announce last said (system/boot/platform-row.ts): the target is
     // its own row, and learns its own id at its first announce.
     { path: "platform-row.json", portability: "identity", note: "The target learns its own platform id when it first announces." },

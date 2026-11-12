@@ -20,6 +20,7 @@ test("POST /system/webext/grants-changed refreshes the browser and rechecks need
             capabilities: unstubbed("capabilities", { list: async () => [] }),
             logger: unstubbed("logger", { info: () => undefined }),
             secretTickets: unstubbed("secretTickets", {}),
+            fileTickets: unstubbed("fileTickets", {}),
         })["POST /system/webext/grants-changed"],
     );
     const response = await app.request("/system/webext/grants-changed", { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } });
