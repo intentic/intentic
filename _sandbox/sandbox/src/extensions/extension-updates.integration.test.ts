@@ -253,12 +253,12 @@ const reviewedUpdate = async (turns: Services["turns"], settled: (update: Extens
 test("the agent rung reads the update on the extension-review role and links the conversation that holds what it found", async () => {
     const { turns, started } = reviewing([{ kind: "delta", text: "Safe to take." }, { kind: "done" }]);
     await reviewedUpdate(turns, (update) => {
-        expect(update?.review).toEqual({ conversationId: expect.stringMatching(/^ext-update-acme-demo-/u), at: expect.any(String) });
+        expect(update?.review).toEqual({ conversationId: expect.stringMatching(/^upd-acme-demo-/u), at: expect.any(String) });
         expect(update?.review?.conversationId).toBe(started[0]?.conversationId);
         expect(update?.needsReview).toBeUndefined();
     });
     expect(started).toHaveLength(1);
-    expect(started[0]).toMatchObject({ runRole: "extension-review", unattended: true, isolated: true, conversationId: expect.stringMatching(/^ext-update-acme-demo-/u) });
+    expect(started[0]).toMatchObject({ runRole: "extension-review", unattended: true, isolated: true, conversationId: expect.stringMatching(/^upd-acme-demo-/u) });
 });
 
 test("a review that ends in an error hands the card back to its owner with the reason, and no link to a review that read nothing", async () => {

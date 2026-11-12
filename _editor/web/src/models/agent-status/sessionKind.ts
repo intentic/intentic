@@ -1,6 +1,6 @@
 import type { IconName } from "@intentic/ui";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { CI_FIX_PREFIX, LAND_FIX_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { isCiFixConversationId, LAND_FIX_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { t } from "@intentic/ui/i18n";
 import { contextPct, originMeta } from "./agentStatus-meta";
 
@@ -48,7 +48,7 @@ export const sessionKind = (session: SessionFacts | undefined): SessionKind => {
         const source = originMeta(session.origin);
         return { name: `automation`, icon: source.icon, label: t(`agents.sessionKind.automation`, { source: source.label }) };
     }
-    if (session !== undefined && (session.id.startsWith(CI_FIX_PREFIX) || session.id.startsWith(LAND_FIX_PREFIX))) {
+    if (session !== undefined && (isCiFixConversationId(session.id) || session.id.startsWith(LAND_FIX_PREFIX))) {
         return { name: `fixer`, icon: `pipelines`, label: t(`agents.sessionKind.fixer`) };
     }
     if (session?.fresh !== undefined) {

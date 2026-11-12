@@ -76,18 +76,22 @@ export const looksDrawn = (id: string): boolean => {
 };
 
 // Derived, not drawn, so a re-computed id says whether an agent is already on this failure and a second press continues
-// it. The repo is included (one run id per project) and slugified, not hashed, since people read it.
-export const CI_FIX_PREFIX = "ci-fix-";
-// Leaves ~24 characters for the run id and an attempt suffix within the 64-char id limit; the widest run id either
-// forge mints is eleven digits.
-const REPO_SLUG_MAX = 32;
+// it. The repo is included (one run id per project) and slugified, not hashed, since people read it. Kept short, since it
+// is also the branch and the worktree folder every board row prints: `fix-intentic-jqzy27q`, not
+// `ci-fix-intentic-42991360694`. Not `ci-`: the gate CLI names its own conversations `ci-<run>-<attempt>`. The run id is base36 (the widest either forge mints, eleven digits, is eight
+// characters), and the repo is cut at sixteen, which still names it: the run id is what keeps two repos apart.
+export const CI_FIX_PREFIX = "fix-";
+// What fix agents minted before the ids were shortened carry; still a fix agent's, so still read as one.
+const LEGACY_CI_FIX_PREFIX = "ci-fix-";
+export const isCiFixConversationId = (id: string): boolean => id.startsWith(CI_FIX_PREFIX) || id.startsWith(LEGACY_CI_FIX_PREFIX);
+const REPO_SLUG_MAX = 16;
 const repoSlug = (repo: string): string =>
     repo
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .slice(0, REPO_SLUG_MAX)
         .replace(/^-+|-+$/g, "") || "repo";
-export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId}`;
+export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId.toString(36)}`;
 // The title a CI fix conversation opens with: the daemon names it so (ci-fix.ts), and the board's card standing in for it
 // while the press is out (Pipelines, `chat.launchAgent`) wears the same words, so the one hands over to the other unchanged.
 export const ciFixTitle = (run: { readonly title?: string | undefined; readonly repo: string }): string =>
@@ -127,14 +131,14 @@ export const landFixConversationId = (project: string, failingSince: number): st
 // ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER. The derived id above names the FAILURE; an attempt at it is a
 // conversation of its own, so starting over (another model, a clean worktree) never rewrites a record some other window
 // is showing, and every attempt keeps its own transcript, cost and URL. Attempt 1 wears the bare id, so every id minted
-// before attempts existed is attempt 1 of its failure.
-const ATTEMPT_MARK = "-attempt";
+// before attempts existed is attempt 1 of its failure. Later ones add `_<n>`: an underscore, since no base holds one (a
+// slug turns every other character into `-`), so `fix-web-15_2` can only be run 15's second attempt, never a base.
+const ATTEMPT_MARK = "_";
 
 export const fixAttemptId = (base: string, attempt: number): string => (attempt <= 1 ? base : `${base}${ATTEMPT_MARK}${attempt}`);
 
 // Which attempt at `base` this id is, or undefined for an id that is none of them. Read base-relative, never the other
-// way round: a base ends in a run id or a digest, so nothing about an id on its own says where an attempt marker would
-// begin, and `ci-fix-web-41-2` is repo `web-41`'s run 2, not a second go at run 41.
+// way round: the marker is unambiguous, but only the base says which failure an attempt answers.
 export const fixAttemptOf = (base: string, id: string): number | undefined => {
     if (id === base) {
         return 1;
@@ -143,7 +147,7 @@ export const fixAttemptOf = (base: string, id: string): number | undefined => {
         return undefined;
     }
     const rest = id.slice(base.length + ATTEMPT_MARK.length);
-    // One spelling per attempt: the first is the bare id, so `-attempt1` and a zero-padded number are nobody's.
+    // One spelling per attempt: the first is the bare id, so `_1` and a zero-padded number are nobody's.
     return /^[2-9]\d*$|^[1-9]\d+$/.test(rest) ? Number(rest) : undefined;
 };
 

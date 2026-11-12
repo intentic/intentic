@@ -13,7 +13,7 @@ test("a run finds the agent whose conversation was derived from it", () => {
     const failed = run({ runId: 41 });
     const other = run({ runId: 42 });
     const fixes = fixesByRun([failed, other], [fixAgent(failed)]);
-    expect(fixes.get(failed)?.id).toBe(`ci-fix-web-41`);
+    expect(fixes.get(failed)?.id).toBe(`fix-web-15`);
     expect(fixes.has(other)).toBe(false);
 });
 

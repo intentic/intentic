@@ -13,7 +13,7 @@ describe(`sessionKind`, () => {
         expect(sessionKind({ id: `c1`, fresh: { of: `c0`, kind: `review`, at: 1 } }).icon).toBe(`eye`);
         expect(sessionKind({ id: `c1`, fresh: { of: `c0`, kind: `test`, at: 1 } }).icon).toBe(`flask`);
         expect(sessionKind({ id: `c1`, forkedFrom: { conversationId: `c0`, index: 2, files: `then` } }).icon).toBe(`fork`);
-        expect(sessionKind({ id: `ci-fix-intentic-37292817794` }).name).toBe(`fixer`);
+        expect(sessionKind({ id: `fix-intentic-h4r6ide` }).name).toBe(`fixer`);
     });
 
     it(`draws an automation by where it came from: a schedule's clock, a webhook's bolt`, () => {

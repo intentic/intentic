@@ -41,7 +41,7 @@ import { createRunsCache } from "./runs-cache.js";
 jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: () => {} }));
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
-const FIXER = "ci-fix-web-41";
+const FIXER = "fix-web-15";
 
 const job = (runId: number, jobId: number, name = "verify-core", over: Partial<FailedJob> = {}): FailedJob => ({
     runId,
@@ -671,7 +671,7 @@ test("a cancelled run clears the jobs that passed in it, and a job that ran out 
     expect((await mainFailures(services))[0]?.workflows).toEqual([
         expect.objectContaining({ name: "CI", runId: 62, jobs: ["migrations"], timedOut: ["migrations"] }),
     ]);
-    expect(said.map((words) => words.turn.conversationId)).toEqual(["ci-fix-web-61"]);
+    expect(said.map((words) => words.turn.conversationId)).toEqual(["fix-web-1p"]);
     expect(said[0]!.turn.prompt).toContain(`run 62 failed 1 job: "migrations"`);
 });
 

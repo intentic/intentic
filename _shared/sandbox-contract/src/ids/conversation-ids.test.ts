@@ -13,6 +13,7 @@ import {
     ciFixConversationId,
     fixAttemptId,
     fixAttemptOf,
+    isCiFixConversationId,
     fixAttemptsOf,
     latestFixAttempt,
     newConversationId,
@@ -64,10 +65,10 @@ test("every word is a short lowercase word, listed once", () => {
     }
 });
 
-// A drawn id must never read as a derived one (`home-…`, `ci-fix-…`, `sub-…`) or as a git ref. Every prefix a
+// A drawn id must never read as a derived one (`home-…`, `fix-…`, `sub-…`) or as a git ref. Every prefix a
 // conversation id is minted under is listed, wherever it is minted: fix agents, home, subagents and links (this file's
 // module), automation fires (`a-`), workflow steps (`wf-`), the public doors (`wc-` Visitor chat, `bug-` issue
-// intake), extension update reviews (`ext-update-`) and the batch packs (`xt-`, `dg-`, `mt-`). Then the neighbours a
+// intake), extension update reviews (`upd-`) and the batch packs (`xt-`, `dg-`, `mt-`). Then the neighbours a
 // drawn id would be mistaken for: a borrowed account (`lent-`) and a watch (`watch-k7mq` is its exact shape).
 test("no word collides with a derived id's prefix or a git name", () => {
     const prefixes = [
@@ -81,7 +82,7 @@ test("no word collides with a derived id's prefix or a git name", () => {
         "wf-",
         "wc-",
         "bug-",
-        "ext-update-",
+        "upd-",
         "xt-",
         "dg-",
         "mt-",
@@ -138,7 +139,9 @@ test("ids are unique across a burst", () => {
 });
 
 test("a CI fix id is the same string every time it is derived", () => {
-    expect(ciFixConversationId(`web`, 4213)).toBe(`ci-fix-web-4213`);
+    expect(ciFixConversationId(`web`, 4213)).toBe(`fix-web-391`);
+    // The id the screenshot that asked for this carried, `ci-fix-intentic-42991360694-attempt5`, now reads:
+    expect(fixAttemptId(ciFixConversationId(`intentic`, 42_991_360_694), 5)).toBe(`fix-intentic-jqzy27q_5`);
     expect(ciFixConversationId(`web`, 4213)).toBe(ciFixConversationId(`web`, 4213));
 });
 
@@ -158,31 +161,39 @@ test("every derived id passes the conversation-id guard", () => {
     }
 });
 
+test("a fix agent is told apart by its id, whichever shape it was minted in", () => {
+    expect(isCiFixConversationId(ciFixConversationId(`web`, 41))).toBe(true);
+    expect(isCiFixConversationId(`ci-fix-intentic-42991360694-attempt5`)).toBe(true);
+    // The gate CLI's own conversations, and a drawn id.
+    expect(isCiFixConversationId(`ci-42991360694-1`)).toBe(false);
+    expect(isCiFixConversationId(`otter-k7mq`)).toBe(false);
+});
+
 test("the prefix is carried by every fix id", () => {
-    expect(ciFixConversationId(`ci-fix`, 7)).toBe(`ci-fix-ci-fix-7`);
+    expect(ciFixConversationId(`ci-fix`, 7)).toBe(`fix-ci-fix-7`);
 });
 
 // Attempt 1 is the bare derived id, so every fix conversation minted before attempts existed reads as attempt 1.
 test("the first attempt wears the failure's own id, later ones carry their number", () => {
     const base = ciFixConversationId(`web`, 41);
     expect(fixAttemptId(base, 1)).toBe(base);
-    expect(fixAttemptId(base, 2)).toBe(`ci-fix-web-41-attempt2`);
+    expect(fixAttemptId(base, 2)).toBe(`fix-web-15_2`);
     expect(fixAttemptOf(base, base)).toBe(1);
-    expect(fixAttemptOf(base, `ci-fix-web-41-attempt2`)).toBe(2);
-    expect(fixAttemptOf(base, `ci-fix-web-41-attempt12`)).toBe(12);
+    expect(fixAttemptOf(base, `fix-web-15_2`)).toBe(2);
+    expect(fixAttemptOf(base, `fix-web-15_12`)).toBe(12);
 });
 
 // Read base-relative on purpose: a base ends in a run id, so a neighbouring failure's id can start with this one.
 test("another failure's id is not an attempt at this one", () => {
     const base = ciFixConversationId(`web`, 41);
-    // Repo `web-41`, run 2: starts with the base and a dash, and is nobody's attempt.
-    expect(fixAttemptOf(base, ciFixConversationId(`web-41`, 2))).toBeUndefined();
-    expect(fixAttemptOf(base, ciFixConversationId(`web`, 412))).toBeUndefined();
+    // Repo `web-15`, run 2: starts with the base and a dash, and is nobody's attempt.
+    expect(fixAttemptOf(base, ciFixConversationId(`web-15`, 2))).toBeUndefined();
+    expect(fixAttemptOf(base, ciFixConversationId(`web`, 41 * 36))).toBeUndefined();
     expect(fixAttemptOf(base, `swift-otter-k9m2`)).toBeUndefined();
     // One spelling per attempt.
-    expect(fixAttemptOf(base, `ci-fix-web-41-attempt1`)).toBeUndefined();
-    expect(fixAttemptOf(base, `ci-fix-web-41-attempt02`)).toBeUndefined();
-    expect(fixAttemptOf(base, `ci-fix-web-41-attempt`)).toBeUndefined();
+    expect(fixAttemptOf(base, `fix-web-15_1`)).toBeUndefined();
+    expect(fixAttemptOf(base, `fix-web-15_02`)).toBeUndefined();
+    expect(fixAttemptOf(base, `fix-web-15_`)).toBeUndefined();
 });
 
 test("attempts are read off the roster, earliest first, and the newest is the live answer", () => {
@@ -197,9 +208,9 @@ test("attempts are read off the roster, earliest first, and the newest is the li
 test("the next attempt is numbered past every known one, archived included", () => {
     const base = ciFixConversationId(`web`, 41);
     expect(nextFixAttemptId(base, [])).toBe(base);
-    expect(nextFixAttemptId(base, [base])).toBe(`ci-fix-web-41-attempt2`);
-    expect(nextFixAttemptId(base, [`ci-fix-web-41-attempt3`, `swift-otter-k9m2`])).toBe(`ci-fix-web-41-attempt4`);
-    expect(nextFixAttemptId(base, [ciFixConversationId(`web-41`, 2)])).toBe(base);
+    expect(nextFixAttemptId(base, [base])).toBe(`fix-web-15_2`);
+    expect(nextFixAttemptId(base, [`fix-web-15_3`, `swift-otter-k9m2`])).toBe(`fix-web-15_4`);
+    expect(nextFixAttemptId(base, [ciFixConversationId(`web-15`, 2)])).toBe(base);
 });
 
 test("an attempt id passes the guard and fits, even for the widest run id a forge mints", () => {

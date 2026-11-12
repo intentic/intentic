@@ -278,7 +278,7 @@ const DEMO_RUNTIME_INSTALLS: NonNullable<Environment[`recurring`]> = [
         tool: `@opencode/cli`,
         kind: `npm`,
         sessions: 2,
-        sessionIds: [`keen-anchor-eq06`, `ci-fix-intentic-37292817794-attempt41`],
+        sessionIds: [`keen-anchor-eq06`, `fix-intentic-h4r6ide_41`],
         commands: [
             `cd /tmp && npm install -g --prefix /tmp/oc2spike/gtest --no-audit --no-fund @opencode/cli@2.0.26 >/dev/null 2>&1`,
             `npm install --global --prefix /tmp/intentic-opencode-global --foreground-scripts @opencode/cli@2.1.4`,

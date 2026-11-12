@@ -1,6 +1,6 @@
 import { keyedLock } from "@intentic/base/async";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { CI_FIX_PREFIX, ciFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { ciFixConversationId, isCiFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import {
     type CiMainFailure,
     isPipelineInFlight,
@@ -644,7 +644,7 @@ export const runInFlight = async (services: Services, project: CiProject, run: P
  *  hands the failure to the owner. A turn the sandbox runs again by itself is not over yet. */
 export const fixerSettled = async (services: Services, settled: { readonly conversationId: string; readonly rerun?: unknown }): Promise<void> => {
     // Every fix agent is a CI fix conversation (startCiFix); any other turn is none of this.
-    if (settled.rerun !== undefined || !settled.conversationId.startsWith(CI_FIX_PREFIX)) {
+    if (settled.rerun !== undefined || !isCiFixConversationId(settled.conversationId)) {
         return;
     }
     const found = Object.entries(await services.ciStore.failures()).find(([, streak]) => fixerOf(streak) === settled.conversationId);

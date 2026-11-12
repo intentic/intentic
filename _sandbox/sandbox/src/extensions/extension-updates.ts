@@ -395,11 +395,11 @@ export const resumeExtensionHealthWatches = async (services: Services, earlyMs =
 };
 
 // Agent-prepared rung: runs the update card's diff-read unprompted the moment the check records a new sha.
-// An ordinary unattended fleet entry in a shared workspace; the update record links to it.
-
+// An ordinary unattended fleet entry in a shared workspace; the update record links to it. Its id is also its branch
+// and folder, so kept short: `upd-`, the name without the built-ins' publisher, cut at 16.
 let reviewSeq = 0;
 const reviewConversationId = (identity: string): string =>
-    `ext-update-${identity.replaceAll(/[^a-zA-Z0-9_-]/gu, "-")}-${Date.now().toString(36)}${(reviewSeq++).toString(36)}`.slice(0, 64);
+    `upd-${identity.replace(/^intentic\./u, "").replaceAll(/[^a-zA-Z0-9_-]/gu, "-").slice(0, 16).replace(/-+$/u, "")}-${Date.now().toString(36)}${(reviewSeq++).toString(36)}`;
 
 // How much of a failure the card quotes; the review conversation holds the whole of it.
 const REVIEW_FAILURE_MAX = 240;

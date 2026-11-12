@@ -1,5 +1,5 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { CI_FIX_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { isCiFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "../host";
@@ -21,7 +21,7 @@ const moving = (agent: AgentSummary): boolean =>
     agent.status === `running` || agent.status === `resuming` || agent.status === `stopping` || agent.status === `dismissing`;
 
 // The conversations this board sends: the fleet's other work moving must not quicken the pace.
-const sentFromHere = (agent: AgentSummary): boolean => agent.id.startsWith(CI_FIX_PREFIX);
+const sentFromHere = (agent: AgentSummary): boolean => isCiFixConversationId(agent.id);
 
 export function useCiFixes(enabled: Ref<boolean>) {
     const api = host();

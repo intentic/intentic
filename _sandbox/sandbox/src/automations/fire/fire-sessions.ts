@@ -1,3 +1,4 @@
+import { fnvDigest } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
@@ -5,14 +6,24 @@ import type { AutomationRecord } from "../automations-store.js";
 
 // The conversations a fire mints, and the sessions gate that counts every other one since this automation's last wake.
 
-// Branch/worktree name bounded by ConversationIdSchema, built from the automation id with prefix/suffix room.
-const AUTOMATION_ID_IN_CONVERSATION = 40;
+// The automation's part of a fire's id, which is also its branch and worktree folder, so it is kept short: an id of up to
+// sixteen characters as it is, a longer one cut to eleven and followed by four of its digest, so two automations that
+// share a long opening (`weekly-summary-for-web`, `weekly-summary-for-api`) still mint apart.
+const AUTOMATION_ID_IN_CONVERSATION = 16;
+const AUTOMATION_ID_HEAD = 11;
+const automationPart = (automationId: string): string =>
+    automationId.length <= AUTOMATION_ID_IN_CONVERSATION
+        ? automationId
+        : `${automationId.slice(0, AUTOMATION_ID_HEAD).replace(/-+$/, "")}-${fnvDigest(automationId).slice(-4)}`;
+// What fires minted before ids were shortened carry: the automation id cut at forty. Still read, so a wake from then
+// counts as this automation's own.
+const LEGACY_AUTOMATION_ID_IN_CONVERSATION = 40;
 // Prefix every fire's conversation carries; the mark a schedule wake leaves, read by the sessions gate.
 const AUTOMATION_CONVERSATION_PREFIX = "a-";
 // Fires of one automation can't share a millisecond; this makes the id unique per process regardless of caller.
 let fireSeq = 0;
 export const mintConversationId = (automationId: string, now: number): string =>
-    `${AUTOMATION_CONVERSATION_PREFIX}${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-${now.toString(36)}${(fireSeq++).toString(36)}`;
+    `${AUTOMATION_CONVERSATION_PREFIX}${automationPart(automationId)}-${now.toString(36)}${(fireSeq++).toString(36)}`;
 
 // Where a minted conversation came from when no outside message opened it: the automation, and the clock or check that
 // woke it. Recorded so every surface can tell an automation's runs from a person's work: the board stacks one
@@ -25,10 +36,11 @@ export const ownOrigin = (automation: AutomationRecord): AgentOrigin => ({
 
 // Whether this automation minted that conversation id; a leftover "-" after the base36 suffix means only a prefix
 // match. Used to exclude a job's own wakes from its sessions gate and its own `turn.settled`.
-export const firedBy = (automationId: string, conversationId: string): boolean => {
-    const mine = `${AUTOMATION_CONVERSATION_PREFIX}${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-`;
-    return conversationId.startsWith(mine) && !conversationId.slice(mine.length).includes("-");
-};
+export const firedBy = (automationId: string, conversationId: string): boolean =>
+    [automationPart(automationId), automationId.slice(0, LEGACY_AUTOMATION_ID_IN_CONVERSATION)].some((part) => {
+        const mine = `${AUTOMATION_CONVERSATION_PREFIX}${part}-`;
+        return conversationId.startsWith(mine) && !conversationId.slice(mine.length).includes("-");
+    });
 
 // Sessions gate for afterSessions: fires once enough new sessions ran since the last wake, read from the newest
 // conversation this automation minted, not the bounded run ledger.

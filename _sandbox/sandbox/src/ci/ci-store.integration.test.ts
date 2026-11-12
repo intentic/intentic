@@ -61,7 +61,7 @@ test("a failure kept in the shape it shared with a failed push's reads back as m
                         },
                     ],
                     decisions: [
-                        { kind: "fix-up", conversationId: "ci-fix-web-40", at: 2 },
+                        { kind: "fix-up", conversationId: "fix-web-14", at: 2 },
                         { kind: "resolved", at: 3, findings: ["f"], detail: "A later measurement no longer printed them." },
                         { kind: "dismissed", at: 4, findings: ["f"] },
                     ],
@@ -80,7 +80,7 @@ test("a failure kept in the shape it shared with a failed push's reads back as m
             since: 1,
             findings: [finding],
             decisions: [
-                { kind: "fix-up", conversationId: "ci-fix-web-40", at: 2 },
+                { kind: "fix-up", conversationId: "fix-web-14", at: 2 },
                 { kind: "reported", at: 3, detail: "A later measurement no longer printed them." },
                 { kind: "reported", at: 4 },
             ],

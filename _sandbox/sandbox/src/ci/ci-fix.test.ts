@@ -55,7 +55,7 @@ test("a retry of a turned-away CI fix sends current evidence instead of replayin
     const services = unstubbed<Services>("services", {
         agents: unstubbed<Services["agents"]>("agents", {
             list: () => [{
-                id: "ci-fix-web-7",
+                id: "fix-web-7",
                 status: "error",
                 failureCode: "sandbox-memory-low",
                 provider: "claude",
@@ -73,7 +73,7 @@ test("a retry of a turned-away CI fix sends current evidence instead of replayin
                     ...initial.resume,
                     held: {
                         reason: "door",
-                        input: { conversationId: "ci-fix-web-7", prompt: "Old evidence" },
+                        input: { conversationId: "fix-web-7", prompt: "Old evidence" },
                         ran: false,
                         recordedAt: 0,
                         fired: false,
@@ -98,7 +98,7 @@ test("a retry of a turned-away CI fix sends current evidence instead of replayin
         pressed: true,
         evidence: { failedJobs: ["new failure"], failedJobIds: [71], logs: "Error: new failure from the latest snapshot", infra: false, infraReasons: [] },
     });
-    expect(outcome).toEqual({ kind: "started", conversationId: "ci-fix-web-7", attempt: 1, continued: true });
+    expect(outcome).toEqual({ kind: "started", conversationId: "fix-web-7", attempt: 1, continued: true });
     expect(started).toHaveLength(1);
     expect(started[0]?.prompt).toContain("Error: new failure from the latest snapshot");
 });
