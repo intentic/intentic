@@ -184,6 +184,9 @@ export class StatusLog extends DurableObject<Env> {
         sql.exec(`CREATE TABLE IF NOT EXISTS samples (
             component TEXT NOT NULL, at INTEGER NOT NULL, state TEXT NOT NULL, latency_ms INTEGER, detail TEXT NOT NULL,
             PRIMARY KEY (component, at))`);
+        // The day's prune and the page's history both filter on `at` alone, which the primary key cannot serve: without
+        // this each read the whole table, every minute and every view, and that ran out the free tier's daily row reads.
+        sql.exec(`CREATE INDEX IF NOT EXISTS samples_at ON samples (at)`);
         sql.exec(`CREATE TABLE IF NOT EXISTS components (component TEXT PRIMARY KEY, state TEXT NOT NULL, since INTEGER NOT NULL)`);
     }
 
