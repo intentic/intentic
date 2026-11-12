@@ -1,9 +1,10 @@
+import { opt } from "../../opt.js";
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import type { ConversationReader } from "../../auth/scope/conversation-reader.js";
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
-import { conversationBundle } from "./fleet-bundle.js";
+import { type BundlePromptReader, conversationBundle } from "./fleet-bundle.js";
 import { resolveFleetHandle } from "./fleet-handles.js";
 import { type HandleResolution, candidateOf, fleetRecall, fleetRoster, fleetSearch, present, type RosterOptions } from "./fleet-recall.js";
 import { fleetMessageDetail, fleetMessages, fleetRows } from "./fleet-transcript.js";
@@ -105,7 +106,7 @@ const resolvedFor = async (
 
 // The fleet's reads, made with whichever reader the door supplies: the roster or a search, one conversation, and one
 // conversation's debug bundle. None can change anything.
-export const createFleetReads = (services: Services, readerOf: FleetReaderOf) => ({
+export const createFleetReads = (services: Services, readerOf: FleetReaderOf, readPrompt?: BundlePromptReader) => ({
     /** GET /fleet: paginated roster, newest first; `?q=` switches it to a phrase search, `?owner=` narrows to one member's. */
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const query = c.req.query("q")?.trim();
@@ -167,6 +168,6 @@ export const createFleetReads = (services: Services, readerOf: FleetReaderOf) =>
         if (resolved instanceof Response) {
             return resolved;
         }
-        return c.json(await conversationBundle({ ...services, historyRoot: services.config.historyRoot }, resolved.entry));
+        return c.json(await conversationBundle({ ...services, historyRoot: services.config.historyRoot, ...opt("readPrompt", readPrompt) }, resolved.entry));
     },
 });

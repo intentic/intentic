@@ -1030,6 +1030,7 @@
             "stoppingRun": "Zatrzymywanie przebiegu {name}"
         },
         "cardMenu": {
+            "exportTranscript": "Eksportuj transkrypcję",
             "openIn": "Otwórz w {name}",
             "openInItsSandbox": "Otwórz w jego sandboxie",
             "stopWatchingCount": "Przestań obserwować ({count})"

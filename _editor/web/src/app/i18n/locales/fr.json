@@ -1030,6 +1030,7 @@
             "stoppingRun": "Arrêt de l'exécution {name}"
         },
         "cardMenu": {
+            "exportTranscript": "Exporter la transcription",
             "openIn": "Ouvrir dans {name}",
             "openInItsSandbox": "Ouvrir dans son sandbox",
             "stopWatchingCount": "Arrêter la surveillance ({count})"

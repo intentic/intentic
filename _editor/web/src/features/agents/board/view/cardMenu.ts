@@ -2,6 +2,11 @@ import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, type Ref, ref } from "vue";
 import { useRole } from "../../../../client/sandbox/useRole";
+import { useAccess } from "../../../../client/sandbox/access/useAccess";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
+import { agentWork } from "../../../../models/fleet/agentActions";
+import { startOperation } from "../../../../workbench/operations/operations";
+import { downloadBundle } from "../session/agentBundle";
 import { changesToRead, drillTarget, reviewAction } from "../../../../models/agent-status/agentStatus-attention";
 import { unregistered } from "../../../../models/agent-status/agentStatus-standing";
 import {
@@ -35,6 +40,8 @@ export interface MenuFacts extends AgentMenuFacts {
     readonly href: () => string;
     // Another sandbox's name, for the row that crosses to it.
     readonly boxName: string | undefined;
+    // The reader may take the conversation's debug bundle: the daemon serves it and lets this reader read it (useAccess).
+    readonly exportable?: boolean;
     // What only the card itself can do (its title's field, its reactions' picker), handed over by the card the menu was
     // opened on; a child's row and a card that offers neither hand nothing, and the menu leaves the rows out.
     readonly presses?: CardPresses;
@@ -62,11 +69,24 @@ export interface MenuActions extends AgentMenuActions {
     readonly drillIn: (agent: FleetAgent) => void;
     readonly closeAgent: (agent: FleetAgent) => void;
     readonly openInSandbox: (sandboxId: string, agentId: string) => void;
+    // Saves the conversation's debug bundle (session/agentBundle.ts): its transcript, how its turns ended, the sandbox's
+    // log lines about it and the system prompt it ran on, as one file to analyse elsewhere.
+    readonly exportTranscript: (agent: FleetAgent) => void;
 }
+
+// The BUNDLE route, asked of the daemon and of the reader's access alike.
+const BUNDLE_ROUTE = `GET /fleet/{handle}/bundle` as const;
 
 // Filing is the shared row; closing a never-registered card is just this browser's tab, the board's own.
 const closeRows = (agent: FleetAgent, act: MenuActions): MenuItem[] =>
     unregistered(agent.status) ? [{ label: t(`ui.action.close`), icon: `times`, command: () => act.closeAgent(agent) }] : [];
+
+// A read beside the session's name: the whole conversation as one file, for looking into what the agent did. A card the
+// sandbox never registered has no record to export.
+const exportRows = (agent: FleetAgent, facts: MenuFacts, act: MenuActions): MenuItem[] =>
+    facts.exportable === true && !unregistered(agent.status)
+        ? [{ label: t(`agents.cardMenu.exportTranscript`), icon: `download`, command: () => act.exportTranscript(agent) }]
+        : [];
 
 // The card's own presses, beside the name they act on.
 const ownRows = ({ rename, react }: CardPresses = {}): MenuItem[] => [
@@ -109,7 +129,7 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
         ],
         freshRows(agent, facts, act),
         ownRows(facts.presses),
-        sessionNameRows(agent, act),
+        [...sessionNameRows(agent, act), ...exportRows(agent, facts, act)],
         // The one press here costing the whole shell, so it names where it goes; it reaches what a remote card's menu drops.
         facts.here || sandboxId === undefined
             ? []
@@ -158,6 +178,7 @@ export const useCardMenu = (host: MenuHost) => {
     // The element pressed, whose own document the clipboard is asked of (clipboardOf), not this module's `navigator`.
     const menuAnchor = ref<Element>();
     const { canShip } = useRole();
+    const { can } = useAccess();
     const { pressLand } = useAgentDrag();
     const act: MenuActions = {
         ...host.focus,
@@ -167,6 +188,17 @@ export const useCardMenu = (host: MenuHost) => {
         copySessionName: (branch) => copySessionName(branch, menuAnchor.value),
         openInSandbox,
         startFresh: (agent, kind) => void draftFreshSession(agent, kind),
+        // The menu closes on the press, so the read goes through the ledger: the file arriving is the answer, a refusal a
+        // receipt (as the agent page's own row does, AgentSessionMenu).
+        exportTranscript: (agent) => {
+            const at = isRemote(agent) ? agent.sandboxId : undefined;
+            void startOperation(`${agentWork(agent.id, at)}/bundle`, {
+                what: t(`agents.agentSessionMenu.bundleGathering`),
+                done: (name) => t(`agents.agentSessionMenu.bundleSaved`, { name }),
+                failed: t(`agents.agentSessionMenu.bundleFailed`),
+                task: () => downloadBundle(agent.id, at),
+            });
+        },
     };
     const ownPresses = (): CardPresses | undefined => {
         const presses = menuPresses.value;
@@ -188,6 +220,7 @@ export const useCardMenu = (host: MenuHost) => {
             href: () => host.focus.agentHref(agent),
             boxName: here || agent.sandboxId === undefined ? undefined : boxNameOf.value.get(agent.sandboxId),
             presses: ownPresses(),
+            exportable: supportsRoute(BUNDLE_ROUTE) && can(BUNDLE_ROUTE),
         };
         return menuItemsFor(agent, facts, act);
     });

@@ -1,4 +1,5 @@
 import { CONVERSATION_BUNDLE_KIND, type ConversationBundle, DIAGNOSTICS_MAX_MINUTES } from "@intentic/sandbox-contract/schemas/diagnostics";
+import type { SystemPromptDisclosure } from "@intentic/sandbox-contract/schemas/system-prompt";
 import type { Services } from "../../composition.js";
 import { runDiagnosticsQuery } from "../../logs/diagnostics-queries.js";
 import { opt } from "../../opt.js";
@@ -20,7 +21,27 @@ const TRANSCRIPT_BYTES = 4_000_000;
 // reports it after the turn ended.
 const AFTER_MS = 30 * 60_000;
 
-export type BundleDeps = FleetRecallDeps & Pick<Services, "usage" | "info"> & { readonly historyRoot: string };
+/** Reads what a conversation's last turn was told, as GET /agents/{id}/system-prompt answers it. */
+export type BundlePromptReader = (id: string) => Promise<SystemPromptDisclosure | undefined>;
+
+export type BundleDeps = FleetRecallDeps &
+    Pick<Services, "usage" | "info" | "promptRecord" | "logger"> & {
+        readonly historyRoot: string;
+        // The base prompt's own text is filled in by the agent subsystem (withBaseText), which this one may not import:
+        // a route module hands the reader in, and without one the prompt rides as recorded, its sections whole.
+        readonly readPrompt?: BundlePromptReader;
+    };
+
+// What the conversation's last turn was told before its own words: the environment it worked in, which the record never
+// carries. A bundle without it still says everything else, so a failed read leaves it out.
+const promptOf = async (deps: BundleDeps, id: string): Promise<SystemPromptDisclosure | undefined> => {
+    try {
+        return await (deps.readPrompt ?? deps.promptRecord.of)(id);
+    } catch (error) {
+        deps.logger.warn({ err: error, conversationId: id }, "bundle: the conversation's system prompt could not be read");
+        return undefined;
+    }
+};
 
 // The newest rows that fit the byte budget, oldest first.
 const keptRows = <Row>(rows: readonly Row[]): readonly Row[] => {
@@ -45,9 +66,10 @@ export const conversationBundle = async (deps: BundleDeps, entry: PersistedAgent
     const id = entry.id;
     const records = { historyRoot: deps.historyRoot, usage: deps.usage, now: () => now };
     const lastActive = Math.max(entry.updatedAt, entry.answeredAt ?? 0);
-    const [agent, record, timeline, turns, errors, restarts, browser] = await Promise.all([
+    const [agent, record, prompt, timeline, turns, errors, restarts, browser] = await Promise.all([
         fleetRecall(deps, entry, deps.historyRoot),
         fleetRows(deps, entry, { last: TRANSCRIPT_ROWS }),
+        promptOf(deps, id),
         runDiagnosticsQuery(records, { query: "timeline", conversationId: id, limit: 200 }),
         runDiagnosticsQuery(records, { query: "turns", conversationId: id, limit: 100 }),
         runDiagnosticsQuery(records, { query: "errors", contains: id, level: "warn", stacks: true, group: false, limit: 60 }),
@@ -71,6 +93,7 @@ export const conversationBundle = async (deps: BundleDeps, entry: PersistedAgent
         conversation: id,
         show: { agent },
         transcript: { total: record.total, rows: kept, ...opt("omitted", omitted > 0 ? omitted : undefined) },
+        ...opt("prompt", prompt),
         timeline,
         turns,
         errors,

@@ -12,6 +12,7 @@ import type { PersistedAgent } from "../registry/agents-store.js";
 import { resolveFleetHandle } from "./fleet-handles.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { createFleetReads, readableHandle } from "./fleet-reads.js";
+import { withBaseText } from "../../agent/prompt/prompt-disclosure.js";
 import { relayFleetRead } from "../../links/link-records-relay.js";
 
 // The shell door onto the daemon's fleet knowledge (registry, record, worktree composition, phrase index), joined into
@@ -101,7 +102,15 @@ const orOnLink =
 
 // Full Services, not a Pick: `message` starts turns, and a turn is the whole daemon.
 const createFleetRoutes = (services: Services) => ({
-    ...createFleetReads(services, (c) => turnReader(services, c)),
+    // The bundle's system prompt with its base's own text, as GET /agents/{id}/system-prompt answers it.
+    ...createFleetReads(
+        services,
+        (c) => turnReader(services, c),
+        async (id) => {
+            const recorded = await services.promptRecord.of(id);
+            return recorded === undefined ? undefined : await withBaseText(recorded, services.workspace.root);
+        },
+    ),
     /** POST /fleet/message: say something to another conversation — steered into its live turn, opening one, or queued
      *  behind one; with `wait`, answered once the turn it reached settles. */
     message: async (c: Context<AppEnv>): Promise<Response> => {

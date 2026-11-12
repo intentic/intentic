@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SystemPromptDisclosureSchema } from "./system-prompt.js";
 
 // THE DIAGNOSTICS QUERIES: read-only questions over what a sandbox's daemon already recorded (its log, the editor's
 // reports, slow spans and rollups, the turn ledger, the resource series, its boots, one conversation's timeline, the
@@ -173,6 +174,9 @@ export const ConversationBundleSchema = z.object({
     show: z.unknown(),
     // The record as stored, newest last, bounded: `total` says how many rows it has.
     transcript: z.unknown(),
+    // What its last turn was told before its own words: the base prompt and what the sandbox added (guidance, persona,
+    // memory), the environment it worked in. Absent when no turn has been recorded, and from an older sandbox.
+    prompt: SystemPromptDisclosureSchema.optional().describe("The system prompt the conversation's most recent turn ran on."),
     // The diagnostics answers about it, each as the `diagnostics` command words it.
     timeline: z.string(),
     turns: z.string(),

@@ -47,6 +47,7 @@ const actions = (): { [K in keyof MenuActions]: ReturnType<typeof jest.fn> & Men
     archive: jest.fn(async () => undefined),
     startFresh: jest.fn(),
     land: jest.fn(),
+    exportTranscript: jest.fn(),
 });
 // The rows as a reader sees them: a label, or a rule between groups.
 const rows = (items: readonly MenuItem[]): string[] => items.map((item) => (item.separator === true ? `—` : String(item.label)));
@@ -85,6 +86,25 @@ describe(`what a card's menu offers`, () => {
             `—`,
             t(`agents.agentsView.archive`),
         ]);
+    });
+
+    // The whole conversation as one file, beside its session name, only where the daemon serves it to this reader, and never
+    // for a card the sandbox holds no record of.
+    it(`exports a registered card's transcript beside its session name, where the reader may take it`, () => {
+        const act = actions();
+        const items = menuItemsFor(landed, facts({ exportable: true }), act);
+        expect(rows(items)).toEqual([
+            OPEN_CHAT,
+            `—`,
+            t(`agents.agentsView.copySessionName`),
+            t(`agents.cardMenu.exportTranscript`),
+            `—`,
+            t(`agents.agentsView.archive`),
+        ]);
+        press(items, t(`agents.cardMenu.exportTranscript`));
+        expect(act.exportTranscript.mock.calls).toEqual([[landed]]);
+        expect(rows(menuItemsFor(landed, facts(), actions()))).not.toContain(t(`agents.cardMenu.exportTranscript`));
+        expect(rows(menuItemsFor(card(`new`, { status: `draft` }), facts({ exportable: true }), actions()))).toEqual([OPEN_CHAT, `—`, t(`ui.action.close`)]);
     });
 
     // An error is read in the chat, not on a diff page that cannot show it.

@@ -1030,6 +1030,7 @@
             "stoppingRun": "Stopping the {name} run"
         },
         "cardMenu": {
+            "exportTranscript": "Export transcript",
             "openIn": "Open in {name}",
             "openInItsSandbox": "Open in its sandbox",
             "stopWatchingCount": "Stop watching ({count})"

@@ -1030,6 +1030,7 @@
             "stoppingRun": "Der Lauf {name} wird gestoppt"
         },
         "cardMenu": {
+            "exportTranscript": "Transkript exportieren",
             "openIn": "In {name} öffnen",
             "openInItsSandbox": "In seiner Sandbox öffnen",
             "stopWatchingCount": "Beobachten beenden ({count})"
