@@ -739,7 +739,7 @@ fn build_cache_row(cache: &BuildCache, dry_run: bool) -> Option<(ui::Tone, Strin
                 } else {
                     "removed"
                 },
-                crate::os::drives::human_bytes(*bytes),
+                crate::util::human_bytes(*bytes),
                 BUILD_CACHE_UNUSED_HOURS / 24
             ),
         )),

@@ -322,3 +322,19 @@ mod tests {
         assert_eq!(normalize_host_name("  "), "");
     }
 }
+
+/// A count of bytes as a person reads it: `117.7 MB`, `1.2 GB`. Pure.
+pub fn human_bytes(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["bytes", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1000.0 && unit < UNITS.len() - 1 {
+        value /= 1000.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} bytes")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
