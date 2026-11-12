@@ -140,6 +140,14 @@ export const KeepWarmSettingsSchema = z.object({
         .describe(
             "Keep a Claude conversation's prompt cache warm after each turn a person asked for. Each refresh re-reads the cached context at the cache price and adds nothing to the conversation.",
         ),
+    // On by default, unlike `auto`: a person may never come back, but a working subagent's report always wakes its parent,
+    // so every refresh is spent on a re-read that is coming anyway, and none at all when the subagents finish in time.
+    subagents: z
+        .boolean()
+        .default(true)
+        .describe(
+            "Keep a Claude conversation's prompt cache warm while subagents it started are still working, whoever asked for its last turn: each one's report wakes it, and would otherwise find the cache cold after an hour. Nothing is refreshed while the cache still has time left, and refreshing stops once none of them is working.",
+        ),
     hours: z
         .number()
         .min(1)
@@ -153,7 +161,7 @@ export const KeepWarmSettingsSchema = z.object({
         .int()
         .min(0)
         .default(100_000)
-        .describe("Only conversations at least this large, in tokens, are kept warm by `auto`: a small one is cheap to re-read anyway."),
+        .describe("Only conversations at least this large, in tokens, are kept warm by `auto` or `subagents`: a small one is cheap to re-read anyway."),
     reserve: z
         .number()
         .int()

@@ -358,7 +358,8 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
             </Row>
             <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
         </RowGroup>
-        <!-- Off by default: each refresh spends the account's allowance on a chat nobody is using yet. -->
+        <!-- After a person's turn, off by default: each refresh spends the account's allowance on a chat nobody is using
+             yet. While subagents work, on: their reports are sure to wake the chat. -->
         <RowGroup data-setting="agent-idle-chats" :label="t(`sandbox.agentRecovery.keepWarmGroup`)">
             <Row icon="sun" :title="t(`sandbox.agentRecovery.keepWarm`)" :description="t(`sandbox.agentRecovery.keepWarmNote`)">
                 <template #control>
@@ -369,39 +370,48 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                     />
                 </template>
             </Row>
-            <template v-if="keepWarm.auto">
-                <Row icon="clock" :title="t(`sandbox.agentRecovery.keepWarmHours`)" :description="t(`sandbox.agentRecovery.keepWarmHoursNote`)">
-                    <template #control>
-                        <input
-                            type="number"
-                            :min="WARM_HOURS.min"
-                            :max="WARM_HOURS.max"
-                            :aria-label="t(`sandbox.agentRecovery.keepWarmHoursLabel`)"
-                            class="ui-field-box ui-field-sm w-16 text-right"
-                            :value="keepWarm.hours"
-                            @change="setKeepWarmHours"
-                        />
-                    </template>
-                </Row>
-                <Row
-                    icon="database"
-                    :title="t(`sandbox.agentRecovery.keepWarmMinTokens`)"
-                    :description="t(`sandbox.agentRecovery.keepWarmMinTokensNote`)"
-                >
-                    <template #control>
-                        <input
-                            type="number"
-                            :min="WARM_TOKENS.min"
-                            :max="WARM_TOKENS.max"
-                            step="10000"
-                            :aria-label="t(`sandbox.agentRecovery.keepWarmMinTokensLabel`)"
-                            class="ui-field-box ui-field-sm w-24 text-right"
-                            :value="keepWarm.minTokens"
-                            @change="setKeepWarmMinTokens"
-                        />
-                    </template>
-                </Row>
-            </template>
+            <Row icon="users" :title="t(`sandbox.agentRecovery.keepWarmSubagents`)" :description="t(`sandbox.agentRecovery.keepWarmSubagentsNote`)">
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="keepWarm.subagents"
+                        :disabled="settings === undefined"
+                        @update:model-value="(value: boolean) => patchKeepWarm({ subagents: value })"
+                    />
+                </template>
+            </Row>
+            <Row v-if="keepWarm.auto" icon="clock" :title="t(`sandbox.agentRecovery.keepWarmHours`)" :description="t(`sandbox.agentRecovery.keepWarmHoursNote`)">
+                <template #control>
+                    <input
+                        type="number"
+                        :min="WARM_HOURS.min"
+                        :max="WARM_HOURS.max"
+                        :aria-label="t(`sandbox.agentRecovery.keepWarmHoursLabel`)"
+                        class="ui-field-box ui-field-sm w-16 text-right"
+                        :value="keepWarm.hours"
+                        @change="setKeepWarmHours"
+                    />
+                </template>
+            </Row>
+            <!-- The floor both switches share. -->
+            <Row
+                v-if="keepWarm.auto || keepWarm.subagents"
+                icon="database"
+                :title="t(`sandbox.agentRecovery.keepWarmMinTokens`)"
+                :description="t(`sandbox.agentRecovery.keepWarmMinTokensNote`)"
+            >
+                <template #control>
+                    <input
+                        type="number"
+                        :min="WARM_TOKENS.min"
+                        :max="WARM_TOKENS.max"
+                        step="10000"
+                        :aria-label="t(`sandbox.agentRecovery.keepWarmMinTokensLabel`)"
+                        class="ui-field-box ui-field-sm w-24 text-right"
+                        :value="keepWarm.minTokens"
+                        @change="setKeepWarmMinTokens"
+                    />
+                </template>
+            </Row>
             <Row icon="usage" :title="t(`sandbox.agentRecovery.keepWarmReserve`)" :description="t(`sandbox.agentRecovery.keepWarmReserveNote`)">
                 <template #control>
                     <input

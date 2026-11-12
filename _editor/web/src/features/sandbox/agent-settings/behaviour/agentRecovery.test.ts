@@ -123,3 +123,16 @@ test("Simple keeps each ending's answer, and Advanced adds the tuning and the au
     expect(advancedRows.filter((id) => !marked(id))).toEqual([]);
     expect(storedValue(`intentic:agent-tools-detail`)).toBe(JSON.stringify({ "turn-breaks": `advanced` }));
 });
+
+test("the keep-warm floor shows while either switch is on, and the hours only with the after-turn one", async () => {
+    const minTokens = (host: HTMLElement) => host.querySelector(`input[aria-label="Minimum context, in tokens"]`);
+    const hours = (host: HTMLElement) => host.querySelector(`input[aria-label="Hours to keep an idle chat warm"]`);
+    // The daemon's own defaults: after a person's turn off, while subagents work on.
+    const host = mount();
+    expect(minTokens(host)).not.toBeNull();
+    expect(hours(host)).toBeNull();
+
+    settings.value = { ...settings.value, keepWarm: { ...settings.value.keepWarm, subagents: false } };
+    await nextTick();
+    expect(minTokens(host)).toBeNull();
+});

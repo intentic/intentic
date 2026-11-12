@@ -152,7 +152,7 @@ into the pipeline's order by subscribing earlier. They are, in subscription orde
 | reaper | `system/boot/reaper.ts` (wired in `composition.ts`, started in `bootstrap/boot-sweeps.ts`) | frees what a stopped owner held |
 | needs | `needs/needs.ts` (wired in `needs/needs-slice.ts`) | continues a conversation whose need was met while its turn ran |
 | child report | `bootstrap/boot-schedulers.ts` | tells a spawned child's parent it settled |
-| keep-warm | `bootstrap/boot-schedulers.ts` | arms a prompt-cache hold after a person's turn, from the event alone |
+| keep-warm | `bootstrap/boot-schedulers.ts` | arms a prompt-cache hold after a person's turn, or after any turn while its spawned subagents work |
 | main's fix agent | `bootstrap/boot-schedulers.ts` | hands a failing main to the owner when its fix agent's turn ends without a fix |
 
 A listener takes the `run.settled` event and decides for itself; one that needs an order against the close belongs in

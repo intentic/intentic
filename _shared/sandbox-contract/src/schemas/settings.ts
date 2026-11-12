@@ -522,8 +522,9 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "How large a home conversation's context may grow, in tokens, before its next message starts a fresh session: a summary and its latest messages instead of the whole conversation re-read on every call. Half of it is enough once the prompt cache has gone cold, since re-reading then costs a full write anyway. The chat keeps every message; only what the model reads starts over. Zero never starts one by itself.",
         ),
-    // Off by default: every refresh spends the account's own allowance on a conversation nobody is using yet. Before
-    // 2026-09-26 these were four top-level settings (settings-history.ts folds them).
+    // `auto` is off by default: every refresh spends the account's own allowance on a conversation nobody is using yet.
+    // `subagents` is on: a working child's report is sure to wake its parent. Before 2026-09-26 these were four top-level
+    // settings (settings-history.ts folds them).
     keepWarm: KeepWarmSettingsSchema.prefault({}).describe(
         "Keeping an idle conversation's prompt cache warm, so coming back to it hours later costs a cache read instead of re-sending everything. Any one conversation can be kept warm or let cool by hand whatever `auto` says.",
     ),

@@ -17,6 +17,7 @@ import { deadlineKind, deadlines, type Deadlines } from "../../../conversations/
 import { startAnchor } from "../../../conversations/worktrees/isolation.js";
 import type { Holding } from "../../../conversations/actor/conversation-holdings.js";
 import { holdOf, waitingOf } from "../../../conversations/actor/conversation-queue.js";
+import { childrenAtWorkOf } from "../../../conversations/actor/subagent-roster.js";
 import { opt } from "../../../opt.js";
 import type { ProviderDeps } from "../../../runtimes/runtime-table.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
@@ -50,6 +51,9 @@ export type KeepWarmDeps = ServiceabilityDeps & Pick<Services, "agents" | "conve
 
 const KEEPABLE: Holding<Keepable> = { name: "keepable" };
 const REFRESHING: Holding<AbortController> = { name: "keep-warm refreshes", dropped: (controller) => controller.abort() };
+// A hold armed because its conversation's subagents were at work, and the person's own hold it falls back to once none
+// is (`auto` after a turn they asked for), else nothing. Any other arming or stop clears it.
+const FOR_SUBAGENTS: Holding<{ readonly fallback: number | undefined }> = { name: "keep-warm for subagents" };
 // Each live hold's next look, at the exact instant something about it is due.
 const DUE = deadlineKind("keep-warm");
 
@@ -59,6 +63,9 @@ export const MAX_WARM_PER_ACCOUNT = 3;
 const HOUR_MS = 3_600_000;
 // A look that found a turn about to start, whose own requests keep the cache, looks again this much later.
 const BUSY_RETRY_MS = 15_000;
+// What a hold for working subagents asks for: no end of its own, so the cap (what refreshing is worth, and midnight)
+// sets it, and the subagents finishing ends it sooner.
+const SUBAGENTS_REACH_MS = 24 * HOUR_MS;
 
 const dueOf = (deps: Pick<KeepWarmDeps, "conversations" | "logger">): Deadlines =>
     deadlines(deps.conversations, DUE, (conversationId, error) => deps.logger.warn({ err: error, conversationId }, "keep-warm: tending a hold failed"));
@@ -138,6 +145,15 @@ const scheduleNext = (deps: KeepWarmDeps, conversationId: string, now: number): 
 
 /** Starts or moves a hold; `until` is shortened to what can honestly be kept, and refused when nothing can. */
 export const armKeepWarm = (deps: KeepWarmDeps, conversationId: string, until: number, now: number = Date.now()): KeepWarmAnswer => {
+    const answer = arm(deps, conversationId, until, now);
+    // A hold a person armed or moved runs to the end they asked for, whatever the subagents do.
+    if ("ok" in answer) {
+        deps.conversations.holdings(FOR_SUBAGENTS).drop(conversationId);
+    }
+    return answer;
+};
+
+const arm = (deps: KeepWarmDeps, conversationId: string, until: number, now: number): KeepWarmAnswer => {
     const { conversations } = deps;
     const keepable = conversations.holdings(KEEPABLE).get(conversationId);
     const state = conversations.state(conversationId);
@@ -173,29 +189,70 @@ export const armKeepWarm = (deps: KeepWarmDeps, conversationId: string, until: n
 export const dropKeepWarm = (deps: KeepWarmDeps, conversationId: string): void => {
     const { conversations } = deps;
     conversations.holdings(REFRESHING).get(conversationId)?.abort();
+    conversations.holdings(FOR_SUBAGENTS).drop(conversationId);
     dueOf(deps).clear(conversationId);
     conversations.send(conversationId, { kind: "keep-warm-ended" });
 };
 
-/** After a turn a person asked for: arms a hold where the sandbox-wide setting and the conversation allow it. */
+/**
+ * After a turn: arms a hold where the sandbox-wide settings and the conversation allow it. Two reasons can: a person
+ * asked for the turn and `auto` is on, or subagents it started are still at work (`subagents`, on by default), whose
+ * reports will wake it whoever asked. The second asks for no end of its own and ends once none of them is at work.
+ */
 export const autoKeepWarm = async (
     deps: KeepWarmDeps,
     settled: { readonly conversationId: string; readonly speaker: TurnSpeaker | undefined; readonly failure: string | undefined },
     now: number = Date.now(),
 ): Promise<void> => {
-    // A person at the keyboard, not a program holding a token a person minted: only they come back to a warm cache.
-    if (!spokenByPerson(settled.speaker) || settled.failure !== undefined) {
+    const { conversationId } = settled;
+    if (settled.failure !== undefined) {
         return;
     }
     const { keepWarm } = await deps.sandboxSettings.get();
-    const tokens = deps.conversations.state(settled.conversationId)?.turn.contextTokens ?? 0;
-    if (!keepWarm.auto || tokens < keepWarm.minTokens) {
+    const tokens = deps.conversations.state(conversationId)?.turn.contextTokens ?? 0;
+    if (tokens < keepWarm.minTokens) {
         return;
     }
-    const answer = armKeepWarm(deps, settled.conversationId, now + keepWarm.hours * HOUR_MS, now);
-    if ("refused" in answer) {
-        deps.logger.debug({ conversationId: settled.conversationId, reason: answer.refused }, "keep-warm: not armed after the turn");
+    // A person at the keyboard, not a program holding a token a person minted: only they come back to a warm cache.
+    const personUntil = keepWarm.auto && spokenByPerson(settled.speaker) ? now + keepWarm.hours * HOUR_MS : undefined;
+    const forSubagents = keepWarm.subagents && childrenAtWorkOf(deps.conversations, conversationId) > 0;
+    if (!forSubagents) {
+        if (personUntil !== undefined) {
+            refusedAfterTurn(deps, conversationId, armKeepWarm(deps, conversationId, personUntil, now));
+        }
+        return;
     }
+    const answer = arm(deps, conversationId, now + SUBAGENTS_REACH_MS, now);
+    if ("ok" in answer) {
+        deps.conversations.holdings(FOR_SUBAGENTS).hold(conversationId, conversationId, { fallback: personUntil });
+    }
+    refusedAfterTurn(deps, conversationId, answer);
+};
+
+const refusedAfterTurn = (deps: Pick<KeepWarmDeps, "logger">, conversationId: string, answer: KeepWarmAnswer): void => {
+    if ("refused" in answer) {
+        deps.logger.debug({ conversationId, reason: answer.refused }, "keep-warm: not armed after the turn");
+    }
+};
+
+/**
+ * A hold for subagents none of which is at work any more, looked at as a refresh falls due: it goes on as the person's
+ * own hold where one stands behind it, else ends without spending the refresh. Their reports have woken the
+ * conversation already (whose turn took the hold), or never will: a child stopped, paused for a reset, or waiting on a
+ * person. Answers whether it did either, leaving the hold to be looked at again rather than refreshed now: the person's
+ * hold may end before this refresh would be worth sending.
+ */
+const outlivedSubagents = (deps: KeepWarmDeps, conversationId: string, end: (reason: KeepWarmEnd, detail?: string) => void, now: number): boolean => {
+    const { conversations } = deps;
+    const held = conversations.holdings(FOR_SUBAGENTS).get(conversationId);
+    if (held === undefined || childrenAtWorkOf(conversations, conversationId) > 0) {
+        return false;
+    }
+    conversations.holdings(FOR_SUBAGENTS).drop(conversationId);
+    if (held.fallback === undefined || !("ok" in arm(deps, conversationId, held.fallback, now))) {
+        end("elapsed", "its subagents are no longer working");
+    }
+    return true;
 };
 
 // A refresh that wrote more than this found the cache gone; the tail it adds (last answer, the refresh's own words) stays under it.
@@ -340,6 +397,22 @@ const movedOn = (deps: KeepWarmDeps, conversationId: string, keepable: Keepable 
     return entry.profile.account !== undefined && entry.profile.account !== keepable.account ? "the conversation moved to another account" : undefined;
 };
 
+type ClockLook = { readonly kind: "due" | "wait" } | { readonly kind: "end"; readonly reason: KeepWarmEnd; readonly detail?: string };
+
+// What the cache's clock says of a hold: it is over, nothing is due yet, or a refresh is due now.
+const clockLook = (cache: { readonly at: number; readonly ttlMs: number } | undefined, kept: KeepWarm, now: number): ClockLook => {
+    if (cache === undefined || cache.at + cache.ttlMs <= now) {
+        return { kind: "end", reason: "cold", detail: "it expired before a refresh could run" };
+    }
+    if (now >= nextPromptDayAt(cache.at)) {
+        return { kind: "end", reason: "changed", detail: "the date in the prompt" };
+    }
+    if (now >= kept.until) {
+        return { kind: "end", reason: "elapsed" };
+    }
+    return cache.at + cache.ttlMs >= kept.until || now < keepWarmDueAt(cache) ? { kind: "wait" } : { kind: "due" };
+};
+
 /** One conversation's hold, looked at when its deadline falls: ended, looked at again later, or refreshed. */
 export const tendKeepWarm = async (deps: KeepWarmDeps, conversationId: string, now: number = Date.now()): Promise<void> => {
     const { conversations } = deps;
@@ -351,6 +424,7 @@ export const tendKeepWarm = async (deps: KeepWarmDeps, conversationId: string, n
     }
     const end = (reason: KeepWarmEnd, detail?: string): void => {
         schedule(deps, conversationId, undefined, now);
+        conversations.holdings(FOR_SUBAGENTS).drop(conversationId);
         conversations.send(conversationId, { kind: "keep-warm-ended", reason, ...opt("detail", detail) }, now);
     };
     const entry = deps.agents.entry(conversationId);
@@ -370,20 +444,13 @@ export const tendKeepWarm = async (deps: KeepWarmDeps, conversationId: string, n
         end("changed", moved);
         return;
     }
-    const cache = state.turn.promptCache;
-    if (cache === undefined || cache.at + cache.ttlMs <= now) {
-        end("cold", "it expired before a refresh could run");
+    const look = clockLook(state.turn.promptCache, kept, now);
+    if (look.kind === "end") {
+        end(look.reason, look.detail);
         return;
     }
-    if (now >= nextPromptDayAt(cache.at)) {
-        end("changed", "the date in the prompt");
-        return;
-    }
-    if (now >= kept.until) {
-        end("elapsed");
-        return;
-    }
-    if (cache.at + cache.ttlMs >= kept.until || now < keepWarmDueAt(cache)) {
+    // Subagents are asked only once a refresh is due: until then a hold costs nothing however they fare.
+    if (look.kind === "wait" || outlivedSubagents(deps, conversationId, end, now)) {
         scheduleNext(deps, conversationId, now);
         return;
     }

@@ -17,6 +17,9 @@ import { rootExecution } from "../../../../workload/agent-execution.testing.js";
 import { armKeepWarm, autoKeepWarm, dropKeepWarm, keepableOf, keepWarmDueOf, noteKeepable, stopKeepWarm, tendKeepWarm } from "../cache-keepwarm.js";
 import { nextPromptDayAt } from "../../../../conversations/actor/conversation-state.js";
 import { claudeReading } from "../../../providers/claude/claude-usage.testing.js";
+import type { TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
+import { ROSTER } from "../../../../conversations/actor/subagent-roster.js";
+import { openSpawnedChild, settleSpawnedChild } from "../../../subagents/subagents.js";
 
 // Only the runtime is fake: the actor, registry, reducer and provider module a refresh reports into are the real ones.
 
@@ -82,7 +85,10 @@ interface Harness {
 }
 
 // The frames a refresh hears, stopping where its own signal says it was cut off.
-const harness = (frames: readonly AgentEvent[], opts: { usage?: AccountUsage; keepWarm?: boolean; seatRefusal?: string } = {}): Harness => {
+const harness = (
+    frames: readonly AgentEvent[],
+    opts: { usage?: AccountUsage; keepWarm?: boolean; subagents?: boolean; seatRefusal?: string } = {},
+): Harness => {
     const sent: HarnessRequest[] = [];
     const rows: Omit<UsageTurn, "at" | "day">[] = [];
     const deps = services({
@@ -107,7 +113,9 @@ const harness = (frames: readonly AgentEvent[], opts: { usage?: AccountUsage; ke
         accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", {
             read: async () => (opts.usage === undefined ? {} : { acct: opts.usage }),
         }),
-        sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ keepWarm: { auto: opts.keepWarm ?? false } }) },
+        sandboxSettings: {
+            get: async () => SandboxSettingsSchema.parse({ keepWarm: { auto: opts.keepWarm ?? false, subagents: opts.subagents ?? true } }),
+        },
         usage: {
             record: async (row) => {
                 rows.push(row);
@@ -398,5 +406,122 @@ describe("the sandbox-wide setting", () => {
         keep(deps);
         await autoKeepWarm(deps, { conversationId: ID, speaker: { kind: "person", email: "me@example.com" }, failure: undefined }, T0 + MINUTE);
         expect(hold(deps)).toBeUndefined();
+    });
+});
+
+describe("subagents at work", () => {
+    const PERSON = { kind: "person", email: "me@example.com" } as const;
+    const KID = "kid-1";
+
+    // A subagent this conversation spawned, at work as its turn settles.
+    const spawnKid = (deps: Services, id = KID): void =>
+        openSpawnedChild({ conversationId: ID, conversations: deps.conversations, subagentsDir: undefined }, { id });
+    const kidEnded = (deps: Services, id = KID): void => settleSpawnedChild(deps.conversations, id, { status: "completed", report: "done" });
+
+    // A settled turn with a subagent still at work, and the setting's own after-turn arming, a sandbox wake by default.
+    const working = async (
+        frames: readonly AgentEvent[],
+        opts: Parameters<typeof harness>[1] & { readonly speaker?: TurnSpeaker } = {},
+    ): Promise<Harness> => {
+        const built = harness(frames, opts);
+        await settled(built.deps);
+        keep(built.deps);
+        spawnKid(built.deps);
+        await autoKeepWarm(built.deps, { conversationId: ID, speaker: opts.speaker, failure: undefined }, T0 + MINUTE);
+        return built;
+    };
+
+    test("arms after any turn, a sandbox wake included, and reaches as far as refreshing is worth", async () => {
+        const { deps } = await working([]);
+        // An hour's entry, nine refreshes fifty minutes apart: no end of its own, unlike a person's `hours`.
+        expect(hold(deps)).toEqual({ since: T0 + MINUTE, until: T0 + HOUR + 9 * 50 * MINUTE, refreshes: 0 });
+        expect(keepWarmDueOf(deps, ID)).toBe(T0 + 50 * MINUTE);
+        stopKeepWarm(deps);
+    });
+
+    test("is on by default, and stays off where the setting is", async () => {
+        expect(SandboxSettingsSchema.parse({}).keepWarm).toMatchObject({ auto: false, subagents: true });
+        const off = await working([], { subagents: false });
+        expect(hold(off.deps)).toBeUndefined();
+    });
+
+    test("leaves a subagent that is paused or waiting on a person, or one already done, to wake it whenever that is", async () => {
+        const { deps } = harness([]);
+        await settled(deps);
+        keep(deps);
+        spawnKid(deps, "paused");
+        spawnKid(deps, "blocked");
+        spawnKid(deps, "done");
+        deps.conversations.holdings(ROSTER).get("paused")!.status = "paused";
+        deps.conversations.holdings(ROSTER).get("blocked")!.status = "blocked";
+        kidEnded(deps, "done");
+        await autoKeepWarm(deps, { conversationId: ID, speaker: undefined, failure: undefined }, T0 + MINUTE);
+        expect(hold(deps)).toBeUndefined();
+    });
+
+    test("leaves a conversation smaller than the floor, or a failed turn, alone", async () => {
+        const small = harness([]);
+        await settled(small.deps);
+        keep(small.deps);
+        spawnKid(small.deps);
+        small.deps.conversations.send(ID, { kind: "frame", frame: { kind: "context_usage", tokens: 50_000, contextWindow: 1_000_000 } });
+        await autoKeepWarm(small.deps, { conversationId: ID, speaker: undefined, failure: undefined }, T0 + MINUTE);
+        expect(hold(small.deps)).toBeUndefined();
+        const failed = harness([]);
+        await settled(failed.deps);
+        keep(failed.deps);
+        spawnKid(failed.deps);
+        await autoKeepWarm(failed.deps, { conversationId: ID, speaker: undefined, failure: "boom" }, T0 + MINUTE);
+        expect(hold(failed.deps)).toBeUndefined();
+    });
+
+    test("refreshes while one is still at work", async () => {
+        const { deps, sent } = await working(refreshed(T0 + 51 * MINUTE));
+        await tendKeepWarm(deps, ID, T0 + 51 * MINUTE);
+        expect(sent).toHaveLength(1);
+        expect(hold(deps)?.refreshes).toBe(1);
+        stopKeepWarm(deps);
+    });
+
+    test("costs nothing when they finish while the cache still has time left", async () => {
+        const { deps, sent } = await working(refreshed(T0 + 51 * MINUTE));
+        kidEnded(deps);
+        await tendKeepWarm(deps, ID, T0 + 30 * MINUTE);
+        expect(sent).toHaveLength(0);
+        expect(hold(deps)?.ended).toBeUndefined();
+        stopKeepWarm(deps);
+    });
+
+    test("ends instead of spending the refresh once none is at work", async () => {
+        const { deps, sent, rows } = await working(refreshed(T0 + 51 * MINUTE));
+        kidEnded(deps);
+        await tendKeepWarm(deps, ID, T0 + 51 * MINUTE);
+        expect(sent).toHaveLength(0);
+        expect(rows).toHaveLength(0);
+        expect(hold(deps)?.ended).toEqual({ at: T0 + 51 * MINUTE, reason: "elapsed", detail: "its subagents are no longer working" });
+        expect(keepWarmDueOf(deps, ID)).toBeUndefined();
+    });
+
+    test("goes on as the person's own hold once they are done, when a person asked for the turn", async () => {
+        const { deps, sent } = await working(refreshed(T0 + 51 * MINUTE), { keepWarm: true, speaker: PERSON });
+        expect(hold(deps)?.until).toBe(T0 + HOUR + 9 * 50 * MINUTE);
+        kidEnded(deps);
+        await tendKeepWarm(deps, ID, T0 + 51 * MINUTE);
+        // Cut back to the four hours `auto` asked for, and looked at again before anything is spent.
+        expect(hold(deps)).toMatchObject({ until: T0 + MINUTE + 4 * HOUR, refreshes: 0 });
+        expect(sent).toHaveLength(0);
+        await tendKeepWarm(deps, ID, T0 + 51 * MINUTE);
+        expect(sent).toHaveLength(1);
+        stopKeepWarm(deps);
+    });
+
+    test("a hold a person moves by hand runs to their end, whatever the subagents do", async () => {
+        const { deps, sent } = await working(refreshed(T0 + 51 * MINUTE));
+        armKeepWarm(deps, ID, T0 + 2 * HOUR, T0 + 2 * MINUTE);
+        kidEnded(deps);
+        await tendKeepWarm(deps, ID, T0 + 51 * MINUTE);
+        expect(sent).toHaveLength(1);
+        expect(hold(deps)).toMatchObject({ until: T0 + 2 * HOUR, refreshes: 1 });
+        stopKeepWarm(deps);
     });
 });
