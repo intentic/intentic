@@ -36,12 +36,20 @@ in the popup; justify it as:
   click. It uses Chrome's documented User Scripts API, which the Manifest V3 remote-code policy names as a permitted
   way to run code that is not in the extension package.
 
+Downloads add the **optional** `downloads` permission, requested only when the person turns Downloads on in the
+popup; justify it as:
+
+- **downloads (optional):** Moves a file that the agent's own click downloaded (for example, a site's Download
+  button in the agent's window) into the user's own sandbox, where the agent can use it, and then removes it from the
+  browser's download list. Requested only when the user turns Downloads on. Downloads the user starts are not read
+  beyond their address and are never moved. Files go only to the user's own sandbox.
+
 Uploading the package through the API does not fill those fields. The store can accept the upload and then reject
 `:publish` with HTTP 400, "Your submission does not meet the requirements to be published in the store." The API
 response does not name the missing field. Open the item in the Developer Dashboard and select **Why can't I submit?**
 beside **Submit for review** to see the exact validation errors. Fill the missing fields and select **Save draft**;
 the submit button becomes enabled when the requirements are met. Optional permissions require justifications too:
-the missing `nativeMessaging` justification blocked release `1.353.0` despite a successful upload.
+the missing `nativeMessaging` justification blocked release `1.353.0` despite a successful upload, and the missing `downloads` one blocked `1.413.0`.
 
 After correcting dashboard metadata, rerun the failed publish job at the same release tag. The uploaded package
 does not need a new version just to submit its corrected listing.
