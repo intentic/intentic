@@ -201,7 +201,7 @@ const placementOf = (
             services,
             { conversationId: id, snapshot, runner },
             {
-                compose: () => ensureComposedWorktree(services, input, id, input.worktreeBase, entersNamespace(input)),
+                compose: () => ensureComposedWorktree(services, input, id, input.worktreeBase, entersNamespace(input), { mirror: true }),
                 // What carries a failed turn on is this sandbox's to decide, never the runner's (remote-failure.ts).
                 dispatch: (worktree) => remoteFailuresHere(services, { ...input, conversationId: id }, runner, dispatchRemoteTurn(services, { ...input, conversationId: id }, runner, worktree, signal)),
             },
@@ -220,7 +220,7 @@ const placementOf = (
         services,
         { input, conversationId: id, snapshot, signal, reach },
         {
-            compose: (base) => ensureComposedWorktree(services, input, id, base, entersNamespace(input), true),
+            compose: (base) => ensureComposedWorktree(services, input, id, base, entersNamespace(input), { fromParent: true }),
             versionMain: (repos) => versionMainTree(services, repos),
             run: (worktree) => runTurn(services, input, admission, signal, worktree, steering, snapshot, reach, conversation.coldTrimBasis),
             settleLanding: (conversationId, land) => settleLandingInBackground(services, conversationId, land),

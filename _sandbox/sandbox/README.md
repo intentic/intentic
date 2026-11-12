@@ -1159,6 +1159,9 @@ A Cargo repository (a `Cargo.toml` at its top or one folder below) is priced at 
 (`conversations/worktrees/build-outputs/build-output-estimate.ts`, 2026-11-03): main's own build output, measured in the background
 and kept six hours, or 8 GiB, the median shinobi's checkouts reached, until main has a measured one. Its tracked files
 were about 0.3 GB of a checkout that went on to hold 8-23 GB of `target/`.
+A runner's mirror is priced by its files alone (`composition-space.ts`, `buildsHere`): its builds run on the runner,
+whose own daemon prices its checkout, build output included, against its own disk when the turn opens there. Memory
+is the same: a runner turn's room is admitted by the runner's budget, never this sandbox's.
 Storage lists build output inside checkouts as its own category, `buildOutputs`, carved out of the protected
 checkouts by the folders the sweep would remove; its Clean hands the press to the build-output reaper, which takes only
 checkouts whose conversation has nothing running, and the checkouts themselves stay protected.

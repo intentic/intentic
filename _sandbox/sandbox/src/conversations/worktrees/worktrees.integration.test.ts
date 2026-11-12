@@ -14,6 +14,7 @@ import { createPerfTracker } from "../../system/resources/perf.js";
 import { opt } from "../../opt.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { createAgentWorktrees } from "./worktrees.js";
+import { settledEstimate } from "./build-outputs/build-output-estimate.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -976,6 +977,22 @@ test("the predicted checkout cost refuses a write even above the free-space floo
         "The sandbox's disk has 10 GB free, too little to give this conversation its own copy of the workspace (about 13 GB).",
     );
     expect(existsSync(worktrees.conversationDir("c1"))).toBe(false);
+});
+
+// A runner's mirror only holds the files the runner sends back. Its builds fill the runner's disk, so the build output
+// a Rust checkout is priced at here is not counted against this one (2026-11-12: a turn sent to omen was refused for
+// rog's disk because of rog's own main `target/`).
+test("a runner's mirror is priced by its files alone, not by the builds that run on the runner", async () => {
+    const { work, worktrees } = await setup(async () => ({ freeBytes: 25 * 1024 ** 3, totalBytes: 1024 ** 4 }));
+    await writeFile(join(work, "Cargo.toml"), "[workspace]\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a cargo workspace");
+    // 25 GiB free over a 20 GiB floor: a local checkout's unmeasured Rust build (8 GiB) does not fit, its files do.
+    await expect(worktrees.ensure("local", [], undefined, undefined, [])).rejects.toThrow("too little to give this conversation its own copy");
+    expect(existsSync(worktrees.conversationDir("local"))).toBe(false);
+    const mirror = await worktrees.ensure("mirror", [], undefined, undefined, [], undefined, false);
+    expect(existsSync(join(mirror.cwd, "Cargo.toml"))).toBe(true);
+    await settledEstimate(work);
 });
 
 // A repo that joins while the daemon runs, with git's ordinary in-tree `.git` (`git init`, `git clone`): the boot pass

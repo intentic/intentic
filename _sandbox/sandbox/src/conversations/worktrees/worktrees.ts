@@ -89,6 +89,9 @@ export interface AgentWorktrees {
         // Narrows the composition to the repositories it reaches, and cuts each of those to a sparse checkout, so the
         // fence is enforced by ABSENCE rather than by a tool hook a shell can compute its way around.
         fence?: Fence,
+        // Whether the checkout's builds run here; false for a runner's mirror, so only its files are priced against this
+        // sandbox's disk (composition-space.ts). Absent means they do.
+        buildsHere?: boolean,
     ) => Promise<ConversationWorktree>;
     // Tear down: worktree remove before the ref (git refuses to delete a checked-out branch), then the dir.
     readonly remove: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<void>;
@@ -685,7 +688,7 @@ export const createAgentWorktrees = (
                 .filter((entry): entry is { repo: string; base: string } => entry.base !== undefined)
                 .map(({ repo, base }) => ({ repo, base }));
         },
-        ensure: async (id, recorded, base, namespaced, selection, fence) => {
+        ensure: async (id, recorded, base, namespaced, selection, fence, buildsHere) => {
             const branch = `agent/${id}`;
             // What the conversation should hold, root leading: every live repo, or the selected ones plus root, and
             // in either case only the ones the fence reaches.
@@ -693,7 +696,7 @@ export const createAgentWorktrees = (
             // conversation is selected.
             const available = base ?? (await liveRepos()).map((repo) => ({ repo, base: undefined }));
             const live = selectedComposition(available, selection, fence);
-            const releaseSpace = await reserveCompositionSpace(id, recorded, live, { ...options, mainDir, worktreeDir, head: composableHead, git });
+            const releaseSpace = await reserveCompositionSpace(id, recorded, live, { ...options, mainDir, worktreeDir, head: composableHead, git, buildsHere });
             try {
                 if (recorded.length > 0) {
                     await eachRepo(recorded, "root-first", (repo) => withRepoLock(repo, () => repairOne(id, repo)));

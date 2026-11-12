@@ -87,14 +87,15 @@ const openingCut = async (services: Services, input: AgentTurn, entry: Persisted
 // Brings the checkout to what the conversation carries, for both the local turn and the runner's mirror. The opening
 // turn decides and records the composition; later turns reconcile the checkout to it. A local spawned child with no base
 // of its own opens on its parent's current work (`fromParent`); a runner's child opens on the main line, since the runner
-// rebases the branch onto its own copy of it.
+// rebases the branch onto its own copy of it. A runner's mirror (`mirror`) builds nothing here, so only its files are
+// priced against this sandbox's disk; the runner prices its own checkout, builds and all, against its own.
 export const ensureComposedWorktree = async (
     services: Services,
     input: AgentTurn,
     conversationId: string,
     base: readonly { repo: string; base: string }[] | undefined,
     namespaced: boolean,
-    fromParent = false,
+    { fromParent = false, mirror = false }: { readonly fromParent?: boolean; readonly mirror?: boolean } = {},
 ): Promise<ConversationWorktree> => {
     const entry = services.agents.entry(conversationId);
     const recorded = worktreeOf(entry)?.repos ?? [];
@@ -104,7 +105,7 @@ export const ensureComposedWorktree = async (
     // The conversation's own fence, from the areas its starter held. Resolved here rather than latched as folders,
     // so editing an area narrows an existing conversation's checkout on its next turn.
     const fence = conversationFence(await services.areas.list(), entry?.identity);
-    const worktree = await services.agentWorktrees.ensure(conversationId, recorded, cut?.base ?? base, namespaced, composition?.repos, fence);
+    const worktree = await services.agentWorktrees.ensure(conversationId, recorded, cut?.base ?? base, namespaced, composition?.repos, fence, !mirror);
     if (opening || !sameRepos(recorded, worktree.repos)) {
         const branches = cut?.branches;
         if (branches?.some(({ repo }) => !worktree.repos.some((composed) => composed.repo === repo)) === true) {

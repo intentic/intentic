@@ -25,6 +25,11 @@ interface CompositionSpaceOptions {
     readonly historySpace?: () => Promise<HistorySpace>;
     // What a checkout of the repository at main's dir grows to in build output; build-output-estimate.ts by default.
     readonly buildOutputs?: (mainDir: string) => Promise<number>;
+    // Whether the checkout's builds run on this disk. A runner's mirror (false) holds only the files the runner sends
+    // back: its builds fill the runner's disk, and the runner prices its own checkout against that disk when it opens
+    // it. On 2026-11-12 a turn sent to omen was refused for rog's disk, because rog's own main `target/` (about 115 GB)
+    // was counted for a mirror that never builds.
+    readonly buildsHere?: boolean | undefined;
 }
 
 // Reserve only the checkouts ensure will write. Standing ones need no space reading or tree-size walk.
@@ -36,6 +41,7 @@ export const reserveCompositionSpace = async (
 ): Promise<() => void> => {
     const { mainDir, worktreeDir, git, logger, head, historyRoot, historySpace } = options;
     const buildOutputs = options.buildOutputs ?? ((dir: string) => buildOutputEstimate(dir));
+    const buildsHere = options.buildsHere ?? true;
     const candidates = [...new Set([...recorded.map(({ repo }) => repo), ...live.map(({ repo }) => repo)])];
     const missing = (
         await Promise.all(
@@ -64,8 +70,9 @@ export const reserveCompositionSpace = async (
                     logger.warn({ err: error, repo }, "agents: could not size a checkout before writing it");
                     return undefined;
                 });
-                // What its builds will add: a Rust checkout's `target/` dwarfs its files (build-output-estimate.ts).
-                return files === undefined ? undefined : files + (await buildOutputs(mainDir(repo)));
+                // What its builds will add here: a Rust checkout's `target/` dwarfs its files (build-output-estimate.ts).
+                // A runner's mirror adds nothing here.
+                return files === undefined ? undefined : files + (buildsHere ? await buildOutputs(mainDir(repo)) : 0);
             }),
         );
         const known = costs.filter((cost) => cost !== undefined);
