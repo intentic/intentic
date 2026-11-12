@@ -40,6 +40,7 @@ const GLYPHS = {
     repair: `wrench`,
     "engine-move": `server`,
     "first-task": `comments`,
+    "agent-install": `shield`,
 } as const satisfies Readonly<Record<ProcessKind, IconName>>;
 
 // A recreate is not worn in the sandbox's letters: its subject is the container's slug (`sandbox-6a4ac…`), so every one

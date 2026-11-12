@@ -1642,6 +1642,10 @@ fn follow(
                 if let Some(heard) = &heard {
                     heard(stream, line);
                 }
+                // Security software refusing the machine agent is the computer's, whichever run met it.
+                if stream == Stream::Stdout {
+                    crate::agent_install::hear(&app, line);
+                }
                 let _ = app.emit(
                     RUN_EVENT,
                     RunEvent::Line {

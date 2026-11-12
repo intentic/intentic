@@ -14601,7 +14601,8 @@
             "sync": "Synchronisation de {name}",
             "repair": "Réparation",
             "engineMove": "Déplacement de vos sandboxes",
-            "firstTask": "Première tâche de {name}"
+            "firstTask": "Première tâche de {name}",
+            "agentInstall": "L'agent Intentic sur cet ordinateur"
         },
         "wait": {
             "consent": "En attente de votre accord",
@@ -14634,7 +14635,9 @@
             "signInAgain": "Rouvrir le navigateur",
             "cancel": "Annuler",
             "allow": "Autoriser",
-            "deny": "Refuser"
+            "deny": "Refuser",
+            "copy": "Copier la note",
+            "copied": "Copié"
         },
         "page": {
             "needs": "Ce qu'il demande",

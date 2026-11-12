@@ -32,6 +32,8 @@ export const PROCESS_KINDS = [
     `repair`,
     `engine-move`,
     `first-task`,
+    // This computer's machine agent kept off it by security software (the app's agent_install.rs): one per computer.
+    `agent-install`,
 ] as const;
 export type ProcessKind = (typeof PROCESS_KINDS)[number];
 
@@ -49,7 +51,8 @@ export type ProcessWait = (typeof PROCESS_WAITS)[number];
  * What the reader can do about a run, named here and worded by the page (shell/rail/processes/processWords.ts). `open`
  * opens what the run made (a sandbox: on Home in place; elsewhere it is the press that goes there); `use-hosted` takes
  * the sandbox to a machine of ours instead; `fresh-code` runs a setup again on a code minted now; `allow` and `deny`
- * answer one need.
+ * answer one need. `copy` is a need's own press that never reaches the run: the page puts the need's detail (a note to
+ * hand someone, such as whoever manages the antivirus) on the clipboard.
  */
 export const PROCESS_ACTIONS = [
     `consent`,
@@ -67,6 +70,7 @@ export const PROCESS_ACTIONS = [
     `cancel`,
     `allow`,
     `deny`,
+    `copy`,
 ] as const;
 export type ProcessAction = (typeof PROCESS_ACTIONS)[number];
 

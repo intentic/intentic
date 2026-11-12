@@ -46,6 +46,7 @@ pub const KINDS: &[&str] = &[
     "repair",
     "engine-move",
     "first-task",
+    "agent-install",
 ];
 pub const STATES: &[&str] = &["running", "waiting", "failed", "stopped", "done"];
 pub const WAITS: &[&str] = &[
@@ -67,6 +68,8 @@ pub const ACTIONS: &[&str] = &[
     "cancel",
     "allow",
     "deny",
+    // A need's own press, answered in the page: its detail (a note to hand someone) onto the clipboard.
+    "copy",
 ];
 
 /// One thing a run asks of the reader: a requirement to consent to, an approval to give.
@@ -556,6 +559,7 @@ fn notice_words(report: &ProcessReport) -> (String, Option<String>) {
         ("pc-setup", _) => "Setting up this PC needs you".to_string(),
         ("docker", _) => "Docker needs you".to_string(),
         ("repair", _) => "Repair needs your OK".to_string(),
+        ("agent-install", _) => "Intentic can't put its agent on this PC".to_string(),
         (_, "failed") => format!("{subject} stopped"),
         _ => format!("{subject} needs you"),
     };
@@ -590,7 +594,7 @@ fn owner_of(report: &ProcessReport) -> Owner {
         return Owner::Workspace;
     }
     match report.kind.as_str() {
-        "sign-in" | "folder-setup" | "first-task" | "repair" => Owner::App,
+        "sign-in" | "folder-setup" | "first-task" | "repair" | "agent-install" => Owner::App,
         _ => Owner::MainWindow,
     }
 }
@@ -667,6 +671,7 @@ fn act_here(app: &AppHandle, held: &ProcessReport, act: &str, need: Option<&str>
                 None => {}
             }
         }
+        "agent-install" => crate::agent_install::act(app, act),
         "repair" if crate::repair::act(app, act, need) => {
             crate::windows::show_home_route(app, press, "/repair");
         }
@@ -881,7 +886,13 @@ mod tests {
         let mut workspace = setup();
         workspace.origin = "workspace".into();
         assert_eq!(owner_of(&workspace), Owner::Workspace);
-        for kind in ["sign-in", "folder-setup", "first-task", "repair"] {
+        for kind in [
+            "sign-in",
+            "folder-setup",
+            "first-task",
+            "repair",
+            "agent-install",
+        ] {
             assert_eq!(
                 owner_of(&ProcessReport::of(kind, "x", "running")),
                 Owner::App,

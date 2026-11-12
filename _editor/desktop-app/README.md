@@ -614,6 +614,16 @@ flowchart LR
   app runs also carries `INTENTIC_AGENT_FLOOR` (its own release, `commands.rs` `app_env`): an agent at it or newer sets
   up without asking the release channel and every WSL side first (the machine agent's `install.ts` `meetsFloor`).
 
+  **An antivirus that will not have the agent is said, not guessed at** (`agent_install.rs`, 2026-11-12). When an
+  antivirus refuses `intentic-machine.exe` (the download vanishes into quarantine, or Windows refuses that one name in a
+  folder that takes any other), the bootstrap prints a `security-software` requirement naming the product Windows
+  Security Center lists, with a note for whoever manages it (scripts-kit/agent-fetch.ps1). Every run's stdout passes
+  `agent_install::hear` (`scripts.rs` `follow`), so whichever run met it (this install at launch, a folder's setup, a
+  sync) puts up ONE process, `agent-install:this`: why, the note with a Copy the page answers itself, and Try again,
+  which runs this install again. A folder whose sync never started says the same reason on its card. Nothing adds an
+  exclusion: software that exempts itself from a scanner is what malware does. _(Until 2026-11-12) The refusal surfaced
+  as "Access to the path is denied" from the bootstrap's last `Move-Item`, or as a folder that "isn't syncing"._
+
   **Ready means Open shows a drawn page** (2026-10-22). Once the sandbox answers end to end (its `connecting-machine`
   phase), the app puts the workspace's page up out of sight (`windows/warmth.rs` `warm_workspace`), built at Home when
   the frame has none, so Open routes a page already drawn. A workspace already in the frame is never sent anywhere,
@@ -982,7 +992,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/wake.rs](src-tauri/src/wake.rs), [src-tauri/src/microphone.rs](src-tauri/src/microphone.rs) and [src-tauri/src/autostart.rs](src-tauri/src/autostart.rs) — the wake word with the window in the tray: what the page says and is told, the tray's rows, the microphone for the workspace alone, and the start at sign-in.
 - [src-tauri/src/found.rs](src-tauri/src/found.rs) — what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name.
 - [src-tauri/src/agents.rs](src-tauri/src/agents.rs) — the machine agents of this computer's environments: this app's own, and each running WSL distro's.
-- [src-tauri/src/agent_install.rs](src-tauri/src/agent_install.rs) — the machine agent put on a computer that has none, at launch, so a first folder's sync does not wait on its download.
+- [src-tauri/src/agent_install.rs](src-tauri/src/agent_install.rs) — the machine agent put on a computer that has none, at launch, so a first folder's sync does not wait on its download; and the one process that says an antivirus refused it.
 - [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder and its sandbox: what its dialog draws, the folder asked for a sandbox of its own, and the project verbs its window runs.
 - [src-tauri/src/folder_setup.rs](src-tauri/src/folder_setup.rs) — each folder's own sandbox: the records every window hears, the thread that makes them one at a time, and each first copy followed in.
 - [src-tauri/src/setup_progress.rs](src-tauri/src/setup_progress.rs) — a setup's own lines read into a step, a percent, what it asks for and why it stopped.

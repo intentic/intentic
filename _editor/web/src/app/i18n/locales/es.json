@@ -14601,7 +14601,8 @@
             "sync": "Sincronizando {name}",
             "repair": "Reparación",
             "engineMove": "Moviendo tus sandboxes",
-            "firstTask": "Primera tarea de {name}"
+            "firstTask": "Primera tarea de {name}",
+            "agentInstall": "El agente de Intentic en este equipo"
         },
         "wait": {
             "consent": "Esperando tu visto bueno",
@@ -14634,7 +14635,9 @@
             "signInAgain": "Abrir el navegador de nuevo",
             "cancel": "Cancelar",
             "allow": "Permitir",
-            "deny": "Denegar"
+            "deny": "Denegar",
+            "copy": "Copiar la nota",
+            "copied": "Copiado"
         },
         "page": {
             "needs": "Lo que pide",

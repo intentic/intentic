@@ -154,6 +154,23 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         the screen described above.
     </p>
 
+    <h3 id="antivirus-blocks-the-agent">An antivirus blocks intentic-machine.exe</h3>
+    <p>
+        Syncing folders and reaching this computer from a sandbox run through one program, <code>intentic-machine.exe</code>,
+        which lives in <code>%USERPROFILE%\.intentic\machine\bin</code>. Some antivirus products, most often ones a
+        company manages for its staff, refuse it: the download arrives, and Windows then answers
+        <strong>Access to the path is denied</strong> for that one name, even for an empty file, while any other file
+        saves in the same folder. The setup tells this apart from an ordinary permissions problem, names the antivirus
+        Windows Security Center lists, and the app shows it as <strong>Intentic's agent on this computer</strong> with a
+        note to copy for whoever manages the antivirus.
+    </p>
+    <p>
+        Nothing on the PC itself gets past it, and Intentic does not add exclusions for itself. Ask whoever manages the
+        antivirus (at work, your IT) to restore <code>intentic-machine.exe</code> from its quarantine and to allow the
+        folder <code>%USERPROFILE%\.intentic\machine\bin</code>. Allow it by folder rather than by file hash: the agent
+        updates itself with each release. Then press <strong>Try again</strong>.
+    </p>
+
     <h3>The setup code no longer works</h3>
     <p>
         Setup codes expire <strong>30 minutes</strong> after the screen mints one. Reopen the setup screen and a fresh code is minted into a fresh command; nothing else is lost, and it is still the same sandbox. Re-running a command whose code is still valid is also safe: see <a href="/docs/quickstart/#setup-codes">more about setup codes</a>.

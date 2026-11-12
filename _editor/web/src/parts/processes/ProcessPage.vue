@@ -3,11 +3,11 @@
      takes, answered here rather than on another screen. The run is never this page's: leaving it changes nothing, which
      the page says. A face that has more to show (Devices' card on This computer) puts it in the slot. -->
 <script setup lang="ts">
-import { Button, Meter, Page, SandboxLogo, SectionHeader, toneTint } from "@intentic/ui";
+import { Button, Meter, Page, SandboxLogo, SectionHeader, toneTint, useCopied } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
-import { computed } from "vue";
-import { type ProcessAction, processAsks, processLive, type ProcessReport } from "../../app/environments/processes/processReport";
+import { computed, ref } from "vue";
+import { type ProcessAction, processAsks, processLive, type ProcessNeed, type ProcessReport } from "../../app/environments/processes/processReport";
 import { processTileOf } from "../../models/processes/processTiles";
 import { processActionLabel, quietAction } from "../../models/processes/processWords";
 
@@ -20,6 +20,24 @@ const share = computed(() => (report?.percent === undefined || !processLive(repo
 const figures = computed(() => [report?.position, report?.remaining].filter((part): part is string => part !== undefined).join(` · `));
 const actions = computed(() => report?.actions ?? []);
 const needs = computed(() => report?.needs ?? []);
+
+// A need's Copy is answered here, never by the run: its detail (the note for whoever manages the antivirus, the app's
+// agent_install.rs) onto the clipboard, and the press says it landed.
+const { copied, copy } = useCopied();
+const copiedNeed = ref<string | undefined>(undefined);
+const pressNeed = (act: ProcessAction, need: ProcessNeed, from: EventTarget | null): void => {
+    if (act !== `copy`) {
+        emit(`act`, act, need.id);
+        return;
+    }
+    if (need.detail === undefined) {
+        return;
+    }
+    copiedNeed.value = need.id;
+    void copy(need.detail, from instanceof Element ? from : null);
+};
+const needActionLabel = (act: ProcessAction, need: ProcessNeed): string =>
+    act === `copy` && copied.value && copiedNeed.value === need.id ? t(`processes.action.copied`) : processActionLabel(act, report);
 </script>
 
 <template>
@@ -59,16 +77,16 @@ const needs = computed(() => report?.needs ?? []);
                                 <li v-for="need in needs" :key="need.id" class="flex flex-col gap-2 rounded-lg bg-card p-3 shadow-sm">
                                     <div class="flex min-w-0 flex-col gap-0.5">
                                         <span class="text-sm font-medium text-content">{{ need.label }}</span>
-                                        <span v-if="need.detail" class="text-xs text-muted">{{ need.detail }}</span>
+                                        <span v-if="need.detail" class="whitespace-pre-line text-xs text-muted" data-process-need-detail>{{ need.detail }}</span>
                                     </div>
                                     <div v-if="need.actions?.length" class="flex flex-wrap gap-2">
                                         <Button
                                             v-for="(act, at) in need.actions"
                                             :key="act"
                                             size="small"
-                                            :label="processActionLabel(act, report)"
+                                            :label="needActionLabel(act, need)"
                                             :tier="quietAction(act) ? `quiet` : at === 0 ? `accent` : `boring`"
-                                            @click="emit(`act`, act, need.id)"
+                                            @click="pressNeed(act, need, $event.currentTarget)"
                                         />
                                     </div>
                                 </li>

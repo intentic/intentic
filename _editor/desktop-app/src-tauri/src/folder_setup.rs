@@ -550,11 +550,18 @@ pub fn copy_seen(record: &Record, pairing: &serde_json::Value) -> Option<Record>
     })
 }
 
-/// What the card says when a setup finished and the folder's sync never started.
-pub fn no_sync(name: &str) -> String {
-    format!(
-        "{name}'s sandbox works, but this folder isn't syncing to it. Its Devices page says why."
-    )
+/// What the card says when a setup finished and the folder's sync never started: why, where the run heard it (security
+/// software refusing the machine agent, `Progress::blocked`), else where to look.
+pub fn no_sync(name: &str, blocked: Option<String>) -> String {
+    match blocked {
+        Some(why) => format!("{name}'s sandbox works, but this folder isn't syncing to it. {why}")
+            .chars()
+            .take(600)
+            .collect(),
+        None => format!(
+            "{name}'s sandbox works, but this folder isn't syncing to it. Its Devices page says why."
+        ),
+    }
 }
 
 /* NAMES. */
@@ -1487,7 +1494,7 @@ fn create(app: &AppHandle, path: &str, consent: bool) {
             // rather than after [`COPY_SILENCE`] of a copy that never started.
             let standing = if made && progress.sync_unfinished {
                 Standing::Failed {
-                    reason: no_sync(&record.name),
+                    reason: no_sync(&record.name, progress.blocked()),
                 }
             } else {
                 standing
@@ -1766,7 +1773,7 @@ fn hearing(
             record.requirements.clone_from(&shown.requirements);
         });
         if shown.phase.as_deref() == Some(WARM_FROM) && !warmed.swap(true, Ordering::SeqCst) {
-            made_ahead(&app, &path, shown.sync_unfinished);
+            made_ahead(&app, &path, shown.sync_unfinished, shown.blocked());
         }
     })
 }
@@ -1788,7 +1795,7 @@ pub fn made_this_run(record: &Record) -> bool {
 
 /// The sandbox answers end to end and the folder's sync was set up: the folder is made (or made with a sync that never
 /// started, said so), its workspace put up, and its copy followed for as long as the script still runs.
-fn made_ahead(app: &AppHandle, path: &str, sync_unfinished: bool) {
+fn made_ahead(app: &AppHandle, path: &str, sync_unfinished: bool, blocked: Option<String>) {
     let Some(record) = all(app).into_iter().find(|record| record.path == path) else {
         return;
     };
@@ -1799,7 +1806,7 @@ fn made_ahead(app: &AppHandle, path: &str, sync_unfinished: bool) {
     finished(app, &sandbox, record.slug.as_deref(), &name);
     let standing = if sync_unfinished {
         Standing::Failed {
-            reason: no_sync(&record.name),
+            reason: no_sync(&record.name, blocked),
         }
     } else {
         Standing::Copying
@@ -2019,7 +2026,7 @@ fn follow_copies(app: &AppHandle, report: Option<&serde_json::Value>) {
                 .made_at
                 .is_some_and(|at| now_ms().saturating_sub(at) > COPY_SILENCE.as_millis() as u64);
             if silent {
-                let reason = no_sync(&record.name);
+                let reason = no_sync(&record.name, crate::agent_install::blocked_now(app));
                 update(app, &record.path, |held| {
                     if held.standing == Standing::Copying {
                         held.standing = Standing::Failed { reason };

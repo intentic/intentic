@@ -88,3 +88,37 @@ it(`draws no group, divider included, while nothing runs, and a tile per run oth
     expect(el.querySelector(`[data-process-tiles]`)).toBeNull();
     expect(el.querySelector(`.icon-rail-divider`)).toBeNull();
 });
+
+it(`copies a need's note itself, never sending the press to the run, and says it landed`, async () => {
+    const written: string[] = [];
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, `clipboard`);
+    Object.defineProperty(navigator, `clipboard`, { configurable: true, value: { writeText: (text: string) => Promise.resolve(void written.push(text)) } });
+    try {
+        const note = `Please allow Intentic on this PC.\nFile: intentic-machine 1.410.1`;
+        const el = mountPage({
+            id: `agent-install:this`,
+            kind: `agent-install`,
+            state: `failed`,
+            origin: `app`,
+            failure: `Windows refused to save intentic-machine.exe.`,
+            needs: [{ id: `security-software`, label: `Bitdefender Endpoint Security Tools is blocking intentic-machine.exe`, detail: note, actions: [`copy`] }],
+            actions: [`retry`, `dismiss`],
+        });
+        expect(el.querySelector(`h1`)?.textContent).toContain(`Intentic's agent on this computer`);
+        expect(el.querySelector(`[data-process-need-detail]`)?.textContent).toBe(note);
+        const button = (label: string): HTMLButtonElement | undefined => [...el.querySelectorAll(`button`)].find((each) => each.textContent?.trim() === label);
+        button(`Copy the note`)?.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(written).toEqual([note]);
+        expect(acts).toEqual([]);
+        expect(button(`Copied`)?.textContent?.trim()).toBe(`Copied`);
+        button(`Try again`)?.click();
+        expect(acts).toEqual([[`retry`, undefined]]);
+    } finally {
+        if (clipboard === undefined) {
+            Reflect.deleteProperty(navigator, `clipboard`);
+        } else {
+            Object.defineProperty(navigator, `clipboard`, clipboard);
+        }
+    }
+});

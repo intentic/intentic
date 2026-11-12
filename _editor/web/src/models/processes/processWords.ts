@@ -38,6 +38,8 @@ export const processTitle = (report: ProcessReport): string => {
             return t(`processes.title.engineMove`);
         case `first-task`:
             return t(`processes.title.firstTask`, { name });
+        case `agent-install`:
+            return t(`processes.title.agentInstall`);
     }
 };
 
@@ -113,6 +115,8 @@ export const processActionLabel = (act: ProcessAction, report?: ProcessReport): 
             return t(`processes.action.allow`);
         case `deny`:
             return t(`processes.action.deny`);
+        case `copy`:
+            return t(`processes.action.copy`);
     }
 };
 

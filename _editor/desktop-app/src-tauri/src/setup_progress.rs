@@ -71,6 +71,35 @@ pub fn parse_requirement(line: &str) -> Option<serde_json::Value> {
         .then_some(value)
 }
 
+/// The requirement the agent's bootstrap says when security software will not let `intentic-machine` onto this
+/// computer (scripts-kit/agent-fetch.ps1 `Stop-IntenticAgentRefused`): something only the reader, or whoever manages
+/// their antivirus, can do, whatever run it came up in (agent_install.rs holds it as this computer's one process).
+pub const BLOCKED: &str = "security-software";
+
+/// That requirement, among a run's. Pure.
+pub fn blocked(requirements: &[serde_json::Value]) -> Option<&serde_json::Value> {
+    requirements
+        .iter()
+        .find(|requirement| requirement["id"].as_str() == Some(BLOCKED))
+}
+
+/// Why the run stopped, in the requirement's own words: what was refused, then what to ask for. Within the 600
+/// characters a process's failure carries (processReport.ts). Pure.
+pub fn blocked_words(requirement: &serde_json::Value) -> Option<String> {
+    let said = |key: &str| {
+        requirement[key]
+            .as_str()
+            .map(str::trim)
+            .filter(|said| !said.is_empty())
+    };
+    let words = match (said("problem"), said("remedy")) {
+        (Some(problem), Some(remedy)) => format!("{problem}\n\n{remedy}"),
+        (Some(only), None) | (None, Some(only)) => only.to_string(),
+        (None, None) => said("title")?.to_string(),
+    };
+    Some(words.chars().take(600).collect())
+}
+
 /// The setup's phases in the order it runs them, each weighed in rough seconds (setupPlan.ts, sandbox-run's
 /// setup-progress.fixture.json): Windows fetches `ic` before it checks Docker; an image already here is a docker answer
 /// away. Docker is never installed by this run, and a folder's setup always syncs: its folder's link comes right after
@@ -215,11 +244,17 @@ impl Progress {
         Some((total as f32 - done).max(0.0).round() as u32)
     }
 
-    /// Why the run stopped, in its own words: a command that said it failed, else the last thing it said on stderr.
+    /// Why the run stopped, in its own words: security software refusing the machine agent, else a command that said it
+    /// failed, else the last thing it said on stderr (a stop block's last line is its `fix:`, not its reason).
     pub fn reason(&self) -> Option<String> {
-        self.command_failure
-            .clone()
+        self.blocked()
+            .or_else(|| self.command_failure.clone())
             .or_else(|| self.last_error.clone())
+    }
+
+    /// What it heard of security software refusing the machine agent, in the requirement's words ([`blocked_words`]).
+    pub fn blocked(&self) -> Option<String> {
+        blocked(&self.requirements).and_then(blocked_words)
     }
 }
 
@@ -440,6 +475,31 @@ mod tests {
         progress.hear(Stream::Stdout, "intentic: [verifying] checking");
         assert_eq!(progress.reason().as_deref(), Some("! trailing noise"));
         assert_eq!(Progress::new(false, true).reason(), None);
+    }
+
+    #[test]
+    fn security_software_refusing_the_agent_is_why_the_run_stopped() {
+        let mut progress = Progress::new(true, true);
+        assert_eq!(progress.blocked(), None);
+        assert!(progress.hear(
+            Stream::Stdout,
+            r#"intentic-requirement: {"id":"security-software","title":"Bitdefender Endpoint Security Tools is blocking intentic-machine.exe","problem":"Windows refused to save intentic-machine.exe.","remedy":"Ask your IT to allow C:\\Users\\Ada\\.intentic\\machine\\bin, then try again.","action":"user","detail":"Please allow Intentic on this PC."}"#
+        ));
+        // The stop block's last line is its `fix:`: the requirement says why, not that.
+        progress.hear(
+            Stream::Stderr,
+            "   fix:     Ask your IT to allow it, then try again.",
+        );
+        let words = "Windows refused to save intentic-machine.exe.\n\nAsk your IT to allow C:\\Users\\Ada\\.intentic\\machine\\bin, then try again.";
+        assert_eq!(progress.blocked().as_deref(), Some(words));
+        assert_eq!(progress.reason().as_deref(), Some(words));
+        // Words past what a process's failure carries are cut there.
+        let long = serde_json::json!({ "id": BLOCKED, "problem": "x".repeat(700) });
+        assert_eq!(
+            blocked_words(&long).map(|said| said.chars().count()),
+            Some(600)
+        );
+        assert_eq!(blocked_words(&serde_json::json!({ "id": BLOCKED })), None);
     }
 
     #[test]

@@ -195,6 +195,114 @@ function Get-IntenticPackedAgent {
     return $unpacked
 }
 
+# WHEN SECURITY SOFTWARE STANDS BETWEEN THE AGENT AND ITS PLACE (2026-11-12). On a PC whose antivirus will not have
+# intentic-machine.exe (the first was Bitdefender Endpoint Security Tools, run from a company's console), the download
+# arrived and even answered its probe, and then Windows refused the one name: "Access to the path is denied", for an
+# empty file as much as for the agent, while any other file saved in the same folder. That read as a permissions fault,
+# and nothing anyone does on the PC itself changes it: whoever manages the antivirus has to allow the file. So the
+# refusal is told apart and named, with what to ask them for. Nothing here adds an exclusion: software that exempts
+# itself from a scanner is what malware does, and scanners treat it so.
+
+# The antivirus Windows Security Center lists as on, someone else's before Microsoft's own; '' where there is none to
+# name (Windows Server has no Security Center). productState's middle byte is 0x10 or 0x11 while it scans.
+function Get-IntenticSecurityProduct {
+    try {
+        $listed = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)
+    } catch {
+        return ''
+    }
+    $on = @($listed | Where-Object { (([int]$_.productState -shr 8) -band 0xFF) -in 0x10, 0x11 })
+    $named = @($on | Where-Object { "$($_.displayName)" -notmatch '^(Windows|Microsoft) Defender' }) + $on
+    if ($named.Count -gt 0) { return "$($named[0].displayName)".Trim() }
+    return ''
+}
+
+# How security software refused the agent, or '' when the refusal looks like anything else: 'removed' when the probed
+# download is gone (taken into quarantine after it ran), 'name' when this folder takes a file under any other name and
+# refuses one under the agent's own, even an empty one. Cmdlets rather than [IO.File], so a test can stand in for them.
+function Get-IntenticAgentRefusal {
+    param([string]$Dest, [string]$Part)
+    if (-not (Test-Path -LiteralPath $Part)) { return 'removed' }
+    if (Test-Path -LiteralPath $Dest) { return '' }
+    $other = Join-Path (Split-Path $Dest) ('intentic-probe-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        New-Item -ItemType File -Path $other -ErrorAction Stop | Out-Null
+    } catch {
+        # The folder takes nothing at all: its permissions, or a full disk, not a name.
+        return ''
+    }
+    Remove-Item -Force -LiteralPath $other -ErrorAction SilentlyContinue
+    try {
+        New-Item -ItemType File -Path $Dest -ErrorAction Stop | Out-Null
+    } catch {
+        return 'name'
+    }
+    Remove-Item -Force -LiteralPath $Dest -ErrorAction SilentlyContinue
+    return ''
+}
+
+# The note to hand whoever manages the antivirus, within the 600 characters the desktop app's card carries: its last
+# lines go first when a long path or product name would take it over.
+function Get-IntenticAllowNote {
+    param([string]$Who, [string]$Leaf, [string]$Folder, [string]$Version, [string]$Hash, [string]$How)
+    $blocks = if ($How -eq 'removed') {
+        "removes $Leaf as soon as it is downloaded."
+    } else {
+        "blocks $Leaf (Windows answers ""Access denied"", even for an empty file of that name)."
+    }
+    $lines = @(
+        "Please allow Intentic on this PC: $Who $blocks",
+        "- Restore $Leaf from quarantine, if it is there.",
+        "- Allow the folder $Folder. The program updates itself, so allow it by folder, not by hash."
+    )
+    $file = 'File: intentic-machine'
+    if ($Version) { $file += " $Version" }
+    if ($Hash) { $file += ", SHA-256 $Hash" }
+    $lines += $file
+    if ($Version) { $lines += "Source: https://github.com/intentic/intentic/releases/tag/v$Version" }
+    $count = $lines.Count
+    while ($count -gt 1 -and ($lines[0..($count - 1)] -join "`n").Length -gt 600) { $count-- }
+    return ($lines[0..($count - 1)] -join "`n")
+}
+
+# The stop for an agent security software will not let in. The desktop app reads the requirement line (plain mode
+# only, where it is the reader) as something only the reader, or whoever manages their antivirus, can do; a terminal
+# gets the same words in the stop block, and the note under it. Its JSON is kept ASCII (\u escapes), since a redirected
+# Windows PowerShell writes in the console's code page and a path may hold any letter.
+function Stop-IntenticAgentRefused {
+    param([string]$Dest, [string]$Part, [string]$Version, [string]$How)
+    $product = Get-IntenticSecurityProduct
+    $who = if ($product) { $product } else { 'Security software on this PC' }
+    $manager = if ($product) { $product } else { 'the security software' }
+    $leaf = Split-Path $Dest -Leaf
+    $folder = Split-Path $Dest
+    $hash = ''
+    if (Test-Path -LiteralPath $Part) {
+        try { $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Part).Hash.ToLowerInvariant() } catch { $hash = '' }
+    }
+    $title = "$who is blocking $leaf"
+    $what = 'the program Intentic needs on this PC to sync folders and reach your sandboxes'
+    $problem = if ($How -eq 'removed') {
+        "$leaf, $what, was removed as soon as it was downloaded."
+    } else {
+        "Windows refused to save $leaf, $what, at $Dest, though other files save in that folder."
+    }
+    $remedy = "Ask whoever manages $manager on this PC (at work, your IT) to restore $leaf from its quarantine and allow the folder $folder, then try again."
+    $note = Get-IntenticAllowNote -Who $who -Leaf $leaf -Folder $folder -Version $Version -Hash $hash -How $How
+    if ($IntenticKit.Mode -eq 'plain') {
+        $row = [ordered]@{
+            id = 'security-software'; title = $title; problem = $problem; remedy = $remedy; action = 'user'; detail = $note
+            product = $product; path = $Dest; folder = $folder; version = $Version; sha256 = $hash
+        }
+        $json = [regex]::Replace(($row | ConvertTo-Json -Compress), '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
+        Write-Host "intentic-requirement: $json"
+    } else {
+        Write-IntenticSay "For whoever manages $manager`:"
+        foreach ($line in ($note -split "`n")) { Write-IntenticSay "  $line" }
+    }
+    Stop-Intentic "$title." $problem $remedy
+}
+
 # Put a first agent at $Dest. Everything past this - keeping it current, PATH, the launcher stub - is the
 # agent's own `setup`.
 function Install-IntenticAgent {
@@ -256,6 +364,8 @@ function Install-IntenticAgent {
         break
     }
     if (-not (Get-IntenticAgentVersion -Path $part)) {
+        # Gone between landing and its probe: taken into quarantine, which no network check would ever explain.
+        if (-not (Test-Path -LiteralPath $part)) { Stop-IntenticAgentRefused -Dest $Dest -Part $part -Version $published -How 'removed' }
         Remove-Item -Force -ErrorAction SilentlyContinue $part
         Stop-Intentic 'intentic-machine could not be installed.' 'what downloaded is not a working program: a captive portal, a cut-off download, or the wrong architecture.' 'check the network, then run the same command again.'
     }
@@ -263,8 +373,22 @@ function Install-IntenticAgent {
     # RENAMING one out of the way, which leaves the live process running from the renamed file while the new
     # binary takes its place. The leftover is cleared on the next run, once nothing is executing it.
     Remove-Item -Force -ErrorAction SilentlyContinue "$Dest.old"
-    if (Test-Path $Dest) { Move-Item -Force -Path $Dest -Destination "$Dest.old" }
-    Move-Item -Force -Path $part -Destination $Dest
+    $refused = ''
+    try {
+        if (Test-Path $Dest) { Move-Item -Force -Path $Dest -Destination "$Dest.old" -ErrorAction Stop }
+        Move-Item -Force -Path $part -Destination $Dest -ErrorAction Stop
+    } catch {
+        $refused = $_.Exception.Message
+    }
+    if ($refused) {
+        # The agent moved aside goes back where it was, where it still can: a PC that had one keeps it.
+        if (-not (Test-Path -LiteralPath $Dest) -and (Test-Path -LiteralPath "$Dest.old")) {
+            Move-Item -Force -Path "$Dest.old" -Destination $Dest -ErrorAction SilentlyContinue
+        }
+        $how = Get-IntenticAgentRefusal -Dest $Dest -Part $part
+        if ($how) { Stop-IntenticAgentRefused -Dest $Dest -Part $part -Version $published -How $how }
+        Stop-Intentic 'intentic-machine could not be put in place.' "Windows refused to move it to $Dest ($refused)." 'close anything using that folder and run the same command again; if it repeats, check whether security software on this PC blocked intentic-machine.exe.'
+    }
     Complete-IntenticStep
 }
 # The agent to hand over to: AGENT_BIN as it is (a dev build, taken without asking), else the installed agent when it

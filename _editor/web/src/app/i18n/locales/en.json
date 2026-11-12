@@ -14601,7 +14601,8 @@
             "sync": "Syncing {name}",
             "repair": "Repair",
             "engineMove": "Moving your sandboxes",
-            "firstTask": "{name}'s first task"
+            "firstTask": "{name}'s first task",
+            "agentInstall": "Intentic's agent on this computer"
         },
         "wait": {
             "consent": "Waiting for your go-ahead",
@@ -14634,7 +14635,9 @@
             "signInAgain": "Open the browser again",
             "cancel": "Cancel",
             "allow": "Allow",
-            "deny": "Deny"
+            "deny": "Deny",
+            "copy": "Copy the note",
+            "copied": "Copied"
         },
         "page": {
             "needs": "What it asks for",
