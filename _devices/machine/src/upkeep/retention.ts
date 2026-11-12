@@ -6,6 +6,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { livePidRecord } from "@intentic/local-agent";
 import { z } from "zod";
 import { AUDIT_ROLL_BYTES, rollAudit } from "../device/audit.js";
+import { BUILD_KEEP_MS, BUILDS_KEPT, buildsToPrune } from "../device/tools/programs/builds.js";
 import type { Finding, UpkeepEntry } from "./entry.js";
 import { trashDirOf, trashedAt } from "./trash.js";
 
@@ -163,4 +164,58 @@ const runLogs: UpkeepEntry = {
     },
 };
 
-export const RETENTION_ENTRIES: readonly UpkeepEntry[] = [trashPrune, auditRotate, shimParts, runLogs];
+// The sandboxes' own folders under runs/, each holding what it pushed here.
+const sandboxFolders = async (base: string): Promise<string[]> => {
+    const runs = join(base, "runs");
+    // allow(silent-catch): no runs folder is a device no sandbox ever pushed to
+    return (await readdir(runs).catch((): string[] => [])).map((sandbox) => join(runs, sandbox));
+};
+
+// What `devices push` and `devices run` filed (device/tools/programs/builds.ts says how long a build stays, and why).
+const pushedBuilds: UpkeepEntry = {
+    id: "pushed-builds",
+    kind: "build",
+    action: "prune",
+    reason: `builds sandboxes pushed here, kept the newest ${BUILDS_KEPT} of each name for ${BUILD_KEEP_MS / 86_400_000} days, never one a running program uses`,
+    find: async ({ base, now }) => {
+        const found = await Promise.all(
+            (await sandboxFolders(base)).map(async (sandbox) =>
+                (await buildsToPrune(sandbox, now)).map(
+                    (build): Finding => ({ what: build.dir, act: async () => await rm(build.dir, { recursive: true, force: true }) }),
+                ),
+            ),
+        );
+        return found.flat();
+    },
+};
+
+// An upload the resident gave up on is deleted within the hour (artifacts.ts), but only while the agent that received it
+// lives: one whose agent restarted mid-push stayed in `.incoming` for good (omen, 0.5 GB since 2026-11-09).
+const INCOMING_KEEP_MS = 24 * 60 * 60_000;
+
+const incomingParts: UpkeepEntry = {
+    id: "pushed-upload-parts",
+    kind: "download",
+    action: "prune",
+    reason: "pushes that never finished, left in runs/<sandbox>/.incoming more than a day ago",
+    find: async ({ base, now }) => {
+        const found = await Promise.all(
+            (await sandboxFolders(base)).map(async (sandbox): Promise<Finding[]> => {
+                const incoming = join(sandbox, ".incoming");
+                // No folder holds no uploads.
+                const names = ((await readdir(incoming).catch(undefinedIfMissing)) ?? []).filter((name) => name.endsWith(".part"));
+                const stale = await Promise.all(
+                    names.map(async (name) => {
+                        // A file gone since the listing is nothing to prune.
+                        const info = await lstat(join(incoming, name)).catch(undefinedIfMissing);
+                        return info !== undefined && now - info.mtimeMs >= INCOMING_KEEP_MS ? join(incoming, name) : undefined;
+                    }),
+                );
+                return stale.filter((path) => path !== undefined).map((path) => ({ what: path, act: async () => await rm(path, { force: true }) }));
+            }),
+        );
+        return found.flat();
+    },
+};
+
+export const RETENTION_ENTRIES: readonly UpkeepEntry[] = [trashPrune, auditRotate, shimParts, runLogs, pushedBuilds, incomingParts];

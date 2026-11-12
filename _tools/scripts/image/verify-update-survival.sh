@@ -41,7 +41,8 @@ cleanup() {
     # host never started. Bounded, because it asks the host's own daemon, and one wedged mid-drill must not keep
     # the host below from being removed.
     timeout 60 docker exec "$HOST_CONTAINER" docker rmi -f "$CRASH_AT_BOOT_IMAGE" "$CRASH_AFTER_READY_IMAGE" "$DRILL_IMAGE" >/dev/null 2>&1 || true
-    docker rm -f "$HOST_CONTAINER" >/dev/null 2>&1 || true
+    # -v takes the host's anonymous /var/lib/docker volume with it (lib/dind-host.sh).
+    docker rm -fv "$HOST_CONTAINER" >/dev/null 2>&1 || true
     rm -rf "$WORK"
 }
 trap cleanup EXIT

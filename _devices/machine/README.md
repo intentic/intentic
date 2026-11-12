@@ -964,6 +964,12 @@ login entries once and then stood in for every later cleanup too (2026-10-05).
   - `audit.jsonl` set aside at 8 MB;
   - what programs started with `app_start` printed (`runs/<sandbox>/.logs`), after 14 days or past the newest 100 per
     sandbox, never a run `apps.json` still holds as running;
+  - what sandboxes pushed here (`devices push`, `devices run`: `runs/<sandbox>/<name>/<sha12>/`), the newest three of
+    each name for 30 days, never one a run `apps.json` holds as running starts from, reads or works in, and nothing
+    filed in the last hour. The same rule runs for a name as soon as a new build of it is filed, and a build asked for
+    again counts from then. A pruned build costs a push: `devices run` sends it again. Before this nothing removed one,
+    and omen held 102 GB of them (2026-11-12). Pushes that never finished (`runs/<sandbox>/.incoming/*.part`) go after
+    a day;
   - the install command's half downloads in `bin/` (`*.part`, `*.part-<release>`) older than a day, never while an
     upgrade runs;
   - a second `ic` found first on PATH (a root install's `/usr/local/bin/ic`), reported with both versions, since only

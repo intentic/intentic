@@ -29,7 +29,8 @@ fi
 WORK="$(mktemp -d)"
 HOST_CONTAINER="intentic-desktop-setup-smoke"
 cleanup() {
-    docker rm -f "$HOST_CONTAINER" >/dev/null 2>&1 || true
+    # -v: the host's /var/lib/docker is an anonymous volume (lib/dind-host.sh), 8 GB once a sandbox image is pulled.
+    docker rm -fv "$HOST_CONTAINER" >/dev/null 2>&1 || true
     rm -rf "$WORK"
 }
 trap cleanup EXIT

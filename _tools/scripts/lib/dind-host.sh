@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Shared clean Docker-in-Docker host for setup/update drills; using the runner daemon would couple them to other jobs' containers.
 # Source repo-root.sh first, then call start_dind_host <name> and in_host <command> against _tools/dind-host.
-# Callers own cleanup traps because their work directories and nested sandbox cleanup differ.
+# Callers own cleanup traps because their work directories and nested sandbox cleanup differ. A trap removes the host
+# with `docker rm -fv`: the image declares VOLUME /var/lib/docker, an explicit `docker rm -f` overrides `run --rm`, and
+# without -v that anonymous volume, the pulled sandbox image's 8 GB, stays on the runner's disk (omen, 2026-11-12: three
+# of them, 24 GB, in half an hour).
 
 # Start one and wait for its daemon. `$1` is the container name — chosen by the caller, because two tiers
 # running at once on the same runner must not claim each other's.

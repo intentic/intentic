@@ -326,17 +326,22 @@ function Test-SparseRecentlyFailed {
 
 # Unused volumes, except an Intentic sandbox's (intentic-*): a trashed sandbox keeps its data in
 # them for `ic sandbox restore`. A stopped sandbox's own volumes are in use and never listed.
+# -AnonymousOnly: only volumes docker made for a container's VOLUME line, which nothing can name or mount again once
+# their container is gone, so every guard pass takes them whatever docker's budget. A drill's throwaway Docker host
+# left one per run, 8 GB each: three of them held 24 GB on 2026-11-12, the morning C: ran out.
 function Remove-UnusedVolumes {
-    param([switch]$IncludeIntentic)
-    $out = Invoke-Docker @('volume', 'ls', '-q', '--filter', 'dangling=true') -TimeoutSec 120 -Quiet
+    param([switch]$IncludeIntentic, [switch]$AnonymousOnly)
+    $filter = @('volume', 'ls', '-q', '--filter', 'dangling=true')
+    if ($AnonymousOnly) { $filter += @('--filter', 'label=com.docker.volume.anonymous') }
+    $out = Invoke-Docker $filter -TimeoutSec 120 -Quiet
     if ($null -eq $out) { return }
     $names = @($out -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -and ($IncludeIntentic -or $_ -notlike 'intentic-*') })
-    if ($names.Count -eq 0) { Write-Log 'volumes: none unused'; return }
+    if ($names.Count -eq 0) { if (-not $AnonymousOnly) { Write-Log 'volumes: none unused' }; return }
     for ($i = 0; $i -lt $names.Count; $i += 50) {
         $batch = $names[$i..([math]::Min($i + 49, $names.Count - 1))]
         Invoke-Docker (@('volume', 'rm') + $batch) -Quiet | Out-Null
     }
-    Write-Log ("volumes: removed {0} unused" -f $names.Count)
+    Write-Log ("volumes: removed {0} unused{1}" -f $names.Count, $(if ($AnonymousOnly) { ' anonymous' } else { '' }))
 }
 
 # Release images (ghcr.io/intentic/*: the sandbox in each variant, api, web, ingress, ci-*), which CI pulls and
@@ -418,6 +423,22 @@ function Clear-WindowsTemp {
             ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
     }
     Write-Log 'cleared Windows temp older than 7 days'
+}
+
+# WSL makes its VM's swap disk afresh at every boot, as %TEMP%\<guid>\swap.vhdx (up to .wslconfig's swap=, 16 GB on
+# omen), and deletes it at a clean shutdown. A VM that crashed or was killed leaves its file behind: omen held two, 11.5
+# GB, on 2026-11-12, and the daily temp sweep reaches them only after a week. One nobody has open is a dead VM's.
+function Remove-LeakedWslSwap {
+    $cut = (Get-Date).AddHours(-1)
+    foreach ($file in @(Get-ChildItem -Path (Join-Path $env:TEMP '*\swap.vhdx') -File -Force -ErrorAction SilentlyContinue)) {
+        if ($file.LastWriteTime -gt $cut) { continue }
+        try { $handle = [IO.File]::Open($file.FullName, 'Open', 'ReadWrite', 'None'); $handle.Close() }
+        catch { continue }
+        $gb = [math]::Round($file.Length / 1GB, 1)
+        Remove-Item -LiteralPath $file.DirectoryName -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $file.FullName) { Write-Log "swap: could not remove $($file.FullName)" 'WARN' }
+        else { Write-Log "swap: removed a stopped WSL VM's swap disk, $($file.FullName) (${gb}GB)" }
+    }
 }
 
 # ---- compaction -------------------------------------------------------------------------------
@@ -598,6 +619,8 @@ try {
         }
     }
     if ($Mode -ne 'guard') { Clear-WindowsTemp }
+    Remove-LeakedWslSwap
+    if (-not $low -and $Mode -ne 'routine' -and (Test-EngineUp)) { Remove-UnusedVolumes -AnonymousOnly }
 
     Invoke-Trim $disks
     $disks = @(Get-Disks)

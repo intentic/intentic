@@ -1,5 +1,5 @@
 import { createHash, type Hash } from "node:crypto";
-import { mkdir, open, readdir, rename, rm, stat, writeFile, type FileHandle } from "node:fs/promises";
+import { mkdir, open, readdir, rename, rm, stat, utimes, writeFile, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { isInside } from "@intentic/base/contained";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
@@ -8,15 +8,15 @@ import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabiliti
 import type { StageArtifact, StageArtifactResult } from "@intentic/sandbox-contract/schemas/device-artifacts";
 import { baseDir } from "../../../config.js";
 import { assertScope } from "../../policy.js";
+import { COMPLETE, pruneAfterFiling } from "./builds.js";
 
 // PROGRAMS A SANDBOX SENT, FILED ON THIS MACHINE (schemas/device-artifacts.ts). Each sandbox has its own folder under
 // ~/.intentic/machine/runs, and each push lands in `<sandbox>/<name>/<first 12 of its sha256>/`, written once and never
 // overwritten: a second push of the same build is answered from what is there, and a running copy is never swapped from
 // under its process. The bytes arrive in order, hashed as they come, and are filed only when size and hash match what
-// the sandbox announced. Behind "Run programs this sandbox sends", checked on every op.
-
-// A folder is "there" once this marker is in it; one without it is a filing that died half-way and is filed again.
-const COMPLETE = ".intentic-complete";
+// the sandbox announced. Behind "Run programs this sandbox sends", checked on every op. How long a build stays is
+// builds.ts's: a folder is "there" once its COMPLETE marker is in it, and one without it is a filing that died half-way
+// and is filed again.
 // An upload nobody committed or aborted in this long is the sandbox giving up silently: its bytes are deleted.
 const STALE_UPLOAD_MS = 60 * 60 * 1000;
 
@@ -53,11 +53,19 @@ const incomingDir = (sandboxUrl: string): string => join(sandboxRunsDir(sandboxU
 const finalDir = (sandboxUrl: string, name: string, sha256: string): string => join(sandboxRunsDir(sandboxUrl), name, sha256.slice(0, 12));
 const finalPath = (dir: string, kind: "file" | "tar", fileName: string): string => (kind === "file" ? join(dir, fileName) : dir);
 
-const exists = async (path: string): Promise<boolean> =>
-    await stat(path).then(
-        () => true,
-        () => false,
-    );
+// Whether a build is filed here. One asked for again is in use: its marker's time becomes when it was last wanted, which
+// is what builds.ts keeps by. A marker that is there but will not take a new time still counts as there.
+const reused = async (dir: string): Promise<boolean> => {
+    const marker = join(dir, COMPLETE);
+    const now = new Date();
+    try {
+        await utimes(marker, now, now);
+        return true;
+    } catch {
+        // allow(silent-catch): no marker to touch is a build not filed here, which stat says as undefined
+        return (await stat(marker).catch(undefinedIfMissing)) !== undefined;
+    }
+};
 
 const dropUpload = async (id: string): Promise<void> => {
     const upload = uploads.get(id);
@@ -109,7 +117,7 @@ const unpack = async (archive: string, into: string): Promise<void> => {
 const file = async (upload: Upload, op: Extract<StageArtifact, { op: "commit" }>, sandboxUrl: string): Promise<string> => {
     const dir = finalDir(sandboxUrl, op.name, op.sha256);
     const target = finalPath(dir, op.kind, op.fileName);
-    if (await exists(join(dir, COMPLETE))) {
+    if (await reused(dir)) {
         await rm(upload.path, { force: true });
         return target;
     }
@@ -136,7 +144,7 @@ export const stageArtifact = async (op: StageArtifact, scopes: DeviceScopes, san
     switch (op.op) {
         case "have": {
             const dir = finalDir(sandboxUrl, op.name, op.sha256);
-            return (await exists(join(dir, COMPLETE))) ? { path: finalPath(dir, op.kind, op.fileName) } : {};
+            return (await reused(dir)) ? { path: finalPath(dir, op.kind, op.fileName) } : {};
         }
         case "chunk": {
             const upload = await uploadFor(sandboxUrl, op.upload, op.offset);
@@ -164,7 +172,12 @@ export const stageArtifact = async (op: StageArtifact, scopes: DeviceScopes, san
                 await rm(upload.path, { force: true });
                 throw new Error(`what arrived (${upload.received} bytes, sha256 ${sha256.slice(0, 12)}) is not what was sent (${op.size} bytes, ${op.sha256.slice(0, 12)})`);
             }
-            return { path: await file(upload, op, sandboxUrl) };
+            const path = await file(upload, op, sandboxUrl);
+            // The older builds of this name past their keeping go now rather than at the next upkeep pass: a server
+            // pushed on every change filed 94 builds in four days on omen. Not awaited, so the push answers at once.
+            // allow(silent-catch): what this pass leaves, the upkeep's own pass takes
+            void pruneAfterFiling(sandboxRunsDir(sandboxUrl), op.name, now).catch(() => undefined);
+            return { path };
         }
         case "abort": {
             await dropUpload(op.upload);

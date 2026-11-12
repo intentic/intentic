@@ -26,6 +26,11 @@ declare -A CACHE_CAPS=(
 )
 # /ci-cache/turbo: files older than a few days go first, and the whole directory only if that was not enough.
 TURBO_CAP_GB=${JANITOR_TURBO_CAP_GB:-10}
+# A runner's _diag (its own logs, one Worker_*.log per job, and pages/ and blocks/ of step logs it failed to upload):
+# files older than this. omen's busiest runner held 10 GB there on 2026-11-12, all but 0.2 GB of it older than 14 days.
+DIAG_DAYS=${JANITOR_DIAG_DAYS:-14}
+# A runner's self-update leaves the download in <work>/_update; one older than this is not an update still running.
+UPDATE_STALE_DAYS=${JANITOR_UPDATE_STALE_DAYS:-1}
 # The docker-container builder publish-images.sh creates. Its state is a docker volume, not a /ci-cache path.
 BUILDKIT_CONTAINER=${JANITOR_BUILDKIT_CONTAINER:-buildx_buildkit_intentic-cache0}
 BUILDKIT_KEEP_GB=${JANITOR_BUILDKIT_KEEP_GB:-25}
@@ -123,6 +128,36 @@ for runner in $RUNNERS_GLOB; do
         if [ "$count" -gt 0 ]; then
             log "$([ "$DRY_RUN" = 1 ] && echo 'would remove' || echo removed) $count entries ($(gb "$total") GB) a finished job left in $temp"
         fi
+    fi
+    # The runner's own logs: by age, safe while it works (the logs it is writing are today's).
+    if [ -d "$runner/_diag" ]; then
+        if [ "$DRY_RUN" = 1 ]; then
+            n=$(find "$runner/_diag" -type f -mtime +"$DIAG_DAYS" 2>/dev/null | wc -l)
+            [ "$n" -gt 0 ] && log "would remove $n runner log files older than ${DIAG_DAYS}d in $runner/_diag"
+        else
+            size=$(find "$runner/_diag" -type f -mtime +"$DIAG_DAYS" -printf '%s\n' 2>/dev/null | awk '{ s += $1 } END { printf "%d", s }')
+            if [ "${size:-0}" -gt 0 ]; then
+                find "$runner/_diag" -type f -mtime +"$DIAG_DAYS" -delete 2>/dev/null
+                find "$runner/_diag" -mindepth 1 -type d -empty -delete 2>/dev/null
+                freed=$((freed + size))
+                log "removed $(gb "$size") GB of runner logs older than ${DIAG_DAYS}d in $runner/_diag"
+            fi
+        fi
+    fi
+    # Superseded runner versions: a self-update installs bin.<version> and externals.<version> and points the bin and
+    # externals links at them, keeping every older one (1.4 GB a runner after two updates). Only while the links resolve,
+    # so a runner mid-update, or laid out some other way, is left alone.
+    for kind in bin externals; do
+        current=$(readlink -f -- "$runner/$kind" 2>/dev/null)
+        [ -n "$current" ] && [ -d "$current" ] && [ -L "$runner/$kind" ] || continue
+        for old in "$runner/$kind".*; do
+            [ -d "$old" ] && [ ! -L "$old" ] && [ "$(readlink -f -- "$old")" != "$current" ] || continue
+            runner_busy "$runner" && break
+            remove "$old" "a runner version the $kind link no longer points at"
+        done
+    done
+    if [ -d "$work/_update" ] && [ -z "$(find "$work/_update" -maxdepth 1 -newermt "-${UPDATE_STALE_DAYS} days" -print -quit 2>/dev/null)" ] && ! runner_busy "$runner"; then
+        remove "$work/_update" "a runner self-update's download, finished more than ${UPDATE_STALE_DAYS}d ago"
     fi
     store="$work/.pnpm-store"
     if [ -d "$store" ]; then

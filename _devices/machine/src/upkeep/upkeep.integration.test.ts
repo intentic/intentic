@@ -218,6 +218,48 @@ test("a program's output past two weeks is deleted, a running one's is kept what
     expect(readdirSync(logs).toSorted()).toEqual(["fresh.log", "isolated", "running.log"]);
 });
 
+// Pushed builds: the newest three of a name, never one a running program was started from or reads.
+test("pushed builds past the newest three of a name are deleted, a running program's are kept, and so are other folders", async () => {
+    const { context } = home();
+    const sandbox = join(context.base, "runs", "sandbox-1");
+    const filed = (name: string, version: string, ageDays: number): string => {
+        const dir = join(sandbox, name, version);
+        write(join(dir, "server.exe"));
+        write(join(dir, ".intentic-complete"));
+        const at = (NOW - ageDays * DAY) / 1000;
+        utimesSync(join(dir, ".intentic-complete"), at, at);
+        return dir;
+    };
+    const versions = ["aaaaaaaaaaa1", "aaaaaaaaaaa2", "aaaaaaaaaaa3", "aaaaaaaaaaa4", "aaaaaaaaaaa5"];
+    versions.forEach((version, index) => filed("server", version, index + 1));
+    const assets = filed("assets", "bbbbbbbbbbb1", 40);
+    write(join(sandbox, "engine-test", "notes.txt"));
+    writeFileSync(
+        join(sandbox, "apps.json"),
+        JSON.stringify([
+            { id: "a", program: "cmd", args: ["/c", join(sandbox, "server", "aaaaaaaaaaa5", "server.exe"), assets], log: "x.log" },
+            { id: "b", program: join(sandbox, "server", "aaaaaaaaaaa4", "server.exe"), log: "y.log", endedAt: "2026-10-01T00:00:00.000Z" },
+        ]),
+    );
+    write(join(sandbox, ".incoming", "dead.part"));
+    write(join(sandbox, ".incoming", "live.part"));
+    const old = (NOW - 2 * DAY) / 1000;
+    utimesSync(join(sandbox, ".incoming", "dead.part"), old, old);
+    utimesSync(join(sandbox, ".incoming", "live.part"), NOW / 1000, NOW / 1000);
+
+    await reconcile([entry(RETENTION_ENTRIES, "pushed-builds"), entry(RETENTION_ENTRIES, "pushed-upload-parts")], context, { fix: true });
+    expect(readdirSync(join(sandbox, "server")).toSorted()).toEqual(["aaaaaaaaaaa1", "aaaaaaaaaaa2", "aaaaaaaaaaa3", "aaaaaaaaaaa5"]);
+    expect(existsSync(assets)).toBe(true);
+    expect(existsSync(join(sandbox, "engine-test", "notes.txt"))).toBe(true);
+    expect(readdirSync(join(sandbox, ".incoming"))).toEqual(["live.part"]);
+
+    // A record torn mid-write cannot say what runs, so nothing of that sandbox goes.
+    writeFileSync(join(sandbox, "apps.json"), "[{torn");
+    filed("server", "aaaaaaaaaaa6", 10);
+    await reconcile([entry(RETENTION_ENTRIES, "pushed-builds")], context, { fix: true });
+    expect(readdirSync(join(sandbox, "server"))).toHaveLength(5);
+});
+
 /* Markers, one per entry: an entry a later release adds runs on a machine that holds every older marker. */
 
 const counting = (id: string, finds: () => readonly { what: string; fail?: boolean }[]): UpkeepEntry & { readonly acted: string[] } => {
