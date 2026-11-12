@@ -104,6 +104,7 @@ describe("a conversation remembering an account the records call spent", () => {
             to: "second",
             labels: { from: "radarsu@gmail.com", to: "second" },
             reason: `"radarsu@gmail.com" has used up its allowance, and "second" has not been refused`,
+            spent: true,
         });
     });
 

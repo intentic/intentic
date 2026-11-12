@@ -19,7 +19,8 @@ export type AccountRoute =
     | { readonly kind: "keep" }
     // Moved to a ready account of the same provider; the conversation follows (switchAccount's profile write). `reach`
     // marks a move off an account the people it works for may not use (agent/run/decide/account-reach.ts) rather than
-    // one that cannot serve; `cold` a move off one that can serve, onto one with clearly more room, made because the
+    // one that cannot serve; `spent` a move off one the records call spent (account-placement.ts offSpentAccount), which
+    // a person's own pick overrides; `cold` a move off one that can serve, onto one with clearly more room, made because the
     // cache had expired (account-placement.ts). `labels` are both accounts' own names, read with their verdicts, for the
     // row the move leaves in the chat (turn-plan.ts), which names accounts, never ids.
     | {
@@ -29,6 +30,7 @@ export type AccountRoute =
           readonly labels: AccountLabels;
           readonly reason: string;
           readonly reach?: true;
+          readonly spent?: true;
           readonly cold?: true;
       }
     // Nothing of the provider's can serve: refused before anything spawns, the words held for a press.

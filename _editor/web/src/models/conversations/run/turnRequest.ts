@@ -108,6 +108,25 @@ export const accountIntent = (
     return recorded && (settings.account === undefined || settings.account === session.account) ? undefined : settings.account;
 };
 
+// Rides with an account the person picked by hand (`accountPicked`), which the daemon then runs the turn on even where
+// its records call that account spent or refused: those records are not always right (a limit reset claimed elsewhere,
+// a plan upgraded), and without it the daemon read the pick as the account the conversation already runs on and moved
+// the turn off it again. Only with a named pick, never on an auto selection.
+export const pickedByHand = (settings: Pick<TurnSettings, "account" | "accountPicked">): boolean =>
+    settings.accountPicked === true && settings.account !== undefined;
+
+// The account a body names and whether it was picked by hand, both only for this sandbox's own daemon.
+const accountFields = (
+    input: { readonly settings: TurnSettings; readonly registered: boolean; readonly session: SessionRef | undefined },
+    here: boolean,
+): Pick<ProcedureInput<`agent.run`>, "account" | "accountPicked"> => {
+    const fields: Pick<ProcedureInput<`agent.run`>, "account" | "accountPicked"> = { account: here ? accountIntent(input.settings, input) : undefined };
+    if (here && pickedByHand(input.settings)) {
+        fields.accountPicked = true;
+    }
+    return fields;
+};
+
 // Flags that ride only when true, since the daemon reads false and unset the same way. `autoPicked` is deliberately not
 // one of them: unset there would leave an earlier turn's veto standing on the conversation.
 const setFlags = (settings: TurnSettings): { fast?: true; autoPicked?: true } => ({
@@ -195,8 +214,8 @@ export const turnRequestBody = (input: {
         // does not offer the provider on: it would run its own loop anyway, and the request should not claim otherwise.
         ...sentHarness(input.settings),
         // Omitted when this body targets another box, since that daemon holds no such selection, and wherever the turn
-        // continues the conversation on the account it already runs on (accountIntent).
-        account: here ? accountIntent(input.settings, input) : undefined,
+        // continues the conversation on the account it already runs on (accountIntent); a hand pick says so (pickedByHand).
+        ...accountFields(input, here),
         // Omitted rather than empty: an unresolved persona card gets an ordinary chat, not an error.
         ...(here && input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
         // Omitted for another box, whose projects are its own.

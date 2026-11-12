@@ -139,6 +139,14 @@ const AgentTurnFieldsSchema = z.object({
         .describe(
             "Which of that provider's connected accounts pays for the turn. Leave it out to continue on the account the conversation runs on, or, for its first turn on this provider, to take whichever account can serve with the most room. To move a running conversation, use `switchAccount`.",
         ),
+    // A person's hand pick outranks the records: a usage reading or a refusal on file can be stale (a limit reset claimed,
+    // a plan upgraded), and an account moved off before anything was sent can never prove it (turn-facts.ts accountRouteOf).
+    accountPicked: z
+        .boolean()
+        .optional()
+        .describe(
+            "Set when a person picked `account` by hand for this turn: it runs there even where the sandbox's records call that account's allowance spent or its access refused, and the provider's own answer decides. Leave it out to let the sandbox move the turn off an account its records say cannot serve.",
+        ),
     // Distinct from `account` (who pays): whose name the turn posts as; absent means something different for each
     // mode.
     actsAs: entryId.optional().describe("Which persona the turn speaks as out in the world. Not the same as which account pays for it."),

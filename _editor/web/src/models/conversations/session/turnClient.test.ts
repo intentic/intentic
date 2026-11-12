@@ -1205,9 +1205,10 @@ describe(`an account picked by hand`, () => {
         const picked = pickedClient(PICKED);
         picked.host.session.value = ON_A;
         await picked.client.resendKept({ text: `fix the pipeline`, attachments: [] });
+        // Said as a hand pick, so the daemon sends it there even onto an account its records call spent.
         expect(resume.mock.calls.at(-1)?.[0]).toEqual({
             conversationId: `c1`,
-            routing: { agent: `claude`, harness: `native`, account: `acct-b`, model: `opus`, effort: `high` },
+            routing: { agent: `claude`, harness: `native`, account: `acct-b`, accountPicked: true, model: `opus`, effort: `high` },
         });
         expect(picked.taken()).toEqual([{ kind: `accountTaken`, account: `acct-b` }]);
 

@@ -90,7 +90,9 @@ export const switchAccount = async (
     const held = rerun === true ? state?.resume.held : undefined;
     if (held !== undefined) {
         const { agent, harness } = withRuntimeDefaults(held.input);
-        const routing = { agent, harness, account, ...(carry ? { carry } : {}), ...(handoff === undefined ? {} : { handoff }) };
+        // A person's pick on the held turn: it goes on the account picked even where the records call it spent
+        // (turn-facts.ts accountRouteOf), and the provider's own answer decides.
+        const routing = { agent, harness, account, accountPicked: true, ...(carry ? { carry } : {}), ...(handoff === undefined ? {} : { handoff }) };
         // A person's press: a conversation archived since the turn was held reopens, as their words would reopen it.
         await services.agents.clearArchived([conversationId]);
         const run = await services.turns.resume(conversationId, routing);

@@ -14,7 +14,7 @@ import { modelLabelFor, modelOptionsFor } from "../../../models/providers/provid
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
-import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
+import { askLimitReset, claimAndPick, limitResetFor, limitResetNote } from "../session/limitReset";
 import { atReopenPhrase, type ContinueOptions, handoffPicked, memoryKilled, pickUpNext, pickUpStatus, pickUpWhen, pressCost, pressOnlyStop } from "../../../models/conversations/endings/pickUp";
 import { pressWayOf } from "../../../models/conversations/endings/pressWay";
 import type { ReopenPress } from "../composer/composerIntent";
@@ -340,13 +340,12 @@ const useLimitReset = async (): Promise<void> => {
     if (id === undefined || !reachable.value) {
         return;
     }
-    const at = conversation.value.box.value;
     const ended = await reset.run({
         what: t(`chat.limitReset.resetting`),
         // A claim answers rather than throws (limitReset.ts); a refusal is its own line, said on the receipt too.
         failed: t(`chat.limitReset.failed`),
         done: (claim) => (claim.result === `reset` ? t(`chat.limitReset.resetDone`) : limitResetNote(claim)),
-        task: () => claimLimitReset(id, at),
+        task: () => claimAndPick(conversation.value.selection, id, conversation.value.box.value),
     });
     if (ended?.state === `done` && ended.value?.result === `reset`) {
         emit(`continue`);

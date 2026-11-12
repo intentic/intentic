@@ -64,13 +64,15 @@ export type TurnPlan =
           readonly door?: true;
       });
 
-// The move as its row says it. A refusal carries the provider's own sentence for the row's details; the other two reasons
-// are the sandbox's own words, which the row's line already says.
+// The move as its row says it. A refusal carries the provider's own sentence for the row's details, and a spent allowance
+// the reading it was moved on; the other two reasons are the sandbox's own words, which the row's line already says. A
+// spent allowance was once worded as a refusal, "plan or organization does not allow it", over details saying only that
+// the allowance was used up (2026-11-12).
 const movedNotice = (move: AccountMove): AccountMoved => {
     if (move.reach === true || move.cold === true) {
         return { why: move.reach === true ? "reach" : "cold", from: move.labels.from, to: move.labels.to };
     }
-    return { why: "refused", from: move.labels.from, to: move.labels.to, said: move.reason };
+    return { why: move.spent === true ? "spent" : "refused", from: move.labels.from, to: move.labels.to, said: move.reason };
 };
 
 // Who the turn acts as, named for whoever reads its standing: its card, or the built-in it wears (a child inherits this).

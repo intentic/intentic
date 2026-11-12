@@ -143,13 +143,18 @@ describe(`turnRequestBody`, () => {
         // The daemon holds a conversation off an account its organisation turned off, and a turn naming none is held
         // there again. Picking that account by hand is the person trying it: named, so it runs, and its answer lifts
         // the mark. THE FAILURE THIS PREVENTS: the pick equalled the recorded account, so it was dropped and held again.
+        // Said as a hand pick, so the daemon runs it there whatever its records say of the account. THE FAILURE THIS
+        // PREVENTS: a limit reset the records had not heard of, and every press moved off the account again (2026-11-12).
         it(`is named when the person picked it by hand for this turn, even the one the daemon already records`, () => {
             expect(wire(turnRequestBody({ ...base, registered: true, settings: { ...onA, accountPicked: true }, session }))).toMatchObject({
                 account: `acct-a`,
+                accountPicked: true,
             });
-            expect(wire(turnRequestBody({ ...base, registered: true, settings: { ...onA, accountPicked: true }, session, box: `sbx-there` }))).not.toHaveProperty(
-                `account`,
-            );
+            const elsewhere = wire(turnRequestBody({ ...base, registered: true, settings: { ...onA, accountPicked: true }, session, box: `sbx-there` }));
+            expect(elsewhere).not.toHaveProperty(`account`);
+            expect(elsewhere).not.toHaveProperty(`accountPicked`);
+            // A pick the daemon has not reported back is named, but nobody picked it for this turn by hand.
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: { ...settings, account: `acct-b` }, session }))).not.toHaveProperty(`accountPicked`);
         });
 
         it(`is named where there is no record to follow: a first turn, another provider, a window holding no session`, () => {

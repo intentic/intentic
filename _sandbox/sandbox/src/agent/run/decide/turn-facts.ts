@@ -23,6 +23,7 @@ import { homeNoteIfDue } from "../../../conversations/home/home-policy.js";
 import { type AccountRoute, offBlockedAccount } from "../../providers/accounts/blocked-account.js";
 import { cacheCold, offSpentAccount, placeCold } from "../../providers/accounts/account-placement.js";
 import { type ReachedRoute, routeWithinReach } from "./account-reach.js";
+import { handPicked } from "../turn/holds/spent-door.js";
 import { endpointIdOf, isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
 import { endpointConfigOf } from "../../../endpoints/local-model.js";
 import { routingFor } from "../../../conversations/registry/routing.js";
@@ -223,9 +224,16 @@ const conversationCold = (services: Pick<TurnFactsDeps, "conversations">, conver
 // (2026-10-28). With nowhere else to go it is still the attempt it was, made with the one-token re-test rather than a
 // whole turn (claude-seat-check.ts, forced): an answer lifts the mark and the turn runs there; the refusal again holds it
 // before anything spawns, in the provider's own words. Only a turn naming ANOTHER account skips this.
+//
+// Except a person's own pick (`accountPicked`): the records are not always right (a limit reset claimed, a plan
+// upgraded, a reading gone stale), and a turn moved off before anything was sent can never prove them wrong. A pick is
+// pinned to the conversation first (switch-account.ts), so the turn it sends names the account the conversation already
+// runs on: read as "nothing new", every press after a limit reset was moved to another account and nothing let the
+// person run on the one they knew had room (2026-11-12). Such a turn goes where it was picked, and the provider's own
+// answer decides. A turn the sandbox started by itself never forces (spent-door.ts sandboxStarted).
 const accountRouteOf = async (services: TurnFactsDeps, input: RoutedTurn, entry: ConversationEntry | undefined): Promise<AccountRoute> => {
     const remembered = routingFor(entry?.profile, { agent: input.agent, harness: input.harness }).account;
-    if ((input.account !== undefined && input.account !== remembered) || remembered === undefined) {
+    if ((input.account !== undefined && input.account !== remembered) || remembered === undefined || handPicked(input)) {
         return { kind: "keep" };
     }
     try {

@@ -3573,6 +3573,7 @@
             },
             "accountMoved": {
                 "refused": "Lief auf {to}: Tarif oder Organisation des Kontos {from} lassen es nicht zu.",
+                "spent": "Lief auf {to}: Laut den Aufzeichnungen hat {from} sein Kontingent aufgebraucht. Um trotzdem auf {from} zu laufen, wählen Sie es im Eingabefeld aus.",
                 "reach": "Lief auf {to}: Die Personen, für die diese Unterhaltung arbeitet, dürfen das Konto {from} nicht nutzen.",
                 "cold": "Von {from} zu {to} gewechselt, das mehr Spielraum hat: Der Cache war abgelaufen, der Wechsel hat also nichts gekostet."
             },

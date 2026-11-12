@@ -57,12 +57,16 @@ import { type DueAt, nudgedPass } from "../../../workload/nudged-pass.js";
 // that conversation's own policy (turn-break.ts), because a re-run spends the reader's budget on a turn they sent once.
 // What is pending lives in each conversation's actor; a new turn on the conversation supersedes it.
 // The turn's own fields come from the held copy; routing (agent/harness/account/model) comes from the press when named.
-// Destructure-then-add so a press onto another runtime leaves none of the old runtime's fields standing.
+// Destructure-then-add so a press onto another runtime leaves none of the old runtime's fields standing. A hand pick is
+// this press's own word or nobody's: the held copy's (`accountPicked`) is the word of the press that was refused, and
+// carried into the re-run it would send a plain Continue straight back onto the account that had just refused it
+// (turn-facts.ts accountRouteOf), so only a press naming the account by hand forces it again.
 const reroutedInput = (input: TurnInput & { conversationId: string }, routing: ResumeRouting | undefined): TurnInput & { conversationId: string } => {
+    const { accountPicked: _picked, ...held } = input;
     if (routing === undefined) {
-        return input;
+        return held;
     }
-    const { agent: _agent, harness: _harness, account: _account, model: _model, effort: _effort, thinking, fast, ...rest } = input;
+    const { agent: _agent, harness: _harness, account: _account, model: _model, effort: _effort, thinking, fast, ...rest } = held;
     const sameProvider = withRuntimeDefaults(input).agent === routing.agent;
     const model = routing.model ?? (sameProvider ? input.model : undefined);
     const sameModel = sameProvider && model === input.model;
@@ -73,6 +77,7 @@ const reroutedInput = (input: TurnInput & { conversationId: string }, routing: R
         agent: routing.agent,
         harness: routing.harness,
         ...(account !== undefined ? { account } : {}),
+        ...opt("accountPicked", account !== undefined && routing.account === account && routing.accountPicked === true ? true : undefined),
         ...(model !== undefined ? { model } : {}),
         ...opt("effort", effort),
         ...opt("thinking", sameModel ? thinking : undefined),

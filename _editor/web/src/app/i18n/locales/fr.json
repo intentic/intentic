@@ -3573,6 +3573,7 @@
             },
             "accountMoved": {
                 "refused": "Exécuté sur {to} : le forfait ou l’organisation du compte {from} ne le permet pas.",
+                "spent": "Exécuté sur {to} : d’après les relevés, {from} a épuisé son quota. Pour l’exécuter quand même sur {from}, choisissez-le dans le compositeur.",
                 "reach": "Exécuté sur {to} : les personnes pour qui travaille cette conversation ne peuvent pas utiliser le compte {from}.",
                 "cold": "Déplacé de {from} vers {to}, qui a plus de marge : le cache avait expiré, le déplacement n’a donc rien coûté."
             },

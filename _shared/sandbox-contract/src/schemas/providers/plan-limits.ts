@@ -398,6 +398,12 @@ export const ResumeRoutingSchema = z.object({
         .describe(
             "Which of that provider's accounts pays for it. Leave it out to keep the account the conversation runs on, or, on another provider, to take whichever of its accounts can serve with the most room. Moving to another account of the same provider is `switchAccount`'s job; naming one here still works.",
         ),
+    accountPicked: z
+        .boolean()
+        .optional()
+        .describe(
+            "Set when a person picked `account` by hand for this re-run: it goes there even where the sandbox's records call that account's allowance spent or its access refused, and the provider's own answer decides.",
+        ),
     // An unloaded catalog keeps the held model only on its own provider.
     model: z.string().optional().describe("Which model. Leave it out to keep the refused turn's model on the same provider, or use the new provider's default."),
     // A tier named for one model may mean nothing on another, so a move onto a ladder rung carries that rung's own.

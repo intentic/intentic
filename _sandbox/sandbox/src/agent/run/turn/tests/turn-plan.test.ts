@@ -733,6 +733,76 @@ describe("a conversation whose account can no longer serve it", () => {
     });
 });
 
+// The records can be wrong about a spent allowance (a limit reset claimed, a plan upgraded), and a turn moved off before
+// anything was sent never proves them wrong. THE FAILURE THIS PREVENTS: a pick of the account the conversation already
+// ran on read as "nothing new", so every press after a limit reset went to another account (2026-11-12).
+describe("a conversation on an account the records call spent", () => {
+    const moves: [string, string][] = [];
+    const roomy = { measuredAt: Date.now(), windows: [{ kind: "five_hour" as const, utilization: 20, gates: "all" as const }] };
+    const SPENT = { at: Date.now(), kind: "limit" as const, message: "You've hit your session limit", account: "home" };
+    const PERSON = { kind: "person" as const, email: "owner@example.com" };
+    const fleet = (): Services =>
+        harnessServices({
+            agents: unstubbed<Services["agents"]>("agents", {
+                entry: () => conversationAfter(3, { profile: { provider: "claude", harness: "native", account: "home" } }),
+                switchAccount: async (id: string, account: string) => {
+                    moves.push([id, account]);
+                    return undefined;
+                },
+            }),
+            claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
+                list: async () => [
+                    { id: "home", label: "home@example.com", connectedAt: 0 },
+                    { id: "spare", label: "spare@example.com", connectedAt: 1 },
+                ],
+            }),
+            accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({ home: roomy, spare: roomy }) }),
+            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ claude: [SPENT] }) }),
+        });
+
+    beforeEach(() => {
+        moves.length = 0;
+    });
+
+    test("moves a turn nobody picked an account for, and says it was the allowance rather than the plan", async () => {
+        const services = fleet();
+        const notes: TranscriptRow[] = [];
+        const run = unstubbed<LiveRun>("run", { done: false, expired: () => false, note: (row: TranscriptRow) => void notes.push(row) });
+        services.conversations.holdings(RUNS).hold("conv-spent", "conv-spent", run);
+
+        await planTurn(services, { ...turn({ conversationId: "conv-spent" }), speaker: PERSON }, context);
+
+        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "spare" }));
+        expect(moves).toEqual([["conv-spent", "spare"]]);
+        expect(notes).toEqual([
+            accountMovedRow({
+                why: "spent",
+                from: "home@example.com",
+                to: "spare@example.com",
+                said: `"home@example.com" has used up its allowance, and "spare@example.com" has 80% left`,
+            }),
+        ]);
+    });
+
+    test("runs a person's hand pick on the account whatever the records say, the conversation's own account included", async () => {
+        const services = fleet();
+
+        await planTurn(services, { ...turn({ conversationId: "conv-spent", account: "home", accountPicked: true }), speaker: PERSON }, context);
+
+        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "home" }));
+        expect(moves).toEqual([]);
+    });
+
+    test("still moves a pick the sandbox carries into a turn it started by itself", async () => {
+        const services = fleet();
+
+        await planTurn(services, { ...turn({ conversationId: "conv-spent", account: "home", accountPicked: true }), resume: "restart" as const }, context);
+
+        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "spare" }));
+        expect(moves).toEqual([["conv-spent", "spare"]]);
+    });
+});
+
 // A person the owner held to some AI accounts (Access ▸ People) spends only those, whoever started the conversation and
 // whatever the runtime's own picker would choose: the account is decided at planning, before any arm resolves one.
 describe("a conversation working for someone held to some AI accounts", () => {

@@ -11,7 +11,7 @@ import { uuid } from "../../../lib/uuid";
 import { holdOfQueue, perMessage, queueFromMessages } from "../drafts/bookings";
 import type { SendLater, TurnBooking } from "../drafts/sendLater";
 import type { ContinueOptions } from "../endings/pickUp";
-import { accountIntent, type SessionRef, type TurnSettings } from "../run/turnRequest";
+import { accountIntent, pickedByHand, type SessionRef, type TurnSettings } from "../run/turnRequest";
 import { type ChatAttachment, isNudgeText } from "../transcript/transcript";
 import type { Conversation } from "./conversation";
 import { movedByPick } from "./waitingRouting";
@@ -114,6 +114,10 @@ export const heldRouting = (settings: TurnSettings, session: SessionRef | undefi
     const account = accountIntent(settings, { registered: true, session });
     if (account !== undefined) {
         routing.account = account;
+    }
+    // A hand pick re-runs the held turn on that account whatever the daemon's records say of it (pickedByHand).
+    if (account !== undefined && pickedByHand(settings)) {
+        routing.accountPicked = true;
     }
     if (options.carry === true) {
         routing.carry = true;

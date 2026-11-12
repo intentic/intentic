@@ -6,7 +6,7 @@ import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSetting
 import { effectivePolicy, sandboxPolicy } from "../../../../models/conversations/endings/turnBreak";
 import type { Conversation } from "../../../../models/conversations/session/conversation";
 import { fallbackAccount, fallbackLabel } from "../../session/limitFallback";
-import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../../session/limitReset";
+import { askLimitReset, claimAndPick, limitResetFor, limitResetNote } from "../../session/limitReset";
 import { usageStatusFor } from "../../../../models/providers/usageStatus";
 import type { SendIntent } from "../../composer/composerIntent";
 
@@ -132,7 +132,7 @@ export const useScheduledWays = (host: ScheduledWaysHost) => {
         resetting.value = true;
         note.value = undefined;
         try {
-            const claim = await claimLimitReset(id, host.conversation().box.value);
+            const claim = await claimAndPick(host.conversation().selection, id, host.conversation().box.value);
             if (claim.result === `reset` || claim.result === `not_limited`) {
                 open.value = false;
                 host.submit({ now: true });

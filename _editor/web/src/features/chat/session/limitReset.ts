@@ -3,6 +3,7 @@ import { ref } from "vue";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { t } from "@intentic/ui/i18n";
+import type { ComposerSelection } from "../../../models/conversations/session/composerSelection";
 
 // Client side of the session-limit reset: the provider can reopen a spent five-hour window once a week per account
 // without touching the weekly allowance. Asked once per account, never on a timer — the endpoint rate-limits hard.
@@ -57,6 +58,16 @@ export const claimLimitReset = async (account: string, at?: string): Promise<Lim
         );
     if (!RETRYABLE.has(claim.result)) {
         answers.value.delete(account);
+    }
+    return claim;
+};
+
+// A claim that left the window open picks the account by hand (turnRequest.ts pickedByHand), so what is sent next goes on
+// the account just reset rather than wherever the daemon's records would move it: they read it spent until the claim.
+export const claimAndPick = async (selection: Pick<ComposerSelection, "apply">, account: string, at?: string): Promise<LimitResetClaim> => {
+    const claim = await claimLimitReset(account, at);
+    if (claim.result === `reset` || claim.result === `not_limited`) {
+        selection.apply({ kind: `selectAccount`, account });
     }
     return claim;
 };

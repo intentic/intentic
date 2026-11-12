@@ -3573,6 +3573,7 @@
             },
             "accountMoved": {
                 "refused": "Ran on {to}: the {from} account's plan or organization does not allow it.",
+                "spent": "Ran on {to}: the records say {from} has used up its allowance. To run on {from} anyway, pick it in the composer.",
                 "reach": "Ran on {to}: the people this conversation works for may not use the {from} account.",
                 "cold": "Moved from {from} to {to}, which has more room left: the cache had expired, so moving cost nothing."
             },

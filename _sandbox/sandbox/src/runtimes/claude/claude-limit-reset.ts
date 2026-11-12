@@ -1,8 +1,9 @@
-import type { AccountUsage, LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountUsage, LimitResetClaim, LimitResetStatus, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { claudeUsageWindows, rateLimitParkMs } from "../../agent/providers/claude/claude-usage.js";
 import { asRecord, asString, resetFromIso } from "../../usage/payload.js";
 import { CLAUDE_CLI_USER_AGENT, type ClaudeStore, ensureFreshToken } from "../../agent/providers/claude/claude-credentials.js";
+import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
 
 /* Anthropic's once-a-week session reset. */
 
@@ -142,6 +143,48 @@ const post = async (token: string, organization: string, fetchFn: typeof fetch):
         signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
     });
     return response.ok ? claimFrom(asRecord(await response.json())) : refused(response.status);
+};
+
+/* A RESET THE PROVIDER CONFIRMED REOPENS WHAT THE RECORDS STILL CALL SPENT. The refusal on file is what makes an account
+   read spent (only a refusal proves a rounded Claude pool spent), and nothing but an answered turn settled it. A turn
+   moved off the account before anything was sent never answers, so after a claimed reset every Continue was moved to
+   another account while the one just reset sat idle, read spent until its old reopen (2026-11-12). A claim answered
+   `reset`, or `not_limited` (the provider's word that the session window is open), drops the account's refusals of that
+   window and files a fresh reading of it. A refusal naming a reopen past the session window is the weekly allowance,
+   which the reset leaves as it was, so it stands. */
+
+// The session window's whole length: a refusal naming a reopen further off than this is not the session window's.
+const SESSION_WINDOW_S = 5 * 60 * 60;
+
+/** What settling a claimed reset reaches beyond the claim's own seams: the refusal ledger. */
+export interface ClaimDeps extends LimitResetDeps {
+    readonly refusals: Pick<ProviderRefusalStore, "drop">;
+}
+
+// Whether a refusal on file is this account's session window, the one a reset reopens: its named reopen within the
+// window's length from now, or none named at all.
+const sessionRefusal =
+    (id: string, nowS: number) =>
+    (refusal: ProviderRefusal): boolean => {
+        const reopensAt = refusal.resetsAt ?? refusal.poolResetsAt;
+        return refusal.kind === "limit" && refusal.account === id && (reopensAt === undefined || reopensAt <= nowS + SESSION_WINDOW_S);
+    };
+
+/**
+ * Claims the reset, and where the provider says the session window is open after it, takes back what the records
+ * still say against it. Best-effort past the claim: the window is open whatever the ledger does, so a settle that fails
+ * costs only the next turn a move, never the claim's answer.
+ */
+export const claimAndSettle = async (deps: ClaimDeps, id: string, fetchFn: typeof fetch = fetch, now: number = Date.now()): Promise<LimitResetClaim> => {
+    const claim = await claimLimitReset(deps.store, id, fetchFn);
+    if (claim.result !== "reset" && claim.result !== "not_limited") {
+        return claim;
+    }
+    // allow(silent-catch): a refusal left standing is answered by the next turn on the account, as before this settle.
+    await deps.refusals.drop("claude", sessionRefusal(id, Math.floor(now / 1000))).catch(() => false);
+    // The reading that says so: filed by the probe itself (fileUsage), its answer about the next reset not needed here.
+    await readLimitReset(deps, id, fetchFn);
+    return claim;
 };
 
 export const claimLimitReset = async (store: ClaudeStore, id: string, fetchFn: typeof fetch = fetch): Promise<LimitResetClaim> => {

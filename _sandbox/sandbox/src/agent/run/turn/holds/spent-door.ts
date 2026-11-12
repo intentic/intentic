@@ -28,6 +28,14 @@ export const sandboxStarted = (turn: Pick<TurnInput, "resume" | "speaker">): boo
     return turn.speaker?.kind !== "person";
 };
 
+/**
+ * Whether the account this turn names is a person's own pick for it (`accountPicked`), which outranks what the records
+ * say about that account (turn-facts.ts accountRouteOf). Never a turn the sandbox started by itself: a pick it carries
+ * from an earlier press is not anybody's word now.
+ */
+export const handPicked = (turn: Pick<TurnInput, "account" | "accountPicked" | "resume" | "speaker">): boolean =>
+    turn.accountPicked === true && turn.account !== undefined && !sandboxStarted(turn);
+
 export const HELD_AT_THE_DOOR =
     "The sandbox did not send this turn: its own records say the provider would refuse it, so it is held for when the allowance reopens rather than spent on a refusal.";
 

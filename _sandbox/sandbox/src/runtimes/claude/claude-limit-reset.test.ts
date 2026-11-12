@@ -1,7 +1,7 @@
-import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { unstubbed } from "@intentic/testing";
 import type { ClaudeStore, StoredAccount } from "../../agent/providers/claude/claude-credentials.js";
-import { claimLimitReset, type LimitResetDeps, readLimitReset } from "./claude-limit-reset.js";
+import { claimAndSettle, type ClaimDeps, claimLimitReset, type LimitResetDeps, readLimitReset } from "./claude-limit-reset.js";
 import { claudeUsageWindows, RATE_LIMIT_PARK_MS } from "../../agent/providers/claude/claude-usage.js";
 
 // Once-a-week session-limit reset, over its two seams: the stored credential and the provider (stubbed as fetch).
@@ -196,4 +196,58 @@ test("the usage payload a probe already paid for is filed as a reading rather th
             windows: claudeUsageWindows({ five_hour: { utilization: 100, resets_at: "2026-09-08T00:00:00Z" }, seven_day: { utilization: 4 } }),
         },
     ]);
+});
+
+// THE FAILURE THIS PREVENTS: a reset claimed through the strip left the refusal on file standing, so the account read
+// spent until its old reopen and every Continue was moved to another account (2026-11-12).
+describe("a reset the provider confirmed", () => {
+    const NOW = Date.parse("2026-11-12T12:00:00Z");
+    const nowS = NOW / 1000;
+    const session: ProviderRefusal = { at: NOW - 60_000, kind: "limit", message: "You've hit your session limit", account: "a", resetsAt: nowS + 3_600 };
+    const unnamed: ProviderRefusal = { at: NOW - 60_000, kind: "limit", message: "usage limit reached", account: "a" };
+    const weekly: ProviderRefusal = { at: NOW - 60_000, kind: "limit", message: "You've hit your weekly limit", account: "a", resetsAt: nowS + 3 * 86_400 };
+    const elsewhere: ProviderRefusal = { ...session, account: "b" };
+    const seat: ProviderRefusal = { at: NOW - 60_000, kind: "entitlement", message: "Your organization has disabled Claude Code.", account: "a" };
+    // The ledger as the claim reaches it, and what stands on it afterwards.
+    const ledger = (filed: readonly ProviderRefusal[]) => {
+        let standing = [...filed];
+        const refusals: ClaimDeps["refusals"] = {
+            drop: async (from, which) => {
+                const before = standing.length;
+                standing = standing.filter((refusal) => from !== "claude" || !which(refusal));
+                return standing.length < before;
+            },
+        };
+        return { refusals, left: () => standing };
+    };
+    const claiming = (result: string) =>
+        provider({
+            "/api/oauth/profile": { body: { organization: { uuid: "org-1" } } },
+            "/reset_rate_limits": { body: { result } },
+            "/api/oauth/usage": { body: { five_hour: { utilization: 0 }, seven_day: { utilization: 40 } } },
+        });
+
+    test("takes back the account's session refusals and files a fresh reading, leaving its weekly one and every other account's", async () => {
+        const seen: Gate = { parks: [], filed: [] };
+        const { refusals, left } = ledger([session, unnamed, weekly, elsewhere, seat]);
+
+        expect(await claimAndSettle({ ...gate(store(), seen), refusals }, "a", claiming("reset").fetchFn, NOW)).toEqual({ result: "reset" });
+
+        expect(left()).toEqual([weekly, elsewhere, seat]);
+        expect(seen.filed).toEqual([{ account: "a", windows: claudeUsageWindows({ five_hour: { utilization: 0 }, seven_day: { utilization: 40 } }) }]);
+    });
+
+    test("settles on the provider's word that the window is not limited, and on nothing else", async () => {
+        const open = ledger([session]);
+        await claimAndSettle({ ...gate(store()), refusals: open.refusals }, "a", claiming("not_limited").fetchFn, NOW);
+        expect(open.left()).toEqual([]);
+
+        for (const result of ["already_used", "ineligible", "unavailable"]) {
+            const shut = ledger([session]);
+            const { fetchFn, calls } = claiming(result);
+            await claimAndSettle({ ...gate(store()), refusals: shut.refusals }, "a", fetchFn, NOW);
+            expect(shut.left()).toEqual([session]);
+            expect(calls.some((call) => call.url.includes("/api/oauth/usage"))).toBe(false);
+        }
+    });
 });

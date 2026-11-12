@@ -98,7 +98,8 @@ export const placeCold = async (deps: ServiceabilityDeps, turn: ColdTurn): Promi
    was refused on every press while the provider's other accounts sat idle: a Devin chat was refused twice in half an hour
    with two accounts beside it nothing had refused (2026-10-29). It goes where every move goes (account-moves.ts
    moveDestination): proven room, or where the provider publishes no allowance, an account nothing has refused. With
-   nowhere to go it stays, and the provider's own refusal says why. A turn naming another account is never asked. */
+   nowhere to go it stays, and the provider's own refusal says why. A turn naming another account is never asked, nor one
+   a person picked the account for (turn-facts.ts accountRouteOf): the records are not always right. */
 
 /** Where a conversation remembering a spent account goes: keep, or a move onto the account the move rule picks. */
 export const offSpentAccount = async (deps: ServiceabilityDeps, turn: Pick<ColdTurn, "provider" | "named" | "remembered" | "model">): Promise<AccountRoute> => {
@@ -124,5 +125,6 @@ export const offSpentAccount = async (deps: ServiceabilityDeps, turn: Pick<ColdT
         to: to.id,
         labels: { from: current.label, to: to.label },
         reason: `"${current.label}" has used up its allowance, and "${to.label}" ${to.state.kind === "ready" ? `has ${roomWords(to.state.room)}` : "has not been refused"}`,
+        spent: true,
     };
 };

@@ -42,6 +42,8 @@ export type AccountMoved = Extract<SandboxNotice, { code: "accountMoved" }>["par
 // Each names both accounts, since "moved" alone leaves the reader to work out from where and to where.
 const MOVED_LINES = {
     refused: ({ from, to }) => `Ran on ${to}: the ${from} account's plan or organization does not allow it.`,
+    // Says how to overrule it: the records can be wrong (a limit reset, a plan upgraded), and a pick of the account wins.
+    spent: ({ from, to }) => `Ran on ${to}: the records say ${from} has used up its allowance. To run on ${from} anyway, pick it in the composer.`,
     reach: ({ from, to }) => `Ran on ${to}: the people this conversation works for may not use the ${from} account.`,
     cold: ({ from, to }) => `Moved from ${from} to ${to}, which has more room left: the cache had expired, so moving cost nothing.`,
 } as const satisfies Readonly<Record<AccountMoved["why"], (move: AccountMoved) => string>>;

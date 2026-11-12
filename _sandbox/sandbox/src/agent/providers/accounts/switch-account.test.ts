@@ -115,7 +115,8 @@ test("asked to run, a held turn runs again at once on the account named, carried
         ...verdictOf({}, []),
     };
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b", carry: true, run: true })).toEqual({ kind: "moved", run: "run-2" });
-    expect(pressed).toEqual([{ routing: { agent: "claude", harness: "native", account: "acct-b", carry: true } }]);
+    // A person's pick, so the re-run goes there even where the records call the account spent (turn-facts.ts accountRouteOf).
+    expect(pressed).toEqual([{ routing: { agent: "claude", harness: "native", account: "acct-b", accountPicked: true, carry: true } }]);
     // A person's press reopens a conversation archived since the turn was held, at this door: the engine refuses every
     // archived one.
     expect(reopened).toEqual([ID]);

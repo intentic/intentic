@@ -280,6 +280,7 @@ const startingLine = (notice: StartingNotice, audience: Audience): string => {
 type AccountMoved = Coded<`accountMoved`>[`params`];
 const ACCOUNT_MOVED = {
     refused: ({ from, to }) => t(`chat.sandboxNotice.accountMoved.refused`, { from, to }),
+    spent: ({ from, to }) => t(`chat.sandboxNotice.accountMoved.spent`, { from, to }),
     reach: ({ from, to }) => t(`chat.sandboxNotice.accountMoved.reach`, { from, to }),
     cold: ({ from, to }) => t(`chat.sandboxNotice.accountMoved.cold`, { from, to }),
 } as const satisfies Readonly<Record<AccountMoved[`why`], (move: AccountMoved) => string>>;

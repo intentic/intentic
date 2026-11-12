@@ -151,12 +151,13 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
         }),
     }),
     // The conversation moved to another account of its provider before its turn ran (the daemon's turn-plan.ts), why:
-    // the account could not serve it (`refused`: its plan or organization does not allow it), the people it works for may
-    // not use it (`reach`), or its cache had expired and another account had clearly more room (`cold`). `from` and `to`
-    // are the accounts' own names, never ids; `said` is the provider's own sentence a refusal came with.
+    // the account could not serve it (`refused`: its plan or organization does not allow it), the records call its
+    // allowance used up (`spent`, which a person's own pick of it overrides), the people it works for may not use it
+    // (`reach`), or its cache had expired and another account had clearly more room (`cold`). `from` and `to` are the
+    // accounts' own names, never ids; `said` is the provider's own sentence a refusal came with, or the records' reading.
     z.object({
         code: z.literal("accountMoved"),
-        params: z.object({ why: z.enum(["refused", "reach", "cold"]), from: z.string(), to: z.string(), said: z.string().optional() }),
+        params: z.object({ why: z.enum(["refused", "spent", "reach", "cold"]), from: z.string(), to: z.string(), said: z.string().optional() }),
     }),
     // An agent's own dependency install starting: into its conversation's own copy (`ownCopy`) or the main tree; the
     // workspace root (`root`) and up to three project folders named (`projects`, each with its slash, already joined),

@@ -10,7 +10,7 @@ const answers = jest.fn();
 const claims = jest.fn();
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ usage: { limitReset: answers, claimLimitReset: claims } }) }));
 
-const { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } = await import("./limitReset");
+const { askLimitReset, claimAndPick, claimLimitReset, limitResetFor, limitResetNote } = await import("./limitReset");
 
 const AVAILABLE: LimitResetStatus = { available: true };
 
@@ -93,6 +93,20 @@ it(`hands back the daemon's own words for a refused claim, and "didn't answer" o
 
     claims.mockRejectedValueOnce(new TypeError(`Failed to fetch`));
     expect(await claimLimitReset(account)).toEqual({ result: `error`, detail: `Your sandbox didn't answer.` });
+});
+
+// The records read the account spent until the claim, so a send that follows names it as a hand pick rather than being
+// moved elsewhere. THE FAILURE THIS PREVENTS: a reset claimed, then every Continue moved to another account (2026-11-12).
+it(`picks the account by hand once its window is open, and leaves the pick alone when the claim changed nothing`, async () => {
+    for (const [result, picked] of [[`reset`, true], [`not_limited`, true], [`already_used`, false], [`error`, false]] as const) {
+        const account = fresh();
+        const apply = jest.fn();
+        claims.mockResolvedValue({ result });
+
+        expect(await claimAndPick({ apply }, account)).toEqual({ result });
+
+        expect(apply.mock.calls).toEqual(picked ? [[{ kind: `selectAccount`, account }]] : []);
+    }
 });
 
 it(`says which kind of nothing happened, and says nothing at all about a reset that worked`, () => {

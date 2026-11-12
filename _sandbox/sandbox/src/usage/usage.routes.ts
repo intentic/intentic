@@ -1,10 +1,10 @@
 import { usageContract } from "@intentic/sandbox-contract/contracts/usage.contract";
 import { implement, ORPCError } from "@orpc/server";
-import { claimLimitReset, readLimitReset } from "../runtimes/claude/claude-limit-reset.js";
+import { claimAndSettle, readLimitReset } from "../runtimes/claude/claude-limit-reset.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 
-export type UsageRoutesDeps = Pick<Services, "headroom" | "usage" | "claudeStore">;
+export type UsageRoutesDeps = Pick<Services, "headroom" | "usage" | "claudeStore" | "providerRefusals">;
 
 // How long a forced re-measure waits for the sweep before returning the stale reading; bounded by the readers' own
 // timeouts.
@@ -46,6 +46,9 @@ export const createUsageRoutes = (services: UsageRoutesDeps) => {
             }
             return status;
         }),
-        claimLimitReset: i.claimLimitReset.handler(async ({ input }) => claimLimitReset(services.claudeStore, input.account)),
+        // A reset that went through takes back the refusal the records still hold against the window (claimAndSettle).
+        claimLimitReset: i.claimLimitReset.handler(async ({ input }) =>
+            claimAndSettle({ store: services.claudeStore, headroom: services.headroom, refusals: services.providerRefusals }, input.account),
+        ),
     };
 };
