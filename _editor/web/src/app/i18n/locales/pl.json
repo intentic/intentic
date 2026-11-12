@@ -8634,7 +8634,7 @@
             "free": "Zwolnij {bytes}",
             "freed": "Zwolniono {bytes} z kategorii „{category}”.",
             "heading": "Dysk",
-            "intro": "Zobacz, co zapełnia dysk tego sandboxa, i zwolnij to, co może bezpiecznie zniknąć. Skan czyta każdy plik na woluminach sandboxa, więc może potrwać minutę.",
+            "intro": "Przeskanuj, aby zobaczyć, co zapełnia ten dysk i co można zwolnić.",
             "keptItems": "{count} element został: w użyciu albo zmieniony w ciągu ostatniej doby. | {count} elementy zostały: w użyciu albo zmienione w ciągu ostatniej doby. | {count} elementów zostało: w użyciu albo zmienionych w ciągu ostatniej doby.",
             "measured": "Zmierzono {when}",
             "staleNote": "Zeskanuj ponownie, by zobaczyć aktualne rozmiary.",
@@ -8649,9 +8649,10 @@
             "uncounted": "Poza skanem",
             "unreadable": "Nie udało się odczytać {count} pliku lub folderu, więc nie został policzony. | Nie udało się odczytać {count} plików lub folderów, więc nie zostały policzone. | Nie udało się odczytać {count} plików lub folderów, więc nie zostały policzone.",
             "waiting": "Na razie nic do zwolnienia",
-            "freeable": "Można zwolnić {bytes}",
             "more": "{count} mniejsza kategoria | {count} mniejsze kategorie | {count} mniejszych kategorii",
-            "fewer": "Pokaż mniej"
+            "fewer": "Pokaż mniej",
+            "diskFree": "Wolne {bytes}",
+            "details": "Co zajmuje miejsce"
         },
         "sandboxSwitcher": {
             "couldntDeleteThere": "Nie udało się go usunąć z {machine}.",

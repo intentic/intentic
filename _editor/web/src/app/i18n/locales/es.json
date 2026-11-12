@@ -9624,7 +9624,7 @@
             "scan": "Analizar",
             "scanAgain": "Analizar de nuevo",
             "couldntRead": "No se pudo leer la última medición",
-            "intro": "Mira qué está llenando el disco de este sandbox y libera lo que puede irse sin riesgo. Un análisis lee cada archivo de los volúmenes del sandbox, así que puede tardar un minuto.",
+            "intro": "Analiza para ver qué llena este disco y qué se puede liberar.",
             "firstScan": "Leyendo cada archivo de los volúmenes del sandbox. Puede tardar un minuto.",
             "diskUsed": "{used} de {total} en uso",
             "partial": "El análisis alcanzó su límite de tiempo antes de leerlo todo, así que cada tamaño es como mínimo el indicado.",
@@ -9633,7 +9633,6 @@
             "systemProgramsFilesystem": "Sistema, programas, sistema de archivos",
             "tooRecent": "Demasiado reciente",
             "waiting": "Nada que liberar aún",
-            "freeable": "Se pueden liberar {bytes}",
             "more": "{count} categoría más pequeña | {count} categorías más pequeñas",
             "fewer": "Mostrar menos",
             "uncounted": "Sin contar en el análisis",
@@ -9641,7 +9640,9 @@
             "confirmHeader": "¿Limpiar {category}?",
             "freed": "Liberados {bytes} de {category}.",
             "keptItems": "{count} elemento se quedó: en uso o modificado en el último día. | {count} elementos se quedaron: en uso o modificados en el último día.",
-            "failedItems": "{count} elemento no se pudo eliminar. | {count} elementos no se pudieron eliminar."
+            "failedItems": "{count} elemento no se pudo eliminar. | {count} elementos no se pudieron eliminar.",
+            "diskFree": "{bytes} libres",
+            "details": "Qué ocupa el espacio"
         },
         "storageCategories": {
             "workspace": {

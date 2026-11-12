@@ -43,6 +43,8 @@ import SandboxSleepRow from "./SandboxSleepRow.vue";
 import SandboxGpuRow from "./SandboxGpuRow.vue";
 import SandboxModeRow from "./mode/SandboxModeRow.vue";
 import SandboxStorageCard from "./storage/SandboxStorageCard.vue";
+import { diskPressing } from "./storage/diskPressureView";
+import { useDiskPressure } from "./storage/useDiskPressure";
 import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
 import SandboxLogoStyleDialog from "./logo/SandboxLogoStyleDialog.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -55,6 +57,11 @@ import { here, page } from "../../../lib/routes/links";
 // that already live elsewhere (rail, tab badges, Preview/Ports).
 
 const t = useT();
+
+// The Disk group sits near the foot of the page, under what asks more of the reader (an update, a backup), and climbs to
+// just under the heading while the daemon's watch says the disk is short: then it is the page's most urgent answer.
+const { pressure: diskPressure } = useDiskPressure();
+const diskUrgent = computed(() => diskPressing(diskPressure.value));
 
 const sandbox = useSandbox();
 const { hasSnapshot } = useWorkspaceTree();
@@ -486,8 +493,9 @@ const saveStyledLogo = async (image: string): Promise<void> => {
             @save="saveResize"
         />
 
-        <!-- What fills the disk and what may be freed; maintainer-only like the routes behind it, self-hides otherwise. -->
-        <SandboxStorageCard />
+        <!-- What fills the disk and what may be freed; maintainer-only like the routes behind it, self-hides otherwise.
+             Up here only while the disk is short; otherwise below the update and backup prompts. -->
+        <SandboxStorageCard v-if="diskUrgent" />
 
         <!-- Upgrade path for hosted sandboxes only (a member can't create one for the owner). -->
         <Card v-if="hosted && isOwner" class="flex flex-col gap-2">
@@ -521,6 +529,8 @@ const saveStyledLogo = async (image: string): Promise<void> => {
         <!-- Names a route gap between this app and the daemon instead of a silent 404; fires in dev too, where versions are all 0.0.0. -->
         <SandboxBehindCard />
         <SandboxManifestCard />
+
+        <SandboxStorageCard v-if="!diskUrgent" />
 
         <!-- Last on the page, and only a press away from its question: the dialog asks, counts down and can be undone. -->
         <Card

@@ -9624,7 +9624,7 @@
             "scan": "Scan",
             "scanAgain": "Scan again",
             "couldntRead": "Couldn't read the last measurement",
-            "intro": "See what is filling this sandbox's disk, and free what can safely go. A scan reads every file on the sandbox's volumes, so it can take a minute.",
+            "intro": "Scan to see what fills this disk and what can be freed.",
             "firstScan": "Reading every file on the sandbox's volumes. This can take a minute.",
             "diskUsed": "{used} of {total} used",
             "partial": "The scan reached its time limit before it read everything, so each size is at least what it says.",
@@ -9633,7 +9633,6 @@
             "systemProgramsFilesystem": "System, programs, filesystem",
             "tooRecent": "Too recent",
             "waiting": "Nothing to free yet",
-            "freeable": "{bytes} can be freed",
             "more": "{count} smaller category | {count} smaller categories",
             "fewer": "Show fewer",
             "uncounted": "Not counted by the scan",
@@ -9641,7 +9640,9 @@
             "confirmHeader": "Clean {category}?",
             "freed": "Freed {bytes} from {category}.",
             "keptItems": "{count} item stayed: in use, or changed in the last day. | {count} items stayed: in use, or changed in the last day.",
-            "failedItems": "{count} item could not be removed. | {count} items could not be removed."
+            "failedItems": "{count} item could not be removed. | {count} items could not be removed.",
+            "diskFree": "{bytes} free",
+            "details": "What uses the space"
         },
         "storageCategories": {
             "workspace": {

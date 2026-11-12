@@ -20,11 +20,6 @@ export const shareOfCounted = (bytes: number, scan: StorageScan): number => {
     return whole <= 0 ? 0 : Math.min(100, (bytes / whole) * 100);
 };
 
-// What pressing every clean button would give back right now, as far as the daemon can say: a category that cannot
-// name its figure (a package store) adds nothing rather than a guess.
-export const freeableBytes = (scan: StorageScan): number =>
-    scan.categories.reduce((total, category) => (category.cleanability === `none` ? total : total + (category.cleanableBytes ?? 0)), 0);
-
 // How many of the largest categories the card lists before folding the rest behind one "more" row. The folded tail is
 // the small change of the disk; the categories arrive largest first, so the split keeps the ones worth reading.
 export const LEADING_CATEGORIES = 6;

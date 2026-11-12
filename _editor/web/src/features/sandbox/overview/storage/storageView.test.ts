@@ -5,7 +5,7 @@ import {
     type StorageScan,
 } from "@intentic/sandbox-contract/schemas/metrics";
 import { storageCategoryText } from "./storageCategories";
-import { cleanOffer, freeableBytes, shareOfCounted, splitCategories, uncountedBytes } from "./storageView";
+import { cleanOffer, shareOfCounted, splitCategories, uncountedBytes } from "./storageView";
 
 // What the Disk card decides from a scan: what the scan could not account for, how long each row's bar is, and what
 // each category's button offers. Pinned at the edges, where a card would otherwise say something false.
@@ -51,18 +51,6 @@ describe(`shareOfCounted`, () => {
     it(`never draws past the end, and draws nothing from an empty scan`, () => {
         expect(shareOfCounted(2000, scanOf(counted))).toBe(100);
         expect(shareOfCounted(10, scanOf([]))).toBe(0);
-    });
-});
-
-describe(`freeableBytes`, () => {
-    it(`adds what each cleanable category would give back, and nothing for one that cannot say`, () => {
-        const scan = scanOf([
-            usage({ id: `workspace`, bytes: 900 }),
-            usage({ id: `logs`, bytes: 300, cleanableBytes: 200 }),
-            usage({ id: `modelWeights`, bytes: 100, cleanableBytes: 100 }),
-            usage({ id: `packageStores`, bytes: 500 }),
-        ]);
-        expect(freeableBytes(scan)).toBe(300);
     });
 });
 

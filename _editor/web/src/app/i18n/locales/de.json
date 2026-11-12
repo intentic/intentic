@@ -9624,7 +9624,7 @@
             "scan": "Scannen",
             "scanAgain": "Erneut scannen",
             "couldntRead": "Die letzte Messung ließ sich nicht lesen",
-            "intro": "Sehen Sie, was den Speicherplatz dieser Sandbox füllt, und geben Sie frei, was gefahrlos weg kann. Ein Scan liest jede Datei auf den Volumes der Sandbox und kann daher eine Minute dauern.",
+            "intro": "Scannen, um zu sehen, was diesen Speicher füllt und was frei werden kann.",
             "firstScan": "Jede Datei auf den Volumes der Sandbox wird gelesen. Das kann eine Minute dauern.",
             "diskUsed": "{used} von {total} belegt",
             "partial": "Der Scan hat sein Zeitlimit erreicht, bevor er alles gelesen hatte; jede Größe ist also mindestens so groß wie angegeben.",
@@ -9633,7 +9633,6 @@
             "systemProgramsFilesystem": "System, Programme, Dateisystem",
             "tooRecent": "Zu neu",
             "waiting": "Noch nichts freizugeben",
-            "freeable": "{bytes} lassen sich freigeben",
             "more": "{count} kleinere Kategorie | {count} kleinere Kategorien",
             "fewer": "Weniger anzeigen",
             "uncounted": "Vom Scan nicht erfasst",
@@ -9641,7 +9640,9 @@
             "confirmHeader": "{category} bereinigen?",
             "freed": "{bytes} aus {category} freigegeben.",
             "keptItems": "{count} Element ist geblieben: in Gebrauch oder am letzten Tag geändert. | {count} Elemente sind geblieben: in Gebrauch oder am letzten Tag geändert.",
-            "failedItems": "{count} Element ließ sich nicht entfernen. | {count} Elemente ließen sich nicht entfernen."
+            "failedItems": "{count} Element ließ sich nicht entfernen. | {count} Elemente ließen sich nicht entfernen.",
+            "diskFree": "{bytes} frei",
+            "details": "Was den Platz belegt"
         },
         "storageCategories": {
             "workspace": {

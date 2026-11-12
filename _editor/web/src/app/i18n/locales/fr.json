@@ -9624,7 +9624,7 @@
             "scan": "Analyser",
             "scanAgain": "Analyser à nouveau",
             "couldntRead": "Impossible de lire la dernière mesure",
-            "intro": "Voyez ce qui remplit le disque de ce sandbox, et libérez ce qui peut partir sans risque. Une analyse lit chaque fichier des volumes du sandbox, elle peut donc prendre une minute.",
+            "intro": "Lancez une analyse pour voir ce qui remplit ce disque et ce qui peut être libéré.",
             "firstScan": "Lecture de chaque fichier des volumes du sandbox. Cela peut prendre une minute.",
             "diskUsed": "{used} utilisés sur {total}",
             "partial": "L'analyse a atteint sa limite de temps avant de tout lire : chaque taille est donc au moins celle indiquée.",
@@ -9633,7 +9633,6 @@
             "systemProgramsFilesystem": "Système, programmes, système de fichiers",
             "tooRecent": "Trop récent",
             "waiting": "Rien à libérer pour l'instant",
-            "freeable": "{bytes} peuvent être libérés",
             "more": "{count} catégorie plus petite | {count} catégories plus petites",
             "fewer": "Afficher moins",
             "uncounted": "Non compté par l'analyse",
@@ -9641,7 +9640,9 @@
             "confirmHeader": "Nettoyer {category} ?",
             "freed": "{bytes} libérés dans {category}.",
             "keptItems": "{count} élément est resté : en cours d'utilisation, ou modifié au cours du dernier jour. | {count} éléments sont restés : en cours d'utilisation, ou modifiés au cours du dernier jour.",
-            "failedItems": "{count} élément n'a pas pu être supprimé. | {count} éléments n'ont pas pu être supprimés."
+            "failedItems": "{count} élément n'a pas pu être supprimé. | {count} éléments n'ont pas pu être supprimés.",
+            "diskFree": "{bytes} libres",
+            "details": "Ce qui occupe l’espace"
         },
         "storageCategories": {
             "workspace": {
