@@ -4,6 +4,7 @@ import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { TRIM_KEEPS_RESULTS } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import { thawClaudeSession } from "../../../sessions/session-freeze.js";
 
 /* A COPY OF A CLAUDE CODE SESSION, TO RESUME INSTEAD OF THE ORIGINAL.
 
@@ -323,11 +324,13 @@ export const copySession = (chain: readonly SessionLine[], keep: number, session
 // A session id is the CLI's own UUID; anything else is refused rather than joined into a path.
 const SESSION_ID = /^[\w-]+$/u;
 
-// The CLI files a transcript under its cwd, sanitized; the id alone finds it wherever the turn ran.
+// The CLI files a transcript under its cwd, sanitized; the id alone finds it wherever the turn ran. Thawed first, if the
+// cold-session sweep compressed it (sessions/session-freeze.ts).
 export const sessionFileOf = async (store: string, sessionId: string): Promise<string | undefined> => {
     if (!SESSION_ID.test(sessionId)) {
         return undefined;
     }
+    await thawClaudeSession(store, sessionId);
     const projects = join(store, "projects");
     const dirs = (await readdir(projects, { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
     const paths = dirs.filter((dir) => dir.isDirectory()).map((dir) => join(projects, dir.name, `${sessionId}.jsonl`));

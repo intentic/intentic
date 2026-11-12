@@ -9723,6 +9723,11 @@
                 "reason": "Gewichte, die für die Modelle heruntergeladen wurden, die diese Sandbox selbst ausführt.",
                 "warning": "Ein bereinigtes Modell lädt seine Gewichte beim nächsten Start erneut herunter, was eine Weile dauern kann. Gewichte, die ein laufendes Modell nutzt, bleiben erhalten."
             },
+            "toolCaches": {
+                "label": "Werkzeug-Caches",
+                "reason": "Was die Werkzeuge der Agenten im Cache-Ordner der Sandbox heruntergeladen und installiert haben, ein Ordner pro Werkzeug: Python-Umgebungen, Modellgewichte und Paket-Downloads.",
+                "warning": "Ein bereinigtes Werkzeug lädt beim nächsten Lauf alles erneut herunter oder installiert es neu, was lange dauern kann. Ein Ordner, den ein laufendes Programm nutzt oder der sich am letzten Tag geändert hat, bleibt erhalten."
+            },
             "logs": {
                 "label": "Logs",
                 "reason": "Die eigenen Logs der Sandbox und Terminal-Mitschnitte. Beim Bereinigen bleiben die vom letzten Tag erhalten."

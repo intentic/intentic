@@ -44,12 +44,23 @@ const usingOf = (scan: StorageScan | undefined): DiskPressure["using"] =>
         .slice(0, USING_SHOWN)
         .map(({ id, bytes }) => ({ id, bytes }));
 
+// LAST RESORTS, AFTER THE CHECKOUTS (2026-11-12). On shinobi the checkouts' build output was a fraction of what filled
+// the disk: the main checkout's own Cargo `incremental/` held 68 GB and artifacts 56 GB, and nothing the watch could
+// reach freed either. Each relief here is regenerable or the turn's leftovers, taken only while the disk stays short.
+export interface PressureRelief {
+    readonly name: string;
+    readonly free: (enough: () => Promise<boolean>) => Promise<number>;
+}
+
 export interface DiskPressureDeps {
     readonly read: () => Promise<HistorySpace>;
     // The reaping threshold as a fraction of the volume, read each tick; REAP_BELOW where nothing sets it.
     readonly reapBelow?: () => Promise<number>;
     // Removes settled checkouts' build output until `enough`; resolves how many checkouts it took some from.
     readonly reap: (enough: () => Promise<boolean>) => Promise<number>;
+    // What else may go, in order, while the disk is still short once checkouts' build output is gone; each resolves how
+    // many things it removed and stops by itself once `enough` says there is room.
+    readonly reliefs?: readonly PressureRelief[];
     readonly lastScan: () => Promise<StorageScan | undefined>;
     // The owner told, once per level crossed.
     readonly tell: (level: "low" | "critical", state: DiskPressure) => Promise<void>;
@@ -64,6 +75,33 @@ export interface DiskPressureWatch {
     readonly state: () => DiskPressure;
 }
 
+// Each relief in order until the disk has room; the reading after the last one that removed anything.
+const relieve = async (
+    deps: DiskPressureDeps,
+    from: HistorySpace,
+    reapBelow: number,
+    enough: () => Promise<boolean>,
+): Promise<{ space: HistorySpace; level: DiskPressureLevel }> => {
+    let space = from;
+    let level = pressureLevel(space, reapBelow);
+    for (const relief of deps.reliefs ?? []) {
+        if (level === "ok") {
+            break;
+        }
+        const ahead = space.freeBytes;
+        const removed = await relief.free(enough).catch((error: Error) => {
+            deps.logger.warn({ err: error, relief: relief.name }, "storage: a disk-pressure relief failed");
+            return 0;
+        });
+        if (removed > 0) {
+            space = await deps.read();
+            level = pressureLevel(space, reapBelow);
+            deps.logger.info({ relief: relief.name, removed, bytes: Math.max(0, space.freeBytes - ahead), level }, "storage: the disk was still short; removed more");
+        }
+    }
+    return { space, level };
+};
+
 const UNMEASURED: DiskPressure = { level: "ok", freeBytes: 0, totalBytes: 0, measuredAt: 0, using: [] };
 
 export const createDiskPressureWatch = (deps: DiskPressureDeps): DiskPressureWatch => {
@@ -77,12 +115,16 @@ export const createDiskPressureWatch = (deps: DiskPressureDeps): DiskPressureWat
         let level = pressureLevel(before, reapBelow);
         let reaped = state.reaped;
         if (level !== "ok") {
-            const checkouts = await deps.reap(async () => pressureLevel(await deps.read(), reapBelow) === "ok");
+            const enough = async (): Promise<boolean> => pressureLevel(await deps.read(), reapBelow) === "ok";
+            const checkouts = await deps.reap(enough);
             if (checkouts > 0) {
                 space = await deps.read();
                 level = pressureLevel(space, reapBelow);
                 reaped = { bytes: Math.max(0, space.freeBytes - before.freeBytes), checkouts, at: deps.now() };
                 deps.logger.info({ ...reaped, level }, "storage: the disk was short; removed build output from settled checkouts");
+            }
+            if (level !== "ok") {
+                ({ space, level } = await relieve(deps, space, reapBelow, enough));
             }
         }
         const moved = level !== state.level || reaped !== state.reaped;

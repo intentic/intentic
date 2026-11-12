@@ -225,6 +225,9 @@ export const STORAGE_CLEANABILITY = {
     browserProfiles: "confirm",
     // Weights downloaded for local models.
     modelWeights: "confirm",
+    // What agents' tools downloaded and built in the workspace's cache folder, one folder per tool: Python environments,
+    // model weights, package downloads. Comes back only by downloading or building it again.
+    toolCaches: "confirm",
     // The sandbox's own logs and terminal captures.
     logs: "safe",
     // Scratch space agents and checks leave behind.

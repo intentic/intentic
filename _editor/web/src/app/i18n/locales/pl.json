@@ -9053,6 +9053,11 @@
                 "reason": "Wagi pobrane dla modeli, które ten sandbox uruchamia sam.",
                 "warning": "Wyczyszczony model przy następnym starcie pobierze wagi ponownie, co może chwilę potrwać. Wagi używane przez działający model zostają."
             },
+            "toolCaches": {
+                "label": "Pamięć podręczna narzędzi",
+                "reason": "To, co narzędzia agentów pobrały i zainstalowały w folderze pamięci podręcznej sandboksa, jeden folder na narzędzie: środowiska Pythona, wagi modeli i pobrane pakiety.",
+                "warning": "Wyczyszczone narzędzie przy następnym uruchomieniu pobierze lub zainstaluje wszystko ponownie, co może długo potrwać. Folder używany przez działający program albo zmieniony w ostatniej dobie zostaje."
+            },
             "other": {
                 "label": "Pliki niczyje",
                 "reason": "Pliki, do których nie przyznaje się żadna część sandboxa, np. ręcznie zrobione kopie zapasowe. Przejrzyj je, zanim sam je usuniesz."

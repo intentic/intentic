@@ -29,6 +29,8 @@ import {
 } from "./sessions.js";
 import { BLOB_GRACE_MS, fileTranscriptRecord, type TranscriptPage, type TranscriptWindow } from "./transcript-record.js";
 import { readSessionLines, spokenLinesOf } from "./search/transcript-search.js";
+import { thawClaudeSession } from "./session-freeze.js";
+import { sharedClaudeStore } from "./session-store.js";
 
 // Transcripts and sessions: the durable record, the session files, phrase search, and a conversation's purge.
 export interface SessionsSlice {
@@ -106,6 +108,21 @@ const sessionListing = (deps: SessionsDeps) => {
     const naming = sessionNaming(() => titlesBySession(deps.roster()));
     return { recent: createRecentSessions(deps.workspaceRoot, naming), list: (dir: string) => listWorkspaceSessions(dir, naming) };
 };
+
+// The SDK reads the daemon's own `~/.claude`, which links the shared store: a session the cold-session sweep compressed
+// there comes back before the SDK opens it (session-freeze.ts).
+const thawThen = async <T>(workspaceRoot: string, sessionId: string, read: () => Promise<T>): Promise<T> => {
+    await thawClaudeSession(sharedClaudeStore(workspaceRoot), sessionId);
+    return read();
+};
+
+// The reads of one session by its id, each after its thaw; `exists` is what a turn asks before it resumes one
+// (claude-provider.ts holdsSession).
+const thawedReads = (workspaceRoot: string): Pick<SessionsSlice["sessions"], "read" | "readTail" | "exists"> => ({
+    read: (dir, id) => thawThen(workspaceRoot, id, () => readWorkspaceSession(dir, id)),
+    readTail: (dir, id, since) => thawThen(workspaceRoot, id, () => readWorkspaceSessionTail(dir, id, since)),
+    exists: (dir, id) => thawThen(workspaceRoot, id, () => workspaceSessionExists(dir, id)),
+});
 
 // Builds the sessions slice: the durable record, its blob sweeps, the phrase index and its backfill, and the purge.
 export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: SessionsSlice; readonly saidIndexMetrics: () => unknown } => {
@@ -185,7 +202,7 @@ export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: Sessi
                     key: session.id,
                     // The session file's own mtime, already read by the list; an append moves it, nothing else to open.
                     version: async () => String(session.updatedAt),
-                    lines: () => readSessionLines(deps.workspaceRoot, session.id),
+                    lines: () => thawThen(deps.workspaceRoot, session.id, () => readSessionLines(deps.workspaceRoot, session.id)),
                 })),
             },
             deps.logger,
@@ -210,12 +227,10 @@ export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: Sessi
         slice: {
             sessions: {
                 list: listing.list,
-                read: readWorkspaceSession,
-                readTail: readWorkspaceSessionTail,
+                ...thawedReads(deps.workspaceRoot),
                 // Bound to this daemon's one index, so the history box and the fleet board answer from the same rows.
                 search: (query, caseSensitive) =>
                     searchWorkspaceSessions(recentSessions, query, caseSensitive, saidIndex.search),
-                exists: workspaceSessionExists,
             },
             transcripts: {
                 read: (agent) => agentTranscript(transcriptDeps, agent),

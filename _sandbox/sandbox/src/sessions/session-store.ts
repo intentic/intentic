@@ -43,6 +43,9 @@ export interface StoreOwner {
     readonly identity: { readonly areas?: readonly string[] | undefined };
 }
 
+// The Claude store every unfenced conversation shares, which the daemon's own `~/.claude` links into (linkClaudeState).
+export const sharedClaudeStore = (workspaceRoot: string): string => statePath(workspaceRoot, ".intentic/records/sessions/claude/");
+
 /**
  * Where a conversation's runtime session state is: its transcripts, plans, backups, shell snapshots and checklists.
  * A conversation born fenced keeps its own, outside the workspace; its turn's namespace binds that over the shared
@@ -54,11 +57,11 @@ export const claudeStoreOf = (workspaceRoot: string, historyRoot: string, entry:
         return sessionsDir(historyRoot, entry.id);
     }
     const jailed = entry !== undefined && isConversationId(entry.id) ? jailStoreDir(historyRoot, entry.id) : undefined;
-    return jailed !== undefined && existsSync(jailed) ? jailed : statePath(workspaceRoot, ".intentic/records/sessions/claude/");
+    return jailed !== undefined && existsSync(jailed) ? jailed : sharedClaudeStore(workspaceRoot);
 };
 
 export const linkClaudeState = async (workspaceRoot: string, home = homedir()): Promise<void> => {
-    const store = statePath(workspaceRoot, ".intentic/records/sessions/claude/");
+    const store = sharedClaudeStore(workspaceRoot);
     const claudeHome = join(home, ".claude");
     await mkdir(claudeHome, { recursive: true });
     // Never clobbers a real (non-symlink) entry, only possible outside the container; refusals report together.

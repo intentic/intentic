@@ -11,6 +11,8 @@ import { toolIn, type TranscriptAgent } from "../../sessions/agent-transcript.js
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { readSubagentSession } from "../../sessions/sessions.js";
+import { thawClaudeSession } from "../../sessions/session-freeze.js";
+import { sharedClaudeStore } from "../../sessions/session-store.js";
 import { ROSTER } from "../../conversations/actor/subagent-roster.js";
 import { closeSubagents, pair, readMeta, type SubagentRecord, type SubagentTurn } from "./subagents.js";
 
@@ -242,7 +244,11 @@ export const subagentTranscriptOf = (
     readSubagentTranscript(
         {
             conversations: services.conversations,
-            sdkMessages: (session, agentId) => readSubagentSession(services.workspace.root, session, agentId),
+            // The SDK reads the shared store, where the cold-session sweep may have compressed the record.
+            sdkMessages: async (session, agentId) => {
+                await thawClaudeSession(sharedClaudeStore(services.workspace.root), session);
+                return readSubagentSession(services.workspace.root, session, agentId);
+            },
             toolCard: (agent, toolId) => services.transcripts.toolCard(agent, toolId),
             findSdkRecord: async (toolUseId) =>
                 sessionId === undefined ? undefined : findSubagentRecord(services.agentWorktrees.sessionStore(parent), sessionId, toolUseId),

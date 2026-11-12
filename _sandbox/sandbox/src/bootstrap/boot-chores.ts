@@ -19,9 +19,14 @@ import { clearStaleGitLocks, staleGitLocksChore } from "../git/ops/stale-git-loc
 import { logsRoot, pruneLogFiles } from "../logs/log-files.js";
 import { type Chore, DAY_MS, HOUR_MS, startChoreClock } from "../system/chore-clock.js";
 import { trashSweepChore } from "../system/resources/storage/trash-sweep.js";
+import { busySessions, coldSessionsChore } from "../sessions/cold-sessions.js";
+import { sharedClaudeStore } from "../sessions/session-store.js";
+import { listedSessionIds } from "../sessions/sessions.js";
 import { readHistorySpace } from "../system/resources/storage/checkout-admission.js";
 import { startDiskPressureWatch } from "../system/resources/storage/disk-pressure.js";
-import { readLastStorageScan } from "../system/resources/storage/disk-storage.js";
+import { readLastStorageScan, resolveStorageRoots } from "../system/resources/storage/disk-storage.js";
+import { leftoversRelief } from "../system/resources/storage/pressure-reliefs.js";
+import { mainIncrementalRelief } from "../conversations/worktrees/build-outputs/main-incremental.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { diskLow } from "../push/notifications.js";
 import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-session.js";
@@ -187,6 +192,13 @@ const choresOf = (phase: BootPhase): Chore[] => {
                       logger,
                   }),
                   trashSweepChore({ historyRoot: config.historyRoot, units: services.conversationUnits, transcripts: services.transcripts, logger }),
+                  // Claude sessions nobody touched in a week, compressed in place; every reader thaws one first.
+                  coldSessionsChore({
+                      store: sharedClaudeStore(services.workspace.root),
+                      busy: () => busySessions({ agents: services.agents, conversations: services.conversations }),
+                      listed: () => listedSessionIds(services.workspace.root),
+                      logger,
+                  }),
                   orphanCheckoutsChore({
                       historyRoot: config.historyRoot,
                       worktreesRoot: join(config.historyRoot, "worktrees"),
@@ -231,6 +243,10 @@ const startDiskPressure = (phase: BootPhase): (() => void) => {
             await retireUnpinned(phase, swept);
             return swept;
         },
+        reliefs: [
+            mainIncrementalRelief({ workspaceRoot: services.workspace.root, historyRoot: config.historyRoot }),
+            leftoversRelief({ roots: () => resolveStorageRoots(services.workspace.root, config.historyRoot), historyRoot: config.historyRoot, now: Date.now }),
+        ],
         lastScan: () => readLastStorageScan(config.historyRoot),
         tell: async (level, state) => {
             const notice = diskLow(level, state);

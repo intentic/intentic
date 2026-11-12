@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
@@ -10,6 +10,7 @@ import { CHUNK_BYTES, carriedCostOf, TAIL_LIMIT_BYTES } from "./carried-cost.js"
 import type { QueryFn } from "./harness/claude-code-stream.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { freezeSession } from "../../sessions/session-freeze.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
 jest.mock("../prompt/preset-prompt.js", () => ({
@@ -111,5 +112,23 @@ test("a resumed turn's usage frame is its own spend, not the total the session c
         store,
         fakeQuery({ type: "result", subtype: "success", session_id: SESSION, total_cost_usd: 1.75, modelUsage: {} }),
     );
+    expect(events.filter((event) => event.kind === "usage")).toEqual([{ kind: "usage", costUsd: 0.25 }]);
+});
+
+// The CLI reads only plain transcripts: a session the cold-session sweep compressed must be whole again before the SDK
+// starts, and the baseline read off it too.
+test("a turn resuming a session the cold-session sweep compressed finds it whole before the CLI reads it", async () => {
+    const store = storeWith([message("earlier"), costState(1.5)]);
+    const path = join(store, "projects", "-work", `${SESSION}.jsonl`);
+    const original = readFileSync(path, "utf8");
+    expect((await freezeSession(SESSION, [{ path, seen: lstatSync(path) }], Date.now() + 1)).files).toBe(1);
+    expect(existsSync(path)).toBe(false);
+    let readByCli: string | undefined;
+    const cli = fakeQuery({ type: "result", subtype: "success", session_id: SESSION, total_cost_usd: 1.75, modelUsage: {} });
+    const events = await resumedTurn(store, (args) => {
+        readByCli = readFileSync(path, "utf8");
+        return cli(args);
+    });
+    expect(readByCli).toBe(original);
     expect(events.filter((event) => event.kind === "usage")).toEqual([{ kind: "usage", costUsd: 0.25 }]);
 });

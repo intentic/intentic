@@ -2,6 +2,7 @@ import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { parseJsonWith } from "@intentic/base/json";
+import { thawClaudeSession } from "../../sessions/session-freeze.js";
 
 // The spend a resumed Claude session carries in. The CLI restores the running total its transcript saved (the last
 // `cost-state` record for that session), so a resumed query's first result already counts every earlier turn. Read off
@@ -18,8 +19,10 @@ const CostStateSchema = z.object({ type: z.literal("cost-state"), sessionId: z.s
 // A session id is the CLI's own UUID; anything else is refused rather than joined into a path.
 const SESSION_ID = /^[\w-]+$/;
 
-// The CLI files a transcript under its cwd, sanitized; the id alone finds it wherever the turn ran.
+// The CLI files a transcript under its cwd, sanitized; the id alone finds it wherever the turn ran. Thawed first, if the
+// cold-session sweep compressed it (sessions/session-freeze.ts).
 const transcriptOf = async (store: string, sessionId: string): Promise<string | undefined> => {
+    await thawClaudeSession(store, sessionId);
     const projects = join(store, "projects");
     const dirs = await readdir(projects, { withFileTypes: true }).catch(() => []);
     const paths = dirs.filter((dir) => dir.isDirectory()).map((dir) => join(projects, dir.name, `${sessionId}.jsonl`));

@@ -24,6 +24,12 @@ profile:
   ruff (plus pyright where the project's `.venv` resolves). On an image without that pack the daemon says a
   python project is `unsupported` and reports edits as unchecked rather than guessing; adding it back is the
   pack, not a hand-written step.
+- **Python and ML caches** are already set, one per kind, in `.intentic/local/cache/`: `UV_CACHE_DIR` (`uv`),
+  `PIP_CACHE_DIR` (`pip`), `HF_HOME` (`huggingface`), `TORCH_HOME` (`torch`), `CUDA_CACHE_PATH` (`cuda`). Use them
+  rather than a cache per tool, and don't set `UV_LINK_MODE=copy`: a venv in `.intentic/local/cache/<tool>/` then
+  hardlinks every wheel out of the one uv cache, so five venvs with torch hold torch once, and one Hugging Face cache
+  holds a model once for every tool that loads it. Put a tool's own install and venv in its own
+  `.intentic/local/cache/<tool>/`: Settings → Storage lists each such folder and can clean it.
 - **First-party CLIs**: `intentic`, `iq`, `lsp`.
 - **Search & data** (ripgrep, `jq`, `yq` (YAML, for shell pipelines) in Python just `import yaml`),
   sqlite3, xmllint, file, tree.

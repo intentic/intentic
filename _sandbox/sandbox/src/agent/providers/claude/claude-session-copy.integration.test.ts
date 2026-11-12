@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { answeredChain, chainBefore, copySession, estimateCopy, parseSession, type SessionLine, writeSessionCopy } from "./claude-session-copy.js";
+import { freezeSession } from "../../../sessions/session-freeze.js";
+import { answeredChain, chainBefore, copySession, estimateCopy, parseSession, readSessionChain, type SessionLine, writeSessionCopy } from "./claude-session-copy.js";
 
 // Hand-written sessions, so the expected shape is arithmetic: which results survive, which lines go, where parents point.
 
@@ -142,6 +143,29 @@ describe("writeSessionCopy", () => {
             await rm(store, { recursive: true, force: true });
         }
     });
+});
+
+// What a cold trim and a hand-off read before a turn resumes the session: one the cold-session sweep compressed is
+// thawed first, whole, rather than read as a session the store does not hold.
+test("a session the cold-session sweep compressed is read whole, and thawed in place", async () => {
+    const store = await mkdtemp(join(tmpdir(), "session-copy-thaw-"));
+    try {
+        const dir = join(store, "projects", "-work");
+        await mkdir(dir, { recursive: true });
+        const lines = session();
+        const original = `${lines.map((l) => l.raw).join("\n")}\n`;
+        const path = join(dir, "s-cold.jsonl");
+        await writeFile(path, original);
+        expect((await freezeSession("s-cold", [{ path, seen: await lstat(path) }], Date.now() + 1)).files).toBe(1);
+        expect(await readdir(dir)).toEqual(["s-cold.jsonl.zst"]);
+        const read = await readSessionChain(store, "s-cold", false);
+        expect(read?.path).toBe(path);
+        expect(read?.chain.map((l) => l.raw)).toEqual(answeredChain(chainBefore(lines, lines.length), false).map((l) => l.raw));
+        expect(await readFile(path, "utf8")).toBe(original);
+        expect(await readdir(dir)).toEqual(["s-cold.jsonl"]);
+    } finally {
+        await rm(store, { recursive: true, force: true });
+    }
 });
 
 test("superseded reads clear even among the newest results, while current results keep their budget", () => {

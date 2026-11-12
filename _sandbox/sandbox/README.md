@@ -971,7 +971,11 @@ flowchart LR
   protected as they are: a file clean of a snapshot a live overlay reads would corrupt every checkout reading it.
 - The disk-pressure watch (`system/resources/storage/disk-pressure.ts`, 2026-11-03) reads the history volume once a
   minute. Under the settings' `diskReapBelowPercent` free (15% by default) it removes settled checkouts' build output
-  at once, landed ones first and then the longest idle, until the volume is back over it. Under 10% and under 5% it
+  at once, landed ones first and then the longest idle, until the volume is back over it. Still short, it goes on to
+  its reliefs (2026-11-12), in order and only while the disk stays short: the main checkout's
+  Cargo `incremental/` caches (`build-outputs/main-incremental.ts`; none while any Cargo or rustc runs), then browser captures and artifacts untouched for a
+  week, oldest first, by the Storage cleaner's own rules (`storage/pressure-reliefs.ts`). Both only where the workspace shares the history volume's
+  filesystem, since freeing a separate disk gives the history volume nothing. Under 10% and under 5% it
   tells the sandbox's owner and maintainers once per level, whatever the threshold, with a push
   (`notifyIfAway` at 10%, `notify` at 5%) and a "disk is nearly full" row at the head of the sandbox's attention
   list, saying what is left, what it removed and what holds the most, with a Clean press; it says so again only after
@@ -980,6 +984,17 @@ flowchart LR
   wrote to for a day and that no running process names (argv, cwd or `CARGO_TARGET_DIR`) is removed the same way
   (`conversations/worktrees/build-outputs/tmp-cargo-targets.ts`). Not on archive of the conversation that made it: every Claude
   Code turn writes the shared `/tmp` as the same user, so a folder there cannot be traced to its conversation.
+- Claude Code's session store shared by every unfenced conversation (`.intentic/records/sessions/claude/projects/`) is
+  kept compressed where it went cold (`sessions/cold-sessions.ts`, 2026-11-12): on shinobi 4.1 GB of its 6.6 GB was
+  transcripts and `subagents/agent-*.jsonl` nothing had written for over a week. Hourly, a session whose files all sat
+  unwritten for `COLD_SESSION_MS` (7 days) has each rewritten as `<file>.jsonl.zst` beside it, checked against the
+  bytes read, mode and mtime kept, at most 2 GiB a pass; never one a conversation is running, queued, held or armed
+  on, one the History list shows, one a reader asked for within the week, or a file any process holds open. Claude
+  Code and the SDK read only plain `.jsonl`, so every daemon reader thaws a session by its id first
+  (`sessions/session-freeze.ts`, `thawClaudeSession`): a turn before the CLI resumes it, the session probe before
+  that, cold trim and the hand-off's copy, the history and interrupted-turn reads, a subagent's transcript, a handle
+  lookup and the jail's move. iq's session recall reads the compressed files itself (`_search/iq`). Fenced and jail
+  stores stay plain. `zstdcat` reads a compressed one by hand.
 - Data retention (`retention/retention-sweep.ts`, 2026-10-13) makes `settings.retention` real, on the same clock:
   each positive `*Days` DELETES that kind of copy once it is older (nothing is archived or set aside first), and every
   value is 0 by default except restore points, which default to 30 days. Zero runs nothing.
@@ -1158,10 +1173,18 @@ blob sizes at HEAD, cached per repository and commit, so a large repository's co
 A Cargo repository (a `Cargo.toml` at its top or one folder below) is priced at what its checkouts grow to as well
 (`conversations/worktrees/build-outputs/build-output-estimate.ts`, 2026-11-03): main's own build output, measured in the background
 and kept six hours, or 8 GiB, the median shinobi's checkouts reached, until main has a measured one. Its tracked files
-were about 0.3 GB of a checkout that went on to hold 8-23 GB of `target/`.
+were about 0.3 GB of a checkout that went on to hold 8-23 GB of `target/`. A measured main target counts up to
+`BUILD_OUTPUT_PRICE_CAP` (24 GiB, 2026-11-12): main's piles up every build it ran (93 GB on shinobi), one checkout's
+does not.
 A runner's mirror is priced by its files alone (`composition-space.ts`, `buildsHere`): its builds run on the runner,
 whose own daemon prices its checkout, build output included, against its own disk when the turn opens there. Memory
 is the same: a runner turn's room is admitted by the runner's budget, never this sandbox's.
+Storage calls what agents' tools keep in `.intentic/local/cache/<tool>/` (Python environments, model weights,
+downloads) tool caches (`toolCaches`, 2026-11-12), one item per tool folder, cleaned only after the owner reads the cost
+and never while a running program stands in or names it; the daemon's own folders there (iq, fileq's shadows,
+thumbnails, speech models, extension caches: `DAEMON_CACHES` in `storage-catalog.ts`) stay its indexes. The Python pack
+points uv, pip, Hugging Face, torch and CUDA's caches into that folder, one per kind, so venvs there hardlink one copy
+of each wheel instead of copying it (`image-packs/python.Dockerfile`).
 Storage lists build output inside checkouts as its own category, `buildOutputs`, carved out of the protected
 checkouts by the folders the sweep would remove; its Clean hands the press to the build-output reaper, which takes only
 checkouts whose conversation has nothing running, and the checkouts themselves stay protected.

@@ -36,6 +36,8 @@ mod windows;
 #[cfg(windows)]
 mod wsl_integration;
 
+/// What a docker prune says it reclaimed; tidy's build cache step reads its prune by the same rule.
+pub use disk::reclaimed as prune_reclaimed;
 pub use disk::DiskArgs;
 pub use moves::CopyArgs;
 pub use record::EngineRecord;

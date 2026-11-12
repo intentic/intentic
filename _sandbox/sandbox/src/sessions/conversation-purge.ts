@@ -4,6 +4,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
+import { FROZEN } from "./session-freeze.js";
 import { claudeStoreOf } from "./session-store.js";
 import type { FileTranscriptRecord } from "./transcript-record.js";
 import { statePath } from "../state-paths.js";
@@ -54,6 +55,8 @@ const purgeClaudeSession = async (store: string, sessionId: string): Promise<voi
             entry.isDirectory()
                 ? [
                       rm(join(projects, entry.name, `${sessionId}.jsonl`), { force: true }),
+                      // What the cold-session sweep compressed of it (session-freeze.ts) goes with it.
+                      rm(join(projects, entry.name, `${sessionId}.jsonl${FROZEN}`), { force: true }),
                       rm(join(projects, entry.name, sessionId), { recursive: true, force: true }),
                   ]
                 : [],

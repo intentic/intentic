@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildOutputEstimate, measureBuildOutputs, RUST_TARGET_ESTIMATE, settledEstimate } from "./build-output-estimate.js";
+import { BUILD_OUTPUT_PRICE_CAP, buildOutputEstimate, measureBuildOutputs, RUST_TARGET_ESTIMATE, settledEstimate } from "./build-output-estimate.js";
 
 let root: string;
 
@@ -32,4 +32,12 @@ test("a Cargo repository is priced at the median until main's own build output i
     expect(await buildOutputEstimate(root, { now: 1 })).toBe(RUST_TARGET_ESTIMATE);
     await settledEstimate(root);
     expect(await buildOutputEstimate(root, { now: 2 })).toBe(5000);
+});
+
+// Main's target/ piles up every build it ran; one checkout is never priced past what a checkout was seen to reach.
+test("a main target bigger than any checkout grows to prices a checkout at the cap", async () => {
+    put("Cargo.toml");
+    expect(await buildOutputEstimate(root, { now: 1, measure: async () => 93 * 1024 ** 3 })).toBe(RUST_TARGET_ESTIMATE);
+    await settledEstimate(root);
+    expect(await buildOutputEstimate(root, { now: 2 })).toBe(BUILD_OUTPUT_PRICE_CAP);
 });

@@ -1,7 +1,7 @@
 import { HISTORY_STATE_FILES } from "../../../store/evolution/history-state.js";
 import { STORAGE_CLEANABILITY, StorageCategoryIdSchema } from "@intentic/sandbox-contract/schemas/metrics";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
-import { categoryFolders, classifyStoragePath, insideCheckout, isProtectedStoragePath, locateStoragePath, type StorageRootKind } from "./storage-catalog.js";
+import { categoryFolders, classifyStoragePath, insideCheckout, isProtectedStoragePath, locateStoragePath, removalOf, type StorageRootKind } from "./storage-catalog.js";
 
 // The table every scan sizes by and every clean asks right before it removes a path. What matters most is the
 // boundary between what may go and what may not, so these pin exact answers at that boundary.
@@ -61,6 +61,23 @@ describe("classifyStoragePath", () => {
             category: "indexes",
             item: ".intentic/local/cache/iq",
         });
+        // The daemon's own files beside its folders, SQLite sidecars included, stay its indexes.
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/iq-vectors.db-wal").category).toBe("indexes");
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/code-counts.db").category).toBe("indexes");
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/extensions/prawo/acts.json").category).toBe("indexes");
+    });
+
+    test("anything else in the workspace's cache folder is a tool's cache, one item per tool", () => {
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/motion/comfy-models/vae/x.safetensors")).toEqual({
+            category: "toolCaches",
+            item: ".intentic/local/cache/motion",
+            unit: false,
+            settled: true,
+        });
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/motion")).toMatchObject({ category: "toolCaches", unit: true });
+        // A name that merely starts like the daemon's is not the daemon's.
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/iqtool/data").category).toBe("toolCaches");
+        expect(removalOf("toolCaches")).toEqual({ unit: "entry", keepRecentMs: 24 * 60 * 60 * 1000 });
     });
 
     test("what no rule names falls to the workspace, the history's declared state, or nobody", () => {

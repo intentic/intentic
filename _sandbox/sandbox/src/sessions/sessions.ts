@@ -111,8 +111,16 @@ const promptedTitle = async (
     return session.summary === "" ? undefined : firstPromptTitle(session.summary);
 };
 
+// How many sessions the history list shows, newest first. The cold-session sweep keeps exactly these plain
+// (cold-sessions.ts `listed`), since the SDK lists only plain transcripts: a compressed one would drop out of the list.
+const SESSION_LIST_LIMIT = 50;
+
+// The ids the history list shows for `dir`, without the titles it reads for each: what the cold-session sweep leaves.
+export const listedSessionIds = async (dir: string): Promise<string[]> =>
+    (await sdk().listSessions({ dir, limit: SESSION_LIST_LIMIT })).map((session) => session.sessionId);
+
 export const listWorkspaceSessions = async (dir: string, naming: SessionNaming = sessionNaming()): Promise<SessionSummary[]> => {
-    const sessions = await sdk().listSessions({ dir, limit: 50 });
+    const sessions = await sdk().listSessions({ dir, limit: SESSION_LIST_LIMIT });
     const named = naming.conversationTitles();
     return Promise.all(
         sessions.map(async (session) => ({

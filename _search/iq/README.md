@@ -53,6 +53,11 @@ flowchart LR
   incremental: unchanged transcripts are skipped and grown ones resume from their stored byte offset. It is also safe to
   run twice at once (the prompt hook's budgeted pass and the SessionStart background pass overlap): a turn is unique per
   session, so the second pass stores nothing new.
+- A transcript the sandbox compressed once nothing had written it for a week (`<id>.jsonl.zst` beside where the plain
+  file was, the daemon's `sessions/cold-sessions.ts`, 2026-11-12) is still that session's transcript. Ingest keeps its
+  rows without reading it, reads one it never indexed through zstd (`node:zlib`, offsets in the plain bytes), and
+  `fork` reads it the same way and writes the fork plain. Nothing appends to a compressed file and the sandbox keeps
+  its mtime both ways, so it is read again only if that moves. Where both names exist, the plain file is the one read.
 - Ranking is purely statistical, with no model calls: BM25 over prompts, responses and titles, recency decay, and
   inverse ubiquity so files every session touches (`package.json`) carry no weight.
 - Queries keep only a prompt's content terms: the shared stopwords from `@intentic/base/stopwords` and a short list of

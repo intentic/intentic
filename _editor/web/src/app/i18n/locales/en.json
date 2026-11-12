@@ -9723,6 +9723,11 @@
                 "reason": "Weights downloaded for the models this sandbox runs itself.",
                 "warning": "A cleaned model downloads its weights again the next time it starts, which can take a while. Weights a running model is using are kept."
             },
+            "toolCaches": {
+                "label": "Tool caches",
+                "reason": "What agents' tools downloaded and installed in the sandbox's cache folder, one folder per tool: Python environments, model weights and package downloads.",
+                "warning": "A cleaned tool downloads or installs everything again the next time it runs, which can take a long time. A folder a running program is using, or that changed in the last day, is kept."
+            },
             "logs": {
                 "label": "Logs",
                 "reason": "The sandbox's own logs and terminal captures. Cleaning keeps the last day's."

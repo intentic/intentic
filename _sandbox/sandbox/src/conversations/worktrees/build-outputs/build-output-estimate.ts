@@ -16,6 +16,12 @@ import { findBuildOutputs } from "./build-outputs.js";
 
 export const RUST_TARGET_ESTIMATE = 8 * GIB;
 
+// THE MOST ONE CHECKOUT IS PRICED AT (2026-11-12). Main's own target/ is every build it ever ran, piled up: on shinobi
+// 93 GB (68 of it Cargo's incremental caches across seven build profiles), and every new checkout was priced at all of
+// it, so a disk with 127 GB free turned sessions away. A checkout builds what its one task needs: shinobi's measured
+// 8-23 GB. Main's measure still counts below this; above it, the checkout is priced at the most one was seen to reach.
+export const BUILD_OUTPUT_PRICE_CAP = 24 * GIB;
+
 // A measurement stands this long; the next ask after it starts a new one and answers with the old meanwhile.
 const MEASURE_EVERY_MS = 6 * 60 * 60 * 1000;
 // One measurement's walk is bounded: a partial size is still a floor of what a checkout grows to.
@@ -80,7 +86,7 @@ export const buildOutputEstimate = async (dir: string, options: EstimateOptions 
         measuring.set(dir, run);
     }
     // Main never built, or built nothing yet: the median a Rust checkout grew to.
-    return known === undefined || known.bytes === 0 ? RUST_TARGET_ESTIMATE : known.bytes;
+    return known === undefined || known.bytes === 0 ? RUST_TARGET_ESTIMATE : Math.min(known.bytes, BUILD_OUTPUT_PRICE_CAP);
 };
 
 // The measurement in flight for `dir`, for a test to wait on.

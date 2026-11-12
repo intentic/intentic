@@ -9723,6 +9723,11 @@
                 "reason": "Pesos descargados para los modelos que este sandbox ejecuta por sí mismo.",
                 "warning": "Un modelo limpiado vuelve a descargar sus pesos la próxima vez que arranque, lo que puede tardar. Se conservan los pesos que usa un modelo en ejecución."
             },
+            "toolCaches": {
+                "label": "Cachés de herramientas",
+                "reason": "Lo que las herramientas de los agentes descargaron e instalaron en la carpeta de caché del sandbox, una carpeta por herramienta: entornos de Python, pesos de modelos y descargas de paquetes.",
+                "warning": "Una herramienta limpiada vuelve a descargar o instalar todo la próxima vez que se ejecute, lo que puede tardar mucho. Se conserva una carpeta que usa un programa en ejecución o que cambió en el último día."
+            },
             "logs": {
                 "label": "Registros",
                 "reason": "Los registros propios del sandbox y las capturas de terminal. Al limpiar se conservan los del último día."

@@ -6,6 +6,7 @@ import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldTurn } from "../../run/turn/holds/held-turn.js";
 import type { Services } from "../../../composition.js";
 import { findSubagentRecord } from "../subagent-transcript.js";
+import { thawClaudeSession } from "../../../sessions/session-freeze.js";
 
 const toolsIn = (tools: readonly TranscriptTool[]): TranscriptTool[] => tools.flatMap((tool) => [tool, ...toolsIn(tool.children ?? [])]);
 
@@ -36,6 +37,10 @@ export const lostHelperNote = async (
         const agentId = sdk?.agentId ?? /agentId:\s*(a[\da-f]{16})\b/u.exec(text)?.[1];
         const tree = agentId === undefined ? undefined : worktrees.find((entry) => entry.isDirectory() && entry.name === `agent-${agentId}`);
         const outputs = [...text.matchAll(/(?:output_file|worktree_path):\s*(\S+)/gu)].map((match) => match[1]);
+        // The record named here plain again, if the cold-session sweep compressed it (sessions/session-freeze.ts).
+        if (sdk !== undefined) {
+            await thawClaudeSession(store, sdk.sessionId);
+        }
         const record = sdk === undefined ? [] : [`${store}/projects/*/${sdk.sessionId}/subagents/agent-${sdk.agentId}.jsonl`];
         return `- ${agentId ?? tool.id}: ${tool.subagent?.description ?? tool.target ?? tool.name}. ` +
             `Worktree: ${tree === undefined ? ".claude/worktrees/agent-* (check for a retained worktree)" : `.claude/worktrees/${tree.name}`}. ` +

@@ -9723,6 +9723,11 @@
                 "reason": "Poids téléchargés pour les modèles que ce sandbox exécute lui-même.",
                 "warning": "Un modèle nettoyé retélécharge ses poids à son prochain démarrage, ce qui peut prendre du temps. Les poids qu'un modèle en cours d'exécution utilise sont conservés."
             },
+            "toolCaches": {
+                "label": "Caches des outils",
+                "reason": "Ce que les outils des agents ont téléchargé et installé dans le dossier de cache du sandbox, un dossier par outil : environnements Python, poids de modèles et téléchargements de paquets.",
+                "warning": "Un outil nettoyé retélécharge ou réinstalle tout à sa prochaine exécution, ce qui peut être long. Un dossier qu'un programme en cours d'exécution utilise, ou modifié au cours du dernier jour, est conservé."
+            },
             "logs": {
                 "label": "Journaux",
                 "reason": "Les journaux propres au sandbox et les captures de terminal. Le nettoyage conserve ceux du dernier jour."

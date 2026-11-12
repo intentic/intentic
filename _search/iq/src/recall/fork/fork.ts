@@ -1,7 +1,7 @@
 import { statSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import { readLines } from "../transcript/line-reader.js";
+import { readTranscriptLines } from "../transcript/line-reader.js";
 import {
     aiTitleOf,
     fileTouchesOf,
@@ -39,7 +39,7 @@ const DROPPED_TYPES = new Set(["queue-operation", "file-history-snapshot", "mode
 
 // Synthesize a forked transcript: the root→fork-point slice of a session under a fresh session id, written
 // next to the source so `claude --resume <id>` opens it. Conversation uuids are kept, they only need to be
-// unique within one file.
+// unique within one file. A source the sandbox compressed (`<id>.jsonl.zst`) is read through it; the fork is plain.
 export const materializeFork = async (options: ForkOptions): Promise<ForkResult> => {
     interface Entry {
         readonly json: string;
@@ -51,7 +51,7 @@ export const materializeFork = async (options: ForkOptions): Promise<ForkResult>
     let lastLeaf: string | undefined;
     let lastUuid: string | undefined;
     let title: string | undefined;
-    for await (const { json } of readLines(options.transcriptPath, 0)) {
+    for await (const { json } of readTranscriptLines(options.transcriptPath, 0)) {
         const line = parseLine(json);
         if (line === undefined) {
             continue;

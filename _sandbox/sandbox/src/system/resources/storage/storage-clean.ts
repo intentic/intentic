@@ -202,6 +202,33 @@ const reapOutputs = async (category: StorageCategoryId, deps: CleanDeps): Promis
     return { category, freedBytes: Math.max(0, after - before), removed: reaped.removed, kept: 0, failed: reaped.failed };
 };
 
+// OLD ENTRIES FIRST, ONLY UNTIL THERE IS ROOM (2026-11-12). What the disk-pressure watch takes of a category it may
+// clean unasked: only entries untouched for `olderThanMs`, oldest first, each asked of the plan again as a person's clean
+// would be, and none once `enough` says the disk has room again. On shinobi, 56 GB of artifacts (37 GB of motion-capture
+// frame dumps, 3-11 days old) sat beside a disk the watch could only free checkouts' build output from.
+export const expireCategory = async (
+    category: StorageCategoryId,
+    deps: CleanDeps,
+    olderThanMs: number,
+    enough: () => Promise<boolean>,
+): Promise<StorageCleanResult> => {
+    const empty: StorageCleanResult = { category, freedBytes: 0, removed: 0, kept: 0, failed: 0 };
+    if (removalOf(category)?.unit !== "entry") {
+        return empty;
+    }
+    const plan = planClean(category, await itemCandidates(category, deps, await deps.programs()), deps.roots, deps.now());
+    const cutoff = deps.now() - olderThanMs;
+    const due = plan.targets.filter((target) => target.newestMs <= cutoff).toSorted((left, right) => left.newestMs - right.newestMs);
+    let result: StorageCleanResult = { ...empty, kept: plan.kept.length + plan.targets.length - due.length };
+    for (const [index, target] of due.entries()) {
+        if (await enough()) {
+            return { ...result, kept: result.kept + due.length - index };
+        }
+        ({ result } = await removeTargets([target], deps, result));
+    }
+    return result;
+};
+
 export const cleanCategory = async (category: StorageCategoryId, deps: CleanDeps): Promise<StorageCleanResult> => {
     const removal = removalOf(category)?.unit;
     if (removal === "reap") {

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { statePath } from "../state-paths.js";
+import { FROZEN, thawClaudeSession } from "./session-freeze.js";
 import { jailStoreDir, SESSION_STATE, type StoreOwner } from "./session-store.js";
 
 /* A CONVERSATION'S SESSIONS FOLLOW IT INTO THE JAIL AND OUT AGAIN (2026-11-04). While conversations can be private, every
@@ -25,15 +26,16 @@ const exists = async (path: string): Promise<boolean> => (await stat(path).catch
 
 const namesIn = async (dir: string): Promise<string[]> => (await readdir(dir).catch(undefinedIfMissing)) ?? [];
 
-// What one session keeps in a store, store-relative: its transcript and the directory beside it (subagents, tool
-// output) under whichever project the CLI filed it, its checklists, its task list and its environment snapshot.
+// What one session keeps in a store, store-relative: its transcript (and a compressed copy a thaw left beside it,
+// session-freeze.ts) and the directory beside it (subagents, tool output) under whichever project the CLI filed it, its
+// checklists, its task list and its environment snapshot.
 export const sessionPaths = async (store: string, sessionId: string): Promise<string[]> => {
     if (!SESSION_ID.test(sessionId)) {
         return [];
     }
     const found: string[] = [];
     for (const project of await namesIn(join(store, "projects"))) {
-        for (const name of [`${sessionId}.jsonl`, sessionId]) {
+        for (const name of [`${sessionId}.jsonl`, `${sessionId}.jsonl${FROZEN}`, sessionId]) {
             found.push(join("projects", project, name));
         }
     }
@@ -56,6 +58,10 @@ export const enterJailStore = async (workspaceRoot: string, historyRoot: string,
     await rm(staging, { recursive: true, force: true });
     for (const name of SESSION_STATE) {
         await mkdir(join(staging, name), { recursive: true });
+    }
+    // Plain before it moves, if the cold-session sweep compressed it: the jailed turn is about to resume it.
+    if (owner.sessionId !== undefined) {
+        await thawClaudeSession(shared, owner.sessionId);
     }
     const moved = owner.sessionId === undefined ? [] : await sessionPaths(shared, owner.sessionId);
     for (const rel of moved) {

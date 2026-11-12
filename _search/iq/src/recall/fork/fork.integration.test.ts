@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, utimesSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { zstdCompressSync } from "node:zlib";
 import { makeRecallFixture } from "../testing.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import { openRecallDb } from "../store/db.js";
@@ -110,4 +111,26 @@ test("stale files the fork read are reported with absolute paths", async () => {
 
 test("forking at a non-turn uuid is an error", async () => {
     await expect(materializeFork({ transcriptPath: transcriptA(), atTurnUuid: "a-a1" })).rejects.toThrow("not a user turn");
+});
+
+// A session the sandbox compressed once it went cold (`<id>.jsonl.zst`, the daemon's sessions/cold-sessions.ts) forks as
+// its plain transcript would, and the fork is written plain beside it for `claude --resume` to open.
+test("a compressed session forks as its plain transcript would", async () => {
+    const plain = await materializeFork({ transcriptPath: transcriptA(), atTurnUuid: "a-u0", dryRun: true });
+    const text = readFileSync(transcriptA());
+    writeFileSync(`${transcriptA()}.zst`, zstdCompressSync(text));
+    rmSync(transcriptA());
+    try {
+        const result = await materializeFork({ transcriptPath: transcriptA(), atTurnUuid: "a-u0" });
+        expect({ keptLines: result.keptLines, droppedLines: result.droppedLines, leafUuid: result.leafUuid }).toEqual({
+            keptLines: plain.keptLines,
+            droppedLines: plain.droppedLines,
+            leafUuid: "a-a3",
+        });
+        expect(result.path).toBe(join(projectsDir, `${result.sessionId}.jsonl`));
+        expect(parseAll(result.path).at(-1)?.["lastPrompt"]).toBe("Fix the JWT refresh token rotation in the auth service login flow");
+    } finally {
+        writeFileSync(transcriptA(), text);
+        rmSync(`${transcriptA()}.zst`);
+    }
 });

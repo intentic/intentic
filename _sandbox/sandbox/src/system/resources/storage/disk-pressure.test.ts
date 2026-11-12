@@ -46,6 +46,62 @@ test("a watch reads its threshold each tick and reaps until the disk is back ove
     expect(watch.state()).toMatchObject({ level: "ok", freeBytes: 260, reaped: { bytes: 60, checkouts: 1, at: 42 } });
 });
 
+// Checkouts' build output first; then each relief in order, only while the disk is still short, and none after it has room.
+test("still short after the checkouts, it takes the reliefs in order and stops at the first that makes room", async () => {
+    let space = 50;
+    const asked: string[] = [];
+    const relief = (name: string, frees: number) => ({
+        name,
+        free: async (enough: () => Promise<boolean>) => {
+            asked.push(name);
+            space += frees;
+            await enough();
+            return frees > 0 ? 3 : 0;
+        },
+    });
+    const watch = createDiskPressureWatch({
+        read: async () => at(space),
+        reap: async () => {
+            space += 20;
+            return 1;
+        },
+        reliefs: [relief("nothing", 0), relief("incremental", 100), relief("leftovers", 500)],
+        lastScan: async () => undefined,
+        tell: async () => {},
+        changed: () => {},
+        logger: { info: () => {}, warn: () => {} },
+        now: () => 42,
+    });
+    await watch.tick();
+    expect(asked).toEqual(["nothing", "incremental"]);
+    expect(watch.state()).toMatchObject({ level: "ok", freeBytes: 170, reaped: { bytes: 20, checkouts: 1 } });
+});
+
+test("a relief that throws costs only itself", async () => {
+    let space = 50;
+    const watch = createDiskPressureWatch({
+        read: async () => at(space),
+        reap: async () => 0,
+        reliefs: [
+            { name: "broken", free: async () => { throw new Error("EIO"); } },
+            {
+                name: "works",
+                free: async () => {
+                    space += 200;
+                    return 1;
+                },
+            },
+        ],
+        lastScan: async () => undefined,
+        tell: async () => {},
+        changed: () => {},
+        logger: { info: () => {}, warn: () => {} },
+        now: () => 42,
+    });
+    await watch.tick();
+    expect(watch.state()).toMatchObject({ level: "ok", freeBytes: 250 });
+});
+
 // A disk whose free space the test sets, a reap that frees what the test says, and a record of every word to the owner.
 const harness = (free: number[], reaps: number[] = []) => {
     let space = free[0] ?? TOTAL;

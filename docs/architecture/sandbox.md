@@ -552,7 +552,9 @@ or is meant to outlive it and is adopted; nothing is left to whoever happens to 
   history volume filled to 0 MB mid-rebase. The disk-pressure watch
   ([`disk-pressure.ts`](../../_sandbox/sandbox/src/system/resources/storage/disk-pressure.ts)) reads the volume every
   minute: under the settings' threshold (15% free by default) it removes settled checkouts' build output at once
-  (landed first, then longest idle) until the volume is back over it, and under 10% and 5% it tells the owner once
+  (landed first, then longest idle) until the volume is back over it, then, still short, the main checkout's Cargo
+  `incremental/` caches ([`main-incremental.ts`](../../_sandbox/sandbox/src/conversations/worktrees/build-outputs/main-incremental.ts)) and week-old captures and artifacts ([`pressure-reliefs.ts`](../../_sandbox/sandbox/src/system/resources/storage/pressure-reliefs.ts)),
+  and under 10% and 5% it tells the owner once
   per level, by push and by a row at the head of the attention list with a Clean press. The Storage card counts that
   output as its own cleanable category inside the protected checkouts, lists every conversation's checkout with
   what may be done with it now (free its build output, free the checkout onto its branch, trash a leftover nobody

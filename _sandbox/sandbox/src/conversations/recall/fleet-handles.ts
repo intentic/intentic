@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { z } from "zod";
 import type { Services } from "../../composition.js";
-import { statePath } from "../../state-paths.js";
+import { thawClaudeSession } from "../../sessions/session-freeze.js";
+import { sharedClaudeStore } from "../../sessions/session-store.js";
 import { type FleetRecallDeps, type HandleResolution, present, resolveHandle } from "./fleet-recall.js";
 import { parseJsonOr } from "@intentic/base/json";
 
@@ -76,7 +77,7 @@ const fromRun = async (deps: FleetHandleDeps, wanted: string): Promise<HandleRes
 };
 
 // The Claude runtime's session store shared by every unfenced conversation (sessions/session-store.ts).
-const claudeProjects = (deps: FleetHandleDeps): string => join(statePath(deps.config.workspaceRoot, ".intentic/records/sessions/claude/"), "projects");
+const claudeProjects = (deps: FleetHandleDeps): string => join(sharedClaudeStore(deps.config.workspaceRoot), "projects");
 
 interface SubagentMeta {
     readonly agentType?: string;
@@ -142,6 +143,8 @@ const fromSubagent = async (deps: FleetHandleDeps, agentId: string): Promise<Han
     if (earlier?.kind === "found") {
         return { kind: "found", entry: earlier.entry, via };
     }
+    // The transcript itself, which the cold-session sweep may have compressed; its subagents' meta files it never does.
+    await thawClaudeSession(sharedClaudeStore(deps.config.workspaceRoot), filed.session);
     const branch = await branchOfSession(join(projects, filed.project, `${filed.session}.jsonl`));
     return branch === undefined ? undefined : found(deps, branch, via);
 };

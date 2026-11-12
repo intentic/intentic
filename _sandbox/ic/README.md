@@ -332,15 +332,21 @@ flowchart LR
   `{side, env, at, snapshot, scope}`), and its worker container is named per side (`intentic-backup-<slug>-<side>`)
   (2026-10-05: one shared name let each side's `rm -f` kill the other's backup mid-run).
 - `ic sandbox tidy` removes what updates leave behind (images and records of sandboxes that are gone, superseded
-  environment builds and the ones a rebuild left dangling, the trash past its window) and names volumes and networks
-  that belong to no sandbox (all four families, `intentic-{workspace,history,docker,dind-docker}-<slug>`, and the
-  network; never a runner's). Unattended (`--auto`, or no terminal: the machine agent's daily round) it moves a set
-  nothing claims (no container, no record here, no trash entry, not labelled by another side) into the trash, which
+  environment builds and the ones a rebuild left dangling, build cache no build has used in a week, the trash past its
+  window) and names volumes and networks that belong to no sandbox (all four families,
+  `intentic-{workspace,history,docker,dind-docker}-<slug>`, and the network; never a runner's). Unattended (`--auto`,
+  or no terminal: the machine agent's daily round) it moves a set nothing claims (no container, no record here, no
+  trash entry, not labelled by another side) into the trash, which
   starts the same seven-day window a removal does: it never deletes a volume itself. Records of gone sandboxes, and
   report-only records of another side's, move to `records-archive/`, kept 90 days. It removes this side's backups of a
   sandbox gone 30 days (counted from the later of its record's archiving and the last backup), or of one another side
   keeps whose `/history/.ic/backup.json` is newer than this side's copy; never the only copy of a live sandbox, and
   every decision is in the tidy log. (2026-10-05: none of these had a retention rule; rog held a 40.9 GB duplicate.)
+  Build cache goes by `docker builder prune --force --filter until=168h` on the builder `docker build` uses: a rebuild
+  onto a newer base matches none of the old cache, and what a rebuild does reuse was used within days. Without `--all`
+  it keeps cache an image shares, which would free nothing. A dry run adds up the same records from `docker buildx du
+  --verbose`, since `du` ignores `until`, and a docker that cannot read or prune its cache skips that step, never the
+  tidy. (2026-11: rog held 39.45 GB of build cache, all of it reclaimable.)
   `ic sandbox reset-owner <slug>` moves an unreadable owner file aside, the one way back in for an owner the daemon
   locks out because it cannot read who owns it.
 - **This machine's sandboxes with no network** (2026-10-16, [`loopback.rs`](src/sandbox/loopback.rs)).

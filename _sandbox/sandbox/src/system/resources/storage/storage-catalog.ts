@@ -45,6 +45,8 @@ const REMOVALS: Readonly<Record<CleanableCategory, StorageRemoval>> = {
     browserCaptures: { unit: "entry", keepRecentMs: DAY_MS },
     browserProfiles: { unit: "entry", keepRecentMs: DAY_MS, foldersOnly: true },
     modelWeights: { unit: "entry", keepRecentMs: DAY_MS },
+    // A whole tool's folder: one a running program stands in or names (its Python, its server) is busy and stays.
+    toolCaches: { unit: "entry", keepRecentMs: DAY_MS },
     logs: { unit: "file", keepRecentMs: DAY_MS },
     scratch: { unit: "entry", keepRecentMs: DAY_MS },
     // pnpm's own `store prune` decides, by its definition of what no project references.
@@ -78,6 +80,41 @@ const VOLUME_DOCKER = folder(relative(FLY_VOLUME_PATH, FLY_VOLUME_LAYOUT.docker)
 
 // Every runtime's session store, the transcripts a conversation resumes from.
 const SESSIONS = folder(dirname(stateRelPath(".intentic/records/sessions/claude/")));
+
+// What the daemon itself keeps in the workspace's cache folder, each a name directly below it; a file's name covers the
+// SQLite `-wal` and `-shm` beside it. Everything else there is a tool's (2026-11-12: on shinobi, 228 GB of ComfyUI and
+// Hugging Face weights, Python environments and uv downloads, which Storage called the sandbox's own indexes and offered
+// no way to clean).
+const DAEMON_CACHES: readonly string[] = [
+    // iq's index with its churn and vector stores, and the freshness marks fileq and iq keep.
+    "iq/",
+    "iq-churn/",
+    "iq-vectors.db",
+    "freshness/",
+    "code-counts.db",
+    // fileq's markdown shadows and page renders, the derived blobs, and the editor's previews.
+    "derived/",
+    "derived-blobs/",
+    "rendered/",
+    "thumbnails/",
+    "playable/",
+    // Speech and voice models the image does not bake, and the local models' digests (their weights are modelWeights).
+    "speech/",
+    "voices/",
+    "whisper/",
+    "model-digests/",
+    // Extensions' caches (extensionCacheDir), and the two that kept one here before it existed.
+    "extensions/",
+    "onlyoffice/",
+    "prawo/",
+];
+
+const DAEMON_CACHE_RULES: readonly StoragePathRule[] = DAEMON_CACHES.map((name) => ({
+    root: "workspace",
+    prefix: `${stateRelPath(".intentic/local/cache/")}/${name}`,
+    category: "indexes",
+    depth: 0,
+}));
 
 // The longest matching prefix wins, so a nested rule carves its folder out of the one around it.
 const PATH_RULES: readonly StoragePathRule[] = [
@@ -130,7 +167,8 @@ const PATH_RULES: readonly StoragePathRule[] = [
     { root: "workspace", prefix: folder(LOOP_DIR), category: "conversations", depth: 0, protected: true },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/records/artifacts/browser/")), category: "browserCaptures", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/browser/")), category: "browserProfiles", depth: 1 },
-    { root: "workspace", prefix: folder(stateRelPath(".intentic/local/cache/")), category: "indexes", depth: 1 },
+    { root: "workspace", prefix: folder(stateRelPath(".intentic/local/cache/")), category: "toolCaches", depth: 1 },
+    ...DAEMON_CACHE_RULES,
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/cache/", "models")), category: "modelWeights", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/.pnpm-store/")), category: "packageStores", depth: 0 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/tmp/")), category: "scratch", depth: 1 },

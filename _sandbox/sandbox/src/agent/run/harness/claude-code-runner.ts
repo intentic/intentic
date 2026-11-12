@@ -70,6 +70,7 @@ import { catchUpHooks, stopCatchUp } from "../main-catch-up.js";
 import { settingsHookChangeHooks } from "./settings-hook-gate.js";
 import { checklistSeedOf } from "../task-store.js";
 import { carriedCostOf } from "../carried-cost.js";
+import { thawClaudeSession } from "../../../sessions/session-freeze.js";
 import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../../prompt/system-prompt.js";
 import { noteChildWork } from "../../subagents/child-verification.js";
 import { subagentInParentTree, subagentHooks, type SubagentTurn } from "../../subagents/subagents.js";
@@ -866,6 +867,16 @@ const streamCredentialOf = (
     trial: credential.kind === "trial",
 });
 
+// The resumed session as the CLI's store holds it before the CLI writes: whole again first if the cold-session sweep
+// compressed it (sessions/session-freeze.ts), since the CLI reads only plain files; then the checklist rows it holds,
+// and what it already spent, which the CLI counts again in its first result.
+const resumedStore = async (spec: HarnessRequest["spec"]) => {
+    if (spec.sessionId !== undefined && spec.sessionStore !== undefined) {
+        await thawClaudeSession(spec.sessionStore, spec.sessionId);
+    }
+    return { checklistSeed: await checklistSeedOf(spec), carriedCostUsd: await carriedCostOf(spec) };
+};
+
 // Runs one agent turn over `request.spec.cwd`, streaming typed events; one path for every permission mode, the SDK decides
 // which UI fires. canUseTool and the ask handler feed this stream through a bridging queue. `conversations` hold the
 // children and background commands the turn starts.
@@ -969,10 +980,7 @@ export async function* runAgent(
     // Swallowed-prompt recovery: pushes the turn's own prompt back through the steering queue once.
     const steering = request.spec.steering;
     let redelivered = false;
-    // Checklist rows the session already holds, read off the CLI's own store before it starts writing.
-    const checklistSeed = await checklistSeedOf(request.spec);
-    // What the resumed session already spent, which the CLI counts again in its first result.
-    const carriedCostUsd = await carriedCostOf(request.spec);
+    const { checklistSeed, carriedCostUsd } = await resumedStore(request.spec);
     const redeliver =
         steering === undefined
             ? undefined

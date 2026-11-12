@@ -2,7 +2,7 @@ import { readdirSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative } from "node:path";
 import { isMissing } from "@intentic/base/errors";
 import { stripInjectedPreamble } from "@intentic/constants";
-import { readLines } from "../transcript/line-reader.js";
+import { COMPRESSED, readCompressedLines, readLines, type TranscriptLine } from "../transcript/line-reader.js";
 import { aiTitleOf, assistantTextOf, fileTouchesOf, parseLine, timestampOf, typedPromptOf, uuidOf } from "../transcript/lines.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 
@@ -48,7 +48,7 @@ interface Delta {
     responses: Map<number, string>;
 }
 
-const parseDelta = async (path: string, fromByte: number, lastOrdinal: number, root: string): Promise<Delta> => {
+const parseDelta = async (lines: AsyncIterable<TranscriptLine>, fromByte: number, lastOrdinal: number, root: string): Promise<Delta> => {
     const delta: Delta = {
         slug: undefined,
         version: undefined,
@@ -63,7 +63,7 @@ const parseDelta = async (path: string, fromByte: number, lastOrdinal: number, r
     };
     let ordinal = lastOrdinal;
     let lineStart = fromByte;
-    for await (const { json, endByte } of readLines(path, fromByte)) {
+    for await (const { json, endByte } of lines) {
         const startByte = lineStart;
         lineStart = endByte;
         delta.byteOffset = endByte;
@@ -187,15 +187,24 @@ const applyDelta = (db: SqliteDb, transcriptPath: string, sessionId: string, del
     );
 };
 
-// Incrementally mirrors the transcript dir into the recall index: unchanged files are skipped by (mtime, size), grown
-// files resume from their stored byte offset. `deadlineMs` bounds how long a pass may run; absent, it walks everything.
-export const ingest = async (db: SqliteDb, options: { root: string; projectsDir: string; deadlineMs?: number }): Promise<IngestStats> => {
-    const onDisk = new Map<string, { mtimeMs: number; size: number }>();
+// One transcript as its folder holds it: plain, or only compressed (`compressed` names that file), whose plain size
+// is not known without reading it through.
+interface OnDisk {
+    readonly mtimeMs: number;
+    readonly size: number | undefined;
+    readonly compressed?: string;
+}
+
+// Every transcript in the folder by its plain path. One the sandbox compressed (`<id>.jsonl.zst`) counts as the
+// transcript it holds, so its rows stay and a session first seen compressed is indexed through zstd; a name found both
+// ways is the plain file, the one the CLI writes.
+const transcriptsIn = (projectsDir: string): Map<string, OnDisk> => {
+    const onDisk = new Map<string, OnDisk>();
     // What is not listed below is deleted from the index, so only a dir that is not there may read as empty; one that
     // failed to list (EACCES, EIO, EMFILE) would otherwise erase every session it holds.
     let entries: string[];
     try {
-        entries = readdirSync(options.projectsDir);
+        entries = readdirSync(projectsDir);
     } catch (error) {
         if (!isMissing(error)) {
             throw error;
@@ -203,15 +212,27 @@ export const ingest = async (db: SqliteDb, options: { root: string; projectsDir:
         entries = [];
     }
     for (const entry of entries) {
-        if (!entry.endsWith(".jsonl")) {
+        const compressed = entry.endsWith(`.jsonl${COMPRESSED}`);
+        if (!entry.endsWith(".jsonl") && !compressed) {
             continue;
         }
-        const path = join(options.projectsDir, entry);
+        const path = join(projectsDir, entry);
         const stat = statSync(path);
-        if (stat.isFile()) {
-            onDisk.set(path, { mtimeMs: Math.trunc(stat.mtimeMs), size: stat.size });
+        const plain = compressed ? path.slice(0, -COMPRESSED.length) : path;
+        if (!stat.isFile() || (compressed && onDisk.has(plain))) {
+            continue;
         }
+        onDisk.set(plain, compressed ? { mtimeMs: Math.trunc(stat.mtimeMs), size: undefined, compressed: path } : { mtimeMs: Math.trunc(stat.mtimeMs), size: stat.size });
     }
+    return onDisk;
+};
+
+// Incrementally mirrors the transcript dir into the recall index: unchanged files are skipped by (mtime, size), grown
+// files resume from their stored byte offset. A compressed transcript never grows: it is read again only when its
+// mtime moved from the one indexed, which the sandbox keeps across compressing and back. `deadlineMs` bounds how long a
+// pass may run; absent, it walks everything.
+export const ingest = async (db: SqliteDb, options: { root: string; projectsDir: string; deadlineMs?: number }): Promise<IngestStats> => {
+    const onDisk = transcriptsIn(options.projectsDir);
     const known = new Map(db.all("SELECT path, session_id, byte_offset, mtime_ms, size FROM transcripts").map((row) => [row["path"] as string, row]));
     for (const [path, row] of known) {
         if (onDisk.has(path)) {
@@ -226,7 +247,7 @@ export const ingest = async (db: SqliteDb, options: { root: string; projectsDir:
     const pending = [...onDisk]
         .filter(([path, stat]) => {
             const row = known.get(path);
-            return row === undefined || Number(row["mtime_ms"]) !== stat.mtimeMs || Number(row["size"]) !== stat.size;
+            return row === undefined || Number(row["mtime_ms"]) !== stat.mtimeMs || (stat.size !== undefined && Number(row["size"]) !== stat.size);
         })
         .sort(([, a], [, b]) => b.mtimeMs - a.mtimeMs);
     for (const [path, stat] of pending) {
@@ -237,7 +258,7 @@ export const ingest = async (db: SqliteDb, options: { root: string; projectsDir:
         }
         const sessionId = basename(path, ".jsonl");
         let fromByte = row === undefined ? 0 : Number(row["byte_offset"]);
-        if (fromByte > stat.size) {
+        if (stat.size !== undefined && fromByte > stat.size) {
             // A shrunk transcript shouldn't exist (append-only); treated as a rewrite and reparsed fully.
             db.transaction(() => {
                 db.run("DELETE FROM sessions WHERE session_id = ?", sessionId);
@@ -253,9 +274,12 @@ export const ingest = async (db: SqliteDb, options: { root: string; projectsDir:
                           "n"
                       ] ?? -1,
                   );
-        const delta = await parseDelta(path, fromByte, lastOrdinal, options.root);
+        const lines = stat.compressed === undefined ? readLines(path, fromByte) : readCompressedLines(stat.compressed, fromByte);
+        const delta = await parseDelta(lines, fromByte, lastOrdinal, options.root);
+        // A compressed transcript's size is the plain bytes read through it, what the file holds once it is plain again.
+        const size = stat.size ?? delta.byteOffset;
         db.transaction(() => {
-            applyDelta(db, path, sessionId, delta, stat);
+            applyDelta(db, path, sessionId, delta, { mtimeMs: stat.mtimeMs, size });
         });
     }
     const count = (sql: string): number => Number(db.get(sql)?.["n"] ?? 0);
