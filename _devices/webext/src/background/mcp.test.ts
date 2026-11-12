@@ -122,6 +122,7 @@ test("the tool list says which tools only read and which can lose something", as
         "script_try",
         "script_remove",
         "type_ticket",
+        "upload_file",
     ]);
 });
 
@@ -217,6 +218,30 @@ test("bad arguments come back readable enough for the model to fix its own call"
     const result = await call("wait_for", {});
     expect(result.isError).toBe(true);
     expect(result.text).toContain("textGone");
+    expect(result.text).toContain("quietFor");
+});
+
+// wait_for's contract: any of text, textGone and quietFor, all holding at once, for up to nine minutes. What the model
+// is shown is the schema, so the limits are read from it rather than from the code behind it.
+test("wait_for takes quietFor and up to nine minutes, and says when to reach for them", async () => {
+    // SAFETY: a tools/list answer from this server, which lists every tool with its JSON Schema; the expectations read it.
+    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/list" }, SANDBOX)) as {
+        result: { tools: { name: string; description: string; inputSchema: { properties: Record<string, { minimum?: number; maximum?: number; default?: number }> } }[] };
+    };
+    const waitFor = answer.result.tools.find((tool) => tool.name === "wait_for");
+    expect(waitFor?.inputSchema.properties["quietFor"]).toMatchObject({ minimum: 1, maximum: 60 });
+    expect(waitFor?.inputSchema.properties["seconds"]).toMatchObject({ minimum: 1, maximum: 540, default: 15 });
+    expect(waitFor?.description).toContain("`quietFor`");
+    expect(waitFor?.description).toContain("up to 540");
+});
+
+test("wait_for refuses a wait that could never be met, and one past its ceiling, saying how to fix it", async () => {
+    const still = await call("wait_for", { quietFor: 20 });
+    expect(still.isError).toBe(true);
+    expect(still.text).toContain(`"quietFor" must be shorter than "seconds"`);
+    const long = await call("wait_for", { quietFor: 10, seconds: 600 });
+    expect(long.isError).toBe(true);
+    expect(long.text).toContain("540");
 });
 
 test("a notification is not answered, and a malformed message does not throw", async () => {

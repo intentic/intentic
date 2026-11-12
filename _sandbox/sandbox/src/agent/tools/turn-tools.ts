@@ -17,8 +17,9 @@ export interface TurnRemoteTools {
     readonly browser: BrowserTurnTools;
     // Whether the sandbox's own desktop (desktop/desktop-tools.ts) is mounted, so the prompt names it only then.
     readonly desktop: boolean;
-    // The turn's lease, so the daemon's own servers (daemon-servers.ts) ride the same bearer and end with the same release.
-    readonly lease: Pick<TurnLease, "open">;
+    // The turn's lease, so the daemon's own servers (daemon-servers.ts) ride the same bearer and end with the same release,
+    // and hand it the turn's watchdog hold once their relay exists.
+    readonly lease: Pick<TurnLease, "open" | "holdWith">;
     readonly release: () => void;
 }
 
@@ -51,11 +52,14 @@ export const turnToolsOf = async (
         // no other turn holds it (turn-mounts.ts).
         readonly warmSession?: boolean;
         readonly cleanOutput?: boolean;
+        // The longest the runtime's MCP client waits on one call, where nothing can tell it longer (LeaseOptions).
+        readonly clientCeilingMs?: number;
     },
 ): Promise<TurnRemoteTools> => {
     const lease = services.turnMounts.lease(turn.conversationId, {
         warmSession: turn.warmSession === true,
         ...opt("cleanOutput", turn.cleanOutput),
+        ...opt("clientCeilingMs", turn.clientCeilingMs),
     });
     try {
         // The sites the turn's signed-in accounts are on, so the credential-free browser can name the right door when
@@ -92,7 +96,7 @@ export const turnToolsOf = async (
             ],
             browser,
             desktop: desktop.length > 0,
-            lease: { open: lease.open },
+            lease: { open: lease.open, holdWith: lease.holdWith },
             release: lease.release,
         };
     } catch (error) {

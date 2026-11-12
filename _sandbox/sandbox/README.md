@@ -146,6 +146,11 @@ flowchart LR
   the value on stdin, only into a program on the secret's list), the focused window on one of the owner's computers or
   an app on a phone attached to one (typed by that computer's keyring, which checks the window), and a page in the
   owner's own browser (a one-time ticket the extension redeems at `POST /system/webext/secret`).
+- Files cross between the owner's own browser and the artifacts shelf through two doors on the extension's token
+  (`webext/media-shelf.ts`, `file-tickets.ts`): `POST /system/webext/media` stores what the agent saved from a page
+  (`save_media`, or a download its click started) under `.intentic/records/artifacts/chrome/` with a sanitized name, at
+  most 50 MB; `POST /system/webext/file` hands one shelf file to the browser for `upload_file`, only for a one-time
+  ticket the daemon adds to that call on its way to the browser, after checking the file's real path is on the shelf.
 - The audit trail (`audit/`, `/history/audit/`): who changed a setting, a member, an area, a secret's gate or a policy,
   who signed in, what was exported or deleted, and with `settings.audit.recordReads` who opened what. One middleware
   records by contract route name (`audit/audit-http.ts`); another module calls `services.audit.record({ actor, action,
@@ -391,7 +396,18 @@ flowchart LR
   status entry until its result. Hook lifecycle messages are not requested.
 - Pages in chat (`agent/pages/`, 2026-10-07): the Claude Code loop's `ui` server carries `show_page` and `ask_page`
   beside `ask`, unless settings `chatPages` is off. A page is one HTML document, written inline or named by path.
-  The files it names on disk, and libraries on the CDNs in `page-assets.ts`, are carried into it as data. With
+  The files it names on disk, and libraries on the CDNs in `page-assets.ts`, are carried into it as data. Video and
+  audio on disk are too large for that, so they stream (`page-media.ts`, 2026-11-12): a file a `<video>`, `<audio>`
+  or `<source>` names (or a script names by absolute path) must sit inside the workspace or the turn's own checkout
+  (never `/tmp`, which under the jail is the turn's own) with bytes of the format its name says. It is recorded in a
+  manifest inside the stored page with its real path, size and modification time, signed under a daemon key
+  (`<historyRoot>/page-media.key`) over the page's stored path and those files, its reference becoming
+  `intentic-media:<n>`. The chat mints `POST /pages/media-ticket` for that page through the reader's session (refused to
+  anyone who may not see the conversation that showed it; audited as a read) and plays
+  `GET /pages/media/{ticket}/{n}` in byte ranges (`page-media.routes.ts`). That route serves only files a verified
+  manifest names, only from the workspace or the showing conversation's checkout, and only while each is unchanged:
+  a file rewritten since is refused (409), so a page never shows a different take than the one it was shown with, and
+  every other refusal is one identical 404. With
   `check`, the sandbox's headless Chromium lays it out the way the chat draws it (a sandboxed frame at the column
   width, written in through the same `sizedFirst` shell, sized by the height its bridge reports) and the agent gets a
   picture and its console (`page-check.ts`). What its scripts throw later in a reader's chat comes back over the
@@ -402,7 +418,7 @@ flowchart LR
   markup while the model writes it (`page-draft.ts` reads `input_json_delta`). `file_draft` facts do the same for a
   Write's or Edit's text (`agent/pages/file-draft.ts`, Claude Code only, capped at 256 KiB), which a viewer open on the
   file draws as a draft until the call lands. The editor draws pages sealed: scripts
-  run, no network, no reach into the editor. A page speaks the MCP Apps bridge (`sandbox-contract` `text/pages.ts`),
+  run, no network, no reach into the editor, and `media-src` open only to the page's own media addresses. A page speaks the MCP Apps bridge (`sandbox-contract` `text/pages.ts`),
   so a connected MCP server's own `ui://` app is drawn the same way after a call to its tool (`mcp-apps.ts`). What
   that app later asks of its server goes through `POST /pages/app-call`, which calls only tools the server lets its
   app call. Without the reader's press, it calls only read-only ones.

@@ -3,7 +3,7 @@ import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities
 import { grantSite } from "@intentic/sandbox-contract/schemas/needs";
 import type { webextContract } from "@intentic/sandbox-contract/contracts/webext.contract";
 import { WEBEXT_HEARTBEAT_MS, type WebExtHello, WebExtHelloSchema } from "@intentic/sandbox-contract/protocol/doors/webext-protocol";
-import { WEBEXT_TICKET_TOOL } from "@intentic/sandbox-contract/protocol/doors/webext-links";
+import { WEBEXT_TICKET_TOOL, WEBEXT_UPLOAD_TOOL } from "@intentic/sandbox-contract/protocol/doors/webext-links";
 import type { WebExtFacts, WebExtScopes, WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { ContractRouterClient } from "@orpc/contract";
 import { z } from "zod";
@@ -16,6 +16,8 @@ import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
 import { accountCovering, accountHostsOf, signedInDoor } from "../browser/tools/account-hosts.js";
+import { WEBEXT_CALL_TIMEOUT_MS } from "../peers/webext-call-deadline.js";
+import { fitToClient, withNote } from "./webext-client-ceiling.js";
 
 // The user's own browser as a peer door, through the extension that dials this sandbox and serves `webextContract`.
 // Heartbeat stays under an MV3 service worker's 30s idle kill, and facts are re-asked per read since allowed sites and
@@ -45,7 +47,8 @@ export const WEBEXT_PEER: PeerDoor<WebExtHello, WebExtAnnounced, Record<never, n
         // Tighter than the machine door's, for the MV3 reason webext-protocol.ts states beside the number: the
         // extension's own watchdog is timed off it, so it lives in the contract both sides read.
         heartbeatMs: WEBEXT_HEARTBEAT_MS,
-        callTimeoutMs: 10 * 60 * 1000,
+        // Past wait_for's longest wait (webext-call-deadline.ts).
+        callTimeoutMs: WEBEXT_CALL_TIMEOUT_MS,
         offline: (id) => `"${id}" is not connected right now: that browser is closed, or its computer is asleep.`,
     },
     hello: { schema: WebExtHelloSchema, announced: (hello) => ({ version: hello.version }) },
@@ -180,6 +183,21 @@ const ListingSchema = z.looseObject({ result: z.looseObject({ tools: z.array(z.l
 
 type MountEndpoint = (target: { readonly id: string }, message: RpcMessage, call: MountCall) => Promise<RpcMessage | undefined>;
 
+// A call shaped to what the turn's MCP client can wait for (webext-client-ceiling.ts): passed as it is, shortened with a
+// line saying so after the browser's answer, or refused before the browser is asked.
+export const fittedToClient =
+    (mcp: MountEndpoint): MountEndpoint =>
+    async (target, message, call) => {
+        const fitted = fitToClient(message, call);
+        if (fitted.kind === "refused") {
+            return fitted.answer;
+        }
+        if (fitted.kind === "as-is") {
+            return await mcp(target, message, call);
+        }
+        return withNote(await mcp(target, fitted.message, call), fitted.note);
+    };
+
 // The agent's mount of a browser, minus the daemon's own tools: left out of every listing (a live one, and the one
 // remembered for a browser that is asleep), and answered as the browser answers a tool it does not have.
 export const withoutDaemonTools =
@@ -238,6 +256,12 @@ export const webextPeerRoutes = (services: Services) => {
         hub: services.webextHub,
         summaries: () => webextSummaries(services),
         sealAnswer,
+        // An `upload_file` call gets the one-time ticket its file is collected with, or the agent reads why that file
+        // may not go to a website (file-tickets.ts); every other message goes on as it came.
+        route: async (id, message) =>
+            message.method === "tools/call" && CalledSchema.safeParse(message.params).data?.name === WEBEXT_UPLOAD_TOOL
+                ? await services.fileTickets.route(id, message, services.workspace.root)
+                : undefined,
         // The person's browser asks for a site by lighting its own badge; the same ask goes up as a card in the chat
         // (docs/architecture/needs.md), met when that browser reports the site allowed, which continues the conversation.
         beforeCall: async (payload, call) => {
@@ -255,5 +279,5 @@ export const webextPeerRoutes = (services: Services) => {
             return undefined;
         },
     });
-    return { ...routes, mcp: withoutDaemonTools(routes.mcp) };
+    return { ...routes, mcp: fittedToClient(withoutDaemonTools(routes.mcp)) };
 };

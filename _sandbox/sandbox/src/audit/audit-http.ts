@@ -100,6 +100,9 @@ export const AUDITED_READS = new Map<string, string>([
     ["sessions.get", "conversation.read"],
     ["workspace.file", "file.read"],
     ["GET /workspace/raw", "file.read"],
+    // Opening a shown page's video or audio; the ranged stream behind the ticket is never recorded, a player asks for
+    // dozens of windows of one take.
+    ["pages.mediaTicket", "page.media.read"],
     ["activity.list", "activity.read"],
     ["audit.list", "audit.read"],
     ["audit.verify", "audit.verify"],

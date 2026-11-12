@@ -31,7 +31,16 @@ describe("the page tools", () => {
     afterEach(() => rmSync(root, { recursive: true, force: true }));
 
     const tools = (cards: Pick<ParkedCards, "create"> = answering({ kind: "page_ask", cancelled: true })) =>
-        pageTools({ workspaceRoot: root, cwd: root, conversationId: "conv-1", push: (event) => pushed.push(event), cards, signal: new AbortController().signal });
+        pageTools({
+            workspaceRoot: root,
+            cwd: root,
+            conversationId: "conv-1",
+            push: (event) => pushed.push(event),
+            cards,
+            signal: new AbortController().signal,
+            // Beside the workspace in this test; the daemon keeps it under its own history root.
+            mediaKey: `${root}-page-media.key`,
+        });
 
     it("shows a page written inline, files it, and tells the agent how to redraw it", async () => {
         const show = handlerOf(tools(), "show_page");

@@ -22,6 +22,31 @@ export const webextLendUrl = (sandboxUrl: string): string => `${sandboxUrl.repla
 // are: a tool answer over the socket lands in the model's context, and this value must never reach one.
 export const webextSecretUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/secret`;
 
+// Where the extension stores a picture, video or file it fetched from a page (`save_media`, a download the agent's click
+// started), bearer-authenticated. The bytes are the raw body, never MCP JSON: a tool answer lands in a model's context,
+// and base64 inside JSON costs a third more besides. The answer names where the file now is in the sandbox.
+export const webextMediaUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/media`;
+
+// The other direction (`upload_file`): the extension collects one sandbox file for a ticket the daemon added to the call
+// on its way through, so a browser can never ask for a file on its own say-so.
+export const webextFileUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/file`;
+
+// The most either door carries in one file. A generated picture is a few MB and a short clip tens; past this an agent
+// is moving something no page tool should carry, and both sides hold the whole file in memory while it crosses.
+export const WEBEXT_MEDIA_MAX_BYTES = 50 * 1024 * 1024;
+
+// Headers beside the media body: the file-name stem the page suggested (URI-encoded, the sandbox sanitizes it) and the
+// page's host, which the sandbox's log line names.
+export const WEBEXT_MEDIA_NAME_HEADER = "x-intentic-name";
+export const WEBEXT_MEDIA_SOURCE_HEADER = "x-intentic-source";
+
+// The tool that puts a sandbox file into a page's file input. The daemon recognises calls to it on their way to the
+// browser and adds the ticket the file is collected with (the sandbox's webext/file-tickets.ts).
+export const WEBEXT_UPLOAD_TOOL = "upload_file";
+
+// How long a file ticket waits to be collected; the extension collects it before it asks the person anything.
+export const WEBEXT_FILE_TICKET_TTL_MS = 60_000;
+
 // Where the extension tells its sandbox that site access changed outside the popup (2026-10-20), bearer-authenticated.
 export const webextGrantsChangedUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/grants-changed`;
 

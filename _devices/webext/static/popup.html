@@ -1045,6 +1045,20 @@
                         <p class="work-hint muted"><span id="work-hint"></span></p>
                     </div>
                 </section>
+                <!-- The optional downloads permission: a file the agent's click downloads goes into its sandbox. -->
+                <section id="downloads" hidden>
+                    <h2 class="label">Downloads</h2>
+                    <div class="card">
+                        <label class="switch" title="Asks the browser for the downloads permission; turning it off gives it back.">
+                            <input id="downloads-on" type="checkbox" />
+                            <span>Save my agent's downloads to the sandbox</span>
+                        </label>
+                        <p class="work-hint muted">
+                            A file your agent's click downloads in its own window goes into its sandbox instead of your Downloads folder. Your own downloads are never read.
+                        </p>
+                        <div id="downloads-error" class="error" hidden></div>
+                    </div>
+                </section>
                 <!-- Every sandbox this browser serves, one row each, and the way to add one more. -->
                 <section id="sandboxes" hidden>
                     <h2 class="label">Sandboxes</h2>

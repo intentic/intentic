@@ -3,28 +3,37 @@
 // own frame (the editor's chat/transcript/pages). A page runs its scripts in a frame with an opaque origin and no
 // network: the policy below is the whole of what it may load, and the bootstrap is the whole of what it may say.
 import { parseJsonOr } from "@intentic/base/json";
+import { z } from "zod";
 
 // Everything a sealed page may load is already inside it: its own inline scripts and styles, and pictures, fonts and
-// media carried in as data. Nothing reaches the network, another frame, or a form target.
-export const SEALED_PAGE_POLICY = [
-    `default-src 'none'`,
-    // Inline only, which is every script a sealed document can hold. Eval gives nothing more to a frame that can reach
-    // nothing.
-    `script-src 'unsafe-inline' 'unsafe-eval'`,
-    `style-src 'unsafe-inline'`,
-    `img-src data: blob:`,
-    `font-src data:`,
-    `media-src data: blob:`,
-    // Reading back what the page already holds: `fetch()` on a data: or blob: URL (audio to decode, a file it built),
-    // which reaches no network. Every other address stays refused.
-    `connect-src data: blob:`,
-    `frame-src 'none'`,
-    `worker-src 'none'`,
-    `object-src 'none'`,
-    `form-action 'none'`,
-    `base-uri 'none'`,
-    `manifest-src 'none'`,
-].join(`; `);
+// media carried in as data. Nothing reaches the network, another frame, or a form target. The one exception is the
+// video and audio files the page named on disk when it was shown (PAGE_MEDIA below): too large to carry, they stream
+// from the sandbox, and the chat opens `media-src` to exactly those addresses, one by one, for that page alone.
+export const sealedPagePolicy = (media: readonly string[] = []): string =>
+    [
+        `default-src 'none'`,
+        // Inline only, which is every script a sealed document can hold. Eval gives nothing more to a frame that can
+        // reach nothing.
+        `script-src 'unsafe-inline' 'unsafe-eval'`,
+        `style-src 'unsafe-inline'`,
+        `img-src data: blob:`,
+        `font-src data:`,
+        // An address that could break out of its source expression (a space, `;` or `,`) is left out rather than let
+        // it widen the policy.
+        [`media-src data: blob:`, ...media.filter((address) => /^https?:\/\/[^\s;,']+$/i.test(address))].join(` `),
+        // Reading back what the page already holds: `fetch()` on a data: or blob: URL (audio to decode, a file it
+        // built), which reaches no network. Every other address stays refused, the page's own media included.
+        `connect-src data: blob:`,
+        `frame-src 'none'`,
+        `worker-src 'none'`,
+        `object-src 'none'`,
+        `form-action 'none'`,
+        `base-uri 'none'`,
+        `manifest-src 'none'`,
+    ].join(`; `);
+
+// The seal of a page that names no media: every page drawn anywhere but the chat's own frame, and the headless check.
+export const SEALED_PAGE_POLICY = sealedPagePolicy();
 
 // The bridge between a page and the chat around it speaks the MCP Apps extension's own JSON-RPC over postMessage
 // (io.modelcontextprotocol/ui), so one host serves both the agent's pages and an MCP server's app. `submit` is this
@@ -45,6 +54,9 @@ export const PAGE_BRIDGE = {
     // An uncaught error in the page's own scripts, told as it happens: the chat hands it to the agent that showed the
     // page while its turn still runs, and offers the reader the ask afterwards.
     error: `intentic/page-error`,
+    // A video or audio element of the page's own failed to load: the chat checks whether the page's media ticket is
+    // still good, since the sealed frame cannot see why a load failed and the chat can.
+    mediaError: `intentic/media-error`,
 } as const;
 
 // How many distinct errors a page tells, and how long each may be: enough to fix it by, never a flood.
@@ -210,6 +222,7 @@ function fault(t){var at=Date.now();setTimeout(function(){var seen=[];for(var i=
 function said(x,fallback){return x&&typeof x.stack==="string"?x.stack.split("\\n").slice(0,2).map(function(l){return l.trim();}).join(" "):fallback;}
 window.addEventListener("error",function(e){if(e instanceof ErrorEvent)fault(said(e.error,(e.message||"Script error")+(e.lineno?" (line "+e.lineno+")":"")));});
 window.addEventListener("unhandledrejection",function(e){fault("Unhandled rejection: "+said(e.reason,String(e.reason)));});
+var mediaTold=false;window.addEventListener("error",function(e){var t=e.target;if(mediaTold||!t||!t.tagName||!/^(VIDEO|AUDIO|SOURCE)$/.test(t.tagName))return;var s=String(t.currentSrc||t.src||"");if(/^(data|blob):/i.test(s)||s==="")return;mediaTold=true;post({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.mediaError)},params:{}});},true);
 function request(method,params){return new Promise(function(resolve,reject){if(!framed){reject(new Error("This page is not inside a chat."));return;}var id="intentic-"+(++n);pending[id]={resolve:resolve,reject:reject};post({jsonrpc:"2.0",id:id,method:method,params:params});});}
 window.addEventListener("message",function(e){if(e.source!==window.parent)return;var d=e.data;if(!d||d.jsonrpc!=="2.0")return;if(d.method===${JSON.stringify(PAGE_BRIDGE.hostContextChanged)}&&d.params){apply({appearance:d.params.theme,variables:d.params.styles&&d.params.styles.variables});return;}if(d.id!==undefined&&pending[d.id]){var p=pending[d.id];delete pending[d.id];if(d.error)p.reject(new Error(String(d.error.message||"Refused")));else p.resolve(d.result);}});
 if(framed){var h=-1,z=function(){var r=document.documentElement,b=document.body,v=Math.ceil(Math.max(r.scrollHeight>r.clientHeight?r.scrollHeight:r.getBoundingClientRect().height,b?b.getBoundingClientRect().bottom:0));if(v===h||v<=0)return;h=v;post({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.sizeChanged)},params:{height:v}});};if(window.ResizeObserver){var o=new ResizeObserver(z);o.observe(document.documentElement);document.addEventListener("DOMContentLoaded",function(){if(document.body)o.observe(document.body);z();});}window.addEventListener("load",z);setTimeout(z,50);}
@@ -320,7 +333,7 @@ const SIZE_SCRIPT =
     `window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.sizeChanged)},params:{height:v}},"*");}` +
     `if(window.ResizeObserver)new ResizeObserver(z).observe(document.documentElement);window.addEventListener("load",z);setTimeout(z,50);})();`;
 export const publishedPage = (stored: string): string =>
-    intoHead(stored, `<meta http-equiv="Content-Security-Policy" content="${SEALED_PAGE_POLICY}"><meta name="referrer" content="no-referrer"><script>${SIZE_SCRIPT}</script>`);
+    intoHead(withoutPageMedia(stored), `<meta http-equiv="Content-Security-Policy" content="${SEALED_PAGE_POLICY}"><meta name="referrer" content="no-referrer"><script>${SIZE_SCRIPT}</script>`);
 
 // What an MCP server's app is shown with (agent/pages/mcp-apps.ts): the call's arguments and its result, kept inside the
 // stored page as a data block the chat hands the app over the bridge (`tool-input`, `tool-result`) once it is ready.
@@ -345,6 +358,68 @@ export const readMcpAppData = (html: string): McpAppData | undefined => {
     const data = parseJsonOr(match[1] ?? ``, undefined) as Partial<McpAppData> | null | undefined;
     return typeof data?.server === `string` && typeof data.tool === `string` ? { server: data.server, tool: data.tool, input: data.input, result: data.result } : undefined;
 };
+
+// The video and audio files a page named on disk (agent/pages/page-assets.ts), far too large to carry inside it as
+// pictures are: when the page is shown, each file's reference becomes `intentic-media:<n>` and the page carries a
+// manifest of what <n> was at that moment (its real path, type, size and modification time), signed under a key only the
+// daemon holds, over the page's own stored path and those files, so a manifest written into the records by anyone else,
+// or moved to another page, is never served (agent/pages/page-media.ts). The chat swaps each
+// reference for an address under a ticket it mints for that one page (the daemon's GET /pages/media/{ticket}/{n}),
+// which streams the file in byte ranges only while it is still exactly what was shown. Anywhere else (the headless
+// check, a download, a published share) the reference loads nothing and the player stays empty.
+export const PAGE_MEDIA_REF = `intentic-media:`;
+export const PAGE_MEDIA_ID = `intentic-page-media`;
+// How many media files one page may name: a comparison of takes, not a library.
+export const PAGE_MEDIA_MAX = 32;
+export interface PageMediaFile {
+    // The file's real path in the sandbox, links resolved.
+    readonly path: string;
+    // The type it is served as, from its name, its bytes having said the same.
+    readonly type: string;
+    readonly size: number;
+    readonly mtimeMs: number;
+}
+// Every reference in a page's text, with the manifest index it names.
+export const PAGE_MEDIA_REFS = /intentic-media:(\d{1,3})/g;
+const PAGE_MEDIA_OPEN = `<script type="application/json" id="${PAGE_MEDIA_ID}">`;
+const PAGE_MEDIA_BLOCK = new RegExp(`${PAGE_MEDIA_OPEN.replace(/[.*+?^${}()|[\]\\]/g, `\\$&`)}([\\s\\S]*?)</script>`);
+export interface PageMediaManifest {
+    readonly files: readonly PageMediaFile[];
+    // The daemon's HMAC over `pageMediaSigned(page, files)`, base64url.
+    readonly signature: string;
+}
+// What a manifest's signature covers: the page it belongs to, by its stored path, and each file's every field, in a
+// fixed order, so no spelling of the same JSON can sign differently and a manifest copied into another page fails.
+export const pageMediaSigned = (page: string, files: readonly PageMediaFile[]): string =>
+    JSON.stringify([page, files.map((file) => [file.path, file.type, file.size, file.mtimeMs])]);
+export const pageMediaScript = (manifest: PageMediaManifest): string =>
+    `${PAGE_MEDIA_OPEN}${JSON.stringify({ files: manifest.files, signature: manifest.signature }).replace(/</g, `\\u003c`)}</script>`;
+// A page's text with no manifest: what the agent wrote can never pose as the one the daemon writes, and a page leaving
+// the sandbox (a published share) does not carry the sandbox's paths with it. Each whole block goes, then any opening
+// left over, repeated until none is left, so removing one cannot join the text around it into another.
+export const withoutPageMedia = (html: string): string => {
+    let out = html.replace(new RegExp(PAGE_MEDIA_BLOCK.source, `g`), ``);
+    while (out.includes(PAGE_MEDIA_OPEN)) {
+        out = out.split(PAGE_MEDIA_OPEN).join(``);
+    }
+    return out;
+};
+const PageMediaManifestSchema = z.object({
+    files: z
+        .array(z.object({ path: z.string().min(1), type: z.string().min(1), size: z.number().nonnegative(), mtimeMs: z.number() }))
+        .min(1)
+        .max(PAGE_MEDIA_MAX),
+    signature: z.string().min(1),
+});
+// A stored page's manifest as written, or undefined for a page that names no media (or a block that does not parse). Not
+// yet trusted: only the daemon can say whether its signature holds.
+export const readPageMedia = (html: string): PageMediaManifest | undefined => {
+    const match = PAGE_MEDIA_BLOCK.exec(html);
+    return match === null ? undefined : PageMediaManifestSchema.safeParse(parseJsonOr(match[1] ?? ``, undefined)).data;
+};
+// A page's media references swapped for what `address` answers for each index; one past the manifest is left as it is.
+export const placePageMedia = (html: string, count: number, address: (index: number) => string): string =>
+    html.replace(PAGE_MEDIA_REFS, (whole, index: string) => (Number(index) < count ? address(Number(index)) : whole));
 
 // A page's answer as the agent is handed it: JSON text, whatever the page sent, refused past the cap rather than cut.
 export const pageValueText = (value: unknown): string => JSON.stringify(value === undefined ? null : value) ?? `null`;

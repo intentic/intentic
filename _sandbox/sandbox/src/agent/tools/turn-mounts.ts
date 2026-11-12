@@ -71,11 +71,24 @@ export interface MountSpec {
 export interface TurnLease {
     readonly open: (mount: MountSpec) => AgentTool;
     readonly release: () => void;
+    // The turn's watchdog hold (runtimes/daemon-tools/turn-relay.ts), handed over once the turn's relay exists: the door
+    // takes it for every forwarded tools/call, so a call that runs minutes on a peer (a device command, a browser's
+    // wait_for) is not read as a silent turn by a loop's inactivity limit.
+    readonly holdWith: (hold: TurnHold) => void;
 }
+
+// Takes the turn's watchdog hold; the returned release gives it back, once.
+export type TurnHold = () => () => void;
 
 // What the door resolved a request to, or why it would not.
 export type MountReach =
-    | { readonly target: MountTarget; readonly conversationId: string | undefined; readonly cleanOutput?: false }
+    | {
+          readonly target: MountTarget;
+          readonly conversationId: string | undefined;
+          readonly cleanOutput?: false;
+          readonly hold?: TurnHold;
+          readonly clientCeilingMs?: number;
+      }
     // unknown: no live bearer by that value; unleased: a live bearer whose turn holds no server by that name right now.
     | { readonly refused: "unknown" | "unleased" };
 
@@ -85,6 +98,9 @@ export interface LeaseOptions {
     readonly warmSession?: boolean;
     // Claude cleans in PostToolUse; its HTTP door must not count held-out output twice.
     readonly cleanOutput?: boolean;
+    // The longest this runtime's MCP client waits on one call, for a runtime whose client cannot be told a longer
+    // timeout (Cursor: 60 s). A peer answering through the door shortens what it does to fit (webext-peer.ts).
+    readonly clientCeilingMs?: number;
 }
 
 export interface TurnMounts {
@@ -98,8 +114,10 @@ export interface TurnMounts {
 
 interface Lease {
     readonly cleanOutput?: false;
+    readonly clientCeilingMs?: number;
     readonly targets: Map<string, MountTarget>;
     readonly openedAt: number;
+    hold?: TurnHold;
 }
 
 interface Mount {
@@ -138,10 +156,12 @@ const closeLease = (lease: Lease): void => {
     lease.targets.clear();
 };
 
-const newLease = (openedAt: number, options: LeaseOptions): Lease => ({
+const newLease = (openedAt: number, options: LeaseOptions, hold: TurnHold | undefined): Lease => ({
     targets: new Map(),
     openedAt,
     ...opt("cleanOutput", options.cleanOutput === false ? (false as const) : undefined),
+    ...opt("clientCeilingMs", options.clientCeilingMs),
+    ...opt("hold", hold),
 });
 
 // Resolve the server and its cleaning policy from the same live lease.
@@ -149,11 +169,41 @@ const reachOf = (mount: Mount, name: string): MountReach => {
     // One live turn per bearer (acquire), so this is that turn's lease or none.
     let target: MountTarget | undefined;
     let cleanOutput: false | undefined;
+    let holder: Lease | undefined;
     for (const lease of mount.leases.values()) {
-        target = lease.targets.get(name) ?? target;
+        const found = lease.targets.get(name);
+        if (found !== undefined) {
+            target = found;
+            holder = lease;
+        }
         cleanOutput = lease.cleanOutput;
     }
-    return target === undefined ? { refused: "unleased" } : { target, conversationId: mount.conversationId, ...opt("cleanOutput", cleanOutput) };
+    return target === undefined
+        ? { refused: "unleased" }
+        : {
+              target,
+              conversationId: mount.conversationId,
+              ...opt("cleanOutput", cleanOutput),
+              ...opt("hold", holder?.hold),
+              ...opt("clientCeilingMs", holder?.clientCeilingMs),
+          };
+};
+
+// Whether a live turn of the conversation holds a mount on exactly this peer (TurnMounts.reaches).
+const conversationReaches = (mounts: Iterable<Mount>, conversationId: string, wanted: Parameters<TurnMounts["reaches"]>[1]): boolean => {
+    for (const mount of mounts) {
+        if (mount.conversationId !== conversationId) {
+            continue;
+        }
+        for (const lease of mount.leases.values()) {
+            for (const target of lease.targets.values()) {
+                if ((target.kind === "device" || target.kind === "webext" || target.kind === "phone") && target.kind === wanted.kind && target.id === wanted.id) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 };
 
 export const createTurnMounts = (deps: {
@@ -216,6 +266,7 @@ export const createTurnMounts = (deps: {
             const leaseId = randomBytes(8).toString("hex");
             let held: HeldMount | undefined;
             let released = false;
+            let hold: TurnHold | undefined;
             return {
                 open: ({ name, target, timeoutMs }) => {
                     const tool = (token: string): AgentTool => ({
@@ -233,7 +284,7 @@ export const createTurnMounts = (deps: {
                     // the mount in the same tick, so a second turn acquiring after this one sees the bearer held.
                     if (held === undefined) {
                         held = acquire(conversationId, options);
-                        held.mount.leases.set(leaseId, newLease(now(), options));
+                        held.mount.leases.set(leaseId, newLease(now(), options, hold));
                     }
                     const lease = held.mount.leases.get(leaseId);
                     if (lease === undefined) {
@@ -247,6 +298,13 @@ export const createTurnMounts = (deps: {
                     }
                     lease.targets.set(name, target);
                     return tool(held.mount.token);
+                },
+                holdWith: (taken) => {
+                    hold = taken;
+                    const lease = held?.mount.leases.get(leaseId);
+                    if (lease !== undefined) {
+                        lease.hold = taken;
+                    }
                 },
                 release: () => {
                     if (released) {
@@ -281,25 +339,7 @@ export const createTurnMounts = (deps: {
             }
             return reachOf(mount, name);
         },
-        reaches: (conversationId, wanted) => {
-            for (const mount of mounts.values()) {
-                if (mount.conversationId !== conversationId) {
-                    continue;
-                }
-                for (const lease of mount.leases.values()) {
-                    for (const target of lease.targets.values()) {
-                        if (
-                            (target.kind === "device" || target.kind === "webext" || target.kind === "phone") &&
-                            target.kind === wanted.kind &&
-                            target.id === wanted.id
-                        ) {
-                            return true;
-                        }
-                    }
-                }
-            }
-            return false;
-        },
+        reaches: (conversationId, wanted) => conversationReaches(mounts.values(), conversationId, wanted),
         closeAll: () => {
             // Deleting the entry being visited is safe for a Map iterator.
             for (const key of mounts.keys()) {

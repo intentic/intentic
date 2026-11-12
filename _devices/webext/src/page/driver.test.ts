@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { renderPage, toPageState } from "@intentic/browser/page";
 import { askConfirm, OVERLAY_LOOK } from "./overlay.js";
-import { clickRef, collectPage, describeRef, fillRef, pinFocusedField, readPageText, selectRef, typeSecretInto, waitForText } from "./driver.js";
+import { clickRef, collectPage, describeRef, markDocument, pinFocusedField, pressKeyOnPage, readPageText, selectRef, typeSecretInto } from "./driver.js";
 
 // Tests the page walk against real DOM via jsdom, which is enough for the judgements that matter (what's clickable,
 // what to call it, sensitivity) but cannot lay out elements or run a page's own JavaScript.
@@ -58,19 +58,6 @@ test("a reference from a previous page is refused rather than clicking whatever 
     // A ref that was never minted at all.
     expect(clickRef("e99").ok).toBe(false);
     expect(clickRef("button.submit").ok).toBe(false);
-});
-
-test("typing writes the value the page's own framework will read, and fires what it listens for", () => {
-    document.body.innerHTML = `<form><input id="q" /></form>`;
-    collectPage();
-    const input = document.getElementById("q") as HTMLInputElement;
-    const events: string[] = [];
-    for (const name of ["input", "change"]) {
-        input.addEventListener(name, () => events.push(name));
-    }
-    expect(fillRef("e0", "hello", false).ok).toBe(true);
-    expect(input.value).toBe("hello");
-    expect(events).toEqual(["input", "change"]);
 });
 
 test("a payment or deletion button is flagged, so the person is asked before it is clicked", () => {
@@ -136,48 +123,6 @@ test("reading a page prefers its main content to its chrome", () => {
     const page = readPageText();
     expect(page.text).toContain("42");
     expect(page.text).not.toContain("About");
-});
-
-// executeScript sends the function's source and re-parses it in the page, where no name of this module exists. Re-parsed
-// the same way here: an imported helper inside it would throw on the first look that missed, which Chrome hands back as
-// a null result (the "Cannot read properties of null (reading 'message')" wait_for kept failing with).
-test("wait_for's injected function still works with nothing of its module around it, as it runs in the page", async () => {
-    // re-parsing the source is exactly what Chrome does with it
-    const alone = new Function(`return (${waitForText.toString()})`)() as typeof waitForText;
-    document.body.innerHTML = `<p>loading</p>`;
-    setTimeout(() => {
-        document.body.innerHTML = `<p>Saved</p>`;
-    }, 300);
-    expect(await alone("Saved", false, 5_000)).toEqual({ ok: true, message: `"Saved" appeared` });
-    expect((await alone("never", false, 250)).ok).toBe(false);
-});
-
-// Looks are made when the page changes (a MutationObserver), not on a timer, so a page that changes nothing is never
-// read again until the deadline (2026-10-20).
-test("wait_for looks again only when the page changed, and a vanishing text is heard as it goes", async () => {
-    document.body.innerHTML = `<p>Saving…</p>`;
-    const reads = { count: 0 };
-    const body = document.body;
-    const real = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(body), "innerText") ?? Object.getOwnPropertyDescriptor(HTMLElement.prototype, "innerText");
-    Object.defineProperty(body, "innerText", {
-        configurable: true,
-        get() {
-            reads.count += 1;
-            return real?.get?.call(body) ?? body.textContent;
-        },
-    });
-    try {
-        const idle = await waitForText("Saved", false, 300);
-        expect(idle.ok).toBe(false);
-        // The look at the start and the last one at the deadline; none in between, the page being still.
-        expect(reads.count).toBe(2);
-        setTimeout(() => {
-            body.innerHTML = `<p>Done</p>`;
-        }, 50);
-        expect(await waitForText("Saving", true, 5_000)).toEqual({ ok: true, message: `"Saving" is gone` });
-    } finally {
-        Reflect.deleteProperty(body, "innerText");
-    }
 });
 
 // jsdom lays nothing out and has no hit test: `elementFromPoint` answers with what a pointer would land on here.
@@ -431,4 +376,39 @@ test("a pin is good for one value, on the site it was taken on, for the field it
     expect(gone).toMatchObject({ ok: false, gone: true });
     expect(gone.message).toContain("Click the field again");
     expect(field.value).toBe("");
+});
+
+test("a key goes to the focused element with the legacy codes pages still read for it", () => {
+    document.body.innerHTML = `<input id="q" />`;
+    const input = document.querySelector("input");
+    input?.focus();
+    const heard: string[] = [];
+    for (const type of ["keydown", "keypress", "keyup"]) {
+        input?.addEventListener(type, (key) => {
+            if (!(key instanceof KeyboardEvent)) {
+                return;
+            }
+            heard.push(`${type} ${key.key} ${key.code} ${key.keyCode} ${key.which}`);
+        });
+    }
+    expect(pressKeyOnPage("Enter").ok).toBe(true);
+    expect(heard).toEqual(["keydown Enter Enter 13 13", "keypress Enter Enter 13 13", "keyup Enter Enter 13 13"]);
+    heard.length = 0;
+    // Escape types nothing, so there is no keypress for it.
+    pressKeyOnPage("Escape");
+    expect(heard).toEqual(["keydown Escape Escape 27 27", "keyup Escape Escape 27 27"]);
+    heard.length = 0;
+    // "." must not read as Delete (keyCode 46) to a page that deletes on it.
+    pressKeyOnPage(".");
+    expect(heard[0]).toBe("keydown . . 0 0");
+});
+
+test("a document keeps its mark across looks, so an action can tell the same page from a replaced one", () => {
+    const first = markDocument("one");
+    expect(first.mark).toBe("one");
+    expect(first.url).toBe(location.href);
+    expect(markDocument("two").mark).toBe("one");
+    // A new document starts with no mark: its isolated world is new.
+    delete window.intenticDocumentMark;
+    expect(markDocument("three").mark).toBe("three");
 });

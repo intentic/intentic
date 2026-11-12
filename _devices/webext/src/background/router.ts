@@ -2,6 +2,7 @@ import { webextContract } from "@intentic/sandbox-contract/webext";
 import { implement } from "@orpc/server";
 import { catchLoopback } from "./loopback-catch.js";
 import { handleMcpMessage } from "./mcp.js";
+import { withCapturedDownloads } from "./tools/media-downloads.js";
 import { type SandboxKey, store } from "./store.js";
 import { browserFacts, refreshBadge } from "./tools/access.js";
 
@@ -23,8 +24,9 @@ export const createWebExtRouter = (from: SandboxKey) => {
         ping: os.ping.handler(() => ({ ok: true })),
         // The one opaque procedure: its payload is MCP, understood by handleMcpMessage and the tool it names,
         // deliberately
-        // not by the daemon in between.
-        mcp: os.mcp.handler(async ({ input }) => await handleMcpMessage(input, from)),
+        // not by the daemon in between. A download the call starts is copied into the sandbox and its answer says where
+        // (tools/media-downloads.ts).
+        mcp: os.mcp.handler(async ({ input }) => await withCapturedDownloads(from, input, async () => await handleMcpMessage(input, from))),
         // A sign-in's loopback redirect, watched for in this browser's tabs (loopback-catch.ts); armed by the sandbox
         // only, never a tool, so it is no page read the agent can reach for. Paused means paused for this too.
         catchLoopback: os.catchLoopback.handler(async function* ({ input, signal }) {

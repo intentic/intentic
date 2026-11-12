@@ -1,6 +1,8 @@
 // Fills the `${tools}` slot in a browser pack's SKILL.md: the tool surface and act/read rules shared by every
 // connected-browser family (Chrome, Edge, Firefox); `${id}` is the instance name. Per-family quirks live in a separate
 // pack contributed by the extension, so an unused browser costs no tokens.
+import { STATE_DIR } from "@intentic/constants";
+
 export const WEBEXT_TOOLS_NOTE = `# Connected browser "\${id}"
 
 This is the person's OWN browser, on their own computer, with the extension they installed in it. It is not the
@@ -34,7 +36,10 @@ account to use instead.
 | \`mcp__\${id}__select_option\` | Choose in a \`<select>\` by ref. |
 | \`mcp__\${id}__key\` | Press a key for the page as a whole ("Enter", "Escape", "PageDown"). |
 | \`mcp__\${id}__scroll\` | Scroll the page, when what you need is not in the snapshot yet. |
-| \`mcp__\${id}__wait_for\` | Wait for text to appear or disappear, instead of guessing at a delay. |
+| \`mcp__\${id}__wait_for\` | Wait until the page is as you expect, instead of guessing at a delay: \`text\` to appear, \`textGone\` to go, or \`quietFor\` seconds of the page not changing (about 20 after starting an image or video generation). \`seconds\` up to 540; it answers the moment the conditions hold. |
+| \`mcp__\${id}__save_media\` | Save a picture, video, sound or file from the page into your sandbox, by \`ref\` (read is enough) or \`url\` (needs act; only media, documents, archives or a download). Answers with its path. Up to 50 MB. |
+| \`mcp__\${id}__upload_file\` | Put a sandbox file into a page's file input (or the button that opens the chooser). It must be on \`${STATE_DIR}/records/artifacts/\`; the person is asked every time. Attaches only: sending is your next step. |
+| \`mcp__\${id}__chatgpt_image\` | One call: a temporary, unpersonalized ChatGPT chat in your window, the prompt sent, the image saved into your sandbox (often minutes). Needs chatgpt.com allowed in read and act. Once an answer says the prompt may have gone, never call again with it: that sends it twice. |
 | \`mcp__\${id}__screenshot\` | Your page as an image. For canvas apps and PDF viewers, where the DOM says nothing. |
 | \`mcp__\${id}__ask_access\` | Ask the person to allow a site you are not allowed on. It lights up their extension. |
 | \`mcp__\${id}__connect_site\` | Hand this site's session to the sandbox's own browser, so a job can carry on without them. |

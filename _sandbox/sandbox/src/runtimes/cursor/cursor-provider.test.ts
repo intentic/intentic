@@ -28,7 +28,7 @@ jest.mock("../../browser/tools/browser-tools.js", () => ({
 }));
 
 // Loaded after the mocks: jest.mock binds at this point, and a static import would have already evaluated the graph.
-const { cursorMcpServers } = await import("./cursor-tools.js");
+const { cursorMcpServers, CURSOR_MCP_CALL_CEILING_MS } = await import("./cursor-tools.js");
 const { planCursorTurn } = await import("./cursor-provider.js");
 
 const ROOT = "/nowhere/cursor-plan";
@@ -93,8 +93,16 @@ test("a connected browser extension reaches the turn as an http MCP server named
     const request = await planned([{ kind: "webext", id: "chrome", config: {} } as Capability], mounts);
     const token = request.tools.remote?.[0]?.token ?? "";
 
-    expect(own(request)).toEqual([{ name: "chrome", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/chrome`, token }]);
-    expect(mounts.turnMounts.resolve(token, "chrome")).toEqual({ target: { kind: "webext", id: "chrome" }, conversationId: "conv-1" });
+    // The mount asks the client to wait past the hub's ten minutes, for a nine-minute wait_for. Cursor's own MCP config
+    // (@cursor/sdk McpServerConfig) has no field for it, so its projection below carries none.
+    expect(own(request)).toEqual([{ name: "chrome", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/chrome`, token, timeoutMs: 660_000 }]);
+    // The door is told the 60 s instead, with the turn's watchdog hold, so the browser fits its calls to what Cursor waits for.
+    expect(mounts.turnMounts.resolve(token, "chrome")).toEqual({
+        target: { kind: "webext", id: "chrome" },
+        conversationId: "conv-1",
+        hold: expect.any(Function),
+        clientCeilingMs: CURSOR_MCP_CALL_CEILING_MS,
+    });
     expect(cursorMcpServers(request)["chrome"]).toEqual({
         type: "http",
         url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/chrome`,
@@ -110,7 +118,7 @@ test("a connected machine reaches the turn with the conversation the command gat
     const token = request.tools.remote?.[0]?.token ?? "";
 
     expect(own(request)).toEqual([{ name: "radarsu-rog", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/radarsu-rog`, token, timeoutMs: 960_000 }]);
-    expect(mounts.turnMounts.resolve(token, "radarsu-rog")).toEqual({ target: { kind: "device", id: "radarsu-rog" }, conversationId: "conv-1" });
+    expect(mounts.turnMounts.resolve(token, "radarsu-rog")).toMatchObject({ target: { kind: "device", id: "radarsu-rog" }, conversationId: "conv-1" });
 });
 
 // Internal first, external last: mcpServersOf and cursorMcpServers both merge last-wins, so a same-named capability is

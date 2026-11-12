@@ -3,7 +3,8 @@ import type { ToolOutput } from "../../guard/mcp-output.js";
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { bearerFrom } from "../../auth/auth.js";
-import type { MountTarget, RpcMessage, TurnMounts } from "./turn-mounts.js";
+import { opt } from "../../opt.js";
+import type { MountTarget, RpcMessage, TurnHold, TurnMounts } from "./turn-mounts.js";
 
 // The one door every daemon-hosted MCP server is reached through, `ALL /mcp/<name>`: the bearer names one live turn (and
 // its conversation), that turn's lease maps the name to a target, and the target's endpoint answers. Streamable HTTP, answered as plain
@@ -18,6 +19,8 @@ export interface MountCall {
     readonly conversationId: string | undefined;
     // The HTTP request's own: a client that hung up takes its in-flight call with it.
     readonly signal: AbortSignal;
+    // The longest the turn's MCP client waits on one call, when its runtime cannot be told longer (LeaseOptions).
+    readonly clientCeilingMs?: number;
 }
 
 type TargetOf<K extends MountTarget["kind"]> = Extract<MountTarget, { readonly kind: K }>;
@@ -87,6 +90,24 @@ const answerRpc = async (c: Context<AppEnv>, handle: (message: RpcMessage) => Pr
 
 const ToolCallSchema = z.object({ name: z.string() });
 
+// A forwarded tools/call holds the turn's watchdog while it runs: the turn is waiting on the daemon and what it reaches
+// (a device's command, a browser's nine-minute wait_for), not on its vendor, and a loop's 120 s silence limit
+// (runtimes/decorators/turn-watchdog.ts) ended such turns mid-call. The turn's hard cap still bounds them. A daemon server
+// holds its own (daemon-servers.ts heldDoor).
+const held =
+    (handle: (message: RpcMessage) => Promise<RpcMessage | undefined>, hold: TurnHold | undefined) =>
+    async (message: RpcMessage): Promise<RpcMessage | undefined> => {
+        if (hold === undefined || message.method !== "tools/call") {
+            return await handle(message);
+        }
+        const release = hold();
+        try {
+            return await handle(message);
+        } finally {
+            release();
+        }
+    };
+
 export const createTurnMountRoute =
     (
         mounts: Pick<TurnMounts, "resolve">,
@@ -107,7 +128,7 @@ export const createTurnMountRoute =
                 : // Whatever the path names, a bearer reaches only what its own turn mounted, and nothing once it ends.
                   c.json({ error: `"${name}" is not a server this turn mounted` }, 403);
         }
-        const call: MountCall = { name, conversationId: reach.conversationId, signal: c.req.raw.signal };
+        const call: MountCall = { name, conversationId: reach.conversationId, signal: c.req.raw.signal, ...opt("clientCeilingMs", reach.clientCeilingMs) };
         const { target } = reach;
         if (target.kind === "extension") {
             return endpoints.extension(target, c, call);
@@ -115,7 +136,7 @@ export const createTurnMountRoute =
         if (target.kind === "remote") {
             return endpoints.remote(target, c, call);
         }
-        const handle = rpcOf(endpoints, target, call);
+        const handle = held(rpcOf(endpoints, target, call), target.kind === "daemon" ? undefined : reach.hold);
         return answerRpc(c, async (message) => {
             const answered = await handle(message);
             // Transport messages and notifications are untouched.

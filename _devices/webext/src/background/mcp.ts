@@ -5,15 +5,17 @@ import { WEBEXT_TICKET_TOOL } from "@intentic/sandbox-contract/webext";
 // bundle, which esbuild can otherwise drop. _devices/webext/scripts/size-budget.mjs holds the ceiling.
 import { array, boolean, enum as zEnum, number, object, string } from "zod";
 import { record } from "./audit.js";
+import { KIT_TOOLS } from "./kits/index.js";
 import { RefusedError } from "./policy.js";
 import type { SandboxKey } from "./store.js";
 import { askAccess, describeAccess } from "./tools/access.js";
-import { click, fill, openUrl, pressKey, readable, screenshot, scroll, selectOption, snapshot, waitFor } from "./tools/page.js";
+import { click, fill, MAX_WAIT_SECONDS, openUrl, pressKey, readable, screenshot, scroll, selectOption, snapshot, waitFor } from "./tools/page.js";
 import { lendSite } from "./tools/lend.js";
 import { connectSite } from "./tools/session.js";
 import { listTabs, selectTab } from "./tools/tabs.js";
 import { describeScripts, installScript, removeScript, scriptLogs, toggleScript, tryScript, updateScript } from "./tools/scripts.js";
 import { typeTicket } from "./tools/ticket.js";
+import { MEDIA_TOOLS } from "./tools/media-tools.js";
 import { SOURCE_LIMIT } from "./scripts/header.js";
 
 /* The peer MCP server dispatches the connected browser's tool surface. */
@@ -82,7 +84,7 @@ const TOOLS: readonly McpTool<SandboxKey>[] = [
     tool({
         name: "click",
         description:
-            "Click an element by its [e…] reference. Answers with the page as it stands afterwards. On a page that deals in passwords, money or deletion, the person is asked in their own browser first.",
+            "Click an element by its [e…] reference. Answers with what happened and the page as it stands afterwards: if the page moved to another address or loaded a new one (a Send that opens a new conversation), it says so and earlier references are stale. An answer starting UNKNOWN means the page gave no sign either way: read the page it shows before clicking again, or you may do it twice. On a page that deals in passwords, money or deletion, the person is asked in their own browser first.",
         effect: "destructive",
         input: object({ ref: required, tab }),
         run: async ({ ref, tab: id }, from) => textResult(await click(from, ref, id)),
@@ -90,7 +92,7 @@ const TOOLS: readonly McpTool<SandboxKey>[] = [
     tool({
         name: "fill",
         description:
-            "Type into a field by its [e…] reference: replaces what is there, and fires the events the page's own JavaScript listens for (setting a value without them is how a filled form submits empty). `submit` presses Enter afterwards, which is the half that gets confirmed.",
+            "Type into a field by its [e…] reference: replaces what is there, the way the page's own code hears typing or a paste, rich text editors included (a chat composer), then reads the field back. If the field does not hold the text afterwards it says so and nothing is submitted. `submit` presses Enter afterwards, which is the half that gets confirmed. Answers as click does, including UNKNOWN when the page gave no sign.",
         // Replaces what the field held, and `submit` sends the form.
         effect: "destructive",
         input: object({
@@ -103,7 +105,7 @@ const TOOLS: readonly McpTool<SandboxKey>[] = [
     }),
     tool({
         name: "select_option",
-        description: "Choose in a dropdown by its [e…] reference. Values match either the option's value or the label you can see in the snapshot.",
+        description: "Choose in a dropdown by its [e…] reference. Values match either the option's value or the label you can see in the snapshot. Answers as click does when the choice moves the page.",
         // Another choice undoes it; nothing typed is lost, unlike fill.
         effect: "write",
         input: object({ ref: required, values: array(required).min(1), tab }),
@@ -111,7 +113,7 @@ const TOOLS: readonly McpTool<SandboxKey>[] = [
     }),
     tool({
         name: "key",
-        description: 'Press a key for the page as a whole: "Enter", "Escape", "PageDown". For typing into a field use fill.',
+        description: 'Press a key for the page as a whole: "Enter", "Escape", "PageDown". For typing into a field use fill. Answers as click does: whether the page moved, or UNKNOWN when it gave no sign.',
         // Enter submits and Delete deletes, whatever has focus.
         effect: "destructive",
         input: object({ key: required, tab }),
@@ -132,19 +134,36 @@ const TOOLS: readonly McpTool<SandboxKey>[] = [
     tool({
         name: "wait_for",
         description:
-            "Wait for text to appear (or disappear) on the page, instead of guessing at a delay. This is what to use after a submit: wait for the thing you expect rather than snapshotting into a spinner.",
+            "Wait, in one call, until the page is the way you expect, instead of guessing at a delay or polling. Give any of: `text` to appear, `textGone` to disappear, `quietFor` seconds of the page not changing at all; every one you give must hold at the same moment. After a submit that starts something slow (an image or a video being generated, a long answer, an export), wait with `quietFor` of about 20 (a generating preview can pause for several seconds mid-way) and a long `seconds` (up to 540): it answers as soon as the page settles. Then snapshot, and if it is still generating, wait again. When you know what the finished page says, `text` or `textGone` is sharper. A long `seconds` costs nothing, since the call returns the moment the conditions hold. Answers with which conditions held and after how long, then the page; a timeout is an answer too, saying what was still not so and what kept changing, with the page as it stands.",
         effect: "read",
         input: object({
-            text: required.optional().describe("Wait until this appears."),
-            textGone: required.optional().describe("Wait until this disappears."),
-            seconds: number().int().min(1).max(60).default(15),
+            text: required.optional().describe("Wait until this text is on the page."),
+            textGone: required.optional().describe("Wait until this text is no longer on the page."),
+            quietFor: number()
+                .int()
+                .min(1)
+                .max(60)
+                .optional()
+                .describe(
+                    "Wait until the page has not changed for this many seconds: nothing added, removed, retyped or restyled. For a long job you have no text for. Your window sits behind the person's, so a page that changes only from animation frames looks still there: when the finished page has a marker, text or textGone is surer.",
+                ),
+            seconds: number()
+                .int()
+                .min(1)
+                .max(MAX_WAIT_SECONDS)
+                .default(15)
+                .describe(`The most to wait, up to ${MAX_WAIT_SECONDS} (9 minutes). Default 15. A job that takes minutes needs minutes here.`),
             tab,
-        }).refine((args) => args.text !== undefined || args.textGone !== undefined, {
-            error: `Say what to wait for: "text" for something to appear, "textGone" for something to disappear.`,
-            path: ["text"],
-        }),
-        run: async ({ text, textGone, seconds, tab: id }, from) =>
-            textResult(await waitFor(from, { ...(text === undefined ? {} : { text }), ...(textGone === undefined ? {} : { textGone }), seconds }, id)),
+        })
+            .refine((args) => args.text !== undefined || args.textGone !== undefined || args.quietFor !== undefined, {
+                error: `Say what to wait for: "text" to appear, "textGone" to disappear, or "quietFor" seconds of the page not changing.`,
+                path: ["text"],
+            })
+            .refine((args) => args.quietFor === undefined || args.quietFor < args.seconds, {
+                error: `"quietFor" must be shorter than "seconds", or the page could never be still for long enough within the wait: raise "seconds" (up to ${MAX_WAIT_SECONDS}).`,
+                path: ["quietFor"],
+            }),
+        run: async ({ text, textGone, quietFor, seconds, tab: id }, from) => textResult(await waitFor(from, { text, textGone, quietFor, seconds }, id)),
     }),
     tool({
         name: "screenshot",
@@ -262,6 +281,8 @@ const TOOLS: readonly McpTool<SandboxKey>[] = [
             return { ...textResult(`Typed the secret into the focused ${typed.field} field on ${typed.host}.`), structuredContent: { host: typed.host, field: typed.field } };
         },
     }),
+    ...KIT_TOOLS,
+    ...MEDIA_TOOLS,
 ];
 
 // One MCP server per sandbox, only so the activity list can say whose agent made each call: the audit hook is told the

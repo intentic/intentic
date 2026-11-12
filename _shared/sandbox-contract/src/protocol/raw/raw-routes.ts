@@ -45,6 +45,9 @@ export const RAW_ROUTES = {
     // A previewed web page and the files it names, loaded by a frame, which sends no header: the ticket is the path's
     // first segment, so the page's relative addresses carry it, and it is checked in the handler.
     "GET /workspace/preview/{ticket}/*": { auth: "door", guest: true },
+    // A shown page's video or audio, streamed in ranges to a player inside the page's sealed frame, which sends no header:
+    // the ticket (pages.mediaTicket) is checked in the handler, against the files the page named when it was shown.
+    "GET /pages/media/{ticket}/{index}": { auth: "door", guest: true, lane: "bulk" },
     // An attachment is part of the message it rides with; any other target edits the shared tree.
     "POST /workspace/upload": { floor: "writer", attachmentFloor: "collaborator", lane: "bulk" },
     "POST /workspace/upload-diff": {},
@@ -260,6 +263,10 @@ export const RAW_ROUTES = {
     // for this browser and one host, handed back on the browser's own request rather than over the tool socket.
     "POST /system/webext/secret": { auth: "door", control: "never" },
     "POST /system/webext/grants-changed": { auth: "door", control: "never" },
+    // A picture, video or file the agent saved from a page in that browser, as the raw body, onto the artifacts shelf;
+    // and one shelf file going the other way, for a ticket the daemon added to the agent's `upload_file` call.
+    "POST /system/webext/media": { auth: "door", control: "never", lane: "bulk" },
+    "POST /system/webext/file": { auth: "door", control: "never", lane: "bulk" },
     // This sandbox's keyring keys (schemas/keyring.ts), public halves only: a keyring fetches them here over TLS, from the
     // sandbox's own address, before it shares anything with it, rather than take them from whoever relays the share.
     "GET /keyring/keys": { auth: "door", control: "never" },

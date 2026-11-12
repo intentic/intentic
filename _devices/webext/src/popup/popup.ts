@@ -5,6 +5,7 @@ import { originPattern, sandboxOwnOrigin, siteOf } from "../background/policy.js
 import { DEFAULT_SETTINGS } from "../background/settings.js";
 import type { ActivityEntry, Asking, PendingAccess } from "../background/store.js";
 import { button, byId, favicon, h, icon, type IconName, say, send, show } from "./dom.js";
+import { renderDownloads } from "./downloads-section.js";
 import { renderPasswords } from "./passwords-section.js";
 import { renderScripts, scriptRequestCard } from "./scripts-section.js";
 import { agentOf, listed, pairSandbox, renderSandboxes, sandboxLabel, wirePasteForm, wireSandboxes } from "./sandboxes-section.js";
@@ -487,6 +488,7 @@ const draw = async (): Promise<void> => {
         renderSites(state, here);
         renderScripts(state, refresh);
         renderWorkspace(state, refresh);
+        renderDownloads(state);
         renderSandboxes(state, refresh);
         renderActivity(state);
         renderFooter(state);

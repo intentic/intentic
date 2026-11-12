@@ -8,6 +8,12 @@ import { initializeResult, readPageAsk, themeMessage } from "./pageBridge";
 const rpc = (method: string, params: unknown, id?: string | number) => ({ jsonrpc: `2.0`, method, params, ...(id === undefined ? {} : { id }) });
 
 describe(`readPageAsk`, () => {
+    it(`reads the notices that carry only their name: the handshake's end, and a player that failed`, () => {
+        expect(readPageAsk(rpc(PAGE_BRIDGE.initialized, {}))).toEqual({ kind: `initialized` });
+        expect(readPageAsk(rpc(PAGE_BRIDGE.mediaError, {}))).toEqual({ kind: `mediaError` });
+        expect(readPageAsk(rpc(`intentic/unknown`, {}))).toBeUndefined();
+    });
+
     it(`reads the link guide's asks: a workspace file, an address, and nothing for the pointer`, () => {
         expect(readPageAsk({ intenticHtmlPreview: { open: `docs/a.md` } })).toEqual({ kind: `openFile`, path: `docs/a.md` });
         expect(readPageAsk({ intenticHtmlPreview: { href: `https://example.com` } })).toEqual({ kind: `openLink`, id: undefined, url: `https://example.com` });

@@ -128,3 +128,19 @@ export type WebExtSecretRequest = z.infer<typeof WebExtSecretRequestSchema>;
 // not, which reaches the agent as the tool's refusal.
 export const WebExtSecretAnswerSchema = union([object({ ok: literal(true), value: string() }), object({ ok: literal(false), message: string() })]);
 export type WebExtSecretAnswer = z.infer<typeof WebExtSecretAnswerSchema>;
+
+// What the sandbox answers a stored picture, video or file (webextMediaUrl): where it now is, as the agent reads it,
+// with its size and type; or the sentence why it was not stored, which reaches the agent as the tool's refusal.
+export const WebExtMediaAnswerSchema = union([
+    object({ ok: literal(true), path: string(), bytes: number(), mimeType: string() }),
+    object({ ok: literal(false), message: string() }),
+]);
+export type WebExtMediaAnswer = z.infer<typeof WebExtMediaAnswerSchema>;
+
+// The extension collecting a sandbox file for a page's file input (webextFileUrl): the ticket the daemon added to the
+// `upload_file` call, and nothing else. The bytes come back as the answer's body, the file's name in its
+// `x-intentic-name` header; a refusal comes back as `{ ok: false, message }`.
+export const WebExtFileRequestSchema = object({ ticket: string().min(1) });
+export type WebExtFileRequest = z.infer<typeof WebExtFileRequestSchema>;
+export const WebExtFileRefusalSchema = object({ ok: literal(false), message: string() });
+export type WebExtFileRefusal = z.infer<typeof WebExtFileRefusalSchema>;

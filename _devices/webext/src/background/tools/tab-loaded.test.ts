@@ -1,4 +1,4 @@
-import { untilTabLoaded } from "./tab-loaded.js";
+import { untilTabLoaded, untilTabSettled } from "./tab-loaded.js";
 
 /* `open` reads the page back once the tab says it has loaded, rather than after a fixed 600 ms that on a slow site read
    the page before it arrived (2026-10-20). Chrome's tab events are driven by hand. */
@@ -34,4 +34,28 @@ test("a page that never completes is read as it stands at the cap", async () => 
     const chrome = fakeChrome();
     expect(await untilTabLoaded(7, 30)).toBe(false);
     expect(chrome.listeners.size).toBe(0);
+});
+
+// After an action the tab may be loading a page the action started, or not navigating at all.
+test("a tab that is not loading has settled at once, and a loading one when it completes", async () => {
+    const events = fakeChrome();
+    const statuses = new Map([
+        [7, "complete"],
+        [8, "loading"],
+    ]);
+    Object.assign(chrome.tabs, { get: async (id: number) => ({ id, status: statuses.get(id) }) });
+    expect(await untilTabSettled(7, 5_000)).toBe(true);
+    expect(events.listeners.size).toBe(0);
+
+    let settled: boolean | undefined;
+    const waiting = untilTabSettled(8, 5_000).then((value) => {
+        settled = value;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBeUndefined();
+    events.update(8, { status: "complete" });
+    await waiting;
+    expect(settled).toBe(true);
+    expect(events.listeners.size).toBe(0);
 });

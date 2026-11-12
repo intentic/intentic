@@ -32,6 +32,7 @@ import { harnessAccounts, harnessServers, type HarnessServersDeps, turnSecretAcc
 import { surroundingsNote } from "../../prompt/surroundings.js";
 import { claudeCodeRuntime } from "../../prompt/guidance.js";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
+import { pageMediaKeyPath } from "../../pages/page-media.js";
 
 // The Claude Code loop's own arm: the request no single provider owns, built for native Claude and every provider routed
 // through the harness. Everything it reads of the daemon is named in HarnessPlanDeps; the planner never imports it.
@@ -183,6 +184,14 @@ const surroundingsOf = (
           )
         : undefined;
 
+// Where the page tools file what they show, the key their media manifests are signed under, and the connected MCP
+// servers whose apps are drawn in the chat (agent/pages/).
+const pagesPlan = (deps: HarnessPlanDeps, granted: readonly Capability[]) => ({
+    workspaceRoot: deps.workspace.root,
+    mediaKey: pageMediaKeyPath(deps.config.historyRoot),
+    apps: mcpToolsOf(granted),
+});
+
 // The Claude Code harness: a native Claude turn's subscription OAuth (with mid-turn refresh) or the translator endpoint a
 // routed provider rides. Credentials resolve through harness-credentials.ts; its refusals become the connect-gate's error.
 export const planHarnessTurn = async (
@@ -245,7 +254,7 @@ export const planHarnessTurn = async (
         ...shellTools(deps, settings),
         outputLogsDir: join(deps.config.historyRoot, "logs"),
         // Pages drawn in the chat, unless the owner switched them off; a turn nobody watches still may, its card waiting.
-        ...(settings.chatPages ? { pages: { workspaceRoot: deps.workspace.root, apps: mcpToolsOf(granted) } } : {}),
+        ...(settings.chatPages ? { pages: pagesPlan(deps, granted) } : {}),
         // Every stored credential masked to its reference in tool results, unconditional since this isn't a saving worth
         // trading away.
         secrets,

@@ -6,6 +6,7 @@ import { declinedMessage, originPattern, RefusedError, siteOf } from "../policy.
 import { kept } from "../scripts/kept.js";
 import { availability, unavailableMessage } from "../scripts/runtime.js";
 import { DECLINE_HOLD_MS, type SandboxKey, store } from "../store.js";
+import { downloadsLine } from "./media-downloads.js";
 import { currentGrants } from "./tab-access.js";
 
 // Who this browser is, what it may touch, and how the agent asks for more. `chrome.permissions.request` only
@@ -123,7 +124,7 @@ const scriptsLine = async (from: SandboxKey): Promise<string> => {
 };
 
 export const describeAccess = async (from: SandboxKey): Promise<string> => {
-    const [facts, own, scripts] = await Promise.all([browserFacts(), ownWindow(), scriptsLine(from)]);
+    const [facts, own, scripts, downloads] = await Promise.all([browserFacts(), ownWindow(), scriptsLine(from), downloadsLine()]);
     const lines = facts.grants.map((grant) => `  ${siteOf(grant.origin)} — ${grant.mode === "act" ? "read and act" : "read only"}`);
     return [
         `${facts.browser}, ${facts.tabs} tab${facts.tabs === 1 ? "" : "s"} open.`,
@@ -135,6 +136,7 @@ export const describeAccess = async (from: SandboxKey): Promise<string> => {
         facts.grants.length === 0 ? `You are not allowed on any site yet. Use ask_access to ask for one.` : `Sites you may work on:`,
         ...lines,
         scripts,
+        downloads,
     ]
         .filter((line) => line !== ``)
         .join("\n");

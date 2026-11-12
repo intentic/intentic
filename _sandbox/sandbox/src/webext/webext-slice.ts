@@ -4,6 +4,7 @@ import type { CompositionCore } from "../composition.js";
 import { createPeerHub, type PeerDoorDeps } from "../peers/peer-hub.js";
 import { defineSlice } from "../seams/slice.js";
 import { filePeerStore } from "../peers/peer-store.js";
+import { createFileTickets, type FileTicketDesk } from "./file-tickets.js";
 import { createSecretTickets, type SecretTicketDesk } from "./secret-tickets.js";
 import {
     ownBrowserReach,
@@ -25,6 +26,9 @@ export interface WebextSlice {
     // A stored secret typed into one of those browsers without the agent seeing it: `typeIn` for the turn's tool, and
     // the half the browser's own door redeems its ticket through (secret-tickets.ts).
     readonly secretTickets: SecretTicketDesk;
+    // A shelf file put into a page's file input in one of those browsers: tickets added to the agent's `upload_file`
+    // calls on their way, and redeemed at the browser's own door (file-tickets.ts).
+    readonly fileTickets: FileTicketDesk;
 }
 
 // Builds the webext slice; its reach reads only the hub it builds, so nothing here waits on the rest of the daemon.
@@ -37,6 +41,7 @@ const createWebextSlice = ({ historyRoot, logger, peerTools }: PeerDoorDeps): We
         webextReach: (granted) => ownBrowserReach({ webextHub }, granted),
         // Approval cards included, a typing waits as long as any other call to the browser may.
         secretTickets: createSecretTickets({ hub: webextHub, callTimeoutMs: WEBEXT_PEER.hub.callTimeoutMs }),
+        fileTickets: createFileTickets(),
     };
 };
 

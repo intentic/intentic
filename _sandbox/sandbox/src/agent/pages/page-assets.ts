@@ -3,11 +3,17 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { readCappedBytes } from "@intentic/base/capped-read";
 import { isInside } from "@intentic/base/contained";
+import { withoutPageMedia } from "@intentic/sandbox-contract/text/pages";
+import { type MediaTally, mediaRecorder, STREAMED_EXTENSIONS } from "./page-media.js";
 
 // A page carries everything it shows inside itself, since the chat draws it in a frame that can reach nothing: the
 // pictures, stylesheets and scripts it names on disk are read in as data, and the ones it names on a well-known
 // library CDN are fetched here, once, at the moment it is shown. What could not be carried is reported back to the agent
 // by name, so a chart that will render blank is fixed before anyone sees it, not after.
+//
+// Video and audio are the exception: a take is tens of megabytes, far past what a page can hold. A file a `<video>`,
+// `<audio>` or `<source>` names on disk (or a script names by absolute path) is recorded instead, as it is right now, and
+// streamed to the reader's player from the sandbox (page-media.ts).
 
 const MIB = 1024 * 1024;
 // One file, read whole; a picture past this is left out rather than inflating a page into a transfer.
@@ -85,12 +91,17 @@ export interface PageCarryContext {
     readonly baseDir: string;
     // The folders a page may carry a file from; anything resolving outside them stays a dangling reference.
     readonly roots: readonly string[];
+    // The folders a page may stream video and audio from (page-media.ts); absent, it streams none.
+    readonly mediaRoots?: readonly string[];
+    // Where an absolute path the page names really is, for a turn whose files the daemon sees at another path (an
+    // isolated turn's checkout). Absent, a path is read as written.
+    readonly mapPath?: (path: string) => string;
     // Hosts fetched from besides the library CDNs: the ones an MCP server's app declares it loads its files from.
     readonly extraHosts?: ReadonlySet<string>;
     readonly fetch?: typeof fetch;
 }
 
-export interface CarriedPage {
+export interface CarriedPage extends MediaTally {
     readonly html: string;
     // Files on disk carried in, as the page named them.
     readonly files: readonly string[];
@@ -101,6 +112,28 @@ export interface CarriedPage {
     // Addresses left out: not on a library CDN, not https, or the fetch failed.
     readonly leftOut: readonly string[];
 }
+
+// What a reference names, read alike by what is carried and what is streamed: a file on disk, an address on the internet,
+// or something carried already (data:, a place in the page, another scheme).
+const locate = (ref: string, base: string | URL, context: Pick<PageCarryContext, "mapPath">): { readonly file: string } | { readonly url: URL } | undefined => {
+    const trimmed = ref.trim();
+    if (trimmed === "" || trimmed.startsWith("#") || /^(?:data|blob|about|javascript|mailto|tel):/i.test(trimmed)) {
+        return undefined;
+    }
+    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("//")) {
+        const url = URL.parse(trimmed.startsWith("//") ? `https:${trimmed}` : trimmed);
+        return url === null ? undefined : { url };
+    }
+    if (base instanceof URL) {
+        const url = URL.parse(trimmed, base);
+        return url === null ? undefined : { url };
+    }
+    if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+        return undefined;
+    }
+    const path = bareFile(trimmed);
+    return { file: isAbsolute(path) ? (context.mapPath?.(path) ?? path) : resolve(base, path) };
+};
 
 // One file read, and one fetch made, per page however often it is named; the budget is the page's.
 const carrierFor = (context: PageCarryContext) => {
@@ -172,28 +205,6 @@ const carrierFor = (context: PageCarryContext) => {
         return true;
     };
 
-    // What a reference names: a file on disk, an address on the internet, or something carried already (data:, a
-    // place in the page, another scheme).
-    const locate = (ref: string, base: string | URL): { readonly file: string } | { readonly url: URL } | undefined => {
-        const trimmed = ref.trim();
-        if (trimmed === "" || trimmed.startsWith("#") || /^(?:data|blob|about|javascript|mailto|tel):/i.test(trimmed)) {
-            return undefined;
-        }
-        if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("//")) {
-            const url = URL.parse(trimmed.startsWith("//") ? `https:${trimmed}` : trimmed);
-            return url === null ? undefined : { url };
-        }
-        if (base instanceof URL) {
-            const url = URL.parse(trimmed, base);
-            return url === null ? undefined : { url };
-        }
-        if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
-            return undefined;
-        }
-        const path = bareFile(trimmed);
-        return { file: isAbsolute(path) ? path : resolve(base, path) };
-    };
-
     // The bytes a reference names, carried and counted, or undefined (with the reason recorded) when they are not.
     const bytesOf = async (
         ref: string,
@@ -201,7 +212,7 @@ const carrierFor = (context: PageCarryContext) => {
         accept: (bytes: Uint8Array, name: string) => boolean,
         inline: boolean,
     ): Promise<{ readonly bytes: Uint8Array; readonly name: string; readonly base: string | URL } | undefined> => {
-        const target = locate(ref, base);
+        const target = locate(ref, base, context);
         if (target === undefined) {
             return undefined;
         }
@@ -261,6 +272,11 @@ const carrierFor = (context: PageCarryContext) => {
 };
 
 type Carrier = ReturnType<typeof carrierFor>;
+
+// A video or audio reference taken to stream (page-media.ts): what the page then holds in its place, absent where the
+// file was refused (and the reason recorded). Undefined for a reference that names no file on disk, which is carried, or
+// left out, like any other.
+type Streamer = (ref: string, base: string) => Promise<{ readonly ref?: string } | undefined>;
 
 // A font or picture fetched from an address whose path names no type (Google Fonts serves `…/s/inter/v13/abc`).
 const sniffedType = (bytes: Uint8Array): string | undefined => {
@@ -376,7 +392,7 @@ const carryStyles = async (html: string, base: string, carrier: Carrier): Promis
 
 // Pictures and media an element names by attribute; a `srcset` keeps only its first candidate, carried.
 const MEDIA_ATTRIBUTE = /(<(?:img|source|video|audio|track|input|image|use)\b[^>]*?\s(?:src|poster|href|xlink:href|srcset)\s*=\s*)(["'])([^"']*)\2/gi;
-const carryMedia = (html: string, base: string, carrier: Carrier): Promise<string> =>
+const carryMedia = (html: string, base: string, carrier: Carrier, streamed: Streamer): Promise<string> =>
     replaceAsync(html, MEDIA_ATTRIBUTE, async (match) => {
         const isSrcset = /\ssrcset\s*=\s*$/i.test(match[1] ?? "");
         const ref = isSrcset ? ((match[3] ?? "").trim().split(/\s+/, 1)[0]?.replace(/,$/, "") ?? "") : (match[3] ?? "");
@@ -384,8 +400,25 @@ const carryMedia = (html: string, base: string, carrier: Carrier): Promise<strin
         if (ref.startsWith("#")) {
             return match[0];
         }
-        const url = await carrier.dataUrl(ref, base);
+        // A player's own source streams when it names a file on disk; its poster is a picture, carried like any other, and an
+        // address on the internet is left out the way any other is.
+        const playerSource = /^<(?:video|audio|source)\b/i.test(match[1] ?? "") && /\ssrc\s*=\s*$/i.test(match[1] ?? "");
+        const streamedAs = playerSource ? await streamed(ref, base) : undefined;
+        const url = streamedAs === undefined ? await carrier.dataUrl(ref, base) : streamedAs.ref;
         return url === undefined ? match[0] : `${match[1]}${match[2]}${url}${match[2]}`;
+    });
+
+// A player asking for CORS would send its request with the frame's opaque origin, which the sandbox refuses; without the
+// attribute it plays, and only a canvas reading its frames is barred.
+const PLAYER_TAG = /<(?:video|audio)\b[^>]*>/gi;
+const withoutCorsPlayers = (html: string): string => html.replace(PLAYER_TAG, (tag) => withoutAttributes(tag, ["crossorigin"]));
+
+// An absolute video or audio path written anywhere as a whole quoted string: a script's list of takes it switches between.
+const ABSOLUTE_MEDIA = new RegExp(String.raw`(["'\x60])(/(?!/)[^"'\x60\r\n]{0,2048}?\.(?:${STREAMED_EXTENSIONS}))\1`, "gi");
+const carryMediaPaths = (html: string, streamed: Streamer): Promise<string> =>
+    replaceAsync(html, ABSOLUTE_MEDIA, async (match) => {
+        const ref = (await streamed(match[2] ?? "", "/"))?.ref;
+        return ref === undefined ? match[0] : `${match[1]}${ref}${match[1]}`;
     });
 
 // An absolute picture path written anywhere as a whole quoted string, a script's list of screenshots included.
@@ -399,12 +432,25 @@ const carryPicturePaths = (html: string, carrier: Carrier): Promise<string> =>
 // The page with everything it names carried inside it, and what could not be.
 export const carryPage = async (html: string, context: PageCarryContext): Promise<CarriedPage> => {
     const carrier = carrierFor(context);
+    const media = mediaRecorder(context.mediaRoots ?? []);
+    const streamed: Streamer = async (ref, base) => {
+        const target = locate(ref, base, context);
+        if (target === undefined || !("file" in target)) {
+            return undefined;
+        }
+        const recorded = await media.record(target.file, ref.trim());
+        return recorded === undefined ? {} : { ref: recorded };
+    };
     const base = context.baseDir;
-    // Scripts and sheets first: what they bring in is then read for its own references along with the page's.
-    let out = await carryScripts(html, base, carrier);
+    // Scripts and sheets first: what they bring in is then read for its own references along with the page's. A media
+    // manifest the page wrote itself is dropped, so only the one the daemon writes is ever read (page-store.ts).
+    let out = await carryScripts(withoutPageMedia(html), base, carrier);
     out = await carryLinks(out, base, carrier);
     out = await carryStyles(out, base, carrier);
-    out = await carryMedia(out, base, carrier);
+    out = await carryMedia(out, base, carrier, streamed);
     out = await carryPicturePaths(out, carrier);
-    return { html: out, ...carrier.tally() };
+    out = await carryMediaPaths(out, streamed);
+    // Once more over what carrying brought in: a script or sheet read from disk could hold a manifest of its own too.
+    out = withoutCorsPlayers(withoutPageMedia(out));
+    return { html: out, ...carrier.tally(), ...media.tally() };
 };

@@ -22,6 +22,8 @@ export type PageAsk =
     | { readonly kind: "message"; readonly id: string | number; readonly text: string }
     // An uncaught error in the page's own scripts, for the agent that showed it and the reader's line under it.
     | { readonly kind: "error"; readonly message: string }
+    // One of the page's own players failed to load its video or audio.
+    | { readonly kind: "mediaError" }
     // An `ask_page` page's answer, as JSON text, or a refusal when it is too large to be one.
     | { readonly kind: "submit"; readonly id: string | number; readonly value: string }
     | { readonly kind: "oversize"; readonly id: string | number }
@@ -48,6 +50,12 @@ const messageText = (params: Record<string, unknown>): string | undefined => {
 };
 
 const httpUrl = (value: unknown): string | undefined => (typeof value === `string` && /^https?:\/\//i.test(value) ? value : undefined);
+
+// Notices that carry nothing but their name, read as they are.
+const BARE_NOTICES: ReadonlyMap<string, PageAsk> = new Map<string, PageAsk>([
+    [PAGE_BRIDGE.initialized, { kind: `initialized` }],
+    [PAGE_BRIDGE.mediaError, { kind: `mediaError` }],
+]);
 
 // One message, as the ask it is, or undefined for anything that is not one.
 export const readPageAsk = (data: unknown): PageAsk | undefined => {
@@ -79,8 +87,6 @@ export const readPageAsk = (data: unknown): PageAsk | undefined => {
             const text = messageText(params);
             return isId(id) && text !== undefined ? { kind: `message`, id, text } : undefined;
         }
-        case PAGE_BRIDGE.initialized:
-            return { kind: `initialized` };
         case PAGE_BRIDGE.error: {
             const message = params[`message`];
             return typeof message === `string` && message.trim() !== `` ? { kind: `error`, message: message.trim().slice(0, PAGE_ERROR_CHARS) } : undefined;
@@ -105,7 +111,7 @@ export const readPageAsk = (data: unknown): PageAsk | undefined => {
             return value.length > PAGE_VALUE_MAX ? { kind: `oversize`, id } : { kind: `submit`, id, value };
         }
         default:
-            return undefined;
+            return BARE_NOTICES.get(data[`method`]);
     }
 };
 

@@ -6,7 +6,13 @@ import {
     mcpAppDataScript,
     PAGE_FALLBACK_THEMES,
     PAGE_THEME_VARIABLES,
+    pageMediaScript,
+    pageMediaSigned,
     pageThemeCss,
+    placePageMedia,
+    readPageMedia,
+    sealedPagePolicy,
+    withoutPageMedia,
     publishedPage,
     readMcpAppData,
     sealedPage,
@@ -158,5 +164,57 @@ describe("sizedFirst", () => {
         const literal = /var page=(".*?"),done=/.exec(shell)?.[1];
         expect(literal).toBeDefined();
         expect(JSON.parse(literal!)).toBe(page);
+    });
+});
+
+describe("a page's streamed media", () => {
+    const TAKE = { path: "/work/shots/take1.mp4", type: "video/mp4", size: 12_000_000, mtimeMs: 1_731_400_000_000.25 };
+    const ADDRESS = "https://sandbox.example/pages/media/T0k3n_-x/0";
+
+    it("opens media-src to exactly the addresses named, and nothing else to anything", () => {
+        const policy = sealedPagePolicy([ADDRESS]);
+        const directives = Object.fromEntries(policy.split("; ").map((directive) => [directive.split(" ")[0], directive]));
+        expect(directives["media-src"]).toBe(`media-src data: blob: ${ADDRESS}`);
+        expect(directives["default-src"]).toBe(`default-src 'none'`);
+        expect(directives["connect-src"]).toBe(`connect-src data: blob:`);
+        expect(directives["img-src"]).toBe(`img-src data: blob:`);
+        expect(policy.split(ADDRESS).length).toBe(2);
+        expect(sealedPagePolicy()).toBe(SEALED_PAGE_POLICY);
+        expect(SEALED_PAGE_POLICY).toContain(`media-src data: blob:;`);
+    });
+
+    it("leaves out an address that could break out of its source expression", () => {
+        const policy = sealedPagePolicy([`https://bad.example/a; script-src *`, `https://bad.example/b c`, `javascript:alert(1)`, ADDRESS]);
+        expect(policy).not.toContain(`script-src *`);
+        expect(policy).not.toContain(`bad.example`);
+        expect(policy).toContain(ADDRESS);
+    });
+
+    it("reads back the manifest the daemon wrote, and none the page wrote itself once it is dropped", () => {
+        const stored = standalonePage(intoHead(`<video src="intentic-media:0"></video>`, pageMediaScript({ files: [TAKE], signature: `sig` })));
+        expect(readPageMedia(stored)).toEqual({ files: [TAKE], signature: `sig` });
+        expect(readPageMedia(`<p>no media</p>`)).toBeUndefined();
+        const written = `<script type="application/json" id="intentic-page-media"><script type="application/json" id="intentic-page-media">[]</script>`;
+        expect(withoutPageMedia(written)).not.toContain(`id="intentic-page-media"`);
+    });
+
+    it("publishes a page without its manifest, so a share never carries the sandbox's paths", () => {
+        const stored = standalonePage(intoHead(`<video src="intentic-media:0"></video>`, pageMediaScript({ files: [TAKE], signature: `sig` })));
+        const published = publishedPage(stored);
+        expect(published).not.toContain(TAKE.path);
+        expect(readPageMedia(published)).toBeUndefined();
+        expect(published).toContain(`<video src="intentic-media:0"></video>`);
+    });
+
+    it("signs over the page and every field of every file, so neither can move without the signature failing", () => {
+        const signed = pageMediaSigned(`pages/c1/a.r0.html`, [TAKE]);
+        expect(pageMediaSigned(`pages/c2/a.r0.html`, [TAKE])).not.toBe(signed);
+        expect(pageMediaSigned(`pages/c1/a.r0.html`, [{ ...TAKE, mtimeMs: TAKE.mtimeMs + 1 }])).not.toBe(signed);
+        expect(pageMediaSigned(`pages/c1/a.r0.html`, [{ mtimeMs: TAKE.mtimeMs, size: TAKE.size, type: TAKE.type, path: TAKE.path }])).toBe(signed);
+    });
+
+    it("swaps each reference the manifest numbers for its address, leaving one past it alone", () => {
+        const html = `<video src="intentic-media:0"></video><script>const t=["intentic-media:0","intentic-media:1"]</script>`;
+        expect(placePageMedia(html, 1, (index) => `https://s/${index}`)).toBe(`<video src="https://s/0"></video><script>const t=["https://s/0","intentic-media:1"]</script>`);
     });
 });

@@ -90,10 +90,13 @@ declare namespace chrome {
             url?: string;
             title?: string;
             status?: string;
+            // Unloaded by the browser to save memory; its page comes back only when it is shown or reloaded.
+            discarded?: boolean;
         }
         function query(query: { active?: boolean; currentWindow?: boolean; windowId?: number }): Promise<Tab[]>;
         function get(tabId: number): Promise<Tab>;
-        function update(tabId: number, properties: { url?: string; active?: boolean }): Promise<Tab>;
+        // `autoDiscardable: false` keeps a tab whose page holds state the site cannot load back (a site kit's temporary chat).
+        function update(tabId: number, properties: { url?: string; active?: boolean; autoDiscardable?: boolean }): Promise<Tab>;
         function create(properties: { url?: string; active?: boolean; windowId?: number }): Promise<Tab>;
         function captureVisibleTab(windowId: number, options: { format: "png" | "jpeg"; quality?: number }): Promise<string>;
         // Needed after a session is written into this browser's cookie store: a page already open is still

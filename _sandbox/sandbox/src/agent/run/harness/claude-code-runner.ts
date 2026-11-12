@@ -668,6 +668,7 @@ const askServer = (
                 ? undefined
                 : {
                       workspaceRoot: request.tools.pages.workspaceRoot,
+                      mediaKey: request.tools.pages.mediaKey,
                       cwd: request.spec.cwd,
                       placement: request.spec.isolation?.plan,
                       ...(request.spec.conversationId === undefined ? {} : { conversationId: request.spec.conversationId }),

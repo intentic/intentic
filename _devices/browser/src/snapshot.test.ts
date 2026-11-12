@@ -31,6 +31,24 @@ test("a page renders as its identity and then things to act on", () => {
     expect(rendered).toContain(`[e1] textbox "Search mail" = "invoice"`);
 });
 
+// The browser extension lists pictures and videos with their size (webext's collectPage), so a tool that saves one has a
+// ref to aim at; the size follows the name, and an element without one renders as before.
+test("a picture renders with its size after its name", () => {
+    const rendered = renderPage({
+        url: "https://chatgpt.com/c/1",
+        title: "Chat",
+        elements: [
+            { ref: "e129", role: "img", name: "Generated image 1", size: "1672×941" },
+            { ref: "e130", role: "video", name: "", size: "1920×1080" },
+            { ref: "e131", role: "button", name: "Copy image", size: "" },
+        ],
+    });
+    expect(rendered).toContain(`[e129] img "Generated image 1" 1672×941`);
+    expect(rendered).toContain(`[e130] video 1920×1080`);
+    expect(rendered).toContain(`[e131] button "Copy image"\n`.trimEnd());
+    expect(rendered).not.toContain(`"Copy image" `);
+});
+
 test("a page with nothing to act on says so instead of listing nothing", () => {
     const rendered = renderPage({ url: "https://example.com/report.pdf", title: "Report", elements: [] });
     expect(rendered).toMatch(/Nothing on this page can be clicked/);

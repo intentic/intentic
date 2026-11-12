@@ -459,6 +459,11 @@ export const cursorCustomTools = (
 
 // Every remote mount as an http server, the same list every runtime projects. The daemon's in-process SDK servers have
 // no Cursor projection: the gap behind mcp:"tools", not "full".
+// How long Cursor's MCP client waits on one call: 60 s, and neither its configuration nor @cursor/sdk has a field for a
+// longer one, so cursorMcpServers drops a mount's timeoutMs. The turn's lease carries it instead, and a peer that would
+// run past it shortens or refuses the call with words for the agent (webext/webext-client-ceiling.ts).
+export const CURSOR_MCP_CALL_CEILING_MS = 60_000;
+
 export const cursorMcpServers = (request: AgentRequest): Record<string, CursorMcpServer> =>
     Object.fromEntries(
         (request.tools.remote ?? []).map((tool) => [

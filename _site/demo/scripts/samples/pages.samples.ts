@@ -6,5 +6,6 @@ const PAGE = `${STATE_DIR}/records/artifacts/pages/cnv_priya_payouts/7c1e9a2b4f.
 
 export const pagesSamples: GroupSamples<`pages`> = () => ({
     appCall: { page: PAGE, name: `list_payouts` },
+    mediaTicket: { page: PAGE },
     reportErrors: { page: PAGE, errors: [`TypeError: rows is undefined\n    at draw (page.js:12:5)`] },
 });

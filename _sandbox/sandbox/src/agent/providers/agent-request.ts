@@ -213,6 +213,8 @@ export interface TurnTools {
     // them off (settings `chatPages`), so neither the tools nor the guidance that names them reach the turn.
     readonly pages?: {
         readonly workspaceRoot: string;
+        // The key file a page's media manifest is signed under (agent/pages/page-media.ts `pageMediaKeyPath`).
+        readonly mediaKey: string;
         // The owner's connected MCP servers whose apps (`ui://` resources) are drawn in the chat when the agent calls their
         // tools (agent/pages/mcp-apps.ts); absent or empty, none is.
         readonly apps?: readonly AgentTool[];

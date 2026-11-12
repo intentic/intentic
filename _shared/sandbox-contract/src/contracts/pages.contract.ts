@@ -4,8 +4,8 @@ import { PAGE_ERROR_CHARS, PAGE_ERRORS_MAX } from "../text/pages.js";
 
 // Pages the agent showed in a chat. The pages themselves are files the workspace already serves; the routes here are
 // what an MCP server's app asks of its server while a reader uses it (`tools/call` over the bridge), carried by the
-// daemon since the app's frame reaches no network of its own, and what a page's own scripts threw as it drew, carried
-// back to the agent that showed it.
+// daemon since the app's frame reaches no network of its own, what a page's own scripts threw as it drew, carried
+// back to the agent that showed it, and the ticket a page's video and audio stream with.
 export const PageAppCallSchema = z.object({
     page: z.string().min(1).describe("The stored page the app is drawn from, as a workspace path; it names the server and the tool the app belongs to."),
     name: z.string().min(1).describe("The tool the app asks to call, on its own server."),
@@ -37,6 +37,18 @@ export const PageErrorsResultSchema = z.object({
         ),
 });
 
+export const PageMediaTicketQuerySchema = z.object({
+    page: z.string().min(1).describe("The stored page whose video and audio the ticket covers, as a workspace path."),
+});
+export const PageMediaTicketSchema = z.object({
+    ticket: z
+        .string()
+        .describe(
+            "Put it in the page's media addresses, GET /pages/media/{ticket}/{index}. It buys exactly the files the page named when it was shown, each only while it is unchanged.",
+        ),
+    expiresAt: z.number().describe("When it stops working, in milliseconds, so a player can tell a dead ticket from a dead file."),
+});
+
 export const pagesContract = {
     appCall: procedure
         .route({
@@ -58,4 +70,17 @@ export const pagesContract = {
         })
         .input(PageErrorsSchema)
         .output(PageErrorsResultSchema),
+    // Mints the ticket GET /pages/media/{ticket}/{index} (a plain byte-range route a <video> talks to) requires.
+    mediaTicket: procedure
+        .route({
+            method: "POST",
+            path: "/pages/media-ticket",
+            summary: "Get a pass for playing a shown page's video and audio",
+            description:
+                "Mints the short-lived ticket a shown page's video and audio elements stream with, since a player cannot carry an ordinary header. It covers only the files that page named when the agent showed it, and each only while it is still the file that was shown: one overwritten or removed since is refused rather than played in its place.",
+        })
+        // Playing a page's media is reading the page, and the ticket is narrower than the bearer.
+        .meta({ floor: "viewer", guest: true })
+        .input(PageMediaTicketQuerySchema)
+        .output(PageMediaTicketSchema),
 };

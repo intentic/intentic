@@ -35,6 +35,7 @@ import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 import type { Services } from "../../composition.js";
 import { conversationProfile } from "../../conversations/registry/agents-store.js";
 import { deliverWake } from "../../seams/wake-delivery.js";
+import { pageMediaKeyPath } from "../../agent/pages/page-media.js";
 
 // The daemon's own tools for a runtime that is not the Claude Code loop: the same servers that loop mounts in-process
 // (harness-servers.ts, agent.ts), built for this turn, held to the same persona decisions, and served through the MCP door
@@ -141,6 +142,7 @@ const doorUiServer = (deps: DaemonServersDeps, turn: DaemonServersTurn, relay: T
         pages: turn.settings.chatPages
             ? {
                   workspaceRoot: turn.context.base.tools.pages?.workspaceRoot ?? spec.cwd,
+                  mediaKey: turn.context.base.tools.pages?.mediaKey ?? pageMediaKeyPath(deps.config.historyRoot),
                   cwd: spec.cwd,
                   placement: spec.isolation?.plan,
                   conversationId: spec.conversationId,
@@ -187,6 +189,8 @@ const terminalServer = (turn: DaemonServersTurn, relay: TurnRelay): McpSdkServer
  */
 export const daemonServersFor = (deps: DaemonServersDeps, turn: DaemonServersTurn): DaemonServers => {
     const relay = createTurnRelay();
+    // Every call the door forwards for this turn (a device's, a browser's) holds the watchdog as the daemon's own do.
+    turn.mounted.lease.holdWith(relay.hold);
     const { input, context, granted } = turn;
     const signal = context.base.signal;
     const secrets = context.base.tools.secrets ?? turnSecretAccess(deps, input, signal);

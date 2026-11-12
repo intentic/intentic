@@ -233,7 +233,12 @@ const ENTRIES: readonly GuidanceEntry[] = [
             `${toolName(facts, "ui", "show_page")}: a self-contained HTML page drawn inline in the chat, in the chat's own theme. Do not wait ` +
             "to be asked. Use the lightest form that carries it: a Markdown table for a few rows, a ```mermaid block for a " +
             "small static diagram (the chat draws both), a page for data you plot, many rows, a layout to look at, or " +
-            "anything to interact with. When the answer you need is easier to give on a page than by picking an option " +
+            "anything to interact with. A video or audio file you made plays on a page at full quality: name it on disk in " +
+            '<video src="/abs/path/take1.mp4" controls> (or <audio>), and the reader plays, seeks and compares takes. Render ' +
+            "it inside the workspace or your own checkout (.intentic/records/artifacts/ suits), not /tmp, which a page " +
+            "cannot stream from; never re-encode it into the page or copy it to their computer to show it. When the " +
+            "answer you need is easier to " +
+            "give on a page than by picking an option " +
             `(choosing among mock-ups, tuning values, a short form), ask with ${toolName(facts, "ui", "ask_page")}, which waits for what the ` +
             "page sends back. Keep pages to what the reader acts on: no filler, no decoration. Numbers are ones you read, " +
             "never ones you made up; a mock-up's sample content is labelled as sample. Prose stays the default for anything " +

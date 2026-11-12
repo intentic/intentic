@@ -12,6 +12,9 @@ export interface PageElement {
     readonly name: string;
     // Current value, for anything that has one; absent otherwise.
     readonly value?: string | undefined;
+    // How big a picture, video or drawing is, "1672×941": its own pixels when it has loaded, else as drawn. Present only
+    // for media, so a file-saving tool has a ref to aim at and the agent can tell the picture from its thumbnail.
+    readonly size?: string | undefined;
 }
 
 export interface PageState {
@@ -32,7 +35,8 @@ export const renderPage = (page: PageState, truncated = false): string => {
     const rows = page.elements.map((element) => {
         const said = element.name === "" ? "" : ` "${element.name}"`;
         const holds = element.value === undefined || element.value === "" ? "" : ` = "${element.value}"`;
-        return `[${element.ref}] ${element.role}${said}${holds}`;
+        const size = element.size === undefined || element.size === "" ? "" : ` ${element.size}`;
+        return `[${element.ref}] ${element.role}${said}${holds}${size}`;
     });
     const note = truncated ? [`(only the first ${MAX_ELEMENTS} are listed, scroll or narrow the page to see more)`] : [];
     return [...header, "", ...rows, ...note].join("\n");

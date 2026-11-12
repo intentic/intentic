@@ -33,6 +33,7 @@ import { type CursorStore, fileCursorStore, readCursorCredentials } from "./acco
 import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";
 import { cursorReadiness } from "./cursor-readiness.js";
 import { cursorSdk } from "./cursor-sdk.js";
+import { CURSOR_MCP_CALL_CEILING_MS } from "./cursor-tools.js";
 import { type CursorAccountDeps, cursorAccountDoor } from "./accounts/cursor-accounts.js";
 import { cursorAccountForTurn } from "./cursor-usage.js";
 import { requireRootAgentExecution } from "../../workload/agent-execution.js";
@@ -120,6 +121,7 @@ export const planCursorTurn = async (
         anonymousBrowser: persona.powers.browser,
         shell: persona.powers.shell,
         extensions: persona.powers.extensions,
+        clientCeilingMs: CURSOR_MCP_CALL_CEILING_MS,
     });
     // The privacy shield reads this turn channel by channel (cursor-shield.ts); undefined when there is nothing to read
     // for. A policy that cannot be read refuses the turn, as the gateway refuses a request it cannot read the policy for.

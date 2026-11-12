@@ -8,7 +8,11 @@ export type JsdomOptions = {
     contentType?: string;
 };
 
-export type Jsdom = { readonly window: Window & typeof globalThis };
+export type Jsdom = {
+    readonly window: Window & typeof globalThis;
+    // Moves the document to another address without reloading it, for code that checks which site it is on.
+    readonly reconfigure: (settings: { readonly url?: string }) => void;
+};
 
 type JsdomConstructor = new (html?: string, options?: JsdomOptions) => Jsdom;
 

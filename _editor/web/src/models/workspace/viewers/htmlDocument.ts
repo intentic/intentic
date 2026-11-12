@@ -395,10 +395,10 @@ const markLinks = ({ doc, path }: Carrying): void => {
 
 // First in the head, so nothing the page carries is read before the policy that governs it. `extra` follows the seal,
 // still ahead of everything the page writes itself: a chat page's theme and bridge (chat/transcript/pages).
-const seal = (doc: Document, extra?: string): void => {
+const seal = (doc: Document, extra?: string, content = PREVIEW_POLICY): void => {
     const policy = doc.createElement(`meta`);
     policy.setAttribute(`http-equiv`, `Content-Security-Policy`);
-    policy.setAttribute(`content`, PREVIEW_POLICY);
+    policy.setAttribute(`content`, content);
     const referrer = doc.createElement(`meta`);
     referrer.setAttribute(`name`, `referrer`);
     referrer.setAttribute(`content`, `no-referrer`);
@@ -426,9 +426,10 @@ export const PreviewAskSchema = z.object({
     ]),
 });
 
-// The page at `path`, from its `source`, as one document for a sandboxed frame; `load` reads a file beside it, and
-// `extra` is markup to put right after the seal.
-export const buildPreviewDocument = async (source: string, path: string, load: AssetLoader, extra?: string): Promise<PreviewDocument> => {
+// The page at `path`, from its `source`, as one document for a sandboxed frame; `load` reads a file beside it, `extra` is
+// markup to put right after the seal, and `policy` stands in for the seal's own where a page may load a little more (a
+// chat page's own video and audio, sandbox-contract text/pages.ts `sealedPagePolicy`).
+export const buildPreviewDocument = async (source: string, path: string, load: AssetLoader, extra?: string, policy?: string): Promise<PreviewDocument> => {
     const doc = new DOMParser().parseFromString(source, `text/html`);
     const carrying: Carrying = { doc, path, carrier: carrierFor(load) };
     // A page's own base would move where its references point, and a refresh would take the frame elsewhere.
@@ -439,7 +440,7 @@ export const buildPreviewDocument = async (source: string, path: string, load: A
     // by which time the page's own styles have been listed, so no sheet is carried twice.
     await Promise.all([...carryLinks(carrying), ...carryScripts(carrying), ...carryStyles(carrying), ...carryMedia(carrying)]);
     markLinks(carrying);
-    seal(doc, extra);
+    seal(doc, extra, policy);
     // A page written without a doctype renders in quirks mode, and keeps doing so here.
     const doctype = doc.doctype === null ? `` : `<!DOCTYPE ${doc.doctype.name}>`;
     return { html: `${doctype}${doc.documentElement.outerHTML}`, ...carrying.carrier.tally() };

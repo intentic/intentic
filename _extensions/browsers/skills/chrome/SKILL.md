@@ -1,6 +1,6 @@
 ---
 name: chrome
-description: Use "${id}", the user's OWN signed-in browser, via its extension, on the sites they allow: for what needs THEIR session and no sandbox account covers (work SSO, a passkey, a bank, a datacentre-blocked site), or when they say "my browser". Not for a site with its own skill (X, Reddit…), not unattended.
+description: Use "${id}", the user's OWN signed-in browser, on the sites they allow: for what needs THEIR session and no sandbox account covers (work SSO, a passkey, a bank, a datacentre-blocked site, images from their ChatGPT), or when they say "my browser". Not for a site with its own skill (X, Reddit…), not unattended.
 ---
 
 ${tools}
@@ -38,8 +38,12 @@ This sandbox usually has two, and picking the wrong one wastes a turn:
 - **A user script reaches only its own sites and its `@connect` hosts.** Chrome blocks its requests and loads to any
   other host, whatever the page itself allows. An installed script runs from the next page load, so reload an open
   tab to see it.
-- **Downloads land in their Downloads folder, on their computer** — not in the sandbox. If a file is needed
-  here, say so: a connected computer (the `host` capability) can read it, or they can drag it into the app.
+- **Bring files in with `save_media`, not the site's Download button.** It saves an image, video or file from the
+  page into the sandbox and answers with the path. Prefer `ref`; `url` needs the site in read and act and keeps only
+  media, documents and downloads. A download that does start says where it went;
+  one that landed in their Downloads folder stays theirs. Never fetch it through a connected computer
+  (`run_command`, `docker cp`, a path into a container): that is a side door around this connection. Ask them to
+  drag it into the app instead. `upload_file` goes the other way, into a page's file input, after their yes.
 
 ## Etiquette that keeps this connection installed
 
@@ -66,3 +70,46 @@ It is the same browser their bank is open in. The habits that make this feel saf
 - **Stop and ask after two or three failed attempts.** A tool call that keeps erroring, an element that does
   not respond, a page that will not load, a task that turned out to involve more than it said: say what you
   tried and what went wrong, and ask how to proceed. Do not keep retrying the same failing action.
+
+## Generating images in their browser
+
+Use it when they ask, or when the image has to come from a service they pay for (their ChatGPT, Midjourney…) that
+the sandbox has no key for. Every image spends their plan's allowance. A local model or an API key the sandbox holds
+is unattended and leaves their account alone, so prefer those when the result is good enough. Before the first image,
+say how many you mean to make and where.
+
+**ChatGPT: `chatgpt_image`, one call per image.** It opens a temporary, unpersonalized chat, sends, waits (several
+minutes is normal), saves the image into the sandbox, and answers with the `chat`, the saved paths and whatever
+ChatGPT wrote. Pass that `chat` to the next call for the same style and world. Leave `personalized` off unless they
+ask: their memory and past chats steer the image (one person's game keyframe came back as a pastiche of a series
+they had chatted about). Read the text it answers with: a refusal means rewrite the prompt, never resend it as it
+was; a usage limit means stop and tell them when it resets; a question from ChatGPT gets a short answer in the same
+`chat`. An answer saying the prompt may already have gone means never send it again: `save_media` the image once it
+shows. chatgpt.com must be allowed in read and act. One call at a time, never in parallel.
+
+**By hand, on another site or when the kit fails or is missing:**
+1. On ChatGPT, `open` `https://chatgpt.com/?temporary-chat=true`, then set that chat's "Personalized" menu to
+   "Unpersonalized": a temporary chat still reads their memory until you do. Never change their settings or model.
+2. `fill` the prompt, then `click` Send. Read what each action answered. "The page then moved to …" means it went;
+   otherwise (a temporary chat often keeps its address) `snapshot` and look for your message before sending again,
+   since a blind retry spends a second image. If `fill` says the editor did not take the text, do not send.
+3. `wait_for` with `quietFor` (about 20) and `seconds` up to 540, then `snapshot`; if it is still generating, wait
+   again.
+4. Find the image's ref in the snapshot (images are listed with their size; take the large one) and `save_media` it
+   with a `name`.
+
+**Prompts that work:**
+- **One sentence, style first, then a single scene:** "A painterly stylised 3D animated film still with chunky
+  hand-painted textures: a lantern-lit timber harbour town at blue hour beneath a lighthouse glowing amber on the
+  cliff." Long, precise world descriptions flatten every style into the same image.
+- **One chat per style.** Later shots are short follow-ups in that chat: "Same style and world: low angle up the
+  cliff stair to the lighthouse, one child and a dog small on the steps for scale."
+- **Describe how things look, not what they are called.** A franchise's names and invented words (its magic system,
+  its warrior caste) pull the model toward that franchise, even when your project uses them too. Write "glowing
+  blue energy", not the term.
+- **Ask for the aspect ratio in the prompt** ("wide 16:9"). For frames that will be animated, a few separate
+  figures survive. Crowds and fast limbs smear.
+
+**Showing them:** show the saved files inline with `show_page`. Originals stay where they were saved in the
+sandbox; do not copy them onto their computer, since they open them from the app. End by saying how many
+generations you spent, refusals included.

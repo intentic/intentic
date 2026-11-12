@@ -34,7 +34,8 @@ flowchart LR
   `--disable-backgrounding-occluded-windows` and `--disable-renderer-backgrounding`, so a window behind the owner's
   own keeps drawing; no flag touches the GPU.
 - The `./page` entry point has no DOM or Node imports, so the [browser extension](../webext) renders pages with
-  the same `renderPage`.
+  the same `renderPage`. An element may carry a `size` ("1672×941"), which the extension sets on the pictures and videos
+  it lists so its `save_media` has a ref to aim at; this package's own snapshot lists none.
 
 ## Key files
 

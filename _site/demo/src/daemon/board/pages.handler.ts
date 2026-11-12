@@ -26,6 +26,8 @@ export const pagesDoors = {
         const app = readMcpAppData(html);
         return refuse(app === undefined ? `"${page}" is not an MCP server's app` : `${app.server} is no longer connected`);
     },
+    // No page in this recording names video or audio on disk: the daemon's own refusal for a page that streams none.
+    mediaTicket: ({ page }) => refuse(`"${page}" is not a shown page that plays video or audio`),
     // Heard when the turn that showed the page is still running and has not been told about this drawing yet.
     reportErrors: ({ page }) => {
         const conversation = conversationOf(page);

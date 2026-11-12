@@ -22,3 +22,31 @@ export const untilTabLoaded = async (tabId: number, capMs: number = OPEN_LOAD_CA
         const cap = setTimeout(() => finish(false), capMs);
         chrome.tabs.onUpdated.addListener(onUpdated);
     });
+
+// Whether a tab that may or may not be navigating has settled, for reading it back after an action. Unlike
+// untilTabLoaded, which follows a navigation the caller just asked for, an action may have started one or not: a tab
+// that is not loading has nothing to wait for, so this answers at once. It listens before it looks, so a complete
+// that comes between the look and the listening is not missed.
+export const untilTabSettled = async (tabId: number, capMs: number = OPEN_LOAD_CAP_MS): Promise<boolean> => {
+    let finish: (loaded: boolean) => void = () => undefined;
+    const settled = new Promise<boolean>((resolve) => {
+        const onUpdated = (id: number, change: { status?: string }): void => {
+            if (id === tabId && change.status === "complete") {
+                finish(true);
+            }
+        };
+        const cap = setTimeout(() => finish(false), capMs);
+        finish = (loaded: boolean): void => {
+            clearTimeout(cap);
+            chrome.tabs.onUpdated.removeListener(onUpdated);
+            resolve(loaded);
+        };
+        chrome.tabs.onUpdated.addListener(onUpdated);
+    });
+    // allow(silent-catch): a tab that closed has nothing left to load, which is settled
+    const tab = await chrome.tabs.get(tabId).catch(() => undefined);
+    if (tab?.status !== "loading") {
+        finish(true);
+    }
+    return await settled;
+};

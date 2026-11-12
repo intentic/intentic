@@ -5,6 +5,7 @@
 import type { DaemonRawRouteKey } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import type { Services } from "./composition.js";
 import { mergeRawRoutes, type RawRouteTable } from "./http/raw-route-server.js";
+import { pageMediaRawRoutes } from "./agent/pages/page-media.routes.js";
 import { translatorGatewayRawRoutes } from "./agent/providers/translator-gateway.routes.js";
 import { childrenRawRoutes } from "./agent/subagents/children.routes.js";
 import { accessRawRoutes } from "./auth/access.routes.js";
@@ -60,6 +61,7 @@ import { workspaceBytesRawRoutes } from "./workspace/files/workspace-bytes.route
 
 export const appRawRoutes = (services: Services) =>
     mergeRawRoutes(
+        pageMediaRawRoutes(services),
         translatorGatewayRawRoutes(services),
         childrenRawRoutes(services),
         accessRawRoutes(services),

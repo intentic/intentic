@@ -3,7 +3,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { dirname, isAbsolute, resolve } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type Page, PAGE_MAX_HEIGHT, PAGE_MIN_HEIGHT, PAGE_TITLE_MAX, PAGE_VALUE_MAX } from "@intentic/sandbox-contract/events/requests";
-import { PAGE_LAYOUT_GUIDE, PAGE_THEME_GUIDE } from "@intentic/sandbox-contract/text/pages";
+import { PAGE_LAYOUT_GUIDE, PAGE_MEDIA_REFS, PAGE_THEME_GUIDE } from "@intentic/sandbox-contract/text/pages";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { sdk } from "../../engines/claude-sdk.js";
@@ -30,15 +30,21 @@ const PAGE_RULES =
     "Write one self-contained HTML document with inline <style> and <script> as `html`, or pass `path` to show an HTML file " +
     "you built in the workspace. Pictures, stylesheets and scripts it names on disk (relative to the file, or absolute paths, " +
     `screenshots included) and libraries it names on ${CDN_LIST} are carried into the page when it is shown; the page itself ` +
-    "reaches no network, so nothing else loads (its scripts may still fetch() a data: or blob: URL it holds). Its scripts " +
-    "run, sealed off from the chat. " +
+    "reaches no network, so nothing else loads (its scripts may still fetch() a data: or blob: URL it holds). Video and audio " +
+    'on disk play at full quality: name the file in <video src="/abs/take1.mp4" controls>, <audio> or <source> (or as an ' +
+    "absolute path in a script's list of takes) and the reader's player streams it from the sandbox and seeks; never " +
+    "re-encode or base64 a video to show it, and never copy it to the person's computer. Render media inside the workspace " +
+    "or your own checkout (the artifacts shelf, .intentic/records/artifacts/, is a good place), not /tmp, which the page " +
+    "cannot stream from. A file plays only while it stays as it was when shown, so give each take its own file name. Its " +
+    "scripts run, sealed off from the chat. " +
     `${PAGE_LAYOUT_GUIDE} ${PAGE_THEME_GUIDE}`;
 
 const CHECK_RULE =
     "Set `check: true` the first time you show anything with scripts or a chart: the page is laid out first in a headless " +
     "browser, inside a frame like the chat's at the chat's width, and you get back a picture of it, its height and its " +
-    "console. A page whose scripts throw is not shown, so read the errors, fix, and call again. What its scripts throw later " +
-    "in the reader's own chat is told to you while this turn runs.";
+    "console (video and audio stay empty there, so a player's box shows at its default size). A page whose scripts throw " +
+    "is not shown, so read the errors, fix, and call again. What its scripts throw later in the reader's own chat is told " +
+    "to you while this turn runs.";
 
 const SHOW_DESCRIPTION =
     "Show the user a page right in the chat, drawn inline where your reply continues: a chart, a table, a diagram, a " +
@@ -98,6 +104,8 @@ export interface PageToolsDeps {
     readonly signal: AbortSignal;
     // What follows an answer the agent then acts on (the ask tool's rebase), so both cards keep one rule.
     readonly answered?: (answered: boolean) => Promise<void>;
+    // The key file a page's media manifest is signed under (page-media.ts `pageMediaKeyPath`).
+    readonly mediaKey: string;
 }
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
@@ -132,6 +140,19 @@ const sourceOf = async (args: PageArgs, deps: PageToolsDeps): Promise<{ html: st
 // What carrying left out, said so the agent fixes it now rather than the reader finding a hole.
 const carriedNotes = (carried: CarriedPage): string[] => [
     ...(carried.fetched.length === 0 ? [] : [`Carried in from the CDN: ${carried.fetched.join(", ")}.`]),
+    ...(carried.mediaNamed.length === 0
+        ? []
+        : [
+              `Streamed to the reader's player from disk, not carried into the page: ${carried.mediaNamed.join(", ")}. Each plays ` +
+                  "while the file stays exactly as it is now; overwrite or delete one and it stops playing in this page, so " +
+                  "write a new take under a new name and show a new page for it.",
+          ]),
+    ...(carried.mediaRefused.length === 0
+        ? []
+        : [
+              `Video and audio that will NOT play: ${carried.mediaRefused.map((refused) => `${refused.ref} (${refused.reason})`).join("; ")}. ` +
+                  "Render or move it into the workspace or your own checkout (for example .intentic/records/artifacts/), never /tmp, and show the page again.",
+          ]),
     ...(carried.missing.length === 0
         ? []
         : [`Not found or not readable, so missing from the page: ${carried.missing.join(", ")}. Use paths to files that exist in the workspace.`]),
@@ -164,13 +185,22 @@ const preparePage = async (
     if ("refused" in source) {
         return { refused: [text(source.refused)] };
     }
-    const roots = [deps.workspaceRoot, ...(deps.placement === undefined ? [] : [deps.placement.worktree]), "/tmp"];
-    const carried = await carryPage(source.html, { baseDir: source.baseDir, roots });
+    // Media from the workspace and the turn's own checkout only: under the jail a turn's /tmp is its own, so the daemon's
+    // /tmp holds nothing the agent rendered (page-media.ts). Pictures, read once here, still come from /tmp as well.
+    const mediaRoots = [deps.workspaceRoot, ...(deps.placement === undefined ? [] : [deps.placement.worktree])];
+    const carried = await carryPage(source.html, {
+        baseDir: source.baseDir,
+        roots: [...mediaRoots, "/tmp"],
+        mediaRoots,
+        mapPath: (path) => inWorktree(path, deps.placement),
+    });
     const notes = carriedNotes(carried);
     let measured: number | undefined;
     let picture: Content | undefined;
     if (args.check === true) {
-        const checked = await checkPage(carried.html, { cap: args.height });
+        // Its video and audio stay empty in the check: the sandbox's headless Chromium decodes no H.264 or AAC, so it could
+        // not show a take playing anyway, and a reference it cannot load would only fill the console with refusals.
+        const checked = await checkPage(carried.html.replace(PAGE_MEDIA_REFS, "data:,"), { cap: args.height });
         if (checked.ok) {
             measured = checked.check.contentHeight;
             picture = { type: "image", data: checked.check.png, mimeType: "image/png" };
@@ -193,6 +223,8 @@ const preparePage = async (
             conversationId: deps.conversationId,
             title: args.title,
             html: carried.html,
+            media: carried.media,
+            mediaKey: deps.mediaKey,
             height: args.height,
             measured,
             source: source.source,

@@ -1,6 +1,12 @@
-import { type McpAppData, pageHead, type PageTheme, readMcpAppData } from "@intentic/sandbox-contract/text/pages";
+import { type McpAppData, pageHead, type PageTheme, placePageMedia, readMcpAppData, readPageMedia, sealedPagePolicy } from "@intentic/sandbox-contract/text/pages";
 import type { Page } from "@intentic/sandbox-contract/events/requests";
-import { sandboxBlob } from "../../../../client/sandbox/sandboxClient";
+import { watch } from "vue";
+import { sandboxBlob, sandboxRequest } from "../../../../client/sandbox/sandboxClient";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
+import { useSandboxSession } from "../../../../client/session/sandboxSession";
+import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
+import { useEndpoint } from "../../../../client/endpoint/useEndpoint";
+import { elementAddress } from "../../../../client/endpoint/elementAddress";
 import { buildPreviewDocument } from "../../../../models/workspace/viewers/htmlDocument";
 
 // A page the agent showed, as the frame draws it: the stored file (never rewritten, so read once per window), sealed the
@@ -47,10 +53,90 @@ const loadAsset = (path: string): Promise<Blob | undefined> => readShared(path).
 export const PAGE_BLEED = 6;
 const BLEED_CSS = `<style id="intentic-bleed">:root{padding:${PAGE_BLEED}px}</style>`;
 
-// The page, sealed and themed, for the frame's `srcdoc`; for an MCP server's app, the call it shows as well.
+// The video and audio a page names on disk stream from the sandbox (the daemon's agent/pages/page-media.ts): a player
+// sends no header, so each address carries a ticket the window mints through its own signed-in session, bound to this
+// one page and covering only the files it named when it was shown. A ticket lives for a sitting, so one is kept per page
+// and sandbox while it has a good while left, and a page drawn again (scrolled back, opened alone) reuses it. The daemon
+// keeps tickets in memory and drops them when it restarts or a person is signed out, so every kept ticket is let go when
+// the sandbox comes back online or the session's person changes, and a page's own when its media fails to load on a
+// ticket the daemon no longer takes: the next drawing mints afresh.
+const TICKET_SPARE_MS = 30 * 60 * 1000;
+const tickets = new Map<string, { readonly ticket: string; readonly expiresAt: number }>();
+const keyOf = (base: string, path: string): string => `${base} ${path}`;
+
+// Watched from the first ticket on, not at import, so a window that never shows a page with media watches nothing.
+let watching = false;
+const forgetOnChange = (): void => {
+    if (watching) {
+        return;
+    }
+    watching = true;
+    const { reachable } = useSandbox();
+    const { presentedEmail } = useSandboxSession();
+    watch(reachable, (online, was) => {
+        if (online && !was) {
+            tickets.clear();
+        }
+    });
+    watch(presentedEmail, () => tickets.clear());
+};
+
+const ticketFor = async (base: string, path: string): Promise<string> => {
+    forgetOnChange();
+    const held = tickets.get(keyOf(base, path));
+    if (held !== undefined && held.expiresAt > Date.now() + TICKET_SPARE_MS) {
+        return held.ticket;
+    }
+    const minted = await sandboxRpc.pages.mediaTicket({ page: path });
+    tickets.set(keyOf(base, path), minted);
+    return minted.ticket;
+};
+
+// A page's player failed to load: whether the ticket it streamed on is still taken is asked of the daemon through the
+// window's own transport (the frame cannot see a status across its seal), and a refused one is let go. A missing or
+// changed file answers otherwise and keeps the ticket, which is still good for the page's other files.
+export const mediaFailed = async (path: string): Promise<void> => {
+    const base = useEndpoint().daemonBase.value;
+    const held = base === undefined ? undefined : tickets.get(keyOf(base, path));
+    if (base === undefined || held === undefined) {
+        return;
+    }
+    try {
+        // allow(daemon-doors): the media route answers bytes, not JSON, and only its status is read here.
+        const answer = await sandboxRequest(`/pages/media/${encodeURIComponent(held.ticket)}/0`, { headers: { range: `bytes=0-0` } });
+        await answer.body?.cancel();
+        if (answer.status === 401 && tickets.get(keyOf(base, path)) === held) {
+            tickets.delete(keyOf(base, path));
+        }
+    } catch {
+        // allow(silent-catch): a sandbox that cannot be asked keeps the ticket; reconnecting lets every ticket go anyway.
+    }
+};
+
+// The address of each of the page's `count` media files, as the element will load it (elementAddress.ts); none when the
+// sandbox cannot be reached or will not mint, and then the page still draws, its players empty.
+const mediaAddresses = async (path: string, count: number): Promise<readonly string[]> => {
+    const base = useEndpoint().daemonBase.value;
+    if (count === 0 || base === undefined || base === ``) {
+        return [];
+    }
+    try {
+        const ticket = encodeURIComponent(await ticketFor(base, path));
+        return Array.from({ length: count }, (_, index) => elementAddress(`${base}/pages/media/${ticket}/${index}`));
+    } catch {
+        // allow(silent-catch): a page whose media cannot be streamed still draws; each player shows its own error.
+        return [];
+    }
+};
+
+// The page, sealed and themed, for the frame's `srcdoc`; for an MCP server's app, the call it shows as well. A page that
+// streams video or audio has its references swapped for their addresses, and its seal opens `media-src` to exactly
+// those addresses and nothing else.
 export const buildPageDocument = async (page: Page, theme: PageTheme): Promise<{ readonly html: string; readonly app?: McpAppData }> => {
     const source = await pageSource(page.path);
-    const built = await buildPreviewDocument(source, page.source ?? page.path, loadAsset, pageHead(theme) + BLEED_CSS);
+    const addresses = await mediaAddresses(page.path, readPageMedia(source)?.files.length ?? 0);
+    const built = await buildPreviewDocument(source, page.source ?? page.path, loadAsset, pageHead(theme) + BLEED_CSS, sealedPagePolicy(addresses));
+    const html = addresses.length === 0 ? built.html : placePageMedia(built.html, addresses.length, (index) => addresses[index] ?? ``);
     const app = page.app === undefined ? undefined : readMcpAppData(source);
-    return app === undefined ? { html: built.html } : { html: built.html, app };
+    return app === undefined ? { html } : { html, app };
 };

@@ -1,5 +1,5 @@
 import { oneLine } from "@intentic/base/one-line";
-import { WEBEXT_TICKET_TOOL } from "@intentic/sandbox-contract/webext-links";
+import { WEBEXT_TICKET_TOOL, WEBEXT_UPLOAD_TOOL } from "@intentic/sandbox-contract/webext-links";
 import { siteOf } from "./policy.js";
 
 // Tool calls as sentences a person reads in the popup's activity list. Its own module, apart from audit.ts, because
@@ -17,6 +17,19 @@ const place = (url: string): string => {
         return oneLine(url, 60);
     }
 };
+
+// Where a saved file came from, as a person would say it: the ref aimed at, else the address without its query; a
+// blob: or data: address is the page's own and means nothing read out.
+const savedFrom = (args: CallArgs): string => {
+    const url = text(args["url"]);
+    if (url === "") {
+        return text(args["ref"]);
+    }
+    return /^(?:blob|data):/iu.test(url) ? "a file the page made" : place(url);
+};
+
+// The last part of a sandbox path: the file's name, which is what the person is asked about too.
+const fileName = (path: string): string => oneLine(path.split("/").pop() ?? "", 60) || "a file";
 
 // The calls whose sentence takes nothing from their arguments.
 const FIXED = new Map([
@@ -39,17 +52,24 @@ const scriptName = (source: string): string => {
     return name === undefined ? "a script" : `“${oneLine(name, 60)}”`;
 };
 
-// The script tools whose sentence reads their arguments; nothing of a source but its name ever reaches the list.
-const SCRIPT_CALLS = new Map<string, (args: Parameters<typeof describeCall>[1]) => string>([
+type CallArgs = Parameters<typeof describeCall>[1];
+
+// The script and file tools, whose sentence reads their arguments. Nothing of a script's source but its name ever
+// reaches the list, and never upload_file's ticket, spent by then and meaningless to a person: the file's name instead,
+// as they were asked about it.
+const ARGUED_CALLS = new Map<string, (args: CallArgs) => string>([
     ["script_install", (args) => `Asked to install ${scriptName(text(args["source"]))}`],
     ["script_update", (args) => `Asked to update ${scriptName(text(args["source"]))}`],
     ["script_toggle", (args) => (args["on"] === true ? "Turned one of its scripts on" : "Turned one of its scripts off")],
+    ["save_media", (args) => `Saved ${savedFrom(args)} into its sandbox`],
+    [WEBEXT_UPLOAD_TOOL, (args) => `Attached “${fileName(text(args["path"]))}” from its sandbox to ${text(args["ref"])}`],
+    ["chatgpt_image", (args) => `Asked ChatGPT for an image: “${oneLine(text(args["prompt"]), 60)}”`],
 ]);
 
 // One tool call as a sentence ("Typed 86 characters and submitted"), so the popup's list reads as what happened, not
 // as the call's arguments. Nothing typed into a page is kept: `fill` is recorded by length only.
 export const describeCall = (tool: string, args: Record<string, unknown>): string => {
-    const fixed = FIXED.get(tool) ?? SCRIPT_CALLS.get(tool)?.(args);
+    const fixed = FIXED.get(tool) ?? ARGUED_CALLS.get(tool)?.(args);
     if (fixed !== undefined) {
         return fixed;
     }

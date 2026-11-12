@@ -10,7 +10,17 @@ import { join } from "node:path";
 const BUDGETS = {
     // ~200 kB today: zod's runtime, @orpc's client/server, the page driver, the tools and Passwords' native port.
     // 2026-11-11: up 2 kB for the in-page overlays' stylesheet and mark (page/overlay.ts), the popup's own materials.
-    "background.js": 262_000,
+    // 2026-11-12: up 9 kB (260.6 to 269.2) for actions that say what became of them (tools/page.ts) and fill's steps
+    // into rich editors (page/typing.ts), injected as source and worded for the agent.
+    // 2026-11-12: up 24 kB for site kits (src/background/kits/): ChatGPT's chatgpt_image is 23.4 kB minified, nearly all
+    // of it its in-page steps and the sentences it answers an agent with.
+    // 2026-11-12: up 8 kB for wait_for's long waits, the in-page watch (page/waiting.ts) and the rounds and the answers
+    // the agent reads (tools/page-wait.ts).
+    // 2026-11-12: up 20 kB for moving files between pages and the sandbox: save_media, upload_file and the capture of
+    // the agent's downloads (tools/media*.ts, page/media-driver.ts), 19.5 kB of it measured.
+    // 2026-11-12: 325.5 kB with all four together and their review fixes (refusal wording, save_media's type rules,
+    // the kit's tab release); the ceiling leaves 3.5 kB.
+    "background.js": 329_000,
     // Injected into every intentic.dev page, so it stays two constants and a listener. 374 bytes today.
     "pair-bridge.js": 4_000,
     // The popup's own script; it holds no schema surface. 20.6 kB on 2026-10-28, up from 16.9 kB, for the Sandboxes

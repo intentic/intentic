@@ -15,7 +15,7 @@ import { useChatSurface } from "../../../../models/conversations/tools/chatToolS
 import { setHtmlPreviewed } from "../../../../models/workspace/viewers/htmlPreviewed";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { initializeResult, type PageAsk, pageRefusal, pageResult, readPageAsk, themeMessage, toolInputMessage, toolResultMessage } from "./pageBridge";
-import { buildPageDocument, PAGE_BLEED } from "./pageDocument";
+import { buildPageDocument, mediaFailed, PAGE_BLEED } from "./pageDocument";
 import { usePageTheme } from "./pageTheme";
 
 // One page the agent showed, drawn in the chat: its stored file, sealed (no network, an opaque origin, no reach into
@@ -273,7 +273,10 @@ const onMessage = (event: MessageEvent): void => {
         return;
     }
     const ask = readPageAsk(event.data);
-    if (ask !== undefined) {
+    // A player that failed is the window's to look into (pageDocument.ts), never an ask the page makes of the chat.
+    if (ask?.kind === `mediaError`) {
+        void mediaFailed(props.page.path);
+    } else if (ask !== undefined) {
         void act(ask);
     }
 };

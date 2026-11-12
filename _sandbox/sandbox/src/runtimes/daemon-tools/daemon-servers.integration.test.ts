@@ -16,12 +16,12 @@ import type { CommandGuard } from "../../guard/command-guard.js";
 import { NO_GATE } from "./policy-gate.js";
 import { createTurnTaint } from "../../guard/turn-taint.js";
 import { type TurnPersona, turnPersona } from "../../personas/personas.js";
-import { turnWatchdog } from "../decorators/turn-watchdog.js";
+import { DEFAULT_TURN_TIMEOUTS, turnWatchdog } from "../decorators/turn-watchdog.js";
 import { opt } from "../../opt.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { conversationEntry } from "../../conversations/registry/agents-store.testing.js";
 import type { Said } from "../../seams/turn-starter.js";
-import { waitFor } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
 import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { ChildSupervisor } from "../../agent/subagents/children.js";
 import { harnessServers, turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
@@ -182,6 +182,43 @@ test("ask parks on a card: its frame waits for the loop, the watchdog is held wh
     expect(await asked).toContain("B");
     expect(seen.map((event) => event.kind)).toEqual(["question", "resolved"]);
     expect(clock.remaining()).toBeLessThan(Number.POSITIVE_INFINITY);
+});
+
+// 2026-11-12: a forwarded peer call took no hold, so on the loops with a silence limit (OpenCode, Pi, ACP, Muse: 120 s,
+// turn-watchdog.ts) a device command or a browser's wait_for running past two minutes ended the turn mid-call. The door
+// now holds the watchdog the turn's relay hands its lease, for as long as the call runs.
+test("a peer call that runs three minutes holds the turn's watchdog, so the 120 s silence limit does not end the turn", async () => {
+    jest.useFakeTimers();
+    try {
+        const mounts = createTurnMounts({ baseUrl: () => "http://127.0.0.1:8787/mcp" });
+        const lease = mounts.lease("conv-1");
+        // Mounted as turnToolsOf mounts it, before the daemon's servers, whose relay then hands the lease its hold.
+        const { token } = lease.open({ name: "laptop", target: { kind: "device", id: "laptop" } });
+        const built = daemonServersFor(deps, { input, context: contextOf(cardsAnswering().cards), persona: OPEN, granted: [], settings: SETTINGS, mounted: { browser: NO_BROWSER, desktop: false, lease } });
+        // As the ACP, Pi and Muse loops attach their clock.
+        const clock = turnWatchdog(DEFAULT_TURN_TIMEOUTS);
+        built.relay.attach({ push: () => {}, hold: clock.hold });
+        const device = async (_target: { readonly id: string }, message: { readonly id?: string | number | null }) => {
+            await new Promise((resolve) => setTimeout(resolve, 180_000));
+            return { jsonrpc: "2.0" as const, id: message.id ?? null, result: { content: [{ type: "text", text: "done" }] } };
+        };
+        const app = new Hono<AppEnv>().all("/mcp/:mount", createTurnMountRoute(mounts, unstubbed<MountEndpoints>("endpoints", { device })));
+        const answered = app.request("/mcp/laptop", {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "run_command", arguments: { command: "sleep 180" } } }),
+        });
+        await advanceTimersByTimeAsync(170_000);
+        // Past the silence limit, and held: neither deadline runs while the call does.
+        expect(clock.remaining()).toBe(Number.POSITIVE_INFINITY);
+        await advanceTimersByTimeAsync(10_000);
+        expect((await answered).status).toBe(200);
+        // Released with the answer, which counts as activity: a whole silence window from now.
+        expect(clock.remaining()).toBe(DEFAULT_TURN_TIMEOUTS.inactivityMs);
+        lease.release();
+    } finally {
+        jest.useRealTimers();
+    }
 });
 
 // 2026-11-02 (lively-cedar-3nsa): a Codex call to ask ended a minute after it asked, the owner answered on the card half an
