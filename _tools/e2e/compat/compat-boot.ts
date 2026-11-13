@@ -77,24 +77,37 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
         }
     };
     try {
-        templates = await mkdtemp(join(tmpdir(), `intentic-compat-templates-`));
-        await templateFixture(templates);
+        const templateDir = await mkdtemp(join(tmpdir(), `intentic-compat-templates-`));
+        templates = templateDir;
+        await templateFixture(templateDir);
         const connectToken = randomBytes(16).toString(`base64url`);
-        container = await new GenericContainer(COMPAT_IMAGE)
-            // A moving tag is resolved again every run, never whatever a runner pulled last time.
-            .withPullPolicy(PullPolicy.alwaysPull())
-            .withEnvironment({ CONNECT_TOKEN: connectToken, ZONE: `e2e.invalid`, SANDBOX_ALLOW_UNAUTHENTICATED: `1` })
-            .withCopyDirectoriesToContainer([{ source: templates, target: TEMPLATE_SOURCE }])
-            .withCopyContentToContainer([
-                {
-                    content: JSON.stringify({ source: TEMPLATE_SOURCE, ref: `main` }),
-                    target: join(WORKSPACE_ROOT, STATE_DIR, `config`, `templates.json`),
-                },
-            ])
-            .withExposedPorts(8787)
-            .withWaitStrategy(Wait.forHttp(`/health`, 8787).forStatusCode(200))
-            .withStartupTimeout(STARTUP_MS)
-            .start();
+        const start = (): Promise<StartedTestContainer> =>
+            new GenericContainer(COMPAT_IMAGE)
+                // A moving tag is resolved again every run, never whatever a runner pulled last time.
+                .withPullPolicy(PullPolicy.alwaysPull())
+                .withEnvironment({ CONNECT_TOKEN: connectToken, ZONE: `e2e.invalid`, SANDBOX_ALLOW_UNAUTHENTICATED: `1` })
+                .withCopyDirectoriesToContainer([{ source: templateDir, target: TEMPLATE_SOURCE }])
+                .withCopyContentToContainer([
+                    {
+                        content: JSON.stringify({ source: TEMPLATE_SOURCE, ref: `main` }),
+                        target: join(WORKSPACE_ROOT, STATE_DIR, `config`, `templates.json`),
+                    },
+                ])
+                .withExposedPorts(8787)
+                .withWaitStrategy(Wait.forHttp(`/health`, 8787).forStatusCode(200))
+                .withStartupTimeout(STARTUP_MS)
+                .start();
+        // The runner's containerd can drop a pull's lease mid-download ("unable to lease content: lease does not exist"),
+        // a race in the engine rather than anything this tier did; one more pull is what clears it.
+        try {
+            container = await start();
+        } catch (error) {
+            if (!/lease does not exist/.test(String(error))) {
+                throw error;
+            }
+            process.stdout.write(`compatibility tier: the pull of ${COMPAT_IMAGE} lost its containerd lease, pulling again\n`);
+            container = await start();
+        }
         const url = `http://${container.getHost()}:${container.getMappedPort(8787)}`;
         const health = await readyHealth(url);
         // A daemon from before /health named its build is called by its image instead.
