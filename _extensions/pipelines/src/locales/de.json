@@ -1,9 +1,6 @@
 {
     "extension": {
-        "branchesFailing": "{count} Branches rot",
         "pipelines": "Pipelines",
-        "streakOnCommit": "{repo} {branch} · {runs} fehlgeschlagen · {sha}",
-        "streakOverCommits": "{repo} {branch} · {commits} Commits · {runs} fehlgeschlagen",
         "running": "{count} laufen",
         "queued": "{count} eingereiht",
         "noRunsYet": "Noch keine Läufe",
@@ -11,6 +8,19 @@
         "branchCountFailing": "{count} Branch mit Fehlern | {count} Branches mit Fehlern",
         "runCount": "{count} Lauf | {count} Läufe",
         "webhookNotRegistered": "Webhook nicht registriert"
+    },
+    "attention": {
+        "line": "{repo} {branch} · {move}",
+        "many": "{count} CI-Fehler braucht Sie | {count} CI-Fehler brauchen Sie",
+        "beingFixed": "{count} in Reparatur",
+        "unowned": "fehlgeschlagen, niemand kümmert sich",
+        "handed-back": "der Fix-Agent hat ohne Lösung aufgehört",
+        "answer": "der Fix-Agent wartet auf Sie",
+        "review": "ein Fix wartet auf Review",
+        "push": "Fix gelandet: committen und pushen",
+        "releaseAgain": "Fix gelandet: neu releasen, um ihn zu prüfen",
+        "outside": "braucht einen Schritt außerhalb des Repositorys",
+        "stalled": "Fix gepusht, nichts prüft ihn"
     },
     "mainFailure": {
         "autoFixAgent": "Auto-Reparatur-Agent",
@@ -48,7 +58,8 @@
             "collecting": "Einige Jobs eines neueren Laufs sind fehlgeschlagen. Die automatische Fehlerbehebung sammelt die übrigen Ergebnisse. Wähle „Jetzt beheben“, um früher zu beginnen.",
             "failedAgain": "Ein neuerer Lauf auf {branch} hat fehlgeschlagene Jobs. Wähle „Jetzt beheben“, um einen weiteren Versuch zu starten.",
             "stalled": "Der Fix ist gepusht, aber nichts wird {workflows} von selbst erneut ausführen. Seine Zeile oben sagt, wie er sich messen lässt. | Der Fix ist gepusht, aber nichts wird {workflows} von selbst erneut ausführen. Jede Zeile oben sagt, wie er sich messen lässt.",
-            "stalledUnnamed": "Der Fix ist gepusht, aber was fehlgeschlagen ist, hat seitdem nicht wieder bestanden. Erst sein eigener nächster Lauf hebt das auf."
+            "stalledUnnamed": "Der Fix ist gepusht, aber was fehlgeschlagen ist, hat seitdem nicht wieder bestanden. Erst sein eigener nächster Lauf hebt das auf.",
+            "outside": "Kein Commit behebt das. Laut Fix-Agent braucht es Sie außerhalb des Repositorys: {step} Starten Sie danach den fehlgeschlagenen Workflow neu."
         },
         "title": "{branch} schlägt fehl",
         "fixNow": "Jetzt beheben",
@@ -94,7 +105,6 @@
         "failedJobs": "Fehlgeschlagene Jobs",
         "failureIsHistory": "Fehler ist erledigt",
         "fixAgent": "Mit Agent reparieren",
-        "fixInWorkspace": "Fix ist im Workspace",
         "fixThatRun": "Stattdessen den beheben",
         "fixUnderway": "Fix läuft",
         "freshAttempt": "Neuer Versuch",
@@ -112,11 +122,12 @@
         "supersededBy": "überholt von",
         "stanceNote": {
             "ended": "Fortsetzen oder neu",
-            "landed": "Neu starten zum Beweis",
+            "landed": "Committen und pushen, um zu prüfen",
             "needs-you": "Öffnen zum Antworten",
             "ready": "Prüfen, dann landen",
             "waiting": "Kontingent aufgebraucht",
-            "working": "Öffnen zum Zusehen"
+            "working": "Öffnen zum Zusehen",
+            "landedRelease": "Neu releasen, um zu prüfen"
         },
         "attemptWord": "Versuch {n}",
         "attemptSummary": "Versuch {n}",
@@ -130,7 +141,12 @@
         },
         "startedAgo": "gestartet {ago}",
         "fixAria": "Reparaturagent: {state} — Unterhaltung öffnen",
-        "fixAriaFacts": "Reparaturagent: {state}, {facts} — Unterhaltung öffnen"
+        "fixAriaFacts": "Reparaturagent: {state}, {facts} — Unterhaltung öffnen",
+        "afterTheStep": "Erst den Schritt erledigen",
+        "ownerStepAria": "Schritt für Sie außerhalb des Repositorys: {step} — Unterhaltung öffnen",
+        "ownerStepChip": "Schritt für Sie",
+        "ownerStepNote": "Erledigen, dann neu starten",
+        "ownerStepTitle": "Kein Commit behebt das"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Pipelines werden geladen"
@@ -197,6 +213,7 @@
         "run": "Lauf",
         "runs": "Läufe",
         "started": "Gestartet",
-        "updated": "Aktualisiert"
+        "updated": "Aktualisiert",
+        "step": "Schritt"
     }
 }

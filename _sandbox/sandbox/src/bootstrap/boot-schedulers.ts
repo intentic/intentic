@@ -21,6 +21,7 @@ import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
 import { fixerSettled, resumeMainFixer } from "../ci/main-fixer.js";
+import { ownerStepSettled } from "../ci/owner-steps.js";
 import { createCiPoller } from "../ci/poller.js";
 import { createOriginFollow, type OriginFollowDeps } from "../git/remote/follow-origin.js";
 import { autoKeepWarm, stopKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
@@ -227,6 +228,9 @@ const startCi = ({ role, services, logger, shutdown }: Pick<BootPhase, "role" | 
             services.events.subscribe("run.settled", (settled) => {
                 void fixerSettled(services, settled).catch((error: unknown) =>
                     logger.warn({ err: error }, "ci repair: a settled turn could not be read"),
+                );
+                void ownerStepSettled(services, settled).catch((error: unknown) =>
+                    logger.warn({ err: error }, "ci fix: a settled turn's owner step could not be kept"),
                 );
             }),
         );

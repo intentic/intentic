@@ -1,12 +1,12 @@
 import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
-import { arrivesOpen, failureStreaks, openFailures, inFlightOnHead, streakTooltip, supersededBy } from "./ciStreaks";
+import { arrivesOpen, failureStreaks, openFailures, inFlightOnHead, releaseFailures, supersededBy } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
 import { messages } from "./i18n";
 import { manifest } from "./manifest";
 
-// The tooltip's words are the extension's own catalog, which the host mounts before anything reads it.
+// The history's words are the extension's own catalog, which the host mounts before anything reads it.
 await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 // Pins failureStreaks and friends: is this branch failing right now. `sha` defaults to one per run; the same sha on several
@@ -77,19 +77,24 @@ test("a breakage keeps badging for as long as it is broken", () => {
     expect(failureStreaks([run(5, "success", 60), ...runs])).toHaveLength(0);
 });
 
-test("the tooltip names the branch while there is only one", () => {
-    const streaks = failureStreaks([run(1, "failed", 50), run(2, "failed", 40)]);
-    const [only] = streaks;
-    const single = streakTooltip(streaks);
-    expect(single).toContain(only!.repo);
-    expect(single).toContain(only!.branch);
-    expect(single).toContain(String(only?.commits));
-    // One-commit streaks name the commit, not a count of 1.
-    const oneCommit = streakTooltip(failureStreaks([run(1, "failed", 50, "main", "abcdef1234")]));
-    expect(oneCommit).toContain("abcdef1");
-    const multi = streakTooltip([...streaks, ...failureStreaks([run(3, "failed", 50, "feat")])]);
-    expect(multi).toContain(String(2));
-    expect(multi).not.toBe(single);
+// A tag never gets another commit, so a failure on it never cleared: the rail said "1" over release v1.413.0 for hours
+// (2026-11-12), while the board's own rows already left tags out of auto-open.
+test("a release tag is no failing branch", () => {
+    const release = { ...run(1, "failed", 50, "v1.413.0", "f7639ba"), workflow: "webstore publish" };
+    expect(failureStreaks([release, run(2, "success", 60)])).toEqual([]);
+});
+
+// A release's failure is read per workflow: the newest finished release run of each, when it failed.
+test("a release workflow's newest failure is open until a later release of it passes", () => {
+    const failed = { ...run(1, "failed", 50, "v1.413.0", "f7639ba"), workflow: "webstore publish" };
+    const otherWorkflow = { ...run(2, "success", 60, "v1.414.0", "a1"), workflow: "msstore publish" };
+    expect([...releaseFailures([failed, otherWorkflow])]).toEqual([failed]);
+    const passedLater = { ...run(3, "success", 70, "v1.414.0", "a1"), workflow: "webstore publish" };
+    expect(releaseFailures([failed, otherWorkflow, passedLater]).size).toBe(0);
+    expect(supersededBy([failed, passedLater]).get(failed)).toBe(passedLater);
+    // A newer release failing the same workflow is the open one; the older is behind it.
+    const failedAgain = { ...run(4, "failed", 80, "v1.415.0", "b2"), workflow: "webstore publish" };
+    expect([...releaseFailures([failed, failedAgain])]).toEqual([failedAgain]);
 });
 
 // openFailures/supersededBy: same head-commit rule as the badge, applied per run.

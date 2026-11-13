@@ -1,6 +1,6 @@
 import { keyedLock } from "@intentic/base/async";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { ciFixConversationId, isCiFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { ciFixBase, isCiFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import {
     type CiMainFailure,
     isPipelineInFlight,
@@ -16,7 +16,7 @@ import type { FixAttemptOutcome } from "../conversations/fix/fix-attempts.js";
 import { opt } from "../opt.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import type { CiFailure } from "./ci-store.js";
-import { FIX_LOG_BYTES, startCiFix, WHOLE_LOG } from "./ci-fix.js";
+import { FIX_LOG_BYTES, knownConversationIds, startCiFix, WHOLE_LOG } from "./ci-fix.js";
 import { digestOf, excerptOf, type JobExcerpt } from "./logs/failure-digest.js";
 import { ciLogsRoot, keepJobLog } from "./logs/job-logs.js";
 import { isMainLine } from "./main-line.js";
@@ -212,7 +212,7 @@ const startFixer = async (
             {
                 project,
                 runId,
-                base: ciFixConversationId(project.repo, streak.firstRunId),
+                base: ciFixBase(project.repo, streak.firstRunId, knownConversationIds(services)),
                 evidence: {
                     failedJobs: names,
                     failedJobIds: parked.map(({ job }) => job.jobId),
@@ -683,7 +683,7 @@ export const fixerSettled = async (services: Services, settled: { readonly conve
 export const streakFixerFor = async (services: Services, run: Pick<PipelineRun, "repo" | "branch">): Promise<string | undefined> => {
     // A streak is only ever begun on a main-line branch (jobFailed), so having one is the branch's answer.
     const streak = (await services.ciStore.failures())[keyOf(run.repo, run.branch)];
-    return streak === undefined ? undefined : ciFixConversationId(run.repo, streak.firstRunId);
+    return streak === undefined ? undefined : ciFixBase(run.repo, streak.firstRunId, knownConversationIds(services));
 };
 
 /** The branch's other failing workflows, each by its newest failed run: what a press on one run of a failing main also

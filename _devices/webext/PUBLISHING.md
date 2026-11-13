@@ -16,7 +16,10 @@ Every release tag builds the extension and submits it to the Chrome Web Store fr
    from the dashboard. Until all five exist, the publish step logs a warning and skips.
 
 Before releasing a version that adds a manifest permission, update the item's **Privacy practices** tab in the
-Developer Dashboard with the matching justification from [STORE-LISTING.md](STORE-LISTING.md). Passwords adds
+Developer Dashboard with the matching justification from [STORE-LISTING.md](STORE-LISTING.md). The listing half is
+enforced: [`src/store-listing.test.ts`](src/store-listing.test.ts) fails a commit that adds a permission, a host pattern or
+a content script's sites without a row there (an optional one marked `(optional)`). The dashboard half is still a person's
+step: the store's API does not set it. Passwords adds
 **optional** `nativeMessaging` and uses the existing optional host permission for `*://*/*` when the person
 turns remembering on; justify them as:
 

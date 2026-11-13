@@ -239,6 +239,16 @@ export const CiForgetParamSchema = z.object({
         .describe("The workflow to stop tracking, by the name the failure lists it under. Leave it out to end the whole failure, every workflow on it."),
 });
 export type CiForgetParam = z.infer<typeof CiForgetParamSchema>;
+// A step only a person can take, outside the repository, that a CI fix agent ended its turn on: a field in a store's
+// dashboard, a secret's value, an account setting. No commit fixes such a failure, so the board shows the step on the
+// failed run instead of reading the agent's turn as a fix (ci/owner-steps.ts).
+export const CI_OWNER_STEP_MARK = "Owner step:";
+export const CiOwnerStepSchema = z.object({
+    conversationId: z.string().describe("The fix agent that said it: which run's failure it answers is in its id."),
+    step: z.string().describe("What the owner has to do, and where, in the agent's own words."),
+    at: z.number().describe("When the turn that said it ended, in milliseconds."),
+});
+export type CiOwnerStep = z.infer<typeof CiOwnerStepSchema>;
 export const CiRunsResponseSchema = z.object({
     repos: z.array(CiRepoSchema).describe("Which workspace repositories are wired to a forge, and how each one's notifications are set up."),
     // Newest first, across all mapped repos.
@@ -247,6 +257,12 @@ export const CiRunsResponseSchema = z.object({
         .array(CiMainFailureSchema)
         .optional()
         .describe("Every main-line branch failing right now, with the fix agent on it. Absent from a daemon that keeps none."),
+    ownerSteps: z
+        .array(CiOwnerStepSchema)
+        .optional()
+        .describe(
+            "Steps outside the repository that CI fix agents ended their latest turn on, one per agent. Absent from a daemon that keeps none.",
+        ),
 });
 export type CiRunsResponse = z.infer<typeof CiRunsResponseSchema>;
 // Re-resolves repo → project + token on every call, so a stale card can't act on a mapping the workspace no longer has.

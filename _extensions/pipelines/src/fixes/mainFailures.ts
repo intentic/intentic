@@ -2,6 +2,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import {
     type CiMainFailure,
     type CiMainFailureWorkflow,
+    type CiOwnerStep,
     type CiRepo,
     isPipelineInFlight,
     MAIN_FAILURE_STALE_MS,
@@ -10,6 +11,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/ci";
 import { type FixStance, fixStance } from "@intentic/sandbox-contract/state/fix-stance";
 import { latestFixAttempt } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { ownerStepOf } from "./ciFixes";
 
 // A MAIN-LINE BRANCH WHOSE CI FAILS, AND ITS ONE FIX AGENT, as the board draws it: one incident block at the head of its
 // repository's runs, holding the runs it is about (coveredRuns). The daemon keeps the failure (`ci.runs` `failures`,
@@ -40,6 +42,8 @@ export interface MainFailureView {
     readonly stance: FixStance | undefined;
     // The newest failed run the failure names, while the board still lists it: what a Fix press from the banner acts on.
     readonly run: PipelineRun | undefined;
+    // The step outside the repository the fix agent ended its latest turn on (owner-steps.ts), while that is its last word.
+    readonly ownerStep?: string | undefined;
 }
 
 // A hand-back outranks the agent's stance; otherwise known failures after landing reopen its fix control.
@@ -79,6 +83,7 @@ export const mainFailuresOf = (
     failures: readonly CiMainFailure[] | undefined,
     agents: readonly AgentSummary[],
     runs: readonly PipelineRun[],
+    steps: readonly CiOwnerStep[] = [],
 ): MainFailureView[] =>
     (failures ?? [])
         .map((failure): MainFailureView => {
@@ -90,6 +95,7 @@ export const mainFailuresOf = (
                 fixer,
                 stance: fixer === undefined ? undefined : fixStance(fixer),
                 run,
+                ownerStep: ownerStepOf(fixer, steps),
             };
         })
         .toSorted((left, right) => failingSince(left.failure) - failingSince(right.failure));
@@ -286,6 +292,8 @@ export type MainFailureStory =
     | `stalled`
     | `waiting`
     | `ended`
+    // The fix agent says no commit fixes it: a step outside the repository is the reader's (owner-steps.ts).
+    | `outside`
     | Exclude<MainFailureState, `fixing`>;
 
 // A landed fix's story: being measured, measured by nothing on its way (`stalled`), or still to be pushed.
@@ -310,7 +318,7 @@ const landedStory = (
 };
 
 export const storyOf = (
-    view: Pick<MainFailureView, "state" | "stance" | "fixer"> & {
+    view: Pick<MainFailureView, "state" | "stance" | "fixer" | "ownerStep"> & {
         readonly failure: Pick<CiMainFailure, "repo" | "branch" | "workflows">;
         readonly run?: PipelineRun | undefined;
     },
@@ -323,6 +331,10 @@ export const storyOf = (
     }
     if (view.state !== `fixing`) {
         return view.state;
+    }
+    // Its step outranks what it holds: a docs change landed beside a dashboard step is not the fix.
+    if (view.ownerStep !== undefined) {
+        return `outside`;
     }
     switch (view.stance?.kind) {
         case `needs-you`:

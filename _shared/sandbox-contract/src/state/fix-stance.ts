@@ -10,7 +10,7 @@ export type FixStanceKind =
     | "needs-you"
     // The fix is written and held on the agent's branch, waiting to be reviewed and landed.
     | "ready"
-    // It is in the workspace. What is left is proving it: re-run the check.
+    // It is in the workspace, not yet in a commit any check has run. What is left is proving it: commit and push.
     | "landed"
     // Stopped on a spent allowance, which is a wait rather than a failure and must not be drawn as one.
     | "waiting"
@@ -63,7 +63,8 @@ const LANDED: FixStance = {
     ongoing: false,
     retry: false,
     label: "Fix landed",
-    hint: "The fix is in your workspace. Running the check again is what proves it.",
+    // Not "run the check again": a re-run repeats the commit that failed, which the fix is not in (2026-11-12).
+    hint: "The fix is in your workspace. Commit and push it: the next run of the check shows whether it worked.",
 };
 
 const WAITING: FixStance = {

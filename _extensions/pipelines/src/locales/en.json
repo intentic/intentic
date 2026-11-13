@@ -1,9 +1,6 @@
 {
     "extension": {
-        "branchesFailing": "{count} branches failing",
         "pipelines": "Pipelines",
-        "streakOnCommit": "{repo} {branch} · {runs} failed · {sha}",
-        "streakOverCommits": "{repo} {branch} · {commits} commits · {runs} failed",
         "running": "{count} running",
         "queued": "{count} queued",
         "noRunsYet": "No runs yet",
@@ -11,6 +8,19 @@
         "branchCountFailing": "{count} branch failing | {count} branches failing",
         "runCount": "{count} run | {count} runs",
         "webhookNotRegistered": "webhook not registered"
+    },
+    "attention": {
+        "line": "{repo} {branch} · {move}",
+        "many": "{count} CI failure needs you | {count} CI failures need you",
+        "beingFixed": "{count} being fixed",
+        "unowned": "failed, nobody is on it",
+        "handed-back": "the fix agent stopped without a fix",
+        "answer": "the fix agent is waiting on you",
+        "review": "a fix is ready to review",
+        "push": "fix landed: commit and push it",
+        "releaseAgain": "fix landed: release again to check it",
+        "outside": "needs a step outside the repository",
+        "stalled": "fix pushed, nothing is checking it"
     },
     "mainFailure": {
         "autoFixAgent": "Auto-fix agent",
@@ -48,7 +58,8 @@
             "collecting": "Some jobs failed on a newer run. Auto-fix is collecting the remaining results. Fix now to start sooner.",
             "failedAgain": "A newer run on {branch} has failed jobs. Fix now to start another attempt.",
             "stalled": "The fix is pushed, but nothing will run {workflows} again on its own. Its line above says how to measure it. | The fix is pushed, but nothing will run {workflows} again on their own. Each line above says how to measure it.",
-            "stalledUnnamed": "The fix is pushed, but what failed has not passed again since. Only its own next run clears this."
+            "stalledUnnamed": "The fix is pushed, but what failed has not passed again since. Only its own next run clears this.",
+            "outside": "No commit fixes this. The fix agent says it needs you outside the repository: {step} Then re-run the failed workflow."
         },
         "title": "{branch} is failing",
         "fixNow": "Fix now",
@@ -94,7 +105,6 @@
         "failedJobs": "Failed jobs",
         "failureIsHistory": "Failure is history",
         "fixAgent": "Fix with agent",
-        "fixInWorkspace": "Fix is in workspace",
         "fixThatRun": "Fix that run instead",
         "fixUnderway": "Fix underway",
         "freshAttempt": "Fresh attempt",
@@ -112,11 +122,12 @@
         "supersededBy": "superseded by",
         "stanceNote": {
             "ended": "Continue or start over",
-            "landed": "Re-run to prove it",
+            "landed": "Commit and push it to check",
             "needs-you": "Open to answer",
             "ready": "Review, then land",
             "waiting": "Allowance spent",
-            "working": "Open to watch"
+            "working": "Open to watch",
+            "landedRelease": "Release again to check it"
         },
         "attemptWord": "attempt {n}",
         "attemptSummary": "Attempt {n}",
@@ -130,7 +141,12 @@
         },
         "startedAgo": "started {ago}",
         "fixAria": "Fix agent: {state} — open the conversation",
-        "fixAriaFacts": "Fix agent: {state}, {facts} — open the conversation"
+        "fixAriaFacts": "Fix agent: {state}, {facts} — open the conversation",
+        "afterTheStep": "Do the step first",
+        "ownerStepAria": "Step for you outside the repository: {step} — open the conversation",
+        "ownerStepChip": "Step for you",
+        "ownerStepNote": "Do it, then Re-run",
+        "ownerStepTitle": "No commit fixes this"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Loading pipelines"
@@ -197,6 +213,7 @@
         "run": "Run",
         "runs": "Runs",
         "started": "Started",
-        "updated": "Updated"
+        "updated": "Updated",
+        "step": "Step"
     }
 }

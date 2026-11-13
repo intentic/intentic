@@ -1,9 +1,6 @@
 {
     "extension": {
-        "branchesFailing": "{count} branches en échec",
         "pipelines": "Pipelines",
-        "streakOnCommit": "{repo} {branch} · {runs} en échec · {sha}",
-        "streakOverCommits": "{repo} {branch} · {commits} commits · {runs} en échec",
         "running": "{count} en cours",
         "queued": "{count} en file d'attente",
         "noRunsYet": "Aucune exécution pour l'instant",
@@ -11,6 +8,19 @@
         "branchCountFailing": "{count} branche en échec | {count} branches en échec",
         "runCount": "{count} exécution | {count} exécutions",
         "webhookNotRegistered": "webhook non enregistré"
+    },
+    "attention": {
+        "line": "{repo} {branch} · {move}",
+        "many": "{count} échec de CI vous attend | {count} échecs de CI vous attendent",
+        "beingFixed": "{count} en cours de correction",
+        "unowned": "échec, personne ne s'en occupe",
+        "handed-back": "l'agent de correction s'est arrêté sans correctif",
+        "answer": "l'agent de correction vous attend",
+        "review": "un correctif attend votre revue",
+        "push": "correctif intégré : faites commit et push",
+        "releaseAgain": "correctif intégré : publiez une nouvelle version pour le vérifier",
+        "outside": "demande une étape hors du dépôt",
+        "stalled": "correctif poussé, rien ne le vérifie"
     },
     "mainFailure": {
         "autoFixAgent": "Agent de correction auto",
@@ -48,7 +58,8 @@
             "collecting": "Certaines tâches d’une exécution plus récente ont échoué. La correction automatique rassemble les résultats restants. Cliquez sur « Corriger maintenant » pour commencer plus tôt.",
             "failedAgain": "Une exécution plus récente sur {branch} comporte des tâches en échec. Cliquez sur « Corriger maintenant » pour lancer une nouvelle tentative.",
             "stalled": "Le correctif est poussé, mais rien ne relancera {workflows} de lui-même. Sa ligne ci-dessus dit comment le mesurer. | Le correctif est poussé, mais rien ne relancera {workflows} d'eux-mêmes. Chaque ligne ci-dessus dit comment le mesurer.",
-            "stalledUnnamed": "Le correctif est poussé, mais ce qui a échoué n'est pas repassé depuis. Seule sa propre prochaine exécution lève l'alerte."
+            "stalledUnnamed": "Le correctif est poussé, mais ce qui a échoué n'est pas repassé depuis. Seule sa propre prochaine exécution lève l'alerte.",
+            "outside": "Aucun commit ne corrige cela. Selon l'agent de correction, il vous faut une étape hors du dépôt : {step} Relancez ensuite le workflow en échec."
         },
         "title": "{branch} échoue",
         "fixNow": "Corriger maintenant",
@@ -94,7 +105,6 @@
         "failedJobs": "Tâches en échec",
         "failureIsHistory": "Échec du passé",
         "fixAgent": "Réparer avec un agent",
-        "fixInWorkspace": "Correctif dans le workspace",
         "fixThatRun": "Corrigez plutôt celui-là",
         "fixUnderway": "Correctif en cours",
         "freshAttempt": "Nouvelle tentative",
@@ -112,11 +122,12 @@
         "supersededBy": "remplacée par",
         "stanceNote": {
             "ended": "Continuer ou recommencer",
-            "landed": "Relancez pour le prouver",
+            "landed": "Faites commit et push pour vérifier",
             "needs-you": "Ouvrir pour répondre",
             "ready": "Relire, puis intégrer",
             "waiting": "Quota épuisé",
-            "working": "Ouvrir pour suivre"
+            "working": "Ouvrir pour suivre",
+            "landedRelease": "Publiez une nouvelle version pour vérifier"
         },
         "attemptWord": "tentative {n}",
         "attemptSummary": "Tentative {n}",
@@ -130,7 +141,12 @@
         },
         "startedAgo": "démarrée {ago}",
         "fixAria": "Agent de correction : {state} — ouvrir la conversation",
-        "fixAriaFacts": "Agent de correction : {state}, {facts} — ouvrir la conversation"
+        "fixAriaFacts": "Agent de correction : {state}, {facts} — ouvrir la conversation",
+        "afterTheStep": "Faites d'abord l'étape",
+        "ownerStepAria": "Étape pour vous hors du dépôt : {step} — ouvrir la conversation",
+        "ownerStepChip": "Étape pour vous",
+        "ownerStepNote": "Faites-la, puis relancez",
+        "ownerStepTitle": "Aucun commit ne corrige cela"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Chargement des pipelines"
@@ -197,6 +213,7 @@
         "run": "Exécution",
         "runs": "Exécutions",
         "started": "Démarré",
-        "updated": "Mis à jour"
+        "updated": "Mis à jour",
+        "step": "Étape"
     }
 }

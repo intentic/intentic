@@ -8,7 +8,7 @@ flowchart LR
     daemon --> ext(["pipelines<br/>browser"])
     ext -->|"rerun · cancel · jobs · fix"| daemon
     daemon -->|"fix"| agent["Fix conversation"]
-    ext --> badge["Rail badge<br/>failing branches"]
+    ext --> badge["Rail badge<br/>what CI owes you"]
 ```
 
 - Runs in the browser, compiled into the editor app as a builtin. It holds no CI state: runs, jobs and main's failures come
@@ -56,14 +56,32 @@ flowchart LR
   later run's derived id (`src/fixes/mainFailures.ts`).
 - One fix control per breakage. On a failing main line it is the block's: the runs inside show the run, Re-run and
   Cancel, and no Fix, Continue, Start over or agent pointer (`leadsRows`), since every press on main goes to the same
-  agent anyway; nor does a landed fix promote Re-run there, since the fix is uncommitted and re-running the old commit
-  cannot measure it. The block's press is the rows' own split button, so its caret still re-points the model and, over
-  an agent that already tried, ends in Continue or Start over. Any other branch keeps "Fix with agent" on its failed
-  run rows.
-- The badge counts branches whose last commit failed, in the rail's danger tone. It never clears on viewing: a failing
-  branch clears when a later commit passes. `startCiAttention` polls from activation, so the badge is live while the board is closed.
+  agent anyway. The block's press is the rows' own split button, so its caret still re-points the model and, over an
+  agent that already tried, ends in Continue or Start over. Any other branch keeps "Fix with agent" on its failed run
+  rows, except beside a landed fix (the next push measures it, which its chip says) or a step outside the repository. A
+  landed fix never promotes Re-run: it is uncommitted in the workspace, and a re-run repeats the commit that failed.
+- The badge counts what CI owes the reader, not what is red (`src/attention.ts`): a failure nobody is on, one whose fix
+  agent stopped or handed it back, a fix waiting for an answer or a review, a landed fix still to push (a release's: to
+  release again), a step outside the repository, a pushed fix nothing is measuring. Danger only for a failure with nobody
+  on it; a step or a stall is a warning, the rest the ordinary tone. A failure a fix agent is working, one waiting on its
+  allowance, or one a run is measuring needs nobody: it rides the tile's running mark ("1 being fixed") beside the runs
+  in flight. A failing main line is read through the daemon's failure and its banner's story, so the tile and the banner
+  agree; any other branch through its head commit's failed runs and their fix agents. It counts only the open project's
+  repositories, as the board shows them, and never clears on viewing. `startCiAttention` polls the runs, and the fleet's
+  roster when anything failed, from activation, so the badge is live while the board is closed. Until 2026-11-12 it
+  counted every branch whose last commit failed, tags included, so a failed release whose fix had landed kept it at
+  "1" for hours with nothing to do on the board but start a third agent.
+- A release tag (`v1.2.3`) is no branch: nothing newer ever lands on it (`src/ciStreaks.ts`, `releaseFailures`). Each
+  release workflow's newest finished run is its state: open while it failed, history once a later release's run of the
+  same workflow passes, or the failed run itself is re-run to a pass.
+- No commit fixes some failures: a field in a store's dashboard, a secret's value, an account setting. The fix prompt asks
+  the agent to open its final message with `Owner step: …` instead of committing something for its sake; the daemon keeps
+  that line per agent (`ci/owner-steps.ts`, the contract's `ownerSteps`) and the row shows "Step for you" with it, and
+  promotes Re-run, which measures the step once it is taken. On a failing main line the banner says it.
 - "Fix with agent" asks the daemon to start a fix conversation. Its id is derived from the run, so the board pairs
-  runs with their fixes without a store of its own (`src/fixes/ciFixes.ts`). A plain press sends the model the button
+  runs with their fixes without a store of its own (`src/fixes/ciFixes.ts`). Ids minted before 2026-11-12
+  (`ci-fix-<repo>-<run>`, later attempts `-attemptN`) are still read: a run with attempts under the old spelling keeps
+  that family (the contract's `ciFixBase`), so a press continues it rather than opening a second attempt 1. A plain press sends the model the button
   names (the job's pin in Models, else the model a new chat would open on) as `fallback`: the daemon holds no chat pick
   of its own, so it runs that one when no pinned model can, while it can serve its provider (`src/usePipelines.ts`).
 - The press opens the agents board at once (`api.chat.launchAgent`) rather than when the daemon answers. The daemon
@@ -80,7 +98,8 @@ flowchart LR
 
 - [src/extension.ts](src/extension.ts) — registers the rail view: when it shows, its badge and its warm-up query.
 - [src/PipelinesView.vue](src/PipelinesView.vue) — the board: repository picker, failing main lines, run rows.
-- [src/ciStreaks.ts](src/ciStreaks.ts) — when a branch counts as failing, the rule behind the badge.
+- [src/ciStreaks.ts](src/ciStreaks.ts) — when a branch counts as failing, and a release's failures apart from it.
+- [src/attention.ts](src/attention.ts) — what CI owes the reader, the rule behind the badge.
 - [src/fixes/mainFailures.ts](src/fixes/mainFailures.ts) — a failing main line and its one fix agent, joined by the fixer's own id.
 - [src/graph/pipelineDag.ts](src/graph/pipelineDag.ts) — a run's flat job list turned into layers, cards and GitHub's order.
 

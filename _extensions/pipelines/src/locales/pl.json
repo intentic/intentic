@@ -1,9 +1,6 @@
 {
     "extension": {
-        "branchesFailing": "Gałęzie z błędem: {count}",
         "pipelines": "Pipeline'y",
-        "streakOnCommit": "{repo} {branch} · nieudane: {runs} · {sha}",
-        "streakOverCommits": "{repo} {branch} · commity: {commits} · nieudane: {runs}",
         "running": "{count} w toku",
         "queued": "{count} w kolejce",
         "noRunsYet": "Jeszcze żadnych uruchomień",
@@ -11,6 +8,19 @@
         "branchCountFailing": "{count} gałąź z błędem | {count} gałęzie z błędem | {count} gałęzi z błędem",
         "runCount": "{count} uruchomienie | {count} uruchomienia | {count} uruchomień",
         "webhookNotRegistered": "webhook niezarejestrowany"
+    },
+    "attention": {
+        "line": "{repo} {branch} · {move}",
+        "many": "{count} błąd CI czeka na Ciebie | {count} błędy CI czekają na Ciebie | {count} błędów CI czeka na Ciebie",
+        "beingFixed": "{count} w naprawie",
+        "unowned": "błąd, nikt się nim nie zajmuje",
+        "handed-back": "agent naprawczy skończył bez poprawki",
+        "answer": "agent naprawczy czeka na Ciebie",
+        "review": "poprawka czeka na przegląd",
+        "push": "poprawka wylądowała: zrób commit i push",
+        "releaseAgain": "poprawka wylądowała: wydaj nową wersję, by ją sprawdzić",
+        "outside": "wymaga kroku poza repozytorium",
+        "stalled": "poprawka wypchnięta, nic jej nie sprawdza"
     },
     "mainFailure": {
         "autoFixAgent": "Agent auto-naprawy",
@@ -48,7 +58,8 @@
             "collecting": "Część zadań w nowszym przebiegu nie powiodła się. Auto-naprawa zbiera pozostałe wyniki. Wybierz „Napraw teraz”, żeby zacząć wcześniej.",
             "failedAgain": "Nowszy przebieg na {branch} ma nieudane zadania. Wybierz „Napraw teraz”, żeby rozpocząć kolejną próbę.",
             "stalled": "Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Jego wiersz powyżej mówi, jak go zmierzyć. | Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Każdy wiersz powyżej mówi, jak go zmierzyć. | Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Każdy wiersz powyżej mówi, jak go zmierzyć.",
-            "stalledUnnamed": "Poprawka jest wypchnięta, ale to, co się nie powiodło, od tamtej pory nie przeszło. Zgłoszenie zniknie dopiero po jego własnym kolejnym udanym uruchomieniu."
+            "stalledUnnamed": "Poprawka jest wypchnięta, ale to, co się nie powiodło, od tamtej pory nie przeszło. Zgłoszenie zniknie dopiero po jego własnym kolejnym udanym uruchomieniu.",
+            "outside": "Żaden commit tego nie naprawi. Agent naprawczy mówi, że potrzebny jest Twój krok poza repozytorium: {step} Potem uruchom ponownie nieudany workflow."
         },
         "title": "{branch} nie przechodzi",
         "fixNow": "Napraw teraz",
@@ -94,7 +105,6 @@
         "failedJobs": "Nieudane zadania",
         "failureIsHistory": "Błąd to przeszłość",
         "fixAgent": "Napraw agentem",
-        "fixInWorkspace": "Poprawka jest w workspace",
         "fixThatRun": "Napraw raczej tamten",
         "fixUnderway": "Poprawka w toku",
         "freshAttempt": "Nowa próba",
@@ -112,11 +122,12 @@
         "supersededBy": "zastąpiony przez",
         "stanceNote": {
             "ended": "Kontynuuj lub zacznij od nowa",
-            "landed": "Uruchom ponownie, by sprawdzić",
+            "landed": "Zrób commit i push, by sprawdzić",
             "needs-you": "Otwórz, by odpowiedzieć",
             "ready": "Przejrzyj i wdróż",
             "waiting": "Limit wyczerpany",
-            "working": "Otwórz, by śledzić"
+            "working": "Otwórz, by śledzić",
+            "landedRelease": "Wydaj nową wersję, by sprawdzić"
         },
         "attemptWord": "próba {n}",
         "attemptSummary": "Próba {n}",
@@ -130,7 +141,12 @@
         },
         "startedAgo": "rozpoczęto {ago}",
         "fixAria": "Agent naprawy: {state} — otwórz rozmowę",
-        "fixAriaFacts": "Agent naprawy: {state}, {facts} — otwórz rozmowę"
+        "fixAriaFacts": "Agent naprawy: {state}, {facts} — otwórz rozmowę",
+        "afterTheStep": "Najpierw wykonaj krok",
+        "ownerStepAria": "Krok dla Ciebie poza repozytorium: {step} — otwórz rozmowę",
+        "ownerStepChip": "Krok dla Ciebie",
+        "ownerStepNote": "Zrób to, potem uruchom ponownie",
+        "ownerStepTitle": "Żaden commit tego nie naprawi"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Wczytywanie pipeline'ów"
@@ -197,6 +213,7 @@
         "run": "Przebieg",
         "runs": "Przebiegi",
         "started": "Start",
-        "updated": "Zmiana"
+        "updated": "Zmiana",
+        "step": "Krok"
     }
 }

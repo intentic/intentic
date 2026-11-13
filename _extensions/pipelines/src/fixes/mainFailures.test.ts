@@ -389,6 +389,19 @@ describe(`storyOf`, () => {
         expect(storyOf({ state: `fixing`, fixer: undefined, stance: undefined, failure: failing() }, [])).toBe(`working`);
     });
 
+    // A docs line landed beside a dashboard step is not the fix: the step is what the reader is owed.
+    it(`tells a step outside the repository ahead of what the agent holds`, () => {
+        expect(storyOf({ ...fixing(`landed`), ownerStep: `Fill the field in the store's dashboard.` }, [])).toBe(`outside`);
+    });
+
+    it(`carries the fixer's step only while its turn is its last word`, () => {
+        const fixer = agentCard(`ci-fix-web-41`, { status: `landed` });
+        const steps = [{ conversationId: fixer.id, step: `Fill the field.`, at: 1 }];
+        const failure = failing({ fixer: fixer.id, decision: decided(`fix-up`, { conversationId: fixer.id }) });
+        expect(mainFailuresOf([failure], [fixer], [], steps)[0]?.ownerStep).toBe(`Fill the field.`);
+        expect(mainFailuresOf([failure], [{ ...fixer, status: `running` }], [], steps)[0]?.ownerStep).toBeUndefined();
+    });
+
     it(`calls a landed fix measured once a run starts after it landed, and only then`, () => {
         const before = pipelineRun({ runId: 51, status: `running`, createdAt: NOW - 6 * MINUTE });
         const after = pipelineRun({ runId: 52, status: `running`, createdAt: NOW - 4 * MINUTE });

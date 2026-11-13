@@ -1,5 +1,4 @@
 import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
-import { t } from "./i18n.js";
 
 // Whether a branch is failing right now, judged on its last commit rather than its last run: near-simultaneous
 // workflows mean a passing one can hide a failed one. A state, not a one-time edge: it clears only when a later commit passes, never
@@ -26,8 +25,10 @@ const isTerminal = (run: PipelineRun): boolean => run.status === `failed` || run
 const branchKey = (run: PipelineRun): string => `${run.repo}\n${run.branch}`;
 
 // A semver-looking tag (v1.2.3, ...): workflow_dispatch runs from a release tag carry the tag as head_branch, not the
-// real branch. Excluded from auto-open, or stale release runs bury the board.
-const isTagRef = (branch: string): boolean => /^v\d+\.\d+\.\d+/.test(branch);
+// real branch. Excluded from auto-open, or stale release runs bury the board, and from the failing branches: a tag never
+// gets another commit, so a failure on it never cleared, and the rail said "1" over a release for hours (v1.413.0,
+// 2026-11-12). A release's failures are their own reading (releaseFailures).
+export const isTagRef = (branch: string): boolean => /^v\d+\.\d+\.\d+/.test(branch);
 
 // One commit's verdict on one branch: what every derivation below walks.
 interface BranchCommit {
@@ -73,8 +74,8 @@ export const failureStreaks = (runs: readonly PipelineRun[]): FailureStreak[] =>
     const streaks: FailureStreak[] = [];
     for (const commits of commitsByBranch(runs)) {
         const [head] = commits;
-        // A clean commit at the head ⇒ whatever happened behind it is over.
-        if (head === undefined || head.failed.length === 0) {
+        // A clean commit at the head ⇒ whatever happened behind it is over. A tag is a release, not a branch.
+        if (head === undefined || head.failed.length === 0 || isTagRef(head.newest.branch)) {
             continue;
         }
         // Runs back to the last passing commit, or the window's oldest run; never looks newer than it is.
@@ -127,11 +128,48 @@ export const inFlightOnHead = (runs: readonly PipelineRun[]): ReadonlySet<Pipeli
 // rules, so a breakage six commits deep still opens one row, not six.
 export const arrivesOpen = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => new Set([...inFlightOnHead(runs), ...openFailures(runs)]);
 
+// A RELEASE'S FAILURES, read per workflow rather than per commit: each release tag is a commit of its own, so nothing
+// newer ever lands on it, and what says a release workflow works again is a later release's run of the same workflow
+// passing (or the failed run itself re-run to a pass, which keeps its id and so is simply no longer failed).
+const workflowKey = (run: PipelineRun): string => `${run.repo}\n${run.workflow ?? ``}`;
+
+// Each workflow's newest finished release run, when it failed: the release failures still open. An older failed one
+// behind it is history either way, superseded by a pass (releaseSupersededBy) or by the newer failure.
+export const releaseFailures = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => {
+    const newest = new Map<string, PipelineRun>();
+    for (const run of runs.filter((each) => isTagRef(each.branch) && isTerminal(each))) {
+        const held = newest.get(workflowKey(run));
+        if (held === undefined || run.createdAt > held.createdAt) {
+            newest.set(workflowKey(run), run);
+        }
+    }
+    return new Set([...newest.values()].filter((run) => run.status === `failed`));
+};
+
+// Each failed release run with the earliest later release run of its workflow that passed.
+const releaseSupersededBy = (runs: readonly PipelineRun[]): Map<PipelineRun, PipelineRun> => {
+    const superseded = new Map<PipelineRun, PipelineRun>();
+    const releases = runs.filter((run) => isTagRef(run.branch) && isTerminal(run)).toSorted((a, b) => a.createdAt - b.createdAt);
+    for (const failure of releases.filter((run) => run.status === `failed`)) {
+        const recovery = releases.find(
+            (run) => run.status === `success` && run.createdAt > failure.createdAt && workflowKey(run) === workflowKey(failure),
+        );
+        if (recovery !== undefined) {
+            superseded.set(failure, recovery);
+        }
+    }
+    return superseded;
+};
+
 // Earliest later commit that passed clean, not just the newest pass; a pass on the failure's own commit doesn't
 // count. Keyed by run object identity (shared from one query cache); absent means nothing has passed since.
 export const supersededBy = (runs: readonly PipelineRun[]): ReadonlyMap<PipelineRun, PipelineRun> => {
-    const superseded = new Map<PipelineRun, PipelineRun>();
+    // A release's runs answer per workflow (releaseSupersededBy); a branch's per commit.
+    const superseded = releaseSupersededBy(runs);
     for (const commits of commitsByBranch(runs)) {
+        if (commits[0] !== undefined && isTagRef(commits[0].newest.branch)) {
+            continue;
+        }
         // Walking backwards, this always holds the earliest recovery newer than the failure visited.
         let recovery: PipelineRun | undefined;
         for (const commit of commits) {
@@ -147,16 +185,4 @@ export const supersededBy = (runs: readonly PipelineRun[]): ReadonlyMap<Pipeline
         }
     }
     return superseded;
-};
-
-// Names the branch while there's only one breakage; 'main is broken' is actionable, '1' is not. Single-commit says the
-// sha; more than one says how deep, which is what changes the response. Figures, not a sentence: the host reads it
-// after the view's name.
-export const streakTooltip = (streaks: readonly FailureStreak[]): string => {
-    const [only] = streaks;
-    if (streaks.length === 1 && only !== undefined) {
-        const facts = { repo: only.repo, branch: only.branch, runs: only.runs, commits: only.commits, sha: only.sha.slice(0, 7) };
-        return only.commits === 1 ? t(`extension.streakOnCommit`, facts) : t(`extension.streakOverCommits`, facts);
-    }
-    return t(`extension.branchesFailing`, { count: streaks.length });
 };

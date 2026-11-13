@@ -129,6 +129,7 @@ const STORY = {
     waits: () => t(`mainFailure.story.waits`, { reason: handBack.value }),
     reported: () => t(`mainFailure.story.reported`),
     unassigned: () => t(`mainFailure.story.unassigned`),
+    outside: () => t(`mainFailure.story.outside`, { step: props.view.ownerStep ?? `` }),
 } as const satisfies Readonly<Record<MainFailureStory, () => string>>;
 const story = computed(() => STORY[storyOf(props.view, props.covered, props.runs)]());
 

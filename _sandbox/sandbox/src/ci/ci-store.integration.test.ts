@@ -124,3 +124,22 @@ test("a failure and a pass are kept as failures and passes", async () => {
         { kind: "spent", reason: "turn-failed", at: 2, detail: "Its fix agent's turn failed." },
     ]);
 });
+
+// A fix agent's step outside the repository (owner-steps.ts): kept per agent, replaced by its next turn's, forgotten by a
+// turn that names none, and bounded.
+test("owner steps are kept per fix agent, replaced, forgotten and bounded", async () => {
+    const store = storeIn("ci-owner-steps-");
+    expect(await store.ownerStep("fix-web-15", { step: "Fill the field.", at: 1 })).toBe(true);
+    expect(await store.ownerStep("fix-web-15", { step: "Fill the field.", at: 2 })).toBe(false);
+    expect(await store.ownerSteps()).toEqual({ "fix-web-15": { step: "Fill the field.", at: 1 } });
+    expect(await store.ownerStep("fix-web-15", undefined)).toBe(true);
+    expect(await store.ownerStep("fix-web-15", undefined)).toBe(false);
+    expect(await store.ownerSteps()).toEqual({});
+    for (let i = 0; i < 55; i += 1) {
+        await store.ownerStep(`fix-web-${i}`, { step: `step ${i}`, at: i });
+    }
+    const kept = await store.ownerSteps();
+    expect(Object.keys(kept)).toHaveLength(50);
+    expect(kept["fix-web-0"]).toBeUndefined();
+    expect(kept["fix-web-54"]).toEqual({ step: "step 54", at: 54 });
+});

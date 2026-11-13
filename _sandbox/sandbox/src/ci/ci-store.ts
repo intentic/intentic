@@ -9,7 +9,7 @@ import { stateRelPath } from "../state-paths.js";
 // Daemon-recorded CI state in .intentic/secrets/ci.json: the webhook secret, each repo+branch's last terminal
 // conclusion (drives pipeline_fixed/pipeline_broken), the poller's already-announced run ids, each main-line branch
 // failing now with the newest run of each workflow that passed on it, what the forge says of each repository (its id,
-// path and default branch), and the runs re-run for the fleet. Carries a secret, so it's a
+// path and default branch), the runs re-run for the fleet, and the steps outside the repository fix agents ended on. Carries a secret, so it's a
 // LOCKED_STATE_ENTRIES file like capabilities.json. No 'seen' flag: only a passing commit clears the rail badge.
 
 // Caps stored conclusions; oldest-touched entries drop past this so the file doesn't grow forever.
@@ -20,6 +20,9 @@ const ANNOUNCED_KEPT = 60;
 
 // Fleet re-runs kept per repo; a run older than these is long past being heard of again.
 const FLEET_RERUNS_KEPT = 50;
+
+// Owner steps kept (owner-steps.ts), newest by when they were said; a fix agent older than these has scrolled off the board.
+const OWNER_STEPS_KEPT = 50;
 
 const ConclusionSchema = z.object({ status: z.enum(["success", "failed"]), at: z.number() });
 
@@ -99,6 +102,8 @@ const CiStateSchema = z.object({
     // Keyed by workspace repo: the runs re-run because the CI fleet, not the code, failed them, newest first, so a run is
     // re-run once however many restarts hear of it. Bounded.
     fleetReruns: z.record(z.string(), z.array(z.number())).optional(),
+    // Keyed by fix conversation id: the step outside the repository its latest turn ended on (owner-steps.ts). Bounded.
+    ownerSteps: z.record(z.string(), z.object({ step: z.string(), at: z.number() })).optional(),
 });
 type CiState = z.infer<typeof CiStateSchema>;
 
@@ -166,6 +171,10 @@ export interface CiStore {
     readonly learnForge: (repo: string, remote: string, fact: Omit<CiForge, "remote">) => Promise<void>;
     // Records a fleet re-run of the run, answering whether it is the first: false means it was re-run before.
     readonly fleetRerun: (repo: string, runId: number) => Promise<boolean>;
+    // The step outside the repository each CI fix agent's latest turn ended on, keyed by its conversation id.
+    readonly ownerSteps: () => Promise<Readonly<Record<string, { readonly step: string; readonly at: number }>>>;
+    // Keeps one agent's step, or forgets it with undefined, answering whether anything changed.
+    readonly ownerStep: (conversationId: string, kept: { readonly step: string; readonly at: number } | undefined) => Promise<boolean>;
 }
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
@@ -242,6 +251,23 @@ export const fileCiStore = (path: string): CiStore => {
                 return { ...minted(state), fleetReruns: { ...state.fleetReruns, [repo]: [runId, ...known].slice(0, FLEET_RERUNS_KEPT) } };
             });
             return first;
+        },
+        ownerSteps: async () => (await file.read()).ownerSteps ?? {},
+        ownerStep: async (conversationId, kept) => {
+            let changed = false;
+            await file.update((state) => {
+                const { [conversationId]: previous, ...others } = state.ownerSteps ?? {};
+                if (kept === undefined ? previous === undefined : previous?.step === kept.step) {
+                    return state;
+                }
+                changed = true;
+                const steps = kept === undefined ? others : { ...others, [conversationId]: kept };
+                const newest = Object.entries(steps)
+                    .toSorted(([, a], [, b]) => b.at - a.at)
+                    .slice(0, OWNER_STEPS_KEPT);
+                return { ...minted(state), ownerSteps: Object.fromEntries(newest) };
+            });
+            return changed;
         },
         recordAnnounced: async (repo, runIds) => {
             await file.update((state) => ({

@@ -1,5 +1,5 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { ciFixConversationId, fixAttemptId, legacyCiFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { branchFixes, branchKey, fixesByRun } from "./ciFixes";
 import { agentCard, pipelineRun as run } from "../testing";
@@ -25,6 +25,15 @@ test("a run with several attempts is represented by the latest", () => {
     const second: AgentSummary = { ...fixAgent(failed), id: fixAttemptId(first.id, 2) };
     expect(fixesByRun([failed], [first, second]).get(failed)?.id).toBe(second.id);
     expect(fixesByRun([failed], [second, first]).get(failed)?.id).toBe(second.id);
+});
+
+// Fix agents started before the ids were shortened (2026-11-12): the board found none of them afterwards and offered Fix
+// with agent beside a failure two agents had already worked.
+test("a run fixed before the ids were shortened still finds its latest attempt", () => {
+    const failed = run({ runId: 43_301_660_752 });
+    const legacy = legacyCiFixConversationId(failed.repo, failed.runId);
+    const fixes = fixesByRun([failed], [agentCard(legacy, { status: `landed` }), agentCard(`${legacy}-attempt2`)]);
+    expect(fixes.get(failed)?.id).toBe(`${legacy}-attempt2`);
 });
 
 // The roster is the whole fleet; an agent that is not one of this board's fixes must never be joined to a row.

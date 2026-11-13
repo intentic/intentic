@@ -1,9 +1,6 @@
 {
     "extension": {
-        "branchesFailing": "{count} ramas fallando",
         "pipelines": "Pipelines",
-        "streakOnCommit": "{repo} {branch} · {runs} fallidas · {sha}",
-        "streakOverCommits": "{repo} {branch} · {commits} commits · {runs} fallidas",
         "running": "{count} en marcha",
         "queued": "{count} en cola",
         "noRunsYet": "Todavía sin ejecuciones",
@@ -11,6 +8,19 @@
         "branchCountFailing": "{count} rama con fallos | {count} ramas con fallos",
         "runCount": "{count} ejecución | {count} ejecuciones",
         "webhookNotRegistered": "webhook sin registrar"
+    },
+    "attention": {
+        "line": "{repo} {branch} · {move}",
+        "many": "{count} fallo de CI te necesita | {count} fallos de CI te necesitan",
+        "beingFixed": "{count} en arreglo",
+        "unowned": "falló, nadie se encarga",
+        "handed-back": "el agente de arreglo paró sin arreglo",
+        "answer": "el agente de arreglo te espera",
+        "review": "hay un arreglo listo para revisar",
+        "push": "arreglo integrado: haz commit y push",
+        "releaseAgain": "arreglo integrado: publica otra versión para comprobarlo",
+        "outside": "necesita un paso fuera del repositorio",
+        "stalled": "arreglo enviado, nada lo comprueba"
     },
     "mainFailure": {
         "autoFixAgent": "Agente de arreglo automático",
@@ -48,7 +58,8 @@
             "collecting": "Algunos trabajos de una ejecución más reciente han fallado. La corrección automática está recopilando los resultados restantes. Pulsa «Corregir ahora» para empezar antes.",
             "failedAgain": "Una ejecución más reciente en {branch} tiene trabajos fallidos. Pulsa «Corregir ahora» para iniciar otro intento.",
             "stalled": "El arreglo está subido, pero nada volverá a ejecutar {workflows} por sí solo. Su línea de arriba dice cómo medirlo. | El arreglo está subido, pero nada volverá a ejecutar {workflows} por sí solos. Cada línea de arriba dice cómo medirlo.",
-            "stalledUnnamed": "El arreglo está subido, pero lo que falló no ha vuelto a pasar desde entonces. Solo su propia próxima ejecución lo resuelve."
+            "stalledUnnamed": "El arreglo está subido, pero lo que falló no ha vuelto a pasar desde entonces. Solo su propia próxima ejecución lo resuelve.",
+            "outside": "Ningún commit arregla esto. El agente de arreglo dice que te necesita fuera del repositorio: {step} Después vuelve a ejecutar el workflow fallido."
         },
         "title": "{branch} está fallando",
         "fixNow": "Corregir ahora",
@@ -94,7 +105,6 @@
         "failedJobs": "Tareas fallidas",
         "failureIsHistory": "El fallo ya pasó",
         "fixAgent": "Arreglar con un agente",
-        "fixInWorkspace": "El arreglo está en el workspace",
         "fixThatRun": "Arregla ese en su lugar",
         "fixUnderway": "Arreglo en curso",
         "freshAttempt": "Intento nuevo",
@@ -112,11 +122,12 @@
         "supersededBy": "sustituida por",
         "stanceNote": {
             "ended": "Continúa o empieza de nuevo",
-            "landed": "Reejecuta para probarlo",
+            "landed": "Haz commit y push para comprobarlo",
             "needs-you": "Ábrelo para responder",
             "ready": "Revisa y aplica",
             "waiting": "Cupo agotado",
-            "working": "Ábrelo para verlo"
+            "working": "Ábrelo para verlo",
+            "landedRelease": "Publica otra versión para comprobarlo"
         },
         "attemptWord": "intento {n}",
         "attemptSummary": "Intento {n}",
@@ -130,7 +141,12 @@
         },
         "startedAgo": "iniciado {ago}",
         "fixAria": "Agente de reparación: {state} — abrir la conversación",
-        "fixAriaFacts": "Agente de reparación: {state}, {facts} — abrir la conversación"
+        "fixAriaFacts": "Agente de reparación: {state}, {facts} — abrir la conversación",
+        "afterTheStep": "Primero haz el paso",
+        "ownerStepAria": "Paso para ti fuera del repositorio: {step} — abrir la conversación",
+        "ownerStepChip": "Paso para ti",
+        "ownerStepNote": "Hazlo y vuelve a ejecutar",
+        "ownerStepTitle": "Ningún commit arregla esto"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Cargando las pipelines"
@@ -197,6 +213,7 @@
         "run": "Ejecución",
         "runs": "Ejecuciones",
         "started": "Iniciado",
-        "updated": "Actualizado"
+        "updated": "Actualizado",
+        "step": "Paso"
     }
 }

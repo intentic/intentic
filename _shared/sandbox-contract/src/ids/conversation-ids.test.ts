@@ -10,6 +10,8 @@ import {
     TAIL_ALPHABET,
     homeConversationId,
     isHomeConversationId,
+    legacyCiFixConversationId,
+    ciFixBase,
     ciFixConversationId,
     fixAttemptId,
     fixAttemptOf,
@@ -220,6 +222,26 @@ test("an attempt id passes the guard and fits, even for the widest run id a forg
         expect(ConversationIdSchema.safeParse(id).success).toBe(true);
         expect(id.length).toBeLessThanOrEqual(64);
     }
+});
+
+// Fix agents minted before the ids were shortened (2026-11-12) still answer their failures: the board found none of them
+// after the change, and offered Fix with agent beside a failure two agents had already worked.
+test("a run fixed before the ids were shortened keeps its own family", () => {
+    const legacy = legacyCiFixConversationId(`intentic`, 43_301_660_752);
+    expect(legacy).toBe(`ci-fix-intentic-43301660752`);
+    expect(fixAttemptOf(legacy, `ci-fix-intentic-43301660752-attempt2`)).toBe(2);
+    // An attempt minted after the change, on the family the legacy base began.
+    expect(fixAttemptOf(legacy, fixAttemptId(legacy, 3))).toBe(3);
+    expect(latestFixAttempt(legacy, [{ id: legacy }, { id: `ci-fix-intentic-43301660752-attempt2` }])?.attempt).toBe(2);
+    expect(ciFixBase(`intentic`, 43_301_660_752, [`ci-fix-intentic-43301660752-attempt2`])).toBe(legacy);
+    expect(ciFixBase(`intentic`, 43_301_660_752, [`swift-otter-k9m2`])).toBe(ciFixConversationId(`intentic`, 43_301_660_752));
+});
+
+test("the legacy attempt mark is read only on the bases that once carried it", () => {
+    const base = ciFixConversationId(`web`, 41);
+    expect(fixAttemptOf(base, `${base}-attempt2`)).toBeUndefined();
+    // Another legacy run's id is no attempt: `-attempt` never follows a decimal run id inside a base.
+    expect(fixAttemptOf(legacyCiFixConversationId(`web`, 41), legacyCiFixConversationId(`web-41`, 2))).toBeUndefined();
 });
 
 // One home conversation per member, derived from who they are: the same in every browser and in the daemon, whatever the

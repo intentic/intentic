@@ -25,8 +25,8 @@ import {
     ProjectChip,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import { branchFixes, branchKey, fixesByRun } from "./fixes/ciFixes";
-import { arrivesOpen, openFailures, supersededBy } from "./ciStreaks";
+import { branchFixes, branchKey, fixesByRun, ownerStepOf } from "./fixes/ciFixes";
+import { arrivesOpen, openFailures, releaseFailures, supersededBy } from "./ciStreaks";
 import { useCiFixes } from "./fixes/useCiFixes";
 import { useFailureHistory } from "./useFailureHistory";
 import MainFailureBanner from "./fixes/MainFailureBanner.vue";
@@ -45,7 +45,7 @@ import { t } from "./i18n.js";
 // at the head of its repository's runs, with the one fix agent the daemon put on it.
 
 const api = host();
-const { repos: allRepos, runs: allRuns, failures: allFailures, loaded, rerun, cancel, dispatch, forget, fix } = usePipelines();
+const { repos: allRepos, runs: allRuns, failures: allFailures, ownerSteps, loaded, rerun, cancel, dispatch, forget, fix } = usePipelines();
 // The open project's rows only (api.workspace.inProject): runs come from the CI routes, not from repos(), so the view
 // narrows them itself and says on its chip how many repositories it put out of sight.
 const repos = computed(() => allRepos.value.filter((repo) => api.workspace.inProject(repo.repo)));
@@ -110,9 +110,10 @@ const recurringByBranch = computed(() => {
 });
 const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurringByBranch.value.get(`${run.repo}\n${run.branch}`) ?? new Map();
 
-// Which failed rows still carry an open problem, so only one gets a primary 'Fix with agent' per breakage. Read off every
-// run, not the scoped ones: a branch's history doesn't change with the repository filter.
-const open = computed(() => openFailures(runs.value));
+// Which failed rows still carry an open problem, so only one gets a primary 'Fix with agent' per breakage: a branch's head
+// commit's failures, and each release workflow's newest failure (ciStreaks.ts, releaseFailures). Read off every run, not
+// the scoped ones: a branch's history doesn't change with the repository filter.
+const open = computed(() => new Set([...openFailures(runs.value), ...releaseFailures(runs.value)]));
 const superseded = computed(() => supersededBy(runs.value));
 
 // Which failed rows already have an agent, and its fate; read off every run for the same cross-run reason as above.
@@ -122,7 +123,7 @@ const { agents, invalidate: refreshFixes } = useCiFixes(fixesWanted);
 const fixByRun = computed(() => fixesByRun(runs.value, agents.value));
 
 // Failing main lines with their one fix agent each, joined by the fixer's own id rather than a run's (mainFailures.ts).
-const mainFailures = computed(() => mainFailuresOf(failures.value, agents.value, runs.value));
+const mainFailures = computed(() => mainFailuresOf(failures.value, agents.value, runs.value, ownerSteps.value));
 const mainFailuresOfRepo = (repo: string) => mainFailures.value.filter((view) => view.failure.repo === repo);
 // Branches whose banner holds the fix (leadsRows): its press or its working agent is the breakage's one fix control, so
 // the rows under it offer none of their own.
@@ -171,6 +172,7 @@ const rowProps = (run: PipelineRun, covered = false) => ({
     superseded: covered ? undefined : superseded.value.get(run),
     autoOpen: autoOpen.value.has(run),
     fix: fixByRun.value.get(run),
+    ownerStep: ownerStepOf(fixByRun.value.get(run), ownerSteps.value),
     branchFix: branchFixFor(run),
     ledByBanner: bannerBranches.value.has(`${run.repo}\n${run.branch}`),
 });

@@ -117,6 +117,8 @@ export function usePipelines() {
         // Main-line branches failing right now, each with the one fix agent the daemon put on it; absent from a daemon
         // that keeps none, which reads the same as none failing.
         failures: computed(() => query.data.value?.failures ?? []),
+        // The steps outside the repository fix agents ended on (the daemon's owner-steps.ts); absent reads as none.
+        ownerSteps: computed(() => query.data.value?.ownerSteps ?? []),
         // Waiting until the first response, including while the sandbox is not answering yet; never an empty board.
         loaded,
         rerun,

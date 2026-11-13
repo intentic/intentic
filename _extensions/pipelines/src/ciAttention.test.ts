@@ -1,9 +1,12 @@
-import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { ciFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import type { CiOwnerStep, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { attentionBadge, inFlightNote } from "./ciAttention";
 import { messages } from "./i18n";
 import { manifest } from "./manifest";
+import { agentCard } from "./testing";
 
 // The broken branch's words are the extension's own catalog, which the host mounts before anything reads it.
 await registerExtensionMessages(extensionIdOf(manifest), messages);
@@ -44,29 +47,69 @@ test("a broken branch does not silence it: the fix's own re-run is what the read
     expect(inFlightNote([run(1, "failed"), run(2, "running")])).toBe("1 running");
 });
 
-// THE TILE AS A WHOLE: a broken branch is the count, in the rail's only danger tone, and what is in flight rides beside
-// it rather than being hidden by it.
+// THE TILE AS A WHOLE: what CI owes the reader is the count, and what needs nobody (a fix working, CI running) rides the
+// running mark beside it rather than turning the tile red.
+const feed = (runs: readonly PipelineRun[], agents: readonly AgentSummary[] = [], ownerSteps: CiOwnerStep[] = []) => ({
+    ci: { repos: [], runs: [...runs], ownerSteps },
+    agents,
+});
+
 describe(`attentionBadge`, () => {
     it(`stands down while nothing is broken or moving`, () => {
-        expect(attentionBadge([run(1, "success")])).toBeUndefined();
-        expect(attentionBadge([])).toBeUndefined();
+        expect(attentionBadge(feed([run(1, "success")]))).toBeUndefined();
+        expect(attentionBadge(feed([]))).toBeUndefined();
     });
 
-    it(`counts broken branches in the danger tone, and names the one there is`, () => {
-        expect(attentionBadge([run(2, "failed")])).toEqual({
+    it(`counts a failure nobody is on in the danger tone, and names it`, () => {
+        expect(attentionBadge(feed([run(2, "failed")]))).toEqual({
             count: 1,
             tone: "danger",
-            tooltip: "intentic main · 1 failed · sha2",
+            tooltip: "intentic main · failed, nobody is on it",
         });
     });
 
-    it(`keeps the running mark beside the count, and alone once nothing is broken`, () => {
-        expect(attentionBadge([run(1, "failed"), run(2, "running")])).toEqual({
+    it(`keeps the running mark beside the count, and alone once nothing is owed`, () => {
+        expect(attentionBadge(feed([run(1, "failed"), run(2, "running")]))).toEqual({
             count: 1,
             tone: "danger",
-            tooltip: "intentic main · 1 failed · sha1",
+            tooltip: "intentic main · failed, nobody is on it",
             running: "1 running",
         });
-        expect(attentionBadge([run(1, "running")])).toEqual({ running: "1 running" });
+        expect(attentionBadge(feed([run(1, "running")]))).toEqual({ running: "1 running" });
+    });
+
+    it(`does not call the reader over a failure a fix agent is working`, () => {
+        const failed = run(1, "failed");
+        const working = agentCard(ciFixConversationId(failed.repo, failed.runId), { status: "running" });
+        expect(attentionBadge(feed([failed], [working]))).toEqual({ running: "1 being fixed" });
+    });
+
+    it(`counts a landed fix as the reader's push, in the ordinary tone`, () => {
+        const failed = run(1, "failed");
+        const landed = agentCard(ciFixConversationId(failed.repo, failed.runId), { status: "landed" });
+        expect(attentionBadge(feed([failed], [landed]))).toEqual({ count: 1, tone: "info", tooltip: "intentic main · fix landed: commit and push it" });
+    });
+
+    // 2026-11-12: release v1.413.0's webstore publish needed a field in the store's dashboard. The rail said "1 failed"
+    // over a tag, and the board offered a third agent.
+    it(`names a step outside the repository on a release, as a warning`, () => {
+        const release = { ...run(1, "failed"), branch: "v1.413.0", workflow: "webstore publish" };
+        const fixer = agentCard(ciFixConversationId(release.repo, release.runId), { status: "landed" });
+        const step = { conversationId: fixer.id, step: "Fill the downloads justification in the dashboard.", at: 1 };
+        expect(attentionBadge(feed([release], [fixer], [step]))).toEqual({
+            count: 1,
+            tone: "warning",
+            tooltip: "intentic v1.413.0 · needs a step outside the repository",
+        });
+        expect(attentionBadge(feed([release], [fixer]))?.tooltip).toBe("intentic v1.413.0 · fix landed: release again to check it");
+    });
+
+    it(`counts only the open project's repositories, as the board shows them`, () => {
+        expect(attentionBadge(feed([run(1, "failed")]), (repo) => repo !== "intentic")).toBeUndefined();
+    });
+
+    it(`says how many when several are owed`, () => {
+        const other = { ...run(3, "failed"), branch: "feature" };
+        expect(attentionBadge(feed([run(1, "failed"), other]))?.tooltip).toBe("2 CI failures need you");
     });
 });

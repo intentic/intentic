@@ -13,6 +13,7 @@ import { ciFailureEvidence, jointEvidence, runOf, startCiFix, type WorkflowEvide
 import { fixPressed, forgetFailure, mainFailures, streakFixerFor, streakRunsBeside } from "./main-fixer.js";
 import { workflowOf } from "./main-streak.js";
 import { createCiFailureLog } from "./logs/ci-failure-log.js";
+import { ownerSteps } from "./owner-steps.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import type { RunsCache } from "./runs-cache.js";
@@ -138,13 +139,13 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                     ...(operator && warning?.recipe !== undefined ? { hookRecipe: warning.recipe } : {}),
                 };
             });
-            const failures = await mainFailures(services);
+            const [failures, steps] = await Promise.all([mainFailures(services), ownerSteps(services)]);
             const cached = services.ciRuns.sweep();
             if (cached !== undefined) {
-                return { repos, runs: cached, failures };
+                return { repos, runs: cached, failures, ownerSteps: steps };
             }
             const listed = await Promise.all(projects.map(listRuns));
-            return { repos, runs: services.ciRuns.replace(listed.flat()), failures };
+            return { repos, runs: services.ciRuns.replace(listed.flat()), failures, ownerSteps: steps };
         }),
         rerun: i.rerun.handler(onRun("rerun")),
         cancel: i.cancel.handler(onRun("cancel")),

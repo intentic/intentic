@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { ciFixConversationId, fixAttemptOf } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { ciFixBase, fixAttemptOf } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
 import { fixStance } from "@intentic/sandbox-contract/state/fix-stance";
 import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import { isTagRef } from "./ciStreaks";
 import {
     AgentRunButton,
     type AgentRunAttempt,
@@ -58,6 +59,9 @@ const props = defineProps<{
     // A failing-main banner above speaks for this row's branch (mainFailures.ts, leadsRows): the fix is the banner's, so
     // this row offers none of its own and shows only the run, Re-run and Cancel. One fix control per breakage.
     ledByBanner?: boolean;
+    // The step outside the repository this row's agent ended on (ciFixes.ts, ownerStepOf): no commit fixes the failure,
+    // so the row says the step and hands its weight to Re-run, which measures it once the step is taken.
+    ownerStep?: string | undefined;
 }>();
 const emit = defineEmits<{
     rerun: [run: PipelineRun];
@@ -116,6 +120,8 @@ const fixState = computed(() => {
     const stance = fixStance(agent);
     return { ...stance, ...fixStanceLook(stance.kind), link: agentLink(agent.id) };
 });
+// How a needs-you chip looks, worn by the step outside the repository too: the same ask of the reader.
+const needsYouLook = fixStanceLook(`needs-you`);
 // Branch's agent for a row with none of its own, in the same slot; its stance distinguishes a running turn from one
 // parked on a question.
 const branchState = computed(() => {
@@ -126,14 +132,17 @@ const branchState = computed(() => {
     const stance = fixStance(other.agent);
     return { run: other.run, stance: { ...stance, ...fixStanceLook(stance.kind) }, link: agentLink(other.agent.id) };
 });
-// A landed fix hands the row's weight to Re-run: it's in the workspace, proving it is what's left. Not under a failing-main
-// block, which says the move itself: the fix is uncommitted in the workspace, so re-running this commit cannot measure
-// it, and the next push on main does (MainFailureBanner, storyOf).
-const proven = computed(() => props.ledByBanner !== true && fixState.value?.kind === `landed`);
+// The agent's word that no commit fixes this: the step is the reader's, outside the repository.
+const outside = computed(() => props.fix !== undefined && props.ownerStep !== undefined);
+// Re-run carries the row's weight only once the agent's step outside the repository is what is left: re-running this
+// same commit then measures it. A landed code fix is uncommitted in the workspace, so re-running this commit cannot
+// measure it; the next push does, which its chip says (2026-11-12: the row said "Re-run to prove it" over every landed
+// fix, a re-run that could only fail the same way). Never under a failing-main block, which says the move itself.
+const proven = computed(() => props.ledByBanner !== true && outside.value);
 
 // Which attempt at this run the row's agent is (conversation-ids.ts): 1 wears the bare id, later ones their number.
 const attemptNumber = computed(() =>
-    props.fix === undefined ? undefined : fixAttemptOf(ciFixConversationId(props.run.repo, props.run.runId), props.fix.id),
+    props.fix === undefined ? undefined : fixAttemptOf(ciFixBase(props.run.repo, props.run.runId, [props.fix.id]), props.fix.id),
 );
 // Only worth a word past the first: "attempt 1" on every chip would be noise, "attempt 3" is the story.
 const attemptWord = computed(() =>
@@ -281,9 +290,15 @@ const fixDetail = computed((): Tip | undefined => {
                   { label: t(`tip.error`), value: agent.failure ?? ``, tone: `danger` },
               ]
             : [],
-        note: t(`pipelineRunRow.stanceNote.${state.kind}`),
+        note: state.kind === `landed` && isTagRef(props.run.branch) ? t(`pipelineRunRow.stanceNote.landedRelease`) : t(`pipelineRunRow.stanceNote.${state.kind}`),
     };
 });
+// The step outside the repository as the chip's card: what to do, then the press that measures it.
+const outsideDetail = computed((): Tip | undefined =>
+    props.ownerStep === undefined
+        ? undefined
+        : { title: t(`pipelineRunRow.ownerStepTitle`), tone: `warning`, rows: [{ label: t(`tip.step`), value: props.ownerStep }], note: t(`pipelineRunRow.ownerStepNote`) },
+);
 // The chip in words: an `aria-label` replaces what's read, so a screen reader never gets the abbreviations directly.
 const fixAria = computed<string | undefined>(() => {
     const state = fixState.value;
@@ -440,9 +455,21 @@ const openStartOver = (): void => {
                                 <Icon :name="branchState.stance.icon" :spin="branchState.stance.spin" class="text-2xs" />
                                 {{ t(`pipelineRunRow.agentOnBranch`) }}
                             </a>
+                            <!-- The agent's step outside the repository outranks what it holds: no commit fixes this failure. -->
+                            <a
+                                v-if="outside && fixState !== undefined"
+                                v-bind="fixState.link"
+                                class="ui-chip shrink-0 font-medium"
+                                :class="[needsYouLook.ink, needsYouLook.chip]"
+                                v-tooltip.top="outsideDetail"
+                                :aria-label="t(`pipelineRunRow.ownerStepAria`, { step: ownerStep ?? `` })"
+                            >
+                                <Icon :name="needsYouLook.icon" class="text-2xs" />
+                                {{ t(`pipelineRunRow.ownerStepChip`) }}
+                            </a>
                             <!-- One slot for the agent, whichever half of its life applies (fixStance.ts owns the words). -->
                             <a
-                                v-if="fixState !== undefined && !fixState.retry"
+                                v-else-if="fixState !== undefined && !fixState.retry"
                                 v-bind="fixState.link"
                                 class="ui-chip shrink-0 font-medium"
                                 :class="[fixState.ink, fixState.chip]"
@@ -464,7 +491,7 @@ const openStartOver = (): void => {
                             </a>
                             <!-- Active attempts expose the remaining detail action beside their chip. -->
                             <Button
-                                v-if="fixState !== undefined && fixState.ongoing && run.status === `failed`"
+                                v-if="!outside && fixState !== undefined && fixState.ongoing && run.status === `failed`"
                                 ref="startOver"
                                 :label="t(`pipelineRunRow.startOver`)"
                                 size="small"
@@ -477,9 +504,10 @@ const openStartOver = (): void => {
                             >
                                 <template #icon><Icon name="chevron-down" class="text-2xs" /></template>
                             </Button>
-                            <!-- Only an unassigned branch failure gets the primary action. -->
+                            <!-- Only an unassigned branch failure gets the primary action: not beside a landed fix, which the
+                                 next push measures, nor beside a step outside the repository, which no agent can take. -->
                             <AgentRunButton
-                                v-else-if="run.status === `failed`"
+                                v-else-if="run.status === `failed` && !outside && fixState?.kind !== `landed`"
                                 :label="fixLabel"
                                 :picker="fixModel"
                                 :tier="loud ? `accent` : `quiet`"
@@ -507,7 +535,7 @@ const openStartOver = (): void => {
                             :tier="proven ? `accent` : `quiet`"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
-                            v-tooltip.top="proven ? { title: t(`pipelineRunRow.proveTheFix`), note: t(`pipelineRunRow.fixInWorkspace`) } : undefined"
+                            v-tooltip.top="proven ? { title: t(`pipelineRunRow.proveTheFix`), note: t(`pipelineRunRow.afterTheStep`) } : undefined"
                             @click="emit(`rerun`, run)"
                         />
                     </div>

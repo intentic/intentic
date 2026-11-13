@@ -85,13 +85,30 @@ export const CI_FIX_PREFIX = "fix-";
 const LEGACY_CI_FIX_PREFIX = "ci-fix-";
 export const isCiFixConversationId = (id: string): boolean => id.startsWith(CI_FIX_PREFIX) || id.startsWith(LEGACY_CI_FIX_PREFIX);
 const REPO_SLUG_MAX = 16;
-const repoSlug = (repo: string): string =>
+const repoSlug = (repo: string, max = REPO_SLUG_MAX): string =>
     repo
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
-        .slice(0, REPO_SLUG_MAX)
+        .slice(0, max)
         .replace(/^-+|-+$/g, "") || "repo";
 export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId.toString(36)}`;
+// The same failure's id as it was minted before 2026-11-12: the repo cut at thirty-two, the run id in decimal. Fix agents
+// started then still answer their failures, so every reader that pairs a run with its agent asks under both (ciFixBase).
+const LEGACY_REPO_SLUG_MAX = 32;
+export const legacyCiFixConversationId = (repo: string, runId: number): string =>
+    `${LEGACY_CI_FIX_PREFIX}${repoSlug(repo, LEGACY_REPO_SLUG_MAX)}-${runId}`;
+// The base a run's fix attempts share: the legacy spelling while an attempt under it is known (live or archived), so a
+// press on a failure fixed before the ids were shortened continues that family (attempt 3, not a second attempt 1 that
+// knows nothing of the first two); the current spelling otherwise.
+export const ciFixBase = (repo: string, runId: number, knownIds: Iterable<string>): string => {
+    const legacy = legacyCiFixConversationId(repo, runId);
+    for (const id of knownIds) {
+        if (fixAttemptOf(legacy, id) !== undefined) {
+            return legacy;
+        }
+    }
+    return ciFixConversationId(repo, runId);
+};
 // The title a CI fix conversation opens with: the daemon names it so (ci-fix.ts), and the board's card standing in for it
 // while the press is out (Pipelines, `chat.launchAgent`) wears the same words, so the one hands over to the other unchanged.
 export const ciFixTitle = (run: { readonly title?: string | undefined; readonly repo: string }): string =>
@@ -134,6 +151,11 @@ export const landFixConversationId = (project: string, failingSince: number): st
 // before attempts existed is attempt 1 of its failure. Later ones add `_<n>`: an underscore, since no base holds one (a
 // slug turns every other character into `-`), so `fix-web-15_2` can only be run 15's second attempt, never a base.
 const ATTEMPT_MARK = "_";
+// What later attempts carried before 2026-11-12, still read on the bases minted then (a legacy CI fix's, which ends in a
+// decimal run id, and a land fix's, which ends in six base36 characters), where `-attempt` cannot be part of a base.
+// Never on a current `fix-` base: its base36 run id could one day spell it.
+const LEGACY_ATTEMPT_MARK = "-attempt";
+const legacyAttempts = (base: string): boolean => base.startsWith(LEGACY_CI_FIX_PREFIX) || base.startsWith(LAND_FIX_PREFIX);
 
 export const fixAttemptId = (base: string, attempt: number): string => (attempt <= 1 ? base : `${base}${ATTEMPT_MARK}${attempt}`);
 
@@ -143,10 +165,11 @@ export const fixAttemptOf = (base: string, id: string): number | undefined => {
     if (id === base) {
         return 1;
     }
-    if (!id.startsWith(`${base}${ATTEMPT_MARK}`)) {
+    const mark = [ATTEMPT_MARK, ...(legacyAttempts(base) ? [LEGACY_ATTEMPT_MARK] : [])].find((each) => id.startsWith(`${base}${each}`));
+    if (mark === undefined) {
         return undefined;
     }
-    const rest = id.slice(base.length + ATTEMPT_MARK.length);
+    const rest = id.slice(base.length + mark.length);
     // One spelling per attempt: the first is the bare id, so `_1` and a zero-padded number are nobody's.
     return /^[2-9]\d*$|^[1-9]\d+$/.test(rest) ? Number(rest) : undefined;
 };

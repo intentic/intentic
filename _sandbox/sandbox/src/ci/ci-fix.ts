@@ -1,6 +1,6 @@
 import type { AgentRunPick } from "@intentic/sandbox-contract/schemas/agent";
-import { ciFixConversationId, ciFixTitle } from "@intentic/sandbox-contract/ids/conversation-ids";
-import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import { ciFixBase, ciFixTitle } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { CI_OWNER_STEP_MARK, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { errorMessage } from "@intentic/base/errors";
 import { isInfraStep } from "@intentic/constants/ci-infra-steps";
 import type { Logger } from "pino";
@@ -155,7 +155,7 @@ export const jointEvidence = (parts: readonly WorkflowEvidence[]): CiFailureEvid
 export interface CiFixRequest {
     readonly project: CiProject;
     readonly runId: number;
-    // The failure the attempts are at, which the first wears as its id: the run's own (ciFixConversationId) unless the run
+    // The failure the attempts are at, which the first wears as its id: the run's own (ciFixBase) unless the run
     // is part of a failing streak on main, whose one fix agent every failure goes to.
     readonly base?: string;
     // The run, when the caller already read it; looked up otherwise.
@@ -181,6 +181,10 @@ const GATEWAY_VARIABLES = { github: "GITHUB_API_URL", gitlab: "GITLAB_URL" } as 
 const gatewayNote = (provider: keyof typeof GATEWAY_VARIABLES): string =>
     `Send every API request to the credential gateway's address in \`$${GATEWAY_VARIABLES[provider]}_<CONNECTION>\` (\`env | grep ^${GATEWAY_VARIABLES[provider]}_\` lists them; for a connection named github: \`curl -s -H "Authorization: Bearer $GITHUB_TOKEN_GITHUB" "$GITHUB_API_URL_GITHUB/repos/<owner>/<repo>/actions/runs/<id>/jobs"\`), never to the forge's own host: the token variable holds a placeholder the gateway swaps for the real token, and sent anywhere else it answers 401 Bad credentials.`;
 
+// What no commit fixes (owner-steps.ts): a refusal that names a dashboard, a secret or an account. Said to every attempt,
+// fresh or continued, since a "fix it and commit" ask is what made three agents land a docs line as a store's fix.
+const OUTSIDE_THE_REPO = `IF THE CAUSE IS OUTSIDE THIS REPOSITORY (a field in a store's or vendor's dashboard, a secret's value, an account or billing setting, a service that is down), no commit fixes it, so make none for its sake: a change landed as "the fix" tells the Pipelines board the failure is handled when it is not. Confirm the cause from the logs or the API, change the repository only where that genuinely helps too, then begin your final message with one line \`${CI_OWNER_STEP_MARK} <exactly what the owner has to do, and where>\`, and say how to re-run the failed run afterwards. The board shows that line on the failed run and offers Re-run.`;
+
 const promptOf = (request: CiFixRequest, where: string): string =>
     [
         ...(request.preface === undefined ? [] : [request.preface]),
@@ -189,6 +193,7 @@ const promptOf = (request: CiFixRequest, where: string): string =>
         `What failed is below, read out of the failed jobs' logs: how failed tasks ended (an exit code that is a signal's, a heap that ran out, a memory ceiling's kill, a timeout), every error once with every job that printed it (one cause often fails several jobs), then each failed step's last lines with the passing tests left out. Read it first; it is usually enough to name each cause. Fix every cause in it, not only the first. Each job's whole log is kept on this machine at the path its \`whole log:\` line names: search that file (\`rg -n 'heap|Killed|exit code|\\(fail\\)' <path>\`) before re-running anything to find out why a task failed.`,
         `REPRODUCE LOCALLY ONLY IF THIS SANDBOX CAN, AND ONLY WHAT FAILED. Re-run the failing job's own step for the package it names (that package's tests or typecheck, the failing test files alone), never the whole repository's suite: this sandbox is shared with other conversations, and a repository-wide run takes the memory they need. Jobs that need Docker, a fresh CI image, a desktop runner, a GPU, Windows or Xcode DO NOT: this sandbox has none of them, and an hour spent standing one up is an hour that ends in a guess anyway.`,
         `For a job you cannot run here: make the change from the logs, then verify it in the place the constraints exist by dispatching the workflow on your own branch and reading the run it starts. NO \`gh\` OR \`glab\` IS INSTALLED IN THIS SANDBOX — the ${request.project.account.provider} REST API is how you reach the run, and the \`${request.project.account.provider}\` skill carries the connected token and the curl form for it. ${gatewayNote(request.project.account.provider)} Say plainly in your summary if you could not verify it and what would.`,
+        OUTSIDE_THE_REPO,
         `You are in an isolated worktree: commit your fix and it goes through review.`,
         ...(request.evidence.logs !== "" ? [`--- what failed ---\n${request.evidence.logs}`] : []),
     ].join("\n\n");
@@ -204,6 +209,13 @@ export const runOf = async (services: Pick<Services, "ciRuns" | "logger">, proje
                 return [];
             })
     ).find((candidate) => candidate.runId === runId);
+
+// Every conversation id the sandbox knows, archived ones included: what decides which spelling a run's fix attempts share
+// (ciFixBase), since a failure fixed before the ids were shortened keeps the family it began.
+export const knownConversationIds = (services: Pick<Services, "agents">): string[] => [
+    ...services.agents.list().map((agent) => agent.id),
+    ...services.agents.listArchived().map((agent) => agent.id),
+];
 
 // Starts, continues or declines an attempt at a failed run; attempts share an id derived from the run (or the streak it is
 // part of), so the board groups them.
@@ -225,13 +237,14 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
     const nudge = [
         `The CI failure on "${project.repo}" ${where} is still open, and this conversation is the attempt at it. Your earlier turn ended without landing a fix.`,
         `Carry on from where you left off, using the current failed job evidence below alongside the earlier conversation. Fix every cause it reports. You are in an isolated worktree: commit your fix and it goes through review.`,
+        OUTSIDE_THE_REPO,
         ...(request.evidence.failedJobs.length > 0 ? [`Failed jobs: ${request.evidence.failedJobs.join(", ")}.`] : []),
         ...(request.evidence.logs !== "" ? [`--- what failed ---\n${request.evidence.logs}`] : []),
     ].join("\n\n");
     return startFixAttempt(
         daemonFixAttemptDeps(services, { pressed: request.pressed === true }),
         {
-            base: request.base ?? ciFixConversationId(project.repo, runId),
+            base: request.base ?? ciFixBase(project.repo, runId, knownConversationIds(services)),
             prompt: promptOf(request, where),
             nudge,
             errands: { prompt: "ci-fix", nudge: "ci-fix-nudge" },
