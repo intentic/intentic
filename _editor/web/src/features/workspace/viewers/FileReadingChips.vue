@@ -23,8 +23,8 @@ const { hideFileComments, toggleHideFileComments } = useLayout();
 </script>
 
 <template>
-    <!-- The three reading toggles keep their words on a phone: this bar has the width to itself there, and an eye alone
-         did not say whether it hid comments or showed a preview. -->
+    <!-- The three reading toggles are glyphs alone in the pane's tab bar, which tabs and a document's own toolbar already
+         crowd, their names in the tooltip; on a phone's viewer bar they keep their words, since it has the width to itself. -->
     <!-- Same Comments toggle as the diff surface, one habit across both; starts shown here, since opening a file asks what it says. -->
     <button
         v-if="comments"
@@ -35,7 +35,7 @@ const { hideFileComments, toggleHideFileComments } = useLayout();
         v-tooltip.bottom="hideFileComments ? t(`workspace.fileViewer.showComments`) : t(`workspace.fileViewer.hideComments`)"
     >
         <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-2xs" />
-        <span>{{ t(`workspace.words.comments`) }}</span>
+        <span class="in-[.view-header]:sr-only">{{ t(`workspace.words.comments`) }}</span>
     </button>
     <!-- Second reading of the same file, one click away: what a pdf, a spreadsheet or a picture becomes as text. -->
     <button
@@ -51,7 +51,7 @@ const { hideFileComments, toggleHideFileComments } = useLayout();
         "
     >
         <Icon :name="textWanted ? 'file' : 'align-left'" class="text-2xs" />
-        <span>{{ t(`workspace.words.text`) }}</span>
+        <span class="in-[.view-header]:sr-only">{{ t(`workspace.words.text`) }}</span>
     </button>
     <!-- A web page's rendered view and its source, one press apart, like the Text chip above. -->
     <button
@@ -67,7 +67,7 @@ const { hideFileComments, toggleHideFileComments } = useLayout();
         "
     >
         <Icon :name="previewing ? 'code' : 'eye'" class="text-2xs" />
-        <span>{{ t(`workspace.fileViewer.preview`) }}</span>
+        <span class="in-[.view-header]:sr-only">{{ t(`workspace.fileViewer.preview`) }}</span>
     </button>
     <!-- What that preview left out or put back, in a few words beside the chip they qualify; the detail is on hover
          or focus. A bar too narrow for the words (the tab row of a narrow pane, a slim band) keeps the icon and the

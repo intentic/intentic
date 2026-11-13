@@ -85,8 +85,9 @@ const goShared = (): void => pick(SHARED_SCOPE);
         @click="open = !open"
     >
         <Icon :name="icon" class="shrink-0 text-[0.7rem]" />
-        <!-- Name truncates first on narrow panes; icon and tint alone still mark a non-shared scope, tooltip has the rest. -->
-        <span class="max-w-40 truncate max-lg:hidden" :class="{ 'font-mono': shared || branch !== undefined }">{{ label }}</span>
+        <!-- The shared workspace, the usual case, is its folder glyph alone (the name is in the tooltip and aria-label), so it
+             takes no room from the tabs. Another copy keeps its name while there is room, since that is the one to notice. -->
+        <span v-if="!shared" class="max-w-40 truncate max-lg:hidden" :class="{ 'font-mono': branch !== undefined }">{{ label }}</span>
         <Icon name="chevron-down" class="shrink-0 text-[0.6rem] opacity-70 transition-transform" :class="{ 'rotate-180': open }" />
     </button>
     <!-- Its words on a desktop's bar, its glyph alone on a phone's, where the chip beside it already takes the width. -->

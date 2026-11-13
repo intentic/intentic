@@ -25,7 +25,6 @@ import { useLayout } from "../../../workbench/window/useLayout";
 import { formatChord, isApplePlatform } from "../../../workbench/commands/keybindings";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useNotifications } from "../../../workbench/notifications/notifications";
-import { useAudience } from "../../../app/useAudience";
 import { useMonaco } from "../files/useMonaco";
 import { changeEpochOf } from "../../../models/workspace/changes/useWorkspaceLive";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
@@ -546,10 +545,9 @@ const pagedViewer = computed(() => viewerComponent.value !== undefined && !(view
 const printOffered = computed(
     () => !loading.value && error.value === null && !showDerived.value && (previewing.value || open.value.kind === `markdown` || pagedViewer.value),
 );
-// Where Download and Print give up their words for glyphs alone: as the tab bar narrows past its notes' own width, or,
-// for a reader in plain words, whom these two presses are for, only once the bar is truly short of room.
-const { maker } = useAudience();
-const fileWords = computed(() => (maker.value ? `@max-xl/tabbar:sr-only @max-sm/viewerbar:sr-only` : `@max-4xl/tabbar:sr-only @max-sm/viewerbar:sr-only`));
+// Download and Print are glyphs alone in the pane's tab bar, which tabs and a document's own toolbar already crowd;
+// their names stay in the tooltip and for a screen reader. A phone's viewer bar keeps the words while it has room.
+const fileWords = `in-[.view-header]:sr-only @max-sm/viewerbar:sr-only`;
 // Printed from a document of its own (printRendered.ts), so the app around the file never reaches the paper; a
 // failure is said where the app says its passing failures, leaving the file on screen as it was.
 const printFile = async (): Promise<void> => {
