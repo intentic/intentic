@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { Logger } from "pino";
-import { preferredAccount } from "@intentic/sandbox-contract/models/plan-pools";
+import { answerCovers, preferredAccount } from "@intentic/sandbox-contract/models/plan-pools";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { join } from "node:path";
 import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
@@ -17,6 +17,7 @@ import { defineSlice } from "../../seams/slice.js";
 import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { namedReset } from "../../usage/reset-sentences.js";
 import { serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
+import { opt } from "../../opt.js";
 import { usageKey } from "./translator.js";
 import { logPins } from "./translator-prefixes.js";
 import { type TranslatorGatewaySessions, translatorGatewaySessions } from "./translator-gateway-session.js";
@@ -35,10 +36,10 @@ import { type TranslatorGatewaySessions, translatorGatewaySessions } from "./tra
    daemon's HTTP server, which the sandbox's public address reaches, and the bearer is a constant every image bakes in,
    so an unsigned address is answered as no address at all, before the bearer is even read. One whose JSON
    body names a model is placed by the sandbox's one rule (serviceability.ts, plan-pools.ts preferredAccount): the
-   provider's accounts that can serve that model, best first, each asked for by its own prefix (`<prefix>/<model>`,
-   translator-prefixes.ts), which the translator serves on that credential alone. A spent allowance comes back from a
-   known account: it is filed under that account with the provider's own words and reset, the account is re-read, and
-   the next one is tried, each at most once per request. An answer streams through untouched and, once it has come
+   provider's accounts that can serve that model, best first, then a spent one or two (SPENT_PROBES), each asked for by
+   its own prefix (`<prefix>/<model>`, translator-prefixes.ts), which the translator serves on that credential alone. A
+   spent allowance comes back from a known account: it is filed under that account with the provider's own words and
+   reset, the account is re-read, and the next one is tried, each at most once per request. An answer streams through untouched and, once it has come
    whole, settles what that account had refused of the model before the request went out. When every account refused,
    the loop gets the last refusal as it came. A request naming no model, or one with no account to pin, goes through
    unpinned, as it always did. */
@@ -81,6 +82,10 @@ export interface TranslatorGatewayDeps {
     // The accounts a request for this model may be pinned to, best first; empty sends it unpinned.
     readonly candidates: (provider: KeyedProvider, model: string) => Promise<readonly PinCandidate[]>;
     readonly refusals: Pick<ProviderRefusalStore, "record" | "settle">;
+    // The other models an answer on `model` proves open on this account (plan-pools.ts answerCovers, read on its own
+    // reading): Codex meters every model from one allowance, so an answer on one settles a refusal of another. None
+    // given, an answer settles its own model alone.
+    readonly covers?: ((provider: KeyedProvider, account: string, model: string) => Promise<(other: string) => boolean>) | undefined;
     // Re-measures one account that just refused, while its refusal is the freshest thing known about it.
     readonly reread: (provider: KeyedProvider, account: string) => void;
     readonly logger: Pick<Logger, "info" | "warn">;
@@ -88,13 +93,26 @@ export interface TranslatorGatewayDeps {
     readonly now?: () => number;
 }
 
+/* A SPENT ACCOUNT IS STILL ASKED, AFTER EVERY ONE WITH ROOM. A refusal this gateway filed names its account, and only
+   an answer pinned to that account settles it (settleOn): the turn's own answer names the subscription, not the account
+   the request landed on (frame-effects.ts readingAccount), and a refusal that named its reset outranks every reading of
+   the account until then (refusal-verdict.ts verdictOn). Left out of the ranking, a spent account was never asked again,
+   so once every account read spent each request went unpinned, was answered, and settled nothing: a ChatGPT allowance
+   OpenAI reset early read empty in every window while the person's forced Codex sends went through, and the composer
+   kept booking them for the old reset (2026-11-13). So after every account with room, the spent ones that refused
+   longest ago are asked too, at most SPENT_PROBES of them: one still spent refuses again at the cost of a round trip, and
+   the one that answers is settled the moment its answer comes whole. A bench, a revoked sign-in or a lost seat is never
+   asked: no window reopening lifts those. */
+const SPENT_PROBES = 2;
+
 /**
  * The accounts of a routed provider a request for `model` may be pinned to: those the verdict says can serve it (ready,
- * or nothing known against them), best first by the one rule every pick follows, and only those the translator knows by
- * their prefix. An account a refusal or a bench holds shut is left out: asking it would only be refused again.
+ * or nothing known against them), best first by the one rule every pick follows, then at most SPENT_PROBES the verdict
+ * calls spent, the one refused longest ago first; only those the translator knows by their prefix.
  */
 export const pinnedCandidates = async (deps: ServiceabilityDeps, provider: KeyedProvider, model: string): Promise<readonly PinCandidate[]> => {
-    const left = (await serviceabilities(deps, provider, { id: model })).filter((row) => row.state.kind === "ready" || row.state.kind === "unknown");
+    const [rows, onFile] = await Promise.all([serviceabilities(deps, provider, { id: model }), deps.providerRefusals.onFile()]);
+    const left = rows.filter((row) => row.state.kind === "ready" || row.state.kind === "unknown");
     const ranked: PinCandidate[] = [];
     for (let best = preferredAccount(left); best !== undefined; best = preferredAccount(left)) {
         left.splice(left.indexOf(best), 1);
@@ -103,7 +121,17 @@ export const pinnedCandidates = async (deps: ServiceabilityDeps, provider: Keyed
             ranked.push({ account: best.id, prefix });
         }
     }
-    return ranked;
+    // When each account was last refused, so a probe goes round them rather than asking the same one every time.
+    const refusedAt = (account: string): number =>
+        Math.max(0, ...(onFile[provider] ?? []).flatMap((refusal) => (refusal.account === account ? [refusal.at] : [])));
+    const probes = rows
+        .filter((row) => row.state.kind === "spent")
+        .toSorted((one, other) => refusedAt(one.id) - refusedAt(other.id))
+        .flatMap((row) => {
+            const prefix = deps.cliProxy.accountPrefix(row.id);
+            return prefix === undefined ? [] : [{ account: row.id, prefix }];
+        });
+    return [...ranked, ...probes.slice(0, SPENT_PROBES)];
 };
 
 // The token a request presents, in any of the places the translator itself reads one from.
@@ -249,14 +277,24 @@ const fileRefusal = async (g: Gateway, asked: Pinnable, candidate: PinCandidate,
     g.logger.warn(line, "translator gateway: an account refused the request, trying the next");
 };
 
+// The other models an answer on this account proves open, where the gateway can read that. A reading that cannot be read
+// costs the answer only the other models it would have covered, and the line says so.
+const coveredBy = async (g: Gateway, asked: Pinnable, account: string): Promise<((other: string) => boolean) | undefined> =>
+    g.covers?.(asked.provider, account, asked.model).catch((error: Error) => {
+        g.logger.warn({ err: error, provider: asked.provider, account }, "translator gateway: the reading an answer covers other models by could not be read");
+        return undefined;
+    });
+
 // What an answer on one account proves, once it has come whole: what that account had refused of the model before the
-// request went out is over. Nothing is proved by an answer the loop walked away from.
+// request went out is over, and of every model the answer covers (a forced send on a cheaper Codex model is how a person
+// finds the allowance back, while the composer goes on judging the model they were refused on). Nothing is proved by an
+// answer the loop walked away from.
 const settleOn = (g: Gateway, asked: Pinnable, candidate: PinCandidate, askedAt: number, signal: AbortSignal) => (): void => {
     if (signal.aborted) {
         return;
     }
-    g.refusals
-        .settle(asked.provider, { account: candidate.account, model: asked.model, askedAt })
+    void coveredBy(g, asked, candidate.account)
+        .then((covers) => g.refusals.settle(asked.provider, { account: candidate.account, model: asked.model, askedAt, ...opt("covers", covers) }))
         .catch((error: Error) => g.logger.warn({ err: error, provider: asked.provider, account: candidate.account }, "translator gateway: an answer could not settle"));
 };
 
@@ -364,6 +402,10 @@ export const translatorGatewaySlice = defineSlice<TranslatorGatewaySlice>({
             refusals: {
                 record: (provider, refusal) => whole().providerRefusals.record(provider, refusal),
                 settle: (provider, answer) => whole().providerRefusals.settle(provider, answer),
+            },
+            covers: async (provider, account, model) => {
+                const reading = (await whole().headroom.read())[usageKey(provider, account)];
+                return (other) => other !== model && answerCovers(reading, { id: model }, { id: other });
             },
             reread: (provider, account) =>
                 void whole().headroom.refresh({ scope: { providers: [provider], account: usageKey(provider, account) }, maxAgeMs: 0 }),

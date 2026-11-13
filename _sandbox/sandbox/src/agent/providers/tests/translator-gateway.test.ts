@@ -4,6 +4,7 @@ import { signedPayloads } from "../../../auth/signed-payload.js";
 import type { RefusalAnswer } from "../../../usage/provider-refusals.js";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
+import { pino } from "pino";
 import type { AppEnv } from "../../../app-env.js";
 import { memoryProviderRefusalStore } from "../../../usage/provider-refusals.js";
 import type { ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
@@ -51,8 +52,14 @@ const translator = (answer: (model: string | undefined) => Response) => {
     return { seen, fetchFn };
 };
 
-const harness = (answer: (model: string | undefined) => Response) => {
-    const ledger = memoryProviderRefusalStore();
+// `seed` is what the ledger holds before the first request; `covers` the gateway's reading of what an answer proves open.
+interface HarnessOptions {
+    readonly seed?: readonly ProviderRefusal[];
+    readonly covers?: (provider: string, account: string, model: string) => Promise<(other: string) => boolean>;
+}
+
+const harness = (answer: (model: string | undefined) => Response, options: HarnessOptions = {}) => {
+    const ledger = memoryProviderRefusalStore({ gemini: options.seed ?? [] });
     const settled: [string, RefusalAnswer][] = [];
     const reread: [string, string][] = [];
     const providerRefusals = {
@@ -65,6 +72,8 @@ const harness = (answer: (model: string | undefined) => Response) => {
     // Two Google accounts with nothing known against either, each known to the translator by its prefix.
     const deps = unstubbed<ServiceabilityDeps>("services", {
         providerRefusals,
+        // The verdict's state lines are not what these tests read.
+        logger: pino({ level: "silent" }),
         providerAccounts: async () => [],
         cliProxy: unstubbed<ServiceabilityDeps["cliProxy"]>("cliProxy", {
             accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [{ name: A, label: "a@example.com" }, { name: B, label: "b@example.com" }] }),
@@ -79,6 +88,7 @@ const harness = (answer: (model: string | undefined) => Response) => {
         sessions: translatorGatewaySessionsFrom(async () => KEY),
         candidates: (provider, model) => pinnedCandidates(deps, provider, model),
         refusals: providerRefusals,
+        covers: options.covers,
         reread: (provider, account) => reread.push([provider, account]),
         logger: { info: () => undefined, warn: (_fields: object, message?: string) => warned.push(message ?? "") },
         fetch: upstream.fetchFn,
@@ -202,4 +212,58 @@ test("a prefix the translator does not route yet sends the request unpinned rath
     expect(response.status).toBe(200);
     expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix(A)}/${MODEL}`, `${accountPrefix(B)}/${MODEL}`, MODEL]);
     expect(await filed(ledger)).toStrictEqual([]);
+});
+
+// A spent allowance this gateway filed names its account, and only an answer pinned to that account settles it: a ChatGPT
+// allowance OpenAI reset early read empty while every forced Codex send went through unpinned (2026-11-13).
+const DAY_S = 24 * 3600;
+const spentOn = (account: string, at: number, model: string = MODEL): ProviderRefusal => ({
+    at,
+    kind: "limit",
+    message: "You've hit your usage limit.",
+    account,
+    model,
+    resetsAt: Math.floor(Date.now() / 1000) + DAY_S,
+});
+
+test("every account reads spent: the one refused longest ago is still asked, and its answer settles its refusal", async () => {
+    const now = Date.now();
+    const { ledger, settled, upstream, send } = harness(() => sse(), { seed: [spentOn(A, now - 60_000), spentOn(B, now - 120_000)] });
+
+    const response = await send("/v1/chat/completions", { body: chat });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(STREAM);
+    expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix(B)}/${MODEL}`]);
+    expect(settled).toStrictEqual([["gemini", { account: B, model: MODEL, askedAt: expect.any(Number) }]]);
+    expect((await filed(ledger)).map((refusal) => refusal.account)).toStrictEqual([A]);
+});
+
+test("every account reads spent and is: each probe refuses, is filed again, and the loop gets the last refusal, never an unpinned retry", async () => {
+    const now = Date.now();
+    const { ledger, settled, upstream, send } = harness(() => quota(), { seed: [spentOn(A, now - 60_000), spentOn(B, now - 120_000)] });
+
+    const response = await send("/v1/chat/completions", { body: chat });
+
+    expect(response.status).toBe(429);
+    expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix(B)}/${MODEL}`, `${accountPrefix(A)}/${MODEL}`]);
+    expect((await filed(ledger)).every((refusal) => refusal.at >= now)).toBe(true);
+    expect(settled).toStrictEqual([]);
+});
+
+test("an answer settles the account's refusal of every model it covers, and only that account's", async () => {
+    const OTHER = "gemini-3.8-pro-high";
+    const now = Date.now();
+    const { ledger, send } = harness(() => sse(), {
+        seed: [spentOn(A, now - 60_000, OTHER), spentOn(B, now - 60_000, OTHER)],
+        covers: async (_provider, _account, model) => (other) => model === MODEL && other === OTHER,
+    });
+
+    const response = await send("/v1/chat/completions", { body: chat });
+    expect(response.status).toBe(200);
+    // Settled once the answer has come whole.
+    expect(await response.text()).toBe(STREAM);
+
+    // Answered on A, the first account with room for MODEL: B's refusal of the other model is still B's.
+    expect((await filed(ledger)).map((refusal) => [refusal.account, refusal.model])).toStrictEqual([[B, OTHER]]);
 });
