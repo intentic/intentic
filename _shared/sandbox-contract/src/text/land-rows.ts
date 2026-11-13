@@ -100,16 +100,19 @@ export const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): Trans
             noticeCode: noticeCode({ code: "landConflict", params: { files, repos } }),
         };
     }
-    // noticeAction fires only here, right as the auto-behavior ran; an active install takes the slot instead.
+    // An install the land started is the one follow-up offered; a landed row never asks the user to change how this agent lands.
     const deps = event.deps === undefined || event.deps.missing === 0 ? undefined : event.deps;
-    return {
+    const row: TranscriptRow = {
         role: "notice",
         // A home's land (the only one named) is committed too, by nobody pressing anything: said, not left to the Changes panel.
         text: `${event.land === undefined ? "Changes landed in your workspace: review them in the Changes panel." : "Landed in your workspace and committed."}${dependencyLine(event.deps)}`,
-        noticeAction: (event.deps?.started.length ?? 0) > 0 ? "depsInstall" : "landHold",
         noticeCode: noticeCode({
             code: "landed",
             params: deps === undefined && event.land === undefined ? undefined : { deps: deps?.missing, queued: deps?.deferred || undefined, land: event.land },
         }),
     };
+    if ((event.deps?.started.length ?? 0) > 0) {
+        row.noticeAction = "depsInstall";
+    }
+    return row;
 };

@@ -49,7 +49,6 @@ import NoticeFreshStart from "./notices/NoticeFreshStart.vue";
 import NoticeHomeCommit from "./notices/NoticeHomeCommit.vue";
 import { landOfRow } from "../../../models/home/homeCommits";
 import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
-import NoticeLandHold from "./notices/NoticeLandHold.vue";
 import NoticeMemory from "./notices/NoticeMemory.vue";
 import NoticeWatchStop from "./notices/NoticeWatchStop.vue";
 import { isMemoryHold } from "./held/heldQueue";
@@ -124,8 +123,8 @@ const card = computed(() => REQUEST_FIELDS.find((field) => props.message[field] 
 
 // The follow-up each notice action offers; each decides for itself whether it still stands. A low-memory hold is not
 // here: it draws its whole row (NoticeMemory), since its sentence is the sandbox's numbers and belongs a hover away.
-const NOTICE_ACTIONS: Readonly<Record<Exclude<NonNullable<ChatMessage["noticeAction"]>, `sendAnyway` | `sandboxMemory`>, Component>> = {
-    landHold: NoticeLandHold,
+// `landHold` is only on rows stored before it stopped being offered, and draws nothing.
+const NOTICE_ACTIONS: Readonly<Record<Exclude<NonNullable<ChatMessage["noticeAction"]>, `sendAnyway` | `sandboxMemory` | `landHold`>, Component>> = {
     depsInstall: NoticeDepsInstall,
     watchStop: NoticeWatchStop,
     sendAgain: NoticeHeld,
@@ -133,7 +132,7 @@ const NOTICE_ACTIONS: Readonly<Record<Exclude<NonNullable<ChatMessage["noticeAct
 };
 const noticeAction = computed(() => {
     const action = props.message.noticeAction;
-    return action === undefined || action === `sendAnyway` || action === `sandboxMemory` ? undefined : NOTICE_ACTIONS[action];
+    return action === undefined || action === `sendAnyway` || action === `sandboxMemory` || action === `landHold` ? undefined : NOTICE_ACTIONS[action];
 });
 
 const { mobile } = useDevice();

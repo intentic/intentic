@@ -503,7 +503,6 @@ describe("foldTurn", () => {
         expect(foldOf("go", [{ kind: "landed", landed: true, deps: { missing: 3, started: [], deferred: true } }]).at(-1)).toEqual({
             role: "notice",
             text: "Changes landed in your workspace: review them in the Changes panel. 3 dependencies it added or changed are being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.",
-            noticeAction: "landHold",
             noticeCode: { code: "landed", params: { deps: 3, queued: true } },
         });
     });
@@ -1200,7 +1199,6 @@ describe(`the code beside a notice's words`, () => {
         expect(lastOf([{ kind: `landed`, landed: true }])).toEqual({
             role: `notice`,
             text: `Changes landed in your workspace: review them in the Changes panel.`,
-            noticeAction: `landHold`,
             noticeCode: { code: `landed` },
         });
         expect(lastOf([{ kind: `landed`, landed: true, deps: { missing: 2, started: [], deferred: true } }])?.noticeCode).toEqual({

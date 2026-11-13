@@ -338,7 +338,8 @@ export const TranscriptRowSchema = z.object({
     // The follow-up this notice offers, by name; the chat decides what it does, and whether it stands. `sendAnyway` sends
     // the held message; `sandboxMemory` offers that and a raise of the sandbox's memory; `sendAgain` sends a turn the
     // sandbox kept after a refusal no raise would clear; `switchModel` opens the model list for a turn a model's refusal
-    // stopped partway, so the same conversation carries on with another.
+    // stopped partway, so the same conversation carries on with another. `landHold` is no longer written; stored rows that
+    // carry it must still parse.
     noticeAction: z
         .enum(["landHold", "depsInstall", "watchStop", "sandboxMemory", "sendAnyway", "sendAgain", "switchModel"])
         .optional()
