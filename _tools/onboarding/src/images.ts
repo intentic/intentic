@@ -68,3 +68,17 @@ export const buildImages = async (): Promise<void> => {
     // The web's context is its own app dir; .dockerignore keeps only dist, the nginx template and the entrypoint.
     await exec(`docker`, [`build`, `--provenance=false`, `-t`, IMAGES.web, `.`], join(root, `_editor/web`), `building the web image`);
 };
+
+// The published sandbox images the provisioners start: `:stable` is what the wizard's compose file names, and
+// SANDBOX_E2E_IMAGE what CI hands the `ic` lane. Pulled here, outside any test's budget: each is ~2 GiB, and on the
+// first run after a release republishes `:stable` the compose bootstrap pulled it inside the journey test's five
+// minutes and timed out on both attempts (nightly run 43471063277), while the same journey had taken 27s the run before.
+const SANDBOX_IMAGES = (): string[] => [
+    ...new Set([`ghcr.io/intentic/sandbox:stable`, process.env[`SANDBOX_E2E_IMAGE`]].filter((image): image is string => !!image)),
+];
+
+export const pullSandboxImages = async (): Promise<void> => {
+    for (const image of SANDBOX_IMAGES()) {
+        await exec(`docker`, [`pull`, `--quiet`, image], root, `pulling ${image}`);
+    }
+};

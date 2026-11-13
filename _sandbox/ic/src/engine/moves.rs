@@ -1323,14 +1323,29 @@ fn copy_volume(
     out.extend_from_slice(TAR_OUT);
     into.extend_from_slice(&["-v", to_mount.as_str(), "--entrypoint", "tar", helper]);
     into.extend_from_slice(TAR_IN);
-    let copied = pipe(
-        archive_command(source, &out),
-        archive_command(target, &into),
-        slug,
-        "volume",
-        total,
-        log,
-    );
+    // A stream cut short is sent again: tar extracts over what the cut attempt left, and the manifest the caller
+    // compares afterwards is what proves the copy whole.
+    let mut attempt = 1;
+    let copied = loop {
+        let _ = docker::capture_on(source, &["rm", "-f", &reading], docker::READ_LIMIT);
+        let _ = docker::capture_on(target, &["rm", "-f", &writing], docker::READ_LIMIT);
+        let copied = pipe(
+            archive_command(source, &out),
+            archive_command(target, &into),
+            slug,
+            "volume",
+            total,
+            GNU_TAR_RECORD,
+            log,
+        );
+        match &copied {
+            Err(Fail(why)) if why.starts_with(CUT_SHORT) && attempt < COPY_ATTEMPTS => {
+                log.line(&format!("{volume}: attempt {attempt} of {COPY_ATTEMPTS} was cut short; sending it again"));
+                attempt += 1;
+            }
+            _ => break copied,
+        }
+    };
     // A CLI killed for a stall leaves its container running in the daemon: named, it is found and ended here.
     let _ = docker::capture_on(source, &["rm", "-f", &reading], docker::READ_LIMIT);
     let _ = docker::capture_on(target, &["rm", "-f", &writing], docker::READ_LIMIT);
@@ -1420,13 +1435,16 @@ pub(crate) fn archive_command(on: &Target, args: &[&str]) -> Command {
     }
 }
 
-/// `from`'s stdout into `to`'s stdin, counted for the progress line, and killed if no byte moves for [`STALL`].
+/// `from`'s stdout into `to`'s stdin, counted for the progress line, and killed if no byte moves for [`STALL`]. A
+/// stream is whole `record`s; one the writer refused that stops between them was cut short ([`CUT_SHORT`]).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn pipe(
     mut from: Command,
     mut to: Command,
     slug: &str,
     step: &str,
     total: u64,
+    record: u64,
     log: &Log,
 ) -> Result<()> {
     from.stdout(Stdio::piped())
@@ -1542,11 +1560,37 @@ pub(crate) fn pipe(
     if !ok(from_status) {
         bail!("reading it failed: {}", copy_diagnostic(&from_said));
     }
-    if !ok(to_status) || copied.is_err() {
+    let wrote = ok(to_status) && copied.is_ok();
+    if !wrote && cut_short(done, record) {
+        bail!(
+            "{CUT_SHORT} after {done} bytes, though the reading side said it finished: {}",
+            copy_diagnostic(&to_said)
+        );
+    }
+    if !wrote {
         bail!("writing it failed: {}", copy_diagnostic(&to_said));
     }
     Ok(())
 }
+
+/// Said when the stream ended mid-archive; [`copy_volume`] retries a copy that failed this way.
+const CUT_SHORT: &str = "the archive stream ended mid-block";
+
+/// GNU `tar -cf -` writes whole records of 20 blocks, its end included; `docker save` (Go's archive/tar) pads only to
+/// whole 512-byte blocks.
+pub(crate) const GNU_TAR_RECORD: u64 = 10_240;
+pub(crate) const TAR_BLOCK: u64 = 512;
+
+/// A stream that is not whole records was cut short on the way: the reading `docker` CLI on Intentic's engine has
+/// exited 0 with the stream ended mid-record, over the pipe relay (nightly 40291565927) and over the direct TLS
+/// endpoint too (nightly 43471063277: 336459776 bytes of a volume's GNU tar, the writer's tar "Unexpected EOF in
+/// archive"), while the same volume had crossed whole the other way minutes before.
+pub(crate) fn cut_short(bytes: u64, record: u64) -> bool {
+    !bytes.is_multiple_of(record)
+}
+
+/// How many times one volume's stream is sent before a cut-short stream fails the move.
+const COPY_ATTEMPTS: u32 = 3;
 
 /// How long one image's pull onto the other engine may take: a sandbox image is gigabytes on a home connection.
 const PULL_LIMIT: Duration = Duration::from_secs(90 * 60);
@@ -1587,6 +1631,7 @@ fn carry_images(
         slug,
         "image",
         total,
+        TAR_BLOCK,
         log,
     )
 }
@@ -2128,6 +2173,15 @@ fn cli_id(kind: Kind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stream_of_whole_tar_blocks_is_not_cut_short_and_one_ending_mid_block_is() {
+        // The two streams of nightly 43471063277: whole on the way to Intentic's engine, cut on the way back.
+        assert!(!cut_short(339_148_800, GNU_TAR_RECORD));
+        assert!(cut_short(336_459_776, GNU_TAR_RECORD));
+        assert!(!cut_short(336_459_776, TAR_BLOCK));
+        assert!(cut_short(511, TAR_BLOCK));
+    }
 
     #[test]
     fn archive_commands_use_the_tls_endpoint_and_its_credential_even_with_a_relay() {

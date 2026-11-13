@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { e2eTier } from "@intentic/testing/e2e";
 import { dockerAvailable } from "./docker.js";
-import { buildImages } from "./images.js";
+import { buildImages, pullSandboxImages } from "./images.js";
 import { fakeGoogleIdToken, GOOGLE_TOKEN_STORAGE_KEY, seedSession, verifySession } from "./seed.js";
 import { startWorld } from "./world.js";
 import { STORAGE_STATE, writeWorldFile } from "./world-file.js";
@@ -38,7 +38,7 @@ export default async (): Promise<(() => Promise<void>) | void> => {
         return;
     }
 
-    await buildImages();
+    await Promise.all([buildImages(), pullSandboxImages()]);
     const world = await startWorld();
 
     try {
