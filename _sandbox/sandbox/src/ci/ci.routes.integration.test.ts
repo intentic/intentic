@@ -289,7 +289,7 @@ test("the runs list answers each failing main-line branch as a failure, with its
             attempts: 1,
         },
     ]);
-    expect(Object.keys(answer)).toEqual(["repos", "runs", "failures"]);
+    expect(Object.keys(answer)).toEqual(["repos", "runs", "failures", "ownerSteps"]);
 });
 
 // Every open Pipelines board re-lists a stale picture; boards asking at once used to ask the vendor once each. They share
