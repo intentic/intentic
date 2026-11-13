@@ -805,18 +805,16 @@ const grab = (event: PointerEvent): void => {
                     <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
                     <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
                     <SessionChip v-if="agent.branch !== undefined && !maker" :branch="agent.branch" :from="agent.branches" />
-                    <!-- What the branch changed, alongside the other metadata. The count opens the review; red and green mark a live diff. -->
-                    <button
+                    <!-- What the branch changed, alongside the other metadata. A label, not a control: a click on it selects the card like anywhere else (the bar's icons open the review); red and green mark a live diff. -->
+                    <span
                         v-if="diffShown && agent.diff !== undefined"
-                        type="button"
-                        class="shrink-0 rounded-sm font-mono tabular-nums hover:underline"
+                        class="shrink-0 font-mono tabular-nums"
                         :aria-label="t(`agents.agentCard.viewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
                         v-tooltip.top="diffTip(agent.diff)"
-                        @click.stop="emit('changes')"
                     >
                         <span :class="receipt ? '' : 'text-success'">+{{ diffCount(agent.diff.insertions) }}</span>
                         <span :class="receipt ? '' : 'text-danger'"> −{{ diffCount(agent.diff.deletions) }}</span>
-                    </button>
+                    </span>
                     <!-- Opt-in geek metrics: what its processes and those of everything grouped under it hold now, beside the other metadata rather than on a row of its own. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
                     <SessionMetrics v-if="localOnly" :card="agent.id" />
                 </div>
