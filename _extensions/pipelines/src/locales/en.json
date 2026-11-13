@@ -76,6 +76,7 @@
             "measuring": "running again now at {sha}",
             "cancelled": "its newest run, at {sha}, was cancelled, so nothing measured it: re-run it below",
             "scheduled": "runs on a schedule, not on a push: its next run measures it",
+            "byHand": "started by hand, not by a push: run it again to measure it",
             "quiet": "has not run since {when}; tracking stops by itself on {drop}"
         }
     },

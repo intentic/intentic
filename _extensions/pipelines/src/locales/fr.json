@@ -76,6 +76,7 @@
             "measuring": "en cours de nouvelle exécution sur {sha}",
             "cancelled": "sa dernière exécution, sur {sha}, a été annulée, donc rien ne l'a mesuré : relancez-la ci-dessous",
             "scheduled": "s'exécute selon un planning, pas à chaque push : sa prochaine exécution le mesure",
+            "byHand": "lancé à la main, pas par un push : relancez-le pour le mesurer",
             "quiet": "ne s'est pas exécuté depuis {when} ; le suivi s'arrête de lui-même le {drop}"
         }
     },

@@ -76,6 +76,7 @@
             "measuring": "ejecutándose de nuevo ahora en {sha}",
             "cancelled": "su ejecución más reciente, en {sha}, se canceló, así que nada lo midió: vuelve a ejecutarla abajo",
             "scheduled": "se ejecuta según un horario, no con un push: su próxima ejecución lo mide",
+            "byHand": "se inició a mano, no con un push: vuelve a ejecutarlo para medirlo",
             "quiet": "no se ha ejecutado desde {when}; el seguimiento se detiene solo el {drop}"
         }
     },

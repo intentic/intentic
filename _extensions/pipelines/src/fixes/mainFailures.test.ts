@@ -353,10 +353,30 @@ describe(`blockerOf`, () => {
         expect(blockerOf(branch, { ...ci, trigger: `push` }, [], NOW)).toEqual({ kind: `next` });
     });
 
+    // Nightly 43471063277: a hand-started Nightly's fix was pushed, and the banner kept saying "commit and push it".
+    it(`is by hand for a hand-started workflow no push runs, by the daemon's word or the failing run's`, () => {
+        expect(blockerOf(branch, { ...ci, trigger: `workflow_dispatch` }, [], NOW)).toEqual({ kind: `byHand` });
+        expect(blockerOf(branch, ci, [pipelineRun({ runId: 43, workflow: `CI`, trigger: `workflow_dispatch`, createdAt: NOW - MINUTE })], NOW)).toEqual({
+            kind: `byHand`,
+        });
+    });
+
+    it(`waits for the next push when the board shows a push running the hand-started workflow on its branch`, () => {
+        const pushed = pipelineRun({ runId: 40, workflow: `CI`, trigger: `push`, status: `success` });
+        expect(blockerOf(branch, { ...ci, trigger: `workflow_dispatch` }, [pushed], NOW)).toEqual({ kind: `next` });
+        // A push of another workflow, or of this one on another branch, says nothing about whether a push runs it here.
+        const elsewhere = [
+            pipelineRun({ runId: 41, workflow: `Scorecard`, trigger: `push`, status: `success` }),
+            pipelineRun({ runId: 42, workflow: `CI`, branch: `feat/x`, trigger: `push`, status: `success` }),
+        ];
+        expect(blockerOf(branch, { ...ci, trigger: `workflow_dispatch` }, elsewhere, NOW)).toEqual({ kind: `byHand` });
+    });
+
     it(`is quiet once it has not failed for days and nothing ran it, with the day the daemon lets it go`, () => {
         const failedAt = NOW - QUIET_AFTER_MS - MINUTE;
-        expect(blockerOf(branch, { ...ci, failedAt }, [], NOW)).toEqual({ kind: `quiet`, failedAt, dropsAt: failedAt + MAIN_FAILURE_STALE_MS, scheduled: false });
-        expect(blockerOf(branch, { ...ci, failedAt, trigger: `schedule` }, [], NOW)).toMatchObject({ kind: `quiet`, scheduled: true });
+        expect(blockerOf(branch, { ...ci, failedAt }, [], NOW)).toEqual({ kind: `quiet`, failedAt, dropsAt: failedAt + MAIN_FAILURE_STALE_MS, pushless: false });
+        expect(blockerOf(branch, { ...ci, failedAt, trigger: `schedule` }, [], NOW)).toMatchObject({ kind: `quiet`, pushless: true });
+        expect(blockerOf(branch, { ...ci, failedAt, trigger: `workflow_dispatch` }, [], NOW)).toMatchObject({ kind: `quiet`, pushless: true });
         expect(blockerOf(branch, { ...ci, failedAt: NOW - QUIET_AFTER_MS + MINUTE }, [], NOW)).toEqual({ kind: `next` });
     });
 
@@ -368,9 +388,10 @@ describe(`blockerOf`, () => {
                 { kind: `next` as const },
                 { kind: `cancelled` as const, run },
                 { kind: `scheduled` as const },
-                { kind: `quiet` as const, failedAt: 0, dropsAt: 1, scheduled: false },
+                { kind: `byHand` as const },
+                { kind: `quiet` as const, failedAt: 0, dropsAt: 1, pushless: false },
             ].map(stalls),
-        ).toEqual([false, false, true, true, true]);
+        ).toEqual([false, false, true, true, true, true]);
     });
 });
 

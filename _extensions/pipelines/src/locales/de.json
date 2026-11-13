@@ -76,6 +76,7 @@
             "measuring": "läuft gerade erneut auf {sha}",
             "cancelled": "sein neuester Lauf auf {sha} wurde abgebrochen, also hat ihn nichts gemessen: unten erneut ausführen",
             "scheduled": "läuft nach Zeitplan, nicht bei einem Push: sein nächster Lauf misst ihn",
+            "byHand": "von Hand gestartet, nicht durch einen Push: erneut ausführen, um ihn zu messen",
             "quiet": "ist seit {when} nicht mehr gelaufen; die Verfolgung endet von selbst am {drop}"
         }
     },

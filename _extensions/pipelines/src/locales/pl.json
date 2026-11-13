@@ -76,6 +76,7 @@
             "measuring": "właśnie działa ponownie na {sha}",
             "cancelled": "jego najnowsze uruchomienie, na {sha}, zostało anulowane, więc nic go nie zmierzyło: uruchom je ponownie poniżej",
             "scheduled": "działa według harmonogramu, nie po pushu: zmierzy go jego następne uruchomienie",
+            "byHand": "uruchomiony ręcznie, nie po pushu: uruchom go ponownie, żeby go zmierzyć",
             "quiet": "nie był uruchamiany od {when}; śledzenie skończy się samo {drop}"
         }
     },

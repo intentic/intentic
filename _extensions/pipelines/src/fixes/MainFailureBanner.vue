@@ -243,10 +243,12 @@ const blockerLine = (workflow: FailingWorkflow): BlockerLine | undefined => {
             return { text: t(`mainFailure.blocker.cancelled`, { sha: sha7(blocker.run) }), actions: [] };
         case `scheduled`:
             return { text: t(`mainFailure.blocker.scheduled`), actions: [dispatchOf(workflow)] };
+        case `byHand`:
+            return { text: t(`mainFailure.blocker.byHand`), actions: [dispatchOf(workflow)] };
         case `quiet`:
             return {
                 text: t(`mainFailure.blocker.quiet`, { when: formatDayMonthTime(blocker.failedAt), drop: formatDayMonthTime(blocker.dropsAt) }),
-                actions: [...(blocker.scheduled ? [dispatchOf(workflow)] : []), forgetOf(workflow)],
+                actions: [...(blocker.pushless ? [dispatchOf(workflow)] : []), forgetOf(workflow)],
             };
         default:
             return undefined;

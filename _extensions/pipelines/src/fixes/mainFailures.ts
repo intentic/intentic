@@ -186,16 +186,28 @@ export const QUIET_AFTER_MS = 3 * 24 * 60 * 60_000;
 // What stands between one failing workflow and the branch passing again, and so what the reader can do about it.
 // `measuring`: a run of it is going now, so wait. `cancelled`: its newest run, after the failure, was cancelled (a
 // person, a newer push's concurrency group, a runner that never came), so nothing measured it, and a re-run does.
-// `scheduled`: a push never runs it, only its schedule or a manual start, so Run now measures it today. `quiet`: it has
-// not failed for days and nothing ran it since, so nothing is measuring it; the daemon drops it at `dropsAt`, and
-// Stop tracking does it now. `next`: its newest run is the failing one, and the next push or the fix agent's work is
-// what measures it, which the story already says.
+// `scheduled`: a push never runs it, only its schedule or a manual start, so Run now measures it today. `byHand`: its
+// failing run was started by hand and the board shows no push running it, so another start is what measures it, and
+// Run now is that start. `quiet`: it has not failed for days and nothing ran it since, so nothing is measuring it; the
+// daemon drops it at `dropsAt`, and Stop tracking does it now (`pushless` adds Run now beside it). `next`: its newest
+// run is the failing one, and the next push or the fix agent's work is what measures it, which the story already says.
 export type WorkflowBlocker =
     | { readonly kind: `measuring`; readonly run: PipelineRun }
     | { readonly kind: `cancelled`; readonly run: PipelineRun }
     | { readonly kind: `scheduled` }
-    | { readonly kind: `quiet`; readonly failedAt: number; readonly dropsAt: number; readonly scheduled: boolean }
+    | { readonly kind: `byHand` }
+    | { readonly kind: `quiet`; readonly failedAt: number; readonly dropsAt: number; readonly pushless: boolean }
     | { readonly kind: `next` };
+
+// GitHub's word for a run started from Run workflow or the API. A workflow that takes it beside a schedule and no push
+// (a nightly) is never run by the push that carries its fix: a hand-started Nightly's landed and pushed fix sat under
+// "commit and push it" with nothing to press (nightly 43471063277).
+const BY_HAND = `workflow_dispatch`;
+
+// Whether the board shows a push running the workflow on the failure's branch, which makes the next push its measure
+// however its failing run was started.
+const pushRuns = (failure: Pick<CiMainFailure, "repo" | "branch">, name: string, runs: readonly PipelineRun[]): boolean =>
+    runs.some((run) => run.repo === failure.repo && run.branch === failure.branch && workflowOfRun(run) === name && run.trigger === `push`);
 
 // One failing workflow's blocker, read off the daemon's fields first and the board's runs second: the failing run is
 // often older than every run listed (a nightly), and the daemon's trigger and time then say what the board cannot.
@@ -215,12 +227,17 @@ export const blockerOf = (
     if (cancelled !== undefined) {
         return { kind: `cancelled`, run: cancelled };
     }
-    const scheduled = (workflow.trigger ?? failing?.trigger) === `schedule`;
+    const trigger = workflow.trigger ?? failing?.trigger;
+    const scheduled = trigger === `schedule`;
+    const byHand = trigger === BY_HAND && !pushRuns(failure, workflow.name, runs);
     const failedAt = workflow.failedAt ?? failing?.createdAt;
     if (failedAt !== undefined && now - failedAt > QUIET_AFTER_MS) {
-        return { kind: `quiet`, failedAt, dropsAt: failedAt + MAIN_FAILURE_STALE_MS, scheduled };
+        return { kind: `quiet`, failedAt, dropsAt: failedAt + MAIN_FAILURE_STALE_MS, pushless: scheduled || byHand };
     }
-    return scheduled ? { kind: `scheduled` } : { kind: `next` };
+    if (scheduled) {
+        return { kind: `scheduled` };
+    }
+    return byHand ? { kind: `byHand` } : { kind: `next` };
 };
 
 // Whether nothing on its way will measure the workflow: no run of it going, and its next one is not a push's to start.
