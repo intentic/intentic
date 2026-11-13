@@ -76,10 +76,12 @@ const walkCall = async (call: Json, shield: RequestShield): Promise<Json> => {
     return patch(call, "function", patch(fn, "arguments", await maskJsonText(args, shield.mask)));
 };
 
-const walkMessage = async (message: Json, shield: RequestShield): Promise<Json> => {
+// An assistant message's text and calls are the model's own words (RequestShield.own); every other is masked.
+const walkMessage = async (message: Json, given: RequestShield): Promise<Json> => {
     if (!isRecord(message)) {
         return message;
     }
+    const shield = message["role"] === "assistant" ? { ...given, mask: given.own } : given;
     const content = message["content"];
     const calls = message["tool_calls"];
     // The single `function_call` older clients still send in place of `tool_calls`.

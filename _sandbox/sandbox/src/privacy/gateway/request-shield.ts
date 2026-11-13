@@ -7,6 +7,7 @@ import type { ClassCounts, Masker, Replacement } from "../masker.js";
 import { documentWords, paintedPdf, type PdfReading } from "../pdf-pages.js";
 import type { PrivacyImageArchive } from "../privacy-images.js";
 import type { ImageReading, LocalReaders } from "../readers.js";
+import { LITERAL_PREFIX, tokenKey, tokenPattern } from "../tokens.js";
 import type { DocumentVerdict, RequestShield, ShieldBinary, ShieldTally } from "./shield-types.js";
 
 // The shield one request is walked with: the masker for text, the local readers for images and PDFs, and the note that
@@ -16,7 +17,7 @@ import type { DocumentVerdict, RequestShield, ShieldBinary, ShieldTally } from "
 // Appended to the instructions of every masked request, worded the same every time so the provider's prompt cache keeps.
 // Its examples spell the number as a letter: a real one would be a token the vault may have given somebody.
 export const SHIELD_NOTE =
-    "Personal data in this conversation (names, identity and tax numbers, accounts, contact details, addresses) reaches you as tokens of the form ⟦PERSON_n⟧ or ⟦NATIONAL_ID_n⟧ (n a number), and each token is turned back into the real value on the user's machine before anything runs or is shown. In images and PDFs, the personal data is painted over with its token in black on white. Treat a token as the value it stands for: write it exactly as given, brackets, label and number, wherever that value belongs, in replies, commands, code and file edits alike. Never guess, reconstruct or ask for the values behind tokens.";
+    "Personal data in this conversation (names, identity and tax numbers, accounts, contact details, addresses) reaches you as tokens of the form ⟦PERSON_n⟧ or ⟦NATIONAL_ID_n⟧ (n a number), and each token is turned back into the real value on the user's machine before anything runs or is shown. In images and PDFs, the personal data is painted over with its token in black on white. Treat a token as the value it stands for: write it exactly as given, brackets, label and number, wherever that value belongs, in replies, commands, code and file edits alike. Never guess, reconstruct or ask for the values behind tokens. Only values you were given as tokens are tokens: anything you make up yourself (example, sample or test data, fictional people, companies and addresses) write out in full, and never invent a token or a number of your own.";
 
 const WITHHELD_IMAGE =
     "[An image was withheld by the privacy shield: this model provider is not trusted with personal data, and the image could not be read on this machine to cover the personal data in it. If you need to see it, say so and the user can switch this conversation to a trusted model.]";
@@ -44,6 +45,21 @@ const addFound = (tally: ShieldTally, found: readonly Replacement[], image?: { r
 };
 
 export const emptyTally = (): ShieldTally => ({ counts: {}, images: 0, documents: 0, replacements: [] });
+
+// The tokens a masked text gives the provider, by key, into `given`. An escaped literal (tokens.ts LITERAL_PREFIX) was
+// never given out for anything, so it is not one of them.
+const gather = (given: Set<string> | undefined, tokens: Iterable<string>): void => {
+    if (given === undefined) {
+        return;
+    }
+    for (const token of tokens) {
+        for (const [, label, index] of token.matchAll(tokenPattern())) {
+            if (label !== undefined && index !== undefined && !label.startsWith(LITERAL_PREFIX)) {
+                given.add(tokenKey(label, index));
+            }
+        }
+    }
+};
 
 // Values by content hash, oldest dropped first: a screenshot re-sent with every request of a turn is read once.
 export interface Memo<T> {
@@ -126,6 +142,9 @@ export interface RequestShieldDeps {
     readonly readings: ReadingMemo;
     readonly images: PrivacyImages;
     readonly tally: ShieldTally;
+    // Where the tokens this request gives the provider are gathered, by key (`PERSON_3`), for the restore that reads its
+    // answer (masker.ts RestoreScope): in its text, and painted into its images and PDFs.
+    readonly given?: Set<string> | undefined;
     // Where each painted image is kept beside the picture it was, for the owner to peek at; none keeps nothing.
     readonly archive?: PrivacyImageArchive;
     // Where an image or a document named by its address is fetched from; the network unless a test says otherwise.
@@ -151,7 +170,7 @@ const remembered = async <T>(memo: Memo<T>, binary: ShieldBinary, read: (data: B
 // checked as one, each page painted over where its values are, and the pages bound again into a PDF of pictures. Held
 // back when it cannot be read, or when its pictures could not be checked and pictures may not go unchecked.
 const maskPdf = async (
-    { masker, readers, readings, images, tally }: Pick<RequestShieldDeps, "masker" | "readers" | "readings" | "images" | "tally">,
+    { masker, readers, readings, images, tally, given }: Pick<RequestShieldDeps, "masker" | "readers" | "readings" | "images" | "tally" | "given">,
     source: ShieldBinary,
 ): Promise<DocumentVerdict> => {
     const reading = await remembered(readings.pdfs, source, readers.readPdf);
@@ -161,6 +180,10 @@ const maskPdf = async (
     const { pages } = reading.value;
     const words = documentWords(pages);
     const found = await masker.find(words.text, words.keep);
+    gather(
+        given,
+        found.spans.map((span) => span.token),
+    );
     addCounts(tally.counts, found.counts);
     addFound(tally, found.found);
     const regions = pages.map((page, index) => regionsFor(page.lines, words.onPage(found.spans, index), page));
@@ -180,16 +203,19 @@ export const maskingShield = ({
     readings,
     images,
     tally,
+    given,
     archive,
     fetchImage = fetchRemoteImage,
     fetchDocument = fetchRemoteDocument,
 }: RequestShieldDeps): RequestShield => {
-    const mask = async (text: string): Promise<string> => {
-        const result = await masker.mask(text);
+    const counted = async (pass: Masker["mask"], text: string): Promise<string> => {
+        const result = await pass(text);
         addCounts(tally.counts, result.counts);
         addFound(tally, result.found);
+        gather(given, [result.text]);
         return result.text;
     };
+    const mask = async (text: string): Promise<string> => counted(masker.mask, text);
     // The image with what the reader found painted over, or the note that holds it back when it could not be read.
     const maskImage = async (source: ShieldBinary): Promise<"keep" | { readonly text: string } | { readonly image: ShieldBinary }> => {
         const reading = await remembered(readings.images, source, readers.readImage);
@@ -199,6 +225,10 @@ export const maskingShield = ({
         }
         const { lines } = reading.value;
         const found = await masker.find(readingText(lines), (spans) => distinctFinds(lines, spans));
+        gather(
+            given,
+            found.spans.map((span) => span.token),
+        );
         addCounts(tally.counts, found.counts);
         // An animation goes as the one frame that was read, painted or not: the frames after it were never checked.
         if (found.spans.length === 0 && (reading.value.frames ?? 1) <= 1) {
@@ -224,6 +254,7 @@ export const maskingShield = ({
     };
     return {
         mask,
+        own: async (text) => counted(masker.own, text),
         note: SHIELD_NOTE,
         image: async (image) => {
             if (images === "allow") {
@@ -251,7 +282,7 @@ export const maskingShield = ({
                 return { text: WITHHELD_DOCUMENT };
             }
             if (isPdf(source)) {
-                return maskPdf({ masker, readers, readings, images, tally }, source);
+                return maskPdf({ masker, readers, readings, images, tally, given }, source);
             }
             const { value: text } = await remembered(readings.texts, source, async (data) => readers.readDocument(data, source.mediaType));
             return text === undefined ? { text: WITHHELD_DOCUMENT } : { text: `${READ_DOCUMENT}\n${await mask(text)}` };
@@ -260,23 +291,27 @@ export const maskingShield = ({
 };
 
 // Watch mode: the same tally, nothing replaced, nothing read. The body built with it is thrown away.
-export const watchingShield = ({ masker, tally, images }: Pick<RequestShieldDeps, "masker" | "tally" | "images">): RequestShield => ({
-    mask: async (text) => {
-        const result = await masker.mask(text);
+export const watchingShield = ({ masker, tally, images }: Pick<RequestShieldDeps, "masker" | "tally" | "images">): RequestShield => {
+    const watched = async (pass: Masker["mask"], text: string): Promise<string> => {
+        const result = await pass(text);
         addCounts(tally.counts, result.counts);
         addFound(tally, result.found);
         return text;
-    },
-    note: undefined,
-    image: async () => {
-        // What masking would have done to it: an allowed image would have gone as it is, and counts for nothing.
-        if (images !== "allow") {
-            tally.images += 1;
-        }
-        return "keep";
-    },
-    document: async () => {
-        tally.documents += 1;
-        return "keep";
-    },
-});
+    };
+    return {
+        mask: async (text) => watched(masker.mask, text),
+        own: async (text) => watched(masker.own, text),
+        note: undefined,
+        image: async () => {
+            // What masking would have done to it: an allowed image would have gone as it is, and counts for nothing.
+            if (images !== "allow") {
+                tally.images += 1;
+            }
+            return "keep";
+        },
+        document: async () => {
+            tally.documents += 1;
+            return "keep";
+        },
+    };
+};

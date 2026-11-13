@@ -44,6 +44,7 @@ import { commandGateHooks } from "../../../guard/command-guard.js";
 import { createTurnTaint, publishTurnTaint } from "../../../guard/turn-taint.js";
 import { personaScopeHooks } from "../../../personas/persona-scope.js";
 import { toolAllowlistHooks } from "../../tools/tool-allowlist.js";
+import { coinedTokenHooks } from "../../../privacy/gateway/coined-calls.js";
 import { jsExecutionServer } from "../../../execution/js-tool.js";
 import { JS_TOOL_ALIAS, JS_TOOL_NAME } from "../../../seams/js-tool-names.js";
 import { mcpServersOf } from "../../tools/agent-tools.js";
@@ -446,6 +447,13 @@ const policyBoundaryHooks = (policy: HarnessRequest["policy"]): ReturnType<typeo
     policy.allowedTools === undefined ? {} : namedHooks("tool-allowlist", toolAllowlistHooks(policy.allowedTools)),
 ];
 
+// Asked before anything else: plan approval, and behind the privacy shield's gateway a call holding a token the model
+// made up rather than was given, refused so `⟦PERSON_25⟧` never lands in a file as it is (privacy/gateway/coined-calls.ts).
+const firstHooks = (request: HarnessRequest, approval: PlanApprovalContext): ReturnType<typeof personaScopeHooks>[] => [
+    namedHooks("plan-approval", approval.hooks),
+    request.credential.gateway === undefined ? {} : namedHooks("privacy-coined", coinedTokenHooks()),
+];
+
 // The harness's own asks of the session: a checklist left open and subagents' work left held, each said back once at Stop,
 // and a slash command's notes, cut from in front of its words, said through the prompt hook (command-turn.ts).
 const sessionHooks = (spec: HarnessRequest["spec"], children: HarnessRequest["hooks"]["children"]) => [
@@ -505,7 +513,7 @@ const baseOptions = (
         // Each callback timed for perf.jsonl and its git counted under its set's name here (hook-timing.ts namedHooks).
         hooks: timedHooks(
             mergeHooks(
-                namedHooks("plan-approval", approval.hooks),
+                ...firstHooks(request, approval),
                 // Runs before the tmux wrapper, so the classifier and card see the agent's own command, not wrapper
                 // boilerplate.
                 namedHooks("command-guard", commandGateHooks({

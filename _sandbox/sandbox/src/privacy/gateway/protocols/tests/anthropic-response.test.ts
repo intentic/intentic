@@ -234,3 +234,55 @@ describe("restoring an Anthropic Messages stream", () => {
         expect(parseWire(output)).toHaveLength(2);
     });
 });
+
+// A restore that reads ⟦PERSON_1⟧ back and calls ⟦PERSON_9⟧ made up, as a scoped one does for a token never given.
+const scoped = (text: string, coined?: (token: string) => void): string => {
+    for (const [token] of text.matchAll(/⟦PERSON_9⟧/gu)) {
+        coined?.(token);
+    }
+    return restore(text);
+};
+
+describe("a tool call holding a token the model made up", () => {
+    test("is reported by its id, streamed, before its block ends", async () => {
+        const reported: [string, readonly string[]][] = [];
+        const wire = sse([
+            [
+                "content_block_start",
+                { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "toolu_9", name: "Write", input: {} } },
+            ],
+            [
+                "content_block_delta",
+                {
+                    type: "content_block_delta",
+                    index: 0,
+                    delta: { type: "input_json_delta", partial_json: '{"content":"⟦PERSON_1⟧ and ⟦PERSON_9⟧"}' },
+                },
+            ],
+            ["content_block_stop", { type: "content_block_stop", index: 0 }],
+        ]);
+        const out = await runText(
+            restoreStream("anthropic", scoped, (id, tokens) => reported.push([id, tokens])),
+            wire,
+        );
+        expect(reported).toEqual([["toolu_9", ["⟦PERSON_9⟧"]]]);
+        expect(out).toContain("Jan Kowalski and ⟦PERSON_9⟧");
+    });
+
+    test("is reported by its id from a whole response, and a call with none is not", () => {
+        const reported: [string, readonly string[]][] = [];
+        restoreResponse(
+            "anthropic",
+            {
+                role: "assistant",
+                content: [
+                    { type: "tool_use", id: "toolu_a", name: "Bash", input: { command: "echo ⟦PERSON_1⟧" } },
+                    { type: "tool_use", id: "toolu_b", name: "Bash", input: { command: "echo ⟦PERSON_9⟧" } },
+                ],
+            },
+            scoped,
+            (id, tokens) => reported.push([id, tokens]),
+        );
+        expect(reported).toEqual([["toolu_b", ["⟦PERSON_9⟧"]]]);
+    });
+});

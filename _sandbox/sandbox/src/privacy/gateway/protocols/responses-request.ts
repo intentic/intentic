@@ -131,6 +131,34 @@ const ITEM_FIELDS: ReadonlyMap<Json | undefined, Readonly<Record<string, FieldMa
     ["mcp_approval_request", { arguments: jsonText }],
 ]);
 
+// The fields of each item type the model wrote itself: the calls it made (an MCP call's output is the server's) and an
+// assistant message. These go back through RequestShield.own, so nothing the model made up is given a token.
+const OWN_FIELDS: ReadonlyMap<Json | undefined, ReadonlySet<string>> = new Map([
+    ["function_call", new Set(["arguments"])],
+    ["custom_tool_call", new Set(["input"])],
+    ["local_shell_call", new Set(["action"])],
+    ["shell_call", new Set(["action"])],
+    ["apply_patch_call", new Set(["operation"])],
+    ["mcp_call", new Set(["arguments"])],
+    ["mcp_approval_request", new Set(["arguments"])],
+]);
+
+const ownShield = (shield: RequestShield): RequestShield => ({ ...shield, mask: shield.own });
+
+// An item's fields as they are masked: the model's own through `own`, the rest through `mask`.
+const fieldsFor = (item: JsonObject, type: Json | undefined, fields: Readonly<Record<string, FieldMask>>): Readonly<Record<string, FieldMask>> => {
+    const own = item["role"] === "assistant" ? new Set(["content"]) : OWN_FIELDS.get(type);
+    if (own === undefined) {
+        return fields;
+    }
+    return Object.fromEntries(
+        Object.entries(fields).map(([key, change]): [string, FieldMask] => [
+            key,
+            own.has(key) ? async (value, shield) => change(value, ownShield(shield)) : change,
+        ]),
+    );
+};
+
 export const walkItem = async (item: Json, shield: RequestShield): Promise<Json> => {
     if (!isRecord(item)) {
         return item;
@@ -138,7 +166,7 @@ export const walkItem = async (item: Json, shield: RequestShield): Promise<Json>
     // A message may be written `{role, content}` with no type at all.
     const type = typeOf(item) ?? (isText(item["role"]) ? "message" : undefined);
     const fields = ITEM_FIELDS.get(type);
-    return fields === undefined ? item : fieldsOf(item, shield, fields);
+    return fields === undefined ? item : fieldsOf(item, shield, fieldsFor(item, type, fields));
 };
 
 const walkInstructions = async (instructions: Json | undefined, shield: RequestShield): Promise<Json | undefined> => {

@@ -1,6 +1,7 @@
 import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
+import { coinedTokenHooks, takeCoinedCall } from "../gateway/coined-calls.js";
 import { createGatewayRoute } from "../gateway/gateway-route.js";
 import { privacySliceFake } from "../privacy-slice.testing.js";
 import { tokenOf } from "../tokens.js";
@@ -234,4 +235,92 @@ test("a session nobody signed reaches nothing", async () => {
     app.all("/privacy/gateway/:session/*", createGatewayRoute({ shield: fake.privacyShield, warn: () => undefined }));
     const response = await app.request("/privacy/gateway/forged.session/v1/messages", { method: "POST", body: "{}" });
     expect(response.status).toBe(404);
+});
+
+// A model answer that is one tool call with this input, whatever it was sent.
+const toolCall = (id: string, input: Record<string, string>) => (): Response =>
+    sse([
+        { event: "message_start", data: { type: "message_start", message: { id: "m", type: "message", role: "assistant", content: [] } } },
+        {
+            event: "content_block_start",
+            data: { type: "content_block_start", index: 0, content_block: { type: "tool_use", id, name: "Write", input: {} } },
+        },
+        {
+            event: "content_block_delta",
+            data: { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: JSON.stringify(input) } },
+        },
+        { event: "content_block_stop", data: { type: "content_block_stop", index: 0 } },
+        { event: "message_stop", data: { type: "message_stop" } },
+    ]);
+
+// A turn in which the model wrote a file, and the request after it, which sends that call back.
+const afterWrite = (content: string, result = "File created") => ({
+    model: "claude-opus-5",
+    messages: [
+        { role: "user", content: "Generate sample contracts." },
+        { role: "assistant", content: [{ type: "tool_use", id: "w1", name: "Write", input: { file_path: "/tmp/gen/common.py", content } }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "w1", content: result }] },
+    ],
+    stream: true,
+});
+
+const MADE_UP = 'BURMISTRZ = "Andrzej Sosnowski"';
+
+describe("what the model wrote itself", () => {
+    test("a name it made up goes back to it as it wrote it, and the vault gives it no token", async () => {
+        const { fake, provider, send } = await harness({ mode: "on" }, "claude");
+        await send("/v1/messages", afterWrite(MADE_UP));
+        expect(provider.seen[0]?.body).toContain("Andrzej Sosnowski");
+        expect(await fake.privacyShield.vault.counts()).toEqual({ tokens: 0, known: 0 });
+        // The same words in a tool's output are the owner's data, and masked.
+        await send("/v1/messages", afterWrite("print()", MADE_UP));
+        expect(provider.seen[1]?.body).not.toContain("Andrzej Sosnowski");
+    });
+
+    test("a value it wrote back from a token goes back as that token", async () => {
+        const { provider, send } = await harness({ mode: "on" }, "claude");
+        await send("/v1/messages", request(`${PERSON}, PESEL ${PESEL}`));
+        await send("/v1/messages", afterWrite(`PESEL = "${PESEL}"`));
+        expect(provider.seen[1]?.body).not.toContain(PESEL);
+        expect(provider.seen[1]?.body).toContain(`PESEL = \\"${tokenOf("NATIONAL_ID", 1)}\\"`);
+    });
+});
+
+describe("a token the model made up", () => {
+    test("stays as written, its call is refused before it runs, and the log names it", async () => {
+        const id = "toolu_coined_1";
+        const { send, warnings } = await harness({ mode: "on" }, "claude", toolCall(id, { content: `${tokenOf("NATIONAL_ID", 1)} ⟦PERSON_25⟧` }));
+        const { input } = await assembled(await send("/v1/messages", request(`PESEL ${PESEL}`)));
+        expect(JSON.parse(input)).toEqual({ content: `${PESEL} ⟦PERSON_25⟧` });
+        expect(warnings.join("\n")).toContain("⟦PERSON_25⟧");
+        const [hook] = coinedTokenHooks().PreToolUse[0]?.hooks ?? [];
+        const answer = JSON.stringify(
+            await hook?.({
+                hook_event_name: "PreToolUse",
+                tool_name: "Write",
+                tool_input: {},
+                tool_use_id: id,
+                session_id: "s",
+                transcript_path: "",
+                cwd: "/",
+            }),
+        );
+        expect(answer).toContain('"permissionDecision":"deny"');
+        expect(answer).toContain("⟦PERSON_25⟧");
+        // Asked once: the refusal took it off.
+        expect(takeCoinedCall(id)).toBeUndefined();
+    });
+
+    test("never reads back a value the vault holds for that number from another request", async () => {
+        const id = "toolu_coined_2";
+        const { send } = await harness({ mode: "on" }, "claude", toolCall(id, { content: `Pracownik: ${tokenOf("PERSON", 1)}` }));
+        // The vault gives PERSON_1 to a real person here...
+        await send("/v1/messages", request(`id|name\n1|${PERSON}\n`));
+        takeCoinedCall(id);
+        // ...and a later request that never carried it cannot have it written back.
+        const { input } = await assembled(await send("/v1/messages", afterWrite("print()")));
+        expect(input).not.toContain(PERSON);
+        expect(JSON.parse(input)).toEqual({ content: `Pracownik: ${tokenOf("PERSON", 1)}` });
+        expect(takeCoinedCall(id)).toEqual([tokenOf("PERSON", 1)]);
+    });
 });

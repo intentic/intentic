@@ -36,6 +36,8 @@ export const DOCUMENT_TEXT = "Invoice for ⟦PERSON_1⟧, account ⟦BANK_ACCOUN
 export const MASKED_PDF: ShieldBinary = { mediaType: "application/pdf", data: "JVBERi1tYXNrZWQ=" };
 
 export interface FakeShield extends RequestShield {
+    // Every string handed to `own`: what the walker read as the model's own words.
+    readonly owned: string[];
     readonly images: ShieldBinary[];
     readonly documents: ShieldBinary[];
 }
@@ -56,11 +58,17 @@ export const fakeShield = (options: FakeShieldOptions = {}): FakeShield => {
     const paint = options.paint ?? false;
     const images: ShieldBinary[] = [];
     const documents: ShieldBinary[] = [];
+    const owned: string[] = [];
     return {
+        owned,
         images,
         documents,
         note,
         mask: async (text) => mask(text),
+        own: async (text) => {
+            owned.push(text);
+            return mask(text);
+        },
         image: async (image) => {
             images.push(image);
             if (keep) {

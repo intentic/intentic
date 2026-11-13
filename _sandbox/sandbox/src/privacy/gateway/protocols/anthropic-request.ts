@@ -101,18 +101,21 @@ const walkDocument = async (block: JsonObject, shield: RequestShield, walk: Walk
     return walkDocumentSource(await maskField(titled, "context", shield.mask), shield, walk);
 };
 
-const walkBlock = async (block: Json, shield: RequestShield): Promise<Json> => {
+// `own` for a block of an assistant turn: its text and the calls it made are the model's own words (RequestShield.own),
+// while a result inside it (an MCP server's) is not.
+const walkBlock = async (block: Json, shield: RequestShield, own = false): Promise<Json> => {
     if (!isRecord(block)) {
         return block;
     }
     const type = typeOf(block);
     const walk: Walk = async (inner) => walkBlock(inner, shield);
+    const words = own ? shield.own : shield.mask;
     if (!isText(type) || UNTOUCHED.has(type)) {
         return block;
     }
     switch (type) {
         case "text":
-            return maskField(block, "text", shield.mask);
+            return maskField(block, "text", words);
         case "image":
             return walkImage(block, shield);
         case "document":
@@ -121,7 +124,7 @@ const walkBlock = async (block: Json, shield: RequestShield): Promise<Json> => {
         case "server_tool_use":
         case "mcp_tool_use": {
             const input = block["input"];
-            return input === undefined ? block : patch(block, "input", await maskStrings(input, shield.mask));
+            return input === undefined ? block : patch(block, "input", await maskStrings(input, words));
         }
         case "tool_result":
         case "mcp_tool_result":
@@ -139,7 +142,12 @@ const walkMessage = async (message: Json, shield: RequestShield): Promise<Json> 
     if (!isRecord(message)) {
         return message;
     }
-    return patch(message, "content", await walkContent(message["content"], shield, async (block) => walkBlock(block, shield)));
+    const own = message["role"] === "assistant";
+    const content = message["content"];
+    if (own && isText(content)) {
+        return patch(message, "content", await maskText(content, shield.own));
+    }
+    return patch(message, "content", await walkContent(content, shield, async (block) => walkBlock(block, shield, own)));
 };
 
 // The note goes last: after every cache breakpoint, so the cached prefix before it is the same with or without it.

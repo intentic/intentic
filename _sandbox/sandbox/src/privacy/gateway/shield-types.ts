@@ -32,6 +32,9 @@ export interface RequestShield {
     // One string bound for the provider, masked. The same input gives the same output for as long as the vault holds,
     // which is what keeps a provider's prompt cache and a signed transcript stable across requests.
     readonly mask: (text: string) => Promise<string>;
+    // A string the provider itself wrote (its replies, the calls it made), on its way back to it: what the vault holds
+    // goes back as its token, and nothing the model made up is given one (masker.ts Masker.own).
+    readonly own: (text: string) => Promise<string>;
     // An image bound for the provider: `keep` sends it as it is, `image` sends that image in its place (the same picture
     // with its personal data painted over), `text` sends a note instead of any picture.
     readonly image: (image: ShieldBinary) => Promise<ImageVerdict>;
@@ -43,5 +46,9 @@ export interface RequestShield {
 }
 
 // What a response's walker is handed: tokens back to the values they stand for. Pure and synchronous, so a stream can
-// apply it chunk by chunk.
-export type RestoreText = (text: string) => string;
+// apply it chunk by chunk. `coined` is told of each token in the text the model made up rather than was given, which
+// is left as written: how a walker learns that a tool call it restores carries one.
+export type RestoreText = (text: string, coined?: (token: string) => void) => string;
+
+// Told of each tool call whose input holds tokens the model made up: the call's id and those tokens.
+export type CoinedCall = (id: string, tokens: readonly string[]) => void;

@@ -313,3 +313,23 @@ test("a PDF the shield painted over goes as that file, in the form its data came
         { type: "input_file", file_data: `data:application/pdf;base64,${MASKED_PDF.data}`, filename: "document.pdf" },
     ]);
 });
+
+test("the calls the model made and its own messages go back as its own words, outputs are masked", async () => {
+    const shield = fakeShield();
+    const masked = await shieldRequest(
+        "responses",
+        deepFreeze({
+            input: [
+                { role: "user", content: [{ type: "input_text", text: "Write to Jan Kowalski" }] },
+                { type: "message", role: "assistant", content: [{ type: "output_text", text: "Writing to Jan Kowalski." }] },
+                { type: "function_call", call_id: "c1", name: "write", arguments: '{"to":"Jan Kowalski"}' },
+                { type: "function_call_output", call_id: "c1", output: "sent to Jan Kowalski" },
+                { type: "mcp_call", id: "m1", name: "lookup", arguments: '{"who":"Jan Kowalski"}', output: "Zażółć Gęślą" },
+            ],
+        }),
+        shield,
+    );
+    expect(shield.owned).toEqual(["Writing to Jan Kowalski.", '{"to":"Jan Kowalski"}', '{"who":"Jan Kowalski"}']);
+    expect(at(masked, "input", 3, "output")).toBe("sent to ⟦PERSON_1⟧");
+    expect(at(masked, "input", 4, "output")).toBe("⟦PERSON_2⟧");
+});

@@ -71,6 +71,9 @@ export interface PrivacyVault {
     // The token for a value, given a new one when it has none. Synchronous, so concurrent requests never race for an
     // index; held in memory until `commit`. `rule` when one of the owner's rules found it (VaultEntrySchema `rule`).
     readonly tokenFor: (value: string, kind: PersonalDataClass, found?: "rule") => string;
+    // The token a value already has, in any spelling of it; undefined for one the vault never gave a token, which is
+    // never given one here. Marks a value it finds seen today, as `tokenFor` does.
+    readonly tokenOf: (value: string, kind: PersonalDataClass) => string | undefined;
     // Writes what `tokenFor` added since the last commit. Called before a masked request leaves: a token the provider
     // reads must already be on disk, or a restart would give its index to another value.
     readonly commit: () => Promise<void>;
@@ -129,6 +132,16 @@ export class PrivacyVaultUnreadableError extends Error {
 
 // The key an entry is held by: its token's label and number.
 const keyOfEntry = (entry: VaultEntry): string => tokenKey(TOKEN_LABEL[entry.class], entry.index);
+
+// The token an entry goes to a provider as.
+const entryToken = (entry: VaultEntry): string => tokenOf(TOKEN_LABEL[entry.class], entry.index);
+const maybeToken = (entry: VaultEntry | undefined): string | undefined => (entry === undefined ? undefined : entryToken(entry));
+
+// How many tokens the vault holds, and how many of them were taught from a list.
+const countsOf = (entries: Iterable<VaultEntry>) => {
+    const all = [...entries];
+    return { tokens: all.length, known: all.filter((entry) => entry.source !== undefined).length };
+};
 
 // The UTC day a moment falls on, as an entry's `seen` writes it.
 const utcDayOf = (date: Date): string => date.toISOString().slice(0, 10);
@@ -284,9 +297,9 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
         dirty = true;
         generation += 1;
     };
-    const touch = (entry: VaultEntry): void => {
+    const touch = (entry: VaultEntry | undefined): void => {
         const day = utcDayOf(now());
-        if (entry.seen !== day) {
+        if (entry !== undefined && entry.seen !== day) {
             index({ ...entry, seen: day });
             dirty = true;
         }
@@ -306,6 +319,13 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             throw new Error("the privacy vault was used before it was loaded");
         }
     };
+    // The entry a value already has, marked seen today; undefined for one the vault never gave a token.
+    const held = (value: string, kind: PersonalDataClass): VaultEntry | undefined => {
+        loaded();
+        const existing = knownAs(value, kind);
+        touch(existing);
+        return existing;
+    };
     const load = (): Promise<void> => {
         loading ??= (async () => {
             const state = await file.state();
@@ -315,12 +335,10 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             for (const [label, value] of nextIndexes(state.value)) {
                 next.set(label, value);
             }
-            for (const entry of state.value.entries) {
-                if (entry.retired === true) {
-                    // Forgotten by an older release that kept the value: it leaves the file with the next commit.
-                    dirty = true;
-                    continue;
-                }
+            const kept = state.value.entries.filter((entry) => entry.retired !== true);
+            // Forgotten by an older release that kept the value: it leaves the file with the next commit.
+            dirty ||= kept.length < state.value.entries.length;
+            for (const entry of kept) {
                 index(entry);
             }
         })().catch((error: unknown) => {
@@ -345,13 +363,10 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
     return {
         load,
         tokenFor: (value, kind, found) => {
-            loaded();
-            const existing = knownAs(value, kind);
+            const existing = held(value, kind);
             if (existing === undefined) {
-                const entry = allocate(value, kind, markOf(found));
-                return tokenOf(TOKEN_LABEL[entry.class], entry.index);
+                return entryToken(allocate(value, kind, markOf(found)));
             }
-            touch(existing);
             // Found by something other than a rule, it is matched alone as the detectors' finds are from then on.
             if (unmarkedBy(existing, found)) {
                 const { rule: _, ...rest } = byToken.get(keyOfEntry(existing)) ?? existing;
@@ -359,8 +374,9 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
                 dirty = true;
                 generation += 1;
             }
-            return tokenOf(TOKEN_LABEL[existing.class], existing.index);
+            return entryToken(existing);
         },
+        tokenOf: (value, kind) => maybeToken(held(value, kind)),
         commit,
         // Only as the vault writes a number: `PERSON_01` is a token nobody gave out, not another spelling of `PERSON_1`.
         resolve: (label, tokenIndex) => (CANONICAL_INDEX.test(tokenIndex) ? byToken.get(tokenKey(label, Number(tokenIndex)))?.value : undefined),
@@ -394,7 +410,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
                 }
             }
             await commit();
-            return { added, known: [...byToken.values()].filter((entry) => entry.source !== undefined).length };
+            return { added, known: countsOf(byToken.values()).known };
         },
         // Before 2026-10-13 forgetting only stopped the matching and kept the raw value in the file, which no erasure
         // request is satisfied by. Nothing of the value is kept, not even a hash: a hash of a PESEL or a phone number
@@ -409,12 +425,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             await commit();
             return gone.length;
         },
-        saw: (hit) => {
-            const entry = byToken.get(hit.key);
-            if (entry !== undefined) {
-                touch(entry);
-            }
-        },
+        saw: (hit) => touch(byToken.get(hit.key)),
         expire: async (before) => {
             await load();
             const { gone, unstamped } = agedEntries(byToken.values(), utcDayOf(before));
@@ -434,8 +445,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
         },
         counts: async () => {
             await load();
-            const entries = [...byToken.values()];
-            return { tokens: entries.length, known: entries.filter((entry) => entry.source !== undefined).length };
+            return countsOf(byToken.values());
         },
     };
 };

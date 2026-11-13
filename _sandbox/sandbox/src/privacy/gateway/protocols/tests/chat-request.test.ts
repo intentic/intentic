@@ -149,3 +149,23 @@ test("a PDF the shield painted over goes as that file, its name masked", async (
         { type: "file", file: { file_data: `data:application/pdf;base64,${MASKED_PDF.data}`, filename: "⟦PERSON_1⟧.pdf" } },
     ]);
 });
+
+test("an assistant message's text and calls go back as the model's own words", async () => {
+    const shield = fakeShield();
+    await shieldRequest(
+        "chat",
+        deepFreeze({
+            messages: [
+                { role: "user", content: "Who is Jan Kowalski?" },
+                {
+                    role: "assistant",
+                    content: "Jan Kowalski is the employee.",
+                    tool_calls: [{ id: "c1", type: "function", function: { name: "write", arguments: '{"text":"Jan Kowalski"}' } }],
+                },
+                { role: "tool", tool_call_id: "c1", content: "Jan Kowalski saved" },
+            ],
+        }),
+        shield,
+    );
+    expect(shield.owned).toEqual(["Jan Kowalski is the employee.", '{"text":"Jan Kowalski"}']);
+});

@@ -1,4 +1,4 @@
-import type { RequestShield, RestoreText } from "../shield-types.js";
+import type { CoinedCall, RequestShield, RestoreText } from "../shield-types.js";
 import { shieldAnthropicRequest } from "./anthropic-request.js";
 import { anthropicStreamRestorer, restoreAnthropicResponse } from "./anthropic-response.js";
 import { shieldChatRequest } from "./chat-request.js";
@@ -49,12 +49,14 @@ export const shieldRequest = async (protocol: GatewayProtocol, body: unknown, sh
 };
 
 // A non-streamed response with tokens restored in what the model wrote. Unchanged parts are the original objects.
+// `coined` is told of each tool call holding a token the model made up, where the wire names its calls to a hook that
+// can refuse them (Claude Code's); elsewhere the restore's own `coined` sink still hears of every one.
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- the gateway's parsed HTTP body is this module's I/O boundary.
-export const restoreResponse = (protocol: GatewayProtocol, body: unknown, restore: RestoreText): Json => {
+export const restoreResponse = (protocol: GatewayProtocol, body: unknown, restore: RestoreText, coined?: CoinedCall): Json => {
     const json = toJson(body);
     switch (protocol) {
         case "anthropic":
-            return restoreAnthropicResponse(json, restore);
+            return restoreAnthropicResponse(json, restore, coined);
         case "responses":
             return restoreResponsesResponse(json, restore);
         case "chat":
@@ -66,8 +68,8 @@ const restorers = {
     anthropic: anthropicStreamRestorer,
     responses: responsesStreamRestorer,
     chat: chatStreamRestorer,
-} satisfies Readonly<Record<GatewayProtocol, (restore: RestoreText) => SseHandler>>;
+} satisfies Readonly<Record<GatewayProtocol, (restore: RestoreText, coined?: CoinedCall) => SseHandler>>;
 
 // A Server-Sent-Events body with tokens restored as it streams. Each call gives a fresh transform with its own state.
-export const restoreStream = (protocol: GatewayProtocol, restore: RestoreText): TransformStream<Uint8Array, Uint8Array> =>
-    sseTransform(restorers[protocol](restore));
+export const restoreStream = (protocol: GatewayProtocol, restore: RestoreText, coined?: CoinedCall): TransformStream<Uint8Array, Uint8Array> =>
+    sseTransform(restorers[protocol](restore, coined));

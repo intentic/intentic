@@ -7,10 +7,10 @@ import {
     type PrivacyShieldPolicy,
 } from "@intentic/sandbox-contract/schemas/privacy";
 import type { Gate, PersonalDataSpan } from "@intentic/privacy-detect";
-import { detectorFor, type PolicySpan } from "./policy-detector.js";
+import { detectorFor, type PolicyDetector, type PolicySpan } from "./policy-detector.js";
 import { opt } from "../opt.js";
 import type { PrivacyVault, VaultHit } from "./privacy-vault.js";
-import { LITERAL_PREFIX, TOKEN_LABEL, TOKEN_SOURCE, tokenPattern } from "./tokens.js";
+import { LITERAL_PREFIX, TOKEN_LABEL, TOKEN_SOURCE, tokenKey, tokenPattern } from "./tokens.js";
 
 // One string bound for an untrusted provider, masked: what the vault already holds, the detectors and the owner's rules
 // find, and the local name model (where installed) reads, each proposed to the one gate (@intentic/privacy-detect
@@ -46,8 +46,21 @@ export interface FoundSpan {
     readonly token: string;
 }
 
+// Which tokens a restore may read back: those the provider was given in the request it is answering, by their key
+// (`PERSON_3`). Any other token the model writes it made up, and it is left as written.
+export interface RestoreScope {
+    readonly given: (key: string) => boolean;
+    // Told of each token the model made up, as written.
+    readonly coined?: (token: string) => void;
+}
+
 export interface Masker {
     readonly mask: (text: string) => Promise<MaskResult>;
+    // A string the provider itself wrote (its replies, the calls it made), masked for sending back to it. Its own words
+    // are its own: nothing in them is given a new token, so a name it made up goes back as it wrote it, and does not
+    // become personal data of the owner's. What the vault already holds goes back as its token, since the model wrote it
+    // only because a token was restored, and so does anything found around such a value.
+    readonly own: (text: string) => Promise<MaskResult>;
     // Where the personal data in a string sits and the token each value was given, the string left as it is: for text
     // that exists only as pixels (an image's words), where what changes is the picture. Counts as `mask` counts.
     // `keep` picks the finds that count from all of them, for a text that holds some words twice (an image's wrapped
@@ -57,6 +70,8 @@ export interface Masker {
         keep?: (spans: readonly FoundSpan[]) => readonly FoundSpan[],
     ) => Promise<{ readonly spans: readonly FoundSpan[]; readonly counts: ClassCounts; readonly found: readonly Replacement[] }>;
     readonly restore: (text: string) => string;
+    // The same, reading back only the tokens `scope` says the provider was given.
+    readonly restoreGiven: (text: string, scope: RestoreScope) => string;
     // What every source would find in a string and which found it, for the owner trying the shield on a text: nothing
     // is given a token, nothing is remembered, and the vault is only read.
     readonly inspect: (text: string) => Promise<PrivacyPreviewSpan[]>;
@@ -258,22 +273,24 @@ const knownSpans = async (vault: PrivacyVault, gate: Gate, text: string): Promis
     return out;
 };
 
-// Tokens back to the values they stand for, read from the vault alone.
-const restoreFrom = (vault: PrivacyVault, text: string): string =>
+// One token back to its value: an escaped literal one prefix off, a token the scope did not give out as written.
+const restoreToken = (vault: PrivacyVault, whole: string, label: string, index: string, scope: RestoreScope | undefined): string => {
+    if (label.startsWith(LITERAL_PREFIX)) {
+        return whole.replace(LITERAL_PREFIX, "");
+    }
+    if (scope !== undefined && RESTORABLE_LABELS.has(label) && !scope.given(tokenKey(label, index))) {
+        scope.coined?.(whole);
+        return whole;
+    }
+    return vault.resolve(label, index) ?? whole;
+};
+
+// Tokens back to the values they stand for, read from the vault alone; with a scope, only the tokens it gave out.
+const restoreFrom = (vault: PrivacyVault, text: string, scope?: RestoreScope): string =>
     text.includes("⟦") || text.includes("[[")
-        ? text.replace(tokenPattern(), (whole, label?: string, index?: string, looseLabel?: string, looseIndex?: string) => {
-              // An escaped literal comes back as the literal it was: one prefix off, whatever follows it.
-              if ((label ?? looseLabel ?? "").startsWith(LITERAL_PREFIX)) {
-                  return whole.replace(LITERAL_PREFIX, "");
-              }
-              const resolved =
-                  label !== undefined && index !== undefined
-                      ? vault.resolve(label, index)
-                      : looseLabel !== undefined && looseIndex !== undefined
-                        ? vault.resolve(looseLabel, looseIndex)
-                        : undefined;
-              return resolved ?? whole;
-          })
+        ? text.replace(tokenPattern(), (whole, label?: string, index?: string, looseLabel?: string, looseIndex?: string) =>
+              restoreToken(vault, whole, label ?? looseLabel ?? "", index ?? looseIndex ?? "", scope),
+          )
         : text;
 
 const tally = (spans: readonly { readonly class: PersonalDataClass }[]) => {
@@ -282,6 +299,57 @@ const tally = (spans: readonly { readonly class: PersonalDataClass }[]) => {
         counts[span.class] = (counts[span.class] ?? 0) + 1;
     }
     return counts;
+};
+
+// What a masker reads a stretch of text with.
+interface Sources {
+    readonly vault: PrivacyVault;
+    readonly gate: Gate;
+    readonly detector: PolicyDetector;
+    readonly recognizer: EntityRecognizer | undefined;
+}
+
+const recognizedIn = async (recognizer: EntityRecognizer | undefined, text: string): Promise<Proposed[]> =>
+    recognizer === undefined ? [] : (await recognizer.find(text)).map((span) => ({ ...span, by: "model" }));
+
+// What every source proposes in a stretch of text holding no token, through the gate.
+const proposedIn = async ({ vault, gate, detector, recognizer }: Sources, text: string, noting: boolean): Promise<Proposed[]> => {
+    if (!HAS_WORD.test(text)) {
+        return [];
+    }
+    return gate.settle(text, [...knownIn(vault, gate, text, noting), ...detector.candidates(text), ...(await recognizedIn(recognizer, text))]);
+};
+
+// What a stretch the provider wrote holds that the vault gave a token (Masker.own): its values found where they stand
+// and in context, and a find that runs over one of them, which is given a token as `mask` would give it so the value
+// inside does not go back beside the words the model put around its token. Any other find is the model's own word.
+const ownProposedIn = async ({ vault, gate, detector, recognizer }: Sources, text: string): Promise<Proposed[]> => {
+    if (!HAS_WORD.test(text)) {
+        return [];
+    }
+    // Every value the vault holds where it stands, the gate not asked: a find that touches one is not the model's own.
+    const held = vault.matcher().find(text);
+    const found = [...detector.candidates(text), ...(await recognizedIn(recognizer, text))].flatMap((span): Proposed[] => {
+        const token = vault.tokenOf(span.value, span.class);
+        if (token !== undefined) {
+            return [{ ...span, token }];
+        }
+        return held.some((hit) => hit.start < span.end && span.start < hit.end) ? [span] : [];
+    });
+    return gate.settle(text, [...knownIn(vault, gate, text, true), ...found]);
+};
+
+// Every find in a string around the tokens already in it, with where its stretch starts in the string.
+const spansAround = async (sources: Sources, text: string, noting: boolean): Promise<{ readonly span: Proposed; readonly offset: number }[]> => {
+    const out: { span: Proposed; offset: number }[] = [];
+    let offset = 0;
+    for (const part of segmentsAroundTokens(text)) {
+        if (!part.token) {
+            out.push(...(await proposedIn(sources, part.text, noting)).map((span) => ({ span, offset })));
+        }
+        offset += part.text.length;
+    }
+    return out;
 };
 
 export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDeps): Masker => {
@@ -303,27 +371,8 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
         return placeTokens(text, spans.map((span) => ({ ...span, token: tokenOfSpan(span) })), placed, base);
     };
 
-    // What every source proposes in a stretch of text holding no token, through the gate.
-    const spansOf = async (text: string, noting = true): Promise<Proposed[]> => {
-        if (!HAS_WORD.test(text)) {
-            return [];
-        }
-        const recognized: Proposed[] = recognizer === undefined ? [] : (await recognizer.find(text)).map((span) => ({ ...span, by: "model" }));
-        return gate.settle(text, [...knownIn(vault, gate, text, noting), ...detector.candidates(text), ...recognized]);
-    };
+    const sources: Sources = { vault, gate, detector, recognizer };
 
-    // Every find in a string around the tokens already in it, with where its stretch starts in the string.
-    const spansAround = async (text: string, noting: boolean): Promise<{ readonly span: Proposed; readonly offset: number }[]> => {
-        const out: { span: Proposed; offset: number }[] = [];
-        let offset = 0;
-        for (const part of segmentsAroundTokens(text)) {
-            if (!part.token) {
-                out.push(...(await spansOf(part.text, noting)).map((span) => ({ span, offset })));
-            }
-            offset += part.text.length;
-        }
-        return out;
-    };
 
     // Only the vault's values can have changed since a remembered masking; looking for those alone is a fraction of the
     // full pass.
@@ -335,31 +384,35 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
         return out;
     };
 
+    // A masking pass: `spansFor` proposes what a stretch with no token in it holds, `tag` keeps its memo apart.
+    const masking = async (text: string, tag: string, spansFor: (text: string) => Promise<Proposed[]>): Promise<MaskResult> => {
+        if (text.length < 2 || !HAS_WORD.test(text)) {
+            return { text, counts: {}, found: [] };
+        }
+        await vault.load();
+        const key = createHash("sha1").update(tag).update(policyKey).update("\0").update(text).digest("base64url");
+        const remembered = memo.get(key);
+        if (remembered !== undefined && remembered.generation === vault.generation()) {
+            return { text: remembered.text, counts: {}, found: [] };
+        }
+        const counts: Record<string, number> = {};
+        const placed: Placed[] = [];
+        let masked = "";
+        if (remembered === undefined) {
+            for (const part of segmentsAroundTokens(text)) {
+                masked += part.token ? escapedLiteral(part.text) : apply(part.text, await spansFor(part.text), counts, placed, masked.length);
+            }
+        } else {
+            masked = remaskKnown(remembered.text, counts, placed);
+        }
+        // The generation after this masking's own additions: they are in `masked` already.
+        memo.set(key, { text: masked, generation: vault.generation() });
+        return { text: masked, counts, found: replacementsIn(masked, placed) };
+    };
+
     return {
-        mask: async (text) => {
-            if (text.length < 2 || !HAS_WORD.test(text)) {
-                return { text, counts: {}, found: [] };
-            }
-            await vault.load();
-            const key = createHash("sha1").update(policyKey).update("\0").update(text).digest("base64url");
-            const remembered = memo.get(key);
-            if (remembered !== undefined && remembered.generation === vault.generation()) {
-                return { text: remembered.text, counts: {}, found: [] };
-            }
-            const counts: Record<string, number> = {};
-            const placed: Placed[] = [];
-            let masked = "";
-            if (remembered === undefined) {
-                for (const part of segmentsAroundTokens(text)) {
-                    masked += part.token ? escapedLiteral(part.text) : apply(part.text, await spansOf(part.text), counts, placed, masked.length);
-                }
-            } else {
-                masked = remaskKnown(remembered.text, counts, placed);
-            }
-            // The generation after this masking's own additions: they are in `masked` already.
-            memo.set(key, { text: masked, generation: vault.generation() });
-            return { text: masked, counts, found: replacementsIn(masked, placed) };
-        },
+        mask: async (text) => masking(text, "", async (stretch) => proposedIn(sources, stretch, true)),
+        own: async (text) => masking(text, "own\0", async (stretch) => ownProposedIn(sources, stretch)),
         find: async (text, keep = (spans) => spans) => {
             if (text.length < 2 || !HAS_WORD.test(text)) {
                 return { spans: [], counts: {}, found: [] };
@@ -373,7 +426,7 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
             if (remembered !== undefined && remembered.generation === vault.generation()) {
                 return { spans: keep(parseSpans(remembered.text)), counts: {}, found: [] };
             }
-            const all: FoundSpan[] = (await spansAround(text, true)).map(({ span, offset }) => ({
+            const all: FoundSpan[] = (await spansAround(sources, text, true)).map(({ span, offset }) => ({
                 start: offset + span.start,
                 end: offset + span.end,
                 class: span.class,
@@ -391,9 +444,10 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
             return { spans, counts: tally(spans), found: replacementsIn(masked, placed) };
         },
         restore: (text) => restoreFrom(vault, text),
+        restoreGiven: (text, scope) => restoreFrom(vault, text, scope),
         inspect: async (text) => {
             await vault.load();
-            return (await spansAround(text, false)).map(({ span, offset }) => ({
+            return (await spansAround(sources, text, false)).map(({ span, offset }) => ({
                 start: offset + span.start,
                 end: offset + span.end,
                 class: span.class,

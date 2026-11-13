@@ -1067,7 +1067,11 @@ flowchart LR
   whose signed session names the provider and the only upstream it forwards to (`privacy/gateway/`). For an untrusted
   provider it replaces what the detectors ([`@intentic/privacy-detect`](../privacy-detect)), the vault of known values and, with the `privacy` image
   pack, a local name model find with tokens like `⟦PERSON_3⟧`, and restores them in the answer as it streams back, so
-  the agent's tools run on real values while the provider reads tokens. An image still goes as an image: its text is
+  the agent's tools run on real values while the provider reads tokens. What the model wrote itself (its replies and
+  the calls it made, sent back with every request) gives nothing a new token: a name it made up goes back as it wrote
+  it, and only what the vault already holds goes back as its token (`Masker.own`). An answer has only the tokens its own
+  request carried read back; one the model made up stays as written, the Claude Code call that holds it is refused
+  before it runs, and daemon.log names it (`privacy/gateway/coined-calls.ts`). An image still goes as an image: its text is
   read on this machine by PaddleOCR ([`@intentic/ocr`](../ocr), the pack's PP-OCRv6 models) and every stretch found to be personal data
   is painted over with its token (`privacy/image-mask.ts`); one that cannot be read is held back, and an animation goes
   as the one frame that was read. A PDF goes as its

@@ -348,3 +348,27 @@ test("a PDF the shield painted over goes as that PDF inline, by address too, wit
     const painted = { type: "document", source: { type: "base64", media_type: "application/pdf", data: MASKED_PDF.data }, title: "Umowa" };
     expect(at(shielded, "messages", 0, "content")).toEqual([painted, painted]);
 });
+
+test("an assistant turn's text and calls go back as the model's own words, a result inside it is masked", async () => {
+    const shield = fakeShield();
+    const body = {
+        model: "claude-opus-5",
+        messages: [
+            { role: "user", content: [{ type: "text", text: "Draft a contract for Jan Kowalski" }] },
+            {
+                role: "assistant",
+                content: [
+                    { type: "text", text: "Writing it for Jan Kowalski." },
+                    { type: "tool_use", id: "t1", name: "Write", input: { file_path: "umowa.txt", content: "Pracownik: Jan Kowalski" } },
+                    { type: "mcp_tool_result", tool_use_id: "m1", content: "Zażółć Gęślą" },
+                ],
+            },
+            { role: "assistant", content: "Done for Jan Kowalski." },
+        ],
+    };
+    const masked = await shieldRequest("anthropic", deepFreeze(body), shield);
+    expect(shield.owned).toEqual(["Writing it for Jan Kowalski.", "umowa.txt", "Pracownik: Jan Kowalski", "Done for Jan Kowalski."]);
+    // The user's words and the server's result still go through `mask`.
+    expect(at(masked, "messages", 0, "content", 0, "text")).toBe("Draft a contract for ⟦PERSON_1⟧");
+    expect(at(masked, "messages", 1, "content", 2, "content")).toBe("⟦PERSON_2⟧");
+});
