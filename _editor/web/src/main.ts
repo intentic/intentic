@@ -21,7 +21,7 @@ import { dropTranscriptStore } from "./models/conversations/transcript/transcrip
 import { describeError, installClientDiagnostics, reportAutomaticReloads, reportClient, sendClientDiagnosticsWith } from "./app/clientDiagnostics";
 import { postClientDiagnostics } from "./client/sandbox/clientReport";
 import { localFace } from "./app/environments/local";
-import { installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
+import { installDesktopFullscreen, installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
 import { installAppOffer } from "./workbench/commands/appInstall";
 import { installComposingEnterGuard, installModEnterSubmit } from "@intentic/ui/keys";
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf/perf";
@@ -113,6 +113,8 @@ highlightInWorker();
 // Runs in every window too, and does nothing outside the desktop app: there, `target="_blank"` reaches the app only
 // because of this.
 installDesktopLinks();
+// The app's window going full screen with the page, which no webview does by itself (environments/desktop.ts).
+installDesktopFullscreen();
 installAppOffer();
 installComposingEnterGuard();
 // Ctrl+Enter (⌘+Enter) in any form's field submits it, a textarea's included, as Enter does in a one-line field (keys.ts).

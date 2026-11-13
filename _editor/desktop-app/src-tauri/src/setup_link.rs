@@ -627,6 +627,10 @@ pub enum WindowVerb {
     /// Bring the window in front of the reader, out of the tray or from under other windows: what a page's
     /// `window.focus()` would do if a webview's script were allowed to raise the window it is in.
     Raise,
+    /// The page entering full screen or leaving it (`window?do=fullscreen&value=1|0`): a slideshow, a video. The
+    /// webview fills itself with the element and tells nobody (neither WebView2 nor wry turns the window fullscreen
+    /// on the page's request), so the page says it and the window follows (windows/chrome.rs).
+    Fullscreen(bool),
     /// Widen the window to at least this many CSS pixels; a window already that wide is left alone. The
     /// popped-out chat's `window.resizeTo`, which a webview ignores for the same reason as `focus()`.
     Fit(u32),
@@ -1114,6 +1118,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             "dirty" => WindowVerb::Dirty(switch(Some(get("value")?))?),
             "drag" => WindowVerb::Drag,
             "raise" => WindowVerb::Raise,
+            "fullscreen" => WindowVerb::Fullscreen(switch(Some(get("value")?))?),
             "fit" => WindowVerb::Fit(get("width")?.parse().ok()?),
             "mode" => WindowVerb::Mode(
                 crate::state::Mode::parse(&get("mode")?)?,
@@ -1829,6 +1834,14 @@ L"}"#,
             ),
             ("intentic://window?do=drag", WindowVerb::Drag),
             ("intentic://window?do=raise", WindowVerb::Raise),
+            (
+                "intentic://window?do=fullscreen&value=1",
+                WindowVerb::Fullscreen(true),
+            ),
+            (
+                "intentic://window?do=fullscreen&value=0",
+                WindowVerb::Fullscreen(false),
+            ),
             ("intentic://window?do=fit&width=1280", WindowVerb::Fit(1280)),
             (
                 "intentic://window?do=shown&sandbox=cmvjklu9p000201oznem6o5e3",

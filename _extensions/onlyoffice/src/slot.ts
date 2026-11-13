@@ -152,7 +152,11 @@ const frameFor = (url: string, title: string): HTMLIFrameElement => {
     const frame = document.createElement(`iframe`);
     frame.src = url;
     frame.title = title;
-    frame.allow = `clipboard-read; clipboard-write`;
+    // `fullscreen` is what lets a deck's slideshow take the whole screen: the presentation editor goes fullscreen on its
+    // own when a show starts and offers the button only where `document.fullscreenEnabled` says it may, which inside a
+    // frame that does not delegate it is never, so the show used to stop at the pane's edges under the app's bars.
+    frame.allow = `clipboard-read; clipboard-write; fullscreen`;
+    frame.allowFullscreen = true;
     frame.style.cssText = `display:block;width:100%;height:100%;border:0`;
     return frame;
 };

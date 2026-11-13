@@ -66,6 +66,11 @@
     "pptxViewer": {
         "couldNotRead": "Nie udało się odczytać tej prezentacji.",
         "pictureOnSlide": "Obraz na slajdzie {number}",
+        "present": "Prezentuj",
+        "presentEnd": "Zakończ pokaz",
+        "presentNext": "Następny slajd",
+        "presentPosition": "{number} / {count}",
+        "presentPrevious": "Poprzedni slajd",
         "presentationNoSlides": "Ta prezentacja nie ma slajdów.",
         "slide": "Slajd {number}",
         "slideCount": "{count} slajd | {count} slajdy | {count} slajdów",

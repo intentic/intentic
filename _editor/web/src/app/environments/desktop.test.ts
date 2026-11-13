@@ -152,6 +152,43 @@ test("a window of the app is closed, raised and widened by the app, one link eac
     expect(own.resizeTo).not.toHaveBeenCalled();
 });
 
+/* NO WEBVIEW TAKES ITS WINDOW TO FULL SCREEN WITH THE PAGE, so the page says each change and the app does it. */
+test("the app's window follows the page into full screen and out, and a browser is left to do it itself", async () => {
+    const { installDesktopFullscreen } = await load();
+    const { sent } = recordedLocation();
+    const listeners = new Map<string, () => void>();
+    interface FakeDocument {
+        readyState: string;
+        fullscreenElement: object | null;
+        addEventListener: (type: string, listener: () => void) => void;
+    }
+    const page: FakeDocument = {
+        readyState: `complete`,
+        fullscreenElement: null,
+        addEventListener: (type, listener) => listeners.set(type, listener),
+    };
+    // SAFETY: the module reads only `readyState`, `fullscreenElement` and `addEventListener` off the document here.
+    (globalThis as { document?: FakeDocument }).document = page;
+
+    installDesktopFullscreen();
+    expect(listeners.size).toBe(0);
+
+    fakeWindow().__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null, frameless: true };
+    installDesktopFullscreen();
+    jest.useFakeTimers();
+    try {
+        // A slideshow in the office editor's frame: the frame element is this document's fullscreen element.
+        page.fullscreenElement = {};
+        listeners.get(`fullscreenchange`)?.();
+        page.fullscreenElement = null;
+        listeners.get(`fullscreenchange`)?.();
+        jest.advanceTimersByTime(1_000);
+    } finally {
+        jest.useRealTimers();
+    }
+    expect(sent).toEqual([`intentic://window?do=fullscreen&value=1`, `intentic://window?do=fullscreen&value=0`]);
+});
+
 /* WEBKIT KEEPS ONLY THE LAST ADDRESS SET IN ONE TASK: links sent together leave one per task, a beat apart, in order. */
 test("links sent together reach the app one at a time, the first at once", async () => {
     const { openDesktopLink } = await load();

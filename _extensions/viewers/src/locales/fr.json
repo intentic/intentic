@@ -66,6 +66,11 @@
     "pptxViewer": {
         "couldNotRead": "Impossible de lire cette présentation.",
         "pictureOnSlide": "Image sur la diapositive {number}",
+        "present": "Présenter",
+        "presentEnd": "Terminer le diaporama",
+        "presentNext": "Diapositive suivante",
+        "presentPosition": "{number} / {count}",
+        "presentPrevious": "Diapositive précédente",
         "presentationNoSlides": "Cette présentation n'a aucune diapositive.",
         "slide": "Diapositive {number}",
         "slideCount": "{count} diapositive | {count} diapositives",

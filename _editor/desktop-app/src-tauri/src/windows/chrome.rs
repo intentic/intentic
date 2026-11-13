@@ -131,6 +131,18 @@ fn chrome_is_up(page: &Webview) {
     crate::shown::tell(page, true);
 }
 
+/// A page that has just loaded is in nobody's full screen, so a window still in it was left there by the page before
+/// (one reloaded or navigated away mid-slideshow, whose way out went with it): it is put back as it was.
+fn leave_stale_fullscreen(page: &Webview) {
+    if crate::os::kiosk() || !crate::frame::drawn(page) {
+        return;
+    }
+    let window = page.window();
+    if window.is_fullscreen().unwrap_or(false) {
+        let _ = window.set_fullscreen(false);
+    }
+}
+
 /// Whether the window `page` is drawn in wears the platform's title bar, because the page has none (`bare`) or not.
 /// A window of its own takes it at once; the frame takes what the face it draws needs ([`fit_decorations`]), so a
 /// face out of sight never puts a bar over the one on screen.
@@ -188,7 +200,10 @@ pub(super) fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
     let window = page.window();
     let face = crate::frame::is_face(label);
     match verb {
-        WindowVerb::Ready => chrome_is_up(&page),
+        WindowVerb::Ready => {
+            leave_stale_fullscreen(&page);
+            chrome_is_up(&page);
+        }
         WindowVerb::Shown(sandbox) if label == WORKSPACE => workspace_shown(app, sandbox),
         WindowVerb::Shown(_) => {}
         // Sway owns kiosk sizing: these buttons must not hide the face or cover the system bar.
@@ -232,6 +247,14 @@ pub(super) fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
         WindowVerb::Raise if label == HOME => show_home(app, Press::by(Asked::Page)),
         WindowVerb::Raise => raise(Press::by(Asked::Page), &page),
         WindowVerb::Fit(width) => fit_width(&window, f64::from(width)),
+        // Sway owns the kiosk's screen (frame.rs keeps the frame out of full screen there), and a face out of sight
+        // does not get to take the screen from the one on it.
+        WindowVerb::Fullscreen(_) if (crate::os::kiosk() && face) || !crate::frame::drawn(&page) => {}
+        WindowVerb::Fullscreen(on) => {
+            if window.is_fullscreen().unwrap_or(!on) != on {
+                let _ = window.set_fullscreen(on);
+            }
+        }
         // Answered before this is reached (`handle_link`); it is about the app's faces, not this window.
         WindowVerb::Mode(mode, look) => announced(app, mode, look),
         // Answered before this is reached too (`handle_link`): about every page of the app, not this window.

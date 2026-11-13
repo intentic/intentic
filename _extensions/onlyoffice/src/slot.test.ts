@@ -94,6 +94,14 @@ describe(`a first visit`, () => {
         expect(readied).toEqual([true]);
     });
 
+    it(`lets the editor take the whole screen, which a deck's slideshow asks for`, async () => {
+        const { slot, element } = fake();
+        await slot.load(brief);
+        const [frame] = frames(element);
+        expect(frame?.allow.split(`;`).map((feature) => feature.trim())).toContain(`fullscreen`);
+        expect(frame?.hasAttribute(`allowfullscreen`)).toBe(true);
+    });
+
     it(`answers the state in the way and frames nothing while the server is not ready`, async () => {
         const state = fake();
         state.answer = async () => ({ status: { state: `starting` } });

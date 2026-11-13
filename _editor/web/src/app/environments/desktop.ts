@@ -289,6 +289,26 @@ export const installDesktopLinks = (): void => {
     document.addEventListener(`contextmenu`, internalLinkContextMenu);
 };
 
+/* FULL SCREEN THAT TAKES THE SCREEN, NOT JUST THE WEBVIEW (2026-11-13). A page asking for full screen (a deck's slideshow
+   in the office editor, a video, a preview's own button) gets an element as big as the webview, and the webview does not
+   tell its window: neither WebView2 nor wry turns the window fullscreen on that request, so a show ran inside the window
+   with the taskbar under it, or, before the office frame was allowed full screen at all, under the app's own bars. The
+   page says each change (`window?do=fullscreen&value=1|0`) and the app takes the window to full screen and back. An
+   element inside a frame counts: the frame element is this document's fullscreen element while it is. An app older than
+   this drops the verb, which leaves full screen the size of the window, as it always was. */
+
+const followFullscreen = (): void => {
+    openDesktopLink(`intentic://window?do=fullscreen&value=${document.fullscreenElement === null ? 0 : 1}`);
+};
+
+/** Has the app's window follow this page into and out of full screen. A no-op in a browser, which does that itself. */
+export const installDesktopFullscreen = (): void => {
+    if (desktopVersion() === undefined) {
+        return;
+    }
+    document.addEventListener(`fullscreenchange`, followFullscreen);
+};
+
 /* WHAT A PAGE MAY DO TO ITS OWN WINDOW ONLY IF ITS SCRIPT OPENED IT: close it, raise it, resize it. A browser popup
    qualifies; a window of the app never does (windows.rs builds it), so there each is a link answered on that window. */
 

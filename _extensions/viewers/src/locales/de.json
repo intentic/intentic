@@ -66,6 +66,11 @@
     "pptxViewer": {
         "couldNotRead": "Diese Präsentation konnte nicht gelesen werden.",
         "pictureOnSlide": "Bild auf Folie {number}",
+        "present": "Präsentieren",
+        "presentEnd": "Bildschirmpräsentation beenden",
+        "presentNext": "Nächste Folie",
+        "presentPosition": "{number} / {count}",
+        "presentPrevious": "Vorherige Folie",
         "presentationNoSlides": "Diese Präsentation hat keine Folien.",
         "slide": "Folie {number}",
         "slideCount": "{count} Folie | {count} Folien",

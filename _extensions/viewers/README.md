@@ -19,6 +19,8 @@ flowchart LR
   reads the format from the bytes, so a misnamed file still opens. PDF uses the browser's own plugin.
 - Word files also compare: the file diff draws both versions as one document with insertions and deletions marked
   (`src/docxRedline.ts`).
+- A PowerPoint deck also presents: Present shows one slide at a time on the whole screen, moved by arrow keys, Space,
+  Page Up/Down or a click, and ended by Escape.
 - None of these write the file. An editing viewer claiming the same extension wins, which is how
   [../onlyoffice](../onlyoffice) takes over office formats.
 - The `./docx-compare` and `./testing` exports let the editor app's tests drive the Word compare in a DOM.
