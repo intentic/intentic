@@ -240,6 +240,20 @@ test.each([
     expect(setTitle).toHaveBeenCalledWith("c1", title, "model", action);
 });
 
+// The board reads in the language people write in, not the prompt's: a Polish or Chinese opener names its session in
+// Polish or Chinese, and the category stays one of the English words the board tints by.
+test.each([
+    ["Napraw migotanie listy sesji", "napraw migotanie listy sesji na tablicy"],
+    ["修复登录页面闪烁问题", "登录页面一直闪烁，帮我修一下"],
+])("stores %s, a title in the opening message's language", async (title, opening) => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    ask.mockResolvedValue({ value: `${title} · fix` });
+    await nameAgentTitle(servicesWith({ text: opening, source: "derived" }, setTitle), "c1", opening);
+    expect(requests[0]?.prompt).toContain("language the person wrote their own words in");
+    expect(requests[0]?.prompt).toContain("always in English");
+    expect(setTitle).toHaveBeenCalledWith("c1", title, "model", "fix");
+});
+
 test.each(["model", "plan"] as const)("repairs a bare %s title from the original request on a later turn", async (source) => {
     const setTitle = jest.fn<Services["agents"]["setTitle"]>();
     const opening = "Perform an exploratory security check on Intentic. Find critical vulnerabilities.";
