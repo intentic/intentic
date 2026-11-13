@@ -331,6 +331,7 @@ const onPick = (event: Event): void => {
             <DiffToolbar
                 v-if="diffTab"
                 :path="diffTab.label"
+                :file="diffTab.path"
                 :status="diffTab.status"
                 :code="diffStat"
                 :additions="diffTab.additions"

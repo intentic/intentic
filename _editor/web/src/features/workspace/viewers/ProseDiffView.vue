@@ -47,8 +47,13 @@ const blockClass = (block: ProseBlock): string =>
 
 <template>
     <div class="h-full min-h-0 overflow-auto px-6 py-4">
-        <p v-if="changed === 0 && unchangedNote !== false" class="mb-4 text-2xs text-subtle">{{ unchangedNote ?? t(`workspace.proseDiffView.nothingInTextChanged`) }}</p>
         <div class="mx-auto flex max-w-3xl flex-col gap-4 leading-relaxed text-content">
+            <!-- In the document's own column, as its first line, so it is read before the text it is about; the mark says
+                 it is a note about the text, not a line of it. -->
+            <p v-if="changed === 0 && unchangedNote !== false" class="flex items-start gap-1.5 text-xs text-muted">
+                <Icon name="info-circle" class="shrink-0 text-2xs" />
+                <span>{{ unchangedNote ?? t(`workspace.proseDiffView.nothingInTextChanged`) }}</span>
+            </p>
             <template v-for="(run, index) in runs" :key="index">
                 <template v-if="run.kind === `fold`">
                     <template v-if="opened.has(run.at)">

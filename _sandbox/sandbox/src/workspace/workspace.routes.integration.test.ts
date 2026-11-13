@@ -1156,6 +1156,21 @@ test("GET /diff/raw serves a commit's before/after blobs and refuses a sha that 
     }
 });
 
+// A checkout the view names but the daemon cannot open is the resolver's oRPC refusal; this raw route used to let it
+// escape as a bare 500 with no reason, which the reviewer read as "Request failed (500)".
+test("GET /diff/raw answers a checkout it cannot open with that refusal, not a 500", async () => {
+    const root = await mkdtemp(join(tmpdir(), "intentic-diff-raw-view-"));
+    try {
+        const app = createApp(services({ workspace: workspacePaths(root) }));
+        const query = new URLSearchParams({ source: "working", repo: "root", side: "staged", path: "a.pdf", which: "after", view: JSON.stringify({ agent: "gone" }) });
+        const response = await app.request(`/diff/raw?${query}`);
+        expect([404, 412]).toContain(response.status);
+        expect(await response.json()).toMatchObject({ error: expect.any(String) });
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 // Real tmp tree, since a shadow is read off disk rather than through services.files; a fake would only test the fake.
 test("workspace.derived serves a file's shadow with its provenance, and distinguishes no-shadow-yet from no-reader", async () => {
     const root = await mkdtemp(join(tmpdir(), "intentic-derived-"));

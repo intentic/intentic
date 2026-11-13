@@ -63,7 +63,7 @@ afterEach(() => {
 });
 
 describe(`DerivedDiffView`, () => {
-    it(`draws the two renderings as tracked changes and counts the paragraphs that moved`, async () => {
+    it(`opens on the tracked changes themselves, with no bar of its own over them`, async () => {
         answers.set(`brief.docx`, {
             before: side(`# Brief\n\nWe open at nine.\n\nClosed Monday.`),
             after: side(`# Brief\n\nWe open at eight.\n\nClosed Monday.`),
@@ -74,9 +74,11 @@ describe(`DerivedDiffView`, () => {
         expect(asked).toEqual([`brief.docx`]);
         expect(element.querySelector(`del`)?.textContent).toBe(`nine`);
         expect(element.querySelector(`ins`)?.textContent).toBe(`eight`);
-        expect(element.textContent).toContain(`1 paragraph changed`);
-        expect(element.textContent).toContain(`docx v1`);
-        expect(element.textContent).toContain(`formatting, pictures and layout not shown`);
+        // What the diff bar's Text reading already says (and which reader made the text) is not said again here, and
+        // the way to Before / After is that bar's switch, not a second button under it.
+        expect(element.textContent).not.toContain(`docx v1`);
+        expect(element.textContent).not.toContain(`not shown`);
+        expect([...element.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Before / After`))).toBe(false);
         expect(element.textContent).not.toContain(`from the conversion`);
     });
 
@@ -113,8 +115,17 @@ describe(`DerivedDiffView`, () => {
         const element = mount(`same.docx`);
         await settle();
 
-        expect(element.textContent).toContain(`The text is the same in both versions`);
+        // Once, as the document's first line, not as a strip over it and again in the body.
+        expect(element.textContent?.split(`The text is the same in both versions`)).toHaveLength(2);
         expect(element.querySelectorAll(`ins, del`)).toHaveLength(0);
+    });
+
+    it(`says it over a spreadsheet's grid too, which has no first line to say it in`, async () => {
+        answers.set(`same.xlsx`, { before: side(`## Sheet1\n\n| a |\n| --- |\n| 1 |`), after: side(`## Sheet1\n\n| a |\n| --- |\n| 1 |`) });
+        const element = mount(`same.xlsx`);
+        await settle();
+
+        expect(element.textContent?.split(`The text is the same in both versions`)).toHaveLength(2);
     });
 
     it(`reads an added file as one added text, with no before side to speak of`, async () => {

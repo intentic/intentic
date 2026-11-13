@@ -12,15 +12,19 @@ import { rendersAsBytes } from "../../../models/workspace/tree/fileType";
 import { compareViewerForExtension } from "../../../workbench/views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 
-// Shared diff bar shows file mark/path/badges/±; persistent reading habits live in the end popover, with comment visibility always signaled.
+// Shared diff bar shows file mark/path/badges/±, and a document's or prose file's reading switch inline where it fits;
+// the other persistent reading habits live in the end popover, with comment visibility always signaled.
 // Host slots own review placement/actions: lead before path, badges after path, actions after reading controls.
 // settings adds rare popover rows using the supplied item class; viewed ticks and next-file navigation stay host-owned.
 
 const t = useT();
 
-const { path, status, code, additions, deletions, from } = defineProps<{
+const { path, file, status, code, additions, deletions, from } = defineProps<{
     // Repo-qualified where the surface knows the repo: this is a label to read, not a key.
     path: string;
+    // The file itself, when `path` is a label carrying more than its name (a staged row reads "a.pdf (staged)"): its
+    // format decides which readings the bar offers, and a label's suffix would hide that it is a document at all.
+    file?: string;
     status?: ChangeStatus;
     // Counts with comments stripped, for the pane below unless toggled off; absent falls back to git's counts.
     code?: LineStat;
@@ -36,7 +40,8 @@ const { showComments, toggleShowComments, diffLayout, setDiffLayout, diffProse, 
 
 // A document offers a second reading, tracked changes over the text; code has only the code. In the prose reading the
 // layout and comment controls have nothing to act on, so they step aside.
-const format = computed(() => formatOf(path).reads);
+const named = computed(() => file ?? path);
+const format = computed(() => formatOf(named.value).reads);
 const prose = computed(() => format.value === `markdown` || format.value === `plain`);
 const proseOn = computed(() => prose.value && diffProse.value);
 const READING_OPTIONS = computed(() => [
@@ -51,7 +56,7 @@ const READING_OPTIONS = computed(() => [
 // and the two versions; elsewhere a stored `text` reads as the Changes it is.
 const document = computed(() => format.value === `document` || format.value === `table`);
 const documentChanges = computed(() => document.value && diffDocument.value !== `sides`);
-const redline = computed(() => format.value === `document` && compareViewerForExtension(extensionOf(path)) !== undefined);
+const redline = computed(() => format.value === `document` && compareViewerForExtension(extensionOf(named.value)) !== undefined);
 const documentReading = computed(() => (diffDocument.value === `text` && !redline.value ? `changes` : diffDocument.value));
 const DOCUMENT_OPTIONS = computed(() => {
     if (format.value === `table`) {
@@ -60,20 +65,25 @@ const DOCUMENT_OPTIONS = computed(() => {
             { label: t(`workspace.words.code`), value: `sides`, title: t(`workspace.diffToolbar.rawLines`) },
         ];
     }
+    // The text reading is named for what it is, the words without their formatting, on every format that has one; its
+    // card says so, which is all the bar used to spell out in a row of its own above the diff.
+    const text = { label: t(`workspace.words.text`), title: { title: t(`workspace.diffToolbar.agentReading`), note: t(`workspace.diffToolbar.noFormatting`) } };
     if (redline.value) {
         return [
             { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.markedDocument`) },
-            { label: t(`workspace.words.text`), value: `text`, title: t(`workspace.diffToolbar.agentReading`) },
+            { ...text, value: `text` },
             { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.wholeVersions`) },
         ];
     }
     return [
-        { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.trackedChanges`) },
-        rendersAsBytes(path, undefined)
+        { ...text, value: `changes` },
+        rendersAsBytes(named.value, undefined)
             ? { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.wholeVersions`) }
             : { label: t(`workspace.words.code`), value: `sides`, title: t(`workspace.diffToolbar.rawLines`) },
     ];
 });
+
+const setReading = (value: string): void => setDiffDocument(value === `changes` ? `changes` : value === `text` ? `text` : `sides`);
 
 // Desktop-only; DiffView forces unified on a phone without overwriting the stored preference.
 const LAYOUT_OPTIONS = computed((): { label: string; value: DiffLayout }[] => [
@@ -96,6 +106,10 @@ const layoutRow = computed(() => !mobile.value && !proseOn.value && !documentCha
 const commentsRow = computed(() => !proseOn.value && !document.value);
 const hosted = computed(() => slots[`settings`] !== undefined);
 const reads = computed(() => prose.value || document.value || layoutRow.value || commentsRow.value || hosted.value);
+// The reading is the one choice a document or a prose file is opened with, so it sits in the bar where it is seen;
+// the popover carries it only where the bar is too narrow for it, and steps aside entirely when it has nothing else.
+const readingInline = computed(() => prose.value || document.value);
+const onlyReading = computed(() => readingInline.value && !layoutRow.value && !commentsRow.value && !hosted.value);
 
 // The two things the closed button still has to say: that lines may be missing, and what pressing it is about. The
 // glyph carries the first (comments are hidden by default, so the eye is struck through most of the time); the
@@ -146,13 +160,31 @@ const LABEL = `text-2xs text-content max-md:text-sm`;
         </span>
         <slot name="badges" />
         <ReviewStat :code="code" :additions="additions" :deletions="deletions" />
+        <SegmentedControl
+            v-if="prose"
+            class="hidden shrink-0 @lg:flex"
+            :model-value="proseOn ? `prose` : `code`"
+            :options="READING_OPTIONS"
+            size="xs"
+            :aria-label="t(`workspace.diffToolbar.reading`)"
+            @update:model-value="(value: string) => setDiffProse(value === `prose`)"
+        />
+        <SegmentedControl
+            v-else-if="document"
+            class="hidden shrink-0 @lg:flex"
+            :model-value="documentReading"
+            :options="DOCUMENT_OPTIONS"
+            size="xs"
+            :aria-label="t(`workspace.diffToolbar.reading`)"
+            @update:model-value="setReading"
+        />
         <slot name="actions" />
         <!-- Last in the row, after the file's own actions: the settings are about every file, so they sit outside them. -->
         <button
             v-if="reads"
             ref="readingAnchor"
             type="button"
-            :class="ui.iconButton({ size: mobile ? `lg` : `md`, on: readingOpen }, `gap-0.5`)"
+            :class="ui.iconButton({ size: mobile ? `lg` : `md`, on: readingOpen }, `gap-0.5`, onlyReading ? `@lg:hidden` : ``)"
             :aria-expanded="readingOpen"
             :aria-label="t(`workspace.diffToolbar.howThisReads`)"
             v-tooltip.bottom="readingTip"
@@ -169,7 +201,7 @@ const LABEL = `text-2xs text-content max-md:text-sm`;
             cross="end"
             panel-class="w-72 p-1"
         >
-            <div :class="ROW" v-if="prose">
+            <div :class="[ROW, `@lg:hidden`]" v-if="prose">
                 <span :class="LABEL">{{ t(`workspace.diffToolbar.reading`) }}</span>
                 <SegmentedControl
                     :model-value="proseOn ? `prose` : `code`"
@@ -178,14 +210,9 @@ const LABEL = `text-2xs text-content max-md:text-sm`;
                     @update:model-value="(value: string) => setDiffProse(value === `prose`)"
                 />
             </div>
-            <div :class="ROW" v-if="document">
+            <div :class="[ROW, `@lg:hidden`]" v-if="document">
                 <span :class="LABEL">{{ t(`workspace.diffToolbar.reading`) }}</span>
-                <SegmentedControl
-                    :model-value="documentReading"
-                    :options="DOCUMENT_OPTIONS"
-                    size="xs"
-                    @update:model-value="(value: string) => setDiffDocument(value === `changes` ? `changes` : value === `text` ? `text` : `sides`)"
-                />
+                <SegmentedControl :model-value="documentReading" :options="DOCUMENT_OPTIONS" size="xs" @update:model-value="setReading" />
             </div>
             <div :class="ROW" v-if="layoutRow">
                 <span :class="LABEL">{{ t(`workspace.diffToolbar.layout`) }}</span>

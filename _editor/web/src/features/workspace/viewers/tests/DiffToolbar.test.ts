@@ -12,10 +12,10 @@ const { default: DiffToolbar } = await import("../DiffToolbar.vue");
 const { showComments, toggleShowComments } = (await import("../../../../workbench/window/useLayout")).useLayout();
 
 let app: App | undefined;
-const mount = async (path: string): Promise<HTMLElement> => {
+const mount = async (path: string, file?: string): Promise<HTMLElement> => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(DiffToolbar, { path }) });
+    app = createApp({ render: () => h(DiffToolbar, { path, file }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
@@ -80,8 +80,27 @@ it(`offers a document its readings, and drops the settings that cannot apply to 
     await nextTick();
 
     expect(panel()).toContain(`Reading`);
-    expect(panel()).toContain(`Changes`);
+    expect(panel()).toContain(`Text`);
     expect(panel()).toContain(`Before / After`);
     expect(panel()).not.toContain(`Comments`);
     expect(panel()).not.toContain(`Layout`);
+});
+
+// The reading is what a document is opened with, so it sits in the bar itself (the popover keeps it only for a bar too
+// narrow to hold it); a reader who pressed Before / After once must see the way back without opening anything.
+it(`shows a document's readings in the bar itself, closed`, async () => {
+    const el = await mount(`docs/handover.pdf`);
+    const pills = [...el.querySelectorAll(`button`)].map((button) => button.textContent?.trim());
+    expect(pills).toContain(`Text`);
+    expect(pills).toContain(`Before / After`);
+    expect(control(el).getAttribute(`aria-expanded`)).toBe(`false`);
+});
+
+// A staged row is labelled "a.pdf (staged)": the label's suffix once hid that the file is a document, which left the
+// bar with no reading switch at all, and a reader who had chosen Before / After with no way back to the text.
+it(`reads the format from the file, not from a label carrying a suffix`, async () => {
+    const el = await mount(`demo/01_kadry/Regulamin.pdf (staged)`, `demo/01_kadry/Regulamin.pdf`);
+    expect(el.textContent).toContain(`Regulamin.pdf (staged)`);
+    expect([...el.querySelectorAll(`button`)].map((button) => button.textContent?.trim())).toContain(`Before / After`);
+    expect(control(el).querySelector(`[data-icon="eye-slash"]`)).toBeNull();
 });

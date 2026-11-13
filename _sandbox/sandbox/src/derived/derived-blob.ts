@@ -35,6 +35,12 @@ export interface BlobSource {
     readonly relPath?: string;
 }
 
+// fileq's saved rendering opens with its own front matter (sha256, deriver, provenance), which renderings kept before
+// it was cut on the way in still carry under ours; that block is about the file, not in it, so it never reaches the
+// text a reviewer compares. Only a block fileq wrote is cut (it always names the sha), never a document's own.
+const withoutReaderFront = (body: string): string =>
+    body.startsWith("---\n") && parseSidecarFront(body).sha256 !== undefined ? sidecarBody(body) : body;
+
 // A kept rendering read back with the same front matter a path shadow carries, cut to the response ceiling.
 const readKept = async (path: string): Promise<DerivedSide | undefined> => {
     const window = await readWorkspaceFileWindow(path, 0, MAX_DERIVED_BYTES);
@@ -44,7 +50,7 @@ const readKept = async (path: string): Promise<DerivedSide | undefined> => {
     const front = parseSidecarFront(window.content);
     return {
         present: true,
-        content: sidecarBody(window.content),
+        content: withoutReaderFront(sidecarBody(window.content)),
         deriver: front.deriver ?? "unknown",
         notes: [...front.notes],
         truncated: window.bytes < window.size,
@@ -130,7 +136,7 @@ const render = async (root: string, bytes: Uint8Array, sha: string, name: string
         if (answer === undefined) {
             return { present: false, reason: "the reader answered with nothing that could be read back" };
         }
-        const body = await readFile(answer.path, "utf8");
+        const body = withoutReaderFront(await readFile(answer.path, "utf8"));
         await rm(answer.path, { force: true });
         await keep(cachePath(root, sha), sha, name, answer, body.replace(/\n$/, ""));
         return (await readKept(cachePath(root, sha))) ?? { present: false, reason: "the rendering could not be kept" };

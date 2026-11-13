@@ -131,6 +131,7 @@ const diff = useLoaded(() => ({
         <template v-else-if="activeTab?.kind === 'diff'">
             <DiffToolbar
                 :path="activeTab.label"
+                :file="activeTab.path"
                 :status="activeTab.status"
                 :code="diffStat"
                 :additions="activeTab.additions"

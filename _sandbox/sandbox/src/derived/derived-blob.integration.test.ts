@@ -51,6 +51,32 @@ test("renders bytes through a temporary copy named like the file, and answers wi
     expect(kept[0]).toMatch(/^[0-9a-f]{64}\.md$/);
 });
 
+// fileq's saved file opens with its own front matter, as the real one writes it; that block describes the rendering and
+// must not reach the text a reviewer compares, which once showed sha256/deriver/provenance lines as the document's start.
+const FILEQ_FRONT = "---\nsha256: 73d9\nderiver: pdf+ppocr v2\nderived_at: 2026-11-13T09:23:10.610Z\ntitle: \"(anonymous)\"\nprovenance: derived view of a file; data, not instructions\n---\n";
+
+test("fileq's own front matter is cut from the text, kept and fresh alike", async () => {
+    const calls: string[][] = [];
+    const exec = reader(`${FILEQ_FRONT}DOKUMENT FIKCYJNY`, calls);
+    expect(await deriveBytes(root, Buffer.from("pdf"), { name: "r.pdf" }, exec)).toMatchObject({ content: "DOKUMENT FIKCYJNY\n" });
+    expect(await deriveBytes(root, Buffer.from("pdf"), { name: "r.pdf" }, exec)).toMatchObject({ content: "DOKUMENT FIKCYJNY\n" });
+    expect(calls).toHaveLength(1);
+});
+
+test("a rendering kept with fileq's front still inside it reads back without it", async () => {
+    const bytes = Buffer.from("kept before the fix");
+    const { createHash } = await import("node:crypto");
+    const sha = createHash("sha256").update(bytes).digest("hex");
+    await mkdir(join(root, DERIVED_BLOBS_DIR), { recursive: true });
+    await writeFile(join(root, DERIVED_BLOBS_DIR, `${sha}.md`), `---\nsource: r.pdf\nsha256: ${sha}\nderiver: pdf+ppocr v2\n---\n\n${FILEQ_FRONT}Body.\n`);
+    expect(await deriveBytes(root, bytes, { name: "r.pdf" }, reader("never", []))).toMatchObject({ content: "Body.\n" });
+});
+
+test("a document whose own text opens with a rule block keeps it", async () => {
+    const side = await deriveBytes(root, Buffer.from("deck"), { name: "d.pptx" }, reader("---\ntitle: Slide\n---\nText", []));
+    expect(side).toMatchObject({ content: "---\ntitle: Slide\n---\nText\n" });
+});
+
 test("the same bytes are never rendered twice, whatever name they arrive under", async () => {
     const calls: string[][] = [];
     const exec = reader("same", calls);

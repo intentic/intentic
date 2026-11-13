@@ -14,8 +14,9 @@ import TableDiffView from "./table/TableDiffView.vue";
 
 // A document's change read as tracked changes over the text the sandbox renders from each version: the same
 // rendering an agent reads instead of the bytes, so what is compared here is what the agent worked from. Formatting,
-// pictures and layout never reach this text, which the bar says outright; the toolbar's Before / After reading is
-// where those are looked at.
+// pictures and layout never reach this text; the diff bar's reading switch (DiffToolbar) names this reading Text, says
+// so on its card, and is the way to Before / After where those are looked at. Nothing here repeats that bar: the pane
+// opens on the document, with a line of its own only for what a reader must not miss (a cut, a caveat, a verdict).
 
 // `source`: which diff, the same query the byte route takes; `at`: another sandbox's daemon, absent for the active one.
 const { path, source, at } = defineProps<{ path: string; source: DiffSourceQuery; at?: string }>();
@@ -96,11 +97,6 @@ const sideName = (label: "before" | "after"): string =>
 // reviewer looking at no marks would otherwise read "nothing changed" over a file that did.
 const identical = computed(() => result.value?.before?.present === true && result.value.after?.present === true && before.value === after.value);
 
-const deriver = computed(() => {
-    const side =
-        result.value?.after?.present === true ? result.value.after : result.value?.before?.present === true ? result.value.before : undefined;
-    return side?.deriver;
-});
 // Every cap and degradation either conversion hit, once each; with two versions rendered, a note only one of them
 // hit is tagged with its side.
 const notes = computed((): ConversionNote[] => {
@@ -123,41 +119,15 @@ const grid = computed(() => formatOf(path).sheet === true);
 const beforeSheets = computed(() => sheetsOfMarkdown(before.value));
 const afterSheets = computed(() => sheetsOfMarkdown(after.value));
 
-// Paragraphs (or rows) the diff marked, stated in the bar so a reviewer knows the size of the change before scrolling.
-const changed = ref(0);
-const changedLabel = computed(() => {
-    if (changed.value === 0) {
-        return ``;
-    }
-    const count = changed.value;
-    return grid.value ? t(`workspace.words.rowsChanged`, { count }, count) : t(`workspace.derivedDiffView.paragraphsChanged`, { count }, count);
-});
-
 const filename = computed(() => basename(path));
 </script>
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <template v-if="result !== undefined">
-            <!-- Provenance first: this is not the file, it is the text made from it, and what that text cannot carry. -->
-            <div class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1.5 text-2xs text-muted">
-                <Icon name="robot" class="shrink-0 text-[0.7rem]" />
-                <span class="shrink-0" v-tooltip.bottom="{ title: t(`workspace.words.renderedText`), note: t(`workspace.words.whatAgentsRead`) }">
-                    {{ t(`workspace.derivedDiffView.textOfBothVersions`) }}
-                </span>
-                <span v-if="deriver" class="shrink-0 text-subtle">{{ deriver }}</span>
-                <span class="shrink-0 text-subtle">{{ t(`workspace.derivedDiffView.formattingNotShown`) }}</span>
-                <span v-if="changedLabel" class="shrink-0 tabular-nums text-content">{{ changedLabel }}</span>
-                <span class="flex-1"></span>
-                <Button size="small" tier="quiet" class="shrink-0" @click="emit(`sides`)" v-tooltip.bottom="t(`workspace.diffToolbar.wholeVersions`)">
-                    <Icon name="split-columns" class="text-[0.7rem]" /> {{ t(`workspace.diffToolbar.beforeAfter`) }}
-                </Button>
-            </div>
-            <!-- The one verdict a reviewer must not have to infer from an absence of marks. -->
-            <div v-if="identical" class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs text-muted">
-                <Icon name="info-circle" class="shrink-0 text-[0.7rem]" />
-                <span>{{ t(`workspace.derivedDiffView.textSameInBothVersions`) }}</span>
-            </div>
+            <!-- A grid has no lead line of its own, so the one verdict a reviewer must not infer from an absence of marks
+                 is a strip over it; prose says it as the document's first line instead (below). -->
+            <Notice v-if="identical && grid" tone="info" size="sm" strip>{{ t(`workspace.derivedDiffView.textSameInBothVersions`) }}</Notice>
             <Notice v-if="truncated" tone="warning" size="sm" strip>{{ t(`workspace.derivedDiffView.longDocumentOnlyStart`) }}</Notice>
             <!-- Every cap and degradation the conversions hit, shown rather than stored: a dropped style is a change this cannot see. -->
             <ConversionNotes :notes="notes" />
@@ -181,15 +151,13 @@ const filename = computed(() => basename(path));
                 class="min-h-0 flex-1"
                 :before="beforeSheets"
                 :after="afterSheets"
-                @changed="(count) => (changed = count)"
             />
             <ProseDiffView
                 v-else-if="readable"
                 class="min-h-0 flex-1"
                 :before="before"
                 :after="after"
-                :unchanged-note="identical ? false : t(`workspace.derivedDiffView.textDiffersOnlySpacing`)"
-                @changed="(count) => (changed = count)"
+                :unchanged-note="identical ? t(`workspace.derivedDiffView.textSameInBothVersions`) : t(`workspace.derivedDiffView.textDiffersOnlySpacing`)"
             />
         </template>
 
