@@ -17,6 +17,7 @@ import { useStepGroups } from "../../transcript/steps/useStepGroups";
 import ChatTranscriptSkeleton from "../../transcript/ChatTranscriptSkeleton.vue";
 import { QUIET_TRANSCRIPT_WAIT } from "../../../../models/conversations/transcript/transcriptWait";
 import ChatTurnStatus from "../../transcript/ChatTurnStatus.vue";
+import { useAudience } from "../../../../app/useAudience";
 import ChatSystemPrompt from "../../transcript/prompt/ChatSystemPrompt.vue";
 import ChatShotViewer from "../../transcript/shots/ChatShotViewer.vue";
 import ChatTurnShots from "../../transcript/shots/ChatTurnShots.vue";
@@ -111,7 +112,10 @@ const shownTurns = computed(() => windowTurns(turns.value, messages.value.length
 // Every row is drawn: only then is the column's top the conversation's (the paging press, the fork line, the prompt).
 const whole = computed(() => budget.value >= messages.value.length);
 // The top of the conversation is on screen, so the chip that says what it was told before its first word is drawn.
-const showsPrompt = computed(() => !conversation.value.transcript.historyMore.value && whole.value && messages.value.length > 0 && !props.subagent);
+// The context chip (system prompt, injected notes) is agent plumbing: plain-words readers don't get it, and their first
+// message then draws its own paperclip, since `opening` follows this.
+const { maker } = useAudience();
+const showsPrompt = computed(() => !maker.value && !conversation.value.transcript.historyMore.value && whole.value && messages.value.length > 0 && !props.subagent);
 // The first message the reader sent: the context it went out with was also said before their first word, so the chip
 // reads it out (ChatSystemPrompt) and that message draws no paperclip of its own.
 const opening = computed(() => (showsPrompt.value ? messages.value.find((message) => message.role === `user`) : undefined));
