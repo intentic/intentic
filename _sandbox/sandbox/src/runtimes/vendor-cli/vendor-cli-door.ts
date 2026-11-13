@@ -66,14 +66,22 @@ export const cliAccountDoor = (cli: VendorCli, store: CliStore, models: CliModel
             const binary = await ensureCli(cli);
             const started = await startCliLogin(cli, binary, cliStoreDir(services.authRoot, cli));
             const { handshake } = started;
-            // Nobody is looking at the attempt as it ends, so its ending lands on `status`, where the card reads it.
+            // Nobody is looking at the attempt as it ends, so its ending lands on `status`, where the card reads it. The
+            // outcome is told only once the attempt's directory is gone, so a card that reads "ok" never finds it still
+            // there; until then the attempt reads as still waiting rather than as one that expired.
             void (async () => {
+                const outcome: LoginStatus = await (async () => {
+                    try {
+                        return { status: "ok", account: await adopt(handshake, await started.signedIn) } as const;
+                    } catch (error) {
+                        return { status: "error", error: errorMessage(error) || `${cli.name} did not finish signing in.` } as const;
+                    }
+                })();
+                settled(handshake, { status: "wait" });
                 try {
-                    settled(handshake, { status: "ok", account: await adopt(handshake, await started.signedIn) });
-                } catch (error) {
-                    settled(handshake, { status: "error", error: errorMessage(error) || `${cli.name} did not finish signing in.` });
-                } finally {
                     await releaseCliLogin(handshake);
+                } finally {
+                    settled(handshake, outcome);
                 }
             })();
             return { url: started.url, code: started.code, state: "", flow: "device", variant: cli.door, handshake, expiresAt: started.expiresAt };

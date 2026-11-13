@@ -202,6 +202,8 @@ const landButton = (el: HTMLElement): HTMLButtonElement | undefined =>
 
 const buttonLabelled = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => button.getAttribute(`aria-label`) === label);
+const countLabelled = (el: HTMLElement, label: string): HTMLElement | undefined =>
+    [...el.querySelectorAll<HTMLElement>(`[aria-label]`)].find((node) => node.getAttribute(`aria-label`) === label);
 
 it(`offers the land on the card, so finished work needs no second surface to release it`, () => {
     expect(landButton(mount(ready()))?.textContent?.trim()).toBe(`Land now`);
@@ -263,14 +265,15 @@ it(`offers no review for a Ready card with nothing counted to read`, () => {
     expect(buttonNamed(mount(ready()), `View changes`)).toBeUndefined();
 });
 
-it(`opens the diff from the change count, a named press that does not also open the chat`, () => {
+// The count is a label, not a control: the bar's icons open the review, so a press on the count is a press on the card.
+it(`shows the change count as a label that opens neither the diff nor anything of its own`, () => {
     const changes = jest.fn();
-    const opened = jest.fn();
-    const el = mount(written(), undefined, { onChanges: changes, onOpen: opened });
-    const count = buttonLabelled(el, `View changes: 20 lines added, 2 removed`)!;
+    const el = mount(written(), undefined, { onChanges: changes });
+    expect(buttonLabelled(el, `View changes: 20 lines added, 2 removed`)).toBeUndefined();
+    const count = countLabelled(el, `View changes: 20 lines added, 2 removed`)!;
     expect(count.textContent?.replace(/\s+/g, ` `).trim()).toBe(`+20 −2`);
     count.click();
-    expect([changes.mock.calls.length, opened.mock.calls.length]).toEqual([1, 0]);
+    expect(changes.mock.calls.length).toBe(0);
 });
 
 // Cost is said in the identity tile's hover, never on the card's face: as a stat it took a row of its own, so it cost
@@ -278,7 +281,7 @@ it(`opens the diff from the change count, a named press that does not also open 
 it(`keeps what a card cost off its face, and its change count always`, async () => {
     const spent: FleetAgent = { ...written(), costUsd: 3.26 };
     const plain = mount(spent);
-    expect([plain.textContent?.includes(`3.26`), buttonLabelled(plain, `View changes: 20 lines added, 2 removed`) !== undefined]).toEqual([false, true]);
+    expect([plain.textContent?.includes(`3.26`), countLabelled(plain, `View changes: 20 lines added, 2 removed`) !== undefined]).toEqual([false, true]);
     showLiveMetrics.value = true;
     try {
         await nextTick();
