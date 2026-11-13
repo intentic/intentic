@@ -249,7 +249,8 @@ pub(super) fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
         WindowVerb::Fit(width) => fit_width(&window, f64::from(width)),
         // Sway owns the kiosk's screen (frame.rs keeps the frame out of full screen there), and a face out of sight
         // does not get to take the screen from the one on it.
-        WindowVerb::Fullscreen(_) if (crate::os::kiosk() && face) || !crate::frame::drawn(&page) => {}
+        WindowVerb::Fullscreen(_)
+            if (crate::os::kiosk() && face) || !crate::frame::drawn(&page) => {}
         WindowVerb::Fullscreen(on) => {
             if window.is_fullscreen().unwrap_or(!on) != on {
                 let _ = window.set_fullscreen(on);
