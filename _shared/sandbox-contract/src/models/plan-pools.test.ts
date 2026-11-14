@@ -9,6 +9,7 @@ import {
     readingHeadroom,
     preferredAccount,
     refusalVerdict,
+    refusedInstant,
     refusedPoolReset,
     roomiestAccount,
     scopedWindow,
@@ -602,7 +603,8 @@ test("a pool the provider stopped reporting is dropped once its window closes, n
 // The one rule the daemon's verdict and the editor's live re-reading both judge a standing refusal by (2026-10-20: the
 // editor drew "spent until 19:55", the pinned pool's own reset, over a daemon verdict of 15:53).
 test("a standing refusal pins the pool its model spends, reopening when the provider said, for every surface alike", () => {
-    const reading = at(2_000, window({ kind: "five_hour", utilization: 0, resetsAt: 20_000 }), window({ kind: "seven_day", utilization: 0, resetsAt: 600_000 }));
+    // Read before the refusal: nothing since says which pool its instant belongs to (refusedInstant).
+    const reading = at(500, window({ kind: "five_hour", utilization: 0, resetsAt: 20_000 }), window({ kind: "seven_day", utilization: 0, resetsAt: 600_000 }));
     const said = refusal({ kind: "limit", model: "gpt-6.1-sol", resetsAt: 9_000 });
     expect(judgedReading(reading, [said])?.windows.map((entry) => [entry.kind, entry.utilization, entry.resetsAt])).toEqual([
         ["five_hour", 100, 9_000],
@@ -617,6 +619,47 @@ test("a standing refusal pins the pool its model spends, reopening when the prov
     ]);
     expect(serviceState({ account: "a" }, [said], undefined, 0)).toEqual({ kind: "spent", reopensAt: 9_000, pool: "GPT 6.1 Sol" });
     expect(serviceState({ account: "a" }, [said], { id: "gpt-6-luna" }, 0)).toEqual({ kind: "unknown" });
+});
+
+// 2026-11-14: Codex refused GPT 6.1 Sol on 11-12 naming a reset of 11-18 14:21, which neither polled window had (five-hour
+// 11-14, weekly 11-20, both mostly free). Pinned on the weekly window, which gates every model, it held every Codex model
+// at the door for four days, and only a turn could have answered it.
+test("a refusal's instant is judged against the pools a reading since publishes: theirs, a renewed one's, or a pool of its own", () => {
+    const DAY = 86_400;
+    const filed = Date.parse("2026-11-12T20:59:22Z");
+    const instant = Date.parse("2026-11-18T14:21:08Z") / 1000;
+    const now = Date.parse("2026-11-14T09:00:00Z");
+    const sol = refusal({ kind: "limit", account: "a", model: "gpt-6.1-sol", resetsAt: instant, at: filed });
+    const codex = (weekly: number, utilization = 30) =>
+        at(now - 60_000, window({ kind: "five_hour", utilization: 36, resetsAt: now / 1000 + 3_600 }), window({ kind: "seven_day", utilization, resetsAt: weekly }));
+
+    // The weekly window resets at the instant the provider named: the refusal is that window's, and stands until then.
+    const same = codex(instant + 60);
+    expect(refusedInstant(sol, same)).toBe("published");
+    expect(refusalVerdict(sol, [{ account: "a", usage: same }], now)).toBe("standing");
+    expect(serviceState({ account: "a", usage: same }, [sol], { id: "gpt-6-luna" }, now)).toEqual({ kind: "spent", reopensAt: instant });
+
+    // The weekly window opened after the refusal was filed, with room: the allowance was renewed early, and it is over.
+    const renewed = codex(Math.floor(now / 1000) + 6 * DAY);
+    expect(refusedInstant(sol, renewed)).toBe("renewed");
+    expect(refusalVerdict(sol, [{ account: "a", usage: renewed }], now)).toBe("answered");
+    expect(serviceStates([{ account: "a", usage: renewed }], [sol], { id: "gpt-6.1-sol" }, now).get("a")).toEqual({ kind: "ready", room: 64 });
+    // Renewed but already spent again: still held, by the window itself.
+    expect(refusedInstant(sol, codex(Math.floor(now / 1000) + 6 * DAY, 100))).toBe("unpublished");
+
+    // The weekly window opened before the refusal and resets elsewhere: the refusal is a pool the reading does not name.
+    // It holds Sol alone, until its instant; Luna and every other model keep the room both windows show.
+    const unnamed = codex(Math.floor(filed / 1000) + 5 * DAY);
+    expect(refusedInstant(sol, unnamed)).toBe("unpublished");
+    expect(refusalVerdict(sol, [{ account: "a", usage: unnamed }], now)).toBe("standing");
+    expect(serviceState({ account: "a", usage: unnamed }, [sol], { id: "gpt-6.1-sol" }, now)).toEqual({ kind: "spent", reopensAt: instant, pool: "GPT 6.1 Sol" });
+    expect(serviceState({ account: "a", usage: unnamed }, [sol], { id: "gpt-6-luna" }, now)).toEqual({ kind: "ready", room: 64 });
+    expect(serviceState({ account: "a", usage: unnamed }, [sol], undefined, now)).toEqual({ kind: "ready", room: 64 });
+
+    // Nothing read since the refusal, or a pool with no reset to judge by: the instant outranks, on the pool the model spends.
+    expect(refusedInstant(sol, { ...unnamed, measuredAt: filed - 1 })).toBe("unjudged");
+    expect(refusedInstant(sol, at(now, window({ kind: "five_hour", utilization: 36 }), window({ kind: "seven_day", utilization: 30 })))).toBe("unjudged");
+    expect(serviceState({ account: "a", usage: { ...unnamed, measuredAt: filed - 1 } }, [sol], { id: "gpt-6-luna" }, now)).toMatchObject({ kind: "spent" });
 });
 
 // 2026-10-09/10-20: a routed model's bench (model-cooldowns.json) and the provider's last refusal were two copies of one
@@ -658,8 +701,8 @@ test("a provider's capacity for a model is spent only when no account can serve 
         { account: "a", usage: room },
         { account: "b", usage: room },
     ];
-    const a = refusal({ kind: "limit", account: "a", model: "sol", resetsAt: 8_000, at: 4_000 });
-    const b = refusal({ kind: "limit", account: "b", model: "sol", resetsAt: 7_000, at: 4_000 });
+    const a = refusal({ kind: "limit", account: "a", model: "sol", resetsAt: 8_000, at: 6_000 });
+    const b = refusal({ kind: "limit", account: "b", model: "sol", resetsAt: 7_000, at: 6_000 });
     expect(fleetCapacity(accounts, [a, b], { id: "sol" }, 6_000_000)).toEqual({ kind: "spent", accounts: 2, reopensAt: 7_000, pool: undefined });
     expect(fleetCapacity(accounts, [a], { id: "sol" }, 6_000_000)).toEqual({ kind: "serving", serving: 1, accounts: 2, roomMeasuredAt: 5_000 });
     // An account nothing has measured may still answer: it keeps the model servable.

@@ -113,7 +113,10 @@ SPAWN AND SUPERVISE
                                        mark a model out of allowance by hand, or clear the mark: the last
                                        resort for a plan that publishes nothing to read. A hand-set mark is
                                        believed for 24h, or until unmarked, and leaves the model out of the
-                                       listing exactly as a refused turn would
+                                       listing exactly as a refused turn would. --unspent also takes back
+                                       a provider's own refusal (Codex, Claude) once you have reason to think
+                                       it is over: the next turn asks the provider, and is refused again,
+                                       once, if it was not
   agents spawn --provider <id> --model <id> [--effort <tier>] [--on <runner|here>]
                [--harness native|claude-code] [--description "one line"] '<task>'
                                        spawn a subagent; prints its id and returns immediately.
@@ -752,7 +755,8 @@ const providers = async (argv = []) => {
     const { flags, positional } = parseFlags(argv, ["provider", "model", "account", "why"]);
     // `--spent` / `--unspent` mark a model out of allowance by hand, the last resort for a plan that publishes none to
     // read: Cursor and Devin publish nothing, so until a turn is refused nothing here knows, and a listing that said
-    // "not metered" sent five subagents onto a spent Cursor model in 32 seconds (2026-10-11).
+    // "not metered" sent five subagents onto a spent Cursor model in 32 seconds (2026-10-11). `--unspent` also takes back
+    // a provider's own refusal where nothing else could (usage/spent-by-hand.ts unmarkSpentByHand).
     const marking = argv.includes("--spent") || argv.includes("--unspent");
     if (marking) {
         const provider = flags.provider ?? positional[0];

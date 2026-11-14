@@ -1,5 +1,6 @@
 import type { AccountUsage, ModelCooldown, ProviderRefusal } from "../../schemas/providers/plan-limits.js";
-import { bindingWindow, SPENT_UTILIZATION } from "./pool-gates.js";
+import { bindingWindow, gatingWindows, SPENT_UTILIZATION } from "./pool-gates.js";
+import { windowPeriod } from "./window-period.js";
 
 // Which refusals on file still speak, and over which account: the half of the serviceability rule plan-pools.ts runs
 // before it lays them on the readings (judgedReading). Every account is judged on its own facts, never another's.
@@ -66,6 +67,49 @@ export const refusedPoolReset = (refusal: ProviderRefusal, accounts: readonly Se
     return resets.length === 0 ? undefined : Math.min(...resets);
 };
 
+// How far apart two instants may be and still name one reset: a reading's reset and a refusal's are each worked out
+// from a countdown at the moment it was said.
+const SAME_RESET_SECONDS = 30 * 60;
+
+/**
+ * What a reading of the refused account taken since says about the instant a spent allowance named, judged on the pools
+ * the refused model spends:
+ * - `published`: one of them resets at that instant, so the refusal is that pool's, and the instant outranks the room
+ *   the reading shows (verdictOn).
+ * - `renewed`: none resets there, and every pool long enough to have held the refusal opened after it was filed, with
+ *   room: the provider renewed the allowance early. 2026-11-13, OpenAI reset ChatGPT allowances days ahead; a Codex
+ *   refusal kept naming the old weekly reset, and every model stayed held for four more days while each window read
+ *   open, since nothing but a turn could answer it and every turn was held at the door.
+ * - `unpublished`: none resets there and none is a pool renewed since: the refusal is a pool the reading does not name
+ *   (a model's own cap), so it holds that model alone (plan-pools.ts judgedReading).
+ * - `unjudged`: no such reading, or a pool that publishes no reset or no length to judge by.
+ */
+export type RefusedInstant = "published" | "renewed" | "unpublished" | "unjudged";
+
+export const refusedInstant = (refusal: ProviderRefusal, usage: AccountUsage | undefined): RefusedInstant => {
+    const { resetsAt } = refusal;
+    if (refusal.kind !== "limit" || resetsAt === undefined || usage === undefined || usage.measuredAt <= refusal.at) {
+        return "unjudged";
+    }
+    const pools = gatingWindows(usage, refusal.model === undefined ? undefined : { id: refusal.model }).flatMap((window) => {
+        const period = windowPeriod(window)?.seconds;
+        return window.lapsedAt === undefined ? [{ window, reset: window.resetsAt, period }] : [];
+    });
+    if (pools.length === 0 || pools.some(({ reset, period }) => reset === undefined || period === undefined)) {
+        return "unjudged";
+    }
+    if (pools.some(({ reset }) => Math.abs((reset ?? 0) - resetsAt) <= SAME_RESET_SECONDS)) {
+        return "published";
+    }
+    // A pool held the refusal only if its window is at least as long as the wait the provider named.
+    const filedAt = refusal.at / 1000;
+    const holders = pools.filter(({ period }) => (period ?? 0) + SAME_RESET_SECONDS >= resetsAt - filedAt);
+    const renewed = holders.every(
+        ({ window, reset, period }) => (reset ?? 0) - (period ?? 0) > filedAt + SAME_RESET_SECONDS && window.utilization < SPENT_UTILIZATION,
+    );
+    return holders.length > 0 && renewed ? "renewed" : "unpublished";
+};
+
 /*
  * How one refusal stands over ONE account, judged from that account's facts alone: nothing read of another account
  * answers it there (2026-11-08: one Google account reading room answered every nameless refusal for all 31, within
@@ -73,7 +117,8 @@ export const refusedPoolReset = (refusal: ProviderRefusal, accounts: readonly Se
  * instant it named has passed (or, where it named none, the reset of the pool it was refused in, stamped as it was filed:
  * refusedPoolReset, unless this account was read since and a reading outranks a stamp: 2026-10-21). Where it is known to
  * be this account's (it named it, or the provider has no other), the provider's own instant outranks a usage endpoint
- * that kept showing room while it refused, so it stands until then; else this account's reading of the refused pool
+ * that kept showing room while it refused, so it stands until then, unless a reading since shows that pool renewed
+ * early (refusedInstant); else this account's reading of the refused pool
  * since it answers it. A nameless one is one account saying no and nothing saying which, so on each account it is only
  * that account's own reading that answers it, whatever kind of allowance or instant it named: held to its instant, one
  * team account's refusal held every Codex account spent for a day, the free ones reading 0% used (2026-10-19).
@@ -86,7 +131,7 @@ const verdictOn = (refusal: ProviderRefusal, facts: ServiceFacts, accounts: numb
     }
     const known = refusal.account !== undefined || accounts <= 1;
     if (refusal.kind === "limit" && refusal.resetsAt !== undefined && known) {
-        return "standing";
+        return refusedInstant(refusal, facts.usage) === "renewed" ? "answered" : "standing";
     }
     return answers(refusal, facts, known ? undefined : true) ? "answered" : "standing";
 };

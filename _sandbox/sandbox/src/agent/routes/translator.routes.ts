@@ -10,7 +10,7 @@ import { type ArmedCatch, armLoopbackCatch, loopbackRedirectOf, loopbackWatchers
 import { usageKey } from "../providers/translator.js";
 import { logPins } from "../providers/translator-prefixes.js";
 
-export type TranslatorRoutesDeps = Pick<Services, "cliProxy" | "headroom" | "logger" | "hostHub" | "webextHub">;
+export type TranslatorRoutesDeps = Pick<Services, "cliProxy" | "headroom" | "logger" | "hostHub" | "providerRefusals" | "webextHub">;
 
 // How long a redirect sign-in's landing is watched for; the translator's own attempt lives about as long.
 const REDIRECT_WATCH_MS = 15 * 60_000;
@@ -134,8 +134,14 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
         }),
         disconnect: i.disconnect.handler(async ({ input }) => {
             await upstream(services.cliProxy.disconnect(input.provider, input.name));
-            // Also clears the dropped account's headroom snapshot, keyed by its auth-file name.
-            await services.headroom.clear(input.provider, usageKey(input.provider, input.name));
+            // Forgets what the sandbox held about the dropped account, as a native door does (forgetAccountState): its
+            // headroom snapshot and every refusal on file naming it, both keyed by its auth-file name. A refusal kept
+            // past a disconnect covered the same credential again when it was reconnected, so Codex stayed held to an
+            // instant a reconnect was meant to clear (2026-11-14).
+            await Promise.all([
+                services.headroom.clear(input.provider, usageKey(input.provider, input.name)),
+                services.providerRefusals.drop(input.provider, (refusal) => refusal.account === input.name),
+            ]);
             return { ok: true } as const;
         }),
     };

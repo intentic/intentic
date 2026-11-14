@@ -4,6 +4,7 @@ import { CATCHING_DEVICE, catchingServicesHubs, fakeCatcher } from "../providers
 import { clientFor, postJson } from "../../harness/route-client.testing.js";
 import { services, withTranslator } from "../../harness/route-services.testing.js";
 import { TRANSLATOR_BINARY_MISSING } from "../providers/translator.js";
+import { memoryProviderRefusalStore } from "../../usage/provider-refusals.js";
 
 // Asserts the translator's own error message reaches the client instead of oRPC's generic 'Internal server error' for
 // non-ORPCError throws.
@@ -72,6 +73,25 @@ test("a disconnect failure says what went wrong instead of Internal server error
     const response = await postJson(app, "/translator/gemini/disconnect", { provider: "gemini", name: "antigravity-user.json" });
 
     expect(((await response.json()) as { message?: string }).message).toBe(reason);
+});
+
+// A refusal kept past a disconnect covered the same credential again once it was reconnected: Codex stayed held to a
+// reset four days out that a reconnect was meant to clear (2026-11-14). A native door forgets them (forgetAccountState).
+test("a disconnect forgets every refusal on file naming that credential, and only that one", async () => {
+    const at = Date.now() - 60_000;
+    const resetsAt = Math.floor(Date.now() / 1000) + 4 * 86_400;
+    const providerRefusals = memoryProviderRefusalStore({
+        codex: [
+            { at, kind: "limit", account: "codex-user.json", model: "gpt-6.1-sol", resetsAt, message: "The usage limit has been reached" },
+            { at, kind: "limit", account: "codex-other.json", model: "gpt-6.1-sol", resetsAt, message: "The usage limit has been reached" },
+        ],
+    });
+    const app = createApp(services({ config: withTranslator, cliProxy: { disconnect: async () => {} }, providerRefusals }));
+
+    const response = await postJson(app, "/translator/codex/disconnect", { provider: "codex", name: "codex-user.json" });
+
+    expect(response.status).toBe(200);
+    expect((await providerRefusals.onFile())["codex"]).toMatchObject([{ account: "codex-other.json" }]);
 });
 
 // A Google credential the proxy filed without a project is read as healthy by its own selector, so it keeps catching

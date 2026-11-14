@@ -192,9 +192,9 @@ const createChildrenRoutes = (services: Services) => ({
         return c.json({ providers, text: spawnCatalogText(providers, Date.now(), { all: named }) });
     },
     /**
-     * POST /children/providers/spent — marks one provider's model out of allowance by hand, or unmarks it. The last
-     * resort for a plan that publishes nothing to read (Cursor, Devin): the ledger a refused turn writes is the only
-     * measurement those have, and until something refuses, nothing knows. Believed 24h, or until unmarked.
+     * POST /children/providers/spent — marks one provider's model out of allowance by hand (the last resort for a plan
+     * that publishes nothing to read: Cursor, Devin), believed 24h; or unmarks it, which also takes back a provider's
+     * own refusal where nothing else can (spent-by-hand.ts unmarkSpentByHand).
      */
     markSpent: async (c: Context<AppEnv>): Promise<Response> => {
         // allow(silent-catch): a body that is not JSON is answered by the refusal below, which says what to send; the

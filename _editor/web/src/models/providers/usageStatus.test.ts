@@ -753,7 +753,9 @@ describe(`accountState`, () => {
     it(`reopens a refused account when the provider said to try again, and draws the pin so`, () => {
         const until = Math.ceil(Date.now() / 1000) + 3_600;
         const reading = usage({
-            windows: [window({ kind: `five_hour`, utilization: 0, resetsAt: until + 7_200 }), window({ kind: `seven_day`, utilization: 0, resetsAt: until + 86_400 })],
+            // The five-hour window the refusal was refused in, read since at room it does not have: the provider's
+            // instant names that window's reset (a minute apart), so it outranks the reading for every model.
+            windows: [window({ kind: `five_hour`, utilization: 0, resetsAt: until + 60 }), window({ kind: `seven_day`, utilization: 0, resetsAt: until + 86_400 })],
             measuredAt: 2_000,
         });
         translatorAccounts.value = { codex: [{ name: `team.json`, label: `team`, usage: reading }], grok: [], kimi: [], gemini: [] };
