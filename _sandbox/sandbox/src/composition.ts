@@ -507,7 +507,7 @@ const createDaemonMembers = (
         }),
         orgPolicy: deps.orgPolicy,
         reach: createReachReporter(config, logger, () => boot),
-        browserRouters: createBrowserRouters(() => ({ capabilities, workspace, logger })),
+        browserRouters: createBrowserRouters(() => ({ capabilities, workspace, logger, presentation: presentation.mirror, config })),
         turnGranted: (conversationId: string) => turnStandingOf(conversations, conversationId)?.granted,
         desktopServers: desktopServersOf,
         probeAcpAgent,

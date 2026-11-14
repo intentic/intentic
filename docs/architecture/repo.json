@@ -59,6 +59,7 @@
                 "_shared/sandbox-contract",
                 "_shared/sandbox-openapi",
                 "_shared/sandbox-run",
+                "_shared/site-kits",
                 "_shared/workspace-ignore",
                 "_shared/workspace-setup"
             ]

@@ -3,8 +3,8 @@
 // survive a restyle; class names do not. Each line says where it came from: "seen" was in a real snapshot of
 // chatgpt.com (2026-11-11, Brave on Windows), "guess" was not, and is the first place to look when the kit fails.
 
-// A regular expression as it crosses into the page: executeScript serializes its arguments as JSON, which a RegExp
-// does not survive.
+// A regular expression as it crosses into the page: a host hands a step its arguments as JSON, which a RegExp does not
+// survive.
 export interface Pattern {
     readonly source: string;
     readonly flags: string;
@@ -112,7 +112,7 @@ export const CHATGPT_PAGE: ChatGptPage = {
     confirmation: { role: "button", name: pattern(/^(Confirm|Allow|Approve|Take over|Continue)$/i) },
 };
 
-// The site's addresses, used only by the worker.
+// The site's addresses, used only by the engine and its hosts.
 export const CHATGPT_SITE = {
     host: "chatgpt.com",
     home: "https://chatgpt.com/",

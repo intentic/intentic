@@ -1,15 +1,16 @@
 // the rule is exactly wrong for this file: every helper
-// is nested inside the installer that defines it, since executeScript serializes and re-parses one function at a time
-// inside the page, where nothing else in this module exists (the same rule as page/driver.ts).
+// is nested inside the installer that defines it, since a host hands the page one function at a time as source text
+// (executeScript in the extension, Playwright's evaluate in the sandbox), where nothing else in this module exists.
 import type { ChatGptPage, Lookup, Pattern } from "./site.js";
 
 // The kit's helpers inside ChatGPT's tab, installed before every step by four small injected functions, and kept on the
-// isolated world's window, where the page's own scripts never see them (as driver.ts keeps its refs). A document that
-// is replaced loses them, and the next step installs them again. Four installers rather than one function because each
-// injected function must carry its helpers whole, and one carrying all of them is past what this repository lets a
-// function grow to.
+// window the step runs in: the extension's isolated world, where the page's own scripts never see them, or, for a host
+// that runs in the page's own world, only for the length of the step (`removeHelpers`). A document that is replaced
+// loses them, and the next step installs them again. Four installers rather than one function because each injected
+// function must carry its helpers whole, and one carrying all of them is past what this repository lets a function
+// grow to.
 
-// Counts taken before the prompt is sent, against which "a new answer" and "a new image" are judged. Kept by the worker,
+// Counts taken before the prompt is sent, against which "a new answer" and "a new image" are judged. Kept by the engine,
 // so they outlive a page that reloads mid-call.
 export interface Baseline {
     readonly images: number;
@@ -325,5 +326,11 @@ export const installAsking = (): boolean => {
         return { images: before(last, all.images), user: users.length - 1, assistant: before(last, all.assistant), turns };
     };
     window.intenticChatgpt = { ...window.intenticChatgpt, asking: { confirmations, lastAnswerBaseline } };
+    return true;
+};
+
+// Takes the helpers away again, after a step run in the page's own world, where the page's scripts could see them.
+export const removeHelpers = (): boolean => {
+    window.intenticChatgpt = undefined;
     return true;
 };

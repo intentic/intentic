@@ -3,6 +3,7 @@ import { type JsonValue, parseJsonOr, parseJsonWith } from "@intentic/base/json"
 import { opt } from "../../opt.js";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import type { McpToolSchema } from "./browser-router.js";
+import { type Section, sectionsOf, ToolAnswerSchema } from "./evaluate-answer.js";
 
 // ---- WebMCP: tools a page registers through document.modelContext ----------------------------------------------
 // @playwright/mcp collects them with each snapshot and serves each one as a tool of its own, `webmcp_<name>`, announced
@@ -157,27 +158,7 @@ const askPage = async (name: string, inputJson: string, graceMs: number): Promis
 const askPageSource = (target: WebmcpTarget, graceMs: number): string =>
     `() => (${askPage.toString()})(${JSON.stringify(target.name)}, ${JSON.stringify(JSON.stringify(target.params))}, ${graceMs})`;
 
-// ---- reading and framing the backend's answers --------------------------------------------------------------------
-
-// One `### Title` section of an answer, as @playwright/mcp writes them (response.ts serialize).
-interface Section {
-    readonly title: string;
-    readonly body: string;
-}
-
-const ToolAnswerSchema = z.looseObject({
-    content: z.array(z.looseObject({ text: z.string().exactOptional() })),
-    isError: z.boolean().exactOptional(),
-});
-
-const sectionsOf = (text: string): Section[] =>
-    text
-        .split(/^### /mu)
-        .filter((chunk) => chunk.trim() !== "")
-        .map((chunk) => {
-            const [title = "", ...body] = chunk.split("\n");
-            return { title, body: body.join("\n").trimEnd() };
-        });
+// ---- reading and framing the backend's answers (sections as evaluate-answer.ts reads them) -------------------------
 
 const rendered = (sections: readonly Section[]): string => sections.map(({ title, body }) => (body === "" ? `### ${title}` : `### ${title}\n${body}`)).join("\n");
 

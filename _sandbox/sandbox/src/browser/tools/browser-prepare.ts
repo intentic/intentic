@@ -24,11 +24,23 @@ export const prepareKnownOwner = async (services: Pick<Services, "capabilities" 
     return prepareBrowserOwner(capabilities, services.workspace.root, owner, port);
 };
 
+type RouterServices = Pick<Services, "capabilities" | "workspace"> & Partial<Pick<Services, "logger" | "presentation" | "config">>;
+
+// What the sandbox's own ChatGPT project is called after (chatgpt-kit.ts): the name the owner gave the sandbox, else its
+// container's, else its address's host.
+const sandboxNameOf = async (services: RouterServices): Promise<string> => {
+    // allow(silent-catch): a name that cannot be read falls to the next one; the project is found again by name either way.
+    const held = await services.presentation?.held().catch(() => undefined);
+    const publicUrl = services.config?.sandbox.publicUrl ?? "";
+    const host = URL.canParse(publicUrl) ? new URL(publicUrl).host : "";
+    return [held?.name, services.config?.sandbox.name, host].find((name) => name !== undefined && name !== "") ?? "sandbox";
+};
+
 // Every turn's router is made here and mounted by the turn (browser-tools.ts), which reaches it at the daemon's one MCP
 // door. Services are read lazily, since the factory is one of them.
 // `logger` is optional only so a caller handing just the two stores still compiles; without it a sidecar that failed
 // is said nowhere.
-export const createBrowserRouters = (services: () => Pick<Services, "capabilities" | "workspace"> & Partial<Pick<Services, "logger">>): BrowserRouterFactory => {
+export const createBrowserRouters = (services: () => RouterServices): BrowserRouterFactory => {
     const deps: RouterDeps = {
         toolSchemas: browserToolSchemas,
         prepare: (owner, port) => prepareKnownOwner(services(), owner, port),
@@ -48,5 +60,8 @@ export const createBrowserRouters = (services: () => Pick<Services, "capabilitie
     };
     // The output dir read per router, not once here: the workspace is one of the services still being composed when this
     // factory is made.
-    return (manifest) => createBrowserRouter(manifest, { ...deps, outputDir: browserOutputDir(services().workspace.root) });
+    return (manifest) => {
+        const { root } = services().workspace;
+        return createBrowserRouter(manifest, { ...deps, outputDir: browserOutputDir(root), kits: { root, sandboxName: () => sandboxNameOf(services()) } });
+    };
 };

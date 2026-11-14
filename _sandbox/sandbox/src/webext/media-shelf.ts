@@ -74,10 +74,10 @@ export interface StoredMedia {
     readonly mimeType: string;
 }
 
-// Writes one file onto the shelf under a name no earlier file holds (`frame-2.png` after `frame.png`), never in place
-// of one: an earlier save is some transcript's file.
-export const storeMedia = async (root: string, bytes: Uint8Array, mimeType: string, suggested: string): Promise<StoredMedia> => {
-    const dir = join(root, CHROME_MEDIA_REL);
+// Writes one file into `dir` on the shelf under a name no earlier file holds (`frame-2.png` after `frame.png`), never in
+// place of one: an earlier save is some transcript's file. The sandbox's own browser saves its ChatGPT kit's files this
+// way too (browser/tools/chatgpt-host.ts), into a directory of its own.
+export const storeMediaIn = async (dir: string, bytes: Uint8Array, mimeType: string, suggested: string): Promise<StoredMedia> => {
     await mkdir(dir, { recursive: true });
     const ext = EXTENSIONS.get(mimeType) ?? "bin";
     const target = await placeArtifact(dir, `${safeStem(suggested)}.${ext}`);
@@ -85,6 +85,10 @@ export const storeMedia = async (root: string, bytes: Uint8Array, mimeType: stri
     await writeFile(target, bytes, { flag: "wx" });
     return { path: target, bytes: bytes.byteLength, mimeType };
 };
+
+// What the owner's browser hands the sandbox, into `chrome/`.
+export const storeMedia = async (root: string, bytes: Uint8Array, mimeType: string, suggested: string): Promise<StoredMedia> =>
+    await storeMediaIn(join(root, CHROME_MEDIA_REL), bytes, mimeType, suggested);
 
 export interface ShelfFile {
     readonly path: string;

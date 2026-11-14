@@ -1,12 +1,12 @@
 // the rule is exactly wrong for this file: each step
-// is injected on its own by executeScript, which serializes and re-parses that one function inside the page; what it
-// shares with the others it reads from the helpers page-hands.ts installed on the isolated world's window just before.
+// is handed to the page on its own, as source text (executeScript in the extension, Playwright's evaluate in the
+// sandbox); what it shares with the others it reads from the helpers page-hands.ts installed on the window just before.
 import type { Baseline, FoundImage, PageState } from "./page-hands.js";
 
 // What runs inside ChatGPT's tab for the kit, one step per call. A step answers null when the helpers are missing (the
-// document was replaced since they were installed), and the worker installs them and asks again. A step that waits
-// does so on a MutationObserver plus single timers: the agent's window sits behind the person's, so its page gets no
-// animation frames and its timers fire about once a second (agent-window.ts).
+// document was replaced since they were installed), and the engine installs them and asks again. A step that waits
+// does so on a MutationObserver plus single timers: the extension's agent window sits behind the person's, so its page
+// gets no animation frames and its timers fire about once a second (its agent-window.ts).
 
 export interface StepAnswer {
     readonly kind: "answer";
@@ -319,29 +319,4 @@ export const modeStep = async (mode: "deep_research" | "agent", waitMs: number):
         acting.key(document.activeElement ?? document.body, "Escape");
     }
     return took === true ? answer(true, `It shows as chosen.`) : answer(false, `ChatGPT does not show it as chosen after the click.`);
-};
-
-// Holds the composer's own file input for putFile (page/media-driver.ts), where findFileInput would hold one an agent
-// aimed at by ref: the input that takes `type`, else the first. The pin lives on the same isolated world's window.
-export const pinFileInputStep = (selector: string, pin: string, name: string, type: string): StepAnswer => {
-    const inputs = Array.from(document.querySelectorAll(selector)).filter((el): el is HTMLInputElement => el instanceof HTMLInputElement && !el.disabled);
-    const lower = name.toLowerCase();
-    const takes = (input: HTMLInputElement): boolean => {
-        const accept = input.accept.split(",").map((token) => token.trim().toLowerCase()).filter((token) => token !== "");
-        return (
-            accept.length === 0 ||
-            accept.some((token) => (token.startsWith(".") ? lower.endsWith(token) : token.endsWith("/*") ? type.startsWith(token.slice(0, -1)) : token === type))
-        );
-    };
-    const input = inputs.find(takes);
-    window.intenticFilePin = undefined;
-    if (input === undefined) {
-        return {
-            kind: "answer",
-            ok: false,
-            message: inputs.length === 0 ? `ChatGPT's page has no file input to attach to.` : `ChatGPT's file input does not take ${type} (${name}).`,
-        };
-    }
-    window.intenticFilePin = { pin, input };
-    return { kind: "answer", ok: true, message: "" };
 };

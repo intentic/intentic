@@ -28,8 +28,9 @@ export interface RpcMessage {
 // One MCP server living in this daemon for a turn (a browser router, browser/tools/browser-router.ts), by what the door
 // and the lease need of it. Structural, so this module imports no subsystem and every runtime can reach it.
 export interface InProcessServer {
-    // Answers one client message; undefined for a notification. `signal` is the HTTP request's own.
-    readonly handle: (message: RpcMessage, signal?: AbortSignal) => Promise<RpcMessage | undefined>;
+    // Answers one client message; undefined for a notification. `signal` is the HTTP request's own; `client` says how
+    // long the turn's MCP client waits on one call, where its runtime cannot be told longer (LeaseOptions).
+    readonly handle: (message: RpcMessage, signal?: AbortSignal, client?: { readonly clientCeilingMs?: number }) => Promise<RpcMessage | undefined>;
     readonly close: () => void;
 }
 

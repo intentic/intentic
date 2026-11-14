@@ -587,6 +587,17 @@ flowchart LR
   http instead. (2026-11-03: `web` used to carry the stealth script, and agents read its seeded GPU name as the hardware
   a game ran on. `file://` stays off rather than turning on @playwright/mcp's `allowUnrestrictedFileAccess`, which has no
   `/work` scope and lifts its limits on uploads and written files too; WASM and WebGPU need an http origin anyway.)
+- The routers also answer tools of their own, sent to a backend as its own tools: `browser_webmcp_call`
+  (`webmcp-call.ts`) and, on `browser`, the ChatGPT kit of [site-kits](../../_shared/site-kits) (`chatgpt_send`,
+  `chatgpt_read`, `chatgpt_image`; `chatgpt-kit.ts`), listed only when one of the turn's accounts signs in on
+  chatgpt.com (the turn's `accountSites`, from `account-hosts.ts`) and refused, before any browser starts, for an
+  `account` whose browser holds none. `chatgpt-host.ts` is the kit's second host, after the person's own Chrome: each
+  page step is ONE `browser_evaluate` that installs the step's helpers, calls it, and takes them off ChatGPT's window as
+  soon as the step has them; files are artifacts-shelf paths `browser_run_code_unsafe` puts into the file input with
+  `setInputFiles`; pictures and long answers land in `.intentic/records/artifacts/chatgpt/`; what the kit remembers (its
+  project, its chats) is a cache, `.intentic/local/browser/<owner>.chatgpt.json`. One kit call at a time per browser,
+  and a router listing the kit is waited on 11 minutes a call, not 5; a client with a shorter ceiling gets the same
+  shortened `wait` as through the extension (`webext-client-ceiling.ts`).
 - The sandbox has a desktop of its own (`desktop/`): one more virtual X display beside the browsers', 1280×800 with
   openbox on it, for programs with a window and no other way in. A turn whose persona may drive a browser and run programs
   (its `browser` and `shell` powers: `open` starts any program) mounts it as the `desktop` server beside the browser

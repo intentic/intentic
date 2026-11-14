@@ -22,27 +22,46 @@ export const bareHost = (address: string): string | undefined => {
     }
 };
 
-// Each granted account's site, host to account id: the hosts its sign-in and home pages are on. The first account to
-// claim a host keeps it, so two accounts on one site name the one listed first, which is still a signed-in door.
-export const accountHostsOf = async (
+// Each granted browser account to the hosts its sign-in and home pages are on, in the order granted: what the signed-in
+// router's site kits read to know whose browser is signed in to their site (chatgpt-kit.ts).
+export const accountSitesOf = async (
     granted: readonly Capability[],
     signInUrls: (capability: Capability) => Promise<readonly string[]>,
-): Promise<Record<string, string>> => {
-    const hosts: Record<string, string> = {};
+): Promise<Record<string, string[]>> => {
+    const sites = new Map<string, string[]>();
     for (const capability of granted.filter((entry) => entry.kind === "browser")) {
         // Started inside the chain, so a lookup that throws before it returns is caught the same way.
         const urls = await Promise.resolve(capability)
             .then(signInUrls)
             // allow(silent-catch): a card whose extension is gone names no site, and a host it cannot name steers nothing.
             .catch(() => []);
-        for (const host of urls.map(bareHost)) {
-            if (host !== undefined && hosts[host] === undefined) {
-                hosts[host] = capability.id;
+        const hosts = [...new Set(urls.map(bareHost).filter((host): host is string => host !== undefined))];
+        if (hosts.length > 0) {
+            sites.set(capability.id, hosts);
+        }
+    }
+    return Object.fromEntries(sites);
+};
+
+// Host to account id, from accountSitesOf's lists. The first account to claim a host keeps it, so two accounts on one
+// site name the one listed first, which is still a signed-in door.
+export const coveredHostsOf = (sites: Readonly<Record<string, readonly string[]>>): Record<string, string> => {
+    const hosts = new Map<string, string>();
+    for (const [account, own] of Object.entries(sites)) {
+        for (const host of own) {
+            if (!hosts.has(host)) {
+                hosts.set(host, account);
             }
         }
     }
-    return hosts;
+    return Object.fromEntries(hosts);
 };
+
+// Each granted account's site, host to account id: the hosts its sign-in and home pages are on.
+export const accountHostsOf = async (
+    granted: readonly Capability[],
+    signInUrls: (capability: Capability) => Promise<readonly string[]>,
+): Promise<Record<string, string>> => coveredHostsOf(await accountSitesOf(granted, signInUrls));
 
 // The account whose site this page is on: the host itself, or a subdomain of one (mobile.x.com is x.com's).
 export const accountCovering = (

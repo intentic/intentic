@@ -1,0 +1,15 @@
+/* Runs in a page and in whatever drives one (a browser extension's worker, the sandbox's daemon): DOM types, no Node. */
+{
+    "compilerOptions": {
+        "lib": ["ES2024", "DOM", "DOM.Iterable"],
+        "types": [],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "references": [{ "path": "../../_tools/base" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

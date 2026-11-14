@@ -52,7 +52,7 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
         "ALL /mcp/{mount}": createTurnMountRoute(
             services.turnMounts,
             {
-                browser: (target, message, call) => target.router.handle(message, call.signal),
+                browser: (target, message, call) => target.router.handle(message, call.signal, call),
                 daemon: daemonEndpoint,
                 device: hostRoutes.mcp,
                 webext: webextRoutes.mcp,

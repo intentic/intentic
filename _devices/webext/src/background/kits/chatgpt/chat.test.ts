@@ -1,6 +1,6 @@
+import type { ChatTiming } from "@intentic/site-kits/chatgpt";
+import { CHAT_ID, type Reply } from "@intentic/site-kits/chatgpt/testing";
 import { dom } from "@intentic/testing/dom";
-import { CHAT_ID, type Reply } from "./fake-chatgpt.testing.js";
-import type { ChatTiming } from "./chat.js";
 import { kitBrowser, resetKitBrowser, SANDBOX, untilSent } from "./kit-chrome.testing.js";
 
 // chatgpt_send and chatgpt_read end to end in the worker, on kit-chrome.testing.ts's browser: the sandbox's project
@@ -22,7 +22,7 @@ jest.mock("../../tools/media.js", () => ({
     megabytes: (bytes: number) => `${bytes} bytes`,
     toBase64: (bytes: Uint8Array) => Buffer.from(bytes).toString("base64"),
 }));
-const { chatgptRead, chatgptSend } = await import("./answers.js");
+const { chatgptRead, chatgptSend } = await import("./chrome-host.js");
 
 const FAST: ChatTiming = { capMs: 4000, roundMs: 400, settleMs: 30, readyMs: 300, stepMs: 300, silentMs: 1000, retryMs: 5, uploadMs: 300 };
 const PROJECT = "Intentic · studio";
@@ -163,6 +163,15 @@ test("a second prompt into the same chat goes to its tab, and is judged against 
     expect(kitBrowser.fake?.sent).toEqual(["One.", "Two."]);
     expect(second).toContain("ChatGPT wrote:\nSecond answer.");
     expect(second).not.toContain("First answer.");
+});
+
+test("reading with no wait still looks: a finished answer is read as it stands", async () => {
+    kitBrowser.page = { replies: [{ kind: "text", text: "Done long ago." }], replyAfterMs: 400 };
+    await ask("Slow.", { waitSeconds: 0.2 });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const read = await chatgptRead(SANDBOX, { chat: CHAT_ID }, FAST);
+    expect(read).toContain("ChatGPT answered.");
+    expect(read).toContain("ChatGPT wrote:\nDone long ago.");
 });
 
 test("reading waits for nothing by default, and says when ChatGPT is still at it", async () => {

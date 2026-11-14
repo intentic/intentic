@@ -1,9 +1,9 @@
+import { type FakeAccount, type FakeChatgpt, type FakeOptions, fakePageAt, giveEveryElementABox, mountFakeChatgpt } from "@intentic/site-kits/chatgpt/testing";
 import { object, string } from "zod";
 import { store } from "../../store.js";
-import { type FakeAccount, type FakeChatgpt, type FakeOptions, giveEveryElementABox, mountFakeChatgpt } from "./fake-chatgpt.testing.js";
 
 // The browser the ChatGPT kit's worker suites run in: a hand-written Chrome whose executeScript runs each injected
-// function against jsdom's document, where the stand-in ChatGPT page answers (fake-chatgpt.testing.ts). Tabs, windows,
+// function against jsdom's document, where the kit's stand-in ChatGPT page answers (@intentic/site-kits). Tabs, windows,
 // storage and the person's answers are all here; what a suite changes between tests is on `kitBrowser`.
 
 export const SANDBOX = "https://sandbox-1.example.dev";
@@ -74,16 +74,12 @@ const area = (storage: Map<string, Stored>): chrome.storage.Area => ({
 // routes (a chat's first message) or navigates (a project just made). A chat's own address (/c/…) keeps the page as it
 // was, as ChatGPT's client-side route does.
 const load = (tab: FakeTab): void => {
-    const url = new URL(tab.url);
-    if (url.host === "chatgpt.com" && !url.pathname.includes("/c/")) {
-        const projectId = /^\/g\/g-p-([A-Za-z0-9]+)/.exec(url.pathname)?.[1];
-        const project = kitBrowser.account.projects.find((each) => each.id === projectId);
-        const kind = url.searchParams.get("temporary-chat") === "true" ? "temporary" : project !== undefined ? "project" : "home";
+    const kind = fakePageAt(tab.url, kitBrowser.account);
+    if (kind !== undefined) {
         kitBrowser.fake = mountFakeChatgpt({
             ...kitBrowser.page,
-            page: kind,
+            ...kind,
             account: kitBrowser.account,
-            project,
             onRoute: (path) => {
                 tab.url = `https://chatgpt.com${path}`;
             },

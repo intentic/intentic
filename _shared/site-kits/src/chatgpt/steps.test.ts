@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { giveEveryElementABox, mountFakeChatgpt } from "./fake-chatgpt.testing.js";
-import { composeStep, inspectStep, lastAnswerStep, modeStep, personalizationStep, pinFileInputStep, sendStep, watchStep } from "./steps.js";
+import { composeStep, inspectStep, lastAnswerStep, modeStep, personalizationStep, sendStep, watchStep } from "./steps.js";
 import { type Baseline, installActing, installAsking, installReading, installWatching, type PageState } from "./page-hands.js";
 import { CHATGPT_PAGE } from "./site.js";
 
@@ -206,13 +206,4 @@ test("a tool is chosen from the composer's menu and shows as a pill; one the acc
     install();
     expect(await modeStep("agent", 100)).toMatchObject({ ok: false, message: expect.stringContaining("has no") });
     expect(document.querySelector('[role="menu"]')).toBeNull();
-});
-
-test("the composer's own file input is held for the file, and a page without one is said plainly", () => {
-    mountFakeChatgpt({ page: "home" });
-    expect(pinFileInputStep(CHATGPT_PAGE.fileInput, "pin-1", "brief.pdf", "application/pdf")).toEqual({ kind: "answer", ok: true, message: "" });
-    expect(window.intenticFilePin?.pin).toBe("pin-1");
-    document.querySelector('input[type="file"]')?.remove();
-    expect(pinFileInputStep(CHATGPT_PAGE.fileInput, "pin-2", "brief.pdf", "application/pdf")).toEqual({ kind: "answer", ok: false, message: "ChatGPT's page has no file input to attach to." });
-    expect(window.intenticFilePin).toBeUndefined();
 });

@@ -23,6 +23,8 @@ const BUDGETS = {
     // 2026-11-14: up 20 kB (325.5 to 345.5, measured against main's build) for the ChatGPT kit's chatgpt_send and
     // chatgpt_read: the sandbox's project (kits/chatgpt/project*.ts), the chat engine with files and tools (chat.ts),
     // and the answers it words (answers.ts). The ceiling again leaves 3.5 kB.
+    // 2026-11-14: 347.1 kB (up 1.6 kB) once the ChatGPT kit moved into @intentic/site-kits behind a host interface
+    // (kits/chatgpt/chrome-host.ts), so the sandbox's own browser can run it too; the ceiling now leaves 1.9 kB.
     "background.js": 349_000,
     // Injected into every intentic.dev page, so it stays two constants and a listener. 374 bytes today.
     "pair-bridge.js": 4_000,

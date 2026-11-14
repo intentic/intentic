@@ -27,6 +27,7 @@
         { "path": "../../_deploy/graph" },
         { "path": "../../_search/iq-engine" },
         { "path": "../../_shared/registry" },
+        { "path": "../../_shared/site-kits" },
         { "path": "../../_sandbox/scaffold" },
         { "path": "../../_deploy/sdk" },
         { "path": "../../_sandbox/fileq" },

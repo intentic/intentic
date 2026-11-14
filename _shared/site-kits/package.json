@@ -1,0 +1,56 @@
+{
+    "name": "@intentic/site-kits",
+    "version": "0.0.0",
+    "description": "One site's whole job in one tool call (ChatGPT so far): its page steps, engine and words, behind a host interface any browser can implement",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_shared/site-kits"
+    },
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        },
+        "./chatgpt": {
+            "types": "./dist/chatgpt/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/chatgpt/index.ts",
+                "default": "./dist/chatgpt/index.js"
+            }
+        },
+        "./chatgpt/testing": {
+            "types": "./dist/chatgpt/fake-chatgpt.testing.d.ts",
+            "import": {
+                "@intentic/src": "./src/chatgpt/fake-chatgpt.testing.ts",
+                "default": "./dist/chatgpt/fake-chatgpt.testing.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "typecheck": "bun check -p tsconfig.test.json",
+        "watch": "tsc --build --watch",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:"
+    }
+}

@@ -1,11 +1,9 @@
 import { errorMessage } from "@intentic/base/errors";
-import { RefusedError } from "../../policy.js";
-import type { SandboxKey } from "../../store.js";
-import { saveBytes, saveMediaFromTab, type SavedMedia } from "../../tools/media.js";
-import type { TargetTab } from "../../tools/tab-access.js";
-import { type Chat, type ChatRequest, type ChatTiming, CHAT_TIMING, type Mode, type Ran, readChat, runChat } from "./chat.js";
+import { KitRefusal, type SavedFile } from "../host.js";
+import { type Chat, type ChatRequest, type ChatTiming, CHAT_TIMING, type Mode, type Ran, readChat, runChat } from "./engine.js";
+import type { ChatgptHost, ChatgptVoice } from "./host.js";
 import type { FoundImage } from "./page-hands.js";
-import { CHATGPT_PAGE, CHATGPT_SITE } from "./site.js";
+import { CHATGPT_PAGE } from "./site.js";
 
 // What the agent is told after chatgpt_send and chatgpt_read: ChatGPT's words, whatever pictures it made (saved into
 // the sandbox), and where the chat is to go on in. image.ts words chatgpt_image's own answers on the same pieces.
@@ -19,7 +17,7 @@ const size = (bytes: number): string =>
     bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : bytes >= 1000 ? `${Math.round(bytes / 1000)} kB` : `${bytes} bytes`;
 
 // Where the chat is, and how to go on in it.
-export const where = (chat: Chat, tool: string, personalized: boolean): string => {
+export const where = (voice: ChatgptVoice, chat: Chat, tool: string, personalized: boolean): string => {
     const kind =
         chat.home === "temporary"
             ? `a temporary chat, ${personalized ? "personalized" : "unpersonalized"}`
@@ -27,20 +25,25 @@ export const where = (chat: Chat, tool: string, personalized: boolean): string =
               ? `in this sandbox's ChatGPT project`
               : `one of the account's own chats`;
     const lives = chat.home === "temporary" ? ` A temporary chat lives only in that tab: it is gone once the tab closes or goes to another page.` : "";
-    return `Chat: "${chat.chat}" (${kind}), in tab ${chat.tabId}, ${chat.url}. To go on in this same chat, call ${tool} with chat "${chat.chat}".${lives}`;
+    return `Chat: "${chat.chat}" (${kind}), in ${voice.page(chat.tabId)}, ${chat.url}. To go on in this same chat, call ${tool} with chat "${chat.chat}".${lives}`;
 };
 
+export interface SavedImage {
+    readonly file: SavedFile;
+    readonly image: FoundImage;
+}
+
 export const saveImages = async (
-    from: SandboxKey,
-    tab: TargetTab,
+    host: ChatgptHost,
+    page: number,
     images: readonly FoundImage[],
     stem: string,
-): Promise<{ saved: { file: SavedMedia; image: FoundImage }[]; failed: string[] }> => {
-    const saved: { file: SavedMedia; image: FoundImage }[] = [];
+): Promise<{ saved: SavedImage[]; failed: string[] }> => {
+    const saved: SavedImage[] = [];
     const failed: string[] = [];
     for (const [index, image] of images.entries()) {
         try {
-            saved.push({ file: await saveMediaFromTab(from, tab.id, image.src, images.length === 1 ? stem : `${stem}-${index + 1}`), image });
+            saved.push({ file: await host.saveImage(page, image.src, images.length === 1 ? stem : `${stem}-${index + 1}`), image });
         } catch (error) {
             failed.push(errorMessage(error));
         }
@@ -48,7 +51,7 @@ export const saveImages = async (
     return { saved, failed };
 };
 
-export const imageLines = (saved: readonly { file: SavedMedia; image: FoundImage }[], failed: readonly string[]): string[] => [
+export const imageLines = (saved: readonly SavedImage[], failed: readonly string[]): string[] => [
     ...saved.map(({ file, image }) => {
         const dimensions = image.width > 0 && image.height > 0 ? `, ${image.width}×${image.height}` : "";
         return `- ${file.path} (${size(file.bytes)}, ${file.mimeType}${dimensions})`;
@@ -58,12 +61,15 @@ export const imageLines = (saved: readonly { file: SavedMedia; image: FoundImage
 
 export const stemOf = (chat: Chat, name: string | undefined): string => name ?? `chatgpt-${chat.chat.replace(/^t-/, "").slice(0, 8)}`;
 
-export const windowNote = (createdWindow: boolean): string[] =>
-    createdWindow ? [``, `(This opened a window of your own, behind the person's, so what they are doing is not interrupted.)`] : [];
+// The host's own sentence after another (host.ts, voice.asking), or nothing.
+export const aside = (said: string): string => (said === "" ? "" : ` ${said}`);
+
+// The host's last word on a finished answer (host.ts, open), set apart by a blank line.
+export const afterword = (said: string): string[] => (said === "" ? [] : [``, said]);
 
 // ChatGPT's words: whole when short, else saved as a file and begun here. `label` heads words that are not its answer
 // yet (still working, waiting on the person).
-const words = async (from: SandboxKey, text: string, stem: string, label = "ChatGPT wrote:"): Promise<string[]> => {
+const words = async (host: ChatgptHost, text: string, stem: string, label = "ChatGPT wrote:"): Promise<string[]> => {
     if (text === "") {
         return [];
     }
@@ -71,7 +77,7 @@ const words = async (from: SandboxKey, text: string, stem: string, label = "Chat
         return [``, label, text];
     }
     try {
-        const file = await saveBytes(from, new TextEncoder().encode(text), "text/markdown", stem, CHATGPT_SITE.host);
+        const file = await host.saveText(text, stem);
         return [``, `ChatGPT's answer is ${text.length} characters, saved whole at ${file.path}. It begins:`, `${text.slice(0, EXCERPT_CHARS)}…`];
     } catch (error) {
         return [``, `ChatGPT's answer is ${text.length} characters and could not be saved (${errorMessage(error)}); its first ${INLINE_CHARS}:`, text.slice(0, INLINE_CHARS)];
@@ -80,31 +86,39 @@ const words = async (from: SandboxKey, text: string, stem: string, label = "Chat
 
 const duration = (ms: number): string => (ms < 90_000 ? `${Math.round(ms / 1000)} s` : `${Math.round(ms / 60_000)} min`);
 
+// Whether what ChatGPT said when it failed is its usage limit.
+export const limited = (failure: string): boolean => new RegExp(CHATGPT_PAGE.limit.source, CHATGPT_PAGE.limit.flags).test(failure);
+
+export const UNSENT = `The prompt was typed into ChatGPT but did not send: it is still in the message box, twice pressed. Nothing was sent, so calling again is safe; if it says the same, ChatGPT changed its page: tell the owner the ChatGPT kit needs fixing.`;
+
+interface Described {
+    readonly name?: string | undefined;
+    readonly personalized: boolean;
+    readonly waitedMs: number;
+}
+
 // The answer for every outcome. Still working and waiting on the person are states the agent acts on, not failures, so
 // they come back as answers; a failure throws, with ChatGPT's words.
-const describe = async (from: SandboxKey, ran: Ran, request: { name?: string | undefined; personalized: boolean; waitedMs: number }): Promise<string> => {
-    const { tab, watched, chat } = ran;
-    const place = where(chat, "chatgpt_send", request.personalized);
+const describe = async (host: ChatgptHost, ran: Ran, request: Described): Promise<string> => {
+    const { page, watched, chat } = ran;
+    const place = where(host.voice, chat, "chatgpt_send", request.personalized);
     const notes = ran.notes.length === 0 ? [] : [``, ...ran.notes];
     const stem = stemOf(chat, request.name);
     if (watched.outcome === "unsent") {
-        throw new RefusedError(
-            `The prompt was typed into ChatGPT but did not send: it is still in the message box, twice pressed. Nothing was sent, so calling again is safe; if it says the same, ChatGPT changed its page: tell the owner the ChatGPT kit needs fixing.`,
-        );
+        throw new KitRefusal(UNSENT);
     }
     if (watched.outcome === "failed") {
-        const limited = new RegExp(CHATGPT_PAGE.limit.source, CHATGPT_PAGE.limit.flags).test(watched.failure);
-        const head = limited
+        const head = limited(watched.failure)
             ? `ChatGPT refused on a usage limit: "${watched.failure}". Calling again now fails the same way; wait until the limit resets, and tell the owner.`
             : `ChatGPT failed: "${watched.failure.slice(0, 600)}". Change the prompt rather than repeating it, or start a new chat.`;
-        throw new RefusedError([head, place, ...notes].join("\n"));
+        throw new KitRefusal([head, place, ...notes].join("\n"));
     }
-    const { saved, failed } = await saveImages(from, tab, watched.images, stem);
+    const { saved, failed } = await saveImages(host, page, watched.images, stem);
     const pictures = watched.images.length === 0 ? [] : [``, `ChatGPT made ${watched.images.length} image${watched.images.length === 1 ? "" : "s"}:`, ...imageLines(saved, failed)];
     const finished = watched.outcome === "done" || watched.outcome === "answered";
-    const said = await words(from, watched.text, stem, finished ? "ChatGPT wrote:" : "So far it shows:");
+    const said = await words(host, watched.text, stem, finished ? "ChatGPT wrote:" : "So far it shows:");
     if (watched.outcome === "asking") {
-        const head = `ChatGPT is waiting for the person to press "${watched.asks}" in tab ${tab.id}. This kit never presses ChatGPT's own confirmations: ask the person to look at that tab and decide, then collect the answer with chatgpt_read (chat "${chat.chat}"). Do not send the prompt again.`;
+        const head = `ChatGPT is waiting for the person to press "${watched.asks}" in ${host.voice.page(page)}. This kit never presses ChatGPT's own confirmations: ask the person to look at that tab and decide, then collect the answer with chatgpt_read (chat "${chat.chat}"). Do not send the prompt again.${aside(host.voice.asking)}`;
         return [head, place, ...notes, ...pictures, ...said].join("\n");
     }
     if (watched.outcome === "working") {
@@ -113,33 +127,36 @@ const describe = async (from: SandboxKey, ran: Ran, request: { name?: string | u
         return [head, place, ...notes, ...pictures, ...said].join("\n");
     }
     const head = said.length === 0 && pictures.length === 0 ? `ChatGPT finished without words or pictures.` : `ChatGPT answered.`;
-    return [head, place, ...notes, ...pictures, ...said, ...windowNote(ran.createdWindow)].join("\n");
+    return [head, place, ...notes, ...pictures, ...said, ...afterword(ran.afterword)].join("\n");
 };
 
-interface SendRequest {
+export interface SendRequest {
     readonly prompt: string;
     readonly chat?: string | undefined;
     readonly mode: Mode;
-    readonly tickets: readonly string[];
+    // The host's references to the files to attach (host.ts, collectFiles).
+    readonly files: readonly string[];
     readonly waitSeconds?: number | undefined;
     readonly name?: string | undefined;
     readonly personalized: boolean;
     readonly temporary: boolean;
 }
 
-export const chatgptSend = async (from: SandboxKey, request: SendRequest, timing: ChatTiming = CHAT_TIMING): Promise<string> => {
+export interface ReadRequest {
+    readonly chat: string;
+    readonly waitSeconds?: number | undefined;
+    readonly name?: string | undefined;
+}
+
+export const chatgptSend = async <File>(host: ChatgptHost<File>, request: SendRequest, timing: ChatTiming = CHAT_TIMING): Promise<string> => {
     const waitMs = request.waitSeconds === undefined ? undefined : request.waitSeconds * 1000;
     const chat: ChatRequest = { ...request, waitMs };
     const waitedMs = Math.min(waitMs ?? timing.capMs, timing.capMs);
-    return await runChat(from, chat, async (ran) => await describe(from, ran, { name: request.name, personalized: request.personalized, waitedMs }), timing);
+    return await runChat(host, chat, async (ran) => await describe(host, ran, { name: request.name, personalized: request.personalized, waitedMs }), timing);
 };
 
-export const chatgptRead = async (
-    from: SandboxKey,
-    request: { readonly chat: string; readonly waitSeconds?: number | undefined; readonly name?: string | undefined },
-    timing: ChatTiming = CHAT_TIMING,
-): Promise<string> => {
+export const chatgptRead = async (host: ChatgptHost, request: ReadRequest, timing: ChatTiming = CHAT_TIMING): Promise<string> => {
     const waitMs = (request.waitSeconds ?? 0) * 1000;
     const waitedMs = Math.min(waitMs, timing.capMs);
-    return await readChat(from, request.chat, waitMs, async (ran) => await describe(from, ran, { name: request.name, personalized: false, waitedMs }), timing);
+    return await readChat(host, request.chat, waitMs, async (ran) => await describe(host, ran, { name: request.name, personalized: false, waitedMs }), timing);
 };

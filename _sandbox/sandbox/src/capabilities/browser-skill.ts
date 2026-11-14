@@ -25,7 +25,11 @@ id, or an identity's id for the identity's own browser. Once a profile is signed
 \`browser_snapshot\` (the accessibility tree) to find elements by role + visible text over guessing selectors;
 screenshot when a page is visual or a snapshot is ambiguous. Work in small steps: navigate → snapshot → act →
 re-snapshot to confirm. Posts, replies, votes, follows and joins are REAL and public: confirm the exact
-target AND the exact account before you submit, and never carry a task from one account into another's calls.`;
+target AND the exact account before you submit, and never carry a task from one account into another's calls.
+An account signed in on chatgpt.com adds three tools to the same server, \`chatgpt_send\`, \`chatgpt_read\` and
+\`chatgpt_image\`: ChatGPT in ONE call per prompt in that account's browser (its project, files, Deep research, agent
+mode, pictures saved onto the artifacts shelf). Use them, with that \`account\`, rather than driving chatgpt.com page by
+page; when one says ChatGPT waits on its own "Confirm", \`request_help\` lets the owner look at that tab.`;
 
 // The first thing a site's roster block says: which of the turn's browsers this site is driven through, with one of its
 // own ids, since a turn holding the account has two wrong doors beside the right one and a weak model picks by name.

@@ -62,6 +62,7 @@
         "@intentic/scaffold": "workspace:*",
         "@intentic/sdk": "workspace:*",
         "@intentic/share-view": "workspace:*",
+        "@intentic/site-kits": "workspace:*",
         "@intentic/speech": "workspace:*",
         "@intentic/webchat-widget": "workspace:*",
         "@intentic/webq": "workspace:*",

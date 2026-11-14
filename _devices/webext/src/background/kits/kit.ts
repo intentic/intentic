@@ -1,5 +1,6 @@
 import type { McpTool } from "@intentic/sandbox-contract/peer-mcp-server";
-import { array, record, string, type ZodType } from "zod";
+import type { JsonValue } from "@intentic/base/json";
+import { json, record, string } from "zod";
 import { agentWindow, openInAgentWindow, ownWindow } from "../agent-window.js";
 import { decide, originPattern, RefusedError } from "../policy.js";
 import { DECLINE_HOLD_MS, type SandboxKey, sandboxKey, store } from "../store.js";
@@ -150,29 +151,20 @@ const keepLoaded = async (tabId: number): Promise<void> => {
     await chrome.tabs.update(tabId, { autoDiscardable: false }).catch(() => undefined);
 };
 
-// What a kit remembers per sandbox between calls (a chat and the tab it lives in), in chrome.storage.session: the
-// worker holds no state (main.ts), and tab ids mean nothing after the browser restarts, which clears this area too.
-export const kitMemory = <Entry>(key: string, entry: ZodType<Entry>, keep: number) => {
+// What a kit keeps per sandbox between calls, one JSON value each, in chrome.storage: the worker holds no state
+// (main.ts). `session` is for what means nothing after the browser restarts (a chat and the tab it lives in), which
+// clears that area too; `local` is for what outlives a restart (the sandbox's ChatGPT project). The kit parses what it
+// reads, since an earlier build may have kept another shape.
+export const kitStorage = (area: "session" | "local", key: string) => {
     const storageKey = `kit:${key}`;
-    // Only this module writes the key; an entry that does not read (a build that kept another shape) is dropped.
-    const remembered = record(string(), array(entry.nullable().catch(null)));
-    const readAll = async (): Promise<Record<SandboxKey, Entry[]>> => {
-        const parsed = remembered.safeParse((await chrome.storage.session.get([storageKey]))[storageKey]);
-        return parsed.success
-            ? Object.fromEntries(Object.entries(parsed.data).map(([owner, entries]) => [owner, entries.filter((kept): kept is Entry => kept !== null)]))
-            : {};
+    const readAll = async (): Promise<Record<SandboxKey, JsonValue>> => {
+        const parsed = record(string(), json()).safeParse((await chrome.storage[area].get([storageKey]))[storageKey]);
+        return parsed.success ? parsed.data : {};
     };
     return {
-        list: async (from: SandboxKey): Promise<Entry[]> => (await readAll())[sandboxKey(from)] ?? [],
-        // Newest first, and only the newest `keep`, replacing an entry `same` matches. Answers the entries that fell off
-        // the end, whose tabs the kit then lets go (releaseKitTab).
-        put: async (from: SandboxKey, kept: Entry, same: (other: Entry) => boolean): Promise<Entry[]> => {
-            const all = await readAll();
-            const owner = sandboxKey(from);
-            const listed = [kept, ...(all[owner] ?? []).filter((other) => !same(other))];
-            all[owner] = listed.slice(0, keep);
-            await chrome.storage.session.set({ [storageKey]: all });
-            return listed.slice(keep);
+        read: async (from: SandboxKey): Promise<JsonValue | undefined> => (await readAll())[sandboxKey(from)],
+        write: async (from: SandboxKey, value: JsonValue): Promise<void> => {
+            await chrome.storage[area].set({ [storageKey]: { ...(await readAll()), [sandboxKey(from)]: value } });
         },
     };
 };

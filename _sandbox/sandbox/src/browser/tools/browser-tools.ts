@@ -21,6 +21,8 @@ import { isProfileOpen, launchSessionDir, passkeyPath, profileOwner } from "../s
 import { ensureStealthScript } from "../sessions/stealth.js";
 import { SOFTWARE_GL_ARGS, SOFTWARE_WEBGPU_ARGS, softwareRenderingEnv } from "../sessions/software-rendering.js";
 import { ANONYMOUS_BROWSER_SERVER, ROUTED_BROWSER_SERVER } from "./browser-servers.js";
+import { coveredHostsOf } from "./account-hosts.js";
+import { CHATGPT_CALL_TIMEOUT_MS, chatgptReachable } from "./chatgpt-kit.js";
 
 // Pure wiring over Microsoft's @playwright/mcp; no browser tools of our own.
 // `web` is always available, credential-free, in-memory profile (--isolated), for ordinary page reads.
@@ -408,9 +410,10 @@ export const browserServersOf = async (
     anonymous = true,
     // Stamped onto the backends a router spawns, so the process scan attributes a browser to its conversation.
     conversationId?: string,
-    // Host to the signed-in account this turn holds for it (account-hosts.ts): the credential-free browser names that
-    // account's own browser when it is pointed at one of them.
-    coveredHosts?: Readonly<Record<string, string>>,
+    // Each granted browser account to the hosts it signs in on (account-hosts.ts accountSitesOf): the credential-free
+    // browser names that account's own browser when it is pointed at one of them, and the signed-in router lists a site
+    // kit's tools only where its site is signed in (chatgpt-kit.ts).
+    accountSites: Readonly<Record<string, readonly string[]>> = {},
 ): Promise<BrowserTurnTools> => {
     const runtime = await browserRuntime();
     if (runtime === undefined) {
@@ -421,10 +424,13 @@ export const browserServersOf = async (
     const passkeys: Record<string, string> = {};
     const servers: AgentTool[] = [];
     // Not alwaysLoad: the router's schemas defer behind ToolSearch like every other MCP tool; system append names it.
+    // A router listing the ChatGPT kit is waited on as long as one of its calls can take, nine minutes and more.
     const mount = (name: string, manifest: Omit<RouterManifest, "backendEnv">): void => {
         const router = mounts.routers({ ...manifest, backendEnv: conversationId === undefined ? {} : workloadStamp(conversationId), conversationId });
-        servers.push(mounts.lease.open({ name, target: { kind: "browser", router }, timeoutMs: BROWSER_CALL_TIMEOUT_MS }));
+        const timeoutMs = chatgptReachable(manifest) ? CHATGPT_CALL_TIMEOUT_MS : BROWSER_CALL_TIMEOUT_MS;
+        servers.push(mounts.lease.open({ name, target: { kind: "browser", router }, timeoutMs }));
     };
+    const coveredHosts = coveredHostsOf(accountSites);
     if (anonymous) {
         ports[ANONYMOUS_BROWSER_SERVER] = await freePort();
         // Its own router, not a second account on the shared one: `mcp__web__*` takes no `account` argument, and a
@@ -433,7 +439,7 @@ export const browserServersOf = async (
             soleOwner: ANONYMOUS_BROWSER_SERVER,
             accounts: {},
             owners: { [ANONYMOUS_BROWSER_SERVER]: { port: ports[ANONYMOUS_BROWSER_SERVER] } },
-            ...opt("coveredHosts", coveredHosts !== undefined && Object.keys(coveredHosts).length > 0 ? coveredHosts : undefined),
+            ...opt("coveredHosts", Object.keys(coveredHosts).length > 0 ? coveredHosts : undefined),
         });
     }
     const granted = capabilities.filter((capability) => capability.kind === "browser" || capability.kind === "identity");
@@ -458,6 +464,7 @@ export const browserServersOf = async (
         passkeys[owner] = passkeyPath(root, owner);
         backends[owner] = { port: ports[owner] };
     }
-    mount(ROUTED_BROWSER_SERVER, { accounts, owners: backends });
+    const sites = Object.fromEntries(Object.entries(accountSites).filter(([id]) => accounts[id] !== undefined));
+    mount(ROUTED_BROWSER_SERVER, { accounts, owners: backends, ...opt("accountSites", Object.keys(sites).length > 0 ? sites : undefined) });
     return { servers, accounts, ports, passkeys };
 };

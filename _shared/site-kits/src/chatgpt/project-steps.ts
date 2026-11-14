@@ -23,7 +23,7 @@ export interface ProjectMade extends StepAnswer {
 }
 
 // Makes a project called `name` with its memory set to project-only where the dialog offers that choice. Answers ok
-// once "Create project" was pressed, with `memory` saying whether project-only memory was chosen. The worker then waits
+// once "Create project" was pressed, with `memory` saying whether project-only memory was chosen. The engine then waits
 // for the tab to arrive at the project's own address.
 export const createProjectStep = async (name: string, waitMs: number): Promise<ProjectMade | null> => {
     const reading = window.intenticChatgpt?.reading;

@@ -24,6 +24,7 @@
         "@intentic/base": "workspace:*",
         "@intentic/browser": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/site-kits": "workspace:*",
         "@orpc/server": "catalog:",
         "zod": "catalog:"
     },

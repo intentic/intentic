@@ -75,6 +75,9 @@ It is the same browser their bank is open in. The habits that make this feel saf
 
 Use `chatgpt_send` when they want their own ChatGPT on something: a second opinion, Deep Research, agent mode, their
 connected apps (Google Drive, Slack…), or files from the sandbox read by it. Each prompt spends their plan's allowance.
+When a sandbox account is signed in on chatgpt.com, the `browser` server has the same three tools (with that account's
+`account`), in the sandbox's own browser with no card in front of the person: prefer those unless the person wants
+this browser, or ChatGPT needs something only it has.
 
 - **Where it goes.** New chats go into a ChatGPT project of this sandbox's own, "Intentic · <sandbox>", made on first
   use with project-only memory: their saved memories and other chats stay out, while apps, files and every tool work,

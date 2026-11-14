@@ -1,7 +1,7 @@
-import { number, object, string } from "zod";
-import { kitMemory, releaseKitTab } from "./kit.js";
+import { kitStorage, releaseKitTab } from "./kit.js";
 
-// What a kit remembers between calls, and how it lets a tab go once it no longer does.
+// What a kit keeps between calls, and how it lets a tab go once it no longer does. Which entries it keeps is the kit's
+// own (@intentic/site-kits' memory.test.ts).
 
 const SANDBOX = "https://sandbox-1.example.dev";
 let removed: number[] = [];
@@ -41,18 +41,16 @@ beforeEach(() => {
     });
 });
 
-test("an entry past the newest few falls off the end and is handed back, so its tab can be let go", async () => {
-    const memory = kitMemory("test-chats", object({ chat: string(), tabId: number() }), 2);
-    const same = (chat: string) => (other: { chat: string }) => other.chat === chat;
-    expect(await memory.put(SANDBOX, { chat: "a", tabId: 1 }, same("a"))).toEqual([]);
-    expect(await memory.put(SANDBOX, { chat: "b", tabId: 2 }, same("b"))).toEqual([]);
-    // Replacing an entry is not evicting one.
-    expect(await memory.put(SANDBOX, { chat: "a", tabId: 1 }, same("a"))).toEqual([]);
-    expect(await memory.put(SANDBOX, { chat: "c", tabId: 3 }, same("c"))).toEqual([{ chat: "b", tabId: 2 }]);
-    expect(await memory.list(SANDBOX)).toEqual([
-        { chat: "c", tabId: 3 },
-        { chat: "a", tabId: 1 },
-    ]);
+test("each sandbox's value is kept apart under the kit's key, and a stored value that does not read is none", async () => {
+    const chats = kitStorage("session", "test-chats");
+    await chrome.storage.session.set({ "kit:test-chats": "an earlier build's" });
+    expect(await chats.read(SANDBOX)).toBeUndefined();
+    await chats.write(SANDBOX, [{ chat: "a", tabId: 1 }]);
+    await chats.write("https://sandbox-2.example.dev/", [{ chat: "b", tabId: 2 }]);
+    expect(await chats.read(SANDBOX)).toEqual([{ chat: "a", tabId: 1 }]);
+    expect(await chrome.storage.session.get(["kit:test-chats"])).toEqual({
+        "kit:test-chats": { [SANDBOX]: [{ chat: "a", tabId: 1 }], "https://sandbox-2.example.dev": [{ chat: "b", tabId: 2 }] },
+    });
 });
 
 test("a released tab is closed or made discardable again, and one already gone is no error", async () => {

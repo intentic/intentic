@@ -1,6 +1,6 @@
 import { opt } from "../../opt.js";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-import { accountHostsOf } from "../../browser/tools/account-hosts.js";
+import { accountSitesOf } from "../../browser/tools/account-hosts.js";
 import { browserServersOf, type BrowserTurnTools } from "../../browser/tools/browser-tools.js";
 import { mcpToolsOf } from "../../capabilities/mcp-tools.js";
 import type { Services } from "../../composition.js";
@@ -63,10 +63,10 @@ export const turnToolsOf = async (
     });
     try {
         // The sites the turn's signed-in accounts are on, so the credential-free browser can name the right door when
-        // it is pointed at one (browser/tools/account-hosts.ts).
+        // it is pointed at one, and the signed-in browsers list a site kit only where its site is signed in
+        // (browser/tools/account-hosts.ts, chatgpt-kit.ts).
         const signInUrls = services.accountSignInUrls;
-        const hosts = turn.anonymousBrowser && signInUrls !== undefined ? await accountHostsOf(granted, signInUrls) : {};
-        const coveredHosts = Object.keys(hosts).length === 0 ? undefined : hosts;
+        const sites = signInUrls === undefined ? {} : await accountSitesOf(granted, signInUrls);
         const [extension, browser] = await Promise.all([
             extensionMcpToolsOf(services, granted, lease, turn.extensions),
             browserServersOf(
@@ -75,7 +75,7 @@ export const turnToolsOf = async (
                 { routers: services.browserRouters, lease },
                 turn.anonymousBrowser,
                 turn.conversationId,
-                coveredHosts,
+                sites,
             ),
         ]);
         // Mounted beside the browsers rather than by browser-tools.ts, since the desktop builds on the browser stack's

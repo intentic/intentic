@@ -1,11 +1,9 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
-import type { Readable } from "node:stream";
 import { z } from "zod";
 import { errorMessage } from "@intentic/base/errors";
-import { parsedJsonLines } from "@intentic/base/json-lines";
-import { cacheFile } from "../../store/open-document.js";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
+import { onMessages, PROTOCOL_VERSION, ROUTER_CLIENT } from "./browser-schema-cache.js";
 import { networkCallOf, networkCallRefusal, redactNetworkAnswer } from "./network-redaction.js";
 import { placeArtifact, placedNote, SCREENSHOT_VERB, writesFilename } from "../cast/browser-artifacts.js";
 import { describeBoundedWait, sendBoundingWait } from "./bounded-wait.js";
@@ -13,6 +11,7 @@ import { withSignedInDoor } from "./account-hosts.js";
 import { fileUrlRefusal, withSandboxNotes } from "./tool-notes.js";
 import { settleTargets } from "./element-targets.js";
 import { callWebmcp, WEBMCP_CALL_SCHEMA, WEBMCP_CALL_TOOL, type WebmcpTarget, webmcpTargetOf } from "./webmcp-call.js";
+import { type BackendLine, createChatgptKit, type KitDeps } from "./chatgpt-kit.js";
 
 // One MCP server standing in for every browser a turn may drive, hosted in this daemon and reached over HTTP, so a
 // session costs no router process of its own. Each tool takes an `account`, resolved through the turn's manifest to an
@@ -64,6 +63,9 @@ export interface RouterManifest {
     // navigation there still runs, and its answer opens by naming the account's own browser, since this one shows that
     // site's login wall and a turn reading the wall concludes the account is signed out.
     readonly coveredHosts?: Readonly<Record<string, string>>;
+    // The signed-in browsers' alone: each granted browser account to the hosts it signs in on (account-hosts.ts), so a
+    // site kit lists its tools, and runs, only where its site is signed in (chatgpt-kit.ts).
+    readonly accountSites?: Readonly<Record<string, readonly string[]>>;
 }
 
 // One screenshot a backend answered for, handed to RouterDeps.screenshotTaken.
@@ -89,104 +91,9 @@ export interface RouterDeps {
     // How long a WebMCP call waits for a tool the page has not registered yet (webmcp-call.ts); absent is its default,
     // tests shorten it.
     readonly webmcpGraceMs?: number;
+    // What the router's site kits need of the workspace (chatgpt-kit.ts); absent lists none.
+    readonly kits?: KitDeps;
 }
-
-const PROTOCOL_VERSION = "2025-06-18";
-const ROUTER_CLIENT = { name: "intentic-browser-router", version: "1.0.0" };
-
-// Hands each JSON-RPC object a backend prints to `onMessage`. A stray non-JSON line (a warning printed to stdout), or
-// JSON that is not an object, carries nothing to route and is passed over.
-const onMessages = (stdout: Readable, onMessage: (message: RpcMessage) => void): void => {
-    void (async () => {
-        for await (const value of parsedJsonLines(stdout)) {
-            if (typeof value === "object" && value !== null) {
-                onMessage(value as RpcMessage);
-            }
-        }
-        // allow(silent-catch): a stdout torn down with its process ends the reading; the exit handlers settle what was pending.
-    })().catch(() => undefined);
-};
-
-// ---- the tool schemas, probed once per @playwright/mcp version and cached on disk for every later daemon ----------
-
-// Asks a throwaway headless server for its tool list: initialize, tools/list, done. It never opens a page, so it
-// launches no Chromium.
-const probeTools = (probe: { readonly command: string; readonly args: readonly string[] }, timeoutMs: number): Promise<McpToolSchema[]> =>
-    new Promise((resolve, reject) => {
-        const child = spawn(probe.command, [...probe.args], { stdio: ["pipe", "pipe", "ignore"] });
-        const timer = setTimeout(() => {
-            child.kill("SIGKILL");
-            reject(new Error("schema probe timed out"));
-        }, timeoutMs);
-        child.on("error", (error) => {
-            clearTimeout(timer);
-            reject(error);
-        });
-        const send = (message: RpcMessage): void => {
-            child.stdin.write(`${JSON.stringify(message)}\n`);
-        };
-        onMessages(child.stdout, (message) => {
-            if (message.id === "probe-init") {
-                send({ jsonrpc: "2.0", method: "notifications/initialized" });
-                send({ jsonrpc: "2.0", id: "probe-tools", method: "tools/list", params: {} });
-            } else if (message.id === "probe-tools") {
-                clearTimeout(timer);
-                child.kill("SIGTERM");
-                resolve(((message.result as { tools?: McpToolSchema[] } | undefined)?.tools ?? []) as McpToolSchema[]);
-            }
-        });
-        send({
-            jsonrpc: "2.0",
-            id: "probe-init",
-            method: "initialize",
-            params: { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: ROUTER_CLIENT },
-        });
-    });
-
-// What the cache must hold to be served: a list of named tools whose input schema, when present, has the shape the
-// router extends with `account`. Anything else is probed again and written over.
-const cachedToolList = z.array(
-    z.looseObject({
-        name: z.string(),
-        inputSchema: z
-            .looseObject({
-                type: z.string().exactOptional(),
-                properties: z.record(z.string(), z.unknown()).exactOptional(),
-                required: z.array(z.string()).exactOptional(),
-            })
-            .exactOptional(),
-    }),
-);
-
-// Memoized per cache path: every router in this daemon shares one read, or one probe on a version's first use. A
-// failed probe is forgotten so the next turn tries again rather than inheriting "no browser tools" for the boot.
-export const createSchemaCache = (timeoutMs = 30_000) => {
-    const loaded = new Map<string, Promise<McpToolSchema[]>>();
-    return (cachePath: string, probe: { readonly command: string; readonly args: readonly string[] }): Promise<McpToolSchema[]> => {
-        const known = loaded.get(cachePath);
-        if (known !== undefined) {
-            return known;
-        }
-        // Written atomically, so two daemons probing at once cannot interleave one file.
-        const file = cacheFile<McpToolSchema[] | undefined>(cachePath, {
-            parse: (raw) => cachedToolList.safeParse(raw).data,
-            fallback: () => undefined,
-        });
-        const reading = (async () => {
-            const cached = await file.read();
-            if (cached !== undefined) {
-                return cached;
-            }
-            const tools = await probeTools(probe, timeoutMs);
-            // allow(silent-catch): a cache that could not be written costs the next boot one more probe; this answer is in hand.
-            await file.update(() => tools).catch(() => undefined);
-            return tools;
-        })();
-        loaded.set(cachePath, reading);
-        reading.catch(() => loaded.delete(cachePath));
-        return reading;
-    };
-};
 
 // ---- one owner's lazily spawned real server --------------------------------------------------------------------
 
@@ -272,6 +179,7 @@ const withAccountParameter = (tools: readonly McpToolSchema[]): McpToolSchema[] 
     });
 
 export { WEBMCP_CALL_TOOL } from "./webmcp-call.js";
+export { createSchemaCache } from "./browser-schema-cache.js";
 
 // A tool call's params, and its arguments, as the router reads and sends them.
 type CallParams = NonNullable<RpcMessage["params"]>;
@@ -335,10 +243,15 @@ const forward = async (wire: Wire, backend: Backend, params: NonNullable<RpcMess
     }
 };
 
+// The longest the turn's MCP client waits on one call, where its runtime cannot be told longer (MountCall).
+export interface ClientLimit {
+    readonly clientCeilingMs?: number;
+}
+
 export interface BrowserRouter {
     // Answers one client message; undefined for a notification, which expects none. `signal` is the HTTP request's
     // own: a client that hung up takes its in-flight call with it.
-    readonly handle: (message: RpcMessage, signal?: AbortSignal) => Promise<RpcMessage | undefined>;
+    readonly handle: (message: RpcMessage, signal?: AbortSignal, client?: ClientLimit) => Promise<RpcMessage | undefined>;
     // Kills every backend; later calls are refused, not respawned.
     readonly close: () => void;
     // Owners whose backend is running now; for tests and the hub's accounting.
@@ -353,6 +266,8 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
     const inflight = new Map<string | number, { readonly backend: Backend; readonly id: number }>();
     let clientInitialize: Record<string, unknown> | undefined;
     let closed = false;
+    // The router's own ChatGPT tools, answered through each owner's backend (chatgpt-kit.ts).
+    const kit = createChatgptKit(manifest, deps.kits);
 
     const send = (backend: Backend, message: RpcMessage): void => {
         try {
@@ -467,7 +382,17 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
 
     const granted = (): string => Object.keys(manifest.accounts).join(", ");
 
-    const call = async (message: RpcMessage, signal: AbortSignal | undefined): Promise<RpcMessage> => {
+    // An owner's backend, brought up if it is not, and one tools/call sent on it under the client's id.
+    const lineFor = async (owner: string, port: number, clientId: RpcMessage["id"], signal: AbortSignal | undefined): Promise<BackendLine> => {
+        const ready = await backendFor(owner, port);
+        if ("refusal" in ready) {
+            return ready;
+        }
+        await ready.backend.ready;
+        return { send: (sent: CallParams, bound: AbortSignal | undefined = signal) => forward({ request, send, inflight }, ready.backend, sent, clientId, bound) };
+    };
+
+    const call = async (message: RpcMessage, signal: AbortSignal | undefined, client: ClientLimit | undefined): Promise<RpcMessage> => {
         // `account` is stripped either way: a sole-owner router never declared it, so one passed anyway is noise the
         // real server would reject.
         const { account, ...rest } = (message.params?.["arguments"] ?? {}) as Record<string, unknown>;
@@ -484,6 +409,13 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         }
         if (closed) {
             return toolRefusal(message.id, "this turn's browsers are already closed");
+        }
+        if (kit.handles(message)) {
+            const named = z.string().safeParse(account).data;
+            // The kit's own calls are not the client's to cancel by id: a backend told to drop one never answers it, and
+            // the kit would wait on it holding the account's tab. A client that hangs up still ends them (`signal`).
+            const line = (): Promise<BackendLine> => lineFor(owner, reserved.port, undefined, signal);
+            return await kit.call(message, { account: named, owner, args: rest, signal, clientCeilingMs: client?.clientCeilingMs, line });
         }
         // allow(silent-catch): an unreadable list holds no tool to read a call against, so it goes on as asked and meets
         // whatever broke the list on its way to the backend, which reports it there.
@@ -504,13 +436,11 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         }
         // The first call for an owner waits on its bring-up; other requests are separate HTTP calls, so a second
         // account's call is not stuck behind the first one's Chromium starting.
-        const ready = await backendFor(owner, reserved.port);
+        const ready = await lineFor(owner, reserved.port, message.id, signal);
         if ("refusal" in ready) {
             return toolRefusal(message.id, ready.refusal);
         }
-        await ready.backend.ready;
-        const toBackend = (sent: CallParams, bound: AbortSignal | undefined = signal): Promise<RpcMessage> =>
-            forward({ request, send, inflight }, ready.backend, sent, message.id, bound);
+        const toBackend = ready.send;
         // A page tool is looked up in the page as it stands (webmcp-call.ts); a timed text wait goes as the text wait it
         // means, answering the moment the text is there (bounded-wait.ts).
         const answer = webmcp === undefined ? await sendBoundingWait(params, signal, toBackend) : await callWebmcp(webmcp, params, toBackend, deps.webmcpGraceMs);
@@ -521,7 +451,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         return { ...(network === undefined ? steered : redactNetworkAnswer(network, steered)), id: message.id ?? null };
     };
 
-    const handle = async (message: RpcMessage, signal?: AbortSignal): Promise<RpcMessage | undefined> => {
+    const handle = async (message: RpcMessage, signal?: AbortSignal, client?: ClientLimit): Promise<RpcMessage | undefined> => {
         switch (message.method) {
             case "initialize":
                 clientInitialize = message.params;
@@ -542,7 +472,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
                 try {
                     const probed = await deps.toolSchemas();
                     const listed = withSandboxNotes(describeBoundedWait(probed));
-                    const tools = listed.some((tool) => tool.name === WEBMCP_CALL_TOOL) ? listed : [...listed, WEBMCP_CALL_SCHEMA];
+                    const tools = [...(listed.some((tool) => tool.name === WEBMCP_CALL_TOOL) ? listed : [...listed, WEBMCP_CALL_SCHEMA]), ...kit.listed()];
                     return {
                         jsonrpc: "2.0",
                         id: message.id ?? null,
@@ -552,7 +482,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
                     return rpcError(message.id, -32603, `browser tools unavailable: ${errorMessage(error)}`);
                 }
             case "tools/call":
-                return call(message, signal);
+                return call(message, signal, client);
             // A call whose backend is still being prepared has sent nothing to cancel; it lands when the backend does.
             case "notifications/cancelled": {
                 const route = inflight.get(message.params?.["requestId"] as string | number);

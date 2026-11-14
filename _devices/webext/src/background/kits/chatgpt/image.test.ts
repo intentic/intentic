@@ -1,7 +1,7 @@
+import type { ImageTiming } from "@intentic/site-kits/chatgpt";
+import { CHAT_ID, type Reply } from "@intentic/site-kits/chatgpt/testing";
 import { dom } from "@intentic/testing/dom";
 import { store } from "../../store.js";
-import { CHAT_ID, type Reply } from "./fake-chatgpt.testing.js";
-import type { ImageTiming } from "./image.js";
 import { kitBrowser, resetKitBrowser, SANDBOX, untilSent } from "./kit-chrome.testing.js";
 
 // chatgpt_image end to end in the worker: the gates, the tab it works in, the steps in order, the route change on send,
@@ -21,7 +21,7 @@ jest.mock("../../tools/media.js", () => ({
         return { path: `/work/.intentic/records/artifacts/chrome/${name}.png`, bytes: 2_934_112, mimeType: "image/png" };
     },
 }));
-const { chatgptImage } = await import("./image.js");
+const { chatgptImage } = await import("./chrome-host.js");
 const { handleMcpMessage } = await import("../../mcp.js");
 
 const FAST: ImageTiming = { capMs: 4000, roundMs: 400, settleMs: 30, readyMs: 300, stepMs: 300, silentMs: 1000, retryMs: 5, uploadMs: 300 };

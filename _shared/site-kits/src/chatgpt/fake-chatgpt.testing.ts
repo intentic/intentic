@@ -73,6 +73,18 @@ export interface FakeChatgpt {
     readonly editorText: () => string;
 }
 
+// Which stand-in a browser shows at `url`: the page of the kind the address names, or undefined for an address that
+// loads nothing new. A chat's own address (/c/…) keeps the page as it was, as ChatGPT's client-side route does.
+export const fakePageAt = (url: string, account: FakeAccount): Pick<FakeOptions, "page" | "project"> | undefined => {
+    const at = new URL(url);
+    if (at.host !== "chatgpt.com" || at.pathname.includes("/c/")) {
+        return undefined;
+    }
+    const projectId = /^\/g\/g-p-([A-Za-z0-9]+)/.exec(at.pathname)?.[1];
+    const project = account.projects.find((each) => each.id === projectId);
+    return { page: at.searchParams.get("temporary-chat") === "true" ? "temporary" : project !== undefined ? "project" : "home", project };
+};
+
 export const CHAT_ID = "6731f0c2-4b1e-8000-9a2c-1f2e3d4c5b6a";
 
 const el = (tag: string, attributes: Record<string, string> = {}, text = ""): HTMLElement => {

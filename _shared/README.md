@@ -32,6 +32,7 @@ flowchart LR
 | [sandbox-contract](sandbox-contract) | Wire contract between the editor and the sandbox daemon. |
 | [sandbox-openapi](sandbox-openapi) | The daemon's contract as an OpenAPI 3.1 document. |
 | [sandbox-run](sandbox-run) | How a sandbox container starts: names, privileges, env, Fly config. |
+| [site-kits](site-kits) | One site's whole job in one tool call (ChatGPT), behind a host interface the extension and the sandbox's browser implement. |
 | [workspace-ignore](workspace-ignore) | Which workspace paths are project files and which are noise. |
 | [workspace-setup](workspace-setup) | Which dependency manager a project needs, for the upload in the browser and the daemon. |
 
