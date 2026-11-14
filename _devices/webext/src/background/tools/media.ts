@@ -299,7 +299,9 @@ const fetchMedia = async (tab: TargetTab, url: string): Promise<Fetched> => {
 
 /* INTO THE SANDBOX. */
 
-const upload = async (from: SandboxKey, data: Uint8Array<ArrayBuffer>, mimeType: string, name: string, source: string): Promise<SavedMedia> => {
+// Bytes the extension already holds, straight into the sandbox: a fetched file below, or words a kit read off a page
+// (a ChatGPT answer too long to hand back in a tool answer).
+export const saveBytes = async (from: SandboxKey, data: Uint8Array<ArrayBuffer>, mimeType: string, name: string, source: string): Promise<SavedMedia> => {
     const sandbox = await store.sandbox(from);
     if (sandbox === undefined) {
         throw new RefusedError(`This browser is not paired with a sandbox any more.`);
@@ -347,5 +349,5 @@ export const saveMediaFromTab = async (from: SandboxKey, tabId: number, url: str
     if (options.pointedAt !== true) {
         keptFromAddress(mimeType, fetched.attachment);
     }
-    return await upload(from, fetched.data, mimeType, name, new URL(tab.url).host);
+    return await saveBytes(from, fetched.data, mimeType, name, new URL(tab.url).host);
 };

@@ -3,9 +3,9 @@
 // inside the page, where nothing else in this module exists (the same rule as page/driver.ts).
 import type { ChatGptPage, Lookup, Pattern } from "./site.js";
 
-// The kit's helpers inside ChatGPT's tab, installed before every step by three small injected functions, and kept on the
+// The kit's helpers inside ChatGPT's tab, installed before every step by four small injected functions, and kept on the
 // isolated world's window, where the page's own scripts never see them (as driver.ts keeps its refs). A document that
-// is replaced loses them, and the next step installs them again. Three installers rather than one function because each
+// is replaced loses them, and the next step installs them again. Four installers rather than one function because each
 // injected function must carry its helpers whole, and one carrying all of them is past what this repository lets a
 // function grow to.
 
@@ -64,11 +64,21 @@ export interface Watching {
     readonly answeredSince: (baseline: Baseline) => boolean;
     readonly alerts: () => string;
     readonly working: (baseline: Baseline) => string;
+    readonly turnsSince: (baseline: Baseline) => Element[];
+}
+
+// What the answer waits on, and where the last answer began.
+export interface Asking {
+    // The names of the buttons ChatGPT is waiting on the person to press in the answer's own turns ("Confirm"), or "".
+    readonly confirmations: (baseline: Baseline) => string;
+    // The counts as they stood just before the conversation's last prompt, so the last answer is "since" them: what
+    // chatgpt_read collects from a chat it did not send into in this call.
+    readonly lastAnswerBaseline: () => Baseline;
 }
 
 declare global {
     interface Window {
-        intenticChatgpt?: { reading?: Reading; acting?: Acting; watching?: Watching } | undefined;
+        intenticChatgpt?: { reading?: Reading; acting?: Acting; watching?: Watching; asking?: Asking } | undefined;
     }
 }
 
@@ -255,7 +265,7 @@ export const installWatching = (): boolean => {
             .map((turn) => textOf(turn).trim())
             .filter((text) => text !== "")
             .join("\n\n")
-            .slice(0, 4000);
+            .slice(0, 400_000);
     const answeredSince = (baseline: Baseline): boolean => turnsSince(baseline).length > 0;
     const alerts = (): string =>
         Array.from(document.querySelectorAll('[role="alert"]'))
@@ -274,6 +284,46 @@ export const installWatching = (): boolean => {
         }
         return "";
     };
-    window.intenticChatgpt = { ...window.intenticChatgpt, watching: { imagesSince, textSince, answeredSince, alerts, working } };
+    window.intenticChatgpt = { ...window.intenticChatgpt, watching: { imagesSince, textSince, answeredSince, alerts, working, turnsSince } };
+    return true;
+};
+
+export const installAsking = (): boolean => {
+    const reading = window.intenticChatgpt?.reading;
+    const watching = window.intenticChatgpt?.watching;
+    if (reading === undefined || watching === undefined) {
+        return false;
+    }
+    const { site, findAll, regex, squash, textOf } = reading;
+    const { turnsSince } = watching;
+    const confirmations = (baseline: Baseline): string => {
+        const asking = regex(site.confirmation.name);
+        const names = turnsSince(baseline).flatMap((turn) =>
+            Array.from(turn.querySelectorAll('button, [role="button"]'))
+                .map((button) => squash(textOf(button)) || squash(button.getAttribute("aria-label") ?? ""))
+                .filter((name) => asking.test(name)),
+        );
+        return [...new Set(names)].join(", ");
+    };
+    // What precedes `mark` in the document, counted the way acting.counts counts the whole page.
+    const before = (mark: Element, found: Element[]): number =>
+        found.filter((el) => (el.compareDocumentPosition(mark) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).length;
+    const lastAnswerBaseline = (): Baseline => {
+        const users = Array.from(document.querySelectorAll(site.userTurn));
+        const last = users.at(-1);
+        const all = {
+            images: findAll(site.generatedImage),
+            assistant: Array.from(document.querySelectorAll(site.assistantTurn)),
+            turns: Array.from(document.querySelectorAll(site.anyTurn)),
+        };
+        if (last === undefined) {
+            return { images: 0, user: 0, assistant: 0, turns: 0 };
+        }
+        // The prompt's own <article> counts among the turns before the answer (turnsSince skips one past it).
+        const own = last.closest(site.anyTurn);
+        const turns = own === null ? before(last, all.turns) : before(own, all.turns);
+        return { images: before(last, all.images), user: users.length - 1, assistant: before(last, all.assistant), turns };
+    };
+    window.intenticChatgpt = { ...window.intenticChatgpt, asking: { confirmations, lastAnswerBaseline } };
     return true;
 };

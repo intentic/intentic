@@ -1,0 +1,145 @@
+import { errorMessage } from "@intentic/base/errors";
+import { RefusedError } from "../../policy.js";
+import type { SandboxKey } from "../../store.js";
+import { saveBytes, saveMediaFromTab, type SavedMedia } from "../../tools/media.js";
+import type { TargetTab } from "../../tools/tab-access.js";
+import { type Chat, type ChatRequest, type ChatTiming, CHAT_TIMING, type Mode, type Ran, readChat, runChat } from "./chat.js";
+import type { FoundImage } from "./page-hands.js";
+import { CHATGPT_PAGE, CHATGPT_SITE } from "./site.js";
+
+// What the agent is told after chatgpt_send and chatgpt_read: ChatGPT's words, whatever pictures it made (saved into
+// the sandbox), and where the chat is to go on in. image.ts words chatgpt_image's own answers on the same pieces.
+
+// An answer past this many characters is saved whole as a Markdown file and only its start handed back: a Deep Research
+// report runs to tens of thousands, more than a tool answer should carry.
+const INLINE_CHARS = 6000;
+const EXCERPT_CHARS = 2500;
+
+const size = (bytes: number): string =>
+    bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : bytes >= 1000 ? `${Math.round(bytes / 1000)} kB` : `${bytes} bytes`;
+
+// Where the chat is, and how to go on in it.
+export const where = (chat: Chat, tool: string, personalized: boolean): string => {
+    const kind =
+        chat.home === "temporary"
+            ? `a temporary chat, ${personalized ? "personalized" : "unpersonalized"}`
+            : chat.home === "project"
+              ? `in this sandbox's ChatGPT project`
+              : `one of the account's own chats`;
+    const lives = chat.home === "temporary" ? ` A temporary chat lives only in that tab: it is gone once the tab closes or goes to another page.` : "";
+    return `Chat: "${chat.chat}" (${kind}), in tab ${chat.tabId}, ${chat.url}. To go on in this same chat, call ${tool} with chat "${chat.chat}".${lives}`;
+};
+
+export const saveImages = async (
+    from: SandboxKey,
+    tab: TargetTab,
+    images: readonly FoundImage[],
+    stem: string,
+): Promise<{ saved: { file: SavedMedia; image: FoundImage }[]; failed: string[] }> => {
+    const saved: { file: SavedMedia; image: FoundImage }[] = [];
+    const failed: string[] = [];
+    for (const [index, image] of images.entries()) {
+        try {
+            saved.push({ file: await saveMediaFromTab(from, tab.id, image.src, images.length === 1 ? stem : `${stem}-${index + 1}`), image });
+        } catch (error) {
+            failed.push(errorMessage(error));
+        }
+    }
+    return { saved, failed };
+};
+
+export const imageLines = (saved: readonly { file: SavedMedia; image: FoundImage }[], failed: readonly string[]): string[] => [
+    ...saved.map(({ file, image }) => {
+        const dimensions = image.width > 0 && image.height > 0 ? `, ${image.width}×${image.height}` : "";
+        return `- ${file.path} (${size(file.bytes)}, ${file.mimeType}${dimensions})`;
+    }),
+    ...failed.map((reason) => `- not saved: ${reason}`),
+];
+
+export const stemOf = (chat: Chat, name: string | undefined): string => name ?? `chatgpt-${chat.chat.replace(/^t-/, "").slice(0, 8)}`;
+
+export const windowNote = (createdWindow: boolean): string[] =>
+    createdWindow ? [``, `(This opened a window of your own, behind the person's, so what they are doing is not interrupted.)`] : [];
+
+// ChatGPT's words: whole when short, else saved as a file and begun here. `label` heads words that are not its answer
+// yet (still working, waiting on the person).
+const words = async (from: SandboxKey, text: string, stem: string, label = "ChatGPT wrote:"): Promise<string[]> => {
+    if (text === "") {
+        return [];
+    }
+    if (text.length <= INLINE_CHARS) {
+        return [``, label, text];
+    }
+    try {
+        const file = await saveBytes(from, new TextEncoder().encode(text), "text/markdown", stem, CHATGPT_SITE.host);
+        return [``, `ChatGPT's answer is ${text.length} characters, saved whole at ${file.path}. It begins:`, `${text.slice(0, EXCERPT_CHARS)}…`];
+    } catch (error) {
+        return [``, `ChatGPT's answer is ${text.length} characters and could not be saved (${errorMessage(error)}); its first ${INLINE_CHARS}:`, text.slice(0, INLINE_CHARS)];
+    }
+};
+
+const duration = (ms: number): string => (ms < 90_000 ? `${Math.round(ms / 1000)} s` : `${Math.round(ms / 60_000)} min`);
+
+// The answer for every outcome. Still working and waiting on the person are states the agent acts on, not failures, so
+// they come back as answers; a failure throws, with ChatGPT's words.
+const describe = async (from: SandboxKey, ran: Ran, request: { name?: string | undefined; personalized: boolean; waitedMs: number }): Promise<string> => {
+    const { tab, watched, chat } = ran;
+    const place = where(chat, "chatgpt_send", request.personalized);
+    const notes = ran.notes.length === 0 ? [] : [``, ...ran.notes];
+    const stem = stemOf(chat, request.name);
+    if (watched.outcome === "unsent") {
+        throw new RefusedError(
+            `The prompt was typed into ChatGPT but did not send: it is still in the message box, twice pressed. Nothing was sent, so calling again is safe; if it says the same, ChatGPT changed its page: tell the owner the ChatGPT kit needs fixing.`,
+        );
+    }
+    if (watched.outcome === "failed") {
+        const limited = new RegExp(CHATGPT_PAGE.limit.source, CHATGPT_PAGE.limit.flags).test(watched.failure);
+        const head = limited
+            ? `ChatGPT refused on a usage limit: "${watched.failure}". Calling again now fails the same way; wait until the limit resets, and tell the owner.`
+            : `ChatGPT failed: "${watched.failure.slice(0, 600)}". Change the prompt rather than repeating it, or start a new chat.`;
+        throw new RefusedError([head, place, ...notes].join("\n"));
+    }
+    const { saved, failed } = await saveImages(from, tab, watched.images, stem);
+    const pictures = watched.images.length === 0 ? [] : [``, `ChatGPT made ${watched.images.length} image${watched.images.length === 1 ? "" : "s"}:`, ...imageLines(saved, failed)];
+    const finished = watched.outcome === "done" || watched.outcome === "answered";
+    const said = await words(from, watched.text, stem, finished ? "ChatGPT wrote:" : "So far it shows:");
+    if (watched.outcome === "asking") {
+        const head = `ChatGPT is waiting for the person to press "${watched.asks}" in tab ${tab.id}. This kit never presses ChatGPT's own confirmations: ask the person to look at that tab and decide, then collect the answer with chatgpt_read (chat "${chat.chat}"). Do not send the prompt again.`;
+        return [head, place, ...notes, ...pictures, ...said].join("\n");
+    }
+    if (watched.outcome === "working") {
+        const hint = watched.hint === "" ? "" : ` (it shows "${watched.hint}")`;
+        const head = `ChatGPT is still working after ${duration(request.waitedMs)}${hint}. The prompt was sent: do not send it again. Collect the answer with chatgpt_read (chat "${chat.chat}", wait up to 540 s a call); Deep research and agent mode often take 5 to 30 minutes.`;
+        return [head, place, ...notes, ...pictures, ...said].join("\n");
+    }
+    const head = said.length === 0 && pictures.length === 0 ? `ChatGPT finished without words or pictures.` : `ChatGPT answered.`;
+    return [head, place, ...notes, ...pictures, ...said, ...windowNote(ran.createdWindow)].join("\n");
+};
+
+interface SendRequest {
+    readonly prompt: string;
+    readonly chat?: string | undefined;
+    readonly mode: Mode;
+    readonly tickets: readonly string[];
+    readonly waitSeconds?: number | undefined;
+    readonly name?: string | undefined;
+    readonly personalized: boolean;
+    readonly temporary: boolean;
+}
+
+export const chatgptSend = async (from: SandboxKey, request: SendRequest, timing: ChatTiming = CHAT_TIMING): Promise<string> => {
+    const waitMs = request.waitSeconds === undefined ? undefined : request.waitSeconds * 1000;
+    const chat: ChatRequest = { ...request, waitMs };
+    const waitedMs = Math.min(waitMs ?? timing.capMs, timing.capMs);
+    return await runChat(from, chat, async (ran) => await describe(from, ran, { name: request.name, personalized: request.personalized, waitedMs }), timing);
+};
+
+export const chatgptRead = async (
+    from: SandboxKey,
+    request: { readonly chat: string; readonly waitSeconds?: number | undefined; readonly name?: string | undefined },
+    timing: ChatTiming = CHAT_TIMING,
+): Promise<string> => {
+    const waitMs = (request.waitSeconds ?? 0) * 1000;
+    const waitedMs = Math.min(waitMs, timing.capMs);
+    return await readChat(from, request.chat, waitMs, async (ran) => await describe(from, ran, { name: request.name, personalized: false, waitedMs }), timing);
+};

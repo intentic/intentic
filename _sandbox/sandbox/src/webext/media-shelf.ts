@@ -40,6 +40,7 @@ const EXTENSIONS = new Map<string, string>(Object.entries({
     "application/pdf": "pdf",
     "application/zip": "zip",
     "text/plain": "txt",
+    "text/markdown": "md",
     "text/csv": "csv",
     "application/json": "json",
 }));

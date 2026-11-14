@@ -135,6 +135,37 @@ test("a shelf file is released once, for the browser its ticket was minted for, 
     expect((await staged.collect(again.ticket ?? "")).status).toBe(404);
 });
 
+const SendCallSchema = z.object({ params: z.object({ arguments: z.object({ prompt: z.string(), files: z.array(z.string()), tickets: z.array(z.string()) }) }) });
+
+test("a chatgpt_send with files gets one ticket per file, in order, each collected once; one file off the shelf refuses the call", async () => {
+    const staged = stage();
+    const dir = join(root, `${STATE_DIR}/records/artifacts/chrome`);
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "frame.png"), PNG);
+    await writeFile(join(dir, "brief.txt"), "the brief");
+    const files = [`${STATE_DIR}/records/artifacts/chrome/frame.png`, `${STATE_DIR}/records/artifacts/chrome/brief.txt`];
+    const send = (names: string[]) =>
+        staged.fileTickets.route("chrome", { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "chatgpt_send", arguments: { prompt: "compare", files: names, tickets: ["made-up"] } } }, root);
+    const routed = await send(files);
+    if (routed === undefined || "refusal" in routed) {
+        throw new Error("the send was not ticketed");
+    }
+    const { arguments: args } = SendCallSchema.parse(routed.message).params;
+    expect(args.prompt).toBe("compare");
+    expect(args.files).toEqual(files);
+    expect(args.tickets).toHaveLength(2);
+    expect(args.tickets).not.toContain("made-up");
+    const [first, second] = args.tickets;
+    expect((await staged.collect(second ?? "")).headers.get("x-intentic-name")).toBe("brief.txt");
+    expect(new Uint8Array(await (await staged.collect(first ?? "")).arrayBuffer())).toEqual(PNG);
+    expect((await staged.collect(first ?? "")).status).toBe(404);
+
+    const refused = await send([files[0] ?? "", `${STATE_DIR}/records/artifacts/chrome/missing.png`]);
+    expect(refused).toEqual({ refusal: expect.stringContaining("There is no file") });
+    // A send with no files has nothing to ticket and goes on as it came.
+    expect(await send([])).toBeUndefined();
+});
+
 test("a file off the shelf, or a link on it that leads out, is refused before the browser hears of it", async () => {
     const staged = stage();
     await mkdir(join(root, `${STATE_DIR}/secrets`), { recursive: true });

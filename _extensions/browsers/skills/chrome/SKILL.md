@@ -1,6 +1,6 @@
 ---
 name: chrome
-description: Use "${id}", the user's OWN signed-in browser, on the sites they allow: for what needs THEIR session and no sandbox account covers (work SSO, a passkey, a bank, a datacentre-blocked site, images from their ChatGPT), or when they say "my browser". Not for a site with its own skill (X, Reddit…), not unattended.
+description: Use "${id}", the user's OWN signed-in browser, on the sites they allow: for what needs THEIR session and no sandbox account covers (work SSO, a passkey, a bank, a datacentre-blocked site, their own ChatGPT), or when they say "my browser". Not for a site with its own skill (X, Reddit…), not unattended.
 ---
 
 ${tools}
@@ -71,6 +71,25 @@ It is the same browser their bank is open in. The habits that make this feel saf
   not respond, a page that will not load, a task that turned out to involve more than it said: say what you
   tried and what went wrong, and ask how to proceed. Do not keep retrying the same failing action.
 
+## Asking their ChatGPT
+
+Use `chatgpt_send` when they want their own ChatGPT on something: a second opinion, Deep Research, agent mode, their
+connected apps (Google Drive, Slack…), or files from the sandbox read by it. Each prompt spends their plan's allowance.
+
+- **Where it goes.** New chats go into a ChatGPT project of this sandbox's own, "Intentic · <sandbox>", made on first
+  use with project-only memory: their saved memories and other chats stay out, while apps, files and every tool work,
+  and the chat can be opened again by its address. The answer says when the project was made, or when it could not be
+  and a temporary chat (apps off) was used instead; pass that on. `personalized: true` uses a regular chat with their
+  memory, only when they ask.
+- **One call per prompt.** It answers with ChatGPT's words (a long answer is saved as a Markdown file and its start
+  shown), images saved into the sandbox, and the `chat` to go on in. `files` must be on the artifacts shelf; the
+  person is asked on the page before they go.
+- **Long jobs.** `mode: "deep_research"` or `"agent"` often runs 5 to 30 minutes. When the answer says ChatGPT is still
+  working, call `chatgpt_read` with the `chat` (and `wait` up to 540) until it is done. Never send the prompt again.
+- **ChatGPT asking the person.** When it waits on its own "Confirm" (an app reaching outside the project, an agent
+  step, a sign-in to take over), the answer says so. The kit never presses those: tell the person what it is asking and
+  that it is in their browser, then `chatgpt_read` once they have answered.
+
 ## Generating images in their browser
 
 Use it when they ask, or when the image has to come from a service they pay for (their ChatGPT, Midjourney…) that
@@ -78,14 +97,14 @@ the sandbox has no key for. Every image spends their plan's allowance. A local m
 is unattended and leaves their account alone, so prefer those when the result is good enough. Before the first image,
 say how many you mean to make and where.
 
-**ChatGPT: `chatgpt_image`, one call per image.** It opens a temporary, unpersonalized chat, sends, waits (several
-minutes is normal), saves the image into the sandbox, and answers with the `chat`, the saved paths and whatever
-ChatGPT wrote. Pass that `chat` to the next call for the same style and world. Leave `personalized` off unless they
-ask: their memory and past chats steer the image (one person's game keyframe came back as a pastiche of a series
-they had chatted about). Read the text it answers with: a refusal means rewrite the prompt, never resend it as it
-was; a usage limit means stop and tell them when it resets; a question from ChatGPT gets a short answer in the same
-`chat`. An answer saying the prompt may already have gone means never send it again: `save_media` the image once it
-shows. chatgpt.com must be allowed in read and act. One call at a time, never in parallel.
+**ChatGPT: `chatgpt_image`, one call per image.** It sends the prompt in a chat in the sandbox's own ChatGPT project
+(see below), waits (several minutes is normal), saves the image into the sandbox, and answers with the `chat`, the
+saved paths and whatever ChatGPT wrote. Pass that `chat` to the next call for the same style and world. Leave
+`personalized` off unless they ask: their memory and past chats steer the image (one person's game keyframe came back
+as a pastiche of a series they had chatted about). Read the text it answers with: a refusal means rewrite the prompt,
+never resend it as it was; a usage limit means stop and tell them when it resets; a question from ChatGPT gets a short
+answer in the same `chat`. An answer saying the prompt was sent or may already have gone means never send it again:
+collect it with `chatgpt_read`. chatgpt.com must be allowed in read and act. One call at a time, never in parallel.
 
 **By hand, on another site or when the kit fails or is missing:**
 1. On ChatGPT, `open` `https://chatgpt.com/?temporary-chat=true`, then set that chat's "Personalized" menu to

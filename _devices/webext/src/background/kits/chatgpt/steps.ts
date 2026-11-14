@@ -16,14 +16,20 @@ export interface StepAnswer {
 
 export interface Watched {
     readonly kind: "watch";
-    // done: the new image(s) are there and ChatGPT has stopped. failed: it stopped and said why (`failure`). answered:
-    // it stopped with words and no image. unsent: the prompt still sits in the composer. working: none of these yet.
-    readonly outcome: "done" | "failed" | "answered" | "unsent" | "working";
+    // done: ChatGPT has stopped with what was asked for: the new image(s) when judged as an image, its answer otherwise.
+    // failed: it stopped and said why (`failure`). answered: judged as an image, it stopped with words and no image.
+    // asking: it waits on the person to press one of its own buttons (`asks`). unsent: the prompt still sits in the
+    // composer. working: none of these yet.
+    readonly outcome: "done" | "failed" | "answered" | "asking" | "unsent" | "working";
     readonly images: FoundImage[];
     readonly text: string;
     readonly failure: string;
     readonly hint: string;
+    readonly asks: string;
 }
+
+// What counts as done: a picture, or any finished answer.
+export type Judged = "image" | "text";
 
 // The page as it stands.
 export const inspectStep = (): PageState | null => window.intenticChatgpt?.acting?.state() ?? null;
@@ -176,25 +182,22 @@ export const sendStep = async (via: "button" | "enter", waitMs: number): Promise
 // `settleMs`, since an answer pauses between its words and its picture. Its timers are single ones, each scheduled
 // from the step or an observer callback, never a chain: Chrome throttles chained timers in a hidden page to one wake a
 // minute.
-export const watchStep = async (baseline: Baseline, prompt: string, roundMs: number, settleMs: number): Promise<Watched | null> => {
+export const watchStep = async (baseline: Baseline, prompt: string, roundMs: number, settleMs: number, judged: Judged = "image"): Promise<Watched | null> => {
     const reading = window.intenticChatgpt?.reading;
     const acting = window.intenticChatgpt?.acting;
     const watching = window.intenticChatgpt?.watching;
-    if (reading === undefined || acting === undefined || watching === undefined) {
+    const asking = window.intenticChatgpt?.asking;
+    if (reading === undefined || acting === undefined || watching === undefined || asking === undefined) {
         return null;
     }
     const { site, regex, squash } = reading;
     const LOOK_GAP_MS = 250;
     const wanted = squash(prompt);
     const failing = (said: string): boolean => regex(site.limit).test(said) || regex(site.error).test(said);
-    const watched = (outcome: Watched["outcome"], extra: { images?: FoundImage[]; failure?: string } = {}): Watched => ({
-        kind: "watch",
-        outcome,
-        images: extra.images ?? [],
-        text: watching.textSince(baseline),
-        failure: extra.failure ?? "",
-        hint: watching.working(baseline),
-    });
+    const watched = (outcome: Watched["outcome"], extra: Partial<Pick<Watched, "images" | "failure" | "asks">> = {}): Watched => {
+        const said = { text: watching.textSince(baseline), hint: watching.working(baseline) };
+        return { kind: "watch", outcome, images: extra.images ?? [], failure: extra.failure ?? "", asks: extra.asks ?? "", ...said };
+    };
     const stillComposed = (): boolean => {
         const box = acting.composer();
         return box !== undefined && wanted !== "" && squash(acting.composerText(box)) === wanted;
@@ -225,14 +228,17 @@ export const watchStep = async (baseline: Baseline, prompt: string, roundMs: num
         if (!watching.answeredSince(baseline)) {
             return undefined;
         }
-        return regex(site.refusal).test(text) ? watched("failed", { failure: text }) : watched("answered");
+        // A refusal is judged only of a picture that did not come: in a written answer "can't help" is just words.
+        return judged === "text" ? watched("done") : regex(site.refusal).test(text) ? watched("failed", { failure: text }) : watched("answered");
     };
     // A verdict, or undefined to keep watching.
     const verdict = (settled: boolean): Watched | undefined => {
         if (!sent()) {
             return unsent(settled);
         }
-        return acting.generating() || !settled ? undefined : stopped();
+        // A button of ChatGPT's own waiting on the person ends the watch, Stop or not: the kit never presses one.
+        const asks = asking.confirmations(baseline);
+        return asks !== "" ? watched("asking", { asks }) : acting.generating() || !settled ? undefined : stopped();
     };
     return await new Promise<Watched>((resolve) => {
         let stillSince: number | undefined;
@@ -273,4 +279,69 @@ export const watchStep = async (baseline: Baseline, prompt: string, roundMs: num
         const cap = setTimeout(() => finish(verdict(settled()) ?? watched("working")), roundMs);
         look();
     });
+};
+
+// The counts just before the conversation's last prompt, for collecting its answer (chatgpt_read).
+export const lastAnswerStep = (): Baseline | null => window.intenticChatgpt?.asking?.lastAnswerBaseline() ?? null;
+
+// Turns on one of the composer's tools (Deep research, agent mode) from its menu, and reads back that it shows as
+// chosen: a pill in the composer named after it, or the menu item checked when the menu is opened again.
+export const modeStep = async (mode: "deep_research" | "agent", waitMs: number): Promise<StepAnswer | null> => {
+    const reading = window.intenticChatgpt?.reading;
+    const acting = window.intenticChatgpt?.acting;
+    if (reading === undefined || acting === undefined) {
+        return null;
+    }
+    const { site, regex, nameOf, locate } = reading;
+    const answer = (ok: boolean, message: string): StepAnswer => ({ kind: "answer", ok, message });
+    const wanted = regex(site.modes[mode]);
+    const items = (): Element[] =>
+        Array.from(document.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"]')).filter((el) => wanted.test(nameOf(el)));
+    // A pill in the composer is a button named after the tool, outside any menu.
+    const chosen = (): boolean =>
+        Array.from(document.querySelectorAll('form button, form [role="button"]')).some((el) => el.closest('[role="menu"]') === null && wanted.test(nameOf(el)));
+    if (chosen()) {
+        return answer(true, `It already shows as chosen.`);
+    }
+    const menuButton = locate(site.toolsMenu);
+    if (menuButton === undefined) {
+        return answer(false, `ChatGPT's tools button ("Add files and more") is not on the page.`);
+    }
+    acting.press(menuButton);
+    const item = await acting.until(() => items()[0], waitMs);
+    if (item === undefined) {
+        acting.key(document.activeElement ?? document.body, "Escape");
+        return answer(false, `ChatGPT's tools menu did not open, or has no "${site.modes[mode].source}" choice on this account.`);
+    }
+    acting.press(item);
+    const took = await acting.until(() => chosen() || item.getAttribute("aria-checked") === "true", waitMs);
+    if (items().length > 0) {
+        acting.key(document.activeElement ?? document.body, "Escape");
+    }
+    return took === true ? answer(true, `It shows as chosen.`) : answer(false, `ChatGPT does not show it as chosen after the click.`);
+};
+
+// Holds the composer's own file input for putFile (page/media-driver.ts), where findFileInput would hold one an agent
+// aimed at by ref: the input that takes `type`, else the first. The pin lives on the same isolated world's window.
+export const pinFileInputStep = (selector: string, pin: string, name: string, type: string): StepAnswer => {
+    const inputs = Array.from(document.querySelectorAll(selector)).filter((el): el is HTMLInputElement => el instanceof HTMLInputElement && !el.disabled);
+    const lower = name.toLowerCase();
+    const takes = (input: HTMLInputElement): boolean => {
+        const accept = input.accept.split(",").map((token) => token.trim().toLowerCase()).filter((token) => token !== "");
+        return (
+            accept.length === 0 ||
+            accept.some((token) => (token.startsWith(".") ? lower.endsWith(token) : token.endsWith("/*") ? type.startsWith(token.slice(0, -1)) : token === type))
+        );
+    };
+    const input = inputs.find(takes);
+    window.intenticFilePin = undefined;
+    if (input === undefined) {
+        return {
+            kind: "answer",
+            ok: false,
+            message: inputs.length === 0 ? `ChatGPT's page has no file input to attach to.` : `ChatGPT's file input does not take ${type} (${name}).`,
+        };
+    }
+    window.intenticFilePin = { pin, input };
+    return { kind: "answer", ok: true, message: "" };
 };

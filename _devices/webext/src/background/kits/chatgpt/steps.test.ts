@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { giveEveryElementABox, mountFakeChatgpt } from "./fake-chatgpt.testing.js";
-import { composeStep, inspectStep, personalizationStep, sendStep, watchStep } from "./steps.js";
-import { type Baseline, installActing, installReading, installWatching, type PageState } from "./page-hands.js";
+import { composeStep, inspectStep, lastAnswerStep, modeStep, personalizationStep, pinFileInputStep, sendStep, watchStep } from "./steps.js";
+import { type Baseline, installActing, installAsking, installReading, installWatching, type PageState } from "./page-hands.js";
 import { CHATGPT_PAGE } from "./site.js";
 
 // The kit's steps inside ChatGPT's page, against a stand-in shaped after a real snapshot of it (fake-chatgpt.testing.ts).
@@ -12,6 +12,7 @@ const install = (): void => {
     installReading(CHATGPT_PAGE, location.host);
     installActing();
     installWatching();
+    installAsking();
 };
 
 const state = (): PageState => {
@@ -164,4 +165,54 @@ test("a picture whose answer still shows a working line is not taken as done, si
     install();
     const before = await sendPrompt("A cat.");
     expect(await watchStep(before, "A cat.", 300, settled.settleMs)).toMatchObject({ outcome: "working", hint: "Creating image" });
+});
+
+test("judged as words, a finished answer is done, even one that says it can't help", async () => {
+    const text = "I can't help with the legal side, but here is the summary you asked for.";
+    mountFakeChatgpt({ replies: [{ kind: "text", text }] });
+    install();
+    const before = await sendPrompt("Summarize.");
+    expect(await watchStep(before, "Summarize.", settled.roundMs, settled.settleMs, "text")).toMatchObject({ outcome: "done", text, images: [] });
+});
+
+test("an answer stopped at one of ChatGPT's own buttons ends the round as asking, Stop button and all, and nothing presses it", async () => {
+    const fake = mountFakeChatgpt({ replies: [{ kind: "confirm", text: "About to search your Drive.", button: "Confirm" }] });
+    install();
+    const before = await sendPrompt("Find the deck.");
+    expect(await watchStep(before, "Find the deck.", settled.roundMs, settled.settleMs, "text")).toMatchObject({ outcome: "asking", asks: "Confirm" });
+    expect(state().generating).toBe(true);
+    expect(fake.confirmed).toBe(false);
+});
+
+test("the last answer's baseline is the page as it stood before its prompt, so a read collects that answer alone", async () => {
+    mountFakeChatgpt({ replies: [{ kind: "text", text: "First." }, { kind: "text", text: "Second." }] });
+    install();
+    const first = await sendPrompt("One.");
+    await watchStep(first, "One.", settled.roundMs, settled.settleMs, "text");
+    const second = await sendPrompt("Two.");
+    await watchStep(second, "Two.", settled.roundMs, settled.settleMs, "text");
+    const baseline = lastAnswerStep();
+    expect(baseline).toEqual(second);
+    expect(await watchStep(baseline ?? second, "", settled.roundMs, settled.settleMs, "text")).toMatchObject({ outcome: "done", text: "Second." });
+});
+
+test("a tool is chosen from the composer's menu and shows as a pill; one the account lacks is said plainly", async () => {
+    const fake = mountFakeChatgpt({ page: "home" });
+    install();
+    expect(await modeStep("deep_research", 300)).toEqual({ kind: "answer", ok: true, message: "It shows as chosen." });
+    expect(fake.mode).toBe("Deep research");
+    expect(await modeStep("deep_research", 300)).toEqual({ kind: "answer", ok: true, message: "It already shows as chosen." });
+    mountFakeChatgpt({ page: "home", noTools: true });
+    install();
+    expect(await modeStep("agent", 100)).toMatchObject({ ok: false, message: expect.stringContaining("has no") });
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+});
+
+test("the composer's own file input is held for the file, and a page without one is said plainly", () => {
+    mountFakeChatgpt({ page: "home" });
+    expect(pinFileInputStep(CHATGPT_PAGE.fileInput, "pin-1", "brief.pdf", "application/pdf")).toEqual({ kind: "answer", ok: true, message: "" });
+    expect(window.intenticFilePin?.pin).toBe("pin-1");
+    document.querySelector('input[type="file"]')?.remove();
+    expect(pinFileInputStep(CHATGPT_PAGE.fileInput, "pin-2", "brief.pdf", "application/pdf")).toEqual({ kind: "answer", ok: false, message: "ChatGPT's page has no file input to attach to." });
+    expect(window.intenticFilePin).toBeUndefined();
 });

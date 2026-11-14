@@ -14,4 +14,8 @@ test("the file tools read as sentences, and upload_file's ticket never reaches t
     expect(describeCall("chatgpt_image", { prompt: "Watercolor storyboard frame: a fox crossing a snowy bridge at dusk.", chat: "abc" })).toMatch(
         /^Asked ChatGPT for an image: “Watercolor storyboard frame/u,
     );
+    const sent = describeCall("chatgpt_send", { prompt: "Compare these two briefs.", files: ["/shelf/a.pdf", "/shelf/b.pdf"], tickets: ["tkt-secret"] });
+    expect(sent).toBe("Asked ChatGPT: “Compare these two briefs.” with 2 files attached");
+    expect(describeCall("chatgpt_send", { prompt: "Hi." })).toBe("Asked ChatGPT: “Hi.”");
+    expect(describeCall("chatgpt_read", { chat: "abc" })).toBe("Read a ChatGPT chat's latest answer");
 });

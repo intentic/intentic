@@ -79,15 +79,15 @@ const saveMedia = async (from: SandboxKey, what: { readonly ref: string | undefi
     return `Saved ${megabytes(saved.bytes)} (${saved.mimeType}) to ${saved.path}. It is a file in your sandbox now: read it from that path.`;
 };
 
-interface Collected {
+export interface Collected {
     readonly data: Uint8Array;
     readonly name: string;
     readonly mimeType: string;
 }
 
 // The file for `ticket`, from the sandbox that minted it (the one whose socket the call came over), on this browser's
-// own token; or the sandbox's own sentence why not.
-const collectFile = async (from: SandboxKey, ticket: string): Promise<Collected> => {
+// own token; or the sandbox's own sentence why not. The ChatGPT kit collects its attachments through it too.
+export const collectFile = async (from: SandboxKey, ticket: string): Promise<Collected> => {
     const sandbox = await store.sandbox(from);
     if (sandbox === undefined) {
         throw new RefusedError(`This browser is not paired with a sandbox any more.`);

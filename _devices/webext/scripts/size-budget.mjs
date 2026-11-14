@@ -20,7 +20,10 @@ const BUDGETS = {
     // the agent's downloads (tools/media*.ts, page/media-driver.ts), 19.5 kB of it measured.
     // 2026-11-12: 325.5 kB with all four together and their review fixes (refusal wording, save_media's type rules,
     // the kit's tab release); the ceiling leaves 3.5 kB.
-    "background.js": 329_000,
+    // 2026-11-14: up 20 kB (325.5 to 345.5, measured against main's build) for the ChatGPT kit's chatgpt_send and
+    // chatgpt_read: the sandbox's project (kits/chatgpt/project*.ts), the chat engine with files and tools (chat.ts),
+    // and the answers it words (answers.ts). The ceiling again leaves 3.5 kB.
+    "background.js": 349_000,
     // Injected into every intentic.dev page, so it stays two constants and a listener. 374 bytes today.
     "pair-bridge.js": 4_000,
     // The popup's own script; it holds no schema surface. 20.6 kB on 2026-10-28, up from 16.9 kB, for the Sandboxes

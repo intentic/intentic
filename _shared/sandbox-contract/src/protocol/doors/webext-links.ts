@@ -44,6 +44,10 @@ export const WEBEXT_MEDIA_SOURCE_HEADER = "x-intentic-source";
 // browser and adds the ticket the file is collected with (the sandbox's webext/file-tickets.ts).
 export const WEBEXT_UPLOAD_TOOL = "upload_file";
 
+// The ChatGPT kit's send, whose `files` (sandbox paths) are ticketed the same way, one ticket per file, into its
+// `tickets` in the same order.
+export const WEBEXT_CHATGPT_SEND_TOOL = "chatgpt_send";
+
 // How long a file ticket waits to be collected; the extension collects it before it asks the person anything.
 export const WEBEXT_FILE_TICKET_TTL_MS = 60_000;
 

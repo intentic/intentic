@@ -3,7 +3,7 @@ import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities
 import { grantSite } from "@intentic/sandbox-contract/schemas/needs";
 import type { webextContract } from "@intentic/sandbox-contract/contracts/webext.contract";
 import { WEBEXT_HEARTBEAT_MS, type WebExtHello, WebExtHelloSchema } from "@intentic/sandbox-contract/protocol/doors/webext-protocol";
-import { WEBEXT_TICKET_TOOL, WEBEXT_UPLOAD_TOOL } from "@intentic/sandbox-contract/protocol/doors/webext-links";
+import { WEBEXT_TICKET_TOOL } from "@intentic/sandbox-contract/protocol/doors/webext-links";
 import type { WebExtFacts, WebExtScopes, WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { ContractRouterClient } from "@orpc/contract";
 import { z } from "zod";
@@ -17,6 +17,7 @@ import type { PeerStore } from "../peers/peer-store.js";
 import { webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
 import { accountCovering, accountHostsOf, signedInDoor } from "../browser/tools/account-hosts.js";
 import { WEBEXT_CALL_TIMEOUT_MS } from "../peers/webext-call-deadline.js";
+import { TICKETED_TOOLS } from "./file-tickets.js";
 import { fitToClient, withNote } from "./webext-client-ceiling.js";
 
 // The user's own browser as a peer door, through the extension that dials this sandbox and serves `webextContract`.
@@ -256,10 +257,10 @@ export const webextPeerRoutes = (services: Services) => {
         hub: services.webextHub,
         summaries: () => webextSummaries(services),
         sealAnswer,
-        // An `upload_file` call gets the one-time ticket its file is collected with, or the agent reads why that file
-        // may not go to a website (file-tickets.ts); every other message goes on as it came.
+        // An `upload_file` call (or a `chatgpt_send` with files) gets the one-time tickets its files are collected with,
+        // or the agent reads why a file may not go to a website (file-tickets.ts); every other message goes on as it came.
         route: async (id, message) =>
-            message.method === "tools/call" && CalledSchema.safeParse(message.params).data?.name === WEBEXT_UPLOAD_TOOL
+            message.method === "tools/call" && TICKETED_TOOLS.has(CalledSchema.safeParse(message.params).data?.name ?? "")
                 ? await services.fileTickets.route(id, message, services.workspace.root)
                 : undefined,
         // The person's browser asks for a site by lighting its own badge; the same ask goes up as a card in the chat

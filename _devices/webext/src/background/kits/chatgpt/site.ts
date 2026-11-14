@@ -53,6 +53,27 @@ export interface ChatGptPage {
     readonly limit: Pattern;
     readonly error: Pattern;
     readonly refusal: Pattern;
+    // THE PROJECT a sandbox's chats live in (project.ts). All guesses (2026-11-14): written from OpenAI's help pages,
+    // not a snapshot. guess: the sidebar's "New project" button opens a dialog with a "Project name" box, a settings
+    // (gear) button holding the memory choice, and "Create project".
+    readonly newProject: Lookup;
+    readonly projectName: Lookup;
+    readonly projectSettings: Lookup;
+    readonly projectOnlyMemory: Lookup;
+    readonly createProject: Lookup;
+    // guess: a project's page offers "Add instructions" (or "Instructions"), a dialog with one text box and "Save".
+    readonly projectInstructions: Lookup;
+    readonly instructionsBox: Lookup;
+    readonly save: Lookup;
+    // THE COMPOSER'S TOOLS. seen: `button "Add files and more"` beside the message box. guess: it opens a menu whose
+    // items name each tool, and a chosen tool shows as a pill button in the composer named after it.
+    readonly toolsMenu: Lookup;
+    readonly modes: { readonly deep_research: Pattern; readonly agent: Pattern };
+    // guess: the composer's own file input, which "Add photos & files" opens.
+    readonly fileInput: string;
+    // guess: what ChatGPT puts in front of an answer it will not go on with until the person says so: an app about to
+    // search outside the project, agent mode's sensitive step, a sign-in it hands over. The kit never presses one.
+    readonly confirmation: Lookup;
 }
 
 export const CHATGPT_PAGE: ChatGptPage = {
@@ -69,12 +90,24 @@ export const CHATGPT_PAGE: ChatGptPage = {
     assistantTurn: '[data-message-author-role="assistant"]',
     anyTurn: "article",
     signIn: { role: "button", name: pattern(/^(Log in|Sign up( for free)?)$/i) },
-    working: pattern(/^(Thinking|Creating image|Generating image|Getting started)\b/),
+    working: pattern(/^(Thinking|Creating image|Generating image|Getting started|Researching|Starting research|Searching|Working)\b/),
     limit: pattern(/(reached (?:your|the) [^.]*limit|usage (?:limit|cap)|rate limit|too many requests|limit resets|hit the (?:free )?plan limit)/i),
     error: pattern(/(something went wrong|there was an error|an error occurred|network error|error in (?:the )?message stream|unable to load conversation)/i),
     refusal: pattern(
         /(\b(?:can(?:'|’)?t|cannot|unable to|not able to|won(?:'|’)t be able to)\b[^.]{0,40}\b(?:help|create|generate|make|produce|fulfil)|content polic|violat|against (?:our|the) (?:usage )?polic)/i,
     ),
+    newProject: { role: "button", name: pattern(/^New project$/i), testId: "create-new-project-button" },
+    projectName: { role: "textbox", name: pattern(/^(Project name|Name)/i) },
+    projectSettings: { role: "button", name: pattern(/^(Project settings|Settings|Memory)/i) },
+    projectOnlyMemory: { role: "menuitemradio", name: pattern(/^Project-only/i) },
+    createProject: { role: "button", name: pattern(/^Create( project)?$/i) },
+    projectInstructions: { role: "button", name: pattern(/^(Add instructions|Instructions)/i) },
+    instructionsBox: { role: "textbox", name: pattern(/instruction/i) },
+    save: { role: "button", name: pattern(/^Save$/i) },
+    toolsMenu: { role: "button", name: pattern(/^(Add files and more|Add photos (&|and) files|Tools)/i), testId: "composer-plus-btn" },
+    modes: { deep_research: pattern(/^Deep research/i), agent: pattern(/^Agent( mode)?/i) },
+    fileInput: 'form input[type="file"]',
+    confirmation: { role: "button", name: pattern(/^(Confirm|Allow|Approve|Take over|Continue)$/i) },
 };
 
 // The site's addresses, used only by the worker.
@@ -85,6 +118,9 @@ export const CHATGPT_SITE = {
     // instructions") until the Personalized menu is set to Unpersonalized.
     newTemporaryChat: "https://chatgpt.com/?temporary-chat=true",
     chat: (id: string): string => `https://chatgpt.com/c/${id}`,
-    // seen: a chat's address once its first message is sent.
-    chatPath: /^\/c\/([A-Za-z0-9-]{6,80})(?:[/?#]|$)/,
+    // seen: a chat's address once its first message is sent. guess: a chat in a project lives under the project's own
+    // path, /g/g-p-<id>-<slug>/c/<chat>, and /c/<chat> takes the browser there.
+    chatPath: /^(?:\/g\/[A-Za-z0-9-]+)?\/c\/([A-Za-z0-9-]{6,80})(?:[/?#]|$)/,
+    // guess: a project's page, /g/g-p-<id>-<slug>/project, whose message box starts a chat in the project.
+    projectPath: /^\/g\/(g-p-[A-Za-z0-9]+)[A-Za-z0-9-]*(?:\/project|\/c\/|\/?$)/,
 } as const;

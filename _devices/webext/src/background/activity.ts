@@ -30,6 +30,11 @@ const savedFrom = (args: CallArgs): string => {
 
 // The last part of a sandbox path: the file's name, which is what the person is asked about too.
 const fileName = (path: string): string => oneLine(path.split("/").pop() ?? "", 60) || "a file";
+// chatgpt_send's files, by count: their names are asked about on the page, not kept in the list.
+const attachedCount = (args: CallArgs): string => {
+    const files = Array.isArray(args["files"]) ? args["files"].length : 0;
+    return files === 0 ? "" : ` with ${files} file${files === 1 ? "" : "s"} attached`;
+};
 
 // The calls whose sentence takes nothing from their arguments.
 const FIXED = new Map([
@@ -64,6 +69,8 @@ const ARGUED_CALLS = new Map<string, (args: CallArgs) => string>([
     ["save_media", (args) => `Saved ${savedFrom(args)} into its sandbox`],
     [WEBEXT_UPLOAD_TOOL, (args) => `Attached “${fileName(text(args["path"]))}” from its sandbox to ${text(args["ref"])}`],
     ["chatgpt_image", (args) => `Asked ChatGPT for an image: “${oneLine(text(args["prompt"]), 60)}”`],
+    ["chatgpt_send", (args) => `Asked ChatGPT: “${oneLine(text(args["prompt"]), 60)}”${attachedCount(args)}`],
+    ["chatgpt_read", () => "Read a ChatGPT chat's latest answer"],
 ]);
 
 // One tool call as a sentence ("Typed 86 characters and submitted"), so the popup's list reads as what happened, not

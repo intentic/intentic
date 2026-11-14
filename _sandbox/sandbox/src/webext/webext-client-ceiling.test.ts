@@ -35,10 +35,20 @@ test("chatgpt_image is refused before it starts under a 60 s client, naming the 
     const fitted = fitToClient(call("chatgpt_image", { prompt: "a lotus" }), CURSOR);
     expect(fitted.kind).toBe("refused");
     const text = JSON.stringify(fitted.kind === "refused" ? fitted.answer : {});
-    expect(text).toContain("needs a runtime that can wait up to 9 minutes");
-    expect(text).toContain("call wait_for again and again with seconds at most 50");
-    expect(text).toContain("save_media");
+    expect(text).toContain(`use chatgpt_send with mode \\"image\\" and wait at most 50`);
+    expect(text).toContain("chatgpt_read (wait at most 50, again until it is done) collects and saves the image");
     expect(text).toContain(`"isError":true`);
+});
+
+test("chatgpt_send and chatgpt_read are shortened to the client's ceiling, an unset wait counted as the browser's own", () => {
+    const send = fitToClient(call("chatgpt_send", { prompt: "a report" }), CURSOR);
+    expect(send).toMatchObject({ kind: "shortened", message: { params: { arguments: { prompt: "a report", wait: 50 } } } });
+    expect(send.kind === "shortened" ? send.note : "").toBe(
+        "This runtime's MCP client stops waiting at 60 s, so this chatgpt_send waited at most 50 s instead of 540 s. If ChatGPT is still working, call chatgpt_read again to keep waiting.",
+    );
+    expect(fitToClient(call("chatgpt_read", { chat: "abc123" }), CURSOR)).toEqual({ kind: "as-is" });
+    expect(fitToClient(call("chatgpt_read", { chat: "abc123", wait: 50 }), CURSOR)).toEqual({ kind: "as-is" });
+    expect(fitToClient(call("chatgpt_read", { chat: "abc123", wait: 51 }), CURSOR)).toMatchObject({ kind: "shortened", message: { params: { arguments: { wait: 50 } } } });
 });
 
 test("through the browser's endpoint: the shortened call is what the browser is asked, and the note follows its answer", async () => {

@@ -137,32 +137,49 @@ flowchart LR
   updates, so the worker registers them again from `chrome.storage.local`. Installed scripts are the person's: they
   stay and keep running when the sandbox that wrote them disconnects, and only its pending request is dropped.
 - **Site kits** ([`src/background/kits/`](src/background/kits/kit.ts)): one site's whole job in one tool call, where
-  the generic page tools would take an agent a snapshot, a click and a check per step. The first is ChatGPT's
-  `chatgpt_image`: it opens a temporary chat in the agent's window, sets its "Personalized" menu to "Unpersonalized"
-  (so the owner's memory and custom instructions stay out of the picture; `personalized: true` leaves it on), types the
-  prompt into the composer the way a person's typing reaches a rich editor, sends it, waits up to 9 minutes for the
-  picture, and saves it into the sandbox through `saveMediaFromTab` ([`tools/media.ts`](src/background/tools/media.ts)).
+  the generic page tools would take an agent a snapshot, a click and a check per step. The ChatGPT kit has three:
+  `chatgpt_send` (one prompt in, ChatGPT's answer out: words, images saved into the sandbox, files attached from the
+  artifacts shelf, Deep research or agent mode chosen from the composer's tools menu), `chatgpt_read` (a chat's latest
+  answer, waited for, for a job that outlived the call that sent it) and `chatgpt_image` (the same engine, done only
+  when a picture comes). Each types the prompt into the composer the way a person's typing reaches a rich editor, sends
+  it, waits up to 9 minutes, and saves pictures through `saveMediaFromTab` and long answers through `saveBytes`
+  ([`tools/media.ts`](src/background/tools/media.ts)). It never presses ChatGPT's own confirmation buttons (an app
+  searching outside the project, agent mode's sensitive step): the answer says ChatGPT is waiting on the person.
   A kit has no power the page tools lack: the browser not paused, the card's "Click and type", the site allowed in read
   and act (checked before anything opens, so a site never allowed is never loaded and the agent is told to
-  `ask_access`), the banner and the activity record. It works in a new tab beside the agent's own and gives the front
-  back when done, or in a new tab in front of the person when they chose to have it work in their tabs.
+  `ask_access`), the banner and the activity record. Files are asked about on the page every time, as `upload_file`'s
+  are, and travel on the same one-time tickets the daemon adds (`chatgpt_send`'s `files` get one each). It works in a
+  new tab beside the agent's own and gives the front back when done, or in a new tab in front of the person when they
+  chose to have it work in their tabs.
+  - New chats go into one ChatGPT project per sandbox, "Intentic · <sandbox>", made on first use with project-only
+    memory and instructions of its own ([`kits/chatgpt/project.ts`](src/background/kits/chatgpt/project.ts)), and
+    remembered in `chrome.storage.local`. Until 2026-11-14 every chat was temporary and unpersonalized, which kept the
+    owner's memory out but also turned off apps and connectors (OpenAI's help page: an unpersonalized temporary chat
+    "does not use memory, custom instructions, or plugins") and could not be opened again once its tab moved on. A
+    project with project-only memory keeps their saved memories and other chats out while every tool works. Rejected:
+    regular chats (their memory shapes the answer) and one project for every sandbox (one sandbox's chats would become
+    another's context). When the project cannot be made, the call falls back to a temporary, unpersonalized chat and
+    says so; `temporary: true` asks for one, and `personalized: true` uses a regular chat with the owner's memory.
   - A kit breaks when its site changes its page, and that is expected. Each keeps every string and element lookup it
     assumes in one table, `kits/<site>/site.ts`, with each line marked as seen in a real snapshot or guessed, so the
     fix after a redesign is there. Elements are found by role and accessible name, as the snapshot names them, not by
     class names.
+  - One call to this browser is capped at ten minutes, so a call waits at most 9 (`wait` shortens it; the daemon cuts
+    it further for a runtime whose client gives up sooner) and answers that ChatGPT is still working; `chatgpt_read`
+    collects the rest, never a second send.
   - ChatGPT's page is watched in rounds of 30 seconds from the worker rather than one long injected wait: Chrome ends a
     worker whose single call runs past five minutes, the page may be replaced mid-answer (sending moves it from `/` to
     `/c/<id>`), and each round re-checks pause and the site's grant. Inside a round the page is watched with a
     MutationObserver and single timers, never animation frames or chained timers, which a page behind the person's
     window does not get on time. A lost answer from the page is asked again, never treated as a failure, so a send is
     never repeated on that account.
-  - Every chat it starts is temporary, and ChatGPT cannot load a temporary chat again by its address, so continuing
-    (`chat`) means the tab that chat lives in, still on it; the tab is kept from being discarded. Once that tab has
-    closed or moved on, the agent is told to start a new chat. A chat id that is not one it made is loaded by address
-    as one of the account's own chats, and only with `personalized: true`, since the owner's memory and history apply
-    there. A tab a call opened is closed again when the call ends before sending; once a prompt is sent the tab stays
-    for the chat, and when a chat falls out of the kit's memory (20 per sandbox) its tab is closed if it still sits in
-    the agent's window on that chat, else made discardable again.
+  - Continuing (`chat`) uses the tab the chat lives in when it is still on it, kept from being discarded. A project chat
+    whose tab has gone is loaded again by its address; a temporary one cannot be, and the agent is told to start a new
+    chat. A chat id it does not remember is opened by address to see whether it sits in the sandbox's project; one that
+    does not is one of the account's own, sent into only with `personalized: true` (its tab is closed again otherwise),
+    and read by `chatgpt_read` either way. A tab a call opened is closed again when the call ends before sending; once
+    a prompt is sent the tab stays for the chat, and when a chat falls out of the kit's memory (20 per sandbox) its tab
+    is closed if it still sits in the agent's window on that chat, else made discardable again.
   - A kit's in-page helpers refuse to install on any host but the kit's own, so a tab redirected mid-call (a sign-in
     page) is never read.
 - Chrome kills an idle MV3 worker, so the worker holds no state: everything lives in `chrome.storage.local`, and an
