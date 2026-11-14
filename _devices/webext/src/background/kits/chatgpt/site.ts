@@ -53,9 +53,10 @@ export interface ChatGptPage {
     readonly limit: Pattern;
     readonly error: Pattern;
     readonly refusal: Pattern;
-    // THE PROJECT a sandbox's chats live in (project.ts). All guesses (2026-11-14): written from OpenAI's help pages,
-    // not a snapshot. guess: the sidebar's "New project" button opens a dialog with a "Project name" box, a settings
-    // (gear) button holding the memory choice, and "Create project".
+    // THE PROJECT a sandbox's chats live in (project.ts). seen (2026-11-14, Brave 157, a workspace account): the
+    // sidebar's "Projects" section holds `button "Add new project"` and `list "No projects"` (or a link per project).
+    // guess, from OpenAI's help pages: it opens a dialog with a "Project name" box, a settings (gear) button holding the
+    // memory choice, and "Create project". A plain click() did not open it; the kit's pointer-sequence press is untested.
     readonly newProject: Lookup;
     readonly projectName: Lookup;
     readonly projectSettings: Lookup;
@@ -65,7 +66,8 @@ export interface ChatGptPage {
     readonly projectInstructions: Lookup;
     readonly instructionsBox: Lookup;
     readonly save: Lookup;
-    // THE COMPOSER'S TOOLS. seen: `button "Add files and more"` beside the message box. guess: it opens a menu whose
+    // THE COMPOSER'S TOOLS. seen (2026-11-14): `button "Add files and more"` beside `textbox "Ask ChatGPT"`, and a
+    // `group "Composer mode"` above them with `button "Chat"` and `button "Work"`. guess: the button opens a menu whose
     // items name each tool, and a chosen tool shows as a pill button in the composer named after it.
     readonly toolsMenu: Lookup;
     readonly modes: { readonly deep_research: Pattern; readonly agent: Pattern };
@@ -96,7 +98,7 @@ export const CHATGPT_PAGE: ChatGptPage = {
     refusal: pattern(
         /(\b(?:can(?:'|’)?t|cannot|unable to|not able to|won(?:'|’)t be able to)\b[^.]{0,40}\b(?:help|create|generate|make|produce|fulfil)|content polic|violat|against (?:our|the) (?:usage )?polic)/i,
     ),
-    newProject: { role: "button", name: pattern(/^New project$/i), testId: "create-new-project-button" },
+    newProject: { role: "button", name: pattern(/^(Add new project|New project)$/i), testId: "create-new-project-button" },
     projectName: { role: "textbox", name: pattern(/^(Project name|Name)/i) },
     projectSettings: { role: "button", name: pattern(/^(Project settings|Settings|Memory)/i) },
     projectOnlyMemory: { role: "menuitemradio", name: pattern(/^Project-only/i) },
