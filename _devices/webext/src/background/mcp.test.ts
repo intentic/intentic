@@ -112,6 +112,7 @@ test("the tool list says which tools only read and which can lose something", as
         "screenshot",
         "scripts",
         "script_logs",
+        "chatgpt_read",
     ]);
     expect(tools.filter((tool) => tool.annotations.destructiveHint).map((tool) => tool.name)).toEqual([
         "click",
@@ -122,6 +123,7 @@ test("the tool list says which tools only read and which can lose something", as
         "script_try",
         "script_remove",
         "type_ticket",
+        "chatgpt_send",
         "upload_file",
     ]);
 });
