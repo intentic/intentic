@@ -61,8 +61,11 @@ install -m 644 "$ROOT/rootfs/wsl.conf" "$WORK/rootfs/etc/wsl.conf"
 # dockerd bridge NAT needs iptables; TLS at install needs openssl; HTTPS pulls need ca-certificates.
 cp /etc/resolv.conf "$WORK/rootfs/etc/resolv.conf"
 run_chroot() {
-  if chroot "$WORK/rootfs" "$@"; then
-    return 0
+  local status=0
+  chroot "$WORK/rootfs" "$@" || status=$?
+  # chroot(1) exits 125 when it cannot enter the root itself; any other code is the command's own.
+  if [ "$status" -ne 125 ]; then
+    return "$status"
   fi
   if command -v sudo >/dev/null 2>&1; then
     sudo chroot "$WORK/rootfs" "$@"
@@ -73,7 +76,17 @@ run_chroot() {
 }
 # passt (pasta) and socat give dockerd a network namespace of its own: the way out, and the loopback forwards in
 # (rootfs/intentic-engine). A distro imported from 1.0.0 fetches them on its first start of a newer keeper.
-run_chroot /sbin/apk add --no-cache iptables ip6tables openssl ca-certificates passt socat
+# The Alpine CDN answers "temporary error" now and then, and apk does not retry an index fetch, so retry here.
+apk_attempt=1
+until run_chroot /sbin/apk add --no-cache iptables ip6tables openssl ca-certificates passt socat; do
+  if [ "$apk_attempt" -ge 5 ]; then
+    echo "error: apk add failed after $apk_attempt attempts" >&2
+    exit 1
+  fi
+  echo "apk add failed (attempt $apk_attempt); retrying in $((apk_attempt * 10))s" >&2
+  sleep $((apk_attempt * 10))
+  apk_attempt=$((apk_attempt + 1))
+done
 rm -f "$WORK/rootfs/etc/resolv.conf"
 
 NAME="intentic-engine-${ENGINE_VERSION}-x86_64.tar.gz"
