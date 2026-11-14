@@ -119,7 +119,7 @@ RUN printf '%s\n' \
 # ponytail: bump together with package.json's packageManager field.
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PATH
-RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.17.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.19.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 # bun on PATH. Every package's tests run on Bun (`suites` is `bun test`), every typecheck is `bun check`, and the
@@ -174,7 +174,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # with a preferred answer. Debian's own `yq` package is a DIFFERENT program (a Python wrapper around jq) whose
 # write syntax is not the one every model has learned, so this is upstream's Go binary — pinned and
 # version-checked like cloudflared, same rationale.
-ARG YQ_VERSION=4.54.1
+ARG YQ_VERSION=4.54.3
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${arch}" -o /usr/local/bin/yq \
     && chmod +x /usr/local/bin/yq \
