@@ -229,6 +229,40 @@ describe("a conversation's standing yes", () => {
         expect((await elsewhereSettled).resolved.reply).toBeUndefined();
     });
 
+    // Asked as the card is raised, not once its raiser waits on it: the push announcing it waits for the answer, so a
+    // conversation allowed everything never buzzes a phone for a card that freezes as Allowed (push/card-push.test.ts).
+    test("a card it answers needs nobody told, known before anything waits on the card; one it may not answer still does", async () => {
+        const { registry, allowed } = standingCards();
+        allowed.add("c-1");
+        const answered = registry.create("permission", denied, "c-1");
+        const hard = registry.create("permission", denied, "c-1", { alwaysAsks: true });
+        const elsewhere = standingOn(registry, "c-2").create("permission", denied);
+
+        expect(await registry.waitsOnPerson(answered.id)).toBe(false);
+        expect(await registry.waitsOnPerson(hard.id)).toBe(true);
+        expect(await registry.waitsOnPerson(elsewhere.id)).toBe(true);
+        expect(await registry.waitsOnPerson("raised-elsewhere")).toBeUndefined();
+        expect((await answered.wait(live())).reply).toMatchObject({ decision: "everything" });
+    });
+
+    test("a grant that cannot be read answers nothing, and the card waits on a person", async () => {
+        const failures: unknown[] = [];
+        const registry = parkedCards(memoryFleet().conversations, {
+            allowed: async () => {
+                throw new Error("conversation-grants.json is unreadable");
+            },
+            allow: async () => undefined,
+            failed: (cause) => failures.push(cause),
+        });
+        const { id, wait } = registry.create("permission", denied, "c-1");
+        const settled = wait(live());
+
+        expect(await registry.waitsOnPerson(id)).toBe(true);
+        expect(failures).toHaveLength(1);
+        expect(registry.resolve({ kind: "permission", requestId: id, decision: "once" })).toBe("settled");
+        expect((await settled).reply).toMatchObject({ decision: "once" });
+    });
+
     test("on a card no standing yes may answer, everything is the allow-once it can be, and nothing is kept", async () => {
         const { registry, kept } = standingCards();
         const { id, wait } = registry.create("permission", denied, "c-1", { alwaysAsks: true });
@@ -314,8 +348,8 @@ test("while the owner sleeps, an agent's own question is answered as it is raise
     const sleeping = parkedCards(memoryFleet().conversations, undefined, undefined, (fields, message) => lines.push([fields, message]), nightOf({ value: true }));
     const { id, wait } = sleeping.create("question", onAbort, "c-1", { night: ASKED });
 
-    // Known before the frame announcing it goes out, which is when the push asks.
-    expect(sleeping.settledOnRaise(id)).toBe(true);
+    // Known before the frame announcing it goes out, and before anything waits on it: nobody is told it waits.
+    expect(await sleeping.waitsOnPerson(id)).toBe(false);
     const { reply, resolved } = await wait(new AbortController().signal);
     expect(reply).toEqual({ kind: "question", requestId: id, answers: { Which: ["A (Recommended)"] }, night: { outcome: "picked", until: "07:00" } });
     // The frozen card carries the mark, so the morning reader sees the sandbox chose.
@@ -328,9 +362,10 @@ test("a card that names no night, as a consent gate or a permission does, waits 
     const { id, wait } = sleeping.create("question", onAbort, "c-1");
     const settled = wait(new AbortController().signal);
 
-    expect(sleeping.settledOnRaise(id)).toBe(false);
+    expect(await sleeping.waitsOnPerson(id)).toBe(true);
     expect(sleeping.resolve({ kind: "question", requestId: id, answers: { Which: ["B"] } })).toBe("settled");
     expect((await settled).reply).toEqual({ kind: "question", requestId: id, answers: { Which: ["B"] } });
+    expect(await sleeping.waitsOnPerson(id)).toBe(false);
 });
 
 test("a question raised in the evening and left unanswered is answered once the night begins", async () => {
@@ -339,7 +374,7 @@ test("a question raised in the evening and left unanswered is answered once the 
     const { id, wait } = evening.create("question", onAbort, "c-1", { night: ASKED });
     const settled = wait(new AbortController().signal);
 
-    expect(evening.settledOnRaise(id)).toBe(false);
+    expect(await evening.waitsOnPerson(id)).toBe(true);
     asleep.value = true;
     const { reply } = await settled;
     expect(reply).toMatchObject({ kind: "question", requestId: id, night: { outcome: "picked" } });

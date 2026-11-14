@@ -238,7 +238,7 @@ describe("held status reads", () => {
             await new Promise((resolve) => setImmediate(resolve));
             const question = { requestId: "q1", status: "pending" as const, questions: [] };
             parkIn(status.conversationId, [{ role: "assistant", text: "", question }]);
-            noteLinkTurnAwaiting({ conversationId: status.conversationId, awaiting: "question" });
+            noteLinkTurnAwaiting({ conversationId: status.conversationId, awaiting: "question", requestId: "q1" });
             await waitFor(() => expect(finished).toBe(true), SETTLES);
             expect(await held).toMatchObject({ state: "blocked", question: { requestId: "q1" } });
         } finally {

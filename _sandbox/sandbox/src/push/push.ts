@@ -21,14 +21,16 @@ import { sendWebPush } from "./senders/webpush.js";
 // 3. A push failure never touches the caller: every send is fire-and-forget.
 // 4. What each tagged notification said is kept for the members it was sent to (sent-notifications.ts), for a native app
 //    whose push carried only the tag.
+// 5. An ask that stops waiting is replaced wherever it showed (`withdraw`), including where it was still on its way.
 
 // How many devices a send reached; the turn lifecycle ignores it, but the test button needs it to catch a silent zero.
 export interface PushDelivery {
     readonly delivered: number;
     readonly failed: number;
     // Why nothing was sent, when nothing was: no device registered, or every device's person is at a screen.
-    // Or a card night hours answered as it was raised, which waits on nobody (agent/night).
-    readonly skipped?: "no device registered" | "nobody it is for has a device" | "everyone is watching" | "it never showed" | "night hours answered it";
+    // Or a card that stopped waiting before anybody was told, answered by night hours or a conversation's standing yes
+    // as it was raised, or by a person quicker than the push (awaiting-detail.ts): it waits on nobody.
+    readonly skipped?: "no device registered" | "nobody it is for has a device" | "everyone is watching" | "it never showed" | "answered before anyone was told";
 }
 
 // Who each device's person is as the roster admits them now (auth/members/member-caller.ts rosterCaller), read per send.
@@ -47,6 +49,7 @@ export interface PushSender {
     readonly test: (notification: PushNotification, member: string | undefined) => Promise<PushDelivery>;
     // Replaces an ask that stopped waiting (answered here or elsewhere, stopped) under its tag, on exactly the devices
     // its persistent notification reached: none at all when it never showed, so a settled ask never pushes on its own.
+    // An ask still on its way is waited for, and replaced once it lands.
     readonly withdraw: (replacement: PushNotification & { readonly tag: string }) => Promise<PushDelivery>;
     // The last notification under this tag that was sent to this member's devices, while it is kept: the words a native
     // app's push left out. Undefined for any tag none of their devices was sent.
@@ -128,6 +131,36 @@ const platformIdOf = async (sandbox: (() => Promise<string | undefined>) | undef
     }
 };
 
+// The persistent asks (`requireInteraction`) still on their way to a device, by tag. Their delivery is what records where
+// they showed, and a card can be answered in the moment between its push being asked for and landing (a person quick on
+// another tab), so a withdrawal waits for them: one that did not would find nothing shown, replace nothing, and leave
+// the ask on the lock screen for a card that no longer waits.
+const asksOnTheirWay = () => {
+    const sending = new Map<string, Set<Promise<unknown>>>();
+    return {
+        track: (notification: PushNotification, delivery: Promise<PushDelivery>): Promise<PushDelivery> => {
+            const tag = notification.requireInteraction === true ? notification.tag : undefined;
+            if (tag === undefined) {
+                return delivery;
+            }
+            const under = sending.get(tag) ?? new Set<Promise<unknown>>();
+            sending.set(tag, under.add(delivery));
+            const done = (): void => {
+                under.delete(delivery);
+                if (under.size === 0 && sending.get(tag) === under) {
+                    sending.delete(tag);
+                }
+            };
+            void delivery.then(done, done);
+            return delivery;
+        },
+        // Resolves once every ask under this tag that was on its way has landed or failed.
+        landed: async (tag: string): Promise<void> => {
+            await Promise.allSettled(sending.get(tag) ?? []);
+        },
+    };
+};
+
 export const createPushSender = (
     store: PushStore,
     logger: Logger,
@@ -151,6 +184,7 @@ export const createPushSender = (
     // screen until tapped, so the only ones a withdrawal has to replace. Kept in memory: an ask pushed before a restart
     // stays until it is tapped, which is how every ask behaved before withdrawal existed.
     const shown = new Map<string, Set<string>>();
+    const flying = asksOnTheirWay();
     const sentWords = createSentNotifications();
     // Sends to every registered device `meant` keeps that `away` also keeps (presence, read as the send is asked for).
     const send = async (asked: PushNotification, meant: (channel: StoredChannel) => boolean, away: (channel: StoredChannel) => boolean = () => true): Promise<PushDelivery> => {
@@ -201,14 +235,15 @@ export const createPushSender = (
 
     const meantFor = async (to: Audience): Promise<(channel: StoredChannel) => boolean> => reachedBy(to, await roster());
     return {
-        notify: async (notification, to) => send(notification, await meantFor(to)),
+        notify: (notification, to) => flying.track(notification, (async () => send(notification, await meantFor(to)))()),
         // Presence is read as the notification is asked for, not once the store answers.
-        notifyIfAway: async (notification, to) => {
+        notifyIfAway: (notification, to) => {
             const away = awayNow();
-            return send(notification, await meantFor(to), away);
+            return flying.track(notification, (async () => send(notification, await meantFor(to), away))());
         },
         test: (notification, member) => send(notification, (channel) => (member === undefined ? channel.member === undefined : channel.member?.toLowerCase() === member.toLowerCase())),
         withdraw: async (replacement) => {
+            await flying.landed(replacement.tag);
             const reached = shown.get(replacement.tag);
             if (reached === undefined) {
                 return { ...NOTHING_SENT, skipped: "it never showed" };

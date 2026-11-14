@@ -254,7 +254,7 @@ export const startConversationTurn = async (
         transcript: async (rows, steerRows) => (await recordUnrecordedRuns(services, conversationId)) && recordTurnTranscript(services, turn, rows, steerRows),
         attempts,
         observer: {
-            awaiting: (awaiting) => services.events.publish("turn.awaiting", { conversationId, awaiting }),
+            awaiting: (awaiting, requestId) => services.events.publish("turn.awaiting", { conversationId, awaiting, requestId }),
             settled: (outcome) => services.events.publish("turn.finished", { conversationId, prompt, outcome }),
         },
         ...(senderKeeps

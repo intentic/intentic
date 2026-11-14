@@ -107,25 +107,15 @@ const logSettled = (log: CardLog, about: CardAbout, { reply, answered, fromUser,
     log({ ...about, reason: cancelled ?? (fromUser ? `a reply of kind ${reply.kind} answered it` : "settled unanswered"), waitedMs }, `card: ${about.kind} cancelled`);
 };
 
-// Asks the standing yes for a card it may answer (`standingId`, the conversation it may answer it for), which settles
-// the card at once where it stands.
-const askStanding = (
-    standing: StandingYes | undefined,
-    answerable: Map<string, string>,
-    card: { readonly id: string; readonly standingId: string | undefined },
-    settle: Waiter,
-): void => {
-    const { id, standingId } = card;
-    if (standingId === undefined || standing === undefined) {
-        return;
-    }
-    answerable.set(id, standingId);
-    void standing.allowed(standingId).then((yes) => {
-        if (yes) {
-            settle(everythingFor(id), true, undefined);
-        }
-    }, standing.failed);
-};
+// Reads the standing yes for a card it may answer (`standingId`, the conversation it may answer it for): true when it
+// stands. Read as the card is raised, before anyone is told it waits; a grant that cannot be read answers nothing.
+const readStanding = (standing: StandingYes | undefined, standingId: string | undefined): Promise<boolean> =>
+    standingId === undefined || standing === undefined
+        ? Promise.resolve(false)
+        : standing.allowed(standingId).catch((cause: unknown) => {
+              standing.failed(cause);
+              return false;
+          });
 
 // Bundled together since only this module can tell a real answer from the abort stand-in; re-deriving that from a
 // caller's own abort signal would race the settle it describes.
@@ -166,9 +156,11 @@ export interface ParkedCards {
     // Which conversation is parked on this card, for a settlement that acts on the turn rather than only answering it.
     // Read before resolving; the card is gone once it settles.
     readonly conversationOf: (requestId: string) => string | undefined;
-    // Whether this card was answered the moment it was raised, by night hours: nobody needs telling it waits, so its push
-    // is never sent (push/awaiting-detail.ts). Known only for a short while after it was raised.
-    readonly settledOnRaise: (requestId: string) => boolean;
+    // Whether anybody needs telling that this card waits (push/awaiting-detail.ts), answered once every answer the sandbox
+    // gives on its own (night hours, the conversation's standing yes) has had its say: true while it still waits on a
+    // person, false once it settled or one of those answered it. Undefined for a card this registry did not raise, or
+    // raised so long ago it no longer remembers it, which nobody announces that late.
+    readonly waitsOnPerson: (requestId: string) => Promise<boolean | undefined>;
 }
 
 /** How many cards the conversation's turn waits on an answer to; one answered leaves this count as its reply lands. */
@@ -192,7 +184,7 @@ export const standingOn = (cards: ParkedCards, conversationId: string | undefine
 
 /* WHICH CARDS NIGHT HOURS MAY ANSWER, AND HOW THE CARD REGISTRY ASKS THEM (below).
 
-   Asked twice over a card's life: as it is raised, before its frame goes out, so a card answered at once is never
+   Asked twice over a card's life: as it is raised, before anybody is told it waits, so a card answered at once is never
    announced to anybody's phone; and again every so often while it waits, since the night may begin, or the last person
    leave the editor, while it does. */
 
@@ -211,14 +203,9 @@ export interface NightAnswers {
 // Who the card log names as having answered a card night hours settled.
 const NIGHT_HOURS = "night hours";
 
-// How many recently raised cards are remembered as answered the moment they were raised: enough to outlast the push that
-// announces a card a microtask after its frame, never a list that grows with the sandbox's life.
-const ON_RAISE_KEPT = 256;
-
 export interface NightOnCards {
-    // The answer a card gets as it is raised, remembered so its push can tell it needs nobody.
+    // The answer a card gets as it is raised, or undefined while night hours would not answer it.
     readonly onRaise: (requestId: string, card: NightCard | undefined) => AgentReply | undefined;
-    readonly settledOnRaise: (requestId: string) => boolean;
     // Asks again while the card waits and hands any answer to `settle`; answers the stop, called once the card settles.
     readonly watch: (requestId: string, card: NightCard | undefined, settle: (reply: AgentReply) => void) => () => void;
 }
@@ -226,33 +213,95 @@ export interface NightOnCards {
 const NOTHING_TO_STOP = (): void => undefined;
 
 /** The registry's side of night hours; with no answers given, nothing is ever answered and nothing is watched. */
-const nightOnCards = (night: NightAnswers | undefined): NightOnCards => {
-    // Newest last, so the oldest is the first to go.
-    const raised = new Set<string>();
-    return {
-        onRaise: (requestId, card) => {
-            const reply = card === undefined ? undefined : night?.answer(requestId, card);
+const nightOnCards = (night: NightAnswers | undefined): NightOnCards => ({
+    onRaise: (requestId, card) => (card === undefined ? undefined : night?.answer(requestId, card)),
+    watch: (requestId, card, settle) => {
+        if (card === undefined || night === undefined) {
+            return NOTHING_TO_STOP;
+        }
+        const timer = setInterval(() => {
+            const reply = night.answer(requestId, card);
             if (reply !== undefined) {
-                raised.add(requestId);
-                if (raised.size > ON_RAISE_KEPT) {
-                    raised.delete(raised.values().next().value ?? requestId);
-                }
+                settle(reply);
             }
-            return reply;
+        }, night.recheckMs);
+        timer.unref();
+        return () => clearInterval(timer);
+    },
+});
+
+/* WHETHER ANYBODY NEEDS TELLING A CARD WAITS (below).
+
+   A card is drawn the moment it is raised, so the transcript records it whatever becomes of it; what answers it on its
+   own (night hours, the conversation's standing yes) is asked as it is raised, and the standing yes is a read of its
+   file. The push that announces the card asks `waitsOnPerson` first, which waits for those answers rather than racing
+   them. 2026-11-14: the standing yes was read only once the raiser waited on the card, after the push had gone out, so
+   a conversation allowed everything still buzzed its owner's phone for a card that froze as Allowed before they could
+   look at it. */
+
+// What became of a recently raised card, as far as telling a person about it goes.
+interface Fate {
+    // Settles once every answer the sandbox gives on its own has had its say: true when one of them answered the card.
+    readonly answeredAlone: Promise<boolean>;
+    settled: boolean;
+}
+
+// How many recently raised cards are remembered: enough to outlast the push that announces a card a moment after its
+// frame, never a list that grows with the sandbox's life.
+const FATES_KEPT = 256;
+
+// The fates of the newest cards, newest last, so the oldest is the first to go.
+const recentFates = () => {
+    const fates = new Map<string, Fate>();
+    return {
+        keep: (requestId: string, fate: Fate): void => {
+            fates.set(requestId, fate);
+            if (fates.size > FATES_KEPT) {
+                fates.delete(fates.keys().next().value ?? requestId);
+            }
         },
-        settledOnRaise: (requestId) => raised.has(requestId),
-        watch: (requestId, card, settle) => {
-            if (card === undefined || night === undefined) {
-                return NOTHING_TO_STOP;
+        waitsOnPerson: async (requestId: string): Promise<boolean | undefined> => {
+            const fate = fates.get(requestId);
+            if (fate === undefined) {
+                return undefined;
             }
-            const timer = setInterval(() => {
-                const reply = night.answer(requestId, card);
-                if (reply !== undefined) {
-                    settle(reply);
+            const alone = await fate.answeredAlone;
+            return !alone && !fate.settled;
+        },
+    };
+};
+
+// What answers a card without a person, started as it is raised: night hours, at once or later, and the conversation's
+// standing yes once its file is read. `listen` hands those answers to the card's waiter, and answers the stop.
+interface SelfAnswers {
+    readonly atOnce: AgentReply | undefined;
+    readonly fate: Fate;
+    readonly listen: (settle: (reply: AgentReply, by: string | undefined) => void) => () => void;
+}
+
+const selfAnswers = (
+    nights: NightOnCards,
+    standing: StandingYes | undefined,
+    // Every parked card a standing yes may answer, which this card joins once it waits.
+    answerable: Map<string, string>,
+    card: { readonly id: string; readonly restored: boolean; readonly night: NightCard | undefined; readonly standingId: string | undefined },
+): SelfAnswers => {
+    // Asked before the frame goes out; a restored card was announced before the restart, so it is only watched.
+    const atOnce = card.restored ? undefined : nights.onRaise(card.id, card.night);
+    const standsYes = atOnce === undefined ? readStanding(standing, card.standingId) : Promise.resolve(false);
+    return {
+        atOnce,
+        fate: { answeredAlone: atOnce === undefined ? standsYes : Promise.resolve(true), settled: false },
+        listen: (settle) => {
+            if (card.standingId !== undefined && standing !== undefined) {
+                answerable.set(card.id, card.standingId);
+            }
+            void standsYes.then((yes) => {
+                if (yes) {
+                    settle(everythingFor(card.id), undefined);
                 }
-            }, night.recheckMs);
-            timer.unref();
-            return () => clearInterval(timer);
+            });
+            return nights.watch(card.id, card.night, (reply) => settle(reply, NIGHT_HOURS));
         },
     };
 };
@@ -281,6 +330,7 @@ export const parkedCards = (
     // Every parked card a standing yes may answer, by id, with the conversation it may answer it for.
     const answerable = new Map<string, string>();
     const nights = nightOnCards(night);
+    const fates = recentFates();
     const park = <K extends AgentReply["kind"]>(
         restored: boolean,
         id: string,
@@ -291,8 +341,9 @@ export const parkedCards = (
     ): ParkedCard<K> => {
         const owner = conversationId ?? options?.standingFor;
         const about: CardAbout = { ...(owner === undefined ? {} : { conversationId: owner }), requestId: id, kind };
-        // Asked before the frame goes out; a restored card was announced before the restart, so it is only watched.
-        const atOnce = restored ? undefined : nights.onRaise(id, options?.night);
+        // Asked now rather than once the raiser waits on the card, so the push announcing it waits for their answers.
+        const self = selfAnswers(nights, standing, answerable, { id, restored, night: options?.night, standingId: standingConversation(kind, conversationId, options) });
+        fates.keep(id, self.fate);
         const wait = (signal: AbortSignal): Promise<Settled<K>> =>
             new Promise((resolve) => {
                 const parked = conversations.holdings(PARKED);
@@ -300,14 +351,15 @@ export const parkedCards = (
                 const raisedAt = Date.now();
                 // Set by an abort just before it settles, so the line says why nobody answered.
                 let cancelled: string | undefined;
-                // Night hours asking again while the card waits, stopped once it settles.
-                let stopNight = (): void => undefined;
+                // What answers the card on its own while it waits, stopped once it settles.
+                let stopSelf = (): void => undefined;
                 const settle = (reply: AgentReply, fromUser: boolean, caller: Caller | undefined, by?: string): void => {
                     if (done) {
                         return;
                     }
                     done = true;
-                    stopNight();
+                    self.fate.settled = true;
+                    stopSelf();
                     parked.drop(id);
                     answerable.delete(id);
                     settled?.(id, conversationId ?? options?.standingFor);
@@ -337,12 +389,11 @@ export const parkedCards = (
                     return;
                 }
                 signal.addEventListener("abort", onAbortSignal, { once: true });
-                if (atOnce !== undefined) {
-                    settle(atOnce, true, undefined, NIGHT_HOURS);
+                if (self.atOnce !== undefined) {
+                    settle(self.atOnce, true, undefined, NIGHT_HOURS);
                     return;
                 }
-                stopNight = nights.watch(id, options?.night, (reply) => settle(reply, true, undefined, NIGHT_HOURS));
-                askStanding(standing, answerable, { id, standingId: standingConversation(kind, conversationId, options) }, settle);
+                stopSelf = self.listen((reply, by) => settle(reply, true, undefined, by));
             });
         return { id, wait };
     };
@@ -381,6 +432,6 @@ export const parkedCards = (
             return "settled";
         },
         conversationOf: (requestId) => conversations.holdings(PARKED).holder(requestId),
-        settledOnRaise: nights.settledOnRaise,
+        waitsOnPerson: fates.waitsOnPerson,
     };
 };

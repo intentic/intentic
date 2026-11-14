@@ -281,7 +281,7 @@ describe("the agent ends its turn while the card is up", () => {
         const unsubscribe = services.events.subscribe("turn.awaiting", (event) => told.push(event));
         try {
             expect(await judgeHostCommand(services, guards, ASKED, 20)).toMatchObject({ refusal: expect.stringMatching(/^Still waiting/) });
-            expect(told).toEqual([{ conversationId: CONVERSATION, awaiting: "permission", insist: true }]);
+            expect(told).toEqual([{ conversationId: CONVERSATION, awaiting: "permission", requestId: expect.any(String), insist: true }]);
         } finally {
             unsubscribe();
         }

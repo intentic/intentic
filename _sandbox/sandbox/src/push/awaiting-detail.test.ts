@@ -266,6 +266,43 @@ describe("telling the devices", () => {
         expect(sent.map((notification) => [notification.tag, notification.body])).toEqual([["awaiting-p1", "Allow npm install?"]]);
     });
 
+    // Every announcement in the daemon names its card: it is read by that id, whatever else the run holds by then.
+    test("a card named by its request id is the one read, even with a newer card of its kind beside it", async () => {
+        const { services, sent } = wired("Fix the login redirect");
+        const fold = liveFold(permission("p1", { title: "Allow npm install?" }), permission("p2", { title: "Allow reading .env?" }));
+        await notifyAwaiting(services, { conversationId: "conv-1", kind: "permission", requestId: "p1", run: { rows: fold.rows } });
+        expect(sent.map((notification) => [notification.tag, notification.body])).toEqual([["awaiting-p1", "Allow npm install?"]]);
+    });
+
+    // The registry has the last word on whether a card still waits (parked-cards.ts `waitsOnPerson`): one that night
+    // hours or the conversation's standing yes answered as it was raised, or a person answered first, tells nobody.
+    test("a card the registry says no longer waits on a person is pushed nowhere", async () => {
+        const { services, sent, insisted } = wired("Fix the login redirect");
+        const asked: string[] = [];
+        const cards = unstubbed<Services["cards"]>("cards", {
+            waitsOnPerson: async (requestId) => {
+                asked.push(requestId);
+                return false;
+            },
+        });
+        const fold = liveFold(permission("p1", { title: "Delete the build caches?" }));
+        const delivery = await notifyAwaiting({ ...services, cards }, { conversationId: "conv-1", kind: "permission", requestId: "p1", run: { rows: fold.rows }, insist: true });
+
+        expect(asked).toEqual(["p1"]);
+        expect([...sent, ...insisted]).toEqual([]);
+        expect(delivery).toEqual({ delivered: 0, failed: 0, skipped: "answered before anyone was told" });
+    });
+
+    // Its frozen row is the proof: never the kind's generic words, which would ask a person about a card already settled.
+    test("a card the run already shows answered is pushed nowhere, not even in the kind's own words", async () => {
+        const { services, sent } = wired("Fix the login redirect");
+        const fold = liveFold(permission("p1", { title: "Delete the build caches?" }), { kind: "resolved", requestId: "p1", reply: { kind: "permission", requestId: "p1", decision: "everything" } });
+        const delivery = await notifyAwaiting(services, { conversationId: "conv-1", kind: "permission", requestId: "p1", run: { rows: fold.rows } });
+
+        expect(sent).toEqual([]);
+        expect(delivery.skipped).toBe("answered before anyone was told");
+    });
+
     test("with no run to read and no title, the notification is the kind's own words, once per conversation", async () => {
         const { services, sent } = wired();
         await notifyAwaiting(services, { conversationId: "conv-1", kind: "terminal_help", run: undefined });

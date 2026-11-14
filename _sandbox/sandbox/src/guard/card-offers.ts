@@ -32,13 +32,13 @@ export interface LiveCard {
 
 // The seams a gate needs for testing: `liveRun` finds the turn to raise a card in (undefined refuses outright);
 // `observe` mirrors frames to the conversation's actor, since externally pushed frames bypass the turn pump; `cards`
-// parks the card where a reply finds it; `awaiting` tells the owner's devices, as a card the turn raised itself would,
-// and `insist` tells them even while their person is active elsewhere.
+// parks the card where a reply finds it; `awaiting` tells the owner's devices of the card `requestId` names, as a card
+// the turn raised itself would, and `insist` tells them even while their person is active elsewhere.
 export interface CardDeps {
     readonly liveRun: (conversationId: string | undefined) => LiveCard | undefined;
     readonly observe: (conversationId: string, event: AgentEvent) => void;
     readonly cards: Pick<ParkedCards, "create">;
-    readonly awaiting: (conversationId: string, kind: ParkKind, insist?: boolean) => void;
+    readonly awaiting: (conversationId: string, kind: ParkKind, requestId: string, insist?: boolean) => void;
 }
 
 // The run a caller may raise a card in. The two reserved owner names (pooled process, one-shot) mean 'no conversation';
@@ -95,7 +95,7 @@ export const raiseRequest = async <K extends AgentReply["kind"]>(
     const raised = card.raised(id);
     // The card says so itself, so its Allow menu never offers a yes that would not answer it.
     say(alwaysAsks && raised.kind === "permission" ? { ...raised, alwaysAsks: true } : raised);
-    deps.awaiting(run.conversationId, card.kind, card.insist === true);
+    deps.awaiting(run.conversationId, card.kind, id, card.insist === true);
     const bounds = [card.signal, card.deadlineMs === undefined ? undefined : AbortSignal.timeout(card.deadlineMs)].filter(
         (signal): signal is AbortSignal => signal !== undefined,
     );

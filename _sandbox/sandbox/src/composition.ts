@@ -887,10 +887,11 @@ export const wireReactions = (services: Services): void => {
             services.logger.warn({ err: error, event: event.event }, "workspace event dispatch failed"),
         ),
     );
-    services.events.subscribe("turn.awaiting", ({ conversationId, awaiting, insist }) =>
+    services.events.subscribe("turn.awaiting", ({ conversationId, awaiting, requestId, insist }) =>
         notifyAwaiting(services, {
             conversationId,
             kind: awaiting,
+            requestId,
             run: turnRunOf(services.conversations, conversationId),
             ...(insist === true ? { insist } : {}),
         }),

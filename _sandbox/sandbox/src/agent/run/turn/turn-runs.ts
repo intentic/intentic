@@ -27,11 +27,15 @@ import { RunRowIds } from "./run-row-ids.js";
 // The two moments a turn's starter might want reported: when it parks and when it settles. This module knows only WHEN;
 // the starter owns the wording and whether to send at all.
 export interface TurnObserver {
-    // Agent waits on the user on any card it can park on; may fire several times.
-    readonly awaiting: (kind: ParkKind) => void;
+    // Agent waits on the user on any card it can park on, named by its request id; may fire several times.
+    readonly awaiting: (kind: ParkKind, requestId: string) => void;
     // Run ended, exactly once; `error` only for a real failure, a /agent/stop abort settles as a clean "done".
     readonly settled: (outcome: { readonly ok: boolean; readonly error?: string }) => void;
 }
+
+// The card a frame parks the turn on: every frame of a parking kind names the request it waits on.
+const parkingCard = (event: AgentEvent): { readonly kind: ParkKind; readonly requestId: string } | undefined =>
+    isParkKind(event.kind) && "requestId" in event ? { kind: event.kind, requestId: event.requestId } : undefined;
 
 export class TurnRun implements LiveRun {
     // Whether the turn journal holds it; the unjournalled door (a loop's iteration) says otherwise as it starts it.
@@ -516,9 +520,9 @@ export function startTurnRun(
                     recordCommands(commandListOf(input.agent, input.harness), event.items);
                 }
                 // Frames that park the turn on the user; they keep the run's fetch open, so it still looks live.
-                if (isParkKind(event.kind)) {
-                    const awaiting = event.kind;
-                    tell((target) => target.awaiting(awaiting));
+                const parkedOn = parkingCard(event);
+                if (parkedOn !== undefined) {
+                    tell((target) => target.awaiting(parkedOn.kind, parkedOn.requestId));
                     // A person may be away for days: what the run drew up to its card goes to disk once it is folded.
                     queueMicrotask(() => void runLog?.flush());
                 }

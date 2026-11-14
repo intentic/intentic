@@ -169,6 +169,12 @@ stopped or is over. A call that stops waiting first leaves its card up through `
 the turn's close (`guard/held-cards.ts`), hands the same call again the answer, and wakes the conversation with a yes
 given after the turn ended.
 
+Nobody is told a card waits until the card registry says it does: what answers a card on its own (night hours, a
+conversation's "allow everything") is asked as the card is raised, and the push announcing it waits for that answer
+(`conversations/actor/parked-cards.ts` `waitsOnPerson`, read by `push/awaiting-detail.ts` by the card's request id, which
+`turn.awaiting` carries). A card that settles while its push is still on its way is replaced once that push lands
+(`push/push.ts` `withdraw`), never left on a lock screen.
+
 ## Peers
 
 `peers/` gives every outside party one door shape: a short-lived pairing, a durable enrollment token, a socket and an

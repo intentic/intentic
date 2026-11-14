@@ -45,9 +45,10 @@ export interface DomainEventMap {
         // What composed words are for, when the sandbox composed them.
         readonly errand: TurnErrand | undefined;
     };
-    // A turn begun through the port's `start` parked on its person; may happen several times a turn.
+    // A turn begun through the port's `start` parked on its person; may happen several times a turn. `requestId` is the
+    // card it parked on, which the push announcing it reads by (push/awaiting-detail.ts).
     // `insist`: told to the owner's devices even while they are active elsewhere (guard/card-offers.ts).
-    readonly "turn.awaiting": { readonly conversationId: string; readonly awaiting: ParkKind; readonly insist?: boolean };
+    readonly "turn.awaiting": { readonly conversationId: string; readonly awaiting: ParkKind; readonly requestId: string; readonly insist?: boolean };
     // That same turn ended, exactly once; `error` only for a real failure, a stop ends it clean.
     readonly "turn.finished": {
         readonly conversationId: string;
