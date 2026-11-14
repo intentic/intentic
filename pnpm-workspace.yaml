@@ -162,22 +162,22 @@ minimumReleaseAgeStrict: false
 minimumReleaseAgeExcludePrune: true
 
 minimumReleaseAgeExclude:
-  - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.317'
-  - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.317'
-  - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.317'
-  - '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.317'
-  - '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.317'
-  - '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.317'
-  - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.317'
-  - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.317'
-  - '@anthropic-ai/claude-agent-sdk@0.3.317'
+  - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.325'
+  - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.325'
+  - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.325'
+  - '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.325'
+  - '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.325'
+  - '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.325'
+  - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.325'
+  - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.325'
+  - '@anthropic-ai/claude-agent-sdk@0.3.325'
   - image-size@2.0.4
-  - "@opencode/client@2.2.5"
-  - "@opencode/protocol@2.2.5"
-  - "@opencode/schema@2.2.5"
+  - "@opencode/client@2.3.0"
+  - "@opencode/protocol@2.3.0"
+  - "@opencode/schema@2.3.0"
   - monaco-editor-core@0.57.0
   - "@posthog/core@1.56.0"
-  - "@muse-code/sdk@1.4.14"
+  - "@muse-code/sdk@1.4.20"
   - marked@18.1.0
   - posthog-js@1.436.1
   - "@oven/bun-darwin-aarch64@1.4.4"
@@ -193,15 +193,7 @@ minimumReleaseAgeExclude:
   - "@oven/bun-windows-aarch64@1.4.4"
   - "@oven/bun-windows-x64@1.4.4"
   - bun@1.4.4
-  - "@cursor/sdk-darwin-arm64@1.2.0"
-  - "@cursor/sdk-darwin-x64@1.2.0"
-  - "@cursor/sdk-linux-arm64@1.2.0"
-  - "@cursor/sdk-linux-x64@1.2.0"
-  - "@cursor/sdk-win32-x64@1.2.0"
-  - "@cursor/sdk@1.2.0"
   - music-metadata@12.3.2
-  - "@openai/codex-sdk@0.166.0"
-  - "@openai/codex@0.166.0-darwin-arm64 || 0.166.0-darwin-x64 || 0.166.0-linux-arm64 || 0.166.0-linux-x64 || 0.166.0-win32-arm64 || 0.166.0-win32-x64 || 0.166.0"
 
 allowBuilds:
   "@ast-grep/lang-go": true
@@ -247,7 +239,7 @@ catalogPrune: true
 # what lets the overrides above dedupe rather than add.
 catalog:
   "@agentclientprotocol/sdk": 2.0.2
-  "@anthropic-ai/claude-agent-sdk": 0.3.317
+  "@anthropic-ai/claude-agent-sdk": 0.3.325
   "@astrojs/check": 0.9.12
   "@astrojs/sitemap": 3.7.4
   "@commitlint/cli": 21.2.4
@@ -260,7 +252,7 @@ catalog:
   # image-packs/cursor.Dockerfile installs the same pin back on the owner's OWN machine when they connect a Cursor
   # account. packs.integration.test.ts holds the two in step, the @openai/codex precedent.
   # ponytail: bump together with image-packs/cursor.Dockerfile.
-  "@cursor/sdk": 1.2.0
+  "@cursor/sdk": 1.3.1
   "@dagrejs/dagre": 3.1.1
   "@discordjs/voice": 0.19.2
   "@hono/node-server": 2.1.3
@@ -271,9 +263,9 @@ catalog:
   # Meta's MSP client for Muse Code (runtimes/muse in the daemon). MIT, zero runtime deps, and versioned in lockstep
   # with the Muse Code release it speaks to: engines.json blesses the matching CLI build (1.4.6-R…), and
   # _tools/scripts/engines/engine-pins.mjs reads this line as the version it tracks.
-  "@muse-code/sdk": 1.4.14
-  "@openai/codex-sdk": 0.166.0
-  "@opencode/client": 2.2.5
+  "@muse-code/sdk": 1.4.20
+  "@openai/codex-sdk": 0.169.0
+  "@opencode/client": 2.3.0
   "@opentelemetry/api": 1.10.0
   "@opentelemetry/context-async-hooks": 3.0.0
   "@opentelemetry/core": 3.0.0
