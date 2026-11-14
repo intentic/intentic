@@ -15,7 +15,7 @@ import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/
 import { TRANSLATOR_GATEWAY_PATH } from "../../http/translator-gateway-url.js";
 import { defineSlice } from "../../seams/slice.js";
 import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
-import { namedReset } from "../../usage/reset-sentences.js";
+import { namedReset, RETRY_HORIZON_S } from "../../usage/reset-sentences.js";
 import { serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
 import { usageKey } from "./translator.js";
@@ -72,6 +72,9 @@ export interface TranslatorGateway {
     // When this gateway last filed a refusal naming its account for one provider's model, in ms; undefined when it has
     // filed none since the daemon started. What a turn's own failure is read against (failure-queries.ts).
     readonly attributedAt: (provider: string, model: string) => number | undefined;
+    // When it last handed a loop a throttle on one provider's model (`throttled`, causeOf), in ms; undefined when none
+    // since the daemon started. What tells a turn refused on a 429 that no account's allowance was in question.
+    readonly throttledAt: (provider: string, model: string) => number | undefined;
 }
 
 export interface TranslatorGatewayDeps {
@@ -197,9 +200,43 @@ const readRefusal = async (response: Response): Promise<ReadRefusal> => {
 const handedOn = (refusal: ReadRefusal): Response =>
     new Response(refusal.bytes, { status: refusal.status, statusText: refusal.statusText, headers: refusal.headers });
 
-// A spent allowance: the provider's 429, or its quota words under another status (Google's RESOURCE_EXHAUSTED).
-const spent = (refusal: ReadRefusal): boolean =>
-    refusal.status === 429 || (refusal.status >= 400 && (mentionsSpentAllowance(refusal.text) || /RESOURCE_EXHAUSTED/u.test(refusal.text)));
+/* A 429 IS NOT A SPENT ALLOWANCE UNTIL THE PROVIDER SAYS SO. Google answers RESOURCE_EXHAUSTED for both: "Individual
+   quota reached … Resets in 163h13m58s" when an account's allowance is spent, and the bare "Resource has been exhausted
+   (e.g. check quota)." when it is slowing requests down. Every 429 used to be filed as the first, so on 2026-11-14 a
+   throttle on Gemini 3.8 Flash was filed against each of 31 accounts in turn, each was re-read, each reading showed most
+   of its Gemini pool left and answered the refusal, and the loop's next retry did it all again: about four hundred
+   ready → spent → ready flips in an afternoon, Google's row dropping out of the chat's "Usage left" and coming back with
+   them, and 31 requests to Google per request the loop made, each throttled in turn. So a refusal is read for what it is:
+   - `spent`: the provider's words say the allowance is spent, or it names a reset further out than a retry
+     (RETRY_HORIZON_S). Filed under the account that gave it, which is re-read, and the next account is asked.
+   - `benched`: the translator's own answer for a credential it is resting on this model (`model_cooldown`). Nothing
+     reached the provider, and the bench is on the translator's listing of the account already (modelCooldowns): the
+     next account is asked, nothing filed.
+   - `throttled`: any other 429, or RESOURCE_EXHAUSTED under another status. No allowance is in question, so nothing is
+     filed and nothing re-read; another account may not be throttled, so a few are asked (THROTTLED_ASKS), and then the
+     loop gets the throttle as it came, to retry on its own backoff. */
+type RefusalCause = "spent" | "benched" | "throttled";
+
+// How many accounts a throttled request is tried on before the loop gets the throttle back. Model capacity throttles every
+// account alike, and asking all 31 at once only adds 31 requests to what is being throttled.
+const THROTTLED_ASKS = 3;
+
+// The translator's own word for a credential it is resting (CLIProxyAPI's `model_cooldown` error code).
+const TRANSLATOR_BENCH = /"model_cooldown"/u;
+
+const causeOf = (refusal: ReadRefusal, now: number): RefusalCause | undefined => {
+    if (refusal.status < 400) {
+        return undefined;
+    }
+    if (refusal.status === 429 && TRANSLATOR_BENCH.test(refusal.text)) {
+        return "benched";
+    }
+    const reset = namedReset(readableProviderText(refusal.text), now) ?? namedReset(refusal.text, now);
+    if (mentionsSpentAllowance(refusal.text) || (reset !== undefined && reset - now / 1000 > RETRY_HORIZON_S)) {
+        return "spent";
+    }
+    return refusal.status === 429 || /RESOURCE_EXHAUSTED/u.test(refusal.text) ? "throttled" : undefined;
+};
 
 // The translator does not route this prefixed model to that credential: the plan does not cover the model, or the
 // translator has not registered the prefix yet. Not the account's refusal; the next one is asked.
@@ -240,11 +277,13 @@ const outgoingOf = async (c: Context<AppEnv>, translatorUrl: string, session: st
     };
 };
 
-// The gateway's deps with its defaults filled, and what it remembers: when it last filed a refusal for each model.
+// The gateway's deps with its defaults filled, and what it remembers: when it last filed a refusal for each model, and
+// when it last handed a loop a throttle on it.
 interface Gateway extends TranslatorGatewayDeps {
     readonly send: typeof fetch;
     readonly clock: () => number;
     readonly attributed: Map<string, number>;
+    readonly throttled: Map<string, number>;
 }
 
 // The line a filed refusal leaves in the log.
@@ -298,10 +337,22 @@ const settleOn = (g: Gateway, asked: Pinnable, candidate: PinCandidate, askedAt:
         .catch((error: Error) => g.logger.warn({ err: error, provider: asked.provider, account: candidate.account }, "translator gateway: an answer could not settle"));
 };
 
-// Asks each candidate in turn, at most once, until one answers or refuses for something other than a spent allowance.
-// Every one refused: the last refusal as it came. None routed the prefix at all: undefined, and the caller sends unpinned.
+// A throttle handed back to the loop, remembered for the turn that may end on it (throttledAt).
+const handedThrottle = (g: Gateway, asked: Pinnable, refusal: ReadRefusal, tried: number): Response => {
+    g.throttled.set(`${asked.provider}:${asked.model}`, g.clock());
+    g.logger.info(
+        { provider: asked.provider, model: asked.model, status: refusal.status, accounts: tried },
+        "translator gateway: the provider is throttling this model, not refusing an allowance; the loop retries on its own backoff",
+    );
+    return handedOn(refusal);
+};
+
+// Asks each candidate in turn, at most once, until one answers or refuses for something other than a spent allowance, a
+// translator's bench or a throttle (causeOf). Past THROTTLED_ASKS throttles, the last one as it came. Every one refused:
+// the last refusal as it came. None routed the prefix at all: undefined, and the caller sends unpinned.
 const placed = async (g: Gateway, outgoing: Outgoing, asked: Pinnable, candidates: readonly PinCandidate[]): Promise<Response | undefined> => {
-    let last: ReadRefusal | undefined;
+    let last: { readonly refusal: ReadRefusal; readonly cause: RefusalCause } | undefined;
+    let throttles = 0;
     for (const candidate of candidates) {
         const askedAt = g.clock();
         const { url, method, headers, signal } = outgoing;
@@ -313,13 +364,21 @@ const placed = async (g: Gateway, outgoing: Outgoing, asked: Pinnable, candidate
         if (unroutable(refusal, candidate.prefix)) {
             continue;
         }
-        if (!spent(refusal)) {
+        const cause = causeOf(refusal, g.clock());
+        if (cause === undefined) {
             return handedOn(refusal);
         }
-        await fileRefusal(g, asked, candidate, refusal);
-        last = refusal;
+        last = { refusal, cause };
+        if (cause === "spent") {
+            await fileRefusal(g, asked, candidate, refusal);
+        } else if (cause === "throttled" && ++throttles >= THROTTLED_ASKS) {
+            return handedThrottle(g, asked, refusal, throttles);
+        }
     }
-    return last === undefined ? undefined : handedOn(last);
+    if (last === undefined) {
+        return undefined;
+    }
+    return last.cause === "throttled" ? handedThrottle(g, asked, last.refusal, throttles) : handedOn(last.refusal);
 };
 
 // The pinned answer, or undefined where there is no account to pin the request to.
@@ -371,11 +430,12 @@ const routeOf =
     };
 
 export const createTranslatorGateway = (deps: TranslatorGatewayDeps): TranslatorGateway => {
-    const g: Gateway = { ...deps, send: deps.fetch ?? fetch, clock: deps.now ?? Date.now, attributed: new Map() };
+    const g: Gateway = { ...deps, send: deps.fetch ?? fetch, clock: deps.now ?? Date.now, attributed: new Map(), throttled: new Map() };
     return {
         route: routeOf(g),
         baseUrlFor: async (provider) => `${deps.loopbackBase}${TRANSLATOR_GATEWAY_PATH}/${await deps.sessions.sign(provider)}`,
         attributedAt: (provider, model) => g.attributed.get(`${provider}:${model}`),
+        throttledAt: (provider, model) => g.throttled.get(`${provider}:${model}`),
     };
 };
 

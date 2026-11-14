@@ -114,9 +114,10 @@ export interface FailureQueries {
     readonly awaitingVerification: (provider: AgentProvider) => Promise<readonly string[]>;
     // Whether memory killed a runtime that died under a conversation's turn (memory-death.ts); absent, every death is a stop.
     readonly memoryDeath?: (conversationId: string, turn: RoutedTurn, now: number) => Promise<MemoryDeath | undefined>;
-    // Whether the daemon's translator gateway filed a spent allowance of this routed model since the request began, under
-    // the account that gave it (translator-gateway.ts); absent, it filed none.
-    readonly gatewayRefused?: (provider: AgentProvider, model: string) => boolean;
+    // What the daemon's translator gateway made of this routed model's refusals since the request began
+    // (translator-gateway.ts causeOf): `spent`, filed under the account that gave it; `throttled`, handed back with nothing
+    // filed, since no account's allowance was in question; undefined, it saw neither.
+    readonly gatewayRefused?: (provider: AgentProvider, model: string) => "spent" | "throttled" | undefined;
 }
 
 // A record a classification files; the turn performs each fire-and-forget, with its own named failure line.
@@ -206,9 +207,19 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Re
         ...opt("unmetered", kind === "limit" && isAdminGrantedAllowanceText(event.message) ? true : undefined),
     };
     const reread: FailureWrite = { kind: "headroom-refresh", options: { scope: { providers: [provider], ...opt("account", account) }, maxAgeMs: 0 } };
-    // The gateway filed this spent allowance already, under the account that gave it: the re-read is all that is owed.
-    if (kind === "limit" && model !== undefined && routedTurn(provider, context.turn.harness) && gateway?.(provider, model) === true) {
-        return [reread];
+    if (kind === "limit" && model !== undefined && routedTurn(provider, context.turn.harness)) {
+        const seen = gateway?.(provider, model);
+        // The gateway filed this spent allowance already, under the account that gave it: the re-read is all that is owed.
+        if (seen === "spent") {
+            return [reread];
+        }
+        // It read each account's own answer, and none said its allowance was spent: the provider was throttling the model.
+        // Filed under no account, that stood over all of them until each was re-read, so every throttled turn on Google
+        // flipped 31 accounts spent and back and took the provider out of "Usage left" meanwhile (2026-11-14). Nothing
+        // is filed and nothing re-read, unless the provider's own words, not the sandbox's, say the allowance is spent.
+        if (seen === "throttled" && (event.own === true || !mentionsSpentAllowance(event.message))) {
+            return [];
+        }
     }
     return [{ kind: "provider-refusal", provider, refusal }, reread];
 };

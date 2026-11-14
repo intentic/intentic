@@ -271,7 +271,8 @@ test("a credential benched only on some models is each model's spent allowance, 
             { scope: "model", model_key: "gemini-3.8-flash-high", reason: "quota", retry_at: "2026-11-14T20:04:38.305556706Z" },
         ],
     };
-    expect(modelCooldowns(refused)).toEqual([
+    const before = Date.parse("2026-11-14T08:00:00Z");
+    expect(modelCooldowns(refused, before)).toEqual([
         { model: "claude-opus-4-6-thinking", until: Math.floor(Date.parse("2026-11-14T12:03:41Z") / 1000) },
         { model: "gemini-3.8-flash-high", until: Math.floor(Date.parse("2026-11-14T20:04:38Z") / 1000) },
     ]);
@@ -285,6 +286,19 @@ test("a credential benched only on some models is each model's spent allowance, 
     expect(modelCooldowns({ name: "b.json", cooldowns: [{ scope: "model", model_key: "x", reason: "overloaded", retry_at: "2026-11-14T12:00:00Z" }] })).toEqual([]);
     expect(modelCooldowns({ name: "b.json", cooldowns: [{ scope: "model", model_key: "x", reason: "quota" }] })).toEqual([]);
     expect(modelCooldowns({ name: "b.json", cooldowns: [{ scope: "model", reason: "quota", retry_at: "2026-11-14T12:00:00Z" }] })).toEqual([]);
+});
+
+// 2026-11-14: the proxy benches a credential on every 429, a throttle's included, from a second up; each bench read as the
+// account spent on that model until it ended, and Opus on Google flipped 27 accounts spent and back a minute later.
+test("a bench ending within a retry's reach is the proxy backing off, no model's spent allowance", () => {
+    const now = Date.parse("2026-11-14T20:12:49Z");
+    const bench = (retryAt: string) => ({ name: "a.json", cooldowns: [{ scope: "model", model_key: "claude-opus-4-6-thinking", reason: "quota", retry_at: retryAt }] });
+    expect(modelCooldowns(bench("2026-11-14T20:13:38Z"), now)).toEqual([]);
+    expect(modelCooldowns(bench("2026-11-21T12:04:55Z"), now)).toEqual([
+        { model: "claude-opus-4-6-thinking", until: Math.floor(Date.parse("2026-11-21T12:04:55Z") / 1000) },
+    ]);
+    // Resting on one model only, it is no bench of the whole credential either.
+    expect(authFileCooling({ ...bench("2026-11-14T20:13:38Z"), unavailable: true, next_retry_after: "2026-11-14T20:13:38Z" })).toBeUndefined();
 });
 
 // What the proxy actually stamps on a rate-limited Google credential: the upstream 429 body, pretty-printed, ~700

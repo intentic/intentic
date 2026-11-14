@@ -12,6 +12,13 @@ import { type CivilDay, civilDayIn, localZone, nextDayStartIn, utcDayOf, wallClo
 // is a misread, and an absurd instant would park a turn for good.
 const LONGEST_SECONDS = 31 * 24 * 3_600;
 
+/* HOW SOON AN INSTANT CAN BE AND STILL BE A POOL REOPENING, NOT A RETRY. A provider slowing requests down names when to
+   ask again in seconds (Google's RetryInfo, a translator's backoff of 1 s doubling), and an allowance it has spent names
+   when its pool reopens, hours or days out. Read as a spent allowance, a throttle's retry flipped every Google account
+   spent and back within a second or two of each 429, about four hundred times in an afternoon, while each one's reading
+   showed most of its Gemini pool left (2026-11-14). An instant closer than this is the retry's. */
+export const RETRY_HORIZON_S = 5 * 60;
+
 const UNIT_SECONDS = new Map([
     ["d", 86_400],
     ["h", 3_600],

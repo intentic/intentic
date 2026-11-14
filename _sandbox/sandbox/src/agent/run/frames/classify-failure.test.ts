@@ -407,11 +407,11 @@ describe("a spent allowance", () => {
     describe("after the translator gateway filed the refusal under its account", () => {
         const quota: ErrorFrame = { ...limit, message: "Individual quota reached. Please upgrade your subscription to increase your limits." };
         const routed = context({ provider: "gemini", model: "gemini-3.8-flash-high", account: undefined, attribution: {}, limitReset: 1_900_000_000 });
-        const filedByGateway = (filed: boolean, asked: unknown[][] = []): FailureQueries => ({
+        const filedByGateway = (filed: boolean | "throttled", asked: unknown[][] = []): FailureQueries => ({
             ...answering({ way }),
             gatewayRefused: (provider, model) => {
                 asked.push([provider, model]);
-                return filed;
+                return filed === "throttled" ? filed : filed ? "spent" : undefined;
             },
         });
 
@@ -433,6 +433,20 @@ describe("a spent allowance", () => {
                 },
                 { kind: "headroom-refresh", options: { scope: { providers: ["gemini"] }, maxAgeMs: 0 } },
             ]);
+        });
+
+        // 2026-11-14: Google throttling Gemini 3.8 Flash ("Resource has been exhausted (e.g. check quota).") was filed under
+        // no account, and stood over all 31 until each was re-read: every throttled turn flipped them spent and back.
+        test("a throttle the gateway handed back, every account's own answer, files nothing and re-reads nothing", async () => {
+            const throttled: ErrorFrame = { ...limit, message: "Resource has been exhausted (e.g. check quota)." };
+            const plan = await classifyFailure(throttled, routed, filedByGateway("throttled"));
+            expect(plan.writes).toStrictEqual([]);
+            expect(plan.held).toMatchObject({ reason: "limit" });
+        });
+
+        test("the provider's own words for a spent allowance are still filed, whatever the gateway last saw", async () => {
+            const plan = await classifyFailure(quota, routed, filedByGateway("throttled"));
+            expect(plan.writes.map(({ kind }) => kind)).toStrictEqual(["provider-refusal", "headroom-refresh"]);
         });
 
         // A sign-in of the loop's own (Grok Build) never went through the gateway: its refusal is that sign-in's alone.

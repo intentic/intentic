@@ -8,4 +8,8 @@ export const testGatewayBase = (provider: string): string => `http://127.0.0.1:7
 
 // No routed request went through it, so it filed no refusal a turn's failure is read against; anything else names itself.
 export const translatorGatewayFake = (): TranslatorGateway =>
-    unstubbed<TranslatorGateway>("translatorGateway", { attributedAt: () => undefined, baseUrlFor: async (provider) => testGatewayBase(provider) });
+    unstubbed<TranslatorGateway>("translatorGateway", {
+        attributedAt: () => undefined,
+        throttledAt: () => undefined,
+        baseUrlFor: async (provider) => testGatewayBase(provider),
+    });

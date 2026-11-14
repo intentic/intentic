@@ -56,6 +56,8 @@ const translator = (answer: (model: string | undefined) => Response) => {
 interface HarnessOptions {
     readonly seed?: readonly ProviderRefusal[];
     readonly covers?: (provider: string, account: string, model: string) => Promise<(other: string) => boolean>;
+    // The Google accounts connected, best first; two unless a test needs more.
+    readonly accounts?: readonly string[];
 }
 
 const harness = (answer: (model: string | undefined) => Response, options: HarnessOptions = {}) => {
@@ -76,12 +78,13 @@ const harness = (answer: (model: string | undefined) => Response, options: Harne
         logger: pino({ level: "silent" }),
         providerAccounts: async () => [],
         cliProxy: unstubbed<ServiceabilityDeps["cliProxy"]>("cliProxy", {
-            accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [{ name: A, label: "a@example.com" }, { name: B, label: "b@example.com" }] }),
+            accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: (options.accounts ?? [A, B]).map((name) => ({ name, label: `${name}@example.com` })) }),
             accountPrefix: (name: string) => accountPrefix(name),
         }),
     });
     const upstream = translator(answer);
     const warned: string[] = [];
+    const said: string[] = [];
     const gateway = createTranslatorGateway({
         translator: { url: "http://127.0.0.1:8789/", token: TOKEN },
         loopbackBase: LOOPBACK,
@@ -90,7 +93,7 @@ const harness = (answer: (model: string | undefined) => Response, options: Harne
         refusals: providerRefusals,
         covers: options.covers,
         reread: (provider, account) => reread.push([provider, account]),
-        logger: { info: () => undefined, warn: (_fields: object, message?: string) => warned.push(message ?? "") },
+        logger: { info: (_fields: object, message?: string) => said.push(message ?? ""), warn: (_fields: object, message?: string) => warned.push(message ?? "") },
         fetch: upstream.fetchFn,
     });
     const app = new Hono<AppEnv>();
@@ -110,7 +113,7 @@ const harness = (answer: (model: string | undefined) => Response, options: Harne
         }
         return app.request(`/translator-gateway/${base}${path}`, request);
     };
-    return { ledger, settled, reread, warned, gateway, upstream, send };
+    return { ledger, settled, reread, warned, said, gateway, upstream, send };
 };
 
 const chat = { model: MODEL, stream: true, messages: [{ role: "user", content: "hi" }] };
@@ -155,6 +158,78 @@ test("every account refused: the loop gets the last refusal exactly as it came, 
     expect(await response.json()).toStrictEqual(QUOTA);
     expect((await filed(ledger)).map((refusal) => refusal.account).toSorted()).toStrictEqual([A, B]);
     expect(settled).toStrictEqual([]);
+});
+
+// Google's answer when it is slowing requests down rather than refusing an allowance: the bare RESOURCE_EXHAUSTED, which
+// names no reset, while the account's own reading shows most of its Gemini pool left.
+const THROTTLE = { error: { code: 429, message: "Resource has been exhausted (e.g. check quota).", status: "RESOURCE_EXHAUSTED" } };
+const throttle = (): Response => Response.json(THROTTLE, { status: 429, headers: { "x-upstream": "google" } });
+
+// 2026-11-14: a throttle on Gemini 3.8 Flash was filed against all 31 Google accounts in turn, each re-read and answered
+// by its own reading, about four hundred ready → spent → ready flips in an afternoon.
+test("a throttle is filed against no account and re-reads none: the loop gets it back to retry", async () => {
+    const { ledger, reread, settled, said, gateway, upstream, send } = harness(() => throttle());
+
+    const response = await send("/v1/chat/completions", { body: chat });
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toStrictEqual(THROTTLE);
+    // Another account may not be throttled, so the next one was asked too.
+    expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix(A)}/${MODEL}`, `${accountPrefix(B)}/${MODEL}`]);
+    expect(await filed(ledger)).toStrictEqual([]);
+    expect(reread).toStrictEqual([]);
+    expect(settled).toStrictEqual([]);
+    expect(gateway.attributedAt("gemini", MODEL)).toBeUndefined();
+    expect(gateway.throttledAt("gemini", MODEL)).toBeTypeOf("number");
+    expect(said).toContain("translator gateway: the provider is throttling this model, not refusing an allowance; the loop retries on its own backoff");
+});
+
+test("a throttled request is asked of a few accounts, not the whole fleet", async () => {
+    const accounts = ["a.json", "b.json", "c.json", "d.json", "e.json"];
+    const { upstream, send } = harness(() => throttle(), { accounts });
+
+    const response = await send("/v1/chat/completions", { body: chat });
+
+    expect(response.status).toBe(429);
+    expect(upstream.seen).toHaveLength(3);
+});
+
+test("an account throttled is passed for the next, and the answer settles nothing it did not refuse", async () => {
+    const { ledger, reread, send } = harness((model) => (model === `${accountPrefix(A)}/${MODEL}` ? throttle() : sse()));
+
+    const response = await send("/v1/chat/completions", { body: chat });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(STREAM);
+    expect(await filed(ledger)).toStrictEqual([]);
+    expect(reread).toStrictEqual([]);
+});
+
+// The translator answers for a credential it is resting on this model without asking the provider: that bench is on its
+// listing of the account already (modelCooldowns), so nothing is filed, and resting accounts are not throttles to count.
+test("the translator's own bench is moved past, filed nowhere", async () => {
+    const bench = { error: { code: "model_cooldown", message: `All credentials for model ${MODEL} are cooling down`, reset_seconds: 40 } };
+    const { ledger, reread, gateway, send } = harness((model) =>
+        model === `${accountPrefix(A)}/${MODEL}` ? Response.json(bench, { status: 429 }) : sse(),
+    );
+
+    const response = await send("/v1/chat/completions", { body: chat });
+
+    expect(response.status).toBe(200);
+    expect(await filed(ledger)).toStrictEqual([]);
+    expect(reread).toStrictEqual([]);
+    expect(gateway.throttledAt("gemini", MODEL)).toBeUndefined();
+});
+
+// A provider that names a reset hours out has spent the allowance, whatever words it used.
+test("a 429 naming a reset past a retry's is a spent allowance, filed with that reset", async () => {
+    const spent = { error: { code: 429, message: "Too many requests.", reset_seconds: 3 * 3600 } };
+    const { ledger, reread, send } = harness((model) => (model === `${accountPrefix(A)}/${MODEL}` ? Response.json(spent, { status: 429 }) : sse()));
+
+    await (await send("/v1/chat/completions", { body: chat })).text();
+
+    expect(await filed(ledger)).toMatchObject([{ kind: "limit", account: A, model: MODEL }]);
+    expect(reread).toStrictEqual([["gemini", A]]);
 });
 
 test("an address minted for a provider is the gateway's own, on the loopback, and names only that provider", async () => {

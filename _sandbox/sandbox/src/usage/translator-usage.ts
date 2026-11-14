@@ -5,6 +5,7 @@ import { GOOGLE_FAMILIES, GoogleModelsSchema, googleGates, googleModelsUsage, sa
 import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "./payload.js";
 import { type JsonValue, parseJsonOr } from "@intentic/base/json";
 import type { AnswerWatch } from "./drift/answer-vocabulary.js";
+import { RETRY_HORIZON_S } from "./reset-sentences.js";
 
 // Reader for the routed subscriptions (counterpart to claude-usage.ts); returns an AccountUsage only, storage and
 // merging live elsewhere.
@@ -38,12 +39,14 @@ export interface TranslatorAuthFile {
 }
 
 // The credential's per-model benches for a spent allowance (TranslatorAccount.cooldowns): the provider's refusal of it on
-// one model, with when the provider said to try again. One the proxy gave no instant for is not a spent allowance this
-// can time, so it is left to the account-wide verdict.
-export const modelCooldowns = (file: TranslatorAuthFile): ModelCooldown[] =>
+// one model, with when the provider said to try again. One with no instant is left to the account-wide verdict. Nor is one
+// ending within RETRY_HORIZON_S: the proxy benches on every 429, a throttle's too, and each such bench read as the account
+// spent for its minute, flipping 27 Google accounts on Opus (2026-11-14); a spent allowance is filed with its own reset.
+export const modelCooldowns = (file: TranslatorAuthFile, now: number = Date.now()): ModelCooldown[] =>
     (file.cooldowns ?? []).flatMap((cooldown) => {
         const until = cooldown.scope === "model" && cooldown.reason === "quota" ? resetFromIso(cooldown.retry_at) : undefined;
-        return cooldown.model_key === undefined || cooldown.model_key === "" || until === undefined ? [] : [{ model: cooldown.model_key, until }];
+        const resting = until === undefined || until - now / 1000 <= RETRY_HORIZON_S;
+        return cooldown.model_key === undefined || cooldown.model_key === "" || resting ? [] : [{ model: cooldown.model_key, until }];
     });
 
 // Whether every bench the proxy holds on this credential is one model's: then it routes the account's other models as

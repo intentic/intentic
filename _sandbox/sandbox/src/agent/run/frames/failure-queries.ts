@@ -9,7 +9,7 @@ import type { MemoryDeath } from "./memory-death.js";
 
 // The questions a failure's classification asks of the daemon's own records rather than of a conversation: when a spent
 // allowance reopens, the way on, which routed sign-ins wait on their owner, whether memory killed a dead runtime, and
-// whether the translator gateway already filed the refusal. Every request a runtime runs has these; a conversation's own
+// whether the translator gateway already filed the refusal, or saw only a throttle. Every request a runtime runs has these; a conversation's own
 // two (its break policy and its stop ladder) are added where there is one (stream-agent.ts). `openedAt` is no later than
 // the request's first call went out: a refusal the gateway filed since is this request's own.
 export type RecordQueries = Omit<FailureQueries, "breakPolicy" | "stopLadder">;
@@ -27,8 +27,11 @@ export const recordQueries = (services: Services, openedAt?: number): RecordQuer
     },
     memoryDeath: (conversationId, turn, now) => memoryDeathOf(services, conversationId, turn, now),
     gatewayRefused: (provider, model) => {
-        const at = openedAt === undefined ? undefined : services.translatorGateway.attributedAt(provider, model);
-        return at !== undefined && openedAt !== undefined && at >= openedAt;
+        const since = (at: number | undefined): boolean => at !== undefined && openedAt !== undefined && at >= openedAt;
+        if (since(services.translatorGateway.attributedAt(provider, model))) {
+            return "spent";
+        }
+        return since(services.translatorGateway.throttledAt(provider, model)) ? "throttled" : undefined;
     },
 });
 
