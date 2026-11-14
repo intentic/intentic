@@ -77,7 +77,7 @@ COPY --from=oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2
 # because only that proves the parsers read what the binaries print, and pyright's `--outputjson` is a wire format.
 # So CI runs the SAME versions the sandbox image ships, fetched the same way (~62 MB, ~6s of build).
 # ponytail: keep both versions in lockstep with _sandbox/sandbox/image-packs/python.Dockerfile.
-RUN ruff_version=0.17.3 \
+RUN ruff_version=0.17.4 \
     && case "$(dpkg --print-architecture)" in \
         amd64) triple=x86_64-unknown-linux-gnu ;; \
         arm64) triple=aarch64-unknown-linux-gnu ;; \
@@ -100,7 +100,7 @@ RUN ruff_version=0.17.3 \
 # ponytail: bump together with package.json's packageManager field.
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PATH
-RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.17.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.19.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 
