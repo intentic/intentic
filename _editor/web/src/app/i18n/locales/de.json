@@ -4017,10 +4017,12 @@
             "whatToInclude": "Was enthalten sein soll"
         },
         "chatShotViewer": {
+            "filmstrip": "Alle Bilder dieser Unterhaltung"
+        },
+        "pictureViewer": {
             "actualSize": "Originalgröße",
             "close": "Schließen",
             "download": "Herunterladen",
-            "filmstrip": "Alle Bilder dieser Unterhaltung",
             "fit": "Einpassen",
             "next": "Nächstes Bild",
             "position": "{index} von {total}",
@@ -4988,7 +4990,9 @@
             "opening": "Seite wird geöffnet…",
             "notFound": "Diese Seite ist nicht mehr in diesem Chat.",
             "conversationGone": "Dieser Chat ist nicht mehr in dieser Sandbox.",
-            "readFailed": "Dieser Chat konnte nicht gelesen werden."
+            "readFailed": "Dieser Chat konnte nicht gelesen werden.",
+            "picture": "Bild {index}",
+            "pictures": "Alle Bilder dieser Seite"
         },
         "chatReview": {
             "title": "Code-Review",

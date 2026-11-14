@@ -57,7 +57,19 @@ export const PAGE_BRIDGE = {
     // A video or audio element of the page's own failed to load: the chat checks whether the page's media ticket is
     // still good, since the sealed frame cannot see why a load failed and the chat can.
     mediaError: `intentic/media-error`,
+    // The pointer rests on one of the page's pictures that is drawn smaller than it is: the chat floats it bigger beside
+    // the page, the way it does a turn's own screenshots. Said again with no picture once the pointer leaves it.
+    pictureLook: `intentic/picture-look`,
+    // A press on such a picture: the chat opens its picture viewer at it, walking every such picture on the page.
+    pictureOpen: `intentic/picture-open`,
 } as const;
+
+// Which of a page's pictures the chat offers bigger (pictureLook, pictureOpen): one carried in as data whose own pixels
+// outnumber what it is drawn at by this much on a side, and that is at least this many pixels on its longer side, so an
+// icon drawn from a sharper file is left alone. How many one press hands the viewer, at most.
+export const PAGE_PICTURE_LARGER = 1.2;
+export const PAGE_PICTURE_MIN_SIDE = 160;
+export const PAGE_PICTURES_MAX = 100;
 
 // How many distinct errors a page tells, and how long each may be: enough to fix it by, never a flood.
 export const PAGE_ERRORS_MAX = 10;
@@ -201,15 +213,19 @@ export const PAGE_LAYOUT_GUIDE =
 const baseCss = (canvas: boolean): string =>
     `html{${canvas ? `background:var(--background);` : `background:transparent;`}color:var(--foreground);font-family:var(--font-sans);` +
     `font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;scrollbar-width:none;accent-color:var(--primary)}` +
-    `html::-webkit-scrollbar{display:none}body{margin:0}code,kbd,pre,samp{font-family:var(--font-mono)}`;
+    `html::-webkit-scrollbar{display:none}body{margin:0}code,kbd,pre,samp{font-family:var(--font-mono)}` +
+    // A picture the chat opens bigger on a press says so, at no specificity, so any cursor the page gives it wins.
+    `:where(img[data-intentic-zoom]){cursor:zoom-in}`;
 
 // The theme as one `:root` rule; a value can hold nothing that ends the rule.
 export const pageThemeCss = (theme: PageTheme, canvas = false): string =>
     `:root{color-scheme:${theme.appearance};${PAGE_THEME_VARIABLES.map((name) => `${name}:${theme.variables[name].replace(/[;{}<>]/g, ``)};`).join(``)}}${baseCss(canvas)}`;
 
 // The page's half of the bridge, run first in its head: the theme it starts in and every change the chat posts, the
-// height it needs whenever that changes, and `window.intentic` for the page's own scripts (submit an answer, send the
-// chat a message, open a link). Every request is answered by the chat, which alone decides whether to act on it.
+// height it needs whenever that changes, which of its pictures the pointer rests on or presses (one already drawn at its
+// own size, or inside something the page made pressable, is never offered), and `window.intentic` for the page's own
+// scripts (submit an answer, send the chat a message, open a link). Every request is answered by the chat, which alone
+// decides whether to act on it.
 const bootstrapScript = (canvas: boolean): string => `(function(){
 var style=document.getElementById("intentic-theme"),n=0,pending={},theme=null,canvas=${canvas ? `true` : `false`};
 var names=${JSON.stringify(PAGE_THEME_VARIABLES)};
@@ -225,6 +241,14 @@ window.addEventListener("unhandledrejection",function(e){fault("Unhandled reject
 var mediaTold=false;window.addEventListener("error",function(e){var t=e.target;if(mediaTold||!t||!t.tagName||!/^(VIDEO|AUDIO|SOURCE)$/.test(t.tagName))return;var s=String(t.currentSrc||t.src||"");if(/^(data|blob):/i.test(s)||s==="")return;mediaTold=true;post({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.mediaError)},params:{}});},true);
 function request(method,params){return new Promise(function(resolve,reject){if(!framed){reject(new Error("This page is not inside a chat."));return;}var id="intentic-"+(++n);pending[id]={resolve:resolve,reject:reject};post({jsonrpc:"2.0",id:id,method:method,params:params});});}
 window.addEventListener("message",function(e){if(e.source!==window.parent)return;var d=e.data;if(!d||d.jsonrpc!=="2.0")return;if(d.method===${JSON.stringify(PAGE_BRIDGE.hostContextChanged)}&&d.params){apply({appearance:d.params.theme,variables:d.params.styles&&d.params.styles.variables});return;}if(d.id!==undefined&&pending[d.id]){var p=pending[d.id];delete pending[d.id];if(d.error)p.reject(new Error(String(d.error.message||"Refused")));else p.resolve(d.result);}});
+var looking=false;
+function larger(t){if(!t||t.tagName!=="IMG")return null;var s=String(t.currentSrc||t.src||"");if(s.slice(0,11).toLowerCase()!=="data:image/")return null;var w=t.naturalWidth,v=t.naturalHeight,r=t.getBoundingClientRect();if(!w||!v||r.width<1||r.height<1||Math.max(w,v)<${PAGE_PICTURE_MIN_SIDE}||(w<r.width*${PAGE_PICTURE_LARGER}&&v<r.height*${PAGE_PICTURE_LARGER}))return null;return{src:s,alt:String(t.alt||"").slice(0,200),left:r.left,top:r.top,width:r.width,height:r.height,aspect:w/v};}
+function opens(t){if(t.closest("a,button,label,summary,select,textarea,[role=button],[role=link],[role=option],[onclick]"))return false;var up=t.parentElement;return getComputedStyle(t).cursor!=="pointer"&&!(up&&getComputedStyle(up).cursor==="pointer");}
+function look(p){if(!p&&!looking)return;looking=!!p;post({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.pictureLook)},params:p||{}});}
+document.addEventListener("pointerover",function(e){if(e.pointerType==="touch")return;var t=e.target,p=larger(t);if(p){if(opens(t))t.setAttribute("data-intentic-zoom","");else t.removeAttribute("data-intentic-zoom");}look(p);},true);
+document.addEventListener("pointerout",function(e){if(e.target&&e.target.tagName==="IMG")look(null);},true);
+window.addEventListener("scroll",function(){look(null);},true);
+document.addEventListener("click",function(e){var t=e.target;if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;var p=larger(t);if(!p||!opens(t))return;var all=[],seen={},at=-1,list=document.images,has=Object.prototype.hasOwnProperty;for(var i=0;i<list.length;i++){var mine=list[i]===t,q=mine?p:larger(list[i]);if(!q)continue;var k=has.call(seen,q.src)?seen[q.src]:-1;if(k<0){if(all.length>=${PAGE_PICTURES_MAX}){if(at>=0)break;if(!mine)continue;all.pop();}k=seen[q.src]=all.length;all.push({src:q.src,alt:q.alt});}if(mine)at=k;}look(null);post({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.pictureOpen)},params:{pictures:all,index:at}});});
 if(framed){var h=-1,z=function(){var r=document.documentElement,b=document.body,v=Math.ceil(Math.max(r.scrollHeight>r.clientHeight?r.scrollHeight:r.getBoundingClientRect().height,b?b.getBoundingClientRect().bottom:0));if(v===h||v<=0)return;h=v;post({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.sizeChanged)},params:{height:v}});};if(window.ResizeObserver){var o=new ResizeObserver(z);o.observe(document.documentElement);document.addEventListener("DOMContentLoaded",function(){if(document.body)o.observe(document.body);z();});}window.addEventListener("load",z);setTimeout(z,50);}
 window.intentic={
 submit:function(value){return request(${JSON.stringify(PAGE_BRIDGE.submit)},{value:value===undefined?null:JSON.parse(JSON.stringify(value))});},

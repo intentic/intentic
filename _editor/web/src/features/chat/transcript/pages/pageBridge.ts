@@ -1,6 +1,7 @@
 import { isRecord } from "@intentic/base/escape";
-import { PAGE_BRIDGE, PAGE_ERROR_CHARS, type PageTheme, pageValueText } from "@intentic/sandbox-contract/text/pages";
+import { PAGE_BRIDGE, PAGE_ERROR_CHARS, PAGE_PICTURES_MAX, type PageTheme, pageValueText } from "@intentic/sandbox-contract/text/pages";
 import { PAGE_VALUE_MAX } from "@intentic/sandbox-contract/events/requests";
+import { z } from "zod";
 import { PreviewAskSchema } from "../../../../models/workspace/viewers/htmlDocument";
 
 // What a page in the chat may say to the window around it, read where it arrives: the page's own scripts can post
@@ -31,7 +32,24 @@ export type PageAsk =
     // host keeps for itself (the model's context, another display mode), which it is answered without.
     | { readonly kind: "initialized" }
     | { readonly kind: "toolCall"; readonly id: string | number; readonly name: string; readonly arguments: Record<string, unknown> }
-    | { readonly kind: "acknowledge"; readonly id: string | number; readonly result: Record<string, unknown> };
+    | { readonly kind: "acknowledge"; readonly id: string | number; readonly result: Record<string, unknown> }
+    // The pointer rests on one of the page's pictures drawn smaller than it is, or has left it (no picture).
+    | { readonly kind: "pictureLook"; readonly picture: PagePictureLook | undefined }
+    // A press on such a picture: every such picture on the page, in order, and which of them was pressed.
+    | { readonly kind: "pictureOpen"; readonly pictures: readonly PagePicture[]; readonly index: number };
+
+// One of a page's pictures, as the page carried it in: a picture's data, never an address, so showing it outside the
+// page loads nothing and runs nothing.
+export interface PagePicture {
+    readonly src: string;
+    readonly alt: string;
+}
+
+// The picture the pointer rests on, with where the page draws it (in the frame's own coordinates) and its own shape.
+export interface PagePictureLook extends PagePicture {
+    readonly rect: { readonly left: number; readonly top: number; readonly width: number; readonly height: number };
+    readonly aspect: number;
+}
 
 type RequestId = string | number;
 
@@ -49,12 +67,44 @@ const messageText = (params: Record<string, unknown>): string | undefined => {
     return words === `` ? undefined : words;
 };
 
+// A picture's data as an `<img>` in this window may show it; anything else (an address, a script) is no picture.
+const ALT_CHARS = 200;
+const PictureSchema = z.object({
+    src: z.string().regex(/^data:image\/[\w.+-]+[;,]/i),
+    alt: z
+        .string()
+        .catch(``)
+        .transform((alt) => alt.trim().slice(0, ALT_CHARS)),
+});
+const PictureLookSchema = PictureSchema.extend({
+    left: z.number().finite(),
+    top: z.number().finite(),
+    width: z.number().finite().positive(),
+    height: z.number().finite().positive(),
+    aspect: z.number().finite().positive(),
+}).transform(({ src, alt, left, top, width, height, aspect }): PagePictureLook => ({ src, alt, rect: { left, top, width, height }, aspect }));
+// An entry that is no picture costs only itself, but the press has to be on one, and lands on it among the rest.
+const PictureOpenSchema = z
+    .object({
+        pictures: z.array(PictureSchema.optional().catch(undefined)).max(PAGE_PICTURES_MAX),
+        index: z.number().int().nonnegative(),
+    })
+    .refine(({ pictures, index }) => pictures[index] !== undefined)
+    .transform(({ pictures, index }) => ({
+        pictures: pictures.filter((picture) => picture !== undefined),
+        index: pictures.slice(0, index).filter((picture) => picture !== undefined).length,
+    }));
+
 const httpUrl = (value: unknown): string | undefined => (typeof value === `string` && /^https?:\/\//i.test(value) ? value : undefined);
 
-// Notices that carry nothing but their name, read as they are.
-const BARE_NOTICES: ReadonlyMap<string, PageAsk> = new Map<string, PageAsk>([
-    [PAGE_BRIDGE.initialized, { kind: `initialized` }],
-    [PAGE_BRIDGE.mediaError, { kind: `mediaError` }],
+// Notices read whole by their schema: those that carry nothing but their name, the picture the pointer rests on (none
+// once it leaves, or for one that is no picture), and a press on one.
+const bare = (ask: PageAsk): z.ZodType<PageAsk> => z.unknown().transform(() => ask);
+const NOTICES: ReadonlyMap<string, z.ZodType<PageAsk>> = new Map<string, z.ZodType<PageAsk>>([
+    [PAGE_BRIDGE.initialized, bare({ kind: `initialized` })],
+    [PAGE_BRIDGE.mediaError, bare({ kind: `mediaError` })],
+    [PAGE_BRIDGE.pictureLook, z.unknown().transform((params): PageAsk => ({ kind: `pictureLook`, picture: PictureLookSchema.safeParse(params).data }))],
+    [PAGE_BRIDGE.pictureOpen, PictureOpenSchema.transform((open): PageAsk => ({ kind: `pictureOpen`, ...open }))],
 ]);
 
 // One message, as the ask it is, or undefined for anything that is not one.
@@ -111,7 +161,7 @@ export const readPageAsk = (data: unknown): PageAsk | undefined => {
             return value.length > PAGE_VALUE_MAX ? { kind: `oversize`, id } : { kind: `submit`, id, value };
         }
         default:
-            return BARE_NOTICES.get(data[`method`]);
+            return NOTICES.get(data[`method`])?.safeParse(params).data;
     }
 };
 

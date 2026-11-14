@@ -1,6 +1,6 @@
 // What a page in the chat may say to the window around it, read where it arrives: the two dialects (the sealed
 // document's link guide, the page bridge's JSON-RPC) become a handful of asks, and everything else is nothing.
-import { PAGE_BRIDGE, PAGE_ERROR_CHARS, PAGE_FALLBACK_THEMES } from "@intentic/sandbox-contract/text/pages";
+import { PAGE_BRIDGE, PAGE_ERROR_CHARS, PAGE_FALLBACK_THEMES, PAGE_PICTURES_MAX } from "@intentic/sandbox-contract/text/pages";
 import { PAGE_VALUE_MAX } from "@intentic/sandbox-contract/events/requests";
 import { withPageDraft } from "../../../../models/conversations/session/turnLiveState";
 import { initializeResult, readPageAsk, themeMessage } from "./pageBridge";
@@ -55,6 +55,40 @@ describe(`readPageAsk`, () => {
         expect(readPageAsk(`not even an object`)).toBeUndefined();
         // A request that cannot be answered is no request.
         expect(readPageAsk(rpc(PAGE_BRIDGE.submit, { value: 1 }))).toBeUndefined();
+    });
+
+    it(`reads the picture the pointer rests on, and its leaving as no picture`, () => {
+        const src = `data:image/png;base64,iVBORw0KGgo=`;
+        expect(readPageAsk(rpc(PAGE_BRIDGE.pictureLook, { src, alt: ` Before `, left: 10, top: -4, width: 320, height: 180, aspect: 16 / 9 }))).toEqual({
+            kind: `pictureLook`,
+            picture: { src, alt: `Before`, rect: { left: 10, top: -4, width: 320, height: 180 }, aspect: 16 / 9 },
+        });
+        expect(readPageAsk(rpc(PAGE_BRIDGE.pictureLook, {}))).toEqual({ kind: `pictureLook`, picture: undefined });
+        // Only a picture's own data is ever shown outside the page: an address or a script reads as the pointer leaving.
+        for (const other of [`https://example.com/a.png`, `javascript:alert(1)`, `data:text/html,<script>`, `blob:null/1`]) {
+            expect(readPageAsk(rpc(PAGE_BRIDGE.pictureLook, { src: other, left: 0, top: 0, width: 1, height: 1, aspect: 1 }))).toEqual({
+                kind: `pictureLook`,
+                picture: undefined,
+            });
+        }
+        expect(readPageAsk(rpc(PAGE_BRIDGE.pictureLook, { src, left: 0, top: 0, width: 0, height: 1, aspect: 1 }))).toEqual({ kind: `pictureLook`, picture: undefined });
+    });
+
+    it(`reads a press on a picture as every picture on the page, landing on the pressed one past any that is none`, () => {
+        const a = `data:image/png;base64,AAAA`;
+        const b = `data:image/svg+xml,%3Csvg%3E`;
+        expect(readPageAsk(rpc(PAGE_BRIDGE.pictureOpen, { pictures: [{ src: a, alt: `before` }, { src: `https://x.dev/a.png` }, { src: b }], index: 2 }))).toEqual({
+            kind: `pictureOpen`,
+            pictures: [
+                { src: a, alt: `before` },
+                { src: b, alt: `` },
+            ],
+            index: 1,
+        });
+        // A press that is not on a picture opens nothing, nor does a list past the cap.
+        expect(readPageAsk(rpc(PAGE_BRIDGE.pictureOpen, { pictures: [{ src: a }, { src: `https://x.dev/a.png` }], index: 1 }))).toBeUndefined();
+        expect(readPageAsk(rpc(PAGE_BRIDGE.pictureOpen, { pictures: [{ src: a }], index: 3 }))).toBeUndefined();
+        expect(readPageAsk(rpc(PAGE_BRIDGE.pictureOpen, { pictures: Array.from({ length: PAGE_PICTURES_MAX + 1 }, () => ({ src: a })), index: 0 }))).toBeUndefined();
     });
 
     it(`answers the handshake with the theme, and says a theme change in the same words`, () => {

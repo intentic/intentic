@@ -4017,10 +4017,12 @@
             "whatToInclude": "Ce qu'il faut inclure"
         },
         "chatShotViewer": {
+            "filmstrip": "Toutes les images de cette conversation"
+        },
+        "pictureViewer": {
             "actualSize": "Taille réelle",
             "close": "Fermer",
             "download": "Télécharger",
-            "filmstrip": "Toutes les images de cette conversation",
             "fit": "Ajuster",
             "next": "Image suivante",
             "position": "{index} sur {total}",
@@ -4988,7 +4990,9 @@
             "opening": "Ouverture de la page…",
             "notFound": "Cette page n'est plus dans ce chat.",
             "conversationGone": "Ce chat n'est plus dans ce sandbox.",
-            "readFailed": "Impossible de lire ce chat."
+            "readFailed": "Impossible de lire ce chat.",
+            "picture": "Image {index}",
+            "pictures": "Toutes les images de cette page"
         },
         "chatReview": {
             "title": "Revue de code",

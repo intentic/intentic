@@ -1,6 +1,6 @@
 // Where a hovered picture's bigger version floats: in whichever free region, beside the chat panel, beside the picture
-// or above/below it, draws the picture largest. Shared by the composer/bubble thumbs (ChatImageThumb) and a finished
-// turn's screenshot strip (ChatTurnShots), so both look the same way.
+// or above/below it, draws the picture largest. Shared by the composer/bubble thumbs (ChatImageThumb), a finished turn's
+// screenshot strip (ChatTurnShots) and the pictures on a page the agent showed (ChatPageFrame), so all look the same way.
 
 // The fixed region the look is drawn in (each edge's distance from the window's same edge), and where in it the
 // picture sits: a picture smaller than its region hugs the side nearest what it previews rather than floating off.
@@ -31,14 +31,27 @@ const drawnWidth = (box: QuickLookBox, viewport: { width: number; height: number
 export const aspectOf = (image: HTMLImageElement | null | undefined): number =>
     image && image.naturalWidth > 0 && image.naturalHeight > 0 ? image.naturalWidth / image.naturalHeight : WIDE;
 
+// Where on screen a picture is drawn, in the window's own coordinates.
+export interface PictureRect {
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+    readonly width: number;
+    readonly height: number;
+}
+
 // `aspect` is the picture's width over height (aspectOf); the look is placed for it.
-export const quickLookBox = (el: HTMLElement, aspect = WIDE): QuickLookBox => {
+export const quickLookBox = (el: HTMLElement, aspect = WIDE): QuickLookBox => quickLookBoxAt(el, el.getBoundingClientRect(), aspect);
+
+// The same for a picture drawn at `rect` that is not itself an element of this window (one inside a page's sealed
+// frame): `el` is what it is drawn in, which says the window and the chat panel the look keeps clear of.
+export const quickLookBoxAt = (el: HTMLElement, rect: PictureRect, aspect = WIDE): QuickLookBox => {
     // The picture may live in a floating window with its own viewport; clamp against that window, not globalThis.
     const win = el.ownerDocument.defaultView ?? globalThis;
     const width = win.innerWidth;
     const height = win.innerHeight;
     const viewport = { width, height };
-    const rect = el.getBoundingClientRect();
     // Horizontal span centred on `centre`, at most MAX_WIDTH wide, kept inside the window's margins.
     const span = (centre: number): Pick<QuickLookBox, `left` | `right`> => {
         const wide = Math.min(MAX_WIDTH, width - MARGIN * 2);
@@ -53,7 +66,7 @@ export const quickLookBox = (el: HTMLElement, aspect = WIDE): QuickLookBox => {
         align: growUp ? (`end` as const) : (`start` as const),
     };
     // Left of or right of an edge box: the chat panel's first, so the look covers workspace rather than the chat.
-    const besides = (box: DOMRect): QuickLookBox[] => [
+    const besides = (box: PictureRect): QuickLookBox[] => [
         { ...vertical, left: Math.max(MARGIN, box.left - GAP - MAX_WIDTH), right: width - box.left + GAP, justify: `end` },
         { ...vertical, left: box.right + GAP, right: Math.max(MARGIN, width - box.right - GAP - MAX_WIDTH), justify: `start` },
     ];

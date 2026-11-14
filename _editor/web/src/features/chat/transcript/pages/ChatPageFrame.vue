@@ -9,6 +9,7 @@ const toldPages = new Map<string, boolean>();
 import { deliverableKindOf } from "@intentic/sandbox-contract/text/documents";
 import { type McpAppData, PAGE_ERRORS_MAX, sizedFirst } from "@intentic/sandbox-contract/text/pages";
 import { type Page, PAGE_MAX_HEIGHT } from "@intentic/sandbox-contract/events/requests";
+import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
@@ -17,12 +18,16 @@ import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { initializeResult, type PageAsk, pageRefusal, pageResult, readPageAsk, themeMessage, toolInputMessage, toolResultMessage } from "./pageBridge";
 import { buildPageDocument, mediaFailed, PAGE_BLEED } from "./pageDocument";
 import { usePageTheme } from "./pageTheme";
+import { usePagePictures } from "./usePagePictures";
+import PictureQuickLook from "../attachments/PictureQuickLook.vue";
+import PictureViewer from "../attachments/PictureViewer.vue";
 
 // One page the agent showed, drawn in the chat: its stored file, sealed (no network, an opaque origin, no reach into
 // this window), wearing the chat's live theme, at the height the page says it needs. Mounted only once it nears the
 // screen, so a chat full of charts costs what is on screen. Every ask the page makes comes through readPageAsk and is
 // acted on here only when it is this frame's own and the reader has just pressed something in it: a page's script on
-// its own can open nothing, send nothing and answer nothing.
+// its own can open nothing, send nothing and answer nothing. Its pictures are looked at and opened the way a turn's own
+// screenshots are (usePagePictures).
 
 const t = useT();
 
@@ -59,6 +64,7 @@ const bleed = { left: `-${PAGE_BLEED}px`, width: `calc(100% + ${2 * PAGE_BLEED}p
 
 const box = useTemplateRef<HTMLElement>(`box`);
 const frame = useTemplateRef<HTMLIFrameElement>(`frame`);
+const { shown, take, viewing, at, pictures, drawn, download } = usePagePictures(frame);
 const near = ref(false);
 const srcdoc = ref<string>();
 const failed = ref(false);
@@ -276,7 +282,7 @@ const onMessage = (event: MessageEvent): void => {
     // A player that failed is the window's to look into (pageDocument.ts), never an ask the page makes of the chat.
     if (ask?.kind === `mediaError`) {
         void mediaFailed(props.page.path);
-    } else if (ask !== undefined) {
+    } else if (ask !== undefined && !take(ask, pressedHere)) {
         void act(ask);
     }
 };
@@ -332,5 +338,28 @@ onBeforeUnmount(() => {
             @load="onLoad"
         />
         <p v-else-if="failed" class="flex size-full items-center justify-center text-2xs text-subtle">{{ t(`chat.chatPages.unavailable`) }}</p>
+        <PictureQuickLook :src="shown?.picture.src" :alt="shown?.picture.alt ?? ``" :box="shown?.box" />
+        <!-- Mounted only while open, so a page nobody opened a picture of holds no viewer. -->
+        <PictureViewer
+            v-if="viewing"
+            v-model:open="viewing"
+            v-model:at="at"
+            :pictures="pictures"
+            :drawn="drawn"
+            :caption="page.title"
+            :filmstrip="t(`chat.chatPages.pictures`)"
+        >
+            <template #actions>
+                <button
+                    type="button"
+                    :class="ui.iconButton()"
+                    :aria-label="t(`chat.pictureViewer.download`)"
+                    v-tooltip.bottom="t(`chat.pictureViewer.download`)"
+                    @click="download"
+                >
+                    <Icon name="download" class="text-xs" />
+                </button>
+            </template>
+        </PictureViewer>
     </div>
 </template>

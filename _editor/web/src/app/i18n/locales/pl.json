@@ -4017,10 +4017,12 @@
             "whatToInclude": "Co dołączyć"
         },
         "chatShotViewer": {
+            "filmstrip": "Wszystkie obrazy w tej rozmowie"
+        },
+        "pictureViewer": {
             "actualSize": "Rzeczywisty rozmiar",
             "close": "Zamknij",
             "download": "Pobierz",
-            "filmstrip": "Wszystkie obrazy w tej rozmowie",
             "fit": "Dopasuj",
             "next": "Następny obraz",
             "position": "{index} z {total}",
@@ -4988,7 +4990,9 @@
             "opening": "Otwieranie strony…",
             "notFound": "Tej strony nie ma już w tym czacie.",
             "conversationGone": "Tego czatu nie ma już w tym sandboxie.",
-            "readFailed": "Nie udało się odczytać tego czatu."
+            "readFailed": "Nie udało się odczytać tego czatu.",
+            "picture": "Obraz {index}",
+            "pictures": "Wszystkie obrazy na tej stronie"
         },
         "chatReview": {
             "title": "Przegląd kodu",
