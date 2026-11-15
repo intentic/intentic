@@ -2,7 +2,7 @@
 import { Button, Icon, type IconName, vAction } from "@intentic/extension-ui";
 import { formatDuration } from "@intentic/extension-ui/format";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { KEYS, playableSource, seekTargets, SPEEDS, type Transport } from "./mediaControls";
+import { KEYS, seekTargets, SPEEDS, type Transport, useRendition } from "./mediaControls";
 import { t } from "./i18n.js";
 
 // Audio and video share one component, always a `<video>` element; layout follows `videoWidth > 0` once metadata loads.
@@ -16,10 +16,8 @@ const stage = ref<HTMLElement>();
 
 const playing = ref(false);
 const waiting = ref(false);
-const failed = ref(false);
-// What the element plays: `src`, or once that failed to decode, the daemon's rendering of it, spun over while it's made.
-const source = ref(src);
-const rendering = ref(false);
+// What the element plays: `src`, or the daemon's rendering of it once that failed to decode (useRendition, mediaControls.ts).
+const { source, rendering, failed, onError, reset: resetSource } = useRendition(() => src);
 // Set in `loadedmetadata`; 0 means audio-only regardless of container.
 const videoWidth = ref(0);
 const duration = ref(0);
@@ -144,14 +142,6 @@ const onLoadedMetadata = (): void => {
     videoWidth.value = node.videoWidth;
     duration.value = node.duration;
     node.playbackRate = rate.value;
-};
-
-// A file this browser can't decode is asked for once more as the daemon's AAC rendering; only that failing is a failure.
-const onError = (): void => {
-    const next = playableSource(source.value);
-    rendering.value = next !== undefined;
-    failed.value = next === undefined;
-    source.value = next ?? source.value;
 };
 
 const onTimeUpdate = (): void => {
@@ -365,10 +355,8 @@ onBeforeUnmount(() => {
 watch(
     () => src,
     () => {
-        source.value = src;
-        rendering.value = false;
+        resetSource();
         playing.value = false;
-        failed.value = false;
         videoWidth.value = 0;
         duration.value = 0;
         currentTime.value = 0;
@@ -428,7 +416,7 @@ watch(
             <p class="max-w-md truncate text-center text-sm text-content">{{ filename }}</p>
         </div>
 
-        <!-- Buffering a video (audio's transport already says so), or rendering a recording this browser can't decode. -->
+        <!-- Buffering a video (audio's transport already says so), or rendering a file this browser can't decode. -->
         <div v-if="((waiting && hasVideo) || rendering) && !failed" class="pointer-events-none absolute inset-0 flex items-center justify-center">
             <Icon name="spinner" class="text-3xl" :class="hasVideo ? `text-white/80` : `text-subtle`" spin />
         </div>

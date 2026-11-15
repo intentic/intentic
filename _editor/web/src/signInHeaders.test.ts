@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 // Pins that nginx.conf's response headers don't break Google sign-in: Referrer-Policy must still send Origin to
 // accounts.google.com's cross-origin request, and CSP must still allow its script and frame. And that the CSP still
-// lets a PDF open in the browser's own viewer.
+// lets a PDF open in the browser's own viewer, and video and audio stream from the sandbox.
 
 const here = import.meta.dirname;
 const nginxConf = readFileSync(resolve(here, `../nginx.conf`), `utf8`);
@@ -43,5 +43,15 @@ describe(`deployed web headers`, () => {
         const sources = (name: string): string[] => (new RegExp(`${name} ([^;]*)`).exec(csp)?.[1] ?? ``).split(` `);
         expect(sources(`object-src`)).toContain(`blob:`);
         expect(sources(`frame-src`)).toContain(`blob:`);
+    });
+
+    // A video or recording streams straight from the sandbox (GET /workspace/media, a shown page's GET /pages/media):
+    // its public https address, a certified loopback name, or plain 127.0.0.1. Refuse those and every player shows
+    // "This format can't be played in the browser", and a chat page's players sit at 0:00 (its srcdoc frame inherits
+    // this policy).
+    it(`lets video and audio stream from the sandbox, wherever the editor reaches it`, () => {
+        const csp = valueOf(`Content-Security-Policy`);
+        const sources = (name: string): string[] => (new RegExp(`${name} ([^;]*)`).exec(csp)?.[1] ?? ``).split(` `);
+        expect(sources(`media-src`)).toEqual(expect.arrayContaining([`https:`, `http://127.0.0.1:*`, `blob:`]));
     });
 });

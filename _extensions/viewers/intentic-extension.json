@@ -46,9 +46,9 @@
                 ],
                 "fetch": "url"
             },
-            { "id": "docx", "extensions": ["docx"], "fetch": "blob", "compare": true },
-            { "id": "xlsx", "extensions": ["xlsx", "ods", "ots"], "fetch": "blob" },
-            { "id": "pptx", "extensions": ["pptx"], "fetch": "blob" },
+            { "id": "docx", "extensions": ["docx", "docm", "dotx", "dotm"], "fetch": "blob", "compare": true },
+            { "id": "xlsx", "extensions": ["xlsx", "xlsm", "xltx", "xltm", "ods", "ots"], "fetch": "blob" },
+            { "id": "pptx", "extensions": ["pptx", "pptm", "ppsx", "ppsm", "potx", "potm"], "fetch": "blob" },
             { "id": "odf-text", "extensions": ["odt", "ott"], "fetch": "blob" },
             { "id": "odf-slides", "extensions": ["odp", "otp", "odg", "otg"], "fetch": "blob" },
             { "id": "rtf", "extensions": ["rtf"], "fetch": "blob" },

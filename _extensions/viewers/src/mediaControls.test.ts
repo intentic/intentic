@@ -1,7 +1,7 @@
 // Through the door the viewer imports it by: the clock itself lives in the kit, since the chat composer's audio chip
 // draws the same one and two players disagreeing about "0:59" is the bug this shares to avoid.
 import { formatDuration } from "@intentic/extension-ui/format";
-import { playableSource, seekTargets, SPEEDS } from "./mediaControls";
+import { playableSource, renditionReady, seekTargets, SPEEDS } from "./mediaControls";
 
 describe(`formatDuration`, () => {
     it(`drops the hours field below an hour`, () => {
@@ -57,5 +57,55 @@ describe(`playableSource`, () => {
 
     it(`has nothing to ask of bytes the page already holds`, () => {
         expect(playableSource(`blob:https://box.example/5c1e`)).toBeUndefined();
+    });
+});
+
+/* A video the browser can't decode takes minutes to re-encode, longer than a proxy holds one request: the daemon answers
+   503 with Retry-After while it works, and the player asks again rather than handing the element an address that fails. */
+describe(`waiting for the daemon's rendition`, () => {
+    const answer = (status: number, headers: Record<string, string> = {}): Response => new Response(status === 503 ? `{}` : `x`, { status, headers });
+    const scripted = (statuses: readonly Response[]) => {
+        const asked: RequestInit[] = [];
+        const slept: number[] = [];
+        let next = 0;
+        return {
+            asked,
+            slept,
+            ask: async (_url: string, init: RequestInit) => {
+                asked.push(init);
+                return statuses[next++] ?? answer(500);
+            },
+            pause: async (ms: number) => {
+                slept.push(ms);
+            },
+        };
+    };
+
+    it(`asks again while it is being made, after the pause the daemon names, until it streams`, async () => {
+        const wire = scripted([answer(503, { "retry-after": `3` }), answer(503), answer(206)]);
+        expect(await renditionReady(`/workspace/media?path=a.avi&playable=1`, new AbortController().signal, wire)).toBe(true);
+        expect(wire.asked).toHaveLength(3);
+        expect(wire.slept).toEqual([3000, 2000]);
+        // One byte, so confirming a finished rendition moves nothing.
+        expect(wire.asked[0]?.headers).toEqual({ Range: `bytes=0-0` });
+    });
+
+    it(`gives up on what can't be made, and on a network that fails`, async () => {
+        expect(await renditionReady(`u`, new AbortController().signal, scripted([answer(415)]))).toBe(false);
+        const down = { ask: async () => { throw new TypeError(`Failed to fetch`); }, pause: async () => {} };
+        expect(await renditionReady(`u`, new AbortController().signal, down)).toBe(false);
+    });
+
+    it(`stops asking once the player moves on`, async () => {
+        const moved = new AbortController();
+        const wire = scripted([answer(503), answer(503), answer(206)]);
+        const ready = renditionReady(`u`, moved.signal, {
+            ask: wire.ask,
+            pause: async () => {
+                moved.abort();
+            },
+        });
+        expect(await ready).toBe(false);
+        expect(wire.asked).toHaveLength(1);
     });
 });

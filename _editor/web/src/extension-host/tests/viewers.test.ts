@@ -40,10 +40,11 @@ describe(`ext-viewers`, () => {
         expect(declared.get(`svg`)).toEqual({ id: `svg`, extensions: [`svg`], fetch: `text` });
         expect(declared.get(`pdf`)).toEqual({ id: `pdf`, extensions: [`pdf`], fetch: `blob` });
         // The one format with a compare reading: its diff is drawn as one marked document, not two sides.
-        expect(declared.get(`docx`)).toEqual({ id: `docx`, extensions: [`docx`], fetch: `blob`, compare: true });
+        // With macros or as a template it is the same package, read the same way.
+        expect(declared.get(`docx`)).toEqual({ id: `docx`, extensions: [`docx`, `docm`, `dotx`, `dotm`], fetch: `blob`, compare: true });
         // One viewer for both spreadsheet formats: its worker decides which it is from the bytes.
-        expect(declared.get(`xlsx`)).toEqual({ id: `xlsx`, extensions: [`xlsx`, `ods`, `ots`], fetch: `blob` });
-        expect(declared.get(`pptx`)).toEqual({ id: `pptx`, extensions: [`pptx`], fetch: `blob` });
+        expect(declared.get(`xlsx`)).toEqual({ id: `xlsx`, extensions: [`xlsx`, `xlsm`, `xltx`, `xltm`, `ods`, `ots`], fetch: `blob` });
+        expect(declared.get(`pptx`)).toEqual({ id: `pptx`, extensions: [`pptx`, `pptm`, `ppsx`, `ppsm`, `potx`, `potm`], fetch: `blob` });
         expect(declared.get(`odf-text`)).toEqual({ id: `odf-text`, extensions: [`odt`, `ott`], fetch: `blob` });
         expect(declared.get(`odf-slides`)).toEqual({ id: `odf-slides`, extensions: [`odp`, `otp`, `odg`, `otg`], fetch: `blob` });
         expect(declared.get(`rtf`)).toEqual({ id: `rtf`, extensions: [`rtf`], fetch: `blob` });
@@ -60,7 +61,7 @@ describe(`ext-viewers`, () => {
                 claims.set(extension, viewer.id);
             }
         }
-        for (const extension of [`docx`, `xlsx`, `pptx`, `pdf`, `odt`, `ods`, `odp`, `odg`, `rtf`, `epub`]) {
+        for (const extension of [`docx`, `docm`, `xlsx`, `xlsm`, `pptx`, `pptm`, `ppsx`, `pdf`, `odt`, `ods`, `odp`, `odg`, `rtf`, `epub`]) {
             expect(claims.has(extension)).toBe(true);
         }
     });
@@ -83,6 +84,16 @@ describe(`ext-viewers`, () => {
         const media = (viewers.manifest.contributes?.viewers ?? []).find((viewer) => viewer.id === `media`);
         for (const extension of media?.extensions ?? []) {
             expect([`audio`, `video`], extension).toContain(formatOf(`clip.${extension}`).category);
+        }
+    });
+
+    // A format a viewer draws is bytes to the rest of the app: one the table left unnamed would open in the text editor
+    // as garbage wherever the viewer isn't asked (a diff, a search hit).
+    it(`claims only what the format table calls binary, SVG aside`, () => {
+        for (const viewer of viewers.manifest.contributes?.viewers ?? []) {
+            for (const extension of viewer.extensions.filter((name) => name !== `svg`)) {
+                expect(formatOf(`file.${extension}`).binary, extension).toBe(true);
+            }
         }
     });
 

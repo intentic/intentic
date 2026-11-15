@@ -34,6 +34,11 @@ const BYTES: Entry = { category: `binary`, binary: true };
 const DOCUMENT: Entry = { category: `doc`, binary: true, reads: `document` };
 const SHEET: Entry = { category: `data`, binary: true, reads: `document`, sheet: true };
 const PAGES: Entry = { ...DOCUMENT, pages: true };
+// The same packages with macros, or as templates or shows: the viewers draw them as they draw the plain ones, but fileq
+// reads only the plain names, so a diff has no text of theirs to read.
+const WORD_VARIANT: Entry = { category: `doc`, binary: true, pages: true };
+const SHEET_VARIANT: Entry = { category: `data`, binary: true };
+const DECK_VARIANT: Entry = { category: `doc`, binary: true };
 
 const BY_EXT: Readonly<Record<string, Entry>> = {
     png: picture(() => t(`ui.fileFormat.pngPicture`)),
@@ -84,11 +89,19 @@ const BY_EXT: Readonly<Record<string, Entry>> = {
     flv: media(`video`, () => t(`ui.fileFormat.flashVideo`)),
     pdf: { ...DOCUMENT, label: () => t(`ui.fileFormat.pdfDocument`) },
     docx: { ...PAGES, label: () => t(`ui.fileFormat.wordDocument`) },
+    docm: { ...WORD_VARIANT, label: () => t(`ui.fileFormat.wordDocument`) },
+    dotx: WORD_VARIANT,
+    dotm: WORD_VARIANT,
     odt: PAGES,
     ott: PAGES,
     rtf: PAGES,
     epub: DOCUMENT,
     pptx: { ...DOCUMENT, label: () => t(`ui.fileFormat.powerPointDeck`) },
+    pptm: { ...DECK_VARIANT, label: () => t(`ui.fileFormat.powerPointDeck`) },
+    ppsx: { ...DECK_VARIANT, label: () => t(`ui.fileFormat.powerPointDeck`) },
+    ppsm: DECK_VARIANT,
+    potx: DECK_VARIANT,
+    potm: DECK_VARIANT,
     odp: DOCUMENT,
     otp: DOCUMENT,
     odg: DOCUMENT,
@@ -100,6 +113,9 @@ const BY_EXT: Readonly<Record<string, Entry>> = {
     mdx: { category: `doc`, label: `Markdown`, reads: `markdown` },
     txt: { category: `doc`, label: () => t(`ui.fileFormat.plainText`), reads: `plain` },
     xlsx: { ...SHEET, label: () => t(`ui.fileFormat.excelSpreadsheet`) },
+    xlsm: { ...SHEET_VARIANT, label: () => t(`ui.fileFormat.excelSpreadsheet`) },
+    xltx: SHEET_VARIANT,
+    xltm: SHEET_VARIANT,
     ods: SHEET,
     ots: SHEET,
     csv: { category: `data`, reads: `table` },

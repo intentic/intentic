@@ -231,8 +231,9 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
     },
 
     // GET /workspace/media: range-streamed reads for a `<video>`, unlike /workspace/raw's whole-file answer; no byte
-    // cap since nothing is buffered. `playable` streams a recording the browser couldn't decode as AAC instead, rendered
-    // once by ffmpeg (workspace-playable.ts); 415 where there is no such rendition to make.
+    // cap since nothing is buffered. `playable` streams a recording or video the browser couldn't decode as an MP4 every
+    // engine plays instead, rendered once by ffmpeg (workspace-playable.ts); 415 where there is no such rendition to make,
+    // 503 with Retry-After while it is still being made.
     // Auth is a query-string ticket (minted via workspace.mediaTicket, bound to one path) since a media element can't
     // send a bearer; loopback has none.
     media: async (c: Context<AppEnv>): Promise<Response> => {
@@ -252,7 +253,7 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
         const wantsPlayable = c.req.query("playable") !== undefined;
         const source = await mediaSourceFor(services.workspace.root, target, wantsPlayable, (file) => services.files.size(file));
         if ("error" in source) {
-            return c.json({ error: source.error }, source.status);
+            return c.json({ error: source.error }, source.status, source.headers);
         }
         const size = source.size;
         const range = parseByteRange(c.req.header("range"), size);
