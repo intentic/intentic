@@ -8,6 +8,7 @@ import { useT } from "../../i18n/index.js";
 import { formatElapsed } from "../../lib/format.js";
 import { vSkeletonSource } from "../../lib/skeleton/skeletonSource.js";
 import { imprintOf } from "../../lib/skeleton/skeletonStore.js";
+import Icon from "../primitives/Icon.vue";
 import Notice from "./Notice.vue";
 import SkeletonRows from "./SkeletonRows.vue";
 import SkeletonSnapshot from "./SkeletonSnapshot.vue";
@@ -156,13 +157,23 @@ const spoken = computed(() => label ?? t(`ui.status.loading`));
             <slot v-else-if="$slots[`fallback`]" name="fallback" />
             <div v-else role="status" aria-busy="true" :aria-label="spoken"><SkeletonRows /></div>
             <!-- After the placeholder, never before it: the region's predicted look must not move when a wait runs long.
-                 A row of its own in a grid, where it would otherwise take one of the region's cells. -->
-            <p v-if="elapsed !== undefined" key="elapsed" class="col-span-full flex items-center gap-2 pt-2 text-2xs text-muted" role="status">
-                <span class="tabular-nums">{{ t(`ui.await.stillWaiting`, { elapsed }) }}</span>
-                <button v-if="retry !== undefined" type="button" class="text-link hover:underline" @click="retry()">
-                    {{ t(`ui.action.tryAgain`) }}
-                </button>
-            </p>
+                 A row of its own in a grid, where it would otherwise take one of the region's cells. Centred and drawn as
+                 the same pill FreshnessFrame says a slow refresh with, so it reads as the app's word about the wait even
+                 when the placeholder above it is blank and it is the only thing in the pane. -->
+            <div v-if="elapsed !== undefined" key="elapsed" class="col-span-full flex justify-center px-4 py-3">
+                <p
+                    role="status"
+                    class="ui-enter flex items-center gap-2 rounded-full border border-line bg-card py-1 text-xs text-muted shadow-sm"
+                    :class="retry === undefined ? `px-3` : `ps-3 pe-1`"
+                >
+                    <!-- The one thing that moves when the placeholder has nothing to draw: says the wait is alive, not hung. -->
+                    <Icon name="spinner" spin class="shrink-0" aria-hidden="true" />
+                    <span class="tabular-nums">{{ t(`ui.await.stillWaiting`, { elapsed }) }}</span>
+                    <button v-if="retry !== undefined" type="button" class="ui-chip ui-chip-sm font-medium text-link" @click="retry()">
+                        {{ t(`ui.action.tryAgain`) }}
+                    </button>
+                </p>
+            </div>
         </template>
         <div v-if="of.state === `ready`" key="answer" v-skeleton-source.empty="source" class="contents">
             <div :class="hidden ? `hidden` : `contents`">
