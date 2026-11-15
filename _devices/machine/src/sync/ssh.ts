@@ -138,13 +138,30 @@ const anchored = (path: string): string => {
     return `/${tail.endsWith(".") ? `${tail}*` : tail}`;
 };
 
+// (2026-11-15) An excluded folder that holds a backed-up one (the artifacts and their attachments) is excluded child by
+// child and the kept one taken back: `/x/*` then `!/x/kept`. Mutagen never looks inside an ignored folder, so a `!` under
+// a bare `/x` would keep nothing. An excluded folder inside another one already is left to it.
+const isUnder = (path: string, folder: string): boolean => folder.endsWith("/") && path !== folder && path.startsWith(folder);
+
+const excludedPatterns = (inGroup: readonly string[], excluded: readonly string[]): string[] =>
+    excluded.flatMap((path) => {
+        if (excluded.some((outer) => isUnder(path, outer))) {
+            return [];
+        }
+        const kept = inGroup.filter((inner) => isUnder(inner, path) && !excluded.includes(inner));
+        if (kept.some((inner) => inner.slice(path.length).replace(/\/$/, "").includes("/"))) {
+            throw new Error(`backup ignores: ${path} keeps a folder more than one level down, which one \`!\` cannot take back`);
+        }
+        return kept.length === 0 ? [anchored(path)] : [`${anchored(path)}/*`, ...kept.map((inner) => `!${anchored(inner)}`)];
+    });
+
 export const BACKUP_IGNORES: readonly string[] = STATE_GROUPS.flatMap((group) => {
     const inGroup = stateGroupPaths(group);
     const excluded = inGroup.filter((path) => UNBACKED_STATE_PATHS.includes(path));
     if (excluded.length === 0) {
         return [];
     }
-    return excluded.length === inGroup.length ? [`/${group}`] : excluded.map(anchored);
+    return excluded.length === inGroup.length ? [`/${group}`] : excludedPatterns(inGroup, excluded);
 });
 
 // A sandbox id safe for an ssh-config alias / Mutagen session name (letters, digits, dashes).

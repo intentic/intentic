@@ -593,11 +593,16 @@ describe(`BACKED_UP_STATE_PATHS`, () => {
 
     it(`still withholds the tokens that authenticate against this sandbox`, () => {
         expect(BACKED_UP_STATE_PATHS).not.toContain(`.intentic/identity/control-tokens.json`);
-        // The whole hand-written list, in declaration order: one credential that would admit its holder to the source
-        // sandbox, and one tree of page captures nothing reads after its own turn. Everything else follows from class.
+        // The whole hand-written list, in declaration order: the agents' artifacts, whose size has no bound (2026-11-15),
+        // and one credential that would admit its holder to the source sandbox. Everything else follows from class.
         expect(WORKSPACE_STATE_FILES.filter((file) => file.backup === false).map((file) => file.path)).toEqual([
-            `.intentic/records/artifacts/browser/`,
+            `.intentic/records/artifacts/`,
             `.intentic/identity/control-tokens.json`,
         ]);
+    });
+
+    it(`keeps the attachments people uploaded while leaving the rest of the artifacts behind`, () => {
+        expect(BACKED_UP_STATE_PATHS).toContain(`.intentic/records/artifacts/attachments/`);
+        expect(UNBACKED_STATE_PATHS).toContain(`.intentic/records/artifacts/`);
     });
 });

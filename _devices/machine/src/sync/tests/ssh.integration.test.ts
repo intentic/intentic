@@ -351,7 +351,13 @@ describe("mutagenCreateArgs: the state backup", () => {
     // Rebuildable bulk and credentials stay in the sandbox; everything a person wrote or that happened comes down.
     // Whole groups are excluded by folder, not an inventory of files.
     it("leaves credentials and rebuildable bulk behind, a folder at a time", () => {
-        expect([...BACKUP_IGNORES].toSorted()).toEqual(["/identity/control-tokens.json", "/local", "/records/artifacts/browser", "/secrets"]);
+        expect([...BACKUP_IGNORES].toSorted()).toEqual([
+            "!/records/artifacts/attachments",
+            "/identity/control-tokens.json",
+            "/local",
+            "/records/artifacts/*",
+            "/secrets",
+        ]);
     });
 
     // `identity` is split: ownership records come down, control tokens don't; collapsing it to a whole-folder
@@ -362,15 +368,17 @@ describe("mutagenCreateArgs: the state backup", () => {
     });
 
     it("copies down what the sandbox going away would otherwise take with it", () => {
-        // Those two folders ARE the backup, so nothing in config may be excluded and nothing in records but the page
-        // captures that no longer have a reader; a whole-folder `/records` or `/config` would empty the backup itself.
+        // Those two folders ARE the backup, so nothing in config may be excluded and nothing in records but the agents'
+        // artifacts (2026-11-15); a whole-folder `/records` or `/config` would empty the backup itself.
         for (const pattern of BACKUP_IGNORES) {
             expect([pattern, pattern.startsWith("/config")]).toEqual([pattern, false]);
-            expect([pattern, pattern.startsWith("/records") && pattern !== "/records/artifacts/browser"]).toEqual([pattern, false]);
+            expect([pattern, pattern.startsWith("/records") && pattern !== "/records/artifacts/*"]).toEqual([pattern, false]);
         }
-        // The exclusion is one subtree deep inside records, never the tree that holds the owner's own uploads.
+        // The artifacts go child by child, never as a folder, so the owner's own uploads inside them are taken back.
         expect(BACKUP_IGNORES).not.toContain("/records/artifacts");
+        expect(BACKUP_IGNORES.indexOf("!/records/artifacts/attachments")).toBeGreaterThan(BACKUP_IGNORES.indexOf("/records/artifacts/*"));
     });
+
 });
 
 // Mutagen freezes config at `sync create`; an upgrade only reaches an existing pairing if drift is noticed and

@@ -165,7 +165,7 @@ const PATH_RULES: readonly StoragePathRule[] = [
     { root: "workspace", prefix: folder(ATTACHMENTS_DIR), category: "conversations", depth: 0, protected: true },
     // A loop's memory between rounds, which a running loop reads back.
     { root: "workspace", prefix: folder(LOOP_DIR), category: "conversations", depth: 0, protected: true },
-    { root: "workspace", prefix: folder(stateRelPath(".intentic/records/artifacts/browser/")), category: "browserCaptures", depth: 1 },
+    { root: "workspace", prefix: folder(stateRelPath(".intentic/records/artifacts/", "browser")), category: "browserCaptures", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/browser/")), category: "browserProfiles", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/cache/")), category: "toolCaches", depth: 1 },
     ...DAEMON_CACHE_RULES,

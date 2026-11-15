@@ -143,6 +143,16 @@ flowchart LR
   back into the daemon leaf whenever it is found outside (seen live on 2026-11-05, Node in `workload` and netd alone in
   `daemon`), and a child of netd's is let stay a tick before it is moved out as a stray, since the Node being started is
   one until its pid is known.
+- (2026-11-15) File sync is bounded here too (`synccap.rs`). A device's Mutagen starts its agent in the sandbox through
+  `docker exec` or sshd, so it ran in `workload` at nice 0, outside every class the daemon gives what it spawns. On rog,
+  after a swap gave a sandbox a fresh container, its agent hashed the state backup's 77 GB of artifacts again at about
+  534 MB/s, 166 GB read in some ten minutes, with the VM's IO pressure `full` near 20% and the owner's PC stuttering.
+  Every 2 s netd moves each `mutagen-agent` into a `sync` leaf beside `daemon` and `workload` and lowers its threads to
+  nice 19. The leaf reads and writes at most 64 MiB/s on each block device holding `/work` or `/history` (`io.max`,
+  devices from `/proc/self/mountinfo`), runs on half a core (`cpu.max 50000 100000`), and weighs 20 for cpu and io where
+  the kernel weighs them. `io.max` is the bound that holds on WSL, whose disks run the `none` scheduler where ionice and
+  `io.weight` do nothing. The settings are written again every minute, and a refusal is said once per file. Only the
+  container's own netd does this; an ordinary scan, which `stat`s what Mutagen's cache already knows, never nears it.
 - The change feed: netd keeps a generation per checkout Node reads git in, moved by one inotify instance on
   whatever a `git status` there reads, so Node answers an untouched checkout from memory.
 - Node drives netd over the control socket: length-prefixed JSON frames on a Unix socket that push listen config
@@ -174,6 +184,7 @@ flowchart LR
 - [crates/netd/src/memguard/mod.rs](crates/netd/src/memguard/mod.rs) — the memory guard: when to kill, when to sample, when to hold a restart.
 - [crates/netd/src/records.rs](crates/netd/src/records.rs) — what netd writes down about memory, in the daemon's shapes.
 - [crates/netd/src/cgroup.rs](crates/netd/src/cgroup.rs) — the daemon's cgroup leaf kept to netd and Node, Node's children reniced.
+- [crates/netd/src/synccap.rs](crates/netd/src/synccap.rs) — Mutagen's agent in a `sync` leaf of its own, its disk and CPU bounded.
 - [crates/netd/src/tunnel.rs](crates/netd/src/tunnel.rs) — the ingress tunnel: grant, then a stream per request.
 - [crates/netd/src/standing.rs](crates/netd/src/standing.rs) — where the tunnel stands for Node and the vitals, and
   each carrier's redial pace.

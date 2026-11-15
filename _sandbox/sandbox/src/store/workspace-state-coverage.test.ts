@@ -35,7 +35,7 @@ const RAW_JOIN = /join\(\s*([A-Za-z_.]+)\s*,\s*(?:"\.intentic"|STATE_DIR)\s*((?:
 const RAW_TEMPLATE = /\$\{STATE_DIR\}\/[\w.-]/g;
 // Matches the declared spellings `statePath(<root>, ".intentic/…", …tail)` and `stateRelPath(".intentic/…", …tail)`,
 // keeping the literal tail segments both helpers append: `stateRelPath(".intentic/records/artifacts/", "browser")`
-// builds the declared `.intentic/records/artifacts/browser/`, and a scan blind to the tail reads that entry as dead.
+// builds `.intentic/records/artifacts/browser`, and a scan blind to the tail reads an entry nested there as dead.
 const STATE_PATH = /(?:statePath\(\s*[A-Za-z_.]+\s*,|stateRelPath\()\s*"(\.intentic\/[^"]+)"((?:\s*,\s*"[^"]+")*)/g;
 
 const scanSources = async (): Promise<{ rawJoins: string[]; statePaths: string[] }> => {

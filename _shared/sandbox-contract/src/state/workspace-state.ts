@@ -369,22 +369,22 @@ const STATE_FILES = [
         why: "Agent session transcripts; nothing derives from watching them, and descending into them would cost a fifth of the watcher.",
         portability: "carry",
     },
+    // `carry`, but the desktop backup declines all of it save the attachments below (2026-11-15): agents' output has no size
+    // a backup can plan for. On rog it was 77 GB of frame sequences, re-hashed at 534 MB/s after a swap; the PC stuttered.
+    // Its `browser/` page captures had been declined on their own before (1.1 GB in 6,315 files on a dogfooding machine).
     {
         path: ".intentic/records/artifacts/",
         invalidates: [],
         why: "Durable outputs owned by conversations and extension runs: attachments, browser captures, generated images, acceptance reports, workflow step reports, voice transcripts, and loop ledgers.",
         portability: "carry",
-    },
-    // Nested under the artifacts above for one difference: this is the only member of that tree with no reader once the
-    // turn that wrote it has ended, and it is most of its bytes. Still `carry` (an export takes the whole history), but
-    // the desktop backup declines it: measured on a dogfooding machine as 1.1 GB across 6,315 files, re-scanned on every
-    // poll of a one-way session whose siblings — attachments above all — are the owner's own uploads and do come down.
-    {
-        path: ".intentic/records/artifacts/browser/",
-        invalidates: [],
-        why: "Page snapshots, screenshots and console logs a turn's browser wrote while looking at a site; read back by that turn and by nothing after it.",
-        portability: "carry",
         backup: false,
+    },
+    // Nested under the artifacts above for the opposite reason: people's own uploads (150 MB of those 77 GB), still backed up.
+    {
+        path: ".intentic/records/artifacts/attachments/",
+        invalidates: [],
+        why: "Files people attached to their messages: uploaded before the message is sent, read back by the turn it starts.",
+        portability: "carry",
     },
     {
         path: ".intentic/local/cache/",

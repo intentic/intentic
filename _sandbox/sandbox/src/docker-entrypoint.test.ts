@@ -38,6 +38,27 @@ describe(`entrypoint compile cache`, () => {
     });
 });
 
+/* File sync's scan caches outlive a recreate, so a swap does not re-hash every synced byte (2026-11-15). */
+describe(`entrypoint Mutagen home`, () => {
+    it(`points the root's .mutagen/caches at a folder on /history before sshd can start an agent`, () => {
+        const link = entrypoint.indexOf(`ln -s "$mutagen_caches" /root/.mutagen/caches`);
+        expect(entrypoint).toContain(`mutagen_caches="$HISTORY_ROOT/cache/mutagen/caches"`);
+        expect(link).toBeGreaterThan(-1);
+        expect(entrypoint.indexOf("/usr/sbin/sshd")).toBeGreaterThan(link);
+    });
+
+    // Mutagen renames its agent from $HOME into `.mutagen/agents`: a whole `.mutagen` on another volume fails that
+    // rename with EXDEV, and no session can start.
+    it(`moves only the caches, never the folder Mutagen installs its agent into`, () => {
+        expect(entrypoint).not.toMatch(/ln -s \S+ \/root\/\.mutagen(\s|$)/);
+    });
+
+    it(`tags the folder as a cache and prunes only caches nobody has written for a month`, () => {
+        expect(entrypoint).toContain(`"$mutagen_caches/CACHEDIR.TAG"`);
+        expect(entrypoint).toContain(`find "$mutagen_caches" -mindepth 1 -maxdepth 1 -type f ! -name CACHEDIR.TAG -mtime +30 -delete`);
+    });
+});
+
 /* An engine before 2026-11-03 put WSL's GPU libraries on the whole container's library path (bin/gpu-run says why). */
 describe(`entrypoint GPU libraries`, () => {
     it(`takes them off before sshd or the daemon starts, keeping their place for gpu-run`, () => {

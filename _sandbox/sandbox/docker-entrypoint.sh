@@ -109,6 +109,27 @@ if mkdir -p "$node_compile_cache" 2>/dev/null; then
     export NODE_COMPILE_CACHE="$node_compile_cache"
 fi
 
+# MUTAGEN'S MEMORY OF THIS SANDBOX'S FILES, KEPT ACROSS A RECREATE (2026-11-15). File sync's agent here (installed by the
+# device's Mutagen over `docker exec` or sshd, into $HOME/.mutagen) keeps one cache per session of every file's size,
+# mtime, inode and digest, and a scan re-reads only what that cache cannot vouch for. In the container's own root it
+# died with every update and swap, and the first scan after one read and hashed every byte the sessions cover again:
+# measured on rog, a swapped sandbox's state backup re-hashed 77 GB of artifacts, 166 GB read in ten minutes at up to
+# 534 MB/s, and the owner's PC stuttered throughout. /work and /history are volumes, so inodes and mtimes outlive the
+# container and the cache stays true. A cache no scan has written for a month belongs to a session that is gone.
+# Only `caches` moves: Mutagen installs its agent by renaming it from $HOME into `.mutagen/agents`, which fails across
+# volumes ("invalid cross-device link", measured with 0.18.1), and a cache is written beside itself and renamed in place.
+mutagen_caches="$HISTORY_ROOT/cache/mutagen/caches"
+if mkdir -p "$mutagen_caches" /root/.mutagen 2>/dev/null; then
+    chmod 700 "$mutagen_caches" /root/.mutagen 2>/dev/null || true
+    find "$mutagen_caches" -mindepth 1 -maxdepth 1 -type f ! -name CACHEDIR.TAG -mtime +30 -delete 2>/dev/null || true
+    [ -f "$mutagen_caches/CACHEDIR.TAG" ] ||
+        printf 'Signature: 8a477f597d28d172789f06886806bc55\n# Mutagen'"'"'s scan caches (docker-entrypoint.sh); they rebuild themselves.\n' \
+            > "$mutagen_caches/CACHEDIR.TAG" 2>/dev/null || true
+    if [ "$(readlink /root/.mutagen/caches 2>/dev/null)" != "$mutagen_caches" ]; then
+        rm -rf /root/.mutagen/caches && ln -s "$mutagen_caches" /root/.mutagen/caches || true
+    fi
+fi
+
 # /run/sshd may be a fresh tmpfs at runtime, so (re)create it here rather than relying on the build layer.
 mkdir -p /run/sshd
 # Only local sync rides it, so an sshd that will not start costs that and nothing else: netd and the daemon still start.

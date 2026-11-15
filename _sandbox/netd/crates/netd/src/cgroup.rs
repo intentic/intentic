@@ -206,17 +206,18 @@ fn renice_children(node: u32, reniced: &mut HashSet<u32>) {
     reniced.retain(|pid| current.contains(pid));
     for pid in current {
         // SAFETY: setpriority on a pid read from procfs; a pid gone since is an error, retried never.
-        if !reniced.contains(&pid) && lower_to_workload(pid) {
+        if !reniced.contains(&pid) && lower_to(pid, WORKLOAD_NICE) {
             reniced.insert(pid);
         }
     }
 }
 
-// Down to WORKLOAD_NICE, never back up: a child spawned at 19 (an agent's build) stays at 19. True once every thread of
-// the child sits at or below it, so it is not looked at again. Thread by thread, since Linux keeps a niceness per thread:
-// a pid alone lowered only the main thread, and by the first look a Node or a build already runs threads of its own,
-// which stayed at the daemon's priority (2026-10-06). Threads started later inherit their starter's.
-fn lower_to_workload(pid: u32) -> bool {
+/// Down to `nice`, never back up: a child spawned at 19 (an agent's build) stays at 19 when asked for 10. True once every
+/// thread of the process sits at or below it, so it is not looked at again. Thread by thread, since Linux keeps a niceness
+/// per thread: a pid alone lowered only the main thread, and by the first look a Node or a build already runs threads of
+/// its own, which stayed at the daemon's priority (2026-10-06). Threads started later inherit their starter's. Node's
+/// children go to WORKLOAD_NICE here; Mutagen's agent to 19 (synccap.rs).
+pub fn lower_to(pid: u32, nice: i32) -> bool {
     let Ok(tasks) = std::fs::read_dir(format!("/proc/{pid}/task")) else {
         return false;
     };
@@ -238,9 +239,7 @@ fn lower_to_workload(pid: u32) -> bool {
         };
         // SAFETY: setpriority on a thread id read from procfs; one gone since is an error, and the child is looked at
         // again next tick.
-        if current < WORKLOAD_NICE
-            && unsafe { libc::setpriority(libc::PRIO_PROCESS, tid, WORKLOAD_NICE) } != 0
-        {
+        if current < nice && unsafe { libc::setpriority(libc::PRIO_PROCESS, tid, nice) } != 0 {
             lowered = false;
         }
     }
@@ -331,7 +330,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
             before = nices(pid);
         }
-        let lowered = lower_to_workload(pid);
+        let lowered = lower_to(pid, WORKLOAD_NICE);
         let after = nices(pid);
         let _ = child.kill();
         let _ = child.wait();

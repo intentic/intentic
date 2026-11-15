@@ -15,6 +15,7 @@ mod remember;
 mod route;
 mod standing;
 mod supervise;
+mod synccap;
 mod term;
 mod tls;
 mod tunnel;
@@ -173,6 +174,11 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     let started = node_pids.clone();
     tokio::spawn(async move { greeting.deadline_first_hellos(started).await });
     tokio::spawn(cgroup::govern(leaves.clone(), node_pids.clone()));
+    // Mutagen's agent, which a device's folder sync starts here, in a leaf of its own with its disk and CPU bounded
+    // (synccap.rs): only from the container's own daemon leaf, where the leaves it sits beside are the entrypoint's.
+    if own && let Some(leaves) = &leaves {
+        tokio::spawn(synccap::govern(leaves.clone()));
+    }
     match leaves {
         Some(leaves) if own => memguard::start(leaves, records, node_pids),
         _ => tracing::info!(

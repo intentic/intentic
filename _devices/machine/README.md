@@ -219,6 +219,20 @@ flowchart LR
   woken cycles, and the copy belongs where the owner already looks. So were `--hash xxh128` and `--compression none`
   on top (5.3 s of the daemon's CPU against 5.2 s): no gain worth recreating every session for, or tying the agent to
   a Mutagen build with its SSPL-licensed extras.
+- **What file sync costs the disk is bounded three ways** (2026-11-15). Measured on rog: a sandbox swapped to a new
+  version started its sessions over with no scan cache, and the state backup re-hashed 77 GB of agents' artifacts
+  (motion-capture frame sequences), 166 GB read in ten minutes at up to 534 MB/s, while the owner's PC stuttered.
+  - The sandbox keeps Mutagen's scan caches on its history volume (`/root/.mutagen/caches`, linked by the image's
+    `docker-entrypoint.sh`), so a swap, an update or a restart scans with what the last scan knew, and only changed
+    files are read again. Only the caches move: Mutagen installs its agent by a rename into `.mutagen/agents`, which
+    fails across volumes.
+  - The state backup leaves `records/artifacts/` behind, all but the attachments people uploaded (`backup: false` in
+    `@intentic/sandbox-contract`'s state table). `BACKUP_IGNORES` ([`sync/ssh.ts`](src/sync/ssh.ts)) excludes such a
+    folder child by child and takes the kept one back (`/records/artifacts/*`, `!/records/artifacts/attachments`), since
+    Mutagen never looks inside an ignored folder. Changing the list recreates every pairing's backup session once.
+  - Whatever a scan still has to read, the sandbox's netd runs Mutagen's agent in a `sync` cgroup of its own, capped at
+    64 MiB/s of reads and writes on the volumes and half a core ([netd](../../_sandbox/netd)), so no tree, however
+    large, can take the whole disk of the computer the sandbox runs on.
 - **A repository can leave its own folders out** (2026-11-09, [`sync/ignores/repo-ignores.ts`](src/sync/ignores/repo-ignores.ts)), in a
   committed `<repo>/.intentic/sync.json`: `{"ignore": ["/runs", "bench/data/*.bin"]}`. Each pattern is a path from
   that repository's root (a leading `/` optional), `*` matching within one name; `**`, `?`, `[...]` and `!` are
