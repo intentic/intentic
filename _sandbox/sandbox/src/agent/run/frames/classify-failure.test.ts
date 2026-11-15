@@ -14,6 +14,7 @@ import {
     type FailureWrite,
     outageFrame,
 } from "./classify-failure.js";
+import { throttleAsOutage } from "./routed-throttle.js";
 import { FAR_RERUN_MS } from "../../subagents/child-records.js";
 import type { HeldReason } from "../turn/holds/held-turn.js";
 
@@ -437,11 +438,29 @@ describe("a spent allowance", () => {
 
         // 2026-11-14: Google throttling Gemini 3.8 Flash ("Resource has been exhausted (e.g. check quota).") was filed under
         // no account, and stood over all 31 until each was re-read: every throttled turn flipped them spent and back.
-        test("a throttle the gateway handed back, every account's own answer, files nothing and re-reads nothing", async () => {
-            const throttled: ErrorFrame = { ...limit, message: "Resource has been exhausted (e.g. check quota)." };
+        // 2026-11-15: the code stayed `rate_limit`, so the throttle was still held "behind a spent allowance" for the loop's
+        // retry instant, beside a "Usage left" that rightly showed 95% of the Gemini pool. It is an outage now.
+        const throttled: ErrorFrame = { ...limit, message: "Resource has been exhausted (e.g. check quota).", resetsAt: 1_800_000_150 };
+        test("a throttle the gateway handed back, every account's own answer, is an outage: nothing filed, nothing re-read", async () => {
             const plan = await classifyFailure(throttled, routed, filedByGateway("throttled"));
             expect(plan.writes).toStrictEqual([]);
-            expect(plan.held).toMatchObject({ reason: "limit" });
+            expect(plan.frame.code).toBe("provider-outage");
+            expect(plan.frame.resetsAt).toBeUndefined();
+            expect(plan.frame.message).toMatch(/^Resource has been exhausted \(e\.g\. check quota\)\. The provider is rate-limiting this model for now/u);
+            expect(plan.log).toMatchObject({ level: "warn", fields: { code: "provider-outage" } });
+        });
+
+        test("on a conversation the breaker counted, the throttle is held for the outage's retry, not an allowance's reopen", async () => {
+            const plan = await classifyFailure(throttled, { ...routed, outage: { attempt: 0, retryAt: 1_800_000_030_400 } }, filedByGateway("throttled"));
+            expect(plan.held).toMatchObject({ reason: "outage" });
+            expect(plan.frame).toMatchObject({ code: "provider-outage", outage: { retryAt: 1_800_000_030 } });
+        });
+
+        test("re-coding is the caller's to do first, and doing it again changes nothing", () => {
+            const once = throttleAsOutage(throttled, routed, filedByGateway("throttled").gatewayRefused);
+            expect(throttleAsOutage(once, routed, filedByGateway("throttled").gatewayRefused)).toBe(once);
+            expect(throttleAsOutage(throttled, routed, filedByGateway(true).gatewayRefused)).toBe(throttled);
+            expect(throttleAsOutage(throttled, routed, filedByGateway(false).gatewayRefused)).toBe(throttled);
         });
 
         test("the provider's own words for a spent allowance are still filed, whatever the gateway last saw", async () => {

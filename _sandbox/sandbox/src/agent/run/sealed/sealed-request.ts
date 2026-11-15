@@ -7,6 +7,7 @@ import { opt } from "../../../opt.js";
 import type { ArmPlan, TurnArmPlan, TurnContext } from "../../providers/adapter.js";
 import { readableProviderText } from "../../../engines/provider-error-text.js";
 import { classifyFailure, type ErrorFrame, type FailureQueries } from "../frames/classify-failure.js";
+import { throttleAsOutage } from "../frames/routed-throttle.js";
 import { codedFailure } from "../frames/error-frames.js";
 import { recordQueries } from "../frames/failure-queries.js";
 import { fileFailureWrites, providerAnswered } from "../frames/frame-effects.js";
@@ -110,10 +111,13 @@ type RunOutcome = { readonly answer: string } | { readonly refusal: Error; reado
 
 // A failure frame as the turn reads it, classified and filed (a spent allowance against its account and model, a refused
 // credential against its provider) before the next plan reads those records back, and said in the provider's own words.
-const failure = async (services: Services, event: ErrorFrame, ran: SealedRun): Promise<RunOutcome> => {
+const failure = async (services: Services, raw: ErrorFrame, ran: SealedRun): Promise<RunOutcome> => {
     const { ask, plan } = ran;
     // No conversation here even when the job is for one: what a conversation's failure holds is that conversation's.
     const turn = { prompt: plan.request.spec.prompt, agent: ask.provider, harness: ask.harness, model: ask.model };
+    const queries = sealedQueries(services, ran.askedAt);
+    // A throttle spends no allowance, so it is not the spent refusal another account is planned after (routed-throttle.ts).
+    const event = throttleAsOutage(raw, { provider: ask.provider, model: plan.request.spec.model, turn }, queries.gatewayRefused);
     try {
         const classified = await classifyFailure(
             event,
@@ -134,7 +138,7 @@ const failure = async (services: Services, event: ErrorFrame, ran: SealedRun): P
                 contextTokens: undefined,
                 now: Date.now(),
             },
-            sealedQueries(services, ran.askedAt),
+            queries,
         );
         await fileFailureWrites(services, classified.writes);
     } catch (error) {

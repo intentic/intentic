@@ -214,7 +214,8 @@ const handedOn = (refusal: ReadRefusal): Response =>
      next account is asked, nothing filed.
    - `throttled`: any other 429, or RESOURCE_EXHAUSTED under another status. No allowance is in question, so nothing is
      filed and nothing re-read; another account may not be throttled, so a few are asked (THROTTLED_ASKS), and then the
-     loop gets the throttle as it came, to retry on its own backoff. */
+     loop gets the throttle as it came, to retry on its own backoff. A turn that ends on it is an outage, not a spent
+     allowance (routed-throttle.ts throttleAsOutage, which reads throttledAt). */
 type RefusalCause = "spent" | "benched" | "throttled";
 
 // How many accounts a throttled request is tried on before the loop gets the throttle back. Model capacity throttles every

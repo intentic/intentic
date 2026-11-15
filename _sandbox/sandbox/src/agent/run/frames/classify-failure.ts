@@ -1,9 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { failureCourseOf } from "@intentic/sandbox-contract/policy/failure-codes";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { loopDoor } from "@intentic/sandbox-contract/models/agent-catalog";
 import { breakArmed, RETRY_LADDER_TRIES, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
-import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
@@ -21,6 +19,7 @@ import type { AgentRequest } from "../../providers/agent-request.js";
 import { heldReopensAt } from "../../../conversations/actor/limit-booking.js";
 import type { Attribution } from "./frame-decorators.js";
 import { withClause } from "./frame-clause.js";
+import { routedTurn, throttleAsOutage } from "./routed-throttle.js";
 import { dressedForMemory, type MemoryDeath } from "./memory-death.js";
 import { namedVerification } from "./verification-sentence.js";
 
@@ -161,8 +160,6 @@ const refusalKind = (event: ErrorFrame): ProviderRefusal["kind"] => {
    the provider's accounts until a reading after it shows room, and its re-read covers them all.
    A loop that signs in through a door of its own (Grok Build, Kimi CLI) is not routed: the turn ran on that sign-in, so
    its refusal is filed under it, or a spent first sign-in would read like every other and keep taking the turns. */
-const routedTurn = (provider: AgentProvider, harness: AgentHarness): boolean =>
-    KeyedProviderSchema.safeParse(provider).success && loopDoor(provider, harness) === undefined;
 const refusingAccount = (provider: AgentProvider, harness: AgentHarness, account: string | undefined): string | undefined =>
     routedTurn(provider, harness) ? undefined : account;
 
@@ -207,19 +204,10 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Re
         ...opt("unmetered", kind === "limit" && isAdminGrantedAllowanceText(event.message) ? true : undefined),
     };
     const reread: FailureWrite = { kind: "headroom-refresh", options: { scope: { providers: [provider], ...opt("account", account) }, maxAgeMs: 0 } };
-    if (kind === "limit" && model !== undefined && routedTurn(provider, context.turn.harness)) {
-        const seen = gateway?.(provider, model);
-        // The gateway filed this spent allowance already, under the account that gave it: the re-read is all that is owed.
-        if (seen === "spent") {
-            return [reread];
-        }
-        // It read each account's own answer, and none said its allowance was spent: the provider was throttling the model.
-        // Filed under no account, that stood over all of them until each was re-read, so every throttled turn on Google
-        // flipped 31 accounts spent and back and took the provider out of "Usage left" meanwhile (2026-11-14). Nothing
-        // is filed and nothing re-read, unless the provider's own words, not the sandbox's, say the allowance is spent.
-        if (seen === "throttled" && (event.own === true || !mentionsSpentAllowance(event.message))) {
-            return [];
-        }
+    // The gateway filed this spent allowance already, under the account that gave it: the re-read is all that is owed. A
+    // throttle it handed back never gets here: it is an outage by then (throttleAsOutage).
+    if (kind === "limit" && model !== undefined && routedTurn(provider, context.turn.harness) && gateway?.(provider, model) === "spent") {
+        return [reread];
     }
     return [{ kind: "provider-refusal", provider, refusal }, reread];
 };
@@ -584,11 +572,13 @@ export const remintFor = (input: RoutedTurn, account: string | undefined, reques
         : undefined;
 
 export const classifyFailure = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<FailurePlan> => {
-    const asked = await namedVerification(event, context, queries);
+    // A caller that counts outages re-codes first (stream-agent.ts); doing it again here is a no-op, and it covers every other.
+    const recoded = throttleAsOutage(event, context, queries.gatewayRefused);
+    const asked = await namedVerification(recoded, context, queries);
     // A spent allowance's reopening, asked once: the refusal it files and the hold it books must not disagree.
     const reopening = asked.code === "rate_limit" ? await reopeningOf(asked, context, queries) : undefined;
     const filed = filedWrites(asked, context, reopening, queries.gatewayRefused);
-    const log = logOf(event, context);
+    const log = logOf(recoded, context);
     const { frame, held } = await dress(asked, context, queries, reopening);
     return { frame, writes: filed, log, held };
 };

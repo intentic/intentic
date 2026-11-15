@@ -26,12 +26,16 @@ export const recordQueries = (services: Services, openedAt?: number): RecordQuer
         return (await services.cliProxy.accounts())[keyed.data].flatMap((account) => (account.cooling?.verify === undefined ? [] : [account.label]));
     },
     memoryDeath: (conversationId, turn, now) => memoryDeathOf(services, conversationId, turn, now),
+    // The latest of the two since the request began is what the loop was handed last: a request that met one spent account
+    // and then three throttling ones ended on the throttle, and one whose last account was spent ended on that.
     gatewayRefused: (provider, model) => {
-        const since = (at: number | undefined): boolean => at !== undefined && openedAt !== undefined && at >= openedAt;
-        if (since(services.translatorGateway.attributedAt(provider, model))) {
-            return "spent";
+        const since = (at: number | undefined): at is number => at !== undefined && openedAt !== undefined && at >= openedAt;
+        const spent = services.translatorGateway.attributedAt(provider, model);
+        const throttled = services.translatorGateway.throttledAt(provider, model);
+        if (since(throttled) && (!since(spent) || throttled >= spent)) {
+            return "throttled";
         }
-        return since(services.translatorGateway.throttledAt(provider, model)) ? "throttled" : undefined;
+        return since(spent) ? "spent" : undefined;
     },
 });
 

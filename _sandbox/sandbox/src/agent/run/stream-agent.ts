@@ -69,6 +69,7 @@ import { privacyTurnRefusal, type TurnRefusal } from "../providers/adapter.js";
 import { abortSuppresses, type Attribution, decorateFrame, silenceOf, silentEnding, withSilentEnding } from "./frames/frame-decorators.js";
 import { performFailureWrites, recordFrame, settleAnswered, turnActivity } from "./frames/frame-effects.js";
 import { recordQueries } from "./frames/failure-queries.js";
+import { throttleAsOutage } from "./frames/routed-throttle.js";
 import { createTurnFrames, type TurnFrames } from "./frames/frame-reducers.js";
 import { endedAfterStop } from "./frames/stop-grace.js";
 import { performSettlement } from "./settle/settle-turn.js";
@@ -819,11 +820,12 @@ interface TurnState {
     readonly door: boolean;
 }
 
-// A failure frame as the window reads it: counted against the provider's breaker when it is an outage on a
-// conversation, classified, its line logged, its records written and its hold taken, all before it goes out.
-const classified = async (services: Services, event: ErrorFrame, turn: TurnState): Promise<AgentEvent> => {
+// A failure frame as the window reads it: a throttle re-coded an outage, counted against the provider's breaker when it is
+// an outage on a conversation, classified, its line logged, its records written and its hold taken, all before it goes out.
+const classified = async (services: Services, raw: ErrorFrame, turn: TurnState): Promise<AgentEvent> => {
     const { input, provider, frames } = turn;
     const readings = frames.readings();
+    const event = throttleAsOutage(raw, { provider, model: turn.request.spec.model, turn: input }, recordQueries(services, readings.openedAt).gatewayRefused);
     const outage = event.code === "provider-outage" && input.conversationId !== undefined ? recordProviderFailure(provider) : undefined;
     const failure = await classifyFailure(
         event,
