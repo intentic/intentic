@@ -30,7 +30,9 @@ export interface WireRunResult {
     readonly error?: { readonly message: string; readonly code?: string };
 }
 
-export type SteerOutcome = "complete_delivered" | "revert_to_followup";
+// The SDK's SteerAckOutcome as it crosses the channel: `queued` (the server already queued the text as a follow-up, so it
+// must not be sent again) without the SDK's `run`, which is a live handle and does not serialise.
+export type SteerOutcome = "complete_delivered" | "revert_to_followup" | { readonly outcome: "queued" };
 
 // One call per SDK method the adapter reaches, each answered by one reply carrying its `seq`. Runs are named by a
 // number the daemon picks, so a `wait` or a `cancel` can go out before `send`'s own reply has come back.

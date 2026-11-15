@@ -3,7 +3,7 @@ import type * as CursorSdk from "@cursor/sdk";
 import type { Run, SDKAgent, SDKCustomTool, SDKCustomToolResult } from "@cursor/sdk";
 import { errorMessage } from "@intentic/base/errors";
 import { opt } from "../../opt.js";
-import { CODED_ERRORS, type CallResult, type HostCall, type HostMessage, type RuntimeMessage, type SteerOutcome, type WireTool } from "./cursor-runtime-protocol.js";
+import { CODED_ERRORS, type CallResult, type HostCall, type HostMessage, type RuntimeMessage, type WireTool } from "./cursor-runtime-protocol.js";
 
 // The Cursor SDK's own process for a turn that runs in a mount namespace. @cursor/sdk spawns its shell and edits files
 // in whatever process loads it, and offers no seam to move either, so an isolated turn loads it HERE, in a process
@@ -15,7 +15,6 @@ import { CODED_ERRORS, type CallResult, type HostCall, type HostMessage, type Ru
 // dependency, a dev checkout.
 
 type Sdk = typeof CursorSdk;
-type SteerableRun = Run & { readonly steer?: (text: string) => Promise<SteerOutcome> };
 
 const entry = process.argv[2];
 const sdkReady: Promise<Sdk> = entry !== undefined && entry !== "" ? import(pathToFileURL(entry).href) : import("@cursor/sdk");
@@ -42,7 +41,7 @@ const remoteTool = ({ name, ...advertised }: WireTool): SDKCustomTool => ({
 });
 
 let agent: SDKAgent | undefined;
-const runs = new Map<number, SteerableRun>();
+const runs = new Map<number, Run>();
 
 const live = (): SDKAgent => {
     if (agent === undefined) {
@@ -51,7 +50,7 @@ const live = (): SDKAgent => {
     return agent;
 };
 
-const runOf = (run: number): SteerableRun => {
+const runOf = (run: number): Run => {
     const handle = runs.get(run);
     if (handle === undefined) {
         throw new Error(`The Cursor runtime has no run ${String(run)}.`);
@@ -69,7 +68,7 @@ const handle = async (call: HostCall): Promise<CallResult> => {
             return { agentId: agent.agentId };
         }
         case "send": {
-            const run: SteerableRun = await live().send(call.prompt, {
+            const run: Run = await live().send(call.prompt, {
                 ...call.options,
                 onDelta: ({ update }) => post({ kind: "delta", run: call.run, update }),
             });
@@ -86,8 +85,11 @@ const handle = async (call: HostCall): Promise<CallResult> => {
         case "cancel":
             await runOf(call.run).cancel();
             return null;
-        case "steer":
-            return (await runOf(call.run).steer?.(call.text)) ?? null;
+        case "steer": {
+            const outcome = await runOf(call.run).steer?.(call.text);
+            // `queued` crosses without its `run`, a live handle that does not serialise.
+            return outcome === undefined || outcome === "complete_delivered" || outcome === "revert_to_followup" ? (outcome ?? null) : { outcome: "queued" };
+        }
         case "close":
             agent?.close();
             agent = undefined;

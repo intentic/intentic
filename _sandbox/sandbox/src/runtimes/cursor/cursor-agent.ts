@@ -185,7 +185,7 @@ type PhaseItem = AgentEvent | typeof PHASE_END;
 const modeFor = (planning: boolean): "plan" | "agent" => (planning ? "plan" : "agent");
 
 // Mid-turn injection rides the live Run, not the prompt, so the pump waits for the handle `send` resolves rather than
-// racing it. Only `complete_delivered` transfers ownership. Any other answer (`revert_to_followup`, a refused steer, a
+// racing it. `complete_delivered` and `queued` transfer ownership. Any other answer (`revert_to_followup`, a refused steer, a
 // run with no `steer` at all) hands the message back, and the relay has already let it go, so the pump keeps it and the
 // phase sends it as an ordinary follow-up once the run settles: the SDK's own instruction, and what Codex does with a
 // steer its app-server refuses. `Run.steer` is declared optional by the SDK, so CursorRunHandle carries it optionally
@@ -219,7 +219,9 @@ const steerInto = async (
                   logger.warn({ err: error }, "cursor: steering message rejected by the run");
                   return undefined;
               });
-        if (outcome !== "complete_delivered") {
+        // `queued` transfers ownership too: the server already holds the text as a follow-up, and a resend would send it
+        // twice. Only a run that took nothing hands it back.
+        if (outcome === undefined || outcome === "revert_to_followup") {
             handedBack.push(text);
         }
     }
