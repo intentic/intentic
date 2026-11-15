@@ -5,6 +5,7 @@ import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/provider
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { watch } from "vue";
 import { perProvider } from "./providerCatalog";
+import type { SwitchOffs } from "@intentic/sandbox-contract/models/plan-pools";
 
 // Who can run a turn on each provider, as last heard from the daemon: connected accounts, translator subscriptions and
 // observed refusals. Which account a conversation runs on is the daemon's record (AgentSummary.account), never resolved
@@ -29,6 +30,19 @@ export const translatorAccounts = sandboxRef<TranslatorAccounts>(() => noTransla
 // Every refusal the daemon holds on file, per provider, as it holds them: the observed half of "can I run", which every
 // verdict here judges by beside the polled rings (usageStatus.ts accountState), exactly as the daemon's own does.
 export const providerRefusals = sandboxRef<Record<string, readonly ProviderRefusal[]>>(() => ({}));
+
+// Each provider's accounts' switch-offs this week, as the daemon publishes them beside the refusals: the facts a pick
+// ranks a flapping account by (plan-pools.ts flappingAccounts), read here so a window places a turn as the daemon does.
+export const providerSwitchOffs = sandboxRef<Readonly<Record<string, SwitchOffs>>>(() => ({}));
+
+// One provider's refusals as they now stand, and its switch-offs with them; switch-offs a daemon that predates them
+// leaves out keep what this window held.
+export const setProviderRefusals = (provider: string, refusals: readonly ProviderRefusal[], switchOffs: SwitchOffs | undefined): void => {
+    providerRefusals.value = { ...providerRefusals.value, [provider]: refusals };
+    if (switchOffs !== undefined) {
+        providerSwitchOffs.value = { ...providerSwitchOffs.value, [provider]: switchOffs };
+    }
+};
 
 // Every account's headroom, keyed `${provider}:${account}`; three writers, newest `measuredAt`
 // always wins.

@@ -16,9 +16,14 @@ const account = (id: string, over: Partial<StoredCursorAccount> = {}): StoredCur
 const outOf = (id: string, model: string = COMPOSER): ProviderRefusal => ({ at: Date.now(), kind: `limit`, message: REFUSED, account: id, model });
 
 type OnFile = ProviderRefusalStore["onFile"];
-const deps = (accounts: readonly StoredCursorAccount[], refusals: readonly ProviderRefusal[] = [], onFile: OnFile = async () => ({ cursor: refusals })) => ({
+const deps = (
+    accounts: readonly StoredCursorAccount[],
+    refusals: readonly ProviderRefusal[] = [],
+    onFile: OnFile = async () => ({ cursor: refusals }),
+    flapping: readonly string[] = [],
+) => ({
     cursorStore: unstubbed<CursorStore>(`cursorStore`, { credentials: async () => [...accounts] }),
-    providerRefusals: unstubbed<ProviderRefusalStore>(`providerRefusals`, { onFile }),
+    providerRefusals: unstubbed<ProviderRefusalStore>(`providerRefusals`, { onFile, flapping: async () => new Set(flapping) }),
 });
 
 test("a named account is honoured, because that choice is the user's", async () => {
@@ -51,4 +56,8 @@ test("one connected account is not a choice, and no refusal is read to make it",
     const onFile = jest.fn<OnFile>(async () => ({}));
     expect((await cursorAccountForTurn(deps([account(`only`)], [], onFile), undefined, COMPOSER))?.id).toBe(`only`);
     expect(onFile).not.toHaveBeenCalled();
+});
+
+test("an unnamed turn ranks an account its organisation keeps switching off behind a steady one, as every window does", async () => {
+    expect((await cursorAccountForTurn(deps([account(`flaps`), account(`steady`)], [], undefined, [`flaps`]), undefined, COMPOSER))?.id).toBe(`steady`);
 });

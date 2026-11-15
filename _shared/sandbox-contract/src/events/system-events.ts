@@ -2,6 +2,7 @@ import { z } from "zod";
 import { AgentSummarySchema } from "../schemas/agents.js";
 import { AccountUsageSchema, type ProviderRefusal, ProviderRefusalSchema } from "../schemas/providers/plan-limits.js";
 import { MemberRoleSchema } from "../schemas/shared.js";
+import { SwitchOffsSchema } from "../schemas/providers/refusals.js";
 import { WorkspaceTreeDeltaSchema } from "../schemas/workspace/workspace-tree.js";
 
 // Frames about the sandbox rather than a turn: liveness, boot progress, what moved (repos, refs, running processes,
@@ -227,6 +228,9 @@ export const ProviderRefusalChangedSchema = z.object({
     provider: z.string(),
     refusals: z.array(ProviderRefusalSchema).optional(),
     refusal: ProviderRefusalSchema.optional(),
+    // The provider's switch-offs within the week as they now stand (plan-pools.ts flappingAccounts reads them); absent
+    // from a daemon that predates them, which leaves what the window held.
+    switchOffs: SwitchOffsSchema.optional(),
 });
 export type ProviderRefusalChanged = z.infer<typeof ProviderRefusalChangedSchema>;
 

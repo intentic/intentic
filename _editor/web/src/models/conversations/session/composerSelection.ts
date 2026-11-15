@@ -301,7 +301,7 @@ export class ComposerSelection {
         const settings: TurnSettings = {
             agent: state.value.provider,
             harness: state.value.harness,
-            account: state.value.account,
+            account: this.sentAccount(),
             actsAs: state.value.actsAs,
             startIn: state.value.startIn,
             model: state.value.model,
@@ -314,6 +314,24 @@ export class ComposerSelection {
         };
         this.apply({ kind: `settingsTaken` });
         return settings;
+    }
+
+    /* WHERE THE TURN GOING OUT NOW RUNS IS WHERE THE PICKER SHOWED IT RUNNING. On a chat the daemon holds no record of,
+       a selection on auto names the account the picker ticks (servingAccount, by the daemon's own rule over the same
+       facts), rather than leaving the daemon to place it again a moment later on readings refreshed in between. Before
+       2026-11-15 the first turn named none: the picker ticked one account as "Auto" and the daemon ran the turn on
+       another, and a person saw which only after it ran. Once a turn has run the conversation's record holds the
+       account, and a turn naming none runs there, moved by the daemon's own rules (an account that can no longer serve,
+       a cold cache with clearly more room elsewhere), each said in the chat as it happens: so
+       only a turn nothing went out before on this provider is placed here (`sentModel`, which a provider switch clears),
+       on a chat with no record (nothing registered, no session held: a session from the history menu is resumed on its
+       own account) or one moving off its session's provider. A press on words already sent (a held turn's resume) is
+       the daemon's to route, as before. */
+    private sentAccount(): string | undefined {
+        const { account: held, sentModel } = this.state.value;
+        const session = this.host.session.value;
+        const unplaced = sentModel === undefined && (session === undefined ? !this.host.registered.value : session.provider !== this.provider.value);
+        return held ?? (unplaced ? this.servingAccount.value?.id : undefined);
     }
 
     // What the reducer may read of the world, as it stands at this pick.

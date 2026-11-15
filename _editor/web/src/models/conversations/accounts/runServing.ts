@@ -1,10 +1,11 @@
 import { accountServesLoop } from "@intentic/sandbox-contract/models/agent-catalog";
-import { preferredAccount, reopensAtOf } from "@intentic/sandbox-contract/models/plan-pools";
+import { flappingAccounts, preferredAccount, reopensAtOf } from "@intentic/sandbox-contract/models/plan-pools";
 import { type AgentHarness, AgentHarnessSchema, type AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { subscriptionProviderOn } from "../../providers/access";
 import { offeredLoops, selectedLoop } from "../../providers/offeredLoops";
-import { providerAccounts, translatorAccounts } from "../../providers/providerAccounts";
+import { mayRunOn } from "../../providers/aiReach";
+import { providerAccounts, providerSwitchOffs, translatorAccounts } from "../../providers/providerAccounts";
 import { accountFacts, accountState, routedAccountFacts } from "../../providers/usageStatus";
 import { type ServingAccount, servingAccount } from "./servingAccount";
 
@@ -34,17 +35,27 @@ export interface RunServing {
     readonly state: AccountState | undefined;
 }
 
+/* THE ONE PLACE A WINDOW WORKS OUT WHERE A TURN RUNS. The picker's tick, the composer's Send, a run button's allowance and
+   the account a chat's first turn names (composerSelection.ts turnSettings) all read runServing, over the rows below,
+   which carry every fact the daemon's own pick reads (serviceability.ts unnamedAccount, account-reach.ts): each account's
+   verdict for the model, whether its organisation keeps switching it off (the switch-offs the refusals feed carries), and
+   only the accounts the person may run on. Before 2026-11-15 the picker and the composer each built their own rows, and
+   neither carried the flapping mark the daemon ranks by: the picker ticked an account as "Auto" that the daemon ranked
+   behind another, so a chat sent without a click ran on an account nobody had been shown. */
+
 // The provider's accounts that could carry the turn, each judged for its model, in the provider's own order (the order
-// the daemon breaks ties by): a subscription's credentials, or the native accounts that serve the chosen loop.
+// the daemon breaks ties by): a subscription's credentials, or the native accounts that serve the chosen loop and that
+// the person may run on (aiReach.ts, as the daemon narrows a person's turn), each marked where it flaps.
 const accountRows = (target: RunTarget, subscription: ReturnType<typeof subscriptionProviderOn>) => {
     const model = target.model === `` ? undefined : { id: target.model };
     if (subscription !== undefined) {
         return translatorAccounts.value[subscription].map((entry) => ({ id: entry.name, state: accountState(target.provider, routedAccountFacts(entry), model) }));
     }
     const loop = selectedLoop(offeredLoops(target.provider), target.harness);
+    const flapping = flappingAccounts(providerSwitchOffs.value[target.provider], Date.now());
     return (providerAccounts.value[target.provider] ?? [])
-        .filter((entry) => accountServesLoop(target.provider, loop, entry))
-        .map((entry) => ({ id: entry.id, state: accountState(target.provider, accountFacts(entry), model) }));
+        .filter((entry) => accountServesLoop(target.provider, loop, entry) && mayRunOn(target.provider, entry.id))
+        .map((entry) => ({ id: entry.id, state: accountState(target.provider, accountFacts(entry), model), flapping: flapping.has(entry.id) }));
 };
 
 // The translator balances its subscriptions, independently of any account pick: any usable credential keeps the pool

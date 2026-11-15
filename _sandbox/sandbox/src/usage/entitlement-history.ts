@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FLAPPING_WINDOW_MS, flappingAccounts, type SwitchOffs } from "@intentic/sandbox-contract/models/plan-pools";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 
@@ -11,7 +12,8 @@ import { openDocument } from "../store/open-document.js";
    An instant here is a switch-off: an entitlement refusal filed for the account while none stood over it. Another one
    filed while one stands (the next refused turn, a probe re-testing the seat) is the same switch-off. An account with
    two in a week is flapping, and a pick ranks it behind every steady account of its tier (plan-pools.ts
-   preferredAccount), even once it serves again. */
+   preferredAccount), even once it serves again. The rule is the contract's (plan-pools.ts flappingAccounts) and the
+   instants ride the refusals feed, so every window ranks the accounts as the daemon's pick does. */
 
 export const entitlementRefusalsDocument = defineDocument({
     root: "history",
@@ -26,13 +28,13 @@ export const entitlementRefusalsDocument = defineDocument({
 export interface EntitlementHistory {
     // Notes that the account was switched off at `at`; forgets every switch-off older than a week as it writes.
     readonly switchedOff: (provider: string, account: string, at: number) => Promise<void>;
-    // The provider's accounts switched off FLAPPING_AFTER times or more in the week before `now`.
+    // The provider's accounts' switch-offs in the week before `now`, by account id: what the refusals feed publishes.
+    readonly switchOffs: (provider: string, now?: number) => Promise<SwitchOffs>;
+    // The same for every provider with any, by provider id.
+    readonly everySwitchOff: (now?: number) => Promise<Readonly<Record<string, SwitchOffs>>>;
+    // The provider's accounts switched off FLAPPING_AFTER times or more in the week before `now` (flappingAccounts).
     readonly flapping: (provider: string, now?: number) => Promise<ReadonlySet<string>>;
 }
-
-const WEEK_MS = 7 * 24 * 60 * 60_000;
-// Once is an organisation's decision; a second time within the week is a habit, and the next turn would meet it again.
-const FLAPPING_AFTER = 2;
 
 type Stored = Record<string, number[]>;
 
@@ -53,24 +55,38 @@ const within = (stored: Stored, since: number): Stored =>
         }),
     );
 
+// One provider's switch-offs in the week before `now`, keyed by account id.
+const switchOffsOf = (stored: Stored, provider: string, now: number): SwitchOffs => {
+    const prefix = `${provider}:`;
+    return Object.fromEntries(
+        Object.entries(within(stored, now - FLAPPING_WINDOW_MS)).flatMap(([key, instants]) => {
+            const kept = instants.filter((at) => at <= now);
+            return key.startsWith(prefix) && kept.length > 0 ? [[key.slice(prefix.length), kept]] : [];
+        }),
+    );
+};
+
 const historyOver = (backing: HistoryBacking): EntitlementHistory => ({
     switchedOff: async (provider, account, at) => {
         const key = keyOf(provider, account);
         await backing.update((current) => {
-            const kept = within(current, Date.now() - WEEK_MS);
+            const kept = within(current, Date.now() - FLAPPING_WINDOW_MS);
             const noted = kept[key] ?? [];
             return noted.includes(at) ? kept : { ...kept, [key]: [...noted, at].toSorted((left, right) => left - right) };
         });
     },
-    flapping: async (provider, now = Date.now()) => {
-        const prefix = `${provider}:`;
-        const recent = within(await backing.read(), now - WEEK_MS);
-        return new Set(
-            Object.entries(recent).flatMap(([key, instants]) =>
-                key.startsWith(prefix) && instants.filter((at) => at <= now).length >= FLAPPING_AFTER ? [key.slice(prefix.length)] : [],
-            ),
+    switchOffs: async (provider, now = Date.now()) => switchOffsOf(await backing.read(), provider, now),
+    everySwitchOff: async (now = Date.now()) => {
+        const stored = await backing.read();
+        const providers = new Set(Object.keys(stored).map((key) => key.slice(0, key.indexOf(":"))));
+        return Object.fromEntries(
+            [...providers].flatMap((provider) => {
+                const offs = switchOffsOf(stored, provider, now);
+                return Object.keys(offs).length === 0 ? [] : [[provider, offs]];
+            }),
         );
     },
+    flapping: async (provider, now = Date.now()) => flappingAccounts(switchOffsOf(await backing.read(), provider, now), now),
 });
 
 export const fileEntitlementHistory = (path: string): EntitlementHistory =>

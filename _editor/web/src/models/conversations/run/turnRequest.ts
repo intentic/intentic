@@ -24,8 +24,10 @@ export interface TurnSettings {
     readonly agent: AgentProvider;
     // Which harness runs the turn (native runtime vs the Claude Code loop); orthogonal to `agent`.
     readonly harness: AgentHarness;
-    // The account the person picked, or the daemon's own record of where the conversation runs; undefined is auto (the
-    // daemon picks by serviceability). Sent only as intent (accountIntent).
+    // The account the person picked, the daemon's own record of where the conversation runs, or on a chat with no record
+    // the account the picker showed the turn placed on (composerSelection.ts turnSettings), so a chat sent without a click
+    // runs where it was shown. Undefined leaves it to the daemon (a subscription, nothing connected). Sent only as intent
+    // (accountIntent).
     readonly account: string | undefined;
     // `account` is a hand pick no turn has run on yet (Selection.accountPicked), so the turn names it even where the
     // daemon's record already does (accountIntent).

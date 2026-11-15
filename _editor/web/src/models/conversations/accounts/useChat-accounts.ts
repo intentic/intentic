@@ -10,7 +10,7 @@ import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../providers/providerAccounts";
+import { accountsLoaded, providerAccounts, providerRefusals, providerSwitchOffs, translatorAccounts } from "../../providers/providerAccounts";
 import { endpointProviders, trialStatus } from "../../providers/providerCatalog";
 import { rememberedProviderFor, turnDefaults } from "../run/turnDefaults";
 import { accessKnown, firstReadyProvider, hasSignIn, providerReadyOn } from "../../providers/access";
@@ -72,10 +72,14 @@ export const refreshTranslatorAccounts = (): Promise<void> =>
         translatorAccounts.value = listing;
     });
 
-// Every refusal on file per provider; the observed counterpart to the polled account snapshots.
+// Every refusal on file per provider; the observed counterpart to the polled account snapshots. The switch-offs ride
+// with them; a daemon that predates them leaves what this window held.
 const refreshProviderRefusals = (): Promise<void> =>
     readOrKeep(sandboxRpc.agent.refusals(), (body) => {
         providerRefusals.value = body.refusals;
+        if (body.switchOffs !== undefined) {
+            providerSwitchOffs.value = body.switchOffs;
+        }
     });
 
 // `error` carries connection/account errors only; per-turn chat errors live on each Conversation.

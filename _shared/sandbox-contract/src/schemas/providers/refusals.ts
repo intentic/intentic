@@ -61,11 +61,20 @@ const RefusalsOnFileSchema = z.codec(z.union([z.array(ProviderRefusalSchema), Pr
     decode: (filed) => (Array.isArray(filed) ? filed : [filed]),
     encode: (list) => list,
 });
+// Each account's entitlement switch-offs within the week (epoch ms, oldest first), keyed by account id: the facts the
+// flapping rule reads (plan-pools.ts flappingAccounts), so every window places an unnamed turn as the daemon does.
+export const SwitchOffsSchema = z.record(z.string(), z.array(z.number()).readonly());
 export const ProviderRefusalsSchema = z.object({
     refusals: z
         .record(z.string(), RefusalsOnFileSchema)
         .describe(
             "Every refusal on file per provider, each the latest of its kind for the account and model it names: what every verdict on that provider's accounts is judged against. Read alongside an account's usage: that says how full it was when last checked, these say whether it has since started saying no.",
+        ),
+    switchOffs: z
+        .record(z.string(), SwitchOffsSchema)
+        .optional()
+        .describe(
+            "Per provider, each account's entitlement switch-offs within the last week (epoch ms, oldest first): an account switched off twice or more in that span keeps being switched off, and a turn naming no account is placed on a steady one before it. Absent from a daemon that predates it.",
         ),
 });
 export type ProviderRefusals = z.infer<typeof ProviderRefusalsSchema>;

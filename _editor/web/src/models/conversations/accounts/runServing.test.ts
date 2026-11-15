@@ -1,9 +1,9 @@
 import "@intentic/testing/dom";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { providerAccounts } from "../../providers/providerAccounts";
+import { providerAccounts, providerSwitchOffs } from "../../providers/providerAccounts";
 import { Conversation } from "../session/conversation";
-import { runSpentUntil, spentUntilOf } from "./runServing";
+import { runServing, runSpentUntil, spentUntilOf } from "./runServing";
 
 // One answer to "would a turn on this pick meet a spent allowance, and until when", read by the composer's Send and by
 // every press that starts an agent. A Fix button once sent a run straight into a refusal on a model whose composer would
@@ -27,6 +27,7 @@ beforeEach(() => {
 afterEach(() => {
     jest.useRealTimers();
     providerAccounts.value = { ...providerAccounts.value, claude: [] };
+    providerSwitchOffs.value = {};
 });
 
 test(`a run on a model whose only account is spent waits for its reopen, the instant the composer's Send books`, () => {
@@ -54,4 +55,22 @@ test(`a reopen the clock has passed is a stale reading, and the run goes now`, (
     providerAccounts.value = { ...providerAccounts.value, claude: [account(`work`, 100)] };
 
     expect(runSpentUntil({ provider: `claude`, model: MODEL }, REOPENS * 1_000 + 1)).toBeUndefined();
+});
+
+// The daemon ranks an account its organisation keeps switching off behind a steady one of the same tier (plan-pools.ts
+// preferredAccount). The window ticked the flapping one as "Auto" while every turn naming no account ran on the other,
+// because the switch-offs never reached it (2026-11-15).
+test(`a turn naming no account runs where the daemon places it: an account switched off twice this week ranks behind a steady one`, () => {
+    providerAccounts.value = { ...providerAccounts.value, claude: [account(`org`, 10), account(`own`, 90)] };
+    expect(runServing({ provider: `claude`, harness: `native`, model: MODEL }).account).toEqual({ id: `org`, byAllowance: true });
+
+    providerSwitchOffs.value = { claude: { org: [NOW - 3 * 86_400_000, NOW - 86_400_000] } };
+    expect(runServing({ provider: `claude`, harness: `native`, model: MODEL }).account).toEqual({ id: `own`, byAllowance: true });
+});
+
+test(`one switch-off, or two a week apart, is not flapping`, () => {
+    providerAccounts.value = { ...providerAccounts.value, claude: [account(`org`, 10), account(`own`, 90)] };
+    providerSwitchOffs.value = { claude: { org: [NOW - 8 * 86_400_000, NOW - 86_400_000] } };
+
+    expect(runServing({ provider: `claude`, harness: `native`, model: MODEL }).account?.id).toBe(`org`);
 });

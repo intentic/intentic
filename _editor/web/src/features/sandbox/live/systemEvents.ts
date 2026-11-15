@@ -11,7 +11,7 @@ import { dropEditBuffers } from "../../../models/workspace/files/useEditBuffers"
 import { desyncAgents } from "../../../models/fleet/useAgents";
 import { agentReviewKeys, applyRosterChanges, auditRoster, refreshAgents, registry, setAgents } from "../../../models/fleet/useAgents-registry";
 import { parentOf } from "../../../models/agent-status/ownership";
-import { providerRefusals, setAccountUsage } from "../../../models/providers/providerAccounts";
+import { setAccountUsage, setProviderRefusals } from "../../../models/providers/providerAccounts";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { draftsMoved } from "../../../models/conversations/drafts/composerDrafts";
 import { agentReviewPrefixes, pushedKeys, rpcPrefix } from "../../../lib/queryKeys";
@@ -223,7 +223,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             return;
         case `providerRefusal`:
             // Every refusal the provider still has on file, replacing what this window held for it.
-            providerRefusals.value = { ...providerRefusals.value, [event.provider]: refusalsOf(event) };
+            setProviderRefusals(event.provider, refusalsOf(event), event.switchOffs);
             return;
         case `agents`:
             // Roster is versioned, not last-frame-wins: it races GET /agents and this browser's own optimistic

@@ -1,7 +1,7 @@
 import { type ProviderRefusal, ProviderRefusalSchema } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { refusedPoolReset, type ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
+import { refusedPoolReset, type ServiceFacts, type SwitchOffs } from "@intentic/sandbox-contract/models/plan-pools";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { type EntitlementHistory, memoryEntitlementHistory } from "./entitlement-history.js";
@@ -55,9 +55,14 @@ export interface ProviderRefusalStore {
     // The provider's accounts switched off for their entitlement twice or more this week (entitlement-history.ts), still
     // counted once a turn on them has settled the refusal: what a pick ranks behind every steady account.
     readonly flapping: (provider: string) => Promise<ReadonlySet<string>>;
-    // Fires on every change, with the provider's refusals as they now stand; what /events forwards, so open windows
-    // judge by exactly what the daemon does within the same beat.
-    readonly onChange: (listener: (provider: string, refusals: readonly ProviderRefusal[]) => void) => () => void;
+    // Each of the provider's accounts' switch-offs this week (entitlement-history.ts): the facts `flapping` is judged
+    // from, which the refusals feed carries so a window ranks the accounts as a pick here does.
+    readonly switchOffs: (provider: string) => Promise<SwitchOffs>;
+    // Every provider's, for the one read that lists them all (agent.refusals); a provider with none is left out.
+    readonly everySwitchOff: () => Promise<Readonly<Record<string, SwitchOffs>>>;
+    // Fires on every change, with the provider's refusals and switch-offs as they now stand; what /events forwards, so
+    // open windows judge by exactly what the daemon does within the same beat.
+    readonly onChange: (listener: (provider: string, refusals: readonly ProviderRefusal[], switchOffs: SwitchOffs) => void) => () => void;
 }
 
 const HOUR_MS = 60 * 60_000;
@@ -277,27 +282,35 @@ const horizonWatch = (
     return () => serially(armNow);
 };
 
+// Every refusal still inside its horizon at `now`, by provider: what is served as on file.
+const standingByProvider = (filed: ReadonlyMap<string, ProviderRefusal>, now: number) => {
+    const byProvider: Record<string, ProviderRefusal[]> = {};
+    for (const [scope, refusal] of filed) {
+        const provider = providerOf(scope);
+        if (refusal.at > now - horizon(provider, refusal)) {
+            (byProvider[provider] ??= []).push(refusal);
+        }
+    }
+    return byProvider;
+};
+
+// allow(silent-catch): unreadable switch-offs cost a window the ranking they feed, as they cost the daemon's pick.
+const switchOffsOr = (history: EntitlementHistory, provider: string): Promise<SwitchOffs> => history.switchOffs(provider).catch((): SwitchOffs => ({}));
+// allow(silent-catch): as switchOffsOr, for every provider at once.
+const everySwitchOffOr = (history: EntitlementHistory): Promise<Readonly<Record<string, SwitchOffs>>> => history.everySwitchOff().catch(() => ({}));
+
 const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOptions = {}): ProviderRefusalStore => {
     const log = options.log ?? (() => undefined);
     const openedAt = Date.now();
     const read = async (): Promise<Map<string, ProviderRefusal>> => scoped(await file.read(), openedAt);
 
-    const listeners = new Set<(provider: string, refusals: readonly ProviderRefusal[]) => void>();
-    const onFile = async (): Promise<Record<string, readonly ProviderRefusal[]>> => {
-        const now = Date.now();
-        const byProvider: Record<string, ProviderRefusal[]> = {};
-        for (const [scope, refusal] of await read()) {
-            const provider = providerOf(scope);
-            if (refusal.at > now - horizon(provider, refusal)) {
-                (byProvider[provider] ??= []).push(refusal);
-            }
-        }
-        return byProvider;
-    };
+    const listeners = new Set<(provider: string, refusals: readonly ProviderRefusal[], switchOffs: SwitchOffs) => void>();
+    const history = options.history ?? memoryEntitlementHistory();
+    const onFile = async (): Promise<Record<string, readonly ProviderRefusal[]>> => standingByProvider(await read(), Date.now());
     const announce = async (provider: string): Promise<void> => {
-        const refusals = (await onFile())[provider] ?? [];
+        const [filed, offs] = await Promise.all([onFile(), switchOffsOr(history, provider)]);
         for (const listener of listeners) {
-            listener(provider, refusals);
+            listener(provider, filed[provider] ?? [], offs);
         }
     };
     const rearm = horizonWatch(read, announce, () => listeners.size > 0, log);
@@ -322,7 +335,6 @@ const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOpti
     };
     // The settles heard while each refusal is being stamped.
     const filing = new Set<HeardSettle[]>();
-    const history = options.history ?? memoryEntitlementHistory();
     // allow(silent-catch): a switch-off that cannot be noted costs only the ranking it would feed, and the line says so.
     const noteSwitchOff = (provider: string, account: string, at: number): Promise<void> =>
         history.switchedOff(provider, account, at).catch((error) => log({ err: error, provider, account }, "provider refusal: the switch-off could not be noted"));
@@ -369,6 +381,8 @@ const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOpti
             return dropped.length > 0;
         },
         flapping: (provider) => history.flapping(provider),
+        switchOffs: (provider) => switchOffsOr(history, provider),
+        everySwitchOff: () => everySwitchOffOr(history),
         onChange: (listener) => {
             listeners.add(listener);
             void rearm();

@@ -2,6 +2,8 @@ import {
     answerCovers,
     bindingWindow,
     currentWindows,
+    FLAPPING_WINDOW_MS,
+    flappingAccounts,
     gatesModel,
     gatingWindows,
     judgedReading,
@@ -729,4 +731,15 @@ test("an answer on one model covers another only where every pool the other spen
     expect(answerCovers(CLAUDE, { id: "claude-opus-4-6" }, { id: "claude-haiku-4-5" })).toBe(true);
     // Nothing read proves nothing.
     expect(answerCovers(undefined, { id: "gpt-6-luna" }, { id: "gpt-6.1-sol" })).toBe(false);
+});
+
+// The daemon's pick and every window that draws where a turn runs read this one rule over the switch-offs the refusals
+// feed carries; the window that lacked them ticked a flapping account the daemon placed nothing on (2026-11-15).
+test("an account switched off twice within the week flaps; once, or twice a week apart, it does not, and a switch-off ages out on the clock", () => {
+    const now = 1_800_000_000_000;
+    const day = 86_400_000;
+    const offs = { twice: [now - 3 * day, now - day], once: [now - day], apart: [now - FLAPPING_WINDOW_MS - day, now - day] };
+    expect([...flappingAccounts(offs, now)]).toEqual(["twice"]);
+    expect([...flappingAccounts(offs, now + FLAPPING_WINDOW_MS)]).toEqual([]);
+    expect([...flappingAccounts(undefined, now)]).toEqual([]);
 });

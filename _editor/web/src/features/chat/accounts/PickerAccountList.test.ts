@@ -21,6 +21,7 @@ jest.mock("../../../models/conversations/accounts/useChat-accounts", () => ({
 jest.mock("../../../models/providers/accountsOutdated", () => ({ accountsOutdated: computed(() => false) }));
 const { default: PickerAccounts } = await import("./PickerAccounts.vue");
 const { endpointProviders, providerModels } = await import("../../../models/providers/providerCatalog");
+const { providerAccounts } = await import("../../../models/providers/providerAccounts");
 
 // An account as the daemon lists it: the facts the one rule judges (a seat mark, a reading), never a verdict.
 
@@ -36,6 +37,8 @@ const credentials: [TurnPick, string | undefined][] = [];
 const mount = (props: { account?: string; named?: boolean; provider?: AgentProvider; model?: string; providerLocked?: boolean } = {}): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
+    // The list as the whole window holds it, which the tick reads (runServing) beside the rows drawn from accountsOf.
+    providerAccounts.value = { ...providerAccounts.value, claude: listed };
     app = createApp({
         render: () =>
             h(PickerAccounts, {

@@ -6,7 +6,7 @@ import type { TurnPick } from "../../../models/conversations/run/turnDefaults";
 import UsageMeter from "../session/UsageMeter.vue";
 import KeyBalanceFigure from "./KeyBalanceFigure.vue";
 import { ACCOUNT_LIST_LIMIT, matchAccounts, pickerOrder, sameModelOn, usePickerAccounts } from "./pickerAccounts";
-import { servingAccount } from "../../../models/conversations/accounts/servingAccount";
+import { runServing } from "../../../models/conversations/accounts/runServing";
 import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
 import { accountsOutdated } from "../../../models/providers/accountsOutdated";
 import { useT } from "@intentic/ui/i18n";
@@ -62,9 +62,12 @@ const { family, onKey, accountRows, accountCapacity, keyRows, choosable, routedR
 
 const { mobile } = useDevice();
 
-// The row ticked is the one the next turn runs on, by the rule the daemon places it with, read off the provider's own
-// order. None where it runs on none (an account gone from the list, whose turn is refused), rather than a guess.
-const serving = computed(() => (onKey.value ? undefined : servingAccount(family.value, accountRows.value, { account, named })));
+// The row ticked is the one the next turn runs on: the window's one reading of it (runServing), which the composer's
+// Send and the account a chat's first turn names read too, so the tick can never name another account than the turn's.
+// None where it runs on none (an account gone from the list, whose turn is refused), rather than a guess.
+const serving = computed(() =>
+    onKey.value ? undefined : runServing({ provider: family.value, harness, model: model ?? ``, account, named }).account,
+);
 const activeAccountId = computed(() => serving.value?.id);
 const autoPickedId = computed(() => (serving.value?.byAllowance === true ? serving.value.id : undefined));
 

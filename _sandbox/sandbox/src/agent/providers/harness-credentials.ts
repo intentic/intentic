@@ -1,10 +1,10 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { endpointIdOf, loopsOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { type ModelRef, preferredAccount,type FleetCapacity } from "@intentic/sandbox-contract/models/plan-pools";
+import type { FleetCapacity, ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { ensureFreshToken, replaceRejectedToken } from "./claude/claude-credentials.js";
 import type { Services } from "../../composition.js";
-import { serviceabilities } from "../../usage/serviceability/serviceability.js";
+import { unnamedAccount } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
 import { goneAccountMessage, resolveRoute, type RouteResult } from "./routes/model-routes.js";
 import type { HarnessCredential } from "./agent-request.js";
@@ -239,8 +239,9 @@ export const resolveHarnessCredentials = async (
     if (unnamed && connected.length > 1) {
         await services.headroom.refresh({ scope: { providers: ["claude"] }, withinMs: PICK_REFRESH_WAIT_MS });
     }
-    const accountId =
-        input.account ?? (connected.length > 1 ? preferredAccount(await serviceabilities(services, "claude", await pickModel(services, input.model)))?.id : connected[0]?.id);
+    // The sandbox's one rule for a turn naming no account (serviceability.ts unnamedAccount), which every window that
+    // draws where a turn would run reads too (plan-pools.ts preferredAccount over the published facts).
+    const accountId = input.account ?? (await unnamedAccount(services, "claude", connected, (await pickModel(services, input.model))?.id))?.id;
     // A refresh failure joins the other refusals rather than throwing past the caller.
     let oauthToken: string | undefined;
     if (accountId !== undefined) {

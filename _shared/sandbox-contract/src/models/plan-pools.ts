@@ -318,10 +318,33 @@ const preference = (state: AccountState): number => {
     }
 };
 
+/* WHICH ACCOUNTS FLAP, judged from the switch-off instants the daemon publishes beside the refusals on file (its
+   entitlement-history.ts records them, the refusals feed carries them), so the daemon's pick and every window that
+   draws where a turn would run read one rule over one set of facts. Before 2026-11-15 only the daemon knew which
+   accounts flapped: the picker ticked a flapping account as where the next turn ran, while the daemon ranked it behind
+   a steady one and ran the turn there. Facts rather than a verdict, since a switch-off ages out of the week on the
+   clock alone, with nothing pushed when it does. */
+
+// How far back a switch-off counts, and how many in that span make an account flap: once is an organisation's decision,
+// a second time within the week is a habit, and the next turn would meet it again.
+export const FLAPPING_WINDOW_MS = 7 * 24 * 60 * 60_000;
+export const FLAPPING_AFTER = 2;
+
+/** Each account's switch-offs (epoch ms, oldest first), keyed by account id. */
+export type SwitchOffs = Readonly<Record<string, readonly number[]>>;
+
+/** The accounts switched off FLAPPING_AFTER times or more in the window before `now`. */
+export const flappingAccounts = (switchOffs: SwitchOffs | undefined, now: number): ReadonlySet<string> =>
+    new Set(
+        Object.entries(switchOffs ?? {}).flatMap(([account, instants]) =>
+            instants.filter((at) => at > now - FLAPPING_WINDOW_MS && at <= now).length >= FLAPPING_AFTER ? [account] : [],
+        ),
+    );
+
 /** What a pick reads of an account: its verdict, and whether its organisation keeps switching it off. */
 interface RankedAccount {
     readonly state: AccountState;
-    // Refused its entitlement twice or more in the last week (the daemon's usage/entitlement-history.ts). Absent: steady.
+    // Refused its entitlement twice or more in the last week (flappingAccounts). Absent: steady.
     readonly flapping?: boolean | undefined;
 }
 

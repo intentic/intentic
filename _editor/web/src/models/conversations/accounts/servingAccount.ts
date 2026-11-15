@@ -8,7 +8,8 @@ import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/provider
 // Which account the next turn runs on, answered here once for every surface that names it (the picker's highlight, the
 // pane's reconnect notice). The daemon decides where a turn runs; this reads its rules off the same verdicts it
 // publishes (AccountState), so a surface never shows one account while the turn goes to another. Pure: the caller
-// hands in the provider's rows in the provider's own order, which is the order the daemon's picks break ties by.
+// hands in the provider's rows in the provider's own order, which is the order the daemon's picks break ties by, each
+// with every fact a pick ranks by (its verdict, and `flapping`). runServing.ts builds those rows, and is the one caller.
 
 /* ONE RULE FOR EVERY PROVIDER WHOSE ACCOUNTS A PERSON CAN PICK. Each runtime that holds its accounts' own credentials
    (Claude, Cursor, Devin, the minted keys, a vendor CLI's sign-ins) places a turn naming none by the daemon's one rule
@@ -18,8 +19,14 @@ import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/provider
    blocked, and a press past that reading named the spent account (composerSend.ts nameBlockedAccount): the turn was
    refused there with two unspent accounts beside it. */
 
+/** What a pick reads of one account: its verdict, and whether its organisation keeps switching it off. */
+export interface PlacementRow {
+    readonly state: AccountState;
+    readonly flapping?: boolean | undefined;
+}
+
 /** The row a turn naming no account runs on. */
-export const autoAccount = <T extends { readonly state: AccountState }>(rows: readonly T[]): T | undefined => preferredAccount(rows);
+export const autoAccount = <T extends PlacementRow>(rows: readonly T[]): T | undefined => preferredAccount(rows);
 
 // Whether the daemon moves a turn off the conversation's own account before sending it (blocked-account.ts
 // offBlockedAccount, account-placement.ts offSpentAccount): one an organisation switched off, or one the records call
@@ -44,7 +51,7 @@ export interface ServingAccount {
  *   the turn where every move goes (account-moves.ts moveDestination) or, with nowhere to go, keeps it there.
  * An account the list no longer has serves nothing: the turn naming it is refused, so no row is where it runs.
  */
-export const servingAccount = <T extends { readonly id: string; readonly state: AccountState }>(
+export const servingAccount = <T extends PlacementRow & { readonly id: string }>(
     provider: AgentProvider,
     rows: readonly T[],
     next: { readonly account: string | undefined; readonly named: boolean },

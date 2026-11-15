@@ -369,10 +369,12 @@ export const createAgentRoutes = (services: Services) => {
         }),
         // The provider's slash commands from its most recent turn; empty (not an error) if never run.
         commands: i.commands.handler(({ input }) => ({ commands: [...commandsOf(commandListOf(input.agent ?? DEFAULT_PROVIDER, "native"))] })),
-        // What each provider last refused a turn with; empty is the common, healthy case.
-        refusals: i.refusals.handler(async () => ({
-            refusals: Object.fromEntries(Object.entries(await services.providerRefusals.onFile()).map(([provider, filed]) => [provider, [...filed]])),
-        })),
+        // What each provider last refused a turn with; empty is the common, healthy case. Beside it, each provider's
+        // switch-offs this week, the facts a window ranks a flapping account by as the daemon's pick does.
+        refusals: i.refusals.handler(async () => {
+            const [filed, switchOffs] = await Promise.all([services.providerRefusals.onFile(), services.providerRefusals.everySwitchOff()]);
+            return { refusals: Object.fromEntries(Object.entries(filed).map(([provider, refusals]) => [provider, [...refusals]])), switchOffs };
+        }),
         // Never throws: no offer, no personas, no model, or a deadline are all "nothing chosen" with a reason; the
         // composer waits on this before the first turn goes out, so a failure here must cost that turn nothing but a
         // sentence. Read within the asker's own fence, so a persona it lands on is one they may actually send through.

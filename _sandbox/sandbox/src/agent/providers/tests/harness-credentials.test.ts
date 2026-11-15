@@ -184,6 +184,8 @@ const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string,
             settle: async () => {},
             drop: async () => false,
             flapping: async () => new Set(),
+            switchOffs: async () => ({}),
+            everySwitchOff: async () => ({}),
             onChange: () => () => {},
         },
     });

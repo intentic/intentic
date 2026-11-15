@@ -259,6 +259,29 @@ describe(`ComposerSelection`, () => {
         expect(selection.turnSettings().accountPicked).toBe(false);
     });
 
+    // The picker ticked one account as "Auto" while the daemon placed the first turn on another, a moment later and on its
+    // own reading (2026-11-15): a chat's first turn now names the account it was shown on, and a later one leaves it to
+    // the conversation's record.
+    it(`names the account the picker shows on a chat's first turn, and leaves a turn after it to the record`, () => {
+        const accounts: OauthAccount[] = [
+            { id: `tight`, label: `tight`, connectedAt: 1, usage: { measuredAt: Date.now(), windows: [{ kind: `seven_day`, gates: `all`, utilization: 90 }] } },
+            { id: `roomy`, label: `roomy`, connectedAt: 2, usage: { measuredAt: Date.now(), windows: [{ kind: `seven_day`, gates: `all`, utilization: 10 }] } },
+        ];
+        providerAccounts.value = { ...providerAccounts.value, claude: accounts };
+        const { host, selection } = selectionOf();
+
+        expect(selection.servingAccount.value).toEqual({ id: `roomy`, byAllowance: true });
+        expect(selection.turnSettings().account).toBe(`roomy`);
+
+        selection.apply({ kind: `sent` });
+        host.registered.value = true;
+        host.session.value = { id: `s-1`, provider: `claude`, account: `roomy`, harness: `native` };
+        selection.apply({ kind: `bindSession`, session: host.session.value });
+        providerAccounts.value = { ...providerAccounts.value, claude: accounts.toReversed() };
+        expect(selection.turnSettings().account).toBe(`roomy`);
+        expect(selection.accountNamed.value).toBe(false);
+    });
+
     it(`drops the last speed answer when the fast pick changes`, () => {
         const { selection, host } = selectionOf();
 

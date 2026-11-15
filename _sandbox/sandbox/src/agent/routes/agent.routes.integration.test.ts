@@ -1203,6 +1203,8 @@ test("a rate-limited turn is filed as a limit even when the provider's wording i
                     settle: async () => {},
                     drop: async () => false,
                     flapping: async () => new Set(),
+                    switchOffs: async () => ({}),
+                    everySwitchOff: async () => ({}),
                     onChange: () => () => {},
                 },
             }),
@@ -1308,6 +1310,8 @@ test("a spent allowance on a natively-picked provider is filed against the accou
                     settle: async () => {},
                     drop: async () => false,
                     flapping: async () => new Set(),
+                    switchOffs: async () => ({}),
+                    everySwitchOff: async () => ({}),
                     onChange: () => () => {},
                 },
                 async *agent() {

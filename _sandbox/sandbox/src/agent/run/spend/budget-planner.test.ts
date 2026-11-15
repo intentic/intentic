@@ -34,7 +34,7 @@ const deps = (settings: Record<string, unknown> = {}): PlannerDeps => ({
         reading: async () => {},
         turnEnded: async () => {},
     },
-    providerRefusals: { onFile: async () => ({}), record: async () => {}, settle: async () => {}, drop: async () => false, flapping: async () => new Set(), onChange: () => () => {} },
+    providerRefusals: { onFile: async () => ({}), record: async () => {}, settle: async () => {}, drop: async () => false, flapping: async () => new Set(), switchOffs: async () => ({}), everySwitchOff: async () => ({}), onChange: () => () => {} },
     runOuts: { read: async () => ({}), record: async () => {} },
     sandboxSettings: { get: async () => SandboxSettingsSchema.parse(settings) },
 });

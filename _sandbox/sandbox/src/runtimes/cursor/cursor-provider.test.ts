@@ -181,6 +181,7 @@ const fleet = (ledger: Record<string, readonly string[]>): Partial<Services> => 
                 models.map((model) => ({ at: Date.now(), kind: "limit" as const, message: "429 usage limit reached", account, model })),
             ),
         }),
+        flapping: async () => new Set<string>(),
     }),
 });
 

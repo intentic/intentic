@@ -195,8 +195,8 @@ async function* systemEvents(
             enqueue({ kind: "accountUsage", provider, account, ...(usage === undefined ? {} : { usage }) });
             onWake();
         }),
-        services.providerRefusals.onChange((provider, refusals) => {
-            enqueue({ kind: "providerRefusal", provider, refusals: [...refusals] });
+        services.providerRefusals.onChange((provider, refusals, switchOffs) => {
+            enqueue({ kind: "providerRefusal", provider, refusals: [...refusals], switchOffs });
             onWake();
         }),
     );

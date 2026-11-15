@@ -29,11 +29,14 @@ export const cursorAccountForTurn = async (
     if (live.length < 2 || model === undefined || model === "") {
         return live[0];
     }
-    const refusals = (await deps.providerRefusals.onFile())["cursor"] ?? [];
+    const [filed, flapping] = await Promise.all([deps.providerRefusals.onFile(), deps.providerRefusals.flapping("cursor")]);
     const states = serviceStates(
         live.map((account) => ({ account: account.id })),
-        refusals,
+        filed["cursor"] ?? [],
         { id: model },
     );
-    return preferredAccount(live.map((stored) => ({ stored, state: states.get(stored.id) ?? { kind: "unknown" as const } })))?.stored;
+    // Flapping ranks as it does for every other provider's pick and in every window's (plan-pools.ts preferredAccount).
+    return preferredAccount(
+        live.map((stored) => ({ stored, state: states.get(stored.id) ?? { kind: "unknown" as const }, flapping: flapping.has(stored.id) })),
+    )?.stored;
 };
