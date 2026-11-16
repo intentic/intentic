@@ -14,7 +14,7 @@ import { compactJsonArrays } from "./json-arrays.mjs";
 import { foldHitRuns, foldPathRuns } from "./path-runs.mjs";
 import { fairSearch, SEARCH_COMMAND } from "./search-fairness.mjs";
 import { byteBudget, capOutput, FAIL_TAIL, priorityCap, READ_COMMAND, READ_MAX_BYTES } from "./output-cap.mjs";
-import { contextualEntries, maskValues } from "./secrets/short-secrets.mjs";
+import { contextualEntries, maskValues } from "./short-secrets.mjs";
 
 export { ANSI, collapseCr, bodyBytes } from "./cleaner-shapes.mjs";
 export { cleanToolText } from "./text-shaping.mjs";
@@ -315,7 +315,7 @@ const maskKeyBlocks = (text) =>
 // value masks only in a secret-like context (short-secrets.mjs); the daemon's tool-result masking uses the same rule.
 export const SECRET_VALUE_MIN = 12;
 export { multilineParts };
-export { contextualEntries, maskValues } from "./secrets/short-secrets.mjs";
+export { contextualEntries, maskValues } from "./short-secrets.mjs";
 
 // Every store a stored secret value lives in, in the order a name two of them hold resolves. The daemon's registry
 // (src/secrets/secret-registry.ts) walks this same list, so the terminal cannot miss a store the tools mask. `root` is

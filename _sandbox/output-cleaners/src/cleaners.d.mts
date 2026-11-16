@@ -27,7 +27,7 @@ export interface SecretValue {
     readonly contextual?: boolean;
 }
 
-export { contextualEntries, maskValues } from "./secrets/short-secrets.mjs";
+export { contextualEntries, maskValues } from "./short-secrets.mjs";
 
 // An issuer's literal prefix and the regex source of the body it mints after it.
 export interface CredentialIssuer {

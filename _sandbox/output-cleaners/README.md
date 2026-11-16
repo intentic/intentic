@@ -56,7 +56,7 @@ flowchart LR
   masking imports `SECRET_STORES`, `surfaceForms`, `secretReference` and `SECRET_VALUE_MIN` from here, so the two lanes
   read the same stores and mask the same forms of a value to the same reference.
 - A value shorter than `SECRET_VALUE_MIN` (12) masks only where its context names a secret
-  ([src/short-secrets.mjs](src/secrets/short-secrets.mjs)): after a key naming a secret or the secret itself (`password=v`,
+  ([src/short-secrets.mjs](src/short-secrets.mjs)): after a key naming a secret or the secret itself (`password=v`,
   `"api_key": "v"`, `NAME=v`, a vault field such as `password: v` for `netdisk/password`), as a flag's argument
   (`--password v`, `mysql -pv`, `sshpass -p v`), or as a URL's userinfo password. Masked bare, a 6-character value would
   blank every coincidence in ordinary output. The daemon's tool-result masking runs the same function; the stream
