@@ -8,6 +8,7 @@ export const SECRET_SAMPLES: Omit<Samples[`secrets`], `list` | `generate` | `wan
     inventory: undefined,
     reveal: { key: `DATABASE_URL` },
     set: { key: `SMOKE_SECRET`, value: `smoke` },
+    regenerate: { key: `SMOKE_SECRET`, bytes: 32, format: `alnum` },
     setGate: { subject: `SMOKE_SECRET`, kind: `secret`, approvers: [`ada@acme.dev`], scope: `use` },
     gates: undefined,
     removeGate: { subject: `SMOKE_SECRET` },

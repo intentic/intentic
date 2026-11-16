@@ -33,14 +33,16 @@ describe(`conflictAsk`, () => {
         expect(prompt).not.toContain(`changed here`);
     });
 
-    it(`names the device's own tool namespace, because those tools are deferred until asked for`, () => {
-        expect(conflictAsk(subject({ card: `ada-laptop` })).prompt).toContain(`+mcp__ada-laptop__`);
+    it(`names the devices server and the card as its device, because those tools are deferred until asked for`, () => {
+        const { prompt } = conflictAsk(subject({ card: `ada-laptop` }));
+        expect(prompt).toContain(`+mcp__devices__`);
+        expect(prompt).toContain(`device: "ada-laptop"`);
     });
 
     // A distro's folder is reached through its PC's own tools, with the crossing named.
     it(`sends a turn about a distro's folder through the card's tools, crossing into that distro`, () => {
         const { prompt } = conflictAsk(subject({ card: `ada-laptop`, environment: `wsl:archlinux` }));
-        expect(prompt).toContain(`+mcp__ada-laptop__`);
+        expect(prompt).toContain(`device: "ada-laptop"`);
         expect(prompt).toContain(`in: "wsl:archlinux"`);
     });
 
