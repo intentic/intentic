@@ -140,13 +140,30 @@ pub fn each_once(slugs: Vec<String>) -> Vec<String> {
     once
 }
 
-/// The stop for a sandbox this device does not have, with the one command that says which it does have.
+/// The stop for a sandbox this device does not have: which sandboxes it does have, by slug and by the owner's name, and
+/// the one command that lists them. Asks docker, so only on the way out.
 pub fn missing(slug: &str) -> String {
+    let known = known_line(&loopback::display_names(&list_slugs()));
     crate::ui::explain(
         &format!("There is no sandbox named {slug} on this device."),
-        None,
+        Some(&known),
         Some("ic sandbox list"),
     )
+}
+
+/// What a miss says this device has: each slug, with the owner's name for it in quotes when there is one. Pure.
+fn known_line(named: &[(String, Option<String>)]) -> String {
+    if named.is_empty() {
+        return "it runs no sandbox.".to_string();
+    }
+    let each: Vec<String> = named
+        .iter()
+        .map(|(slug, name)| match name {
+            Some(name) => format!("{slug} (\"{name}\")"),
+            None => slug.clone(),
+        })
+        .collect();
+    format!("it has {}.", each.join(", "))
 }
 
 /// An explicit slug names the sandbox; only its absence falls back to detecting the single one — never
@@ -186,11 +203,12 @@ pub fn resolve_slug(given: Option<String>, verb: &str) -> Result<String> {
     }
 }
 
-/// The slug a name given on the command line stands for: a sandbox's slug as it is, else its 12-hex sandbox id (the
-/// sandbox's own messages and the platform's pages name it so, while one set up from the platform runs as
-/// `sandbox-<id>`), else the owner's name for it as `ic sandbox list` shows it, matched whatever its case. A name two
-/// sandboxes share names neither, and says which slugs to pick from; a name nothing answers to comes back as it was
-/// given, for the verb to say there is no such sandbox in its own words.
+/// The slug a name given on the command line stands for, whichever column of a listing it was copied from: a sandbox's
+/// slug as it is or in another case, else its 12-hex sandbox id (the sandbox's own messages and the platform's pages
+/// name it so, while one set up from the platform runs as `sandbox-<id>`), else its container name (docker's listings
+/// and the machine agent's show it), else the owner's name for it as `ic sandbox list` shows it, matched whatever its
+/// case. A name two sandboxes share names neither, and says which slugs to pick from; a name nothing answers to comes
+/// back as it was given, for the verb to say there is no such sandbox in its own words (missing lists what there is).
 pub fn slug_for(given: String) -> Result<String> {
     let exists = |slug: &str| {
         is_slug(slug)
@@ -200,11 +218,11 @@ pub fn slug_for(given: String) -> Result<String> {
     if exists(&given) {
         return Ok(given);
     }
-    let prefixed = format!("sandbox-{given}");
-    if !given.starts_with("sandbox-") && exists(&prefixed) {
-        return Ok(prefixed);
+    let slugs = list_slugs();
+    if let Some(slug) = slug_among(&given, &slugs) {
+        return Ok(slug);
     }
-    let named = loopback::display_names(&list_slugs());
+    let named = loopback::display_names(&slugs);
     match slugs_named(&given, &named).as_slice() {
         [] => Ok(given),
         [slug] => Ok(slug.clone()),
@@ -220,6 +238,26 @@ pub fn slug_for(given: String) -> Result<String> {
             )
         ),
     }
+}
+
+/// The slug among `slugs` that `given` spells without asking anyone its name: the slug in any case, the sandbox id of a
+/// `sandbox-<id>` slug, or the container name (a parked one's too). Pure.
+fn slug_among(given: &str, slugs: &[String]) -> Option<String> {
+    let wanted = given.trim().to_lowercase();
+    let bare = wanted
+        .strip_prefix(CONTAINER_PREFIX)
+        .map(|rest| rest.strip_suffix(PARKED_SUFFIX).unwrap_or(rest));
+    let candidates = [
+        Some(wanted.clone()),
+        Some(format!("sandbox-{wanted}")),
+        bare.map(str::to_string),
+    ];
+    candidates.into_iter().flatten().find_map(|candidate| {
+        slugs
+            .iter()
+            .find(|slug| slug.to_lowercase() == candidate)
+            .cloned()
+    })
 }
 
 /// The slugs whose owner's name is `given`, ignoring case and the spaces around it. Pure.
@@ -412,6 +450,43 @@ mod tests {
             listed_row("asleep", "sandbox-3c469e9d6c58", Some("Work laptop")),
             "asleep    sandbox-3c469e9d6c58  Work laptop"
         );
+    }
+
+    #[test]
+    fn a_sandbox_is_found_by_its_id_or_its_container_name_whatever_its_case() {
+        let slugs = names(&["work", "sandbox-a4ba63bf2aa5"]);
+        let platform = Some("sandbox-a4ba63bf2aa5".to_string());
+        for given in [
+            "a4ba63bf2aa5",
+            "A4BA63BF2AA5",
+            "SANDBOX-a4ba63bf2aa5",
+            "intentic-sandbox-sandbox-a4ba63bf2aa5",
+            "intentic-sandbox-sandbox-a4ba63bf2aa5.previous",
+        ] {
+            assert_eq!(slug_among(given, &slugs), platform, "{given}");
+        }
+        assert_eq!(slug_among("Work", &slugs), Some("work".to_string()));
+        assert_eq!(
+            slug_among("intentic-sandbox-work", &slugs),
+            Some("work".to_string())
+        );
+        assert_eq!(slug_among("translations", &slugs), None);
+    }
+
+    #[test]
+    fn a_miss_lists_each_sandbox_by_slug_and_name() {
+        let named = vec![
+            ("work".to_string(), None),
+            (
+                "sandbox-a4ba63bf2aa5".to_string(),
+                Some("translations".to_string()),
+            ),
+        ];
+        assert_eq!(
+            known_line(&named),
+            "it has work, sandbox-a4ba63bf2aa5 (\"translations\")."
+        );
+        assert_eq!(known_line(&[]), "it runs no sandbox.");
     }
 
     #[test]

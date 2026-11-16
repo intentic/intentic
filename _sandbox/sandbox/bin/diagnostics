@@ -21,11 +21,11 @@ const PROOF = process.env.INTENTIC_TURN_PROOF ?? "";
 const USAGE = `diagnostics — what this sandbox's daemon recorded, read-only. Ask it BEFORE re-instrumenting code or reproducing a bug.
 
   diagnostics errors [--source daemon|browser] [--level <lvl>] [--contains <text>] [--since <minutes>]
-                     [--from <ISO time>] [--until <ISO time>] [--group | --no-group] [--stacks] [--limit <n>]
+                     [--from <ISO time>] [--until|--to <ISO time>] [--group | --no-group] [--stacks] [--limit <n>]
                                  what went wrong, newest first: the daemon's log (daemon.log), or with
                                  --source browser what the editor reported about itself (client.jsonl).
                                  --level defaults to warn (and worse); --from/--until read an absolute
-                                 window, for the lines around a moment you already know
+                                 window, for the lines around a moment you already know (--to is --until)
   diagnostics timeline <conversation> [--level <lvl>] [--since <minutes>] [--limit <n>]
                                  everything recorded about one conversation, oldest first: its log lines,
                                  activity, turns and the daemon boots in between
@@ -102,6 +102,8 @@ const QUERIES = {
             source: ["source", TEXT()],
             from: ["from", TEXT()],
             until: ["until", TEXT()],
+            // The MCP tool calls the end of the window `until`, and agents reach for `--to` beside `--from`: one flag.
+            to: ["until", TEXT()],
             level: ["level", TEXT()],
             contains: ["contains", TEXT()],
             group: ["group", true],

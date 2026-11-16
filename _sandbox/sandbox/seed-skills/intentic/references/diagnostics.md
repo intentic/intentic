@@ -5,7 +5,7 @@ with `ToolSearch` `+diagnostics`; they read `/history/logs`, `/history/activity.
 window you choose. They cannot write, and nothing in this playbook restarts anything.
 
 The same queries answer from a shell as the `diagnostics` command (`diagnostics errors|timeline|turns|restarts|slow|resources|failures`,
-`--help` for the flags), for every runtime and for a person in a terminal. `errors --from <ISO> --until <ISO>` reads the
+`--help` for the flags), for every runtime and for a person in a terminal. `errors --from <ISO> --until <ISO>` (`--to` is `--until`) reads the
 log lines around a moment you already know, which a window reaching back from now cannot once the log has moved on.
 
 ## Gather

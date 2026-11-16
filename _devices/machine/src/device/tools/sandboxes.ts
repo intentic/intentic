@@ -22,6 +22,9 @@ import { ensureCurrentIc, icCandidates, icOutOfDate } from "./ic-binary.js";
 import { inFlightMarks } from "../sandbox-rounds/in-flight.js";
 import { swapOnlyNow } from "./shape-now.js";
 import { withName } from "./listing/listed-name.js";
+import { findIn } from "./listing/find-sandbox.js";
+
+export { findIn };
 
 // The Intentic sandboxes running on this machine. A sandbox can't see its siblings itself (its docker socket
 // isn't mounted), so this is the only place "what runs here, start that one back up" can be answered. Scopes
@@ -148,31 +151,19 @@ export const listSandboxes = async (scopes: DeviceScopes): Promise<string> => {
 export const SandboxOpSchema = z.enum(["start", "stop", "restart", "sleep"]);
 export type SandboxOp = z.infer<typeof SandboxOpSchema>;
 
-// Which container the slug means, or the machine's own answer that it means none: one lookup for every op, so a
-// wrong slug gets the same sentence whichever button sent it, and so a flow that will take minutes is refused now. A
-// sandbox an interrupted swap left parked is listed under its own slug, not running, and is found like any other:
-// start, rollback and update are exactly what bring it back.
-export const findIn = (boxes: readonly DeviceSandbox[], slug: string): DeviceSandbox => {
-    const target = boxes.find((box) => box.slug === slug);
-    if (target !== undefined) {
-        return target;
-    }
-    const known = boxes.map((box) => (box.parked === true ? `${box.slug} (parked mid-swap)` : box.slug)).join(", ");
-    throw new Error(`No sandbox "${slug}" on this device. ${known === "" ? "It runs none." : `It has: ${known}.`}`);
-};
-
 const find = async (slug: string): Promise<DeviceSandbox> => findIn(await fleet(), slug);
 
 // Start, stop or restart, through ic: it powers the tunnel sidecar with its sandbox (down first, up last), and a start
 // or restart with a shape saved for the next restart is the recreate that applies it.
 export const manageSandbox = async (
     op: SandboxOp,
-    slug: string,
+    given: string,
     scopes: DeviceScopes,
     onLine: (line: string) => void = () => {},
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    const target = await find(slug);
+    const target = await find(given);
+    const slug = target.slug;
     const run = await icFlow(slug, icPowerArgs(op, slug), onLine, { moves: true });
     if (run.code !== 0) {
         throw new Error(`That ${op} failed on this device.\n\n${run.output}`);
@@ -551,9 +542,9 @@ export const icBackgroundPrepareArgs = (slug: string): string[] => ["sandbox", "
 // The update card's own nudge when it opens: the download the background tick would run within the next few hours, run
 // now. It answers with ic's last line (downloaded, already current, or skipped and why), since unlike an attended
 // prepare every one of those is a fine ending; only ic failing outright is an error.
-export const prepareInBackground = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
+export const prepareInBackground = async (given: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    await find(slug);
+    const { slug } = await find(given);
     const { code, output } = await icFlow(slug, icBackgroundPrepareArgs(slug), onLine, { moves: false });
     if (code !== 0) {
         throw new Error(`The background download for "${slug}" failed on this device.\n\n${output}`);
@@ -574,7 +565,7 @@ export const swapResult = (swap: SandboxSwap, slug: string, output: string, to?:
 
 export const swapSandbox = async (
     swap: SandboxSwap,
-    slug: string,
+    given: string,
     hash: string | undefined,
     scopes: DeviceScopes,
     onLine: (line: string) => void,
@@ -583,8 +574,9 @@ export const swapSandbox = async (
     assertScope(scopes, "sandboxes");
     // Built before the fleet is read, so a rebuild with no digest is refused instantly rather than after a docker
     // round trip.
+    icSwapArgs(swap, given, hash, to);
+    const { slug } = await find(given);
     const args = icSwapArgs(swap, slug, hash, to);
-    await find(slug);
     const { code, output } = await icFlow(slug, args, onLine, { moves: swap !== "prepare" });
     if (code !== 0) {
         throw new Error(`That ${swap} failed on this device.\n\n${output}`);
@@ -596,7 +588,7 @@ export const swapSandbox = async (
 // removal switch, since every value it changes is undone by the next one. The shape is a closed form (two caps, a swap
 // bound, two switches) rather than flags, so nothing reaches ic as text; a field left out keeps what ic has for it.
 export const shapeSandbox = async (
-    slug: string,
+    given: string,
     fields: SandboxShapeFields,
     when: SandboxShapeWhen,
     scopes: DeviceScopes,
@@ -606,7 +598,8 @@ export const shapeSandbox = async (
     if (Object.values(fields).every((value) => value === undefined)) {
         throw new Error("A shape has to set something: a memory or CPU cap, a swap bound, or a privileged/GPU switch. To apply what is saved, restart the sandbox.");
     }
-    const box = await find(slug);
+    const box = await find(given);
+    const slug = box.slug;
     const run = await icFlow(slug, icShapeArgs(slug, fields, when), onLine, { moves: when === "now" });
     if (run.code !== 0) {
         throw new Error(`That shape was not ${when === "now" ? "applied" : "saved"} on this device.\n\n${run.output}`);
@@ -621,9 +614,9 @@ export const shapeSandbox = async (
         : `Saved for the next restart of "${slug}" through ic (Restart, Start, an update, a rollback or a rebuild). It keeps running as it is until then.`;
 };
 
-export const forgetShape = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
+export const forgetShape = async (given: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    await find(slug);
+    const { slug } = await find(given);
     const run = await icFlow(slug, icForgetShapeArgs(slug), onLine, { moves: false });
     if (run.code !== 0) {
         throw new Error(`That could not be forgotten on this device.\n\n${run.output}`);
@@ -671,7 +664,7 @@ export const reshapeSandbox = async (
 };
 
 export const reconnectSandbox = async (
-    slug: string,
+    given: string,
     setupCode: string | undefined,
     platformUrl: string | undefined,
     scopes: DeviceScopes,
@@ -681,7 +674,7 @@ export const reconnectSandbox = async (
     const args = icConnectArgs(setupCode, "reconnect");
     const env = icConnectEnv(platformUrl);
     // find(slug) first: redeeming the claim for a slug not on this machine would burn it for nothing.
-    await find(slug);
+    const { slug } = await find(given);
     const run = await icFlow(slug, args, onLine, { env, moves: true });
     if (run.code !== 0) {
         throw new Error(`That reconnect failed on this device.\n\n${run.output}`);
@@ -781,11 +774,11 @@ export const MAX_LOG_LINES = 2_000;
 // The container's own log, gated like `list_sandboxes` since it's a way of seeing what you already manage, read
 // through `ic sandbox logs` like every other verb here: both streams, since a container that died wrote its reason to
 // stderr. Possibly empty, since the two readers phrase "it has said nothing" differently.
-const readLogs = async (slug: string, lines: number, scopes: DeviceScopes): Promise<string> => {
+const readLogs = async (given: string, lines: number, scopes: DeviceScopes): Promise<string> => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
     }
-    await find(slug);
+    const { slug } = await find(given);
     const run = await runIc(["sandbox", "logs", slug, "--tail", String(lines)], () => {});
     if (run.code !== 0) {
         throw new Error(`The log of "${slug}" could not be read on this device.\n\n${run.output}`);

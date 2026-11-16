@@ -359,8 +359,9 @@ flowchart LR
   empty, `logo` its `image` only when that is a `data:image/` URL; a missing or unreadable file makes both null and is
   never an error. Each file is one `docker cp`, every one of them at once. The text listing shows the same name after
   the slug (`running   sandbox-3c469e9d6c58  Work`), and every verb that names a sandbox on this device takes that
-  name in place of its slug (2026-11-11, `sandbox::slug_for`): a slug or a 12-hex id still wins, the name matches
-  whatever its case, and a name two sandboxes share is refused with both slugs. `ic sandbox session <slug> --json` ([`session.rs`](src/sandbox/session.rs))
+  name in place of its slug (2026-11-11, `sandbox::slug_for`): a slug (in any case), a 12-hex id or the container name
+  (`intentic-sandbox-<slug>`, 2026-11-16) still wins, the name matches whatever its case, and a name two sandboxes share
+  is refused with both slugs. A name nothing answers to is refused listing every slug here, each with its name. `ic sandbox session <slug> --json` ([`session.rs`](src/sandbox/session.rs))
   prints one line `{"slug","sandboxId","platformId","localPort","email","token","expiresAt"}`: a daemon session for
   the bound owner, minted by `docker exec`ing the image's `host-session-cli.js` (the daemon's README says why the machine is
   a proof). It refuses a sandbox nobody has signed in to yet, and one too old to have the script (update it). The token

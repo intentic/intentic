@@ -126,6 +126,23 @@ test("a parked sandbox is found by its slug, and a miss names what is parked", (
     expect(() => findIn([], "other")).toThrow('No sandbox "other" on this device. It runs none.');
 });
 
+// Agents copy whichever column list_sandboxes showed them, and were refused all but the slug (2026-11): the sandbox id,
+// the container name and the owner's name each find the sandbox, whatever their case, and a name two share finds neither.
+test("a sandbox is found by its id, its container name or the owner's name, and a shared name lists both", () => {
+    const platform: DeviceSandbox = { slug: "sandbox-a4ba63bf2aa5", container: "intentic-sandbox-sandbox-a4ba63bf2aa5", running: true, image: "img:1", name: "Translations" };
+    const other: DeviceSandbox = { slug: "work", container: "intentic-sandbox-work", running: true, image: "img:1", name: "Shop" };
+    const boxes = [other, platform];
+    for (const given of ["sandbox-a4ba63bf2aa5", "a4ba63bf2aa5", "A4BA63BF2AA5", "intentic-sandbox-sandbox-a4ba63bf2aa5", "translations", " Translations "]) {
+        expect(findIn(boxes, given)).toEqual(platform);
+    }
+    expect(findIn(boxes, "WORK")).toEqual(other);
+    expect(() => findIn(boxes, "nope")).toThrow('No sandbox "nope" on this device. It has: work ("Shop"), sandbox-a4ba63bf2aa5 ("Translations").');
+    const twin: DeviceSandbox = { ...other, slug: "work2", container: "intentic-sandbox-work2", name: "translations" };
+    expect(() => findIn([...boxes, twin], "translations")).toThrow(
+        '2 sandboxes on this device are named "translations": sandbox-a4ba63bf2aa5 ("Translations"), work2 ("translations"). Name one by its slug.',
+    );
+});
+
 test("listing is refused only when NEITHER grant covers it, naming the manage switch", async () => {
     await expect(listSandboxes(scopes({ shell: "off", sandboxes: "off" }))).rejects.toThrow(ScopeError);
     await expect(listSandboxes(scopes({ shell: "off", sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this device/);

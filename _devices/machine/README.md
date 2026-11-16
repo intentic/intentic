@@ -96,7 +96,10 @@ flowchart LR
   own process group like every `ic` flow. The agent advertises `sandbox-move` exactly when the ic it drives does
   (`ic features --json`), so an older ic is never sent the ops.
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
-  `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
+  `ic sandbox list --json` passed through (a sandbox is named by any column it shows: slug, 12-hex sandbox id,
+  container name or the owner's name, whatever the case, by `findIn` in
+  [`tools/listing/find-sandbox.ts`](src/device/tools/listing/find-sandbox.ts), and by ic itself for the verbs that skip
+  the listing; a name two sandboxes share is refused naming both), and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
   logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). The "Manage sandboxes"
   switch also covers the same verbs sent another way: `ic sandbox …` or `docker stop|kill|restart|rm` on a sandbox
   container through `run_command`, `app_start`, `open` or typed text is refused while it is off

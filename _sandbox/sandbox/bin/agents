@@ -403,7 +403,6 @@ const ls = async (argv) => {
         writeRoster(answer.agents);
         process.stdout.write(`more: agents show <id>${flags.all === true ? "" : " · agents ls --all includes the archive"}\n`);
     }
-    process.exitCode = answer.agents.length > 0 ? 0 : 1;
 };
 
 const find = async (argv) => {
@@ -431,7 +430,6 @@ const find = async (argv) => {
                 : ` (${coverage.done} of ${coverage.of} conversations checked, ${Math.floor((coverage.done / coverage.of) * 100)}%)`;
         process.stderr.write(`The phrase index is still building${read}; this answer can still grow.\n`);
     }
-    process.exitCode = answer.agents.length > 0 ? 0 : 1;
 };
 
 const repoLine = (repo) => {
