@@ -48,6 +48,7 @@ import { coinedTokenHooks } from "../../../privacy/gateway/coined-calls.js";
 import { jsExecutionServer } from "../../../execution/js-tool.js";
 import { JS_TOOL_ALIAS, JS_TOOL_NAME } from "../../../seams/js-tool-names.js";
 import { mcpServersOf } from "../../tools/agent-tools.js";
+import { devicesOnDemand, sessionHandle } from "./devices-on-demand.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../../tools/agent-terminals.js";
 import { sessionOfShell, terminalHelpServer } from "../../../terminal/terminal-help.js";
 import { EventQueue } from "../event-queue.js";
@@ -925,6 +926,8 @@ export async function* runAgent(
     // Writes seen but not yet settled, keyed by call id; a Write's content is known at call time but can still fail.
     const writing = new Map<string, RequestDocument>();
     let stderr = "";
+    const session = sessionHandle(request.tools.outputLogsDir, request.spec.conversationId);
+    const onDemand = devicesOnDemand(mcpServersOf(request.tools.remote ?? []), session, request.tools.hostDevices);
     const options: Options = {
         ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push, turnQuiet(conversations, request, shell), posture.approval),
         // Either built-in base plus this harness's guidance, or the owner's own prompt alone; SDK sends an empty prompt if
@@ -941,7 +944,7 @@ export async function* runAgent(
             // External MCP capabilities first, so every daemon-owned server below wins a name collision: a capability
             // whose id is `ui`, `code` or a browser router can't replace the real one. The capability routes refuse
             // those ids (reserved-servers.ts), and this last-wins order is the structural backstop behind that refusal.
-            ...mcpServersOf(request.tools.remote ?? []),
+            ...onDemand.servers,
             ui: askServer(conversations, request, push, shell, documents),
             // Accounts tools get the same live stream and abort signal handles the ask tool does.
             ...(request.tools.accountsServer === undefined ? {} : { accounts: request.tools.accountsServer(push, request.signal) }),
@@ -1009,6 +1012,7 @@ export async function* runAgent(
         try {
             for await (const event of streamSdk({
                 queryFn,
+                session,
                 prompt: promptInput(commandWire(request.spec).prompt, request.spec.steering),
                 options,
                 cwd: request.spec.cwd,

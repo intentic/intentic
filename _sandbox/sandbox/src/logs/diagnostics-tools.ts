@@ -7,6 +7,7 @@ import {
     DiagnosticsRestartsArgs,
     DiagnosticsSlowArgs,
     DiagnosticsTimelineArgs,
+    DiagnosticsToolsArgs,
     DiagnosticsTurnsArgs,
 } from "@intentic/sandbox-contract/schemas/diagnostics";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
@@ -112,6 +113,15 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     "Use it instead of grepping /history for a conversation id. What was said is in `agents show <id> --transcript`.",
                 DiagnosticsTimelineArgs,
                 async (args) => answer(deps, { query: "timeline", ...args }),
+                { annotations: toolAnnotations("read") },
+            ),
+            sdk().tool(
+                "tools",
+                "What the tool definitions a turn was given cost its context, by MCP server: tools, characters and estimated tokens " +
+                    "(chars/4) of each server's names, descriptions and input schemas, heaviest first, for one conversation's latest " +
+                    "turn. Reach for it when a turn starts with a large context before anyone typed, or to see what a mount costs.",
+                DiagnosticsToolsArgs,
+                async (args) => answer(deps, { query: "tools", ...args }),
                 { annotations: toolAnnotations("read") },
             ),
         ],

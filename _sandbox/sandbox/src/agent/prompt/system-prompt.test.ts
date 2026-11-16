@@ -455,7 +455,10 @@ test("a connected device is named, with the machine running this sandbox called 
     })) as string;
     expect(known).toContain("`ada-laptop`");
     expect(known).toContain("The one running this sandbox is `ada-laptop`.");
-    expect(known).toContain("ToolSearch (`+mcp__ada-laptop__`)");
+    expect(known).toContain("ToolSearch (`+mcp__devices__`), every tool taking `device`");
+    // A Claude turn starts without the devices server and is told what loads it (devices-on-demand.ts).
+    const onDemand = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, hostDevices: { ids: ["ada-laptop"], onDemand: true } })) as string;
+    expect(onDemand).toContain("call `mcp__reach__devices` first");
     // The two limits are the whole reason a turn may act at all, so both are stated.
     expect(known).toContain("ends your");
     expect(known).toContain("never routed around");

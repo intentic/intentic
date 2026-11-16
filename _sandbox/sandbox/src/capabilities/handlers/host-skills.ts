@@ -4,8 +4,8 @@ import { isIntenticOs } from "@intentic/sandbox-contract/schemas/intentic-os";
 import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
 
 // Substituted for `${tools}` in a host pack's SKILL.md: the core, cross-platform tool surface and rules; `${id}` is the
-// instance name. The OS-specific half is a separate pack per platform; one capability per machine namespaces tool names
-// so examples are copy-pasteable. Tools are deferred behind tool search, so the note opens by saying how to load them.
+// instance name. The OS-specific half is a separate pack per platform; every machine's tools are the one `devices` server's,
+// each taking `device`, so the note opens by naming this machine's and saying how to load them.
 // Two halves, so a section that only some machines get (Intentic OS, below) sits beside the rules it builds on.
 const HOST_TOOLS_CORE = `# Connected device "\${id}"
 
@@ -14,54 +14,56 @@ you live and where the repository is; this is their own machine, reached over a 
 
 ## Tools
 
-These tools are DEFERRED: their schemas are not in your prompt until you load them. Before the first call, run
-ToolSearch with \`+mcp__\${id}__\` (all of them) or \`select:mcp__\${id}__describe,mcp__\${id}__run_command\` (just
-the ones you need). Then:
+Every connected computer shares one server, \`devices\`: each tool below takes \`device: "\${id}"\` to act on this one.
+Where the turn lists \`mcp__reach__devices\`, call it first: it loads the devices tools for the rest of the turn. Where
+tools are DEFERRED (their schemas are not in your prompt until you load them), run ToolSearch with
+\`+mcp__devices__\` (all of them) or \`select:mcp__devices__describe,mcp__devices__run_command\` (just the ones you need).
+Then:
 
 | Tool | What it does |
 | --- | --- |
-| \`mcp__\${id}__describe\` | This machine's OS, shell, home directory, and the roots you may touch. |
-| \`mcp__\${id}__run_command\` | Run a command and get stdout/stderr/exit code back. |
-| \`mcp__\${id}__read_file\` | Read a file under the allowed roots, whole or a range of lines; answers the revision a change needs. |
-| \`mcp__\${id}__edit_file\` | Replace one exact, unique piece of a file, given the revision from your read. |
-| \`mcp__\${id}__write_file\` | Create a file, or replace one given the revision from your read: a file that changed since is refused. |
-| \`mcp__\${id}__list_dir\` | List a directory under the allowed roots. |
-| \`mcp__\${id}__trash_file\` | Move a file to the recycle bin / trash: there is no delete tool, on purpose. |
-| \`mcp__\${id}__screenshot\` | Capture the screen as an image with an id, shrunk to fit what you can read; \`display\`, \`window\` or \`region\` looks closer at one part. |
-| \`mcp__\${id}__ui_elements\` | A window's controls from its accessibility tree (Windows; Linux and macOS with cua-driver): role, name, value, and a ref like \`kd12\`. |
-| \`mcp__\${id}__ui_act\` | Act on an element ref without the pointer: invoke, set_value, toggle, expand, collapse, select, focus. |
-| \`mcp__\${id}__list_windows\` | Every open window: app, title, size, position, which has focus. |
-| \`mcp__\${id}__focus_window\` | Bring a window to the front and give it the keyboard. |
-| \`mcp__\${id}__open\` | Start an app, or open a URL or file with its default handler. |
-| \`mcp__\${id}__clipboard\` | Read or replace the clipboard. |
-| \`mcp__\${id}__browser_open\` | Open a page in a browser and get back everything on it, each with a \`[e…]\` ref. |
-| \`mcp__\${id}__browser_snapshot\` | What the current page shows now, with fresh refs. |
-| \`mcp__\${id}__browser_read\` | The page as readable text: for answering questions about it. |
-| \`mcp__\${id}__browser_click\` / \`browser_fill\` / \`browser_key\` | Act on the page by ref. |
-| \`mcp__\${id}__browser_tabs\` | List the browser's tabs, or switch to one. |
-| \`mcp__\${id}__browser_screenshot\` | The page, or one element (\`selector: "canvas"\`), as this machine's GPU drew it, WebGL and WebGPU canvases included. |
-| \`mcp__\${id}__browser_console\` | What the page logged, threw and had the browser log about it since the tools attached to its tab. |
-| \`mcp__\${id}__browser_evaluate\` | Run a JavaScript expression in the page and get its value back as JSON, within a deadline. |
-| \`mcp__\${id}__browser_frames\` | Time N animation frames (median, p95, worst, fps) and name the GPU that drew them; \`until\` waits for a condition first. |
-| \`mcp__\${id}__device\` | Use the mouse and keyboard: click (a coordinate or an element ref), type, press a chord, scroll, drag. |
-| \`mcp__\${id}__android_devices\` | The Android phones and Wear OS watches attached to this machine over adb (USB or wireless debugging): serial, state, model, form (phone, watch, tablet…), Android version, screen size. |
-| \`mcp__\${id}__android_ui_elements\` | The phone or watch screen's controls from its accessibility dump, each with a ref like \`e12\`; \`query\` finds one. |
-| \`mcp__\${id}__android_act\` | Touch the phone or watch: tap, long_press or swipe at a ref or a coordinate, type, press a key, back, home, recents, scroll. |
-| \`mcp__\${id}__android_screenshot\` | The phone's screen as an image with an id (\`phone-…\`), apart from the desktop's screenshots. |
-| \`mcp__\${id}__android_shell\` | Run a command in the phone's own shell (\`adb shell\`): \`am start\`, \`pm list packages\`, \`dumpsys\`. |
-| \`mcp__\${id}__android_install\` | Install an APK from this machine onto the phone. |
-| \`mcp__\${id}__android_logcat\` | The tail of the phone's log, narrowed to one app, tag or priority: where a crash's stack trace is. |
-| \`mcp__\${id}__app_start\` | Start a program and keep it running after the call (an app to look at), its output logged; answers a run id, or how it fell over if it did at once. |
-| \`mcp__\${id}__app_status\` | What you started here, running and ended, and the builds you pushed; with an id, that run's windows and exit code in words. |
-| \`mcp__\${id}__app_logs\` / \`app_stop\` | What a run printed; stop it with everything it started. |
-| \`mcp__\${id}__list_sandboxes\` | The Intentic sandboxes on this machine: which are running, which are stopped, tunnel state. |
-| \`mcp__\${id}__manage_sandbox\` | Start, stop or restart one of them by slug. Requires the 'Manage sandboxes on this device' permission, and stopping the sandbox you are running in severs your own connection. |
-| \`mcp__\${id}__swap_sandbox\` | Update one onto a newer image, roll it back, or rebuild its approved environment. Keeps files and history; takes minutes, and the sandbox is down for them. Same permission as \`manage_sandbox\`. |
-| \`mcp__\${id}__reshape_sandbox\` | Set one's share of this machine (memory cap in GiB, CPU cap in cores) or its privileges (privileged, GPU passthrough), with \`when\`: \`now\` restarts it onto the same image, about a minute; \`nextRestart\` saves it for its next restart through ic (start, restart, update) without restarting it. \`forget\` drops what is saved. Same permission as \`manage_sandbox\`. Ask before changing a privilege. |
-| \`mcp__\${id}__remove_sandbox\` | Delete one, with its files and its history. Irreversible. Same permission as \`manage_sandbox\`, so nothing but you stands between the ask and the deletion: ask before calling it, every time. |
-| \`mcp__\${id}__sandbox_logs\` | The tail of one's container log: why it will not start, or what it did before it stopped. |
-| \`mcp__\${id}__inspect_sandbox\` | Read another sandbox's conversations, transcripts and diagnostics, read-only, through its own \`agents\` (ls, show, find, bundle) and \`diagnostics\` commands: \`{command: "agents", args: ["show", "<id>", "--transcript"]}\`. Use it instead of \`docker exec\` through \`run_command\`. |
-| \`mcp__\${id}__device_logs\` | This device's own records by name: machine.log (watchdog, keeper, restarts), machine-update.log, audit.jsonl of every tool call, ic's per-run logs; no name lists them. Use it instead of hunting paths with \`run_command\`. |
+| \`mcp__devices__describe\` | This machine's OS, shell, home directory, and the roots you may touch. |
+| \`mcp__devices__run_command\` | Run a command and get stdout/stderr/exit code back. |
+| \`mcp__devices__read_file\` | Read a file under the allowed roots, whole or a range of lines; answers the revision a change needs. |
+| \`mcp__devices__edit_file\` | Replace one exact, unique piece of a file, given the revision from your read. |
+| \`mcp__devices__write_file\` | Create a file, or replace one given the revision from your read: a file that changed since is refused. |
+| \`mcp__devices__list_dir\` | List a directory under the allowed roots. |
+| \`mcp__devices__trash_file\` | Move a file to the recycle bin / trash: there is no delete tool, on purpose. |
+| \`mcp__devices__screenshot\` | Capture the screen as an image with an id, shrunk to fit what you can read; \`display\`, \`window\` or \`region\` looks closer at one part. |
+| \`mcp__devices__ui_elements\` | A window's controls from its accessibility tree (Windows; Linux and macOS with cua-driver): role, name, value, and a ref like \`kd12\`. |
+| \`mcp__devices__ui_act\` | Act on an element ref without the pointer: invoke, set_value, toggle, expand, collapse, select, focus. |
+| \`mcp__devices__list_windows\` | Every open window: app, title, size, position, which has focus. |
+| \`mcp__devices__focus_window\` | Bring a window to the front and give it the keyboard. |
+| \`mcp__devices__open\` | Start an app, or open a URL or file with its default handler. |
+| \`mcp__devices__clipboard\` | Read or replace the clipboard. |
+| \`mcp__devices__browser_open\` | Open a page in a browser and get back everything on it, each with a \`[e…]\` ref. |
+| \`mcp__devices__browser_snapshot\` | What the current page shows now, with fresh refs. |
+| \`mcp__devices__browser_read\` | The page as readable text: for answering questions about it. |
+| \`mcp__devices__browser_click\` / \`browser_fill\` / \`browser_key\` | Act on the page by ref. |
+| \`mcp__devices__browser_tabs\` | List the browser's tabs, or switch to one. |
+| \`mcp__devices__browser_screenshot\` | The page, or one element (\`selector: "canvas"\`), as this machine's GPU drew it, WebGL and WebGPU canvases included. |
+| \`mcp__devices__browser_console\` | What the page logged, threw and had the browser log about it since the tools attached to its tab. |
+| \`mcp__devices__browser_evaluate\` | Run a JavaScript expression in the page and get its value back as JSON, within a deadline. |
+| \`mcp__devices__browser_frames\` | Time N animation frames (median, p95, worst, fps) and name the GPU that drew them; \`until\` waits for a condition first. |
+| \`mcp__devices__device\` | Use the mouse and keyboard: click (a coordinate or an element ref), type, press a chord, scroll, drag. |
+| \`mcp__devices__android_devices\` | The Android phones and Wear OS watches attached to this machine over adb (USB or wireless debugging): serial, state, model, form (phone, watch, tablet…), Android version, screen size. |
+| \`mcp__devices__android_ui_elements\` | The phone or watch screen's controls from its accessibility dump, each with a ref like \`e12\`; \`query\` finds one. |
+| \`mcp__devices__android_act\` | Touch the phone or watch: tap, long_press or swipe at a ref or a coordinate, type, press a key, back, home, recents, scroll. |
+| \`mcp__devices__android_screenshot\` | The phone's screen as an image with an id (\`phone-…\`), apart from the desktop's screenshots. |
+| \`mcp__devices__android_shell\` | Run a command in the phone's own shell (\`adb shell\`): \`am start\`, \`pm list packages\`, \`dumpsys\`. |
+| \`mcp__devices__android_install\` | Install an APK from this machine onto the phone. |
+| \`mcp__devices__android_logcat\` | The tail of the phone's log, narrowed to one app, tag or priority: where a crash's stack trace is. |
+| \`mcp__devices__app_start\` | Start a program and keep it running after the call (an app to look at), its output logged; answers a run id, or how it fell over if it did at once. |
+| \`mcp__devices__app_status\` | What you started here, running and ended, and the builds you pushed; with an id, that run's windows and exit code in words. |
+| \`mcp__devices__app_logs\` / \`app_stop\` | What a run printed; stop it with everything it started. |
+| \`mcp__devices__list_sandboxes\` | The Intentic sandboxes on this machine: which are running, which are stopped, tunnel state. |
+| \`mcp__devices__manage_sandbox\` | Start, stop or restart one of them by slug. Requires the 'Manage sandboxes on this device' permission, and stopping the sandbox you are running in severs your own connection. |
+| \`mcp__devices__swap_sandbox\` | Update one onto a newer image, roll it back, or rebuild its approved environment. Keeps files and history; takes minutes, and the sandbox is down for them. Same permission as \`manage_sandbox\`. |
+| \`mcp__devices__reshape_sandbox\` | Set one's share of this machine (memory cap in GiB, CPU cap in cores) or its privileges (privileged, GPU passthrough), with \`when\`: \`now\` restarts it onto the same image, about a minute; \`nextRestart\` saves it for its next restart through ic (start, restart, update) without restarting it. \`forget\` drops what is saved. Same permission as \`manage_sandbox\`. Ask before changing a privilege. |
+| \`mcp__devices__remove_sandbox\` | Delete one, with its files and its history. Irreversible. Same permission as \`manage_sandbox\`, so nothing but you stands between the ask and the deletion: ask before calling it, every time. |
+| \`mcp__devices__sandbox_logs\` | The tail of one's container log: why it will not start, or what it did before it stopped. |
+| \`mcp__devices__inspect_sandbox\` | Read another sandbox's conversations, transcripts and diagnostics, read-only, through its own \`agents\` (ls, show, find, bundle) and \`diagnostics\` commands: \`{command: "agents", args: ["show", "<id>", "--transcript"]}\`. Use it instead of \`docker exec\` through \`run_command\`. |
+| \`mcp__devices__device_logs\` | This device's own records by name: machine.log (watchdog, keeper, restarts), machine-update.log, audit.jsonl of every tool call, ic's per-run logs; no name lists them. Use it instead of hunting paths with \`run_command\`. |
 
 ## Rules that are not negotiable
 
@@ -82,7 +84,7 @@ the ones you need). Then:
 
 ## If this device is the one running your sandbox
 
-Often it is. \`mcp__\${id}__list_sandboxes\` names the containers on this machine; yours is the row whose slug matches
+Often it is. \`mcp__devices__list_sandboxes\` names the containers on this machine; yours is the row whose slug matches
 your own container, which is \`SANDBOX_NAME\` in your sandbox's env (\`printenv SANDBOX_NAME\`) minus its
 \`intentic-sandbox-\` prefix. When they match, this machine is where your own daemon, your \`/work\` and your ports
 actually live — and everything about this sandbox that cannot be done from inside it becomes something to DO here,
@@ -382,11 +384,11 @@ the first sandbox paired with a box is the one meant to look after it. Its OS ha
 
 | Tool | What it does |
 | --- | --- |
-| \`mcp__\${id}__os_status\` | The OS as JSON: edition, version, channel, the booted, staged and rollback deployments, whether the next boot changes anything, and this boot's health verdict. |
-| \`mcp__\${id}__os_update\` | \`check\` asks whether a newer image is out; \`stage\` downloads it for the next boot and restarts nothing; \`apply\` stages it and reboots the machine into it. |
-| \`mcp__\${id}__os_rollback\` | Queue the previous deployment for the next boot, or \`apply: true\` to reboot into it now. |
-| \`mcp__\${id}__os_reboot\` | Reboot the orderly way: every sandbox is left a note to pick up again, then the machine restarts. |
-| \`mcp__\${id}__os_channel\` | Follow \`stable\` or \`beta\`: stages that channel's image for the next boot, restarts nothing. |
+| \`mcp__devices__os_status\` | The OS as JSON: edition, version, channel, the booted, staged and rollback deployments, whether the next boot changes anything, and this boot's health verdict. |
+| \`mcp__devices__os_update\` | \`check\` asks whether a newer image is out; \`stage\` downloads it for the next boot and restarts nothing; \`apply\` stages it and reboots the machine into it. |
+| \`mcp__devices__os_rollback\` | Queue the previous deployment for the next boot, or \`apply: true\` to reboot into it now. |
+| \`mcp__devices__os_reboot\` | Reboot the orderly way: every sandbox is left a note to pick up again, then the machine restarts. |
+| \`mcp__devices__os_channel\` | Follow \`stable\` or \`beta\`: stages that channel's image for the next boot, restarts nothing. |
 
 1. **Manage the sandboxes and the OS only through the device tools**: these and the sandbox tools above. Never ask for
    the Docker socket, and do not manage either with \`bootc\` or \`docker\` through \`run_command\`: \`ic\` keeps the
@@ -406,23 +408,23 @@ Its settings have tools of their own too, the same things a person changes from 
 
 | Tool | What it does |
 | --- | --- |
-| \`mcp__\${id}__os_network_status\` | How it is online now: Wi-Fi, a wire or not at all, with the network's name and signal. |
-| \`mcp__\${id}__os_wifi_list\` | The Wi-Fi networks in reach, after a fresh scan: signal, whether each needs a password, is known, is in use. |
-| \`mcp__\${id}__os_wifi_connect\` | Join a network by its name. One it has joined before, or an open one, needs no \`password\`. |
-| \`mcp__\${id}__os_wifi_forget\` | Forget a network it knows, so it stops rejoining it. |
-| \`mcp__\${id}__os_wifi_radio\` | Turn Wi-Fi on or off. |
-| \`mcp__\${id}__os_sound_status\` | The volume, whether it is muted, and what it plays on. |
-| \`mcp__\${id}__os_sound_set\` | Set the volume, mute or unmute; answers with the sound after. |
-| \`mcp__\${id}__os_sound_outputs\` | Every speaker, headphone and screen that can play sound, each by an \`id\`. |
-| \`mcp__\${id}__os_sound_output\` | Play the sound on another of those. |
-| \`mcp__\${id}__os_display_list\` | Its screens, each with the modes it offers and its scale. The server edition has none and says so. |
-| \`mcp__\${id}__os_display_set\` | Change a screen's mode or scale. |
-| \`mcp__\${id}__os_keyboard_status\` | The keyboard layout in use. |
-| \`mcp__\${id}__os_keyboard_layouts\` | The layouts it knows, about a hundred: give \`search\` ("German", "ch"). |
-| \`mcp__\${id}__os_keyboard_set\` | Set the layout, and its variant. |
-| \`mcp__\${id}__os_drives_list\` | The USB sticks, disks and memory cards plugged into it. |
-| \`mcp__\${id}__os_drive_import\` | Copy everything on one of them into a sandbox here; minutes for a big drive. |
-| \`mcp__\${id}__os_drive_eject\` | Eject one so it can be pulled out safely. |
+| \`mcp__devices__os_network_status\` | How it is online now: Wi-Fi, a wire or not at all, with the network's name and signal. |
+| \`mcp__devices__os_wifi_list\` | The Wi-Fi networks in reach, after a fresh scan: signal, whether each needs a password, is known, is in use. |
+| \`mcp__devices__os_wifi_connect\` | Join a network by its name. One it has joined before, or an open one, needs no \`password\`. |
+| \`mcp__devices__os_wifi_forget\` | Forget a network it knows, so it stops rejoining it. |
+| \`mcp__devices__os_wifi_radio\` | Turn Wi-Fi on or off. |
+| \`mcp__devices__os_sound_status\` | The volume, whether it is muted, and what it plays on. |
+| \`mcp__devices__os_sound_set\` | Set the volume, mute or unmute; answers with the sound after. |
+| \`mcp__devices__os_sound_outputs\` | Every speaker, headphone and screen that can play sound, each by an \`id\`. |
+| \`mcp__devices__os_sound_output\` | Play the sound on another of those. |
+| \`mcp__devices__os_display_list\` | Its screens, each with the modes it offers and its scale. The server edition has none and says so. |
+| \`mcp__devices__os_display_set\` | Change a screen's mode or scale. |
+| \`mcp__devices__os_keyboard_status\` | The keyboard layout in use. |
+| \`mcp__devices__os_keyboard_layouts\` | The layouts it knows, about a hundred: give \`search\` ("German", "ch"). |
+| \`mcp__devices__os_keyboard_set\` | Set the layout, and its variant. |
+| \`mcp__devices__os_drives_list\` | The USB sticks, disks and memory cards plugged into it. |
+| \`mcp__devices__os_drive_import\` | Copy everything on one of them into a sandbox here; minutes for a big drive. |
+| \`mcp__devices__os_drive_eject\` | Eject one so it can be pulled out safely. |
 
 1. **Read before you change**: \`os_network_status\` or \`os_wifi_list\` before a Wi-Fi change, \`os_sound_outputs\`
    before switching outputs (an id can change when a device is plugged in again), \`os_display_list\` before a mode,

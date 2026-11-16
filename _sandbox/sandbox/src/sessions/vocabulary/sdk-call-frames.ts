@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { displayNameOf, mcpServerOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { deviceSpelledName, displayNameOf, mcpServerOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { opt } from "../../opt.js";
 import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolDescription, toolInput, toolLocations } from "./tool-calls.js";
 
@@ -46,11 +46,13 @@ export class SdkCallFrames {
             this.pictures.set(block.id, { name: block.name, input: block.input });
         }
         const target = toolTarget(block.input);
+        // A devices call reads under the computer it went to (agent-context deviceSpelledName).
+        const spelled = deviceSpelledName(block.name, block.input);
         return {
             kind: "tool_call",
             id: block.id,
             // Through the shared tool-name vocabulary, so an MCP browser tool never shows its raw `mcp__web__` name.
-            name: displayNameOf(block.name),
+            name: displayNameOf(spelled),
             category: toolCategoryOf(block.name),
             // No result yet; a stored call that never got one is a turn interrupted mid-call, not a completed one.
             status: "in_progress",
@@ -58,7 +60,7 @@ export class SdkCallFrames {
             // An MCP or Agent call has no target; its input is what the record would otherwise lose.
             ...opt("input", toolInput(block.input, target)),
             ...opt("description", toolDescription(block, target)),
-            ...opt("server", mcpServerOf(block.name)),
+            ...opt("server", mcpServerOf(spelled)),
             ...opt("locations", toolLocations(block.input, this.cwd)),
             ...opt("content", diff === undefined ? undefined : [diff]),
             ...opt("parentToolUseId", parent),

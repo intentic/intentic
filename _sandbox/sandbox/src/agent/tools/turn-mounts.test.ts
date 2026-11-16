@@ -97,6 +97,19 @@ test("a bearer reaches nothing another conversation mounted, and a forged or abs
     expect(mounts.resolve("", "billing")).toEqual({ refused: "unknown" });
 });
 
+// A shell route to a device (device-door.routes.ts) asks whether the turn holds that machine: one card of the devices server.
+test("the devices mount reaches each card it carries and no other, while its turn holds it", () => {
+    const mounts = mountsAt();
+    const lease = mounts.lease("conv-a");
+    lease.open({ name: "devices", target: { kind: "devices", ids: ["rog", "omen"] } });
+    expect(mounts.reaches("conv-a", { kind: "device", id: "omen" })).toBe(true);
+    expect(mounts.reaches("conv-a", { kind: "device", id: "z440" })).toBe(false);
+    expect(mounts.reaches("conv-a", { kind: "webext", id: "rog" })).toBe(false);
+    expect(mounts.reaches("conv-b", { kind: "device", id: "rog" })).toBe(false);
+    lease.release();
+    expect(mounts.reaches("conv-a", { kind: "device", id: "rog" })).toBe(false);
+});
+
 test("a turn with no conversation has a bearer of its own, forgotten when it ends; a turn that mounts nothing mints none", () => {
     const mounts = mountsAt();
     const loose = mounts.lease();

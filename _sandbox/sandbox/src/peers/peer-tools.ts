@@ -5,6 +5,9 @@ import { WEBEXT_CLIENT_TIMEOUT_MS } from "./webext-call-deadline.js";
 import { DEVICE_CLIENT_TIMEOUT_MS } from "./device-call-deadline.js";
 import type { PeerKind } from "./peer.js";
 
+/** The server every granted machine is mounted under: `mcp__devices__run_command` (hosts/devices/devices-server.ts). */
+export const DEVICES_SERVER = "devices";
+
 // How long the agent's MCP client waits on one call, for a kind of peer whose calls run past a client's default.
 const clientTimeoutOf = (kind: PeerKind): number | undefined =>
     kind === "device" ? DEVICE_CLIENT_TIMEOUT_MS : kind === "webext" ? WEBEXT_CLIENT_TIMEOUT_MS : undefined;
@@ -16,8 +19,14 @@ const clientTimeoutOf = (kind: PeerKind): number | undefined =>
 // does: left to the client's default, Claude Code cut every device call at 60 s with "The operation timed out."
 // (2026-10-27, peers/device-call-deadline.ts), and every browser call too, a nine-minute wait_for included
 // (peers/webext-call-deadline.ts).
-export const peerToolsOf = (kind: PeerKind, capabilities: readonly Capability[], lease: Pick<TurnLease, "open">): AgentTool[] =>
-    capabilities.flatMap((capability) => {
+// Devices are the exception: every granted machine rides ONE server, `devices`, whose tools take `device`
+// (hosts/devices/devices-server.ts), so N machines cost one copy of the tool schemas rather than N.
+export const peerToolsOf = (kind: PeerKind, capabilities: readonly Capability[], lease: Pick<TurnLease, "open">): AgentTool[] => {
+    if (kind === "device") {
+        const ids = capabilities.filter((capability) => capability.kind === "device").map((capability) => capability.id);
+        return ids.length === 0 ? [] : [lease.open({ name: DEVICES_SERVER, target: { kind: "devices", ids }, timeoutMs: DEVICE_CLIENT_TIMEOUT_MS })];
+    }
+    return capabilities.flatMap((capability) => {
         if (capability.kind !== kind) {
             return [];
         }
@@ -25,3 +34,4 @@ export const peerToolsOf = (kind: PeerKind, capabilities: readonly Capability[],
         const timeoutMs = clientTimeoutOf(kind);
         return [lease.open(timeoutMs === undefined ? mount : { ...mount, timeoutMs })];
     });
+};

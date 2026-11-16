@@ -1,3 +1,4 @@
+import type { HostDeviceReach } from "../../../hosts/self-host.js";
 import { type FleetReadDeps, fleetPressure } from "../../../runners/fleet-advice.js";
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -194,6 +195,9 @@ const pagesPlan = (deps: HarnessPlanDeps, granted: readonly Capability[]) => ({
 
 // The Claude Code harness: a native Claude turn's subscription OAuth (with mid-turn refresh) or the translator endpoint a
 // routed provider rides. Credentials resolve through harness-credentials.ts; its refusals become the connect-gate's error.
+// A Claude turn loads the devices server when it asks for it (devices-on-demand.ts), and its prompt says so.
+const onDemandReach = (reach: HostDeviceReach | undefined): HostDeviceReach | undefined => (reach === undefined ? undefined : { ...reach, onDemand: true });
+
 export const planHarnessTurn = async (
     deps: HarnessPlanDeps,
     input: RoutedAgentTurn,
@@ -222,7 +226,7 @@ export const planHarnessTurn = async (
     }
     // What this turn may reach out of the container, and the owner's own browsers: the cards peerToolsOf mounts, through
     // Services, since the hosts and webext subsystems reach back into this one.
-    const hostDevices = await deps.hostReach(granted);
+    const hostDevices = onDemandReach(await deps.hostReach(granted));
     const ownBrowsers = await deps.webextReach(granted);
     const ownPhones = await deps.phoneReach(granted);
     // Said only while this sandbox is full and a runner is calm; a reading that fails says nothing.

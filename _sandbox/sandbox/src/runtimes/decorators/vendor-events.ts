@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "@intentic/sandbox-contract/events/requests";
-import { displayNameOf, mcpServerOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { deviceSpelledName, displayNameOf, mcpServerOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { opt } from "../../opt.js";
 import { toolDescription, toolInput, toolLocations } from "../../sessions/vocabulary/tool-calls.js";
 import type { PlanPhaseResult } from "./plan-mode.js";
@@ -126,7 +126,9 @@ export const toolCard = (call: {
     readonly parentToolUseId?: string | undefined;
 }): Extract<AgentEvent, { kind: "tool_call" }> => {
     const target = call.target ?? toolTarget(call.input);
-    const name = displayNameOf(call.name);
+    // A devices call reads under the computer it went to (agent-context deviceSpelledName).
+    const spelled = deviceSpelledName(call.name, call.input);
+    const name = displayNameOf(spelled);
     // A loop's own spelling the taxonomy does not know (OpenCode's `shell`) is read by the name it is shown under.
     const category = toolCategoryOf(call.name);
     return toolCallOpened({
@@ -139,7 +141,7 @@ export const toolCard = (call: {
         content: call.content,
         input: toolInput(call.input, target),
         description: toolDescription(call, target),
-        server: mcpServerOf(call.name),
+        server: mcpServerOf(spelled),
         parentToolUseId: call.parentToolUseId,
     });
 };

@@ -55,6 +55,19 @@ export const displayNameOf = (raw: string): string => DISPLAY_NAMES[raw] ?? brow
 // ran (2026-10-27). Undefined for a tool that is not an MCP server's.
 export const mcpServerOf = (raw: string): string | undefined => /^mcp__(.+?)__./u.exec(raw)?.[1];
 
+// A call to the daemon's one devices server (`mcp__devices__run_command` with `device: "rog"`) spelled as the per-device
+// server it went to (`mcp__rog__run_command`), which is how every device call read before they shared a server
+// (2026-11-16): the chat and the records keep saying which computer a call ran on. Any other name passes through.
+const DEVICES_CALL = /^mcp__devices__(.+)$/u;
+export const deviceSpelledName = (raw: string, input: unknown): string => {
+    const tool = DEVICES_CALL.exec(raw)?.[1];
+    if (tool === undefined || typeof input !== "object" || input === null || !("device" in input)) {
+        return raw;
+    }
+    const { device } = input;
+    return typeof device === "string" && /^[\w.-]+$/u.test(device) ? `mcp__${device}__${tool}` : raw;
+};
+
 // Display name to ACP ToolKind (case-insensitive), the one table driving card icons and live-writes.
 const CATEGORIES: ReadonlyArray<readonly [string, ToolKind]> = [
     ["read", "read"],

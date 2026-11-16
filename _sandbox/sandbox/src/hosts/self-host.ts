@@ -30,16 +30,16 @@ export interface EnvironmentReach {
     readonly home?: string | undefined;
 }
 
-// A machine with more than one OS install on it. ONE card, one tool prefix, one grant — what varies is which
+// A machine with more than one OS install on it. ONE card, one `device` name, one grant — what varies is which
 // environment a command lands in, which is an argument rather than another device.
 export interface MachineReach {
-    /** The card: the machine's id, and the prefix every tool of it is named after. */
+    /** The card: the machine's id, and what every devices tool's `device` names it by. */
     readonly id: string;
     /** Native first, as the summary orders them. */
     readonly environments: readonly EnvironmentReach[];
 }
 
-// How far out of this container a turn can act: the devices whose servers it carries, which one runs this sandbox when
+// How far out of this container a turn can act: the devices its `devices` server reaches, which one runs this sandbox when
 // that is already known, this container's slug out there, and which of those machines have more than one environment.
 // `self` undefined means unread, never "no such machine".
 export interface HostDeviceReach {
@@ -47,6 +47,8 @@ export interface HostDeviceReach {
     readonly self?: string | undefined;
     readonly slug?: string | undefined;
     readonly machines?: readonly MachineReach[] | undefined;
+    /** The turn starts without the devices server and loads it with `mcp__reach__devices` (Claude turns: devices-on-demand.ts). */
+    readonly onDemand?: boolean | undefined;
 }
 
 // Only the machines a turn could get wrong: one environment is a machine whose every command lands in the only place
@@ -64,7 +66,7 @@ export const machineReach = (summaries: readonly HostSummary[], ids: readonly st
             })),
         }));
 
-// One entry per granted host card, which is exactly the set `peerToolsOf("device", …)` mounts for the turn; undefined
+// One entry per granted host card, which is exactly the set `peerToolsOf("device", …)` mounts as `devices`; undefined
 // with no card at all, so a prompt composed from it says nothing rather than promising tools that aren't there.
 export const hostDeviceReach = async (services: Services, granted: readonly Capability[]): Promise<HostDeviceReach | undefined> => {
     const ids = granted.filter((capability) => capability.kind === "device").map((capability) => capability.id);

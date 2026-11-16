@@ -27,6 +27,8 @@ export const DAEMON_MCP_SERVERS: Readonly<Record<string, ServerProvenance>> = {
     web: "outside", // the turn's mounts: the anonymous browser router; the page is the internet
     browser: "outside", // the turn's mounts: the signed-in browser router; the page is the internet
     desktop: "outside", // the turn's mounts: the sandbox's own virtual desktop; whatever its windows show is outside content
+    reach: "control", // claude-code-runner: `devices`, the loader that adds the devices server mid-turn (devices-on-demand.ts)
+    devices: "outside", // the turn's mounts: every connected computer behind one server, `device` naming which (hosts/devices-server.ts)
 };
 
 // Every daemon-mounted server name, the set a capability id may not collide with.

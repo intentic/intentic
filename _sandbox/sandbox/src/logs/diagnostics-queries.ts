@@ -10,6 +10,7 @@ import { readRestarts, readTimeline } from "./diagnostics-history.js";
 import { renderLines, renderRestarts, renderRollups, renderSeries, renderSpans, renderTimeline, type Window } from "./diagnostics-render.js";
 import { readRollups } from "./diagnostics-rollups.js";
 import { commandFailuresAnswer } from "./command-runs-log.js";
+import { toolSchemasAnswer } from "./tool-schemas-log.js";
 
 // THE DIAGNOSTICS QUERIES, answered: read-only questions over what the daemon already recorded, each worded as text to
 // be read. One function behind every door that asks them (schemas/diagnostics.ts): the `diagnostics` tools a turn
@@ -259,5 +260,7 @@ export const runDiagnosticsQuery = async (deps: DiagnosticsDeps, ask: Diagnostic
             return timeline(deps, now, ask);
         case "failures":
             return failures(deps, now, ask);
+        case "tools":
+            return toolSchemasAnswer(deps.historyRoot, ask);
     }
 };

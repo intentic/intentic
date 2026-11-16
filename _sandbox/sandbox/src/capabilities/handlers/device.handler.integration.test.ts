@@ -78,10 +78,11 @@ test("apply installs the contributed OS pack with the core tools note and this i
     await drain(deviceHandler.apply(ctx, "my-laptop", laptop.config));
 
     const skill = await readWorkspaceFile(skillPath(root));
-    // The pack is the OS half (PowerShell here); `${tools}` is the core half, and `${id}` makes the tool names
-    // this machine's, so the examples are copy-pasteable rather than illustrative.
+    // The pack is the OS half (PowerShell here); `${tools}` is the core half, and `${id}` names the `device` every
+    // tool takes for this machine, so the examples are copy-pasteable rather than illustrative.
     expect(skill).toMatch(/Windows/i);
-    expect(skill).toContain("mcp__my-laptop__run_command");
+    expect(skill).toContain("mcp__devices__run_command");
+    expect(skill).toContain('`device: "my-laptop"`');
     expect(skill).toContain("name: my-laptop");
     expect(skill).not.toContain("${tools}");
     expect(skill).not.toContain("${id}");
@@ -118,14 +119,14 @@ describe("a device on Intentic OS", () => {
         expect(await refreshDeviceSkill(online, "my-laptop")).toBe(true);
         const skill = await readWorkspaceFile(skillPath(root));
         expect(skill).toContain("## This device is an Intentic OS box, and you may be its steward");
-        expect(skill).toContain("mcp__my-laptop__os_status");
+        expect(skill).toContain("mcp__devices__os_status");
         expect(skill).toContain("Never ask for\n   the Docker socket");
         expect(skill).toContain("only after the owner says yes in chat");
         // Its settings too, with the rule that keeps a Wi-Fi password out of the transcript.
-        expect(skill).toContain("mcp__my-laptop__os_wifi_connect");
+        expect(skill).toContain("mcp__devices__os_wifi_connect");
         expect(skill).toContain("Never ask for a Wi-Fi password in chat");
         // The rest of the note is all still there, around it.
-        expect(skill).toContain("mcp__my-laptop__run_command");
+        expect(skill).toContain("mcp__devices__run_command");
         expect(skill).toContain("## Using a website");
         expect(skill).not.toContain("${id}");
         // The same facts again change nothing, so a reconnect does not rewrite the file.

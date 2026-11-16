@@ -36,6 +36,9 @@ const USAGE = `diagnostics — what this sandbox's daemon recorded, read-only. A
                                  shell commands agents ran that failed, kept a month: grouped by program and
                                  error across conversations, each kind marked ongoing, stopped (ran clean
                                  elsewhere since) or quiet, with what the agent ran instead
+  diagnostics tools [--conversation <id>]
+                                 what each MCP server's tool definitions cost a conversation's latest turn:
+                                 tools, chars and ~tokens (chars/4) by server, heaviest first
   diagnostics restarts [--since <minutes>] [--limit <n>]
                                  the daemon's boots, and why each run before ended (who stopped it, a kill,
                                  an update, memory)
@@ -117,6 +120,7 @@ const QUERIES = {
         flags: { ...COMMON, conversation: ["conversationId", TEXT()], contains: ["contains", TEXT()], group: ["group", true], "no-group": ["group", false] },
     },
     restarts: { flags: COMMON },
+    tools: { flags: { conversation: ["conversationId", TEXT()] } },
     slow: { flags: { ...COMMON, source: ["source", TEXT()], op: ["op", TEXT()], "group-by": ["groupBy", TEXT()] } },
     resources: { positional: "field", flags: COMMON },
 };

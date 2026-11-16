@@ -47,6 +47,8 @@ export type MountTarget =
     // A connected machine (device card), one of the owner's own browsers (webext card) or phones (phone card), through
     // its peer socket.
     | { readonly kind: "device"; readonly id: string }
+    // Every connected machine the turn was granted, behind one server whose tools take `device` (hosts/devices/devices-server.ts).
+    | { readonly kind: "devices"; readonly ids: readonly string[] }
     | { readonly kind: "webext"; readonly id: string }
     | { readonly kind: "phone"; readonly id: string }
     // An extension's tools (`contributes.tools`), answered by its backend host from `api.tools.serve`; `card` names the
@@ -190,6 +192,14 @@ const reachOf = (mount: Mount, name: string): MountReach => {
           };
 };
 
+// Whether one mounted target reaches exactly this peer: itself, or a card of the devices server.
+const targetReaches = (target: MountTarget, wanted: Parameters<TurnMounts["reaches"]>[1]): boolean => {
+    if (target.kind === "devices") {
+        return wanted.kind === "device" && target.ids.includes(wanted.id);
+    }
+    return (target.kind === "device" || target.kind === "webext" || target.kind === "phone") && target.kind === wanted.kind && target.id === wanted.id;
+};
+
 // Whether a live turn of the conversation holds a mount on exactly this peer (TurnMounts.reaches).
 const conversationReaches = (mounts: Iterable<Mount>, conversationId: string, wanted: Parameters<TurnMounts["reaches"]>[1]): boolean => {
     for (const mount of mounts) {
@@ -198,7 +208,7 @@ const conversationReaches = (mounts: Iterable<Mount>, conversationId: string, wa
         }
         for (const lease of mount.leases.values()) {
             for (const target of lease.targets.values()) {
-                if ((target.kind === "device" || target.kind === "webext" || target.kind === "phone") && target.kind === wanted.kind && target.id === wanted.id) {
+                if (targetReaches(target, wanted)) {
                     return true;
                 }
             }

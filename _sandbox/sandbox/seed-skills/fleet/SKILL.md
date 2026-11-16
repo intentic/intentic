@@ -16,7 +16,7 @@ owner saying yes to that exact one, in chat, first.
 sandboxes ls                                 # every sandbox on the account, and whether it ever came up
 sandboxes create storefront \
     --on rog \                               # which connected computer builds it, by its device name (the
-                                             # one its tools carry, mcp__rog__…); default: this one's
+                                             # `device` its tools take, mcp__devices__…); default: this one's
     --definition ./team/reviewer.sandbox.toml \
     --why "one line on why this job needs its own box"
 sandboxes remove storefront --why "…"        # take one off the account, the owner's card first

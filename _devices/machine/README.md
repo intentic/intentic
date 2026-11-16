@@ -30,6 +30,9 @@ flowchart LR
   dialled out to the sandbox and answers MCP tools on it: `run_command`, files, windows and clipboard, `browser_*`
   through [browser](../browser), `screenshot`, `device`, `ui_elements` and `ui_act` through
   [desktop-automation](../desktop-automation), and the intentic sandboxes on this machine through the `ic` CLI.
+  The sandbox puts every connected computer behind one `devices` server and routes each call here by its `device`
+  argument, which never reaches this agent: the tools it lists are this one machine's. `run_command` also takes
+  `timeout` as `timeoutMs`, in milliseconds, since agents reach for Bash's name.
 - What the agent has been shown of the screen is kept for the process's life
   ([`tools/view.ts`](src/device/tools/view.ts)): each screenshot is a frame with an id, shrunk to what a model reads
   whole, and a coordinate is read in the newest frame and mapped back to desktop pixels, so one naming an older frame

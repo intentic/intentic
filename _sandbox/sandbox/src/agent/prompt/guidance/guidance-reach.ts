@@ -51,14 +51,24 @@ const behind = (facts: Facts, server: string): string =>
         ? `behind deferred tools you load with ToolSearch (\`+mcp__${server}__\`)`
         : `behind the \`${server}\` server's tools (${serverPrefix(facts, server)}… in your tool list)`;
 
-export const devicesFull = (facts: Facts, { ids, self, slug, machines }: HostDeviceReach): string => {
+// Where the computers' tools are: one `devices` server whose every tool takes `device` (hosts/devices/devices-server.ts), loaded
+// by `mcp__reach__devices` where the turn starts without it (agent/run/harness/devices-on-demand.ts).
+const devicesBehind = (facts: Facts, onDemand: boolean): string => {
+    const each = `every tool taking \`device\`, the computer it acts on`;
+    return onDemand
+        ? `behind one \`devices\` server that is not loaded yet: call ${toolName(facts, "reach", "devices")} first, which lists ` +
+              `them and loads ${serverPrefix(facts, "devices")}… for the rest of the turn${facts.runtime.deferredTools ? " (then ToolSearch `+mcp__devices__`)" : ""}, ${each}`
+        : `${behind(facts, "devices")}, ${each}`;
+};
+
+export const devicesFull = (facts: Facts, { ids, self, slug, machines, onDemand }: HostDeviceReach): string => {
     const which =
         self === undefined
             ? `Which of them runs this sandbox is what \`list_sandboxes\` answers${slug === undefined ? "" : ` — its slug there is \`${slug}\``}.`
             : `The one running this sandbox is \`${self}\`.`;
     return (
-        `The owner's own computers are connected to this turn: ${ids.map((id) => `\`${id}\``).join(", ")}, each ` +
-        `${behind(facts, ids[0] ?? "device")}. ${which} When something has to happen out ` +
+        `The owner's own computers are connected to this turn: ${ids.map((id) => `\`${id}\``).join(", ")}, all ` +
+        `${devicesBehind(facts, onDemand === true)}. ${which} When something has to happen out ` +
         `there, DO IT and report what came back, never write a command out for the owner to run on a machine you can ` +
         `reach: \`run_command\` takes a working directory and a deadline of up to ten minutes, ` +
         `\`read_file\`/\`write_file\`/\`list_dir\` reach that machine's own tree, and \`list_sandboxes\`, ` +

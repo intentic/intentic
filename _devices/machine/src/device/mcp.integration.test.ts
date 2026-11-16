@@ -359,6 +359,12 @@ test("a command waiting for input dies on the timeout with an explanation instea
     expect(result.text).toMatch(/Exit code|killed after/);
 });
 
+test("run_command takes Bash's `timeout` as its timeoutMs, in milliseconds", async () => {
+    const root = mkdtempSync(join(tmpdir(), "host-fs-"));
+    const result = await call("run_command", { command: "sleep 5", cwd: root, timeout: 300 }, scopes({ roots: root }));
+    expect(result.text).toMatch(/was stopped after/);
+});
+
 test("describe names the shell, the home and the boundary: what the agent needs before its first command", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const described = await call("describe", {}, scopes({ roots: root }));

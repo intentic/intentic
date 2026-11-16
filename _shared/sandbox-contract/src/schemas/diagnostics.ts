@@ -119,6 +119,15 @@ export const DiagnosticsFailuresArgs = {
     limit: limit(),
 };
 
+/** `tools`: what each MCP server's tool definitions cost one conversation's latest turn (logs/tool-schemas.jsonl). */
+export const DiagnosticsToolsArgs = {
+    conversationId: z
+        .string()
+        .max(200)
+        .optional()
+        .describe("The conversation whose latest turn to read. Leave it out for the newest conversation that recorded a listing."),
+};
+
 // One query, named by `query`, with that query's own arguments.
 export const DiagnosticsQuerySchema = z.discriminatedUnion("query", [
     z.object({ query: z.literal("errors"), ...DiagnosticsErrorsArgs }),
@@ -128,10 +137,11 @@ export const DiagnosticsQuerySchema = z.discriminatedUnion("query", [
     z.object({ query: z.literal("restarts"), ...DiagnosticsRestartsArgs }),
     z.object({ query: z.literal("timeline"), ...DiagnosticsTimelineArgs }),
     z.object({ query: z.literal("failures"), ...DiagnosticsFailuresArgs }),
+    z.object({ query: z.literal("tools"), ...DiagnosticsToolsArgs }),
 ]);
 export type DiagnosticsQuery = z.infer<typeof DiagnosticsQuerySchema>;
 export type DiagnosticsQueryName = DiagnosticsQuery["query"];
-export const DIAGNOSTICS_QUERY_NAMES = ["errors", "slow", "turns", "resources", "restarts", "timeline", "failures"] as const satisfies readonly DiagnosticsQueryName[];
+export const DIAGNOSTICS_QUERY_NAMES = ["errors", "slow", "turns", "resources", "restarts", "timeline", "failures", "tools"] as const satisfies readonly DiagnosticsQueryName[];
 
 // POST /diagnostics: one query of this sandbox's records, or, with `on`, of the linked sandbox that card names, read
 // through the link (its owner must share records on it).

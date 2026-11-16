@@ -1,4 +1,4 @@
-import { displayNameOf, isFileWorkCall, mcpServerOf, isRootListing, isSearchCall, searchPrecedesFileWork, toolCategoryOf, toolPathsUnder, toolTarget } from "./tool-calls.js";
+import { deviceSpelledName, displayNameOf, isFileWorkCall, mcpServerOf, isRootListing, isSearchCall, searchPrecedesFileWork, toolCategoryOf, toolPathsUnder, toolTarget } from "./tool-calls.js";
 
 // The agent's root in these fixtures; the predicates only compare paths against it, nothing here touches the disk.
 const CWD = "/repo";
@@ -133,6 +133,15 @@ test("mcpServerOf names the server of an MCP tool, and nothing for a tool of the
     expect(mcpServerOf("mcp__web__browser_navigate")).toBe("web");
     expect(mcpServerOf("mcp__radarsu-omen__run_command")).toBe("radarsu-omen");
     expect(mcpServerOf("Bash")).toBeUndefined();
+});
+
+// One server for every computer; the chat still says which one a call ran on.
+test("a devices call is spelled as the computer its `device` names, and anything else passes through", () => {
+    expect(deviceSpelledName("mcp__devices__run_command", { device: "rog", command: "ls" })).toBe("mcp__rog__run_command");
+    expect(deviceSpelledName("mcp__devices__browser_click", { device: "omen" })).toBe("mcp__omen__browser_click");
+    expect(deviceSpelledName("mcp__devices__run_command", { command: "ls" })).toBe("mcp__devices__run_command");
+    expect(deviceSpelledName("mcp__devices__run_command", { device: "a b" })).toBe("mcp__devices__run_command");
+    expect(deviceSpelledName("mcp__web__browser_navigate", { device: "rog" })).toBe("mcp__web__browser_navigate");
 });
 
 test("a browser verb is the text after the last `__browser_`, read without backtracking", () => {

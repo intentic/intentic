@@ -32,6 +32,7 @@ export interface MountEndpoints {
     readonly browser: RpcEndpoint<TargetOf<"browser">>;
     readonly daemon: RpcEndpoint<TargetOf<"daemon">>;
     readonly device: RpcEndpoint<TargetOf<"device">>;
+    readonly devices: RpcEndpoint<TargetOf<"devices">>;
     readonly webext: RpcEndpoint<TargetOf<"webext">>;
     readonly phone: RpcEndpoint<TargetOf<"phone">>;
     readonly tools: RpcEndpoint<TargetOf<"tools">>;
@@ -53,6 +54,8 @@ const rpcOf = (endpoints: MountEndpoints, target: Exclude<MountTarget, TargetOf<
             return (message: RpcMessage) => endpoints.daemon(target, message, call);
         case "device":
             return (message: RpcMessage) => endpoints.device(target, message, call);
+        case "devices":
+            return (message: RpcMessage) => endpoints.devices(target, message, call);
         case "webext":
             return (message: RpcMessage) => endpoints.webext(target, message, call);
         case "phone":
@@ -108,6 +111,20 @@ const held =
         }
     };
 
+type ListingObserver = (entry: { readonly server: string; readonly kind: MountTarget["kind"]; readonly conversationId: string | undefined; readonly result: unknown }) => void;
+
+// Hands a tools/list answer to the door's observer, the one message it is told about.
+const noteListing = (
+    listed: ListingObserver | undefined,
+    message: RpcMessage,
+    answered: RpcMessage | undefined,
+    entry: Omit<Parameters<ListingObserver>[0], "result">,
+): void => {
+    if (listed !== undefined && message.method === "tools/list" && answered?.result !== undefined) {
+        listed({ ...entry, result: answered.result });
+    }
+};
+
 export const createTurnMountRoute =
     (
         mounts: Pick<TurnMounts, "resolve">,
@@ -118,6 +135,10 @@ export const createTurnMountRoute =
         // finds nothing the second time. Until 2026-10-25 only Claude, Pi and Cursor masked, so a script the code server
         // ran printed a resolved secret straight to a Codex, OpenCode, ACP or Muse model.
         mask?: (result: ToolOutput) => Promise<ToolOutput>,
+        // Told each tools/list answer a mounted server gave, so what its definitions cost a turn's context is on record
+        // (logs/tool-schemas-log.ts). Extension endpoints that speak the transport themselves and remote servers are
+        // forwarded whole and not read here.
+        listed?: ListingObserver,
     ) =>
     async (c: Context<AppEnv>): Promise<Response> => {
         const name = c.req.param("mount") ?? "";
@@ -139,6 +160,7 @@ export const createTurnMountRoute =
         const handle = held(rpcOf(endpoints, target, call), target.kind === "daemon" ? undefined : reach.hold);
         return answerRpc(c, async (message) => {
             const answered = await handle(message);
+            noteListing(listed, message, answered, { server: name, kind: target.kind, conversationId: call.conversationId });
             // Transport messages and notifications are untouched.
             const toolCall = message.method === "tools/call" ? ToolCallSchema.safeParse(message.params) : undefined;
             if (toolCall?.success !== true || answered?.result === undefined) {

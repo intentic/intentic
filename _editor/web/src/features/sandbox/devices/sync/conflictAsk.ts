@@ -55,8 +55,8 @@ export interface ConflictAsk {
 export interface ConflictSubject {
     /** What the machine is called on screen and to its owner. */
     readonly machine: string;
-    // The card the door is a connection of, and which environment of it the door is. The tools are the CARD's
-    // (`mcp__<card>__…`) and an environment of that machine is reached through them with a crossing.
+    // The card the door is a connection of, and which environment of it the door is. The tools take the CARD
+    // (`mcp__devices__…` with `device: "<card>"`) and an environment of that machine is reached through them with a crossing.
     readonly card: string;
     readonly environment: string;
     /** The folder on that machine this sandbox is synced with. */
@@ -122,8 +122,8 @@ export const conflictAsk = ({ machine, card, environment, localDir, conflicts, c
                 `picking a side, so one of the two copies has to be chosen, per path, by someone who has read both.`,
             goal:
                 `${inventory}\n\n` +
-                `For each path: read the copy on ${machine} (its tools are deferred — \`ToolSearch\` with \`+mcp__${card}__\`, then ` +
-                `\`mcp__${card}__describe\` once before anything else) and the copy in the sandbox, then make the two agree — the ` +
+                `For each path: read the copy on ${machine} (its tools are the \`devices\` server's, each with \`device: "${card}"\`: deferred, so \`ToolSearch\` with ` +
+                `\`+mcp__devices__\` first, after \`mcp__reach__devices\` where the turn lists it, then \`mcp__devices__describe\` once before anything else) and the copy in the sandbox, then make the two agree — the ` +
                 `same bytes on both ends, or gone from both if that is the answer.${crossing} The sandbox's end is the OWNER'S workspace root, ` +
                 `not yours: an isolated turn's /work is its own worktree, and the tree this folder is synced with is mounted at ` +
                 `/mnt/intentic-main. Check which one you are in before you edit anything.`,

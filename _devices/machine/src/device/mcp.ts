@@ -185,10 +185,13 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 .int()
                 .positive()
                 .max(MAX_TIMEOUT_MS)
-                .default(DEFAULT_TIMEOUT_MS)
-                .describe(`How long to wait before killing it. Default ${DEFAULT_TIMEOUT_MS}, maximum ${MAX_TIMEOUT_MS}.`),
+                .optional()
+                .describe(`How long to wait before killing it, in ms. Default ${DEFAULT_TIMEOUT_MS}, maximum ${MAX_TIMEOUT_MS}.`),
+            // Agents reach for Bash's `timeout` here (2026-11-16): the same milliseconds, timeoutMs winning when both are given.
+            timeout: z.int().positive().max(MAX_TIMEOUT_MS).optional().describe("Same as timeoutMs, in milliseconds."),
         }),
-        run: async ({ command, cwd, timeoutMs, in: target }, scopes) => {
+        run: async ({ command, cwd, timeoutMs: asked, timeout, in: target }, scopes) => {
+            const timeoutMs = asked ?? timeout ?? DEFAULT_TIMEOUT_MS;
             const result = await runCommand(
                 { command, ...(cwd === undefined ? {} : { cwd }), ...(target === undefined ? {} : { in: target }), timeoutMs },
                 scopes,

@@ -3,6 +3,7 @@
 // emitted by runAgent, not here.
 import type { Options, Query, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand, TerminalReason } from "@anthropic-ai/claude-agent-sdk";
 import { within } from "@intentic/base/async";
+import type { SessionHandle } from "./devices-on-demand.js";
 import { sdk } from "../../../engines/claude-sdk.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { FastModeState } from "@intentic/sandbox-contract/schemas/providers/fast-mode";
@@ -39,6 +40,8 @@ export type AgentQuery = AsyncIterable<SDKMessage> & {
     readonly supportedCommands?: () => Promise<readonly SlashCommand[]>;
     // Stops the running request loop where it stands; the stream still ends on its own result.
     readonly interrupt?: Query["interrupt"];
+    // Adds or replaces MCP servers in the running session (devices-on-demand.ts); a fake stream has none.
+    readonly setMcpServers?: Query["setMcpServers"];
 };
 
 // The SDK `query` injected so tests can drive a fake message stream with no API calls and no bundled binary.
@@ -356,6 +359,9 @@ export interface TurnPosture {
 // Every input streamSdk folds, named at its one call site (runAgent); each field's comment says why it can be absent.
 export interface StreamSdkArgs {
     readonly queryFn: QueryFn;
+    // Told the running query and its servers once it exists, for a tool that changes the session mid-turn and the record
+    // of what the servers cost (devices-on-demand.ts).
+    readonly session?: SessionHandle;
     readonly prompt: string | AsyncIterable<SDKUserMessage>;
     readonly options: Options;
     readonly cwd: string;
@@ -988,6 +994,7 @@ class TurnFold {
 // Normalize the SDK's SDKMessage stream onto AgentEvents.
 export async function* streamSdk(args: StreamSdkArgs): AsyncGenerator<AgentEvent> {
     const session = args.queryFn({ prompt: args.prompt, options: args.options });
+    args.session?.started(session, args.options.mcpServers ?? {});
     const fold = new TurnFold(args, session);
     yield* drainSdkMessages(sdkTurns(session, args.steering, args.redeliver), fold, session);
 }

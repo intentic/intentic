@@ -6,8 +6,8 @@ description: Hand a task to another of the owner's sandboxes that is linked to t
 # Linked sandboxes
 
 A **link** lets this sandbox hand tasks to another of the owner's sandboxes. Each linked sandbox sits with the owner's
-devices: a `link` card under Your devices, and a tool server of its own named after the card, the way a computer's is
-(`mcp__ops__delegate` beside `mcp__omen__run_command`). The token behind it was minted by the other sandbox's owner
+devices: a `link` card under Your devices, and a tool server of its own named after the card (`mcp__ops__delegate`,
+beside the computers' `mcp__devices__run_command`). The token behind it was minted by the other sandbox's owner
 and stays with this sandbox's daemon, never in your environment. What a task may do over there is decided **there**, on the link's terms:
 
 - the **persona** its tasks wear (their accounts, tool shelves, folders and model);

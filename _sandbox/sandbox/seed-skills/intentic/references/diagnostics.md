@@ -4,7 +4,7 @@ The daemon writes everything down. Ask the records instead of re-instrumenting c
 with `ToolSearch` `+diagnostics`; they read `/history/logs`, `/history/activity.jsonl` and the spend ledger over a
 window you choose. They cannot write, and nothing in this playbook restarts anything.
 
-The same queries answer from a shell as the `diagnostics` command (`diagnostics errors|timeline|turns|restarts|slow|resources|failures`,
+The same queries answer from a shell as the `diagnostics` command (`diagnostics errors|timeline|turns|restarts|slow|resources|failures|tools`,
 `--help` for the flags), for every runtime and for a person in a terminal. `errors --from <ISO> --until <ISO>` (`--to` is `--until`) reads the
 log lines around a moment you already know, which a window reaching back from now cannot once the log has moved on.
 
@@ -30,6 +30,9 @@ log lines around a moment you already know, which a window reaching back from no
   error across conversations, each kind marked `ongoing`, `stopped` (its program has since run clean in two other
   conversations) or `quiet`, with what the agent ran instead. `--conversation <id>` lists one conversation's failures
   one by one. Only the shell command answers it; there is no `mcp__diagnostics__` tool for it.
+- A turn started with a large context before anyone typed → `mcp__diagnostics__tools` (or `diagnostics tools
+  [--conversation <id>]`): what each MCP server's tool definitions cost that conversation's latest turn, by server,
+  in tools, characters and estimated tokens (chars/4), heaviest first.
 - Something errored in the daemon (an automation, a sync, a land, a refused provider) → `mcp__diagnostics__errors`
   (`sinceMinutes`; `contains` a conversation id, route or code; `level`). Many matches come back grouped by message
   with a count and first/last time; `group: false` lists every line, `stacks: true` adds the stacks.
@@ -63,8 +66,8 @@ A bug the owner met in ANOTHER of their sandboxes is read from here, never by `d
   and `diagnostics`. Every conversation but a private one is readable, and each read is logged over there. No link yet:
   `capabilities request link --target <sandbox> --why "…"`; a link that does not share records answers so, and turning
   it on is that sandbox's owner's.
-- **On one of the owner's computers.** When the sandbox runs on a connected device, `mcp__<device>__inspect_sandbox`
-  runs its own `agents` and `diagnostics` read-only (`{slug, command: "agents", args: ["show", "<id>", "--transcript"]}`),
+- **On one of the owner's computers.** When the sandbox runs on a connected device, `mcp__devices__inspect_sandbox`
+  runs its own `agents` and `diagnostics` read-only (`{device, slug, command: "agents", args: ["show", "<id>", "--transcript"]}`),
   with no link needed. `list_sandboxes` names the slugs.
 - **From a file.** `agents bundle <id> --out <file>` there, or the editor's "Download debug bundle" on the conversation,
   puts its show, its record, its timeline, turns, log errors, restarts and the editor's reports in one JSON file; the

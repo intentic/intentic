@@ -10,12 +10,14 @@ import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import { createExtensionMcpEndpoint, createExtensionToolsEndpoint } from "../extensions/backend/extension-mcp.js";
 import { createMcpRemoteEndpoint } from "../capabilities/mcp-oauth/mcp-remote.js";
 import { HOST_PEER, hostPeerRoutes } from "../hosts/host-peer.js";
+import { createDevicesEndpoint, hostDevicesDeps } from "../hosts/devices/devices-server.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 import { createPhonePasswordsRoutes } from "../phones/phone-passwords.routes.js";
 import { createPhoneWakeRoute, PHONE_PEER, phonePeerRoutes } from "../phones/phone-peer.js";
 import { RUNNER_PEER, runnerPeerRoutes } from "../runners/runner-peer.js";
 import { WEBEXT_PEER, webextPeerRoutes } from "../webext/webext-peer.js";
 import { peerRouteTable } from "./peer-routes.js";
+import { recordToolSchemas, ToolListingSchema } from "../logs/tool-schemas-log.js";
 import { createRedeemRoute } from "./redeem-codes.js";
 
 // What the device gates ask when an agent would restart the sandbox it runs in: everything a restart would cut, leaving
@@ -55,6 +57,7 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
                 browser: (target, message, call) => target.router.handle(message, call.signal, call),
                 daemon: daemonEndpoint,
                 device: hostRoutes.mcp,
+                devices: createDevicesEndpoint(hostDevicesDeps(services, hostRoutes.mcp)),
                 webext: webextRoutes.mcp,
                 phone: phoneRoutes.mcp,
                 tools: createExtensionToolsEndpoint(services),
@@ -76,6 +79,13 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
             },
             // SAFETY: maskDeep keeps a value's shape and changes only its strings, so a tool result stays a tool result.
             async (result) => maskDeep(result, maskTargets(await services.secretRegistry())) as typeof result,
+            ({ server, kind, conversationId, result }) => {
+                const listing = ToolListingSchema.safeParse(result);
+                if (listing.success) {
+                    // allow(silent-catch): the record is a measurement; a full disk costs it, never the listing the turn waits on.
+                    void recordToolSchemas(join(services.config.historyRoot, "logs"), { server, kind, conversationId, listing: listing.data }).catch(() => undefined);
+                }
+            },
         ),
     };
 });
