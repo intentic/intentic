@@ -10,6 +10,7 @@ import { type MemoryKill, type NetdKill, type PostMortem, PostMortemSchema, type
 import { bootHistoryDocument } from "./boot-history.js";
 import { epochOfKernel, type KernelLog, kernelZeroEpochMs, memcgIsDaemonLeaf, memcgIsOurs, readContainerId, readKernelLog } from "./kernel-oom.js";
 import { type MemoryTrail, neverStartedBoots, readDaemonSamples, readMemoryTrail, readTrail } from "./memory-trail.js";
+import { rolledBackText } from "./rolled-back.js";
 import { RESTARTS_FILE, RUN_ENDINGS, type RunEnding, spanOf } from "./restart-record.js";
 
 /* WHY THE RUN BEFORE THIS ONE ENDED, NAMED FROM WHAT WAS LEFT ON FILE (2026-11-05). A job's `integra replay-client` grew
@@ -311,6 +312,8 @@ const netdText = (netd: readonly NetdKill[]): string | undefined => {
     const stuck = netd.filter((kill) => kill.kind === "stuck");
     const noHello = netd.filter((kill) => kill.kind === "no-hello").length;
     const held = netd.filter((kill) => kill.kind === "restart-held").length;
+    const rolled = netd.findLast((kill) => kill.kind === "rolled-back");
+    const gaveUp = netd.some((kill) => kill.kind === "rollback-failed");
     const first = stuck[0];
     const parts = [
         ...(first === undefined
@@ -322,6 +325,8 @@ const netdText = (netd: readonly NetdKill[]): string | undefined => {
             ? []
             : [`${first === undefined ? "netd killed " : "then "}${times(noHello, "a daemon it restarted that", "daemons it restarted that")} never said hello`]),
         ...(held === 0 ? [] : [`held ${times(held, "a restart", "restarts")} while memory was short`]),
+        ...(rolled?.from === undefined ? [] : [rolledBackText(rolled.from, rolled.failures ?? 0, rolled.error)]),
+        ...(gaveUp ? ["the last build that booted failed too, so netd went back to the installed build"] : []),
     ];
     return parts.length === 0 ? undefined : parts.join(", ");
 };

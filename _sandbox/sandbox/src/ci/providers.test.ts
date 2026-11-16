@@ -180,6 +180,9 @@ test("github client lists runs and reruns/cancels via the vendor endpoints", asy
     await client.rerun(githubProject, 1);
     await client.cancel(githubProject, 1);
     await expect(client.rerun(githubProject, 2)).rejects.toThrow(/github rerun failed \(404\)/);
+    // A run the fleet failed has only its failed jobs run again.
+    await client.rerunFailed(githubProject, 1);
+    expect(calls.at(-1)).toMatchObject({ method: "POST", url: "https://api.github.com/repos/acme/web/actions/runs/1/rerun-failed-jobs" });
 });
 
 test("ensureHook is idempotent by delivery url; removeHook deletes exactly the matching hooks", async () => {
@@ -305,15 +308,19 @@ test("a failed job names its id, the step that failed it, and gitlab's own reaso
             {
                 "GET /actions/runs/41/jobs": {
                     jobs: [
-                        { id: 7, name: "verify-core", conclusion: "failure", steps: [{ name: "Run tests", conclusion: "failure" }] },
+                        { id: 4107, name: "verify-core", conclusion: "failure", steps: [{ name: "Run tests", conclusion: "failure" }], runner_name: "worker-2" },
                         { id: 8, name: "lint", conclusion: "success", steps: [] },
                     ],
                 },
+                // A failed job's annotations are read too: they are where a runner that died under it is said.
+                "GET /check-runs/4107/annotations": [{ message: "Process completed with exit code 1." }],
             },
             [],
         ),
     ).failedSteps(githubProject, 41);
-    expect(github).toEqual([{ job: "verify-core", id: 7, step: "Run tests", steps: ["Run tests"] }]);
+    expect(github).toEqual([
+        { job: "verify-core", id: 4107, step: "Run tests", steps: ["Run tests"], annotations: ["Process completed with exit code 1."], runner: "worker-2" },
+    ]);
 
     const gitlab = await ciClientFor(
         "gitlab",
@@ -354,8 +361,8 @@ test("a cancelled github job that ran out of time, or that no runner took, is a 
         ),
     );
     const expected = [
-        { job: "migrations", id: 9102, reason: "timed_out" },
-        { job: "mobile / ios", id: 9103, reason: "runner_unavailable" },
+        { job: "migrations", id: 9102, reason: "timed_out", annotations: ["The job has exceeded the maximum execution time of 15m0s"] },
+        { job: "mobile / ios", id: 9103, reason: "runner_unavailable", annotations: ["The job was not acquired by Runner of type hosted even after multiple attempts"] },
     ];
     expect(await client.failedSteps(githubProject, 91)).toEqual(expected);
     expect(await client.failedSteps(githubProject, 91)).toEqual(expected);

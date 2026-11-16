@@ -42,6 +42,8 @@ export const cooled = (client: CiClient, fetchFn: FetchFn): CiClient => {
         allJobs: guard(client.allJobs),
         jobLog: guard(client.jobLog),
         rerun: guard(client.rerun),
+        rerunFailed: guard(client.rerunFailed),
+        annotations: guard(client.annotations),
         cancel: guard(client.cancel),
         ensureHook: guard(client.ensureHook),
         removeHook: guard(client.removeHook),

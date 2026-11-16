@@ -98,5 +98,7 @@ export const detachedStamp = (kind: DetachedKind, deadlineAt?: number): Detached
 // Variables only the daemon may hold: netd's control socket and the socket it relays HTTP to, which a child that
 // inherited them (an agent's shell, a second Node started there) could take netd's socket over with; and which start
 // of the daemon this is and which copy of the sandbox, which such a second Node would otherwise claim as its own. Read
-// before they are forgotten: the generation by the hello, the instance by the announce, both at boot.
-export const DAEMON_ONLY_ENV = [NETD_SOCKET_ENV, NODE_SOCKET_ENV, NODE_GENERATION_ENV, INSTANCE_ENV] as const;
+// before they are forgotten: the generation by the hello, the instance by the announce, both at boot. And netd's word that
+// this start is the last build that booted (system/boot/restarts/rolled-back.ts, read when that module loads), which a
+// second Node would otherwise put on its own owner's card.
+export const DAEMON_ONLY_ENV = [NETD_SOCKET_ENV, NODE_SOCKET_ENV, NODE_GENERATION_ENV, INSTANCE_ENV, "INTENTIC_ROLLED_BACK"] as const;

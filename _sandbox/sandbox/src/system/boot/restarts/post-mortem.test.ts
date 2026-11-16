@@ -240,3 +240,24 @@ test("the restart record keeps every stuck kill and the newest of the rest", () 
     expect(kept.summary).toBe(postMortem.summary);
     expect(CONTAINER_ID).toHaveLength(64);
 });
+
+test("netd starting the last build that booted says so, and names no hand that ended the run", () => {
+    const rolled: NetdKill = {
+        at: BOOT_AT - 2000,
+        kind: "rolled-back",
+        from: { hash: "a1b2c3d4e5f60718", builtAt: BOOT_AT - 60_000 },
+        to: { hash: "0f1e2d3c4b5a6978", builtAt: BOOT_AT - 3_600_000 },
+        failures: 3,
+        error: "TypeError: Cannot read properties of undefined (reading 'handler')\n    at openNetdDoor (main.js:1:1)",
+        step: "Opening the netd door",
+    };
+    const { postMortem, namedEnding } = assemblePostMortem(input({ kernel: [], netd: [rolled] }));
+    expect(namedEnding).toBeUndefined();
+    expect(postMortem.summary).toBe(
+        "netd started the last build that booted after build a1b2c3d4e5f60718 failed 3 times before it was ready (TypeError: Cannot read properties of undefined (reading 'handler'))",
+    );
+    const gaveUp: NetdKill = { ...rolled, kind: "rollback-failed", at: BOOT_AT - 1000 };
+    expect(assemblePostMortem(input({ kernel: [], netd: [rolled, gaveUp] })).postMortem.summary).toContain(
+        "the last build that booted failed too, so netd went back to the installed build",
+    );
+});

@@ -11,42 +11,32 @@ import { NO_PROVIDER_CONNECTED, runRoleModel, unpinnedRunProvider } from "../age
 import { digestOf, excerptOf } from "./logs/failure-digest.js";
 import { ciLogsRoot, jobLogPath, keepJobLog, keptJobLog } from "./logs/job-logs.js";
 import type { CiProject } from "./projects.js";
+import { jobVerdict } from "./fleet/fleet-verdict.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
 // One way to put an agent on a failed run, whoever asks: the Pipelines board's Fix press, or main's one fix agent with
 // the first run that fails on a main-line branch (main-fixer.ts).
 
-// How much of a failed job's log end is read for the fleet's signs (infraLog): the runner's death is said last.
+// How much of a failed job's log end is read for the fleet's signs (fleet-verdict.ts): the runner's death is said last.
 export const FIX_LOG_BYTES = 24_000;
 // A failed job's log is read whole, since its errors can sit anywhere in it (a typecheck's above a test run's megabytes),
 // and only its digest (failure-digest.ts) reaches a conversation. Both forges hand the whole log over either way.
 export const WHOLE_LOG = Number.POSITIVE_INFINITY;
 const RUNS_PER_PROJECT = 15;
 
-// Lines only the runner, its Docker daemon or its disk print, each with what it says happened; a test's own output (a
-// refused port, an HTTP 503 it asserts) is left to read as the code's.
-const INFRA_LOG: readonly { readonly sign: RegExp; readonly says: string }[] = [
-    { sign: /Cannot connect to the Docker daemon at /, says: "the runner's Docker daemon stopped answering" },
-    { sign: /docker: command not found/, says: "the runner has no Docker" },
-    { sign: /no space left on device/i, says: "the runner's disk is full" },
-    { sign: /net\/http: timeout awaiting response headers/, says: "the runner's network timed out" },
-    { sign: /The runner has received a shutdown signal/, says: "the runner was shut down mid-job" },
-    { sign: /lost communication with the server/i, says: "the runner lost its connection to the forge" },
-];
-
-// What a failed-job log says the fleet did, once per sign it carries; none for a log that reads as the code's.
-const infraSigns = (logs: string): readonly string[] => INFRA_LOG.flatMap(({ sign, says }) => (sign.test(logs) ? [says] : []));
-
-// Whether a failed-job log reads as the fleet's failure; any one sign is enough, since a code failure prints none of them.
-export const infraLog = (logs: string): boolean => infraSigns(logs).length > 0;
-
-// Why a run reads as the fleet's, in words for whoever pressed Fix: each sign with the jobs whose log ends carry it, or,
-// when none does, the runner-owned steps every job died in. Empty when the run reads as the code's.
+// Why a run reads as the fleet's, in words for whoever pressed Fix: what each job's annotations, the forge's reason or
+// its log end say the fleet did (fleet-verdict.ts), with the jobs it did it to, or, when none says so, the runner-owned
+// steps every job died in. Empty when the run reads as the code's.
 export const fleetReasons = (failedSteps: readonly FailedStep[], logs: readonly string[]): readonly string[] => {
     const jobsBySign = new Map<string, string[]>();
     failedSteps.forEach((failed, index) => {
-        for (const says of infraSigns((logs[index] ?? "").slice(-FIX_LOG_BYTES))) {
-            jobsBySign.set(says, [...(jobsBySign.get(says) ?? []), failed.job]);
+        // Its own steps alone: a runner-owned one is the fallback's below, said once for the run.
+        const verdict = jobVerdict(
+            { steps: failed.steps ?? [], reason: failed.reason, annotations: failed.annotations },
+            (logs[index] ?? "").slice(-FIX_LOG_BYTES),
+        );
+        if (verdict.kind === "fleet") {
+            jobsBySign.set(verdict.says, [...(jobsBySign.get(verdict.says) ?? []), failed.job]);
         }
     });
     if (jobsBySign.size > 0) {

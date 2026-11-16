@@ -16,7 +16,7 @@ import type { FixAttemptOutcome } from "../conversations/fix/fix-attempts.js";
 import { opt } from "../opt.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import type { CiFailure } from "./ci-store.js";
-import { FIX_LOG_BYTES, knownConversationIds, startCiFix, WHOLE_LOG } from "./ci-fix.js";
+import { knownConversationIds, startCiFix, WHOLE_LOG } from "./ci-fix.js";
 import { digestOf, excerptOf, type JobExcerpt } from "./logs/failure-digest.js";
 import { ciLogsRoot, keepJobLog } from "./logs/job-logs.js";
 import { isMainLine } from "./main-line.js";
@@ -25,7 +25,6 @@ import {
     type FailedJob,
     findingOf,
     fixerOf,
-    fleetFailed,
     heardOf,
     isMainsOwn,
     mainFailureOf,
@@ -38,13 +37,15 @@ import {
     withRecovered,
     workflowOf,
 } from "./main-streak.js";
+import { fleetOf, isFleetJob, judgedFleet, leftOut, releaseAmbiguous, rerunFleet, resetMainFleet } from "./fleet/main-fleet.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
 /* One persisted fix conversation per default-branch failure streak; hand a run's failed jobs over HANDOVER_DELAY_MS after the first
  * of them, or when the run finishes, whichever is sooner, and any that fail later in it as they come.
  * Send later failures to the same conversation; end the streak after every affected workflow has a later passing run.
- * Limited turns, no change, failure, stop or archive hand control to the owner. Exclude fleet failures and retry an all-fleet-failure run once.
+ * Limited turns, no change, failure, stop or archive hand control to the owner. Exclude fleet failures and re-run an all-fleet-failure
+ * run's failed jobs once, starting nobody, and a job that only might be the fleet's first too (main-fleet.ts).
  * Persist in ci-store across restarts. With autoRepair off, report failures without starting repairs. */
 
 // Turns the sandbox starts for the fix agent in one streak; words said into its live turn are none. A run costs one at
@@ -76,12 +77,11 @@ interface Batch {
 // Why a run's failures are handed over now: the run finished, or it is still going and these are what failed so far.
 type HandOverReason = "finished" | "early";
 
-// What only this process holds: a lock per branch, so one branch's news is decided in the order it arrived; the fleet
-// failures already judged, so a job's log is not read twice for them; and each run's failed jobs not yet handed over.
+// What only this process holds: a lock per branch, so one branch's news is decided in the order it arrived, and each
+// run's failed jobs not yet handed over (the fleet's are main-fleet.ts's).
 // Losing them to a restart costs a read: `heard` is written only at a handover, so the boot's replay of the runs since
 // the streak began (resumeMainFixer) parks and hands over again whatever this process held.
 let serially = keyedLock<string>();
-const fleetJobs = new Set<string>();
 const batches = new Map<string, Batch>();
 let handoverDelayMs = HANDOVER_DELAY_MS;
 
@@ -171,6 +171,7 @@ const openingPreface = (project: CiProject, branch: string, runId: number, parke
     [
         `Main's CI is failing: ${jobsFailed(runId, parked)}, on ${branch} of "${project.repo}".`,
         completeness(reason),
+        ...leftOut(fleetOf(project.repo, runId)),
         `One cause often fails several jobs (a type error fails every group that compiles it), so group what is below by cause and fix every cause in this turn, not only the first.`,
         `You are the one fix agent for this failure. Every later failure on ${branch} is sent to this conversation until ${branch} passes again, so do not wait on runs or watch them: fix what failed, then end your turn.`,
         `Your work lands in the main tree like any conversation's; the owner commits and pushes it, and the next run on ${branch} measures it.`,
@@ -186,6 +187,7 @@ const followUp = (project: CiProject, streak: CiFailure, branch: string, runId: 
                 ? `It is the run this failure began in.`
                 : `It is a later run${sha === undefined ? "" : `, at commit ${sha.slice(0, 7)}`}.`,
             completeness(reason),
+            ...leftOut(fleetOf(project.repo, runId)),
             `If what you already changed covers them (the run's commit predates your change), say so and change nothing; otherwise fix them too, every cause, then end your turn.`,
         ].join(" "),
         `--- what failed ---\n${digestOf(parked.map(({ excerpt }) => excerpt))}`,
@@ -376,8 +378,9 @@ const park = (services: Services, project: CiProject, job: FailedJob, log: strin
 
 /** One failed job of a main-line branch: begins the branch's streak, and is parked until its run is handed over to the
  *  fix agent (handOverRun). Each job is handled once however many ways it arrives; a fleet failure, and a failure older
- *  than main's newest pass, are not the agent's. */
-export const jobFailed = async (services: Services, project: CiProject, heardJob: FailedJob, fetchFn: FetchFn = fetch): Promise<Verdict> => {
+ *  than main's newest pass, are not the agent's (main-fleet.ts). With `anyway`, one that only might be the fleet's
+ *  is the agent's anyway, its run being some code's failure or one that could not be re-run. */
+export const jobFailed = async (services: Services, project: CiProject, heardJob: FailedJob, fetchFn: FetchFn = fetch, anyway = false) => {
     // A job's own webhook does not say what set its run off; the run's own deliveries, kept for the board, do.
     const job = heardJob.trigger === undefined ? { ...heardJob, trigger: services.ciRuns.known(project.repo, heardJob.runId)?.trigger } : heardJob;
     if (!isMainsOwn(job.trigger) || !(await isMainLine(services, project, job.branch))) {
@@ -386,7 +389,7 @@ export const jobFailed = async (services: Services, project: CiProject, heardJob
     const key = keyOf(project.repo, job.branch);
     return serially(key, async (): Promise<Verdict> => {
         const heard = heardOf(job);
-        if (fleetJobs.has(`${project.repo}/${heard}`)) {
+        if (isFleetJob(project.repo, job)) {
             return "fleet";
         }
         const current = (await services.ciStore.failures())[key];
@@ -405,8 +408,7 @@ export const jobFailed = async (services: Services, project: CiProject, heardJob
             "ci repair: the failed job's log could not be read",
             { repo: project.repo, jobId: job.jobId },
         );
-        if (fleetFailed(job, log.slice(-FIX_LOG_BYTES))) {
-            fleetJobs.add(`${project.repo}/${heard}`);
+        if (await judgedFleet(services, project, job, log, anyway, fetchFn)) {
             return "fleet";
         }
         // Kept whether or not an agent is sent now: a failure waiting for the owner is the one a person then presses Fix
@@ -450,6 +452,8 @@ const jobOf = (run: PipelineRun, step: FailedStep): FailedJob => ({
     steps: step.steps,
     reason: step.reason,
     trigger: run.trigger,
+    annotations: step.annotations ?? [],
+    runner: step.runner,
 });
 
 // The failed jobs of a run, in or out of flight; a forge that will not say leaves nothing to act on.
@@ -464,32 +468,6 @@ const failedStepsOf = async (services: Services, project: CiProject, run: Pipeli
             runId: run.runId,
         },
     );
-
-// A run the fleet failed is re-run once, kept on file so a restart that hears of it again does not re-run it twice; the
-// fleet failing it again is said and left to the owner.
-const rerunFleet = async (services: Services, project: CiProject, run: PipelineRun, fetchFn: FetchFn): Promise<void> => {
-    if (!(await services.ciStore.fleetRerun(run.repo, run.runId))) {
-        tell(
-            services,
-            "ci.fleet_failed",
-            `Run ${run.runId} of ${run.repo} failed on the CI fleet again after a re-run: the runners need a look, not the code.`,
-            "error",
-        );
-        return;
-    }
-    const rerun = await orElse(
-        services,
-        ciClientFor(project.account.provider, fetchFn)
-            .rerun(project, run.runId)
-            .then(() => true),
-        false,
-        "ci repair: the fleet re-run was refused",
-        { repo: run.repo, runId: run.runId },
-    );
-    if (rerun) {
-        tell(services, "ci.fleet_rerun", `Run ${run.runId} of ${run.repo} failed on the CI fleet, not in the code: re-run once.`, "ok");
-    }
-};
 
 // A passing run takes its workflow off the streak; the last one off ends it. A failure kept before workflows were told
 // apart ends at any pass.
@@ -546,19 +524,32 @@ export const runFinished = async (services: Services, run: PipelineRun, fetchFn:
         return;
     }
     const steps = await failedStepsOf(services, project, run, fetchFn);
-    const verdicts: Verdict[] = [];
+    const verdicts = new Map<number, Verdict>();
     for (const step of steps) {
-        verdicts.push(await jobFailed(services, project, jobOf(run, step), fetchFn));
+        verdicts.set(step.id, await jobFailed(services, project, jobOf(run, step), fetchFn));
     }
-    const failing = steps.filter((_step, index) => verdicts[index] === "code").map((step) => step.job);
+    // Jobs that only might be the fleet's, released as such (main-fleet.ts), judged again as the agent's.
+    const settle = async (released: readonly FailedJob[]): Promise<void> => {
+        for (const job of released) {
+            verdicts.set(job.jobId, await jobFailed(services, project, job, fetchFn, true));
+        }
+    };
+    // A run some code failed is the agent's, and is not re-run: what only might be the fleet's in it goes to the agent too.
+    if ([...verdicts.values()].includes("code")) {
+        await settle(releaseAmbiguous(run.repo, run.runId, steps.map(({ id }) => id)));
+    }
+    const failing = steps.filter((step) => verdicts.get(step.id) === "code").map((step) => step.job);
     // Only a failed run ran every verification job whatever the others concluded; a cancelled one says only what passed.
     if (run.status === "failed" && failing.length > 0) {
         await failedRun(services, project, run, failing);
     }
     await recovered(services, project, run, fetchFn);
-    if (verdicts.length > 0 && verdicts.every((verdict) => verdict === "fleet")) {
-        await rerunFleet(services, project, run, fetchFn);
-        return;
+    if (verdicts.size > 0 && [...verdicts.values()].every((verdict) => verdict === "fleet")) {
+        const released = await rerunFleet(services, project, run, fetchFn);
+        if (released.length === 0) {
+            return;
+        }
+        await settle(released);
     }
     await handOverRun(services, project, run.branch, run.runId, "finished", fetchFn);
 };
@@ -770,7 +761,7 @@ export const resumeMainFixer = async (services: Services, fetchFn: FetchFn = fet
 /** Test seam: forget what only this process holds, as a restart does; the failures on file stay. */
 export const resetMainFixer = (options: { readonly handoverDelayMs?: number } = {}): void => {
     serially = keyedLock<string>();
-    fleetJobs.clear();
+    resetMainFleet();
     for (const batch of batches.values()) {
         clearTimeout(batch.timer);
     }

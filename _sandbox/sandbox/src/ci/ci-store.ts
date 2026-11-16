@@ -171,6 +171,8 @@ export interface CiStore {
     readonly learnForge: (repo: string, remote: string, fact: Omit<CiForge, "remote">) => Promise<void>;
     // Records a fleet re-run of the run, answering whether it is the first: false means it was re-run before.
     readonly fleetRerun: (repo: string, runId: number) => Promise<boolean>;
+    // Whether the run was re-run for the fleet already, without recording anything.
+    readonly fleetRerunDone: (repo: string, runId: number) => Promise<boolean>;
     // The step outside the repository each CI fix agent's latest turn ended on, keyed by its conversation id.
     readonly ownerSteps: () => Promise<Readonly<Record<string, { readonly step: string; readonly at: number }>>>;
     // Keeps one agent's step, or forgets it with undefined, answering whether anything changed.
@@ -240,6 +242,7 @@ export const fileCiStore = (path: string): CiStore => {
                 same(state.forges?.[repo]) ? state : { ...minted(state), forges: { ...state.forges, [repo]: merged(state.forges?.[repo]) } },
             );
         },
+        fleetRerunDone: async (repo, runId) => ((await file.read()).fleetReruns?.[repo] ?? []).includes(runId),
         fleetRerun: async (repo, runId) => {
             let first = false;
             await file.update((state) => {

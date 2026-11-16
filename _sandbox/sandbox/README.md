@@ -277,6 +277,15 @@ flowchart LR
   its host guard and hosts, and whether it needs a named approver, never the value or who approves. A verdict is
   reused within a turn only while those facts are unchanged (`safety/command-judge-cache.ts`).
   When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
+  Each failed job is judged first (`ci/fleet/fleet-verdict.ts`, from its steps, the forge's reason, its log end and, on GitHub,
+  its check run annotations, where a self-hosted runner that lost its connection or was shut down is said): a job the
+  CI fleet failed is no agent's (`ci/fleet/main-fleet.ts`). A run only the fleet failed has its failed jobs re-run once
+  (`rerun-failed-jobs`, kept in the CI store's `fleetReruns` so a restart does not re-run it twice) with an activity
+  notice naming each job's runner, its machine (the job log's `Machine name:` line) and what happened; failing on the
+  fleet again is a notice and nobody is sent. A timeout with no step of its own failing is re-run once the same way and
+  is the agent's when the re-run fails it again; in a run some code failed it goes to the agent at once, and the
+  agent's prompt names the fleet's jobs it left out. A token that may not re-run is logged once per repository and
+  told in the notice.
   A manual Fix can start before the run finishes. Its start shares the automatic handover's branch lock and records
   the job IDs in its evidence, so completion and restart replay deliver only additional failures; a refused or busy
   start leaves the pending failures untouched. Continued attempts and retries that were turned away before running

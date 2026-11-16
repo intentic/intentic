@@ -4,7 +4,7 @@ import { BoundedMap } from "@intentic/base/held";
 import { plainText } from "@intentic/base/plain-text";
 import { cooled } from "./forge/forge-cooldown.js";
 import { throwOn } from "./forge-refusals.js";
-import { cancelledFailures } from "./forge/github-cancels.js";
+import { annotationsOf, githubFailedStep, jobAnnotations } from "./forge/github-cancels.js";
 import { jobLists } from "./forge/job-lists.js";
 import type { CiProject } from "./projects.js";
 import { z } from "zod";
@@ -36,6 +36,11 @@ export interface FailedStep {
     // GitLab's word for why the job failed (`script_failure`, `runner_system_failure`, …), where it gives one; on GitHub,
     // why a job it reports as cancelled is a failure after all (CANCEL_CAUSES): `timed_out` or `runner_unavailable`.
     readonly reason?: string;
+    // What the job's check run annotations say, where the forge has them (GitHub): its one word on a runner that died
+    // under the job (fleet-verdict.ts). Absent where they were not read.
+    readonly annotations?: readonly string[];
+    // The runner that ran it, by the name its forge knows it by, where the forge says.
+    readonly runner?: string;
 }
 
 export interface CiClient {
@@ -61,6 +66,10 @@ export interface CiClient {
     // expired or unreadable log says so in its place.
     readonly jobLog: (project: CiProject, jobId: number, maxBytes: number) => Promise<string>;
     readonly rerun: (project: CiProject, runId: number) => Promise<void>;
+    // The run's failed jobs again, on the same commit, and nothing else: what a run the fleet failed gets, once.
+    readonly rerunFailed: (project: CiProject, runId: number) => Promise<void>;
+    // One job's check run annotations, where the forge has them (GitHub); empty where it has none or did not say.
+    readonly annotations: (project: CiProject, jobId: number) => Promise<readonly string[]>;
     readonly cancel: (project: CiProject, runId: number) => Promise<void>;
     // Idempotent: a hook already delivering to spec.url is left alone, otherwise one is created.
     readonly ensureHook: (project: CiProject, spec: HookSpec) => Promise<void>;
@@ -209,19 +218,12 @@ interface GithubJob {
     readonly completed_at: string | null;
     readonly html_url: string | null;
     readonly steps?: readonly { readonly name: string; readonly conclusion: string | null }[];
+    readonly runner_name?: string | null;
 }
 
-// A job of a run as main's fix agent hears of it: failed, or cancelled in a way that is a failure after all (`cause`,
-// forge/github-cancels.ts); none for any other.
-const githubFailedStep = (job: GithubJob, cause: string | undefined): FailedStep[] => {
-    if (cause === undefined && (job.conclusion === null || githubStatus("completed", job.conclusion) !== "failed")) {
-        return [];
-    }
-    const steps = (job.steps ?? []).filter((candidate) => candidate.conclusion === "failure").map((candidate) => candidate.name);
-    const step = steps[0];
-    const named: FailedStep = step === undefined ? { job: job.name, id: job.id } : { job: job.name, id: job.id, step, steps };
-    return [cause === undefined ? named : { ...named, reason: cause }];
-};
+// One job's check run annotations, as Actions answers them (a job's id is its check run's).
+const annotationsAsked = (fetchFn: FetchFn, project: CiProject, jobId: number): Promise<Response> =>
+    fetchFn(githubApi(project, `/check-runs/${jobId}/annotations`), { headers: githubHeaders(project.account.token) });
 
 // Settled once every job has completed; an empty list is a run whose jobs have not been made yet.
 const githubJobLists = jobLists<GithubJob>((jobs) => jobs.length > 0 && jobs.every((job) => job.status === "completed"));
@@ -319,10 +321,8 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
     // every job that failed, and every cancelled one whose cancel says it failed after all, in the run's order.
     const jobsOf = async (project: CiProject, runId: number): Promise<FailedStep[]> => {
         const listed = await jobListOf(project, runId);
-        const cancels = await cancelledFailures(listed, runKey(project, 0), (jobId) =>
-            fetchFn(githubApi(project, `/check-runs/${jobId}/annotations`), { headers: githubHeaders(project.account.token) }),
-        );
-        return listed.flatMap((job) => githubFailedStep(job, cancels.get(job)));
+        const annotated = await jobAnnotations(listed, runKey(project, 0), (jobId) => annotationsAsked(fetchFn, project, jobId));
+        return listed.flatMap((job) => githubFailedStep(job, annotated.get(job)));
     };
     // Redirects to a short-lived blob url; fetch follows it. An expired log is reported inline, not fatal.
     const logOf = async (project: CiProject, jobId: number, maxBytes: number): Promise<string> => {
@@ -379,6 +379,11 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
             githubJobLists.forget(fetchFn, runKey(project, runId));
             return post(project, `/actions/runs/${runId}/rerun`, "github rerun");
         },
+        rerunFailed: (project, runId) => {
+            githubJobLists.forget(fetchFn, runKey(project, runId));
+            return post(project, `/actions/runs/${runId}/rerun-failed-jobs`, "github rerun failed jobs");
+        },
+        annotations: async (project, jobId) => (await annotationsOf(await annotationsAsked(fetchFn, project, jobId))) ?? [],
         cancel: (project, runId) => post(project, `/actions/runs/${runId}/cancel`, "github cancel"),
         ensureHook: async (project, spec) => {
             const hooks = await json<{ id: number; events?: string[]; config?: { url?: string } }[]>(
@@ -714,6 +719,9 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
         },
         jobLog: (project, jobId, maxBytes) => traceOf(project, jobId, maxBytes),
         rerun: (project, runId) => post(project, `/pipelines/${runId}/retry`, "gitlab retry"),
+        // GitLab's retry runs only the failed jobs again, and it has no annotations: its `failure_reason` says what the fleet did.
+        rerunFailed: (project, runId) => post(project, `/pipelines/${runId}/retry`, "gitlab retry"),
+        annotations: async () => [],
         cancel: (project, runId) => post(project, `/pipelines/${runId}/cancel`, "gitlab cancel"),
         ensureHook: async (project, spec) => {
             const hooks = await json<{ id: number; url: string; job_events?: boolean }[]>(

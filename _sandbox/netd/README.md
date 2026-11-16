@@ -113,10 +113,27 @@ flowchart LR
   or by swap read as a dead one.) A Node that has not said its first hello 3 minutes after it started is treated as
   hung, killed and restarted like one that stopped answering pings (2026-10-05: one hung before its hello was never
   killed, since pings start at the hello).
+- (2026-11-16) netd keeps the last daemon build that booted and starts it when a new one cannot boot (`fallback.rs`).
+  Only where the daemon runs compiled trees bind-mounted from a checkout (dev-mounts.mjs: `/opt/sandbox/dist` and each
+  workspace package's `dist`, found in `/proc/self/mountinfo`), since only there does the build change without the
+  container changing; a baked image's way back is `ic`'s probation or the platform's. A start whose `/health` says
+  `boot.ready` (asked on Node's socket every 5 s) and that is still running a minute later has its trees' JavaScript
+  copied to `/history/daemon-builds/last-good`, the one build kept, replacing the one before; a build is told by a
+  fingerprint of its files' paths, sizes and mtimes (a checkout build always says 0.0.0), and one that changed under
+  the running daemon is not kept. Three starts in a row that exit before ready, within 10 minutes, start the kept build
+  instead: the same command with `--import` of a loader netd writes from its own binary (`fallback-hook.mjs`), which
+  reads each module's source from the kept copy while every URL, and so resolution and `node_modules`, stays the live
+  one. netd writes `rolled-back` to `netd-kills.jsonl` with both builds and the error the failed boot left in
+  `/history/boot-failure.json`; the restart record's post-mortem tells it, and the daemon, told in
+  `INTENTIC_ROLLED_BACK`, puts it on the owner's settings-problems card. The kept build failing three times too goes
+  back to the live build, written down as `rollback-failed`, and never rolls back again for that build. A new build in
+  the trees is always tried first with strikes of its own, and a restarted container starts with none (2026-11-11: an
+  `ic sandbox dev` build crashed at "Opening the netd door" and was restarted 16 times in four minutes).
 - Memory is netd's to watch too (2026-11-05: one process an agent started grew to 17.6 GB of RSS and 33 GB of swap,
   the VM thrashed for 1 h 48 m, the daemon's event loop froze and its own sampler with it, and netd, up and answering
   throughout, killed the frozen daemon and every one it restarted every three minutes, saying so only on stderr). Every
   kill netd makes of the daemon is written to `netd-kills.jsonl` in the history volume's `logs/` (`stuck`, `no-hello`,
+  and the build switches above, `rolled-back` and `rollback-failed`,
   with the pid, how long it had been silent and the memory pressure), and a restart after a crash or a kill waits while
   the sandbox stalls on memory (`full avg10` at or above 20%) until it is below 10%, read every 5 s for 10 minutes at
   most, and is written down as `restart-held`; a first start is never held. The memory guard (`memguard/`) runs on a

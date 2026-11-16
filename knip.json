@@ -58,6 +58,8 @@
                 "_tools/nav/**/*.mjs",
                 "_tools/oxlint/*.mjs",
                 "_tools/turbo-cache/*.mjs",
+                // netd embeds it (include_str!) and Node loads it with `--import` on a rollback (netd's fallback.rs).
+                "_sandbox/netd/crates/netd/src/fallback-hook.mjs",
                 // Cloudflare runs it by its wrangler.jsonc `main`, outside any import graph (README.md beside it).
                 "_platform/status/worker.ts",
                 ".githooks/*",

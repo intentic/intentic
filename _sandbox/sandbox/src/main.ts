@@ -34,6 +34,7 @@ import { logsRoot } from "./logs/log-files.js";
 import { CONTAINER_SECRET_ENV, loadConfig } from "./env.config.js";
 import { sealConfigSecrets } from "./seams/sealed-env.js";
 import { type BootAttempt, clearBootFailure, failBoot } from "./system/boot/boot-failure.js";
+import { reportRolledBack } from "./system/boot/restarts/rolled-back.js";
 import { bootFacts } from "./system/boot/restarts/boot-history.js";
 import { claimContainer } from "./system/boot/container-owner.js";
 import { announceStop, type StopCause, tearDown } from "./system/boot/restarts/daemon-stop.js";
@@ -276,6 +277,8 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop, sleep, left }: Ready,
     // This boot got all the way, so the last one's failure is no longer the news: the host reads the record's absence.
     if (role.container) {
         void clearBootFailure(config.historyRoot, logger);
+        // Got here on the last build that booted, in place of one that kept failing (netd's fallback.rs): the owner is told.
+        reportRolledBack(config.historyRoot, logger);
     }
     // The build booted all the way on the files it converted: nothing needs undoing, and the host's update gate reads
     // the committed journal off /health.

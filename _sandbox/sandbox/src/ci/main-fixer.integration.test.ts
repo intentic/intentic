@@ -81,12 +81,14 @@ const summary = (id: string, over: Partial<AgentSummary> = {}): AgentSummary => 
 
 interface Forge {
     // A run's jobs as the jobs list answers them.
-    jobs: Record<number, { id: number; name: string; conclusion: string; steps?: { name: string; conclusion: string }[] }[]>;
+    jobs: Record<number, { id: number; name: string; conclusion: string; steps?: { name: string; conclusion: string }[]; runner_name?: string }[]>;
     log: string;
     // What a job's check run says of it, by job id: why a cancelled job was cancelled.
     annotations: Record<number, { message: string }[]>;
     // Runs read one by one, by id, as Actions answers them.
     runs: Record<number, { event: string; created_at: string; name: string }>;
+    // The token may not re-run: every re-run is refused.
+    refuseRerun: boolean;
 }
 
 const harness = async (autoRepair = true) => {
@@ -109,7 +111,7 @@ const harness = async (autoRepair = true) => {
     const logged: string[] = [];
     const logFields: unknown[] = [];
     const reruns: string[] = [];
-    const forge: Forge = { jobs: {}, log: "FAIL src/a.test.ts > adds", annotations: {}, runs: {} };
+    const forge: Forge = { jobs: {}, log: "FAIL src/a.test.ts > adds", annotations: {}, runs: {}, refuseRerun: false };
     // These runs exercise the unpinned fallback; fresh settings otherwise assign every job a preset.
     const settings = { autoRepair, roleSetups: {} };
     const services = unstubbed<Services>("services", {
@@ -175,7 +177,7 @@ const harness = async (autoRepair = true) => {
         const path = String(url);
         if (init?.method === "POST") {
             reruns.push(path);
-            return new Response(null, { status: 201 });
+            return forge.refuseRerun ? new Response(JSON.stringify({ message: "Resource not accessible by integration" }), { status: 403 }) : new Response(null, { status: 201 });
         }
         if (path.includes("/logs")) {
             return new Response(forge.log);
@@ -389,7 +391,7 @@ test("the fleet's failure is never the agent's: a run only the fleet failed is r
 
     expect(started).toEqual([]);
     expect(await failure()).toBeUndefined();
-    expect(reruns).toEqual(["https://api.github.com/repos/acme/web/actions/runs/41/rerun"]);
+    expect(reruns).toEqual(["https://api.github.com/repos/acme/web/actions/runs/41/rerun-failed-jobs"]);
     expect(told).toEqual(["ci.fleet_rerun", "ci.fleet_failed"]);
 });
 
@@ -632,7 +634,7 @@ test("a run only the fleet failed is re-run once, across a restart too", async (
     resetMainFixer();
     await runFinished(services, run(41, "failed"), fetchFn);
 
-    expect(reruns).toEqual(["https://api.github.com/repos/acme/web/actions/runs/41/rerun"]);
+    expect(reruns).toEqual(["https://api.github.com/repos/acme/web/actions/runs/41/rerun-failed-jobs"]);
     expect(told).toEqual(["ci.fleet_rerun", "ci.fleet_failed"]);
 });
 
@@ -652,8 +654,8 @@ test("the default branch the forge said is main's line; one said of a repository
 
 // GitHub reports a job past its `timeout-minutes` as cancelled, and a run with it in as cancelled too: the run still says
 // which of main's failing jobs pass now, and the timed-out one is a failure like any other.
-test("a cancelled run clears the jobs that passed in it, and a job that ran out of time is a failure its agent hears", async () => {
-    const { services, fetchFn, running, said, failure, failRun, forge } = await harness();
+test("a cancelled run clears the jobs that passed in it, and a job that ran out of time is re-run once, then its agent's", async () => {
+    const { services, fetchFn, running, started, said, failure, failRun, forge, reruns, told } = await harness();
     await failRun(61, ["verify-core", "verify-platform"]);
     running.delete(FIXER);
     forge.jobs[62] = [
@@ -667,12 +669,99 @@ test("a cancelled run clears the jobs that passed in it, and a job that ran out 
 
     await runFinished(services, run(62, "canceled"), fetchFn);
 
+    // A hang and a stalled runner both time out: the run's failed jobs are run again once before anybody is sent, and
+    // what passed in it already ended main's failure.
+    expect(reruns).toEqual([expect.stringContaining("/actions/runs/62/rerun-failed-jobs")]);
+    expect(told).toContain("ci.fleet_rerun");
+    expect(await failure()).toBeUndefined();
+    expect(said).toEqual([]);
+
+    // The re-run times out again: the agent's now.
+    forge.jobs[62] = [{ id: 624, name: "migrations", conclusion: "cancelled" }];
+    forge.annotations[624] = [{ message: "The job has exceeded the maximum execution time of 15m0s" }];
+    await runFinished(services, run(62, "canceled"), fetchFn);
+
     expect((await failure())?.findings).toEqual([expect.objectContaining({ source: "CI", text: "migrations", timedOut: true })]);
     expect((await mainFailures(services))[0]?.workflows).toEqual([
         expect.objectContaining({ name: "CI", runId: 62, jobs: ["migrations"], timedOut: ["migrations"] }),
     ]);
-    expect(said.map((words) => words.turn.conversationId)).toEqual(["fix-web-1p"]);
-    expect(said[0]!.turn.prompt).toContain(`run 62 failed 1 job: "migrations"`);
+    expect(started.at(-1)?.prompt).toContain(`run 62 failed 1 job: "migrations"`);
+    expect(reruns).toHaveLength(1);
+});
+
+// 2026-11-12: two fix agents on one failing main found no bug; every job had died with its self-hosted runner, which GitHub
+// says only in the job's annotations.
+test("a job whose runner lost its connection starts nobody: its failed jobs are re-run once, and the owner told where", async () => {
+    const { services, fetchFn, forge, started, reruns, told, sentences, failure } = await harness();
+    forge.log = "Current runner version: '2.329.0'\nRunner name: 'radarsu-worker-3'\nMachine name: 'omen'\nFAIL src/a.test.ts > adds";
+    forge.jobs[51] = [
+        { id: 510, name: "e2e", conclusion: "failure", steps: [{ name: "Run e2e", conclusion: "cancelled" }], runner_name: "radarsu-worker-3" },
+    ];
+    forge.annotations[510] = [
+        { message: "The self-hosted runner: radarsu-worker-3 lost communication with the server. Verify the machine is running and has a healthy network connection." },
+    ];
+
+    await runFinished(services, run(51, "failed"), fetchFn);
+
+    expect(started).toEqual([]);
+    expect(await failure()).toBeUndefined();
+    expect(reruns).toEqual(["https://api.github.com/repos/acme/web/actions/runs/51/rerun-failed-jobs"]);
+    expect(told).toEqual(["ci.fleet_rerun"]);
+    expect(sentences[0]).toContain(`"e2e" (runner radarsu-worker-3 on omen): its runner lost its connection to the forge`);
+
+    // Failing on the fleet again is the owner's, still with nobody sent.
+    forge.jobs[51] = [{ id: 511, name: "e2e", conclusion: "failure", runner_name: "radarsu-worker-3" }];
+    forge.annotations[511] = [{ message: "The runner has received a shutdown signal." }];
+    await runFinished(services, run(51, "failed"), fetchFn);
+    expect(started).toEqual([]);
+    expect(told).toEqual(["ci.fleet_rerun", "ci.fleet_failed"]);
+    expect(sentences[1]).toContain("its runner was shut down mid-job");
+});
+
+test("a job heard by its own webhook has its annotations read before it is judged", async () => {
+    const { services, fetchFn, project, forge } = await harness();
+    forge.annotations[520] = [{ message: "The self-hosted runner: radarsu-worker-1 lost communication with the server." }];
+
+    expect(await jobFailed(services, project, job(52, 520, "e2e"), fetchFn)).toBe("fleet");
+    expect(await jobFailed(services, project, job(52, 521, "verify-core"), fetchFn)).toBe("code");
+});
+
+test("in a run some code failed too, the agent is told which jobs were the runners' and why, and nothing is re-run", async () => {
+    const { services, fetchFn, forge, started, reruns } = await harness();
+    forge.jobs[53] = [
+        { id: 530, name: "verify-core", conclusion: "failure", steps: [{ name: "Run pnpm turbo run test", conclusion: "failure" }] },
+        { id: 531, name: "e2e", conclusion: "failure", runner_name: "radarsu-worker-2" },
+        { id: 532, name: "migrations", conclusion: "cancelled" },
+    ];
+    forge.annotations[531] = [{ message: "The self-hosted runner: radarsu-worker-2 lost communication with the server." }];
+    forge.annotations[532] = [{ message: "The job has exceeded the maximum execution time of 15m0s" }];
+
+    await runFinished(services, run(53, "failed"), fetchFn);
+
+    expect(reruns).toEqual([]);
+    expect(started).toHaveLength(1);
+    const prompt = started[0]?.prompt ?? "";
+    // The timeout that only might be the runner's goes to the agent with the code's failure; the lost runner does not.
+    expect(prompt).toContain(`run 53 failed 2 jobs: "verify-core", "migrations"`);
+    expect(prompt).toContain(`Left out of that list, as the CI runners' failures rather than the code's: "e2e" (runner radarsu-worker-2): its runner lost its connection to the forge.`);
+});
+
+test("when the token may not re-run, the owner is told and a timeout that only might be the runner's goes to the agent", async () => {
+    const { services, fetchFn, forge, started, reruns, told, logged } = await harness();
+    forge.refuseRerun = true;
+    forge.jobs[54] = [{ id: 540, name: "migrations", conclusion: "cancelled" }];
+    forge.annotations[540] = [{ message: "The job has exceeded the maximum execution time of 15m0s" }];
+    forge.jobs[55] = [{ id: 550, name: "e2e", conclusion: "failure" }];
+    forge.annotations[550] = [{ message: "The runner has received a shutdown signal." }];
+
+    await runFinished(services, run(54, "canceled"), fetchFn);
+    await runFinished(services, run(55, "failed", { workflow: "Nightly" }), fetchFn);
+
+    expect(reruns).toHaveLength(2);
+    expect(told.filter((type) => type === "ci.fleet_failed")).toHaveLength(2);
+    expect(logged.filter((line) => line.includes("the fleet re-run was refused"))).toHaveLength(1);
+    expect(started).toHaveLength(1);
+    expect(started[0]?.prompt).toContain(`run 54 failed 1 job: "migrations"`);
 });
 
 test("a run whose only failures are cancels clears what passed in it, and a job no runner took is the fleet's", async () => {

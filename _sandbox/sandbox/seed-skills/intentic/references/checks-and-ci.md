@@ -10,7 +10,12 @@ You decide when the work is done: nothing sends you back, and no check holds a l
 - After the land only a dependency install runs, when the land moved a manifest.
 - CI checks what the owner commits and pushes, and when main's CI fails one fix agent (the `ci-fix-<repo>-<run>`
   conversation) is sent every failure until it passes, while **Repair main when its CI fails** (Sandbox ▸ Agent ▸
-  Finishing) is on. The **Pipelines** view shows it (`editor.md`).
+  Finishing) is on. The **Pipelines** view shows it (`editor.md`). A job the CI runners failed rather than the code (a
+  self-hosted runner that lost its connection or was shut down, no runner taking the job, a runner-owned step, a full
+  disk) starts no agent: a run only they failed has its failed jobs re-run once and the owner is told which runner, on
+  which machine, did what; failing on the runners again is left to the owner. A job past its time limit with no step of
+  its own failing is re-run once first too, and goes to the agent if it fails again. In a run the code failed as well,
+  the agent gets the code's failures and is told which jobs were the runners' and why.
 
 So run the checks you judge worth running while you work, scoped to what you changed: the test files that cover it and
 a typecheck of what you changed (`lsp diag --changed`), never the whole repository (`pnpm test`, `pnpm typecheck`,

@@ -3,6 +3,7 @@
 
 mod cgroup;
 mod connect;
+mod fallback;
 mod feed;
 mod guard;
 mod link;
@@ -139,6 +140,10 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
         records.clone(),
     );
 
+    // Only the container's own: a test's or a developer's netd keeps no build on the history volume.
+    let fallback = own
+        .then(|| fallback::Fallback::discover(&run_dir, &http, records.clone()))
+        .flatten();
     let restarts = Arc::new(Restarts::default());
     let standing = Arc::new(Standing::default());
     let vitals = Arc::new(Vitals::new(link, restarts.clone(), standing.clone()));
@@ -297,6 +302,7 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
             (NODE_SOCKET_ENV.into(), http.into_os_string()),
             (INSTANCE_ENV.into(), instance.into()),
         ],
+        fallback,
     };
     let code =
         supervise::supervise(command, node_pid, stopping, stuck, &restarts, &container).await;

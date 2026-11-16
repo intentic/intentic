@@ -7,8 +7,8 @@
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::process::ExitStatus;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use relay::Backoff;
@@ -16,6 +16,7 @@ use tokio::process::{Child, Command};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::watch;
 
+use crate::fallback::{Fallback, Launch};
 use crate::memguard::{self, Container};
 use crate::records::{self, NetdKill, NetdKillKind};
 use crate::vitals::Verdict;
@@ -93,6 +94,8 @@ pub struct NodeCommand {
     pub program: OsString,
     pub args: Vec<OsString>,
     pub env: Vec<(OsString, OsString)>,
+    /// The way back to the last build that booted, for a daemon running mounted compiled trees (fallback.rs).
+    pub fallback: Option<Arc<Fallback>>,
 }
 
 /// Runs Node until it stops on purpose or `stop` is raised; the answer is netd's own exit code. A verdict sent on
@@ -112,12 +115,19 @@ pub async fn supervise(
     // newer start take the link from an older one, and never a copy of the same start (link.rs).
     let mut generation = 0_u64;
     loop {
+        let launch = match &command.fallback {
+            Some(fallback) => Some(fallback.launch(&command.args).await),
+            None => None,
+        };
         let started = Instant::now();
         generation += 1;
-        let mut child = match spawn(&command, generation) {
+        let mut child = match spawn(&command, launch.as_ref(), generation) {
             Ok(child) => child,
             Err(error) => {
                 tracing::error!(%error, "could not start the daemon");
+                if let Some(fallback) = &command.fallback {
+                    fallback.exited(false);
+                }
                 restarts.record(Instant::now());
                 if wait_or_stop(backoff.after(started.elapsed()), &mut stop).await {
                     return 1;
@@ -127,6 +137,15 @@ pub async fn supervise(
         };
         let node = child.id();
         pid.send_replace(node);
+        // Whether this start got past its readiness gate, which the way back counts by; its build is kept once it ran.
+        let ready = Arc::new(AtomicBool::new(false));
+        let watching = command
+            .fallback
+            .clone()
+            .zip(launch)
+            .map(|(fallback, launch)| {
+                tokio::spawn(fallback.watch(launch.build, launch.on_kept, ready.clone()))
+            });
         // A verdict on an earlier Node says nothing of this one.
         stuck.mark_unchanged();
         let status = tokio::select! {
@@ -142,12 +161,18 @@ pub async fn supervise(
             }
         };
         pid.send_replace(None);
+        if let Some(watching) = watching {
+            watching.abort();
+        }
         let code = status.as_ref().map_or(1, exit_code);
         if *stop.borrow() || code == 0 || code == REFUSED_CONFIG {
             tracing::info!(code, "the daemon stopped");
             return code;
         }
         tracing::error!(code, ran = ?started.elapsed(), "the daemon crashed; restarting it");
+        if let Some(fallback) = &command.fallback {
+            fallback.exited(ready.load(Ordering::SeqCst));
+        }
         restarts.record(Instant::now());
         if let Some(group) = node {
             reclaim(group).await;
@@ -238,11 +263,20 @@ async fn hold_while_short(container: &Container, stop: &mut watch::Receiver<bool
 
 // Its own process group, so the daemon's "my group" still means its own descendants and never netd; and it dies
 // with netd, so a netd killed outright never leaves a daemon serving a socket nobody dials.
-fn spawn(command: &NodeCommand, generation: u64) -> std::io::Result<Child> {
+fn spawn(
+    command: &NodeCommand,
+    launch: Option<&Launch>,
+    generation: u64,
+) -> std::io::Result<Child> {
     let mut spawning = Command::new(&command.program);
     spawning
-        .args(&command.args)
+        .args(launch.map_or(&command.args, |launch| &launch.args))
         .envs(command.env.iter().cloned())
+        .envs(
+            launch
+                .into_iter()
+                .flat_map(|launch| launch.env.iter().cloned()),
+        )
         .env(netd_wire::GENERATION_ENV, generation.to_string())
         .process_group(0)
         .kill_on_drop(false);
@@ -374,6 +408,7 @@ mod tests {
             program: "sh".into(),
             args: vec!["-c".into(), script.into()],
             env: vec![],
+            fallback: None,
         }
     }
 
@@ -558,6 +593,7 @@ mod tests {
                 "(trap '' TERM; exec sleep 1000) & echo $! > {}; exit 3",
                 written.display()
             )),
+            None,
             1,
         )
         .unwrap();
@@ -720,7 +756,12 @@ mod tests {
     // Each start is told which one it is, which it says back in its hello (link.rs).
     #[tokio::test]
     async fn every_start_is_told_its_generation() {
-        let mut child = spawn(&sh(&format!("exit ${}", netd_wire::GENERATION_ENV)), 7).unwrap();
+        let mut child = spawn(
+            &sh(&format!("exit ${}", netd_wire::GENERATION_ENV)),
+            None,
+            7,
+        )
+        .unwrap();
         assert_eq!(child.wait().await.unwrap().code(), Some(7));
     }
 }

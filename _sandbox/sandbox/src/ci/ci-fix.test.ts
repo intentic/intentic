@@ -6,19 +6,8 @@ import type { TurnInput } from "../seams/turn-starter.js";
 import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
 import { idleConversation } from "../conversations/actor/conversation-state.js";
-import { fleetReasons, infraLog, startCiFix } from "./ci-fix.js";
+import { fleetReasons, startCiFix } from "./ci-fix.js";
 import type { CiProject } from "./projects.js";
-
-// A failure read as the fleet's is re-run instead of fixed, so a test's own output must never read as the runner dying.
-
-test("the runner's own death reads as the fleet, and a failing test's words never do", () => {
-    expect(infraLog("ERROR: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?")).toBe(true);
-    expect(infraLog("write /tmp/x: no space left on device")).toBe(true);
-    expect(infraLog("Put https://ghcr.io/v2/x/blobs/uploads: net/http: timeout awaiting response headers")).toBe(true);
-    expect(infraLog("The self-hosted runner: worker-3 lost communication with the server.")).toBe(true);
-    expect(infraLog("FAIL src/api.test.ts > retries\n  Error: connect ECONNREFUSED 127.0.0.1:4317")).toBe(false);
-    expect(infraLog("expected status 200, received 503 Service Unavailable")).toBe(false);
-});
 
 // The refusal names what the fleet did and in which jobs, not the repository steps the jobs happened to be in when it did.
 test("a fleet failure is told by the sign its logs carry, with the jobs that carry it", () => {
@@ -31,6 +20,9 @@ test("a fleet failure is told by the sign its logs carry, with the jobs that car
     expect(fleetReasons(failed, ["npm error network read ETIMEDOUT", docker, docker])).toEqual(["the runner's Docker daemon stopped answering (e2e-signin, desktop-check)"]);
     expect(fleetReasons([{ job: "test", id: 4, step: "Set up job" }], [""])).toEqual(["every failed job died in the runner's own steps (Set up job)"]);
     expect(fleetReasons([{ job: "test", id: 5, step: "Run pnpm test" }], ["FAIL src/api.test.ts"])).toEqual([]);
+    // A runner that lost its connection says so only in the job's annotations, under a log that reads like any other.
+    const lost = "The self-hosted runner: radarsu-worker-3 lost communication with the server.";
+    expect(fleetReasons([{ job: "e2e", id: 6, annotations: [lost] }], ["FAIL src/api.test.ts"])).toEqual(["its runner lost its connection to the forge (e2e)"]);
 });
 
 // Nothing connected and nothing pinned: the fix is refused in words before any agent exists, rather than opened on a

@@ -230,7 +230,8 @@ flowchart LR
   ledger before it is made) is not counted as a crash (2026-10-06). The same look finishes or undoes a swap that died halfway (Ctrl-C, a dropped SSH session, an agent restart, a
   reboot): the channel record names the swap in flight before anything stops. What happened is written to the
   sandbox's `/history/update-outcome.json` (`outcome.rs`), which its daemon shows the owner. The dogfood `dev` loop
-  keeps no probation. `IC_PROBATION_SECONDS` and `IC_WATCH_GRACE_SECONDS` shorten both windows for the nightly drill.
+  keeps no probation: its daemon runs the checkout's compiled trees, which a parked container would mount too, so its
+  way back is netd's, inside the container (the last build that booted, `_sandbox/netd`). `IC_PROBATION_SECONDS` and `IC_WATCH_GRACE_SECONDS` shorten both windows for the nightly drill.
   The probation's numbers and rule are the contract's `update-probation.ts`, which the platform's watch over hosted
   sandboxes also uses; `golden/update-probation.json` pins ic to it. `ic sandbox swaps --json` (`swaps.rs`) answers,
   without Docker, whether each swap's cutover is being done right now (its heartbeat is fresh). The machine agent

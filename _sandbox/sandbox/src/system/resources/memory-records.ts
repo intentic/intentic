@@ -75,11 +75,18 @@ export type MemoryKill = z.infer<typeof MemoryKillSchema>;
 // the machine was short of memory (`restart-held`), and with what memory pressure in the sandbox at the time.
 export const NetdKillSchema = z.object({
     at: z.number(),
-    kind: z.enum(["stuck", "no-hello", "restart-held"]),
+    kind: z.enum(["stuck", "no-hello", "restart-held", "rolled-back", "rollback-failed"]),
     pid: z.number().int().optional(),
     silentMs: z.number().optional().describe("How long the daemon had not answered (stuck) or not said hello (no-hello)."),
     heldMs: z.number().optional().describe("restart-held: how long the restart waited."),
     psi: PsiSchema.optional(),
+    // rolled-back / rollback-failed (netd's fallback.rs): the build that failed STRIKES times before it was ready, the
+    // last build that booted netd started in its place, and the boot error the failed build left.
+    from: z.object({ hash: z.string(), builtAt: z.number() }).optional(),
+    to: z.object({ hash: z.string(), builtAt: z.number() }).optional(),
+    failures: z.number().optional(),
+    error: z.string().optional(),
+    step: z.string().optional(),
 });
 export type NetdKill = z.infer<typeof NetdKillSchema>;
 

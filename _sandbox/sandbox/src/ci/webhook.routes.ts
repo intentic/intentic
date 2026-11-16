@@ -55,6 +55,7 @@ interface GithubJob {
     readonly html_url?: string | null;
     readonly conclusion?: string | null;
     readonly steps?: readonly { readonly name: string; readonly conclusion?: string | null }[];
+    readonly runner_name?: string | null;
 }
 
 // A `Job Hook` delivery, narrowed the same way.
@@ -123,6 +124,7 @@ const githubFailedJob = (job: GithubJob): FailedJob | undefined => {
         url: job.html_url ?? undefined,
         step: steps[0],
         steps,
+        runner: job.runner_name ?? undefined,
     };
 };
 

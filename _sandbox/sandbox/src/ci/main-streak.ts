@@ -1,8 +1,7 @@
-import { isInfraStep } from "@intentic/constants/ci-infra-steps";
 import { fnvDigest } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { type CiMainFailure, MAIN_FAILURE_STALE_MS } from "@intentic/sandbox-contract/schemas/ci";
 import type { CiFailure, CiFinding } from "./ci-store.js";
-import { infraLog } from "./ci-fix.js";
+import { TIMEOUT_REASONS } from "./fleet/fleet-verdict.js";
 import { opt } from "../opt.js";
 
 /* MAIN'S STREAK, AS A RECORD. What main-fixer.ts keeps in the CI store about one failing main line, built up one failed
@@ -13,18 +12,6 @@ const HEARD_KEPT = 200;
 // The workflow of a run whose forge runs one pipeline per commit (GitLab), or that named none.
 const ONE_PIPELINE = "ci";
 
-// Why a job failed, where the runner or the scheduler failed and not the code: GitLab's own `failure_reason`, and a
-// GitHub job no runner took (forge/github-cancels.ts).
-const FLEET_REASONS: ReadonlySet<string> = new Set([
-    "runner_system_failure",
-    "scheduler_failure",
-    "runner_unsupported",
-    "api_failure",
-    "data_integrity_failure",
-    "runner_unavailable",
-]);
-// Why a job failed, where it ran out of time: a GitHub job past its `timeout-minutes`, a GitLab job past its timeout.
-const TIMEOUT_REASONS: ReadonlySet<string> = new Set(["timed_out", "job_execution_timeout"]);
 // What sets off a GitHub run that is none of main's CI: `dynamic` is GitHub's own workflows run on the repository's
 // default branch (Dependabot's updates, CodeQL's default setup, Copilot's sessions). Each Dependabot update is a
 // workflow of its own name, so one that failed never ran again to pass, and held main's failure open for weeks.
@@ -50,6 +37,10 @@ export interface FailedJob {
     readonly reason?: string | undefined;
     // What set its run off, in the forge's word, where it is known.
     readonly trigger?: string | undefined;
+    // What its check run annotations say (GitHub), where they were read: a job's own webhook carries none.
+    readonly annotations?: readonly string[] | undefined;
+    // The runner that ran it, where the forge says.
+    readonly runner?: string | undefined;
 }
 
 // Whether a run set off this way is main's CI at all (NOT_MAINS).
@@ -94,11 +85,6 @@ export const findingOf = (workflow: string, job: string): CiFinding => ({
     source: workflow,
     text: job,
 });
-
-// Whether the fleet failed the job rather than the code: a runner-owned step, the forge's own reason, or a log naming
-// the fleet. Missing evidence never reads as the fleet's.
-export const fleetFailed = (job: FailedJob, log: string): boolean =>
-    (job.step !== undefined && isInfraStep(job.step)) || (job.reason !== undefined && FLEET_REASONS.has(job.reason)) || infraLog(log);
 
 // The streak once a run's jobs are handed over: heard, so no later news of them is handed over again.
 export const withHeard = (current: CiFailure, jobs: readonly Pick<FailedJob, "runId" | "jobId">[]): CiFailure => ({
