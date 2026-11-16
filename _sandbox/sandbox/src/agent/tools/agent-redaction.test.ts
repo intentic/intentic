@@ -127,10 +127,18 @@ test("a value containing another is masked whole, not left with its tail showing
     expect(shown(await fire(held(named("a/short", short), named("b/long", long)), "Bash", result), result)).toBe("secret={{secret:b/long}}");
 });
 
-test("a short value is left alone: masking it would black out ordinary output", async () => {
+test("a short value is left alone where it stands bare: masking it would black out ordinary output", async () => {
     // Below the length floor a value isn't distinctive enough to blank on sight: it would swallow ordinary text.
     const result = "port 8080 mode admin";
     expect(await fire(held(named("a/port", "8080"), named("b/user", "admin")), "Bash", result)).toEqual({});
+});
+
+test("a short value is masked where its context names a secret, in any tool's result", async () => {
+    const secrets = held(named("identity/password", "Short1#"), named("ROOT_PASSWORD", "hunter2"));
+    const result = { content: "password: Short1# then ROOT_PASSWORD=hunter2, and hunter2 alone" };
+    expect(shown(await fire(secrets, "Read", result), result)).toEqual({
+        content: "password: {{secret:identity/password}} then ROOT_PASSWORD={{secret:ROOT_PASSWORD}}, and hunter2 alone",
+    });
 });
 
 test("nothing stored, or nothing matching, leaves the result untouched by reference", async () => {
@@ -165,12 +173,13 @@ test("every credential the sandbox holds is masked, under any field name a conne
     });
 });
 
-test("maskTargets dedupes, trims, drops the short ones and orders longest first", () => {
+test("maskTargets dedupes, trims, marks the short ones contextual and orders longest first", () => {
     expect(
         maskTargets([named("a", "  padded_credential  "), named("b", "padded_credential"), named("c", "short"), named("d", "aaaaaaaaaaaaaaaaaaaa")]),
     ).toEqual([
         { target: "aaaaaaaaaaaaaaaaaaaa", replacement: "{{secret:d}}" },
         { target: "padded_credential", replacement: "{{secret:a}}" },
+        { target: "short", replacement: "{{secret:c}}", name: "c", contextual: true },
     ]);
 });
 
@@ -191,9 +200,9 @@ test("non-string leaves survive the walk unchanged", () => {
     expect(maskDeep(value, maskTargets([named("a", "26170149aaaa")]))).toEqual(value);
 });
 
-// A value below the length floor is never registered as a target, so it's never masked, and nothing else distinguishes
-// that from one that is covered; this closes that reporting gap.
-test("unmaskableSecrets names the stored values the length floor leaves in the clear", () => {
+// A value below the length floor masks only in a secret-like context, and nothing else distinguishes that from one that
+// is covered everywhere; this closes that reporting gap.
+test("unmaskableSecrets names the stored values under the length floor", () => {
     expect(
         unmaskableSecrets([named("identity/password", "Short1#"), named("github/token", "ghp_aaaaaaaaaaaaaaaaaaaa"), named("db/pin", "  1234  ")]),
     ).toEqual(["db/pin", "identity/password"]);

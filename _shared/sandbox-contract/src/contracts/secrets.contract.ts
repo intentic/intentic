@@ -11,6 +11,7 @@ import {
     SecretKeyParamSchema,
     SecretGeneratedSchema,
     SecretGenerateSchema,
+    SecretRegenerateSchema,
     SecretHostGuardSetResultSchema,
     SecretHostGuardSetSchema,
     SecretHostGuardsSchema,
@@ -60,6 +61,16 @@ export const secretsContract = {
         // The `secrets generate` CLI, on the agent token: it creates a value, and hands none back.
         .meta({ agent: true })
         .input(SecretGenerateSchema)
+        .output(SecretGeneratedSchema),
+    regenerate: secretRoute
+        .route({
+            method: "POST",
+            path: "/secrets/regenerate",
+            summary: "Replace a secret you set with a random value",
+            description:
+                "Replaces the value of a secret a person set here (not a connection's or a computer's) with a random one, for a value too short to hide from the model. Answers the name and its length, never the value. Whatever checks the old value (a server, an account) has to be given the new one, or it stops working.",
+        })
+        .input(SecretRegenerateSchema)
         .output(SecretGeneratedSchema),
     list: secretRoute
         .route({

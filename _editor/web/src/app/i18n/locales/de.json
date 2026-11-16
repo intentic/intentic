@@ -3093,6 +3093,19 @@
             "readsWith": "Liest es mit",
             "severalHint": "Mehr als eine {provider}-Verbindung erreicht diesen Host: Die gewählte liest das Repo.",
             "tokenInstead": "Verwendet das Zugriffstoken unter Erweitert statt Ihrer {provider}-Verbindung."
+        },
+        "secretTooShort": {
+            "label": "Vor dem Modell",
+            "title": "Zu kurz zum Verbergen",
+            "titleNamed": "Zu kurz zum Verbergen: {names}",
+            "explain": "Die Sandbox verbirgt einen gespeicherten Wert vor dem Modell, indem sie ihn in dem erkennt, was das Modell liest, und dieser ist zu kurz, um ihn sicher zu erkennen. Er wird nur direkt nach einem Wort oder Flag verborgen, das ein Geheimnis benennt (password=…, --password …), oder als Passwort in einer Webadresse, und überall sonst vollständig gelesen.",
+            "replaceCaution": "Ein Zufallswert behebt das, aber was ihn prüft, etwa ein Server oder ein Konto, muss den neuen Wert ebenfalls bekommen, sonst funktioniert es nicht mehr.",
+            "onSite": "Ändere dieses Passwort auf seiner Website auf eines mit mindestens {min} Zeichen und setze das neue dann hier.",
+            "onComputer": "Ändere ihn im Schlüsselbund auf {machine} auf einen mit mindestens {min} Zeichen.",
+            "longer": "Ersetze ihn durch einen Wert mit mindestens {min} Zeichen.",
+            "replace": "Durch einen Zufallswert ersetzen",
+            "confirm": "Jetzt ersetzen",
+            "couldNotReplace": "Dieser Wert konnte nicht ersetzt werden."
         }
     },
     "chat": {
@@ -10387,7 +10400,8 @@
             "locked": "Gesperrt",
             "ready": "Bereit",
             "offlineNote": "{machine} ist offline: nicht nutzbar, bis er antwortet",
-            "lockedNote": "{machine} ist gesperrt: jede Verwendung fragt dort"
+            "lockedNote": "{machine} ist gesperrt: jede Verwendung fragt dort",
+            "tooShort": "zu kurz, um es vor dem Modell zu verbergen"
         },
         "useDevices": {
             "agentUpdateRefused": "Das Gerät hat seinen Agenten nicht aktualisiert.",

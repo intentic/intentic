@@ -72,6 +72,19 @@ test("secrets.generate refuses a name something already holds, rather than break
     expect(await client.secrets.reveal({ key: "SESSION_SECRET" })).toEqual({ value: "the-one-in-use" });
 });
 
+test("a value too short to mask is flagged on its inventory row, and regenerate replaces only one a person set", async () => {
+    const client = clientFor(createApp(services()));
+    await client.secrets.set({ key: "ROOT_PASSWORD", value: "hunter2" });
+    const row = async () => (await client.secrets.inventory()).entries.find((entry) => entry.key === "ROOT_PASSWORD");
+    expect((await row())?.tooShort).toEqual(["ROOT_PASSWORD"]);
+    const made = await client.secrets.regenerate({ key: "ROOT_PASSWORD" });
+    expect(made).toEqual({ key: "ROOT_PASSWORD", length: 43, stored: "sandbox" });
+    expect((await client.secrets.reveal({ key: "ROOT_PASSWORD" })).value).toMatch(/^[A-Za-z0-9]{43}$/u);
+    expect((await row())?.tooShort).toBeUndefined();
+    // Nothing a person set under that name: a connection's password changes on its site, not here.
+    expect(await errorCode(client.secrets.regenerate({ key: "NOBODY_SET_THIS" }))).toBe("NOT_FOUND");
+});
+
 test("secrets.inventory merges artifact requirements, .env keys, credentialed capabilities, and provider accounts", async () => {
     const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "gh-token" } };
     const client = clientFor(createApp(services({ workspace: secretsWorkspace(), capabilities: memoryCapabilitiesStore([github]) })));

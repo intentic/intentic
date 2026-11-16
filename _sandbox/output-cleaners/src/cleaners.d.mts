@@ -19,10 +19,15 @@ export interface Stage {
 }
 
 // One known secret value and what it masks to.
+// A stored value to mask; a `contextual` one is shorter than SECRET_VALUE_MIN and masks only in a secret-like context.
 export interface SecretValue {
     readonly target: string;
     readonly replacement: string;
+    readonly name?: string;
+    readonly contextual?: boolean;
 }
+
+export { contextualEntries, maskValues } from "./secrets/short-secrets.mjs";
 
 // An issuer's literal prefix and the regex source of the body it mints after it.
 export interface CredentialIssuer {

@@ -10,6 +10,7 @@ import SecretDevicePanel from "./SecretDevicePanel.vue";
 import SecretFact from "./SecretFact.vue";
 import SecretHostsEditor from "./SecretHostsEditor.vue";
 import SecretProgramsEditor from "./SecretProgramsEditor.vue";
+import SecretTooShort from "./SecretTooShort.vue";
 import SecretValue from "./SecretValue.vue";
 import { lastUseWords, storedWords } from "./secretFacts";
 import { FIXED_VALUE, VALUE_NOTE, VALUE_TEXT } from "./secretLook";
@@ -246,6 +247,8 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                         :error="revealError"
                         @reveal="toggleReveal"
                     />
+                    <!-- A value the model reads in full, said beside the value and how to fix it. -->
+                    <SecretTooShort v-if="row.tooShort" :row="row" />
                     <SecretDevicePanel v-if="onComputer" :row="row" part="about" />
                     <!-- The use ledger's newest row: absent for a secret never yet spent. -->
                     <SecretFact v-if="lastUse" :label="t(`capabilities.secretFacts.lastUsed`)">

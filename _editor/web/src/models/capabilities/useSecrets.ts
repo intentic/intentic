@@ -210,5 +210,11 @@ export function useSecrets() {
         onSuccess: invalidate,
     });
 
-    return { set, remove };
+    // A value a person set, replaced with a random one where it is kept; the daemon answers only its length.
+    const regenerate = useMutation({
+        mutationFn: (key: string) => sandboxRpc.secrets.regenerate({ key }),
+        onSuccess: invalidate,
+    });
+
+    return { set, remove, regenerate };
 }

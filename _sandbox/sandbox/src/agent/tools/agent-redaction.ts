@@ -1,6 +1,6 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { errnoCode } from "@intentic/base/errors";
-import { multilineParts, SECRET_VALUE_MIN } from "@intentic/output-cleaners/cleaners";
+import { contextualEntries, maskValues, multilineParts, SECRET_VALUE_MIN } from "@intentic/output-cleaners/cleaners";
 import { classifyCommand } from "@intentic/sandbox-contract/policy/command-classes";
 import { maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
 import { type NamedSecret, SecretStoreUnreadableError, secretReference, surfaceForms } from "../../secrets/secret-registry.js";
@@ -9,14 +9,17 @@ import { type NamedSecret, SecretStoreUnreadableError, secretReference, surfaceF
 // fetched. Values mask to `{{secret:name}}`, not a blank, so a read-then-rewrite round-trips. A second, shape-based
 // pass covers credential files the vault never stored, judged by the call's own input.
 
-// The terminal filter's own floor, so the two lanes leave the same short values unmasked: below it a value isn't
-// distinctive enough to blank safely.
+// The terminal filter's own floor and rule, so the two lanes mask the same: below it a value isn't distinctive enough to
+// blank everywhere, and masks only where its context names a secret (output-cleaners' short-secrets.mjs).
 const MIN_LENGTH = SECRET_VALUE_MIN;
 const LINE_MASK = "***";
 
 export interface MaskTarget {
     readonly target: string;
     readonly replacement: string;
+    // Set on a value under the floor: masked only in a secret-like context, never split on wherever it stands.
+    readonly name?: string;
+    readonly contextual?: boolean;
 }
 
 // Masks to the reference in every surface form (escaped, encoded), not just raw. A multi-line credential's lines are
@@ -38,19 +41,19 @@ export const maskTargets = (secrets: readonly NamedSecret[]): readonly MaskTarge
             add(part, LINE_MASK);
         }
     }
-    return [...byTarget.values()].toSorted((a, b) => b.target.length - a.target.length);
+    const short = contextualEntries(secrets, MIN_LENGTH, secretReference);
+    return [...byTarget.values(), ...short].toSorted((a, b) => b.target.length - a.target.length);
 };
 
-// Names which stored secrets the length floor leaves unmasked, since lowering it would blank ordinary output that
-// merely coincides with a short value. Names only, never values, since this is read by things that log.
+// Names which stored secrets fall under the length floor, so they mask only in a secret-like context and reach the model
+// in full anywhere else. Names only, never values, since this is read by things that log and the Secrets view.
 export const unmaskableSecrets = (secrets: readonly NamedSecret[]): readonly string[] =>
     secrets
         .filter(({ value }) => value.trim().length < MIN_LENGTH)
         .map(({ name }) => name)
         .toSorted();
 
-const maskString = (text: string, targets: readonly MaskTarget[]): string =>
-    targets.reduce((masked, { target, replacement }) => (masked.includes(target) ? masked.split(target).join(replacement) : masked), text);
+const maskString = (text: string, targets: readonly MaskTarget[]): string => maskValues(text, targets, secretReference);
 
 // Gates the shape pass on the call's input, via the same classifier the command gate uses, not the output (shape
 // inference on arbitrary text). An oversized field drops rather than truncates, read as ordinary.

@@ -25,6 +25,17 @@ test("secretValues reads the descriptor-backed store and preserves its reference
     });
 });
 
+test("a stored value too short to mask by value masks only where its context names a secret", () => {
+    withStores(({ auth, env }) => {
+        writeFileSync(join(auth, "capability-secrets.json"), JSON.stringify({ netdisk: { password: "nd4821" } }));
+        const values = secretValues(env);
+        expect(redactText("mount -o username=me,password=nd4821 //nas/share", values)).toBe(
+            `mount -o username=me,password=${secretReference("netdisk/password")} //nas/share`,
+        );
+        expect(redactText("build nd4821 finished", values)).toBe("build nd4821 finished");
+    });
+});
+
 test("a secret pasted on a need card (sandbox-secrets.json) is masked by the terminal filter", () => {
     withStores(({ auth, env }) => {
         writeFileSync(join(auth, "sandbox-secrets.json"), JSON.stringify({ OPENAI_API_KEY: "kept-on-a-card-7Hq2Zx9" }));

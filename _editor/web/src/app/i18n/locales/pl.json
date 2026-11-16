@@ -3093,6 +3093,19 @@
             "readsWith": "Odczytuje przez",
             "severalHint": "Do tego hosta prowadzi więcej niż jedno połączenie {provider}: repozytorium odczyta wybrane.",
             "tokenInstead": "Używa tokenu dostępu z sekcji Zaawansowane zamiast Twojego połączenia {provider}."
+        },
+        "secretTooShort": {
+            "label": "Przed modelem",
+            "title": "Za krótki, by go ukryć",
+            "titleNamed": "Za krótkie, by je ukryć: {names}",
+            "explain": "Sandbox ukrywa zapisaną wartość przed modelem, wyłapując ją w tym, co model czyta, a ta jest zbyt krótka, by wyłapać ją bezpiecznie. Jest ukrywana tylko tuż po słowie lub fladze, które nazywają sekret (password=…, --password …), albo jako hasło w adresie internetowym, a wszędzie indziej model czyta ją w całości.",
+            "replaceCaution": "Losowa wartość to naprawi, ale to, co ją sprawdza, na przykład serwer albo konto, też musi dostać nową wartość, inaczej przestanie działać.",
+            "onSite": "Zmień to hasło na jego stronie na takie, które ma co najmniej {min} znaków, a potem ustaw tu nowe.",
+            "onComputer": "Zmień ją na taką, która ma co najmniej {min} znaków, w pęku kluczy na {machine}.",
+            "longer": "Zastąp ją wartością, która ma co najmniej {min} znaków.",
+            "replace": "Zastąp losową wartością",
+            "confirm": "Zastąp teraz",
+            "couldNotReplace": "Nie udało się zastąpić tej wartości."
         }
     },
     "chat": {
@@ -9784,7 +9797,8 @@
             "locked": "Zablokowany",
             "ready": "Gotowy",
             "offlineNote": "{machine} jest offline: nie da się tego użyć, dopóki nie odpowie",
-            "lockedNote": "{machine} jest zablokowany: każde użycie pyta tam"
+            "lockedNote": "{machine} jest zablokowany: każde użycie pyta tam",
+            "tooShort": "za krótki, by ukryć go przed modelem"
         },
         "useDevices": {
             "agentUpdateRefused": "Tamto urządzenie nie chciało zaktualizować swojego agenta.",

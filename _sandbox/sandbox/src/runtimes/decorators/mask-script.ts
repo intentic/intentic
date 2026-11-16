@@ -125,7 +125,10 @@ export const createMaskWrapper = (root: string): MaskWrapper => {
         wrap: async (command, targets) => {
             const at = await ready();
             const spec = join(at, `${randomUUID()}.json`);
-            await writeFile(spec, JSON.stringify({ command, targets }), { mode: 0o600, flag: "wx" });
+            // A short value's contextual pass needs whole lines, which a stream masked chunk by chunk does not have: the
+            // script masks the exact targets only, so a short secret in context reaches these loops unmasked.
+            const exact = targets.filter(({ contextual }) => contextual !== true);
+            await writeFile(spec, JSON.stringify({ command, targets: exact }), { mode: 0o600, flag: "wx" });
             // `node` by name, as Cursor's hook script runs: guaranteed in the image, and the same binary inside a turn's
             // namespace as outside it.
             return `node ${shellQuote(join(at, SCRIPT_NAME))} ${shellQuote(spec)}`;

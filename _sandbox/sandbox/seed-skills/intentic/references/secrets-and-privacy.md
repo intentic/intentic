@@ -17,6 +17,9 @@ unknown name fails and lists the names that exist. In a file you write, keep the
   tools and the code tool hand one over.
 - **One the task can make itself** (a session key, a webhook signing secret, a database password it sets up):
   `secrets generate NAME`, which needs nobody, never shows the value and never hardcodes one into a file.
+- **A value under 12 characters** is masked in what you read only where its context names a secret (`password=…`,
+  `--password …`, `NAME=…`, a URL's password); printed bare, it reaches you in full. The owner's Secrets view flags it
+  and offers a random replacement for one they set. Don't print such a value; use its reference.
 - **A password for a PLACE whose name you do not know** is asked for by need: `secrets want --site github.com` (or
   `--program FortiClient.exe`, `--ssh user@host`, `--git https://host`, with `--user` when you know the account)
   `--why "…"`. Passwords on the owner's computers finds the entry that fits and asks the person; the command prints the

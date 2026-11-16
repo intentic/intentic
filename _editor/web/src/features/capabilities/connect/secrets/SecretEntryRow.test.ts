@@ -20,11 +20,12 @@ const approverChoices = ref<string[]>([]);
 const runsSecrets = ref(true);
 const namesEveryone = ref(true);
 const stored = ref<CredentialGate | undefined>(undefined);
+const regenerate = { mutateAsync: jest.fn(async (key: string) => ({ key, length: 43, stored: `sandbox` })) };
 
 jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
 jest.mock(`../../../../models/capabilities/useSecrets`, () => ({
     reveal: jest.fn(),
-    useSecrets: () => ({ remove: { mutateAsync: jest.fn() } }),
+    useSecrets: () => ({ remove: { mutateAsync: jest.fn() }, regenerate }),
     useSecretHosts: () => ({ setHosts: { mutateAsync: jest.fn() } }),
     useSecretPrograms: () => ({ programsFor: () => undefined, setPrograms: { mutateAsync: jest.fn() } }),
     useCredentialPolicy: () => ({ setPolicy: { mutateAsync: jest.fn() } }),
@@ -369,5 +370,37 @@ it("offers Type into… only where a computer has a keyring, and opens it beside
     await nextTick();
     expect(el.querySelector(`section[aria-label="Type into…"]`)).not.toBeNull();
     expect(el.textContent).toContain(`Press Type, then put the cursor where it goes on rog. It is typed after 3 s.`);
+    done();
+});
+
+it("says a value too short to hide reaches the model, and replaces one a person set only on a second press", async () => {
+    regenerate.mutateAsync.mockClear();
+    const { el, button, done } = mount({ ...ROW, attention: true, tooShort: { names: [`DATABASE_URL`], replaceable: true } });
+    const text = el.querySelector(`[data-secret-too-short]`)?.textContent ?? ``;
+    expect(text).toContain(`Too short to hide`);
+    expect(text).toContain(`read in full anywhere else`);
+    expect(text).toContain(`has to be given the new value too`);
+    button(`Replace with a random value`).click();
+    await nextTick();
+    expect(regenerate.mutateAsync).not.toHaveBeenCalled();
+    button(`Replace it now`).click();
+    await settled();
+    await settled();
+    expect(regenerate.mutateAsync).toHaveBeenCalledWith(`DATABASE_URL`);
+    done();
+});
+
+it("sends a connection's too-short password to its site, with no button to replace it here", () => {
+    const account: SecretRow = {
+        ...ROW,
+        entry: { ...ROW.entry, key: `identity`, kind: `capability` },
+        group: `credential`,
+        tooShort: { names: [`identity/password`], replaceable: false },
+    };
+    const { el, done } = mount(account);
+    const text = el.querySelector(`[data-secret-too-short]`)?.textContent ?? ``;
+    expect(text).toContain(`Too short to hide: identity/password`);
+    expect(text).toContain(`Change this password on its site to one of 12 characters or more`);
+    expect(el.querySelector(`[data-secret-too-short] button`)).toBeNull();
     done();
 });

@@ -176,7 +176,7 @@ const vaultLooseSecrets = async ({ logger, services }: BootRun): Promise<void> =
     if (settings.length > 0) {
         logger.info({ extensions: settings }, "extension setting secrets moved out of the tracked settings file into the private store");
     }
-    // Masking (agent-redaction.ts) has a length floor below which a stored value passes unmasked.
+    // Masking (agent-redaction.ts) has a length floor below which a stored value masks only in a secret-like context.
     const unmaskable = unmaskableSecrets(
         await services.secretRegistry().catch((error: unknown) => {
             logger.warn({ err: error }, "secrets: the stores could not be read, so every tool result is withheld until they can");
@@ -186,7 +186,7 @@ const vaultLooseSecrets = async ({ logger, services }: BootRun): Promise<void> =
     if (unmaskable.length > 0) {
         logger.warn(
             { secrets: unmaskable },
-            "these stored secrets are too short to mask, so they reach the model in full when something reads them: replace them with longer values",
+            "these stored secrets are too short to mask everywhere: they are masked only right after a key, flag or URL that names a secret, and reach the model in full anywhere else: replace them with longer values",
         );
     }
 };

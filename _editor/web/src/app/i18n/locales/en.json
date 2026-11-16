@@ -3093,6 +3093,19 @@
             "readsWith": "Reads it with",
             "severalHint": "More than one {provider} connection reaches this host: the one picked reads the repository.",
             "tokenInstead": "Uses the access token under Advanced instead of your {provider} connection."
+        },
+        "secretTooShort": {
+            "label": "From the model",
+            "title": "Too short to hide",
+            "titleNamed": "Too short to hide: {names}",
+            "explain": "The sandbox hides a stored value from the model by spotting it in what the model reads, and this one is too short to spot safely. It is hidden only right after a word or flag that names a secret (password=…, --password …) or as a web address's password, and read in full anywhere else.",
+            "replaceCaution": "A random value fixes this, but whatever checks it, such as a server or an account, has to be given the new value too, or it stops working.",
+            "onSite": "Change this password on its site to one of {min} characters or more, then set the new one here.",
+            "onComputer": "Change it to one of {min} characters or more in the keyring on {machine}.",
+            "longer": "Replace it with a value of {min} characters or more.",
+            "replace": "Replace with a random value",
+            "confirm": "Replace it now",
+            "couldNotReplace": "Couldn't replace this value."
         }
     },
     "chat": {
@@ -10387,7 +10400,8 @@
             "locked": "Locked",
             "ready": "Ready",
             "offlineNote": "{machine} is offline: this cannot be used until it answers",
-            "lockedNote": "{machine} is locked: each use asks there"
+            "lockedNote": "{machine} is locked: each use asks there",
+            "tooShort": "too short to hide from the model"
         },
         "useDevices": {
             "agentUpdateRefused": "That device wouldn't update its agent.",

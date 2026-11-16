@@ -20,8 +20,9 @@ import type { OrpcContext } from "../app-env.js";
 import { stateRelPath } from "../state-paths.js";
 import { envKeys, removeEnv, upsertEnv } from "./env-text.js";
 import { sandboxSecretsDocument } from "./sandbox-secrets.js";
-import { randomSecret } from "./random-secret.js";
+import { unmaskableSecrets } from "../agent/tools/agent-redaction.js";
 import { guardForEntry } from "./guards/host-guards.js";
+import { createSecretGenerateRoutes } from "./generate/secret-generate.routes.js";
 import { createSecretHostRoutes } from "./guards/secret-hosts.routes.js";
 import { createSecretProgramRoutes } from "./guards/secret-programs.routes.js";
 import { createDeviceSecretRoutes } from "./device/device-secrets.routes.js";
@@ -73,6 +74,16 @@ const deviceRowsOf = async (services: Pick<SecretsRoutesDeps, "deviceSecrets" | 
         services.logger.warn({ err: error }, "secrets inventory: the keyrings' entries could not be listed");
         return [];
     });
+
+// The values a row holds that are under the masking floor: its own name, or a connection's `<id>/<field>` names.
+// Display only, like the rest of the inventory: an unreadable store shows no warnings, while masking fails closed.
+const flagTooShort = async (services: Pick<SecretsRoutesDeps, "secretRegistry">, entries: SecretInventoryEntry[]): Promise<SecretInventoryEntry[]> => {
+    const unmaskable = await services.secretRegistry().then(unmaskableSecrets, (): readonly string[] => []);
+    return entries.map((entry) => {
+        const names = unmaskable.filter((name) => name === entry.key || name.startsWith(`${entry.key}/`));
+        return names.length === 0 ? entry : { ...entry, tooShort: names };
+    });
+};
 
 // A sandbox-held secret's program guard, where the owner set one; a keyring's row carries its keyring's own list.
 const withPrograms = (entries: readonly SecretInventoryEntry[], guards: readonly SecretProgramGuard[]): SecretInventoryEntry[] =>
@@ -169,31 +180,8 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             }
             return { ok: true } as const;
         }),
-        // A secret nobody has to find: made here, kept where `set` keeps one, and only its name and length answered. A
-        // name any store already holds is refused, since a new value would break whatever reads the old one.
-        generate: i.generate.handler(async ({ input }) => {
-            noteAudit({ target: input.key });
-            if ((await services.secretRegistry()).some((secret) => secret.name === input.key)) {
-                throw new ORPCError("CONFLICT", {
-                    message: `"${input.key}" is already stored: use it as it is, or pick a name nothing here holds. A new value would break whatever reads the old one.`,
-                });
-            }
-            const machine = await keptOnDevice(services, input.key);
-            if (machine !== undefined) {
-                throw new ORPCError("CONFLICT", {
-                    message: `"${input.key}" is kept in the keyring on ${machine}: use it as it is, or pick another name. One stored here would be used in its place.`,
-                });
-            }
-            const value = randomSecret(input.bytes, input.format);
-            const devops = devopsActive();
-            if (devops) {
-                await writeEnv((current) => upsertEnv(current, input.key, value));
-                pushToCi();
-            } else {
-                await services.sandboxSecrets.set(input.key, value);
-            }
-            return { key: input.key, length: value.length, stored: devops ? ("env" as const) : ("sandbox" as const) };
-        }),
+        // Making a random value, new or in place of one a person set (secret-generate.routes.ts).
+        ...createSecretGenerateRoutes(services, { devopsActive, read, writeEnv, pushToCi, keptOnDevice: (key) => keptOnDevice(services, key) }),
         list: i.list.handler(async () => {
             const kept = Object.keys(await services.sandboxSecrets.all());
             const env = devopsActive() ? envKeys(await read()) : [];
@@ -303,7 +291,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             // One row per key: a name a row above already lists is the sandbox's, whatever a keyring shares under it.
             const listedKeys = new Set(ownRows.map((entry) => entry.key));
             const deviceRows = onDevices.filter((entry) => !listedKeys.has(entry.pointer.name)).map(deviceInventoryEntry);
-            return { entries: [...withPrograms(ownRows, programGuards), ...deviceRows].map(withUse) };
+            return { entries: await flagTooShort(services, [...withPrograms(ownRows, programGuards), ...deviceRows].map(withUse)) };
         }),
         reveal: i.reveal.handler(async ({ input, context }) => {
             noteAudit({ target: input.key });

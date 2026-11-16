@@ -24,6 +24,10 @@ export const SecretRevealSchema = z.object({ value: z.string().describe("The val
 
 // A secret nobody has to find or paste: a session key, a webhook signing secret, a database password the task sets up
 // itself. The sandbox makes it and keeps it; the caller gets its reference and length, never the value.
+// The shortest stored value the sandbox masks wherever it appears; a shorter one masks only in a secret-like context. The
+// terminal filter keeps its own copy (SECRET_VALUE_MIN), held equal by terminal-masking-parity.test.ts.
+export const SECRET_MASK_MIN = 12;
+
 export const SECRET_FORMATS = ["hex", "base64url", "alnum"] as const;
 export const SecretGenerateSchema = z.object({
     key: secretKey.describe("The name to store it under: a name nothing here holds yet, since a new value would break whatever uses the old one."),
@@ -39,6 +43,12 @@ export const SecretGenerateSchema = z.object({
         .default("hex")
         .describe("How it is spelled: `hex` (0-9, a-f), `base64url` (letters, digits, - and _), or `alnum` (letters and digits only, for readers that refuse symbols)."),
 });
+// Replacing a value the owner set with a random one: the Secrets view's answer to a value too short to mask everywhere.
+export const SecretRegenerateSchema = SecretGenerateSchema.extend({
+    key: secretKey.describe("The secret you set to replace, by name. Whatever checks the old value has to be given the new one."),
+    format: z.enum(SECRET_FORMATS).default("alnum").describe("How it is spelled; letters and digits unless a reader demands otherwise."),
+});
+
 export const SecretGeneratedSchema = z.object({
     key: z.string().describe("The name it is stored under."),
     length: z.number().int().describe("How many characters it is, which a reader's validation may care about."),
@@ -301,6 +311,13 @@ export const SecretInventoryEntrySchema = z.object({
     // e.g. "desired-state/.env".
     storedAt: z.string().describe("Where it actually lives, in words."),
     revealable: z.boolean().describe("Whether its value can be shown at all. Everything except a model account's credential can be."),
+    // From the masking floor (agent-redaction.ts): names only, never values or lengths.
+    tooShort: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Which of its values are too short for the sandbox to hide from the model everywhere, by the name the agent sees each under. They are hidden only right after a word, flag or address that names a secret, and read in full anywhere else. Absent when none are.",
+        ),
     // Forgejo Actions only, and only after adopt, on env|generated entries.
     ci: z
         .object({

@@ -1,6 +1,7 @@
 import * as terminal from "@intentic/output-cleaners/cleaners";
 import { CREDENTIAL_ISSUER_PREFIXES, CREDENTIAL_ISSUERS, maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
 import { SECRET_REFERENCE } from "@intentic/sandbox-contract/schemas/needs";
+import { SECRET_MASK_MIN } from "@intentic/sandbox-contract/schemas/secrets";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { capabilitySecretsDocument } from "../capabilities/credentials/secret-vault.js";
 import { keyringCopiesDocument, RELEASED_VALUES_FILE } from "./device/keyring-stores.js";
@@ -45,4 +46,8 @@ test.each([
     "PuTTY-User-Key-File-3: ssh-ed25519\nEncryption: none\nPrivate-Lines: 1\nAAAAIGr3dHg0\nPrivate-MAC: ab12ab12\n",
 ])("a private key masks alike in the terminal and the tools: %s", (key) => {
     expect(terminal.redactText(key)).toBe(maskCredentialMaterial(key));
+});
+
+test("the terminal masks by value from the same length the Secrets view warns below", () => {
+    expect(terminal.SECRET_VALUE_MIN).toBe(SECRET_MASK_MIN);
 });

@@ -25,7 +25,7 @@ export interface SecretRow {
     readonly detail: string;
     readonly logo?: string | undefined;
     readonly icon: string;
-    /** Something is owed here: a required value nobody set, or a copy CI never got. */
+    /** Something is owed here: a required value nobody set, a value too short to hide, or a copy CI never got. */
     readonly attention: boolean;
     /** That debt in the reader's words, absent when there is none. */
     readonly note?: string | undefined;
@@ -46,6 +46,11 @@ export interface SecretRow {
     readonly programsHere: boolean;
     /** Everything the filter box matches, already folded. */
     readonly haystack: string;
+    /**
+     * Holds a value too short to hide from the model everywhere, and whether one press may replace it with a random one:
+     * only a value a person set here, since nothing else checks it that the sandbox cannot see. Absent when it is long enough.
+     */
+    readonly tooShort?: { readonly names: readonly string[]; readonly replaceable: boolean } | undefined;
 }
 
 /** The already-cached reads a row needs to find out whose credential it is. */
@@ -210,7 +215,24 @@ const bareRow = (entry: SecretInventoryEntry, group: SecretGroup): SecretRow => 
     };
 };
 
-export const secretRow = (entry: SecretInventoryEntry, sources: SecretSources): SecretRow => {
+// A value the model reads in full is a debt like an unset one, and said first. One press may replace it only where a
+// person set it here (`required`/`yours`): a connection's password and a keyring's entry must match what the account or
+// computer holds, and a generated value is the deploy's, already long.
+const withTooShort = (row: SecretRow): SecretRow => {
+    const names = row.entry.tooShort ?? [];
+    if (names.length === 0) {
+        return row;
+    }
+    return {
+        ...row,
+        attention: true,
+        note: t(`sandbox.secretRows.tooShort`),
+        tooShort: { names, replaceable: row.group === `required` || row.group === `yours` },
+        haystack: `${row.haystack} too short`,
+    };
+};
+
+const rowOf = (entry: SecretInventoryEntry, sources: SecretSources): SecretRow => {
     const group = groupOf(entry);
     if (group === `device`) {
         return deviceRow(entry);
@@ -220,6 +242,8 @@ export const secretRow = (entry: SecretInventoryEntry, sources: SecretSources): 
     }
     return bareRow(entry, group);
 };
+
+export const secretRow = (entry: SecretInventoryEntry, sources: SecretSources): SecretRow => withTooShort(rowOf(entry, sources));
 
 // Orders within a group only, never across the tab: debts first, then connections needing something, then the
 // rest by name.

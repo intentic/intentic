@@ -215,3 +215,15 @@ it(`offers Type into… and a program list only for a value stored under a name 
     // A keyring name may carry a dot, which the Type into… route's name rule refuses.
     expect(secretRow(kept({ machine: `rog`, mode: `each-use`, online: true, source: `keyring` }, { key: `vpn.password` }), sources()).typeable).toBe(false);
 });
+
+it(`owes attention for a value too short to hide, and offers one-press replacement only for a value a person set here`, () => {
+    const yours = secretRow(entry({ key: `ROOT_PASSWORD`, kind: `env`, tooShort: [`ROOT_PASSWORD`] }), sources());
+    expect(yours.attention).toBe(true);
+    expect(yours.note).toBe(`too short to hide from the model`);
+    expect(yours.tooShort).toEqual({ names: [`ROOT_PASSWORD`], replaceable: true });
+    expect(matchesSecret(yours, `too short`, false)).toBe(true);
+    // A connection's password must match its account, so it is changed there first.
+    const account = secretRow(entry({ key: `identity`, kind: `capability`, status: `connected`, tooShort: [`identity/password`] }), sources());
+    expect(account.tooShort).toEqual({ names: [`identity/password`], replaceable: false });
+    expect(secretRow(entry({ key: `LONG_ENOUGH`, kind: `env` }), sources()).tooShort).toBeUndefined();
+});

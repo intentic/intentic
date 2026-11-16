@@ -3093,6 +3093,19 @@
             "readsWith": "Le lit avec",
             "severalHint": "Plusieurs connexions {provider} atteignent cet hôte : celle choisie lit le dépôt.",
             "tokenInstead": "Utilise le jeton d'accès sous Avancé au lieu de votre connexion {provider}."
+        },
+        "secretTooShort": {
+            "label": "Face au modèle",
+            "title": "Trop court pour être caché",
+            "titleNamed": "Trop courts pour être cachés : {names}",
+            "explain": "Le sandbox cache une valeur enregistrée au modèle en la repérant dans ce que le modèle lit, et celle-ci est trop courte pour être repérée sans risque. Elle n'est cachée que juste après un mot ou une option qui nomme un secret (password=…, --password …) ou comme mot de passe d'une adresse web, et lue en entier partout ailleurs.",
+            "replaceCaution": "Une valeur aléatoire règle le problème, mais ce qui la vérifie, comme un serveur ou un compte, doit aussi recevoir la nouvelle valeur, sinon il cesse de fonctionner.",
+            "onSite": "Changez ce mot de passe sur son site pour un mot de passe d'au moins {min} caractères, puis enregistrez le nouveau ici.",
+            "onComputer": "Changez-la pour une valeur d'au moins {min} caractères dans le trousseau de {machine}.",
+            "longer": "Remplacez-la par une valeur d'au moins {min} caractères.",
+            "replace": "Remplacer par une valeur aléatoire",
+            "confirm": "La remplacer maintenant",
+            "couldNotReplace": "Impossible de remplacer cette valeur."
         }
     },
     "chat": {
@@ -10387,7 +10400,8 @@
             "locked": "Verrouillé",
             "ready": "Prêt",
             "offlineNote": "{machine} est hors ligne : inutilisable tant qu'il ne répond pas",
-            "lockedNote": "{machine} est verrouillé : chaque usage demande là-bas"
+            "lockedNote": "{machine} est verrouillé : chaque usage demande là-bas",
+            "tooShort": "trop court pour être caché au modèle"
         },
         "useDevices": {
             "agentUpdateRefused": "Cet appareil n'a pas voulu mettre à jour son agent.",

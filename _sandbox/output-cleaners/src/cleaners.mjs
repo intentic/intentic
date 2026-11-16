@@ -14,6 +14,7 @@ import { compactJsonArrays } from "./json-arrays.mjs";
 import { foldHitRuns, foldPathRuns } from "./path-runs.mjs";
 import { fairSearch, SEARCH_COMMAND } from "./search-fairness.mjs";
 import { byteBudget, capOutput, FAIL_TAIL, priorityCap, READ_COMMAND, READ_MAX_BYTES } from "./output-cap.mjs";
+import { contextualEntries, maskValues } from "./secrets/short-secrets.mjs";
 
 export { ANSI, collapseCr, bodyBytes } from "./cleaner-shapes.mjs";
 export { cleanToolText } from "./text-shaping.mjs";
@@ -311,9 +312,10 @@ const maskKeyBlocks = (text) =>
 // Known secret VALUES (from the daemon's own env) mask exactly, with no per-field upkeep; name patterns above are a
 // backstop only for a value not stored here. A known value masks to its reference (`{{secret:name}}`); a multi-line
 // value masks per line to the anonymous mask instead, since a reference stands for the whole value. Below this length a
-// value is not distinctive enough to blank safely; the daemon's tool-result masking uses the same floor.
+// value masks only in a secret-like context (short-secrets.mjs); the daemon's tool-result masking uses the same rule.
 export const SECRET_VALUE_MIN = 12;
 export { multilineParts };
+export { contextualEntries, maskValues } from "./secrets/short-secrets.mjs";
 
 // Every store a stored secret value lives in, in the order a name two of them hold resolves. The daemon's registry
 // (src/secrets/secret-registry.ts) walks this same list, so the terminal cannot miss a store the tools mask. `root` is
@@ -479,7 +481,8 @@ const harvest = (text, layout) => {
             byTarget.set(trimmed, { target: trimmed, replacement });
         }
     };
-    for (const [name, value] of namedValues(text, layout)) {
+    const named = namedValues(text, layout).map(([name, value]) => ({ name, value }));
+    for (const { name, value } of named) {
         // Trimmed first: whitespace padding is never masked, so an untrimmed target would never match anything.
         for (const form of surfaceForms(value.trim())) {
             add(form, secretReference(name));
@@ -488,8 +491,9 @@ const harvest = (text, layout) => {
             add(part, "***");
         }
     }
+    const short = contextualEntries(named, SECRET_VALUE_MIN, secretReference);
     // Longest first, so a value that contains another is masked whole rather than leaving its tail behind.
-    return [...byTarget.values()].toSorted((a, b) => b.target.length - a.target.length);
+    return [...byTarget.values(), ...short].toSorted((a, b) => b.target.length - a.target.length);
 };
 
 // Where the stores live, from the daemon's own env for this turn. AGENT_AUTH_DIR is the provider-credential root;
@@ -521,12 +525,7 @@ const redactLines = (lines, values = []) => {
 export const redactText = (text, values = []) => redactLines(text.split("\n"), values).join("\n");
 
 const redactLine = (line, values) => {
-    let masked = line;
-    for (const { target, replacement } of values) {
-        if (masked.includes(target)) {
-            masked = masked.split(target).join(replacement);
-        }
-    }
+    const masked = maskValues(line, values, secretReference);
     return SECRET_PATTERNS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), masked);
 };
 

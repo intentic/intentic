@@ -3093,6 +3093,19 @@
             "readsWith": "Lo lee con",
             "severalHint": "Más de una conexión de {provider} llega a este host: la elegida lee el repo.",
             "tokenInstead": "Usa el token de acceso de Avanzado en lugar de tu conexión de {provider}."
+        },
+        "secretTooShort": {
+            "label": "Ante el modelo",
+            "title": "Demasiado corto para ocultarlo",
+            "titleNamed": "Demasiado cortos para ocultarlos: {names}",
+            "explain": "El sandbox oculta un valor guardado al modelo detectándolo en lo que el modelo lee, y este es demasiado corto para detectarlo con seguridad. Solo se oculta justo después de una palabra o una opción que nombra un secreto (password=…, --password …) o como contraseña de una dirección web; en cualquier otro sitio el modelo lo lee entero.",
+            "replaceCaution": "Un valor aleatorio lo soluciona, pero lo que lo comprueba, como un servidor o una cuenta, también debe recibir el valor nuevo, o dejará de funcionar.",
+            "onSite": "Cambia esta contraseña en su sitio por una de {min} caracteres o más y luego guarda aquí la nueva.",
+            "onComputer": "Cámbialo por uno de {min} caracteres o más en el llavero de {machine}.",
+            "longer": "Sustitúyelo por un valor de {min} caracteres o más.",
+            "replace": "Sustituir por un valor aleatorio",
+            "confirm": "Sustituirlo ahora",
+            "couldNotReplace": "No se pudo sustituir este valor."
         }
     },
     "chat": {
@@ -10387,7 +10400,8 @@
             "locked": "Bloqueado",
             "ready": "Listo",
             "offlineNote": "{machine} está sin conexión: no se puede usar hasta que responda",
-            "lockedNote": "{machine} está bloqueado: cada uso pregunta allí"
+            "lockedNote": "{machine} está bloqueado: cada uso pregunta allí",
+            "tooShort": "demasiado corto para ocultarlo al modelo"
         },
         "useDevices": {
             "agentUpdateRefused": "Ese dispositivo no ha actualizado su agente.",
