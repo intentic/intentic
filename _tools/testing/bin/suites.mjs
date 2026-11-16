@@ -96,6 +96,20 @@ const IGNORES = [...new Set([...BUILD_OUTPUT_GLOBS, ...bunfigIgnores(), ...gitIg
 const ignoreArgs = (globs) => globs.flatMap((glob) => ["--path-ignore-patterns", glob]);
 
 const args = process.argv.slice(2);
+// Asked how it works, it says so instead of handing `--help` to bun, which ran the package's whole suite.
+if (args.includes("--help") || args.includes("-h")) {
+    process.stdout.write(
+        [
+            "usage: suites [--watch] [--worker-gib=N] [bun test flags] [filter...]",
+            "",
+            "Runs this package's tests with bun: unit files under a hang detector, *.integration.test.* and *.e2e.test.*",
+            "in a second run with the machine's time. Run it from the package's own directory (it reads that bunfig.toml).",
+            "A filter is any part of a test file's path: `suites src/agent/foo.test.ts` or `suites foo`.",
+            "",
+        ].join("\n"),
+    );
+    process.exit(0);
+}
 const watch = args.includes("--watch");
 const workerGib = Number(args.map((arg) => WORKER_GIB.exec(arg)?.[1]).find((gib) => gib !== undefined) ?? 1);
 const flags = args.filter((arg) => arg !== "--watch" && arg !== "--" && arg.startsWith("-") && !WORKER_GIB.test(arg));

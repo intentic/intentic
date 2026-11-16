@@ -324,7 +324,14 @@ export const createVerificationLedger = (): VerificationLedger => {
 export interface FrameLedger extends VerificationLedger {
     // Feed one frame; frames this ledger has no use for cost only a comparison.
     readonly note: (event: AgentEvent) => void;
+    // Resolves once every call settled so far is folded in. With shell edits to read, a settle is asynchronous: a reader
+    // of the turn's final standing awaits this first.
+    readonly settled: () => Promise<void>;
 }
+
+// The code files a shell command changed, by the agent's names: the dirty files whose content changed since `since`, the
+// moment the command started. Most edits arrive this way (`sed -i`, a heredoc rewrite, a `mv`), never as an edit call.
+export type ShellEdits = (since: number) => Promise<readonly string[]>;
 
 // What one tool call is to this ledger: work waiting for proof, a check that might supply it, or neither.
 type TrackedCall = { readonly kind: "edit"; readonly paths: readonly string[] } | { readonly kind: "check"; readonly command: string };
@@ -341,34 +348,87 @@ export const trackedCall = (event: Extract<AgentEvent, { kind: "tool_call" }>): 
     return event.category === "execute" && event.target !== undefined ? { kind: "check", command: event.target } : undefined;
 };
 
-export const createFrameLedger = (): FrameLedger => {
+// `shellEdits` attributes what a command wrote to that command, noted before the command itself is read as a check, so
+// `python3 - <<EOF … EOF && pnpm test` is an edit proven by its own test. Without it, only edit calls count.
+export const createFrameLedger = (shellEdits?: ShellEdits, now: () => number = Date.now): FrameLedger => {
     const ledger = createVerificationLedger();
-    const pending = new Map<string, TrackedCall>();
+    const pending = new Map<string, { readonly call: TrackedCall; readonly startedAt: number }>();
+    // When the previous frame arrived: the start of a call whose opening frame is already terminal (an ACP agent that
+    // reports a command only once it ran), since nothing earlier marks when it began.
+    let lastFrameAt = now();
+    // Settles fold in strictly in arrival order: synchronously while no command's scan is out (always, without
+    // `shellEdits`), queued behind it otherwise, so an edit call that settles during a scan still lands after that command.
+    let chain: Promise<void> = Promise.resolve();
+    let outstanding = 0;
+    const later = (work: () => Promise<void> | void): void => {
+        outstanding += 1;
+        chain = chain.then(work).finally(() => {
+            outstanding -= 1;
+        });
+    };
+    const inOrder = (work: () => void): void => {
+        if (outstanding === 0) {
+            work();
+        } else {
+            later(work);
+        }
+    };
+    // What the command wrote is an edit made before the command's own outcome: a scan that fails attributes nothing.
+    const written = async (startedAt: number): Promise<readonly string[]> => {
+        if (shellEdits === undefined) {
+            return [];
+        }
+        try {
+            return await shellEdits(startedAt);
+            // allow(silent-catch): a tree that could not be read attributes no edit, leaving what the edit calls said.
+        } catch {
+            return [];
+        }
+    };
+    const foldCommand = async (command: string, startedAt: number, read: CheckOutcome, text: string): Promise<void> => {
+        for (const path of await written(startedAt)) {
+            ledger.noteEdit(path);
+        }
+        ledger.noteCommand(command, read, text);
+    };
+    const fold = (entry: { readonly call: TrackedCall; readonly startedAt: number }, ok: boolean, outcome: () => CheckOutcome, text: string): void => {
+        const { call, startedAt } = entry;
+        if (call.kind === "edit") {
+            if (ok) {
+                inOrder(() => {
+                    for (const path of call.paths) {
+                        ledger.noteEdit(path);
+                    }
+                });
+            }
+            return;
+        }
+        const read = outcome();
+        if (shellEdits === undefined) {
+            inOrder(() => ledger.noteCommand(call.command, read, text));
+        } else {
+            later(() => foldCommand(call.command, startedAt, read, text));
+        }
+    };
     // A call's result, once it has one; interim updates leave it pending, only a terminal status is an answer
     // (activity/outbound.ts).
     const settle = (id: string, status: ToolCallStatus | undefined, content: readonly ToolCallContent[] | undefined, exitCode?: number): void => {
         if (status !== "completed" && status !== "failed") {
             return;
         }
-        const call = pending.get(id);
-        if (call === undefined) {
+        const entry = pending.get(id);
+        if (entry === undefined) {
             return;
         }
         pending.delete(id);
-        if (call.kind === "edit") {
-            if (status === "completed") {
-                for (const path of call.paths) {
-                    ledger.noteEdit(path);
-                }
-            }
-            return;
-        }
-        const text = (content ?? []).flatMap((entry) => (entry.type === "text" ? [entry.text] : [])).join("\n");
-        ledger.noteCommand(call.command, checkOutcome({ status, text, exitCode }), text);
+        const text = (content ?? []).flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
+        fold(entry, status === "completed", () => checkOutcome({ status, text, exitCode }), text);
     };
     return {
         ...ledger,
         note: (event) => {
+            const previous = lastFrameAt;
+            lastFrameAt = now();
             if (event.kind === "tool_call_update") {
                 settle(event.id, event.status, event.content, event.exitCode);
                 return;
@@ -380,8 +440,10 @@ export const createFrameLedger = (): FrameLedger => {
             if (call === undefined) {
                 return;
             }
-            pending.set(event.id, call);
+            const terminal = event.status === "completed" || event.status === "failed";
+            pending.set(event.id, { call, startedAt: terminal ? previous : lastFrameAt });
             settle(event.id, event.status, event.content);
         },
+        settled: () => chain,
     };
 };

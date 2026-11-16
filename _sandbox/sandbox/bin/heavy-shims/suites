@@ -1,0 +1,18 @@
+#!/bin/sh
+# `suites`, a workspace's test runner (the intentic repo's _tools/testing/bin/suites.mjs), from any directory. Each
+# package links it at node_modules/.bin/suites, which only its own `pnpm test` puts on PATH, so a bare `suites <file>`
+# answered "command not found" and agents went looking for vitest or jest instead (transcript audit, 2026-11-15).
+# This runs the nearest package's own copy, from the working directory up; where none is above, it says so and how
+# that tree's tests run instead. A package script finds its real copy first: pnpm puts node_modules/.bin ahead of this.
+dir=$PWD
+while :; do
+    if [ -x "$dir/node_modules/.bin/suites" ]; then
+        exec "$dir/node_modules/.bin/suites" "$@"
+    fi
+    if [ -z "$dir" ] || [ "$dir" = / ]; then
+        break
+    fi
+    dir=${dir%/*}
+done
+echo "suites: no node_modules/.bin/suites in $PWD or above it. Run it from a package directory that has one; otherwise this project's tests run some other way (its package.json \"test\" script says how)." >&2
+exit 127

@@ -268,3 +268,9 @@ export const settleTurn = (end: TurnEnd, now: number = Date.now()): SettlementPl
         ),
     };
 };
+
+// The same plan once the turn's last shell edits are read (each scan bounded), so its proof counts every edit it made.
+export const settleProvenTurn = async (end: TurnEnd, now?: number): Promise<SettlementPlan> => {
+    await end.frames.verification.settled();
+    return settleTurn(end, now);
+};

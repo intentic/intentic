@@ -1,4 +1,6 @@
 import { stat } from "node:fs/promises";
+import { join } from "node:path";
+import { within } from "@intentic/base/async";
 import { dirtyPathsAcross } from "../../git/changes/changes.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 
@@ -20,6 +22,23 @@ export interface ShellEditTracker {
     readonly changed: () => Promise<readonly ShellEdit[]>;
 }
 
+// The dirty files whose inode changed at or after `since`: what a command that started then wrote. Shared by the edit
+// diagnostics (a Claude hook around each Bash call) and the verification ledger (frames, every runtime).
+const changedSince = async (dirty: DirtyFiles, since: number): Promise<readonly ShellEdit[]> => {
+    const files = await dirty().catch((): readonly ShellEdit[] => []);
+    const touched = await Promise.all(
+        files.map(async (edit) => {
+            try {
+                return (await stat(edit.onDisk)).ctimeMs >= since ? edit : undefined;
+            } catch {
+                // Deleted or unreadable: there is no file left to check, so there is nothing to attribute.
+                return undefined;
+            }
+        }),
+    );
+    return touched.filter((edit) => edit !== undefined);
+};
+
 export const createShellEditTracker = (dirty: DirtyFiles, now: () => number = Date.now): ShellEditTracker => {
     let startedAt: number | undefined;
     return {
@@ -29,21 +48,7 @@ export const createShellEditTracker = (dirty: DirtyFiles, now: () => number = Da
         changed: async () => {
             const since = startedAt;
             startedAt = undefined;
-            if (since === undefined) {
-                return [];
-            }
-            const files = await dirty().catch((): readonly ShellEdit[] => []);
-            const touched = await Promise.all(
-                files.map(async (edit) => {
-                    try {
-                        return (await stat(edit.onDisk)).ctimeMs >= since ? edit : undefined;
-                    } catch {
-                        // Deleted or unreadable: there is no file left to check, so there is nothing to attribute.
-                        return undefined;
-                    }
-                }),
-            );
-            return touched.filter((edit) => edit !== undefined);
+            return since === undefined ? [] : changedSince(dirty, since);
         },
     };
 };
@@ -63,4 +68,15 @@ export const checkoutDirtyPaths = (root: string, now: () => number = Date.now): 
         }
         return dirtyPathsAcross(root, await repos.list);
     };
+};
+
+// A scan that has not answered by then attributes nothing, so a stuck git never holds the turn's proof or its end.
+const SHELL_EDITS_BUDGET_MS = 10_000;
+
+// What each command of a turn wrote, as the verification ledger reads it (agent-verification.ts `ShellEdits`): the
+// checkout's dirty files changed since the command started, named as the agent names them (its root joined to the path).
+export const turnShellEdits = (localCwd: string, effectiveCwd: string): ((since: number) => Promise<readonly string[]>) => {
+    const dirty = checkoutDirtyPaths(localCwd);
+    const named: DirtyFiles = async () => (await dirty()).map((path) => ({ onDisk: join(localCwd, path), path: join(effectiveCwd, path) }));
+    return async (since) => (await within(changedSince(named, since), SHELL_EDITS_BUDGET_MS, [], { unref: true })).map((edit) => edit.path);
 };

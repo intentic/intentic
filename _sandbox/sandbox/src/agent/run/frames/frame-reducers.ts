@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
-import { createFrameLedger, type FrameLedger } from "../../verification/agent-verification.js";
+import { createFrameLedger, type FrameLedger, type ShellEdits } from "../../verification/agent-verification.js";
 import { createReachFrameLedger, type ReachFrameLedger } from "../../verification/agent-reach.js";
 import { createViewFrameLedger, type ViewFrameLedger } from "../../verification/agent-viewing.js";
 import { createTurnMetrics, type TurnMetrics } from "@intentic/agent-context/turn-metrics";
@@ -174,7 +174,8 @@ export interface TurnFrames {
 
 // `root` is the tree as the agent sees it; `resumed` is the session the turn starts on until the stream names its own.
 // `openedAt` is no later than the turn's first request goes out, which is all its first answer can be held to.
-export const createTurnFrames = (root: string, resumed: string | undefined, openedAt: number = Date.now()): TurnFrames => {
+// `shellEdits` reads which code files a command wrote, so a shell edit needs proof like an edit call does.
+export const createTurnFrames = (root: string, resumed: string | undefined, openedAt: number = Date.now(), shellEdits?: ShellEdits): TurnFrames => {
     const sessionId = frameReducer(resumed, foldSession);
     const usage = frameReducer<UsageFrame | undefined>(undefined, foldUsage);
     const silence = frameReducer<Silence>({ proseChars: 0, kinds: new Set(), answered: false }, foldSilence);
@@ -183,7 +184,7 @@ export const createTurnFrames = (root: string, resumed: string | undefined, open
     const context = frameReducer<ContextFrame | undefined>(undefined, foldContext);
     const failure = frameReducer<TurnFailure | undefined>(undefined, foldFailure);
     const limitReset = frameReducer<number | undefined>(undefined, foldLimitReset);
-    const verification = createFrameLedger();
+    const verification = createFrameLedger(shellEdits);
     const viewing = createViewFrameLedger();
     const reach = createReachFrameLedger(root);
     const metrics = createTurnMetrics(root);

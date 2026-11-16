@@ -279,6 +279,15 @@ const ENTRIES: readonly GuidanceEntry[] = [
     { id: "batching", text: BATCHING_GUIDANCE },
     { id: "waiting", text: waitingText },
     { id: "context-reuse", text: CONTEXT_REUSE_GUIDANCE },
+    // Three quarters of edits went through the shell (`python3 - <<EOF`, `sed -i`) in the week audited 2026-11-15: an
+    // edit tool's call names the file and its change, which a reviewer and the chat can read; a heredoc buries both.
+    {
+        id: "edits",
+        text:
+            "Change a file with your file-edit tool, not a `python3 - <<EOF` rewrite, `sed -i` or a heredoc: the edit call " +
+            "names the file and the change, so the chat and a reviewer can read it. Keep shell rewrites for one mechanical " +
+            "change across many files. Either way it is an edit the turn still has to prove: run a check after the last one.",
+    },
     {
         id: "refs",
         // REFERENCE_DIR in @intentic/workspace-ignore.

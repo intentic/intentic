@@ -33,7 +33,7 @@ import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } f
 import { childRerunHorizonMs } from "../subagents/child-records.js";
 import { type ScriptRunDoor, scriptRunDoor } from "../subagents/workflows/script-runs.js";
 import { runtimeFrames } from "./frames/runtime-frames.js";
-import { checkoutDirtyPaths } from "../tools/agent-shell-edits.js";
+import { checkoutDirtyPaths, turnShellEdits } from "../tools/agent-shell-edits.js";
 import { scanProducedDocuments, withProducedDocuments } from "../tools/produced-documents.js";
 import type { AgentRequest, TurnBase, TurnHooks, TurnSpec } from "../providers/agent-request.js";
 import { composeWirePrompt } from "../prompt/turn-preamble.js";
@@ -73,7 +73,7 @@ import { throttleAsOutage } from "./frames/routed-throttle.js";
 import { createTurnFrames, type TurnFrames } from "./frames/frame-reducers.js";
 import { endedAfterStop } from "./frames/stop-grace.js";
 import { performSettlement } from "./settle/settle-turn.js";
-import { settleTurn } from "./settle/turn-settlement.js";
+import { settleProvenTurn } from "./settle/turn-settlement.js";
 import {
     conversationIdentity,
     mainTreePlacement,
@@ -588,7 +588,7 @@ const preflight = async (
     const going = await continuationOf(services, execution, { input, history, held, way, rollover, resumed, delivery, signal, localCwd });
     clock.mark("history");
     const base = baseRequestOf(services, turnInput, { execution, history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
-    const frames = createTurnFrames(effectiveCwd, resumed);
+    const frames = createTurnFrames(effectiveCwd, resumed, Date.now(), turnShellEdits(localCwd, effectiveCwd));
     const context = {
         base,
         attachmentPaths: attachments.paths,
@@ -1010,7 +1010,7 @@ async function* runPreparedTurn(
         if (input.conversationId !== undefined) {
             noteKeepable(services, input.conversationId, keepableOf(services, { input, request, account, sessionId: frames.readings().sessionId, fingerprint, spawned }));
         }
-        const settlement = settleTurn({
+        const settlement = await settleProvenTurn({
             ...state,
             aborted: aborted(),
             isolated: worktree !== undefined,

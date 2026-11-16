@@ -421,3 +421,82 @@ describe("reading how a command exited", () => {
         expect(checkOutcome(input)).toBe(outcome);
     });
 });
+
+// Three quarters of edits arrive as shell commands (`sed -i`, a heredoc rewrite); the ledger asks which files each one wrote.
+describe("the frame-fed ledger with shell edits", () => {
+    const shell = (id: string, command: string): AgentEvent => ({ kind: "tool_call", id, name: "Bash", category: "execute", status: "in_progress", target: command });
+    const done = (id: string, text: string): AgentEvent => ({ kind: "tool_call_update", id, status: "completed", content: [{ type: "text", text }] });
+    const edit = (id: string, path: string): AgentEvent => ({ kind: "tool_call", id, name: "Edit", category: "edit", status: "completed", locations: [{ path }] });
+    // Writes per command, keyed by the moment the command started, as the tree would answer.
+    const tree = (writes: Record<string, readonly string[]>) => {
+        let clock = 0;
+        const startedBy = new Map<number, string>();
+        return {
+            now: () => (clock += 1),
+            name: (command: string) => startedBy.set(clock, command),
+            edits: async (since: number) => writes[startedBy.get(since) ?? ""] ?? [],
+        };
+    };
+
+    test("a shell edit with no check after it is unproven, and named", async () => {
+        const fake = tree({ "sed -i s/a/b/ src/a.ts": [`${WORKSPACE_ROOT}/src/a.ts`] });
+        const ledger = createFrameLedger(fake.edits, fake.now);
+        ledger.note(shell("1", "sed -i s/a/b/ src/a.ts"));
+        fake.name("sed -i s/a/b/ src/a.ts");
+        ledger.note(done("1", ""));
+        await ledger.settled();
+        expect(ledger.standing()).toEqual({ state: "unproven", paths: ["/work/src/a.ts"], check: undefined });
+    });
+
+    test("an edit and its test in one command: the edit comes first, so the test proves it", async () => {
+        const command = "python3 - <<'EOF'\nopen('src/a.ts','w').write('x')\nEOF\npnpm test src/a.test.ts";
+        const fake = tree({ [command]: [`${WORKSPACE_ROOT}/src/a.ts`] });
+        const ledger = createFrameLedger(fake.edits, fake.now);
+        ledger.note(shell("1", command));
+        fake.name(command);
+        ledger.note(done("1", "1 passed\n--- [exit 0, 2s]"));
+        await ledger.settled();
+        expect(ledger.standing().state).toBe("verified");
+    });
+
+    test("a shell edit after the last passing check leaves the work unproven", async () => {
+        const fake = tree({ "sed -i s/a/b/ src/a.ts": [`${WORKSPACE_ROOT}/src/a.ts`] });
+        const ledger = createFrameLedger(fake.edits, fake.now);
+        ledger.note(edit("1", `${WORKSPACE_ROOT}/src/a.ts`));
+        ledger.note(shell("2", "pnpm test src/a.test.ts"));
+        ledger.note(done("2", "1 passed\n--- [exit 0, 2s]"));
+        ledger.note(shell("3", "sed -i s/a/b/ src/a.ts"));
+        fake.name("sed -i s/a/b/ src/a.ts");
+        ledger.note(done("3", ""));
+        await ledger.settled();
+        expect(ledger.standing()).toEqual({ state: "unproven", paths: ["/work/src/a.ts"], check: undefined });
+    });
+
+    test("an edit call that settles while a command's scan is out still lands after that command", async () => {
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const ledger = createFrameLedger(async () => {
+            await gate;
+            return [];
+        });
+        ledger.note(shell("1", "pnpm test src/a.test.ts"));
+        ledger.note(done("1", "1 passed\n--- [exit 0, 2s]"));
+        ledger.note(edit("2", `${WORKSPACE_ROOT}/src/a.ts`));
+        release();
+        await ledger.settled();
+        expect(ledger.standing().state).toBe("unproven");
+    });
+
+    test("a scan that fails attributes nothing and still reads the command", async () => {
+        const ledger = createFrameLedger(async () => {
+            throw new Error("git is gone");
+        });
+        ledger.note(edit("1", `${WORKSPACE_ROOT}/src/a.ts`));
+        ledger.note(shell("2", "pnpm test src/a.test.ts"));
+        ledger.note(done("2", "1 passed\n--- [exit 0, 2s]"));
+        await ledger.settled();
+        expect(ledger.standing().state).toBe("verified");
+    });
+});
