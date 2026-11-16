@@ -94,6 +94,16 @@ export interface PerfStat {
     slowest: PerfFields | undefined;
 }
 
+// A span the stall watchdog can name: one still running, or one that ended at or after the moment it asked about.
+export interface SpanActivity {
+    readonly op: string;
+    // Epoch ms; `endedAt` is absent while the span still runs.
+    readonly startedAt: number;
+    readonly endedAt?: number;
+    // The span's identifying fields (repo, path, git verb...), as it was tracked with.
+    readonly fields: PerfFields;
+}
+
 export interface PerfTracker {
     /**
      * Measures `run` under `op`, returning what it returns and rethrowing what it throws: a failed span is still a
@@ -105,6 +115,11 @@ export interface PerfTracker {
      * contention.
      */
     readonly record: (op: string, ms: number, fields: PerfFields, failed?: boolean) => void;
+    /**
+     * Spans running now, and spans that ended at or after `sinceMs` (epoch), longest first, at most `limit`: what the
+     * daemon was doing across a window, for the event-loop stall watchdog to name (loop-watchdog.ts).
+     */
+    readonly during: (sinceMs: number, limit?: number) => readonly SpanActivity[];
     /** Every op's account, ranked by total time; the summary's own content, readable without waiting for the timer. */
     readonly ranked: () => readonly PerfStat[];
     /** Stops the summary and the rollups, resolving once the window counted so far is written. */
@@ -112,6 +127,40 @@ export interface PerfTracker {
 }
 
 const elapsedMs = (from: bigint): number => Number(process.hrtime.bigint() - from) / 1e6;
+
+// Ended spans kept for `during`: a ring, so the watchdog can see what finished inside a stall it noticed only after.
+const RECENT_SPANS = 128;
+const DURING_LIMIT = 8;
+
+// What `during` reads: the spans in flight, and a ring of the last ones to end. Two map writes per span, nothing more.
+const createSpanActivity = () => {
+    const running = new Map<number, SpanActivity>();
+    const ended: SpanActivity[] = [];
+    let nextId = 0;
+    let nextSlot = 0;
+    return {
+        begin: (op: string, fields: PerfFields): number => {
+            const id = nextId++;
+            running.set(id, { op, startedAt: Date.now(), fields });
+            return id;
+        },
+        end: (id: number): void => {
+            running.delete(id);
+        },
+        ended: (op: string, ms: number, fields: PerfFields): void => {
+            const endedAt = Date.now();
+            ended[nextSlot] = { op, startedAt: endedAt - ms, endedAt, fields };
+            nextSlot = (nextSlot + 1) % RECENT_SPANS;
+        },
+        during: (sinceMs: number, limit = DURING_LIMIT): readonly SpanActivity[] => {
+            const now = Date.now();
+            const length = (span: SpanActivity): number => (span.endedAt ?? now) - span.startedAt;
+            return [...running.values(), ...ended.filter((span) => (span.endedAt ?? now) >= sinceMs)]
+                .toSorted((left, right) => length(right) - length(left))
+                .slice(0, limit);
+        },
+    };
+};
 
 // Load average, cached ~1s, stamped onto slow spans to separate a slow op from a busy machine.
 const LOAD_CACHE_MS = 1_000;
@@ -161,6 +210,7 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
     const countAtLastSummary = new Map<string, number>();
     // Anything measured since the last summary; an idle daemon must not print a table of zeroes every minute.
     let dirty = false;
+    const activity = createSpanActivity();
 
     const ranked = (): readonly PerfStat[] => rankedOf(stats);
 
@@ -177,6 +227,7 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
         }
         stats.set(op, stat);
         dirty = true;
+        activity.ended(op, ms, fields);
         rollups?.add(op, ms, fields, failed);
         if (slow) {
             // `seen`/`slowSeen` distinguish first occurrence from pattern; `load1` distinguishes machine from code.
@@ -191,6 +242,7 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
 
     const track = async <T>(op: string, fields: PerfFields, run: () => Promise<T>): Promise<T> => {
         const from = process.hrtime.bigint();
+        const running = activity.begin(op, fields);
         try {
             // Every git the span runs is counted under its name (gitRunCallers), so a profile reads why git ran.
             const result = await withGitCallerPart(op, run);
@@ -200,6 +252,8 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
             // Recorded as failed, then rethrown untouched; error handling is the caller's business.
             record(op, elapsedMs(from), fields, true);
             throw error;
+        } finally {
+            activity.end(running);
         }
     };
 
@@ -224,6 +278,7 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
     return {
         track,
         record,
+        during: activity.during,
         ranked,
         stop: async () => {
             clearInterval(timer);

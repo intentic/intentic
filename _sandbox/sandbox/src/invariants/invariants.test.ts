@@ -237,3 +237,23 @@ test("a violation standing unchanged is recorded once, and again once it has cle
     // A reported violation says so in its fields too: warn, and the check itself ran.
     expect(lines[0]).toMatchObject({ level: 40, checkFailed: false });
 });
+
+// One check timed out on a busy disk and wrote its failure 35 times in a week, flapping between running and not.
+test("a check that cannot run is left out of the passes after it and written once", async () => {
+    const lines: string[] = [];
+    const registry = createInvariantRegistry(pino({ level: "info" }, { write: (line: string) => lines.push(line) }));
+    let runs = 0;
+    registry.register("agents", [
+        check("strays", () => {
+            runs += 1;
+            throw new Error("check did not settle within 5000ms");
+        }),
+    ]);
+
+    for (let pass = 0; pass < 3; pass += 1) {
+        await registry.run("sweep");
+    }
+
+    expect(runs).toBe(1);
+    expect(lines).toEqual([expect.stringContaining(`"msg":"invariant check failed to run: check did not settle within 5000ms"`)]);
+});

@@ -2,7 +2,7 @@ import { serialLock } from "@intentic/base/async";
 import type { Logger } from "pino";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { CiStore } from "./ci-store.js";
-import { createCiFailureLog, vendorStatusOf } from "./logs/ci-failure-log.js";
+import { ciInputOf, createCiFailureLog, vendorStatusOf } from "./logs/ci-failure-log.js";
 import { CiRateLimited } from "./forge-refusals.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
@@ -79,29 +79,24 @@ export interface CiHookReconciler {
     readonly warnings: () => ReadonlyMap<string, HookWarning>;
 }
 
-export const createCiHookReconciler = (
-    services: {
-        readonly workspace: { readonly root: string };
-        readonly capabilities: CapabilitiesStore;
-        readonly ciStore: CiStore;
-        readonly config: { readonly sandbox: { readonly publicUrl: string } };
-        readonly logger: Logger;
-    },
-    fetchFn: FetchFn = fetch,
-): CiHookReconciler => {
-    const warnings = new Map<string, HookWarning>();
-    // Previous pass's wired hooks, keyed by host+project; diffing against it finds an unmapped repo's hook.
-    let wired = new Map<string, CiProject>();
-    let timer: NodeJS.Timeout | undefined;
-    const serially = serialLock();
-    // A pass every ten minutes per repo: a token that cannot read or register writes its line once, then hourly.
-    const unread = createCiFailureLog(services.logger, "ci: the repository could not be read", "ci: the repository can be read again");
-    const unregistered = createCiFailureLog(services.logger, "ci: webhook registration failed", "ci: webhook registration works again");
+interface HookServices {
+    readonly workspace: { readonly root: string };
+    readonly capabilities: CapabilitiesStore;
+    readonly ciStore: CiStore;
+    readonly config: { readonly sandbox: { readonly publicUrl: string } };
+    readonly logger: Logger;
+}
 
-    // What the forge says of the repository now, kept for the deliveries to be matched by; best-effort, since the hook
-    // itself does not need it. A remote naming an old path still works through the forge's redirects, which is exactly
-    // why nothing else would ever say so.
-    const learn = async (project: CiProject): Promise<void> => {
+// What the forge says of the repository now, kept for the deliveries to be matched by; best-effort, since the hook
+// itself does not need it. A remote naming an old path still works through the forge's redirects, which is exactly
+// why nothing else would ever say so. A token that cannot read writes its line once and backs off (ci-failure-log.ts).
+const forgeLearner = (services: HookServices, fetchFn: FetchFn): ((project: CiProject) => Promise<void>) => {
+    const unread = createCiFailureLog(services.logger, "ci: the repository could not be read", "ci: the repository can be read again");
+    return async (project) => {
+        const input = ciInputOf(project);
+        if (!unread.due(project.repo, input)) {
+            return;
+        }
         try {
             const repository = await ciClientFor(project.account.provider, fetchFn).repository(project);
             await services.ciStore.learnForge(project.repo, project.project, repository);
@@ -113,9 +108,52 @@ export const createCiHookReconciler = (
                 );
             }
         } catch (error) {
-            unread.failed(project.repo, error);
+            unread.failed(project.repo, error, input);
         }
     };
+};
+
+interface HookPass {
+    readonly url: string;
+    readonly secret: string;
+    // What the previous pass found, and the repos it covered.
+    readonly before: ReadonlyMap<string, HookWarning>;
+    readonly covered: ReadonlySet<string>;
+}
+
+// Registers one repo's hook and answers why it is not live, if it is not. A failed registration writes its line once and
+// backs off, up to an hour between asks, or until the token or the mapping changes for a 401 or 404
+// (ci-failure-log.ts); meanwhile what the last attempt found stands.
+const hookRegistrar = (logger: Logger, fetchFn: FetchFn): ((project: CiProject, pass: HookPass) => Promise<HookWarning | undefined>) => {
+    const unregistered = createCiFailureLog(logger, "ci: webhook registration failed", "ci: webhook registration works again");
+    return async (project, { url, secret, before, covered }) => {
+        const input = ciInputOf(project);
+        if (!unregistered.due(project.repo, input)) {
+            return before.get(project.repo);
+        }
+        try {
+            await ciClientFor(project.account.provider, fetchFn).ensureHook(project, { url, secret });
+            unregistered.succeeded(project.repo);
+            return undefined;
+        } catch (error) {
+            // The plain reason leads and the vendor's raw answer stays in the log: a JSON body in the page header
+            // read as a crash, with the one useful sentence after it.
+            unregistered.failed(project.repo, error, input);
+            const limited = error instanceof CiRateLimited;
+            return limited && covered.has(project.repo) ? before.get(project.repo) : refused(project, refusalOf(error), limited, url, secret);
+        }
+    };
+};
+
+export const createCiHookReconciler = (services: HookServices, fetchFn: FetchFn = fetch): CiHookReconciler => {
+    const warnings = new Map<string, HookWarning>();
+    // Previous pass's wired hooks, keyed by host+project; diffing against it finds an unmapped repo's hook.
+    let wired = new Map<string, CiProject>();
+    let timer: NodeJS.Timeout | undefined;
+    const serially = serialLock();
+    // A pass every ten minutes per repo.
+    const learn = forgeLearner(services, fetchFn);
+    const register = hookRegistrar(services.logger, fetchFn);
 
     const reconcileOnce = async (): Promise<void> => {
         const projects = await ciProjects(services);
@@ -133,20 +171,9 @@ export const createCiHookReconciler = (
                 warnings.set(project.repo, { reason: `Pipeline webhooks are off: this sandbox has no public URL for the provider to deliver to.` });
                 continue;
             }
-            const url = webhookUrlFor(publicUrl, project.account.provider);
-            try {
-                await ciClientFor(project.account.provider, fetchFn).ensureHook(project, { url, secret });
-                unregistered.succeeded(project.repo);
-            } catch (error) {
-                // The plain reason leads and the vendor's raw answer stays in the log: a JSON body in the page header
-                // read as a crash, with the one useful sentence after it.
-                unregistered.failed(project.repo, error);
-                const limited = error instanceof CiRateLimited;
-                const warning =
-                    limited && covered.has(project.repo) ? before.get(project.repo) : refused(project, refusalOf(error), limited, url, secret);
-                if (warning !== undefined) {
-                    warnings.set(project.repo, warning);
-                }
+            const warning = await register(project, { url: webhookUrlFor(publicUrl, project.account.provider), secret, before, covered });
+            if (warning !== undefined) {
+                warnings.set(project.repo, warning);
             }
         }
         // Removes the hook only if its account is still connected; otherwise there is no token to delete it with.

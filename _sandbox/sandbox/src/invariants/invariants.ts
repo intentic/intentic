@@ -1,6 +1,7 @@
 import { serialLock } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
+import { createFailureTracker } from "../retry/failure-backoff.js";
 
 // Runtime checks for promises the daemon makes to itself that otherwise fail silently. A check must observe live state
 // (not wiring or a pure function), must be able to call `fail`, and must never itself throw at the daemon: a violation
@@ -69,6 +70,12 @@ const STALLED_BY_MS = 1_000;
 // How many stalls may restart one check's allowance, so a check hung through a thrashing machine still expires.
 const MAX_STALL_RESTARTS = 3;
 
+// A check that could not run (it timed out, it threw) is left out of the passes after it for a wait that doubles from this
+// floor to the cap, and its failure is written once per outage rather than on every flap between running and not
+// (35 lines of one timed-out check in a week). A violation it finds is the subject's state, not the check's, and keeps
+// its own rule below.
+const UNRUNNABLE_BACKOFF = { floorMs: 10 * 60_000, capMs: 6 * 60 * 60_000 };
+
 // A live signal, not a ledger; the durable copy is the log line each violation writes.
 const MAX_VIOLATIONS = 200;
 
@@ -100,6 +107,26 @@ const deadline = async (work: Promise<void> | void, ms: number): Promise<void> =
     }
 };
 
+// One check under its deadline: undefined when it held, else what it found or why it could not run.
+const runOne = async (owner: string, check: InvariantCheck, moment: InvariantMoment): Promise<InvariantViolation | undefined> => {
+    const fail = (message: string): never => {
+        throw new InvariantError(owner, check.name, message);
+    };
+    try {
+        await deadline(check.run({ moment, fail }), CHECK_TIMEOUT_MS);
+        return undefined;
+    } catch (error) {
+        return {
+            owner,
+            check: check.name,
+            moment,
+            message: errorMessage(error),
+            at: Date.now(),
+            checkFailed: !(error instanceof InvariantError),
+        };
+    }
+};
+
 export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
     const registered = new Map<string, readonly InvariantCheck[]>();
     const seen: InvariantViolation[] = [];
@@ -109,8 +136,9 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
     // Serializes runs: concurrent passes over shared state could double-report or catch a subsystem mid-write. Each pass
     // runs after the last however it ended, so a pass that throws past `runOne` (a logger that fails) loses only itself.
     const serially = serialLock();
+    const unrunnable = createFailureTracker({ backoff: UNRUNNABLE_BACKOFF });
 
-    const record = (violation: InvariantViolation): void => {
+    const record = (violation: InvariantViolation, log = true): void => {
         const key = `${violation.owner}\u0000${violation.check}`;
         const signature = `${violation.checkFailed}\u0000${violation.message}`;
         if (standing.get(key) === signature) {
@@ -124,6 +152,9 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
         // Warn, not error: a violation is drift the daemon goes on working around (each owner's own handling), and a
         // check that could not run says nothing about its subject. Written once per change of what it reports, and
         // once per boot for one still standing, since each daemon states what it found.
+        if (!log) {
+            return;
+        }
         logger.warn(
             { owner: violation.owner, check: violation.check, moment: violation.moment, checkFailed: violation.checkFailed },
             violation.checkFailed ? `invariant check failed to run: ${violation.message}` : `invariant violated: ${violation.message}`,
@@ -131,33 +162,18 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
     };
 
     const recovered = (owner: string, check: string, moment: InvariantMoment): void => {
-        if (standing.delete(`${owner}\u0000${check}`)) {
+        const key = `${owner}\u0000${check}`;
+        const wasUnrunnable = standing.get(key)?.startsWith("true\u0000") === true;
+        const unrunnableOutage = unrunnable.succeeded(key);
+        // A check that only failed to run says it runs again when its failure was written, not after a quiet flap.
+        if (standing.delete(key) && (!wasUnrunnable || unrunnableOutage !== undefined)) {
             logger.info({ owner, check, moment }, "invariant holds again");
-        }
-    };
-
-    const runOne = async (owner: string, check: InvariantCheck, moment: InvariantMoment): Promise<InvariantViolation | undefined> => {
-        const fail = (message: string): never => {
-            throw new InvariantError(owner, check.name, message);
-        };
-        try {
-            await deadline(check.run({ moment, fail }), CHECK_TIMEOUT_MS);
-            return undefined;
-        } catch (error) {
-            return {
-                owner,
-                check: check.name,
-                moment,
-                message: errorMessage(error),
-                at: Date.now(),
-                checkFailed: !(error instanceof InvariantError),
-            };
         }
     };
 
     const pass = async (moment: InvariantMoment): Promise<readonly InvariantViolation[]> => {
         const armed = [...registered].flatMap(([owner, checks]) =>
-            checks.filter((check) => check.on.includes(moment)).map((check) => ({ owner, check })),
+            checks.filter((check) => check.on.includes(moment) && unrunnable.due(`${owner}\u0000${check.name}`)).map((check) => ({ owner, check })),
         );
         // Concurrent within a pass: independent reads of independent state cost one check's latency, not the sum.
         const results = await Promise.all(armed.map(({ owner, check }) => runOne(owner, check, moment)));
@@ -167,6 +183,12 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
                 recovered(owner, check.name, moment);
                 continue;
             }
+            const key = `${result.owner}\u0000${result.check}`;
+            if (result.checkFailed) {
+                record(result, unrunnable.failed(key, result.message).log);
+                continue;
+            }
+            unrunnable.succeeded(key);
             record(result);
         }
         return results.filter((result) => result !== undefined);

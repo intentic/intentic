@@ -11,6 +11,7 @@ import { trackedBranch } from "./remote.js";
 import { gitFailureReason } from "../git.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
+import { createFailureTracker } from "../../retry/failure-backoff.js";
 
 /* MAIN FOLLOWS ITS REMOTE. Every workspace repo on a branch that tracks one is fetched on a clock, and what arrived is
    brought into the main tree while it is quiet: fast-forwarded when the branch has nothing of its own, else merged
@@ -26,6 +27,8 @@ import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 const TICK_MS = 2 * 60_000;
 // Behind boot's own restores and resumes.
 const WARMUP_MS = 60_000;
+// A remote that cannot be reached is asked again after a wait that doubles from one round to this; a success resets it.
+const FETCH_BACKOFF_MAX_MS = 60 * 60_000;
 
 export type RepoFollowOutcome =
     | FollowOutcome
@@ -33,9 +36,9 @@ export type RepoFollowOutcome =
     | { readonly status: "fetch-failed"; readonly reason: string }
     // Git itself failed somewhere a refusal was not expected (a missing object, a locked ref).
     | { readonly status: "error"; readonly reason: string }
-    // Left for the next round: a turn working in the main tree, a land or commit holding the repo, or a merge, rebase
-    // or cherry-pick the owner has open.
-    | { readonly status: "deferred"; readonly why: "main-tree-turn" | "repo-busy" | "operation" };
+    // Left for the next round: a turn working in the main tree, a land or commit holding the repo, a merge, rebase
+    // or cherry-pick the owner has open, or a remote that failed to fetch and is waiting out its backoff.
+    | { readonly status: "deferred"; readonly why: "main-tree-turn" | "repo-busy" | "operation" | "backoff" };
 
 export interface RepoFollow {
     readonly repo: string;
@@ -63,14 +66,14 @@ export interface OriginFollow {
 
 const moved = (outcome: RepoFollowOutcome): boolean => outcome.status === "fast-forwarded" || outcome.status === "merged";
 
-// What is worth a log line once: the same conflict every two minutes is one piece of news, not thirty.
+// What is worth a log line once: the same conflict every two minutes is one piece of news, not thirty. A failed fetch
+// is told by the fetch tracker below instead.
 const newsOf = (outcome: RepoFollowOutcome): string | undefined => {
     switch (outcome.status) {
         case "conflicted":
             return `conflicted:${outcome.paths.join(",")}`;
         case "refused":
             return `refused:${outcome.reason}`;
-        case "fetch-failed":
         case "error":
             return `${outcome.status}:${outcome.reason}`;
         default:
@@ -78,10 +81,47 @@ const newsOf = (outcome: RepoFollowOutcome): string | undefined => {
     }
 };
 
+// What the rounds say in the log. An unreachable github.com failed every repo's fetch every round, and a flapping one
+// wrote a line per repo per flap (128 in a week): each repo's fetch backs off while it fails, its reason is said once per
+// outage and its recovery once (retry/failure-backoff.ts). Anything else worth saying is said when it changes.
+const createFollowReport = (logger: Logger) => {
+    const lastNews = new Map<string, string | undefined>();
+    const fetches = createFailureTracker({ backoff: { floorMs: TICK_MS, capMs: FETCH_BACKOFF_MAX_MS } });
+    return {
+        fetchDue: (repo: string): boolean => fetches.due(repo),
+        fetched: (repo: string): void => {
+            const recovered = fetches.succeeded(repo);
+            if (recovered !== undefined) {
+                logger.info({ repo, after: recovered.state, repeated: recovered.repeated }, "follow origin: the remote can be fetched again");
+            }
+        },
+        report: (repo: string, outcome: RepoFollowOutcome): void => {
+            if (moved(outcome)) {
+                logger.info({ repo, outcome }, "follow origin: main tree caught up with its remote");
+            }
+            if (outcome.status === "fetch-failed") {
+                const verdict = fetches.failed(repo, outcome.reason);
+                if (verdict.log) {
+                    logger.warn({ repo, outcome, retryAt: new Date(verdict.retryAt ?? Date.now()).toISOString() }, "follow origin: could not catch up with the remote");
+                }
+                return;
+            }
+            const news = newsOf(outcome);
+            if (news !== undefined && lastNews.get(repo) !== news) {
+                logger.warn({ repo, outcome }, "follow origin: could not catch up with the remote");
+            }
+            // A deferral is no news either way: the next round may still meet the same conflict.
+            if (outcome.status !== "deferred") {
+                lastNews.set(repo, news);
+            }
+        },
+    };
+};
+
 export const createOriginFollow = (deps: OriginFollowDeps): OriginFollow => {
     const git = deps.git ?? defaultGit;
     const fetch = deps.fetch ?? fetchTracked;
-    const lastNews = new Map<string, string | undefined>();
+    const told = createFollowReport(deps.logger);
 
     const followOne = async (repo: string): Promise<RepoFollowOutcome> => {
         const dir = join(deps.workspace.root, repo);
@@ -89,10 +129,14 @@ export const createOriginFollow = (deps: OriginFollowDeps): OriginFollow => {
         if (tracked === undefined) {
             return { status: "untracked" };
         }
+        if (!told.fetchDue(repo)) {
+            return { status: "deferred", why: "backoff" };
+        }
         const fetched = await fetch(dir, tracked.remote);
         if (!fetched.ok) {
             return { status: "fetch-failed", reason: fetched.reason };
         }
+        told.fetched(repo);
         // Read before queueing on the lock, so a repo with nothing new never waits behind a land.
         const { ahead, behind } = await upstreamOf(dir, tracked.branch, git);
         if (behind === 0) {
@@ -131,20 +175,6 @@ export const createOriginFollow = (deps: OriginFollowDeps): OriginFollow => {
         });
     };
 
-    const report = (repo: string, outcome: RepoFollowOutcome): void => {
-        if (moved(outcome)) {
-            deps.logger.info({ repo, outcome }, "follow origin: main tree caught up with its remote");
-        }
-        const news = newsOf(outcome);
-        if (news !== undefined && lastNews.get(repo) !== news) {
-            deps.logger.warn({ repo, outcome }, "follow origin: could not catch up with the remote");
-        }
-        // A deferral is no news either way: the next round may still meet the same conflict.
-        if (outcome.status !== "deferred") {
-            lastNews.set(repo, news);
-        }
-    };
-
     const pass = async (): Promise<readonly RepoFollow[]> => {
         if (!(await deps.enabled())) {
             return [];
@@ -160,7 +190,7 @@ export const createOriginFollow = (deps: OriginFollowDeps): OriginFollow => {
             }),
         );
         for (const { repo, outcome } of results) {
-            report(repo, outcome);
+            told.report(repo, outcome);
         }
         if (results.some(({ outcome }) => moved(outcome))) {
             // Pulled files are the owner's side of history, as a Pull press makes them.

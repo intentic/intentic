@@ -353,6 +353,39 @@ test("a refused REST read is logged with its status, never swallowed", async () 
     expect(warned).toEqual([expect.objectContaining({ status: 403 })]);
 });
 
+test("a token whose organisation refuses OAuth REST is asked once, not on every refresh, until the accounts change", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+    const asked: string[] = [];
+    const orgRefuses = Object.assign(
+        async (_url: RequestInfo | URL, init?: RequestInit) => {
+            asked.push(new Headers(init?.headers).get("authorization") ?? "");
+            return new Response(JSON.stringify({ error: { type: "permission_error", message: "OAuth authentication is currently not allowed for this organization." } }), {
+                status: 403,
+            });
+        },
+        { preconnect: fetch.preconnect },
+    );
+    const warned: unknown[] = [];
+    const catalog = createClaudeCatalog(storeOf("forbidden-org"), noContainerToken, dir, join(dir, "models.json"), async () => [], orgRefuses, {
+        warn: (payload: unknown) => {
+            warned.push(payload);
+        },
+    });
+    jest.useFakeTimers();
+    try {
+        await catalog.models();
+        jest.setSystemTime(Date.now() + 2 * MODELS_TTL_MS);
+        await catalog.models();
+        expect(asked).toEqual(["Bearer token-forbidden-org"]);
+        expect(warned).toEqual([expect.objectContaining({ status: 403, retry: "when this credential changes" })]);
+        catalog.forget();
+        await catalog.models();
+        expect(asked).toHaveLength(2);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
 test("a failed CLI discovery is logged with its error, since every versioned row loses its efforts without it", async () => {
     const warned: unknown[] = [];
     const dir = await mkdtemp(join(tmpdir(), "claude-models-"));

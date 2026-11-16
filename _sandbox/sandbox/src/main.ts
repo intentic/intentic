@@ -162,6 +162,8 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     attempt.stage = "Building the services";
     const services = createServices(config, logger);
     attempt.services = services;
+    // From here a stall line names the perf spans across it, which only the services track.
+    loopWatchdog.attribute(services.perf);
     // What composing started on its own clock; registered first, so it stops last, after everything built on it.
     for (const teardown of servicesTeardown(services)) {
         shutdown.push(teardown);

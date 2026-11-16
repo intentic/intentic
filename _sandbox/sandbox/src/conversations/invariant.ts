@@ -7,6 +7,7 @@ import { isIsolated } from "./registry/agents-store.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";
 import { type StrayStanding, strayStandings } from "./worktrees/stray-work.js";
 import { discoverRepos, ROOT_REPO } from "../workspace/layout/repo-discovery.js";
+import { mapPool } from "@intentic/base/async";
 
 // Two independent records of whether a conversation is running (the run each actor holds, the conversation actors'
 // own phase) that must agree, checked both ways: a live run on an idle card, and a running phase with no live run
@@ -15,6 +16,8 @@ import { discoverRepos, ROOT_REPO } from "../workspace/layout/repo-discovery.js"
 
 // Long enough that no ordinary begin is still in flight; short enough to catch a stuck card within one sweep.
 const REGISTRY_GRACE_MS = 10_000;
+// Conversations whose checkouts the stray-work check reads at once.
+const STRAY_READS_AT_ONCE = 8;
 
 export interface FleetRegistryDeps {
     readonly agents: AgentsRegistry;
@@ -70,19 +73,24 @@ export const checks = ({
         name: "stray-work-reaches-its-own-branch",
         on: ["turn-settled", "sweep"],
         run: async ({ fail }) => {
-            const stranded: string[] = [];
-            for (const id of agents.ids()) {
+            const ids = agents.ids();
+            const found = new Map<string, string[]>();
+            // A few conversations at a time: one after another, the archive's thousands of checkouts outlasted the
+            // check's five seconds on a busy disk and the check failed to run (35 times in a week).
+            await mapPool(ids, STRAY_READS_AT_ONCE, async (id) => {
                 const entry = agents.entry(id);
                 // Non-isolated conversations run in the owner's own tree and have no branch of their own to stand on.
                 if (entry === undefined || !isIsolated(entry)) {
-                    continue;
+                    return;
                 }
-                for (const { repo, branch, carried } of await strays(id, entry.placement.repos)) {
-                    if (!carried) {
-                        stranded.push(`${id}/${repo} on ${branch ?? "a detached HEAD"}`);
-                    }
-                }
-            }
+                const off = (await strays(id, entry.placement.repos)).filter(({ carried }) => !carried);
+                found.set(
+                    id,
+                    off.map(({ repo, branch }) => `${id}/${repo} on ${branch ?? "a detached HEAD"}`),
+                );
+            });
+            // In the registry's order, however the reads finished.
+            const stranded = ids.flatMap((id) => found.get(id) ?? []);
             if (stranded.length > 0) {
                 fail(
                     `${stranded.length} checkout(s) stand off their conversation's own branch with commits the turn's carry could not copy onto agent/<id>, which review and land read: ${stranded.join(", ")}`,

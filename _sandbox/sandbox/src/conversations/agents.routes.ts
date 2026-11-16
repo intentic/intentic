@@ -10,6 +10,7 @@ import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog"
 import { indexOfTerm, searchTermOf } from "@intentic/sandbox-contract/schemas/agent-search";
 import { newRowId } from "@intentic/sandbox-contract/ids/row-ids";
 import { implement, ORPCError } from "@orpc/server";
+import { archivedCards } from "./archived-cards.js";
 import { withBaseText } from "../agent/prompt/prompt-disclosure.js";
 import { opt } from "../opt.js";
 import { transcriptPageAnswer } from "./transcript-page-answer.js";
@@ -133,8 +134,8 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Off `list` by construction, pulled on demand since /events never carries it; newest-archived first
         // (registry.listArchived).
-        archived: i.archived.handler(({ context }) => ({
-            agents: services.agents.listArchived().flatMap((agent) => framedSummary(context.identity, agent) ?? []),
+        archived: i.archived.handler(async ({ context }) => ({
+            agents: await archivedCards(services.agents, context.identity),
             rev: services.agents.revision(),
         })),
         // Answers over the live roster and the archive, since the board hides finished/archived agents from the live

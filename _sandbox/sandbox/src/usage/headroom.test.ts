@@ -368,9 +368,9 @@ test("any failed re-read is marked on the snapshot with the provider's words, on
         expect(recorded["gemini:g.json"]?.unread?.since).toBe(NOW);
         expect(announced.toSorted()).toEqual(["codex:c.json:the provider gave no reading", "gemini:g.json:Verify your account to continue."]);
 
-        // A reading that lands is the only thing that clears it.
+        // A reading that lands is the only thing that clears it (asked for by someone watching, past the failure's backoff).
         google = WINDOWS;
-        await service.refresh({ maxAgeMs: 0 });
+        await service.refresh({ maxAgeMs: 0, watched: true });
         expect(recorded["gemini:g.json"]).toEqual({ windows: [...WINDOWS.windows], measuredAt: NOW + FRESH_MS });
         expect(announced.at(-1)).toBe("gemini:g.json:read");
     } finally {
@@ -395,7 +395,7 @@ test("a rate-limit park is marked on the snapshot too, so no screen has to learn
 
 // An organisation refusing OAuth, then the rate limit that answer earns: the reason changed on every retry, so both
 // lines were written for days.
-test("an account flapping between two refusals writes each one once an hour, and again after a read succeeds", async () => {
+test("an account flapping between two refusals writes each one once per outage, and its recovery once", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(NOW);
     try {
@@ -409,9 +409,46 @@ test("an account flapping between two refusals writes each one once an hour, and
         const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [claude], logger });
         for (let pass = 0; pass < 6; pass += 1) {
             jest.setSystemTime(NOW + pass * 10 * 60_000);
+            // Watched, so every pass reads past the backoff and only the log's own rule is under test.
+            await service.refresh({ maxAgeMs: 0, watched: true });
+        }
+        // The last refusal came back within the hour after the reading: the same outage, already said.
+        expect(lines.map((line) => line.reason ?? line.message)).toEqual([
+            "OAuth is not allowed",
+            "rate-limited",
+            "headroom: this account's plan limits can be read again",
+        ]);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("a failing account's background reads back off, doubling, while a watched re-measure still reads it", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
+    try {
+        const { store } = memoryStore({ a: { windows: [...WINDOWS.windows], measuredAt: 0 } });
+        let reads = 0;
+        const { source: codex } = source([
+            {
+                key: "a",
+                provider: "codex",
+                answer: async () => {
+                    reads += 1;
+                    return { windows: [], failure: "the read failed" };
+                },
+            },
+        ]);
+        const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [codex], logger: pino({ level: "silent" }) });
+        // A pass every 30 seconds for ten minutes: the first read, then one per doubled wait, not twenty.
+        for (let pass = 0; pass < 20; pass += 1) {
+            jest.setSystemTime(NOW + pass * 30_000);
             await service.refresh({ maxAgeMs: 0 });
         }
-        expect(lines.map((line) => line.reason)).toEqual(["OAuth is not allowed", "rate-limited", "OAuth is not allowed"]);
+        expect(reads).toBeLessThanOrEqual(4);
+        const before = reads;
+        await service.refresh({ maxAgeMs: 0, watched: true });
+        expect(reads).toBe(before + 1);
     } finally {
         jest.useRealTimers();
     }

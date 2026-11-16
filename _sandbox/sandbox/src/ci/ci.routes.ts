@@ -12,7 +12,7 @@ import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
 import { ciFailureEvidence, jointEvidence, runOf, startCiFix, type WorkflowEvidence } from "./ci-fix.js";
 import { fixPressed, forgetFailure, mainFailures, streakFixerFor, streakRunsBeside } from "./main-fixer.js";
 import { workflowOf } from "./main-streak.js";
-import { createCiFailureLog } from "./logs/ci-failure-log.js";
+import { ciInputOf, createCiFailureLog } from "./logs/ci-failure-log.js";
 import { ownerSteps } from "./owner-steps.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
@@ -75,6 +75,12 @@ const sharedRunLists = (
         if (held !== undefined && Date.now() - held.begun <= cache().ttlMs) {
             return held.runs;
         }
+        // A repo whose last lists failed waits out its backoff, and one refused for its token or mapping waits for either
+        // to change, rather than asking the forge again on every board read.
+        const input = ciInputOf(project);
+        if (!backfill.due(project.repo, input)) {
+            return Promise.resolve([]);
+        }
         const flight = {
             begun: Date.now(),
             runs: ciClientFor(project.account.provider, fetchFn)
@@ -85,7 +91,7 @@ const sharedRunLists = (
                         return runs;
                     },
                     (error: unknown) => {
-                        backfill.failed(project.repo, error);
+                        backfill.failed(project.repo, error, input);
                         return [];
                     },
                 )

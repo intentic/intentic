@@ -34,7 +34,7 @@ test("another repo's failure is its own line", () => {
     expect(lines.map((line) => line["repo"])).toEqual(["web", "api"]);
 });
 
-test("a long outage repeats hourly with the count it folded, and recovery is one line", () => {
+test("a long outage stays one line, and recovery is one line with the count it folded", () => {
     const { logger, lines } = capturing();
     const clock = { at: 0 };
     const log = createCiFailureLog(logger, "ci: poll failed", "ci: poll works again", () => clock.at);
@@ -43,12 +43,26 @@ test("a long outage repeats hourly with the count it folded, and recovery is one
     log.failed("web", refused());
     clock.at += 60 * 60_000;
     log.failed("web", refused());
+    expect(lines).toHaveLength(1);
+    log.succeeded("web");
+    log.succeeded("web");
     expect(lines).toHaveLength(2);
-    expect(lines[1]).toMatchObject({ repeated: 1 });
-    log.succeeded("web");
-    log.succeeded("web");
-    expect(lines).toHaveLength(3);
-    expect(lines[2]).toMatchObject({ level: 30, repo: "web", after: "401", message: "ci: poll works again" });
+    expect(lines[1]).toMatchObject({ level: 30, repo: "web", after: "401", repeated: 2, message: "ci: poll works again" });
+});
+
+test("a loop that asks first backs off a network failure, and a 401 waits for the token to change", async () => {
+    const { logger, lines } = capturing();
+    const clock = { at: 0 };
+    const log = createCiFailureLog(logger, "ci: runs backfill failed", "ci: runs backfill works again", () => clock.at);
+    log.failed("registry", await refusedFetchError(), "t1");
+    expect(log.due("registry", "t1")).toBe(false);
+    clock.at += 2 * 60 * 60_000;
+    expect(log.due("registry", "t1")).toBe(true);
+    log.failed("registry", refused(), "t1");
+    clock.at += 24 * 60 * 60_000;
+    expect(log.due("registry", "t1")).toBe(false);
+    expect(log.due("registry", "t2")).toBe(true);
+    expect(lines[1]).toMatchObject({ status: 401, retryAt: "when the token or the mapping changes" });
 });
 
 test("a network failure or a spent limit is said in words; only an unexpected error keeps its stack", async () => {

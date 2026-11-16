@@ -6,6 +6,7 @@ import type { Logger } from "pino";
 import type { AccountUsageStore } from "./account-usage.js";
 import type { ParkedRead, UsageParkStore } from "./usage-parks.js";
 import { sweptReadings } from "./drift/continuity.js";
+import { createFailureTracker } from "../retry/failure-backoff.js";
 
 // One headroom service for every provider: readings are triggered by what happened (a turn settling, a refusal, a
 // screen opening, a re-measure press) via `refresh(scope, maxAge)`, not on a timer, with an idle floor (`start`) for a
@@ -97,8 +98,9 @@ export const FRESH_MS = 60_000;
 const IDLE_MS = 15 * 60_000;
 // Bounds parallel reads so a refresh across dozens of accounts doesn't self-inflict a rate limit.
 const CONCURRENCY = 4;
-// How often one account's one reason for an unread reading may be written while it stands.
-const FAILURE_LOG_EVERY_MS = 60 * 60_000;
+// Waits between background reads of an account whose reads keep failing: doubling from a minute
+// to an hour. A read someone is watching is not held to it.
+const FAILURE_BACKOFF = { floorMs: 60_000, capMs: 60 * 60_000 };
 
 // Reads what one sweep found due, CONCURRENCY at a time. The count of reads `begun` per target is noted as the sweep
 // decides, and a read another sweep began after that moment began after this sweep's caller asked: its reading is this
@@ -193,41 +195,39 @@ export const createHeadroomService = (deps: {
     // path for every failure, known or not: a screen that dates readings by age reads this one fact instead of keeping
     // its own list of the ways a number can stop moving, which is the list that went stale each time a provider found a
     // new way to say no. Logged and announced when the reason changes, not on every retry.
-    const failedReasons = new Map<string, string>();
-    // When each account's each reason was last written, keyed `${account}\n${reason}`. One account flapping between two
-    // refusals (an organisation refusing OAuth, then the rate limit that answer earns) changed reason on every retry and
-    // wrote both for days; each reason is written once an hour per account, and again after a read succeeds.
-    const loggedAt = new Map<string, number>();
-    const succeeded = (account: string): void => {
-        failedReasons.delete(account);
-        for (const key of loggedAt.keys()) {
-            if (key.startsWith(`${account}\n`)) {
-                loggedAt.delete(key);
-            }
+    // One account flapping between two refusals (an organisation refusing OAuth, then the rate limit that answer earns)
+    // changed reason on every retry and wrote both for days, 119 lines in a week: each reason is written once per outage
+    // and the recovery once, and the account's background reads back off while they fail (retry/failure-backoff.ts).
+    const failures = createFailureTracker({ backoff: FAILURE_BACKOFF });
+    // Each account's reason as last announced: a screen hears the snapshot again when the reason changes, not per retry.
+    const announcedReason = new Map<string, string>();
+    const succeeded = (target: HeadroomTarget): void => {
+        announcedReason.delete(target.key);
+        const recovered = failures.succeeded(target.key);
+        if (recovered !== undefined) {
+            deps.logger.info(
+                { account: target.key, provider: target.provider, after: recovered.state, repeated: recovered.repeated },
+                "headroom: this account's plan limits can be read again",
+            );
         }
     };
     const readFailed = async (target: HeadroomTarget, reason: string, parkedUntil?: number): Promise<void> => {
-        const now = Date.now();
-        const marked = await deps.store.markUnread(target.key, { since: now, reason });
-        if (failedReasons.get(target.key) === reason) {
-            return;
-        }
-        failedReasons.set(target.key, reason);
-        const logKey = `${target.key}\n${reason}`;
-        if (now - (loggedAt.get(logKey) ?? Number.NEGATIVE_INFINITY) >= FAILURE_LOG_EVERY_MS) {
-            loggedAt.set(logKey, now);
+        const marked = await deps.store.markUnread(target.key, { since: Date.now(), reason });
+        const verdict = failures.failed(target.key, reason);
+        if (verdict.log) {
             deps.logger.warn(
                 {
                     account: target.key,
                     provider: target.provider,
                     reason,
-                    ...(parkedUntil === undefined ? {} : { heldOffUntil: new Date(parkedUntil).toISOString() }),
+                    heldOffUntil: new Date(Math.max(parkedUntil ?? 0, verdict.retryAt ?? 0)).toISOString(),
                     lastReadAt: marked === undefined ? undefined : new Date(marked.measuredAt).toISOString(),
                 },
                 "headroom: this account's plan limits could not be re-read, its last reading stands until a read succeeds",
             );
         }
-        if (marked !== undefined) {
+        if (marked !== undefined && announcedReason.get(target.key) !== reason) {
+            announcedReason.set(target.key, reason);
             announce(target.provider, target.key, marked);
         }
     };
@@ -248,7 +248,7 @@ export const createHeadroomService = (deps: {
                 }
                 // A failed read leaves the last snapshot standing; an empty list would misread as "no limits".
                 if (reading.windows.length > 0) {
-                    succeeded(target.key);
+                    succeeded(target);
                     await record(target.provider, target.key, await swept(target, reading.windows), target.whole === true);
                     return;
                 }
@@ -290,6 +290,7 @@ export const createHeadroomService = (deps: {
             (target) =>
                 inScope(target, options.scope) &&
                 (blockedUntil.get(target.key)?.until ?? 0) <= now &&
+                (options.watched === true || failures.due(target.key)) &&
                 // `>=`, so a bound of zero reads it regardless of the clock, as the caller meant.
                 now - Math.max(stored[target.key]?.measuredAt ?? 0, attemptedAt.get(target.key) ?? 0) >= bound(target),
         );
@@ -323,7 +324,8 @@ export const createHeadroomService = (deps: {
         record,
         clear: async (provider, account) => {
             attemptedAt.delete(account);
-            succeeded(account);
+            failures.forget(account);
+            announcedReason.delete(account);
             blockedUntil.delete(account);
             await Promise.all([deps.store.clear(account), deps.parks.clear(account)]);
             announce(provider, account, undefined);

@@ -64,7 +64,13 @@ pretty-prints to stdout instead of writing `daemon.log`.
   over the same files and the spend ledger: `errors`, `slow`, `turns`, `resources`, `restarts` (each boot and why the
   run before it ended) and `timeline` (one conversation's log lines, activity and turns in time order). Each answer says
   which file and window it searched and how far back the file reaches.
-- Invariant violations and event-loop stalls (`system/resources/loop-watchdog.ts`) are written to `daemon.log`.
+- Invariant violations and event-loop stalls (`system/resources/loop/loop-watchdog.ts`) are written to `daemon.log`. A
+  stall line's `spans` names the perf spans that ran across the stall or ended inside it, longest first; one with
+  `running: false` ended inside the stall and is the likeliest culprit of an in-process one.
+- A loop that keeps failing the same way (the CI backfill and webhook reconcile, follow-origin's fetch, headroom's plan
+  reads, the Claude model catalog, an invariant check that cannot run) writes its first failure and each new reason once
+  per outage, then nothing until it works again, which is one line; meanwhile it backs off, and a refusal no retry can
+  change waits for its input (a token, a mapping) to change (`retry/failure-backoff.ts`).
 
 ## State on disk
 

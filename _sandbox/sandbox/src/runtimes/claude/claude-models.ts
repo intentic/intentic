@@ -14,6 +14,9 @@ import { type ClaudeStore, ensureFreshToken } from "../../agent/providers/claude
 import { containerKeyEnv } from "../../seams/sealed-env.js";
 import { recordProbedCommands } from "../../agent/providers/agent-commands.js";
 import { opt } from "../../opt.js";
+import { createHash } from "node:crypto";
+import { isOrgDisabledText } from "../../engines/failure-sentences.js";
+import { createFailureTracker, type FailureTracker } from "../../retry/failure-backoff.js";
 
 // Claude's model catalog merges the CLI's tier aliases (effort levels and badges, no versioned id) with Anthropic's
 // REST /v1/models (versioned ids and names); only versioned rows are offered, aliases just lend capabilities and are
@@ -120,9 +123,36 @@ const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string)
     }
 };
 
+// Which token a refusal belongs to, without holding the token: a refreshed or replaced token is a new key, asked afresh.
+const tokenKey = (oauthToken: string): string => createHash("sha256").update(oauthToken).digest("hex").slice(0, 16);
+
+// What each token's REST reads last failed with (retry/failure-backoff.ts). One account whose organisation forbids OAuth
+// REST was asked on every refresh, five minutes apart, and wrote its 403 105 times in a week: that refusal is permanent
+// for the token, so the token is not asked again until it changes; any other failure is written once per outage.
+// What a failed read's line carries besides its message.
+interface RestFailureFields {
+    readonly status?: number;
+    readonly error?: string;
+    readonly body?: string;
+    readonly issues?: readonly z.core.$ZodIssue[];
+}
+
+interface RestRead {
+    readonly fetchImpl: typeof fetch;
+    readonly logger: Pick<Logger, "warn">;
+    readonly failures: FailureTracker;
+}
+
 // Versioned catalog from Anthropic's REST /v1/models under one OAuth token; display_name rides straight into label.
 // undefined is a refusal or outage, distinct from an empty list, so the caller can try the next credential.
-const fetchApiModels = async (oauthToken: string, fetchImpl: typeof fetch, logger: Pick<Logger, "warn">): Promise<Model[] | undefined> => {
+const fetchApiModels = async (oauthToken: string, { fetchImpl, logger, failures }: RestRead): Promise<Model[] | undefined> => {
+    const key = tokenKey(oauthToken);
+    const failed = (state: string, fields: RestFailureFields, message: string, permanent = false): undefined => {
+        if (failures.failed(key, state, { permanent }).log) {
+            logger.warn({ ...fields, retry: permanent ? "when this credential changes" : undefined }, message);
+        }
+        return undefined;
+    };
     const response = await fetchImpl(ANTHROPIC_MODELS_URL, {
         headers: {
             authorization: `Bearer ${oauthToken}`,
@@ -131,24 +161,22 @@ const fetchApiModels = async (oauthToken: string, fetchImpl: typeof fetch, logge
         },
         // A stalled catalog counts as unreachable, so the next credential (then the persisted catalog) is tried.
         signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
-    }).catch((error: unknown) => {
-        logger.warn({ error: errorMessage(error) }, "claude models: REST catalog unreachable");
-        return undefined;
-    });
+    }).catch((error: unknown) => failed(`unreachable:${errorMessage(error)}`, { error: errorMessage(error) }, "claude models: REST catalog unreachable"));
     if (response === undefined) {
         return undefined;
     }
     if (!response.ok) {
         const body = await response.text().catch(() => "");
-        logger.warn({ status: response.status, body: body.slice(0, 300) }, "claude models: REST catalog refused");
-        return undefined;
+        // Only this catalog read stops asking; the seat check and a turn's own refusal read the same words their own way.
+        const permanent = response.status === 403 && isOrgDisabledText(body);
+        return failed(`${response.status}`, { status: response.status, body: body.slice(0, 300) }, "claude models: REST catalog refused", permanent);
     }
     // An unreadable 200 is a refusal, not an empty catalog: filed as live, [] would shrink the picker to the CLI's rows.
     const catalog = RestCatalogSchema.safeParse(await response.json().catch(() => undefined));
     if (!catalog.success) {
-        logger.warn({ status: response.status, issues: catalog.error.issues.slice(0, 3) }, "claude models: REST catalog unreadable");
-        return undefined;
+        return failed("unreadable", { status: response.status, issues: catalog.error.issues.slice(0, 3) }, "claude models: REST catalog unreadable");
     }
+    failures.succeeded(key);
     return catalog.data.data.map((model) => ({ id: model.id, label: model.display_name ?? humanizeModelId(model.id) }));
 };
 
@@ -156,10 +184,14 @@ const fetchApiModels = async (oauthToken: string, fetchImpl: typeof fetch, logge
 // (oauth_not_allowed_for_organization) or be rate-limited while another answers; the catalog is the same for every
 // subscription, so any 200 is the catalog. undefined when no token answered, including when there was none to ask
 // with: a sandbox before its first sign-in has no REST catalog either, and the CLI's own list is not one (it names a
-// version for Fable alone), so taking it as the whole answer showed a new sandbox one Claude model.
-const discoverApiModels = async (tokens: readonly string[], fetchImpl: typeof fetch, logger: Pick<Logger, "warn">): Promise<Model[] | undefined> => {
+// version for Fable alone), so taking it as the whole answer showed a new sandbox one Claude model. A token its
+// organisation refused is skipped until it changes.
+const discoverApiModels = async (tokens: readonly string[], read: RestRead): Promise<Model[] | undefined> => {
     for (const token of tokens) {
-        const models = await fetchApiModels(token, fetchImpl, logger);
+        if (!read.failures.due(tokenKey(token))) {
+            continue;
+        }
+        const models = await fetchApiModels(token, read);
         if (models !== undefined) {
             return models;
         }
@@ -221,6 +253,8 @@ export const createClaudeCatalog = (
         return tokens;
     };
 
+    let rest: RestRead = { fetchImpl, logger, failures: createFailureTracker() };
+
     // Parsed through the schema, not trusted; an older or truncated record degrades to the floor, not a half-row.
     const store = cacheFile<Model[]>(persistPath, { parse: (raw) => z.array(ModelSchema).safeParse(raw).data?.filter(namesVersion), fallback: () => [] });
 
@@ -252,7 +286,7 @@ export const createClaudeCatalog = (
         // Both sources run concurrently; either alone still yields a usable list.
         discover: async (accountId?: string) => {
             const tokens = await oauthTokens(accountId);
-            const [aliases, versioned] = await Promise.all([aliasesFor(tokens[0]), discoverApiModels(tokens, fetchImpl, logger)]);
+            const [aliases, versioned] = await Promise.all([aliasesFor(tokens[0]), discoverApiModels(tokens, rest)]);
             if (versioned !== undefined) {
                 return mergeCatalogs(aliases, versioned);
             }
@@ -273,6 +307,8 @@ export const createClaudeCatalog = (
         models: catalog.models,
         forget: () => {
             cliAliases = undefined;
+            // An account connected or disconnected: every token is asked afresh.
+            rest = { fetchImpl, logger, failures: createFailureTracker() };
             catalog.forget();
         },
     };

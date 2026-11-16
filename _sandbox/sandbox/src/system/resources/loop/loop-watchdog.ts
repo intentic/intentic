@@ -1,10 +1,14 @@
 import { readdirSync, readFileSync, readlinkSync } from "node:fs";
 import type { Logger } from "pino";
 import { readPressure } from "../cgroup.js";
+import type { PerfTracker, SpanActivity } from "../perf.js";
 
 // Detects why the event loop stalled: in-process (CPU burns, PSI quiet), environmental (PSI screams, no daemon fault),
 // or a blocking DNS resolver (PSI and CPU both quiet, dnsInFlight nonzero); each needs a different fix. Logs one
-// snapshot per stall at recovery, rate-limited per window since thrash arrives in bursts.
+// snapshot per stall at recovery, rate-limited per window since thrash arrives in bursts. Once the services exist it also
+// names what the daemon was doing (`attribute`): the perf spans running across the stall or ending inside it, longest
+// first (perf.ts `during`). A span that ended inside the stall is the likeliest culprit of an in-process one, since the
+// blocking work is usually the last thing it did; one still running only says the stall caught it waiting.
 
 const TICK_MS = 500;
 // A loop this daemon runs (timers, SSE heartbeats, SDK stream parsing) is never legitimately away this long.
@@ -59,13 +63,27 @@ const dnsQueriesInFlight = (): number | undefined => {
 
 export interface LoopWatchdog {
     readonly stop: () => void;
+    // Names the perf spans across each stall from now on; the watchdog starts before the services that track them.
+    readonly attribute: (perf: Pick<PerfTracker, "during">) => void;
 }
+
+// How many spans a stall line names.
+const SPANS_NAMED = 5;
+
+// One span as a stall line carries it: op, how long, whether it was still running, and the fields it was tracked with.
+const spanSummary = (span: SpanActivity, now: number) => ({
+    op: span.op,
+    ms: (span.endedAt ?? now) - span.startedAt,
+    running: span.endedAt === undefined,
+    ...span.fields,
+});
 
 export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
     let last = process.hrtime.bigint();
     let lastCpu = process.cpuUsage();
     let suppressedSince: number | undefined;
     let suppressedCount = 0;
+    let perf: Pick<PerfTracker, "during"> | undefined;
     const timer = setInterval(() => {
         const now = process.hrtime.bigint();
         const lagMs = Number(now - last) / 1e6 - TICK_MS;
@@ -97,11 +115,14 @@ export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
             rssMb: Math.round(memory.rss / 1048576),
             ...(suppressedCount > 0 ? { earlierStallsSuppressed: suppressedCount } : {}),
         };
+        const at = Date.now();
+        // From when the loop last ticked: what ran across the stall, and what ended inside it.
+        const spans = perf?.during(at - Math.round(lagMs) - TICK_MS, SPANS_NAMED).map((span) => spanSummary(span, at));
         // Taken at recovery: thrash that stalled the loop is usually still measurable the instant after.
         void readPressure().then((psi) =>
             logger.warn(
-                { ...stall, psi },
-                "event loop stalled: high PSI means the sandbox (builds/tests/swap), dnsInFlight means a blocking resolver lookup, quiet both means this process",
+                { ...stall, psi, spans },
+                "event loop stalled: high PSI means the sandbox (builds/tests/swap), dnsInFlight means a blocking resolver lookup, quiet both means this process; spans names what the daemon was doing, a span that ended inside the stall being the likeliest culprit",
             ),
         );
         suppressedSince = Date.now();
@@ -109,5 +130,10 @@ export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
     }, TICK_MS);
     // The watchdog must never be what keeps the daemon alive.
     timer.unref();
-    return { stop: () => clearInterval(timer) };
+    return {
+        stop: () => clearInterval(timer),
+        attribute: (tracker) => {
+            perf = tracker;
+        },
+    };
 };

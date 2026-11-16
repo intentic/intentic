@@ -174,3 +174,28 @@ test("every span, slow or not, reaches the rollups, and stopping writes the wind
         ["http.request", "GET /agents/:id/diff", 1, 40, 40],
     ]);
 });
+
+// The stall watchdog names what the daemon was doing: what still runs, and what ended inside the window it asks about.
+test("during names the spans running now and those that ended since, longest first", async () => {
+    const tracker = createPerfTracker(capturing().logger, capturing().logger);
+    const before = Date.now();
+    tracker.record("git.scan", 50, { repo: "old" });
+    const since = Date.now() + 1;
+    let release = (): void => {};
+    const running = tracker.track("http.request", { path: "/agents/archived" }, () => new Promise<void>((resolve) => (release = resolve)));
+    jest.setSystemTime(since + 10);
+    tracker.record("git.run", 2_000, { repo: "intentic" });
+    tracker.record("events.frame", 5, {});
+
+    expect(tracker.during(since).map((span) => [span.op, span.endedAt === undefined])).toEqual([
+        ["git.run", false],
+        ["http.request", true],
+        ["events.frame", false],
+    ]);
+    expect(tracker.during(before, 1)).toHaveLength(1);
+    release();
+    await running;
+    jest.useRealTimers();
+    expect(tracker.during(since).some((span) => span.endedAt === undefined)).toBe(false);
+    await tracker.stop();
+});
