@@ -233,13 +233,14 @@ export const codeBlockHtml = (block: CodeBlock, index: number, colour: boolean):
     const copied = block.code === copiedCode;
     const copyLabel = escapeHtml(named === `` ? t(`ui.code.copyCode`) : t(`ui.code.copyLangCode`, { lang: named }));
     return (
+        // The track spans the block's height so the actions inside it can stick while a tall block scrolls past.
         `<div class="ui-code md-code">` +
-        `<div class="md-code-actions">${
+        `<div class="md-code-track"><div class="md-code-actions">${
             lang === `` ? `` : `<span class="md-code-lang">${lang}</span>`
         }<button type="button" class="md-code-copy${copied ? ` md-code-copied` : ``}" aria-label="${copyLabel}">${escapeHtml(
             copied ? t(`ui.action.copied`) : t(`ui.action.copy`),
         )}</button>` +
-        `</div>${body}</div>`
+        `</div></div>${body}</div>`
     );
 };
 

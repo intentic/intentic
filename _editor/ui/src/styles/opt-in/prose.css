@@ -345,11 +345,18 @@
     /* Fallback carried because this class sits on the block itself, not under a .md-prose selector —. */
     margin: var(--prose-gap, 0.85em) 0;
 }
-.md-code-actions {
+/* The actions ride a track as tall as the block, sticky inside it: a tall block scrolled past keeps its Copy in
+   view until the block's own end, where the track stops it. The track lets clicks through to the code beneath. */
+.md-code-track {
     position: absolute;
-    top: 0.3rem;
-    right: 0.3rem;
+    inset: 0.3rem 0.3rem 0.3rem auto;
     z-index: 1;
+    pointer-events: none;
+}
+.md-code-actions {
+    position: sticky;
+    top: 0.3rem;
+    pointer-events: auto;
     display: flex;
     align-items: center;
     gap: 0.4rem;
