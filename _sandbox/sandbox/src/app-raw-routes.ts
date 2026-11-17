@@ -34,7 +34,6 @@ import { deviceArtifactRawRoutes } from "./hosts/device-artifacts.routes.js";
 import { deviceDoorRawRoutes } from "./hosts/device-door.routes.js";
 import { deviceFileRawRoutes } from "./hosts/device-files.routes.js";
 import { deviceRunRawRoutes } from "./hosts/runs/device-runs.routes.js";
-import { enrollRawRoutes } from "./inventory/enroll.routes.js";
 import { accountSendRawRoutes } from "./issues/account-send.routes.js";
 import { accountRawRoutes } from "./issues/account.routes.js";
 import { intakeRawRoutes } from "./issues/intake.routes.js";
@@ -93,7 +92,6 @@ export const appRawRoutes = (services: Services) =>
         deviceDoorRawRoutes(services),
         deviceFileRawRoutes(services),
         deviceRunRawRoutes(services),
-        enrollRawRoutes(services),
         accountSendRawRoutes(services),
         accountRawRoutes(services),
         intakeRawRoutes(services),

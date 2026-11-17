@@ -1,6 +1,6 @@
 # The app plane
 
-The app plane is the product the owner looks at and drives: the editor, the sandbox daemons it talks to, and the thin platform between them, with the deployment engine outside it.
+The app plane is the product the owner looks at and drives: the editor, the sandbox daemons it talks to, and the thin platform between them.
 
 ```mermaid
 flowchart LR
@@ -13,8 +13,6 @@ flowchart LR
     editor -->|"sandbox contract"| daemon
     editor --> platform
     ext --- daemon
-    daemon -->|"runs like any tool"| deploy["Deployment engine<br/>intentic CLI"]
-    deploy --> infra["The owner's own<br/>infrastructure"]
 ```
 
 ## What is in it
@@ -27,7 +25,6 @@ flowchart LR
 
 ## What is not
 
-- **The deployment engine** ([`_deploy`](../../_deploy)) is a tool bundled into the sandbox image, which an agent or the daemon runs the way it runs a test runner. The infrastructure it creates belongs to the owner and never becomes part of the platform or the sandbox. See [deploy-engine.md](deploy-engine.md). Its own `control` and `application` planes (`Plane` in [`needs.ts`](../../_deploy/state-resolver/src/intent/needs.ts)) describe the owner's infrastructure, not intentic.
 - **The website** ([`_site`](../../_site)) is the public site and its playable demo, which renders the editor against fixtures.
 - **Plumbing** ([`_tools`](../../_tools)): checks, test harnesses and release scripts.
 

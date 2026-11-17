@@ -57,9 +57,6 @@ const connected = computed(() => props.instance.status.state === `active`);
 // An ACP agent with a loginCommand signs in interactively: the daemon starts it and the terminal panel opens on it.
 const agentSignIn = computed(() => props.entry.kind === `agent` && props.instance.config[`loginCommand`] !== undefined);
 
-// DevOps is the ground other tiles stand on; removing it isn't a row-level action.
-const removable = computed(() => props.entry.kind !== `devops`);
-
 // What the card's manifest offers to do next on the service's own site (Discord's invite), once the connection holds
 // what the link is built from.
 const links = computed(() => connectedLinks(props.entry, props.instance.config));
@@ -127,7 +124,7 @@ const items = computed<MenuItem[]>(() => {
         ...(kindActions.length > 0 ? [{ separator: true }] : []),
         { label: t(`ui.action.settings`), icon: `cog`, command: () => emit(`edit`) },
         { label: t(`ui.action.renameEllipsis`), icon: `pencil`, command: () => emit(`rename`) },
-        ...(removable.value ? [{ label: t(`ui.action.remove`), icon: `trash`, danger: true, command: () => emit(`remove`) }] : []),
+        { label: t(`ui.action.remove`), icon: `trash`, danger: true, command: () => emit(`remove`) },
     ];
 });
 </script>

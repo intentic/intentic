@@ -90,13 +90,6 @@ const DESCRIBE: Describers = {
         label: t(`capabilities.capabilityEffects.runsProcesses`, { names: effect.names.join(`, `) }, effect.names.length),
     }),
     mcp: () => ({ icon: `bolt`, label: t(`capabilities.capabilityEffects.registersMcpServerAgent`) }),
-    scaffold: (effect) => ({
-        icon: `sitemap`,
-        label:
-            effect.repos.length === 0
-                ? t(`capabilities.capabilityEffects.scaffoldsRepository`)
-                : t(`capabilities.capabilityEffects.scaffoldsRepos`, { repos: effect.repos.join(`, `) }, effect.repos.length),
-    }),
     "trusted-code": () => ({
         icon: `exclamation-triangle`,
         label: t(`capabilities.capabilityEffects.runsCodeInsideApp`),

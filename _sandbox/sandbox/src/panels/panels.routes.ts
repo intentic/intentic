@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { ARTIFACT_FILE, CONFIG_FILE, REPO_ROLES, type RepoRole } from "@intentic/scaffold";
 import { panelsContract } from "@intentic/sandbox-contract/contracts/panels.contract";
 import type { PanelLaunch, PanelSummary } from "@intentic/sandbox-contract/schemas/panels";
 import { previewUrl } from "@intentic/sandbox-contract/ids/hostnames";
@@ -21,7 +20,7 @@ import { sandboxTargetsAt } from "../workspace/layout/run-file.js";
 import { ROOT_REPO, repoDirOf } from "../workspace/layout/repo-discovery.js";
 
 // Per-repository panel routes. `list` reports each repo's runtime status and the content facts extensions detect on
-// (role, marker files, evidence, not identity); `start`/`stop` drive the repo's dev server, whose tmux session shows on
+// (marker files, evidence, not identity); `start`/`stop` drive the repo's dev server, whose tmux session shows on
 // GET /system/terminals. Panels authenticate to the daemon via the injected INTENTIC_PANEL_TOKEN.
 
 // Acceptance evidence: one user-story file per feature; a directory since the stories are the evidence.
@@ -77,8 +76,6 @@ const detectServers = async (
 
 // Facts computed once so the browser never N+1-scans /work; each extension reads its own presence here.
 const contentFacts = (dir: string) => ({
-    deployConfig: existsSync(join(dir, CONFIG_FILE)),
-    desiredState: existsSync(join(dir, ARTIFACT_FILE)),
     directoryUi: existsSync(join(dir, STATE_DIR, "ui", "index.html")),
     monorepo: existsSync(join(dir, "pnpm-workspace.yaml")) && existsSync(join(dir, "turbo.json")),
     tests: testRunnerOf(dir) !== undefined,
@@ -87,8 +84,6 @@ const contentFacts = (dir: string) => ({
 });
 
 const NO_CONTENT: ReturnType<typeof contentFacts> = {
-    deployConfig: false,
-    desiredState: false,
     directoryUi: false,
     monorepo: false,
     tests: false,
@@ -98,7 +93,6 @@ const NO_CONTENT: ReturnType<typeof contentFacts> = {
 
 // The summary's fields that apply only sometimes, each one there only when it does; optional on the wire.
 const presentFacts = (facts: {
-    readonly repo: string;
     readonly plan: RunPlan | undefined;
     readonly opened: readonly { readonly id: string; readonly title: string }[];
     readonly launch: PanelLaunch | undefined;
@@ -114,11 +108,6 @@ const presentFacts = (facts: {
     }
     if (facts.opened.length > 0) {
         present.windows = [...facts.opened];
-    }
-    // SAFETY: REPO_ROLES is the RepoRole tuple, so a name it includes is a RepoRole; widened only to ask about any string.
-    if ((REPO_ROLES as readonly string[]).includes(facts.repo)) {
-        // SAFETY: just checked to be one of REPO_ROLES.
-        present.role = facts.repo as RepoRole;
     }
     if (facts.port !== undefined) {
         present.port = facts.port;
@@ -183,7 +172,7 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps, { windows: readWi
                             // name a repository's folder, which the root has none of.
                             ...(repo === ROOT_REPO ? NO_CONTENT : contentFacts(dir)),
                         },
-                        presentFacts({ repo, plan, opened, launch, port, url }),
+                        presentFacts({ plan, opened, launch, port, url }),
                         // Its run.json's sandbox targets are its apps; said only when it has some.
                         sandboxTargetsAt(dir).length > 0 ? { sandboxTargets: true } : {},
                     );

@@ -272,14 +272,14 @@ test("environment hash, runtime directives, extra mounts and replayed env ride i
 test("the emitted command survives the values that broke line-based plumbing: a multi-line key", () => {
     // shellQuote's own cases live in quote.test.ts; this only checks the emitter passes words through it.
     const key = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----";
-    const command = sandboxRunCommand({ names, image: "i", baseImage: "i", env: [["HOST_SSH_KEY", key]] });
-    expect(command).toContain(`'HOST_SSH_KEY=${key}'`);
+    const command = sandboxRunCommand({ names, image: "i", baseImage: "i", env: [["PRIVATE_KEY", key]] });
+    expect(command).toContain(`'PRIVATE_KEY=${key}'`);
 });
 
 test("parseNulEnv keeps multi-line values whole and values containing '='", () => {
-    expect(parseNulEnv("A=1\0HOST_SSH_KEY=l1\nl2\0B=x=y\0")).toEqual([
+    expect(parseNulEnv("A=1\0PRIVATE_KEY=l1\nl2\0B=x=y\0")).toEqual([
         ["A", "1"],
-        ["HOST_SSH_KEY", "l1\nl2"],
+        ["PRIVATE_KEY", "l1\nl2"],
         ["B", "x=y"],
     ]);
 });

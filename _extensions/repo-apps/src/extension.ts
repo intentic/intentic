@@ -12,7 +12,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             surface: `directory`,
             detect: (repos) =>
                 repos.flatMap((repo): Activation[] => {
-                    if (repo.monorepo && !(repo.deployConfig || repo.role === `intent`)) {
+                    if (repo.monorepo) {
                         return [{ key: repo.repo, title: repo.repo, repo: repo.repo, props: { monorepo: true } }];
                     }
                     if (repo.tests) {
@@ -28,7 +28,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             surface: `directory`,
             detect: (repos) =>
                 repos
-                    .filter((repo) => repo.monorepo && !(repo.deployConfig || repo.role === `intent`))
+                    .filter((repo) => repo.monorepo)
                     .map((repo) => ({ key: repo.repo, title: repo.repo, repo: repo.repo })),
             view: async () => (await import(`./DependenciesView.vue`)).default,
         }),

@@ -7,7 +7,7 @@ import type { ListeningPort } from "../ports/port-scan.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, windowsByRepo } from "./panels.js";
 
-// A temp workspace: every repo is a dir with a .git (role and clone alike, discovery is .git-based). A repo
+// A temp workspace: every repo is a dir with a .git (discovery is .git-based). A repo
 // has a panel when a `dev` script lives at its operator/ (devScript) OR its root (rootDev); the rest of what Start can
 // run is run-plan.integration.test.ts's.
 const setup = (repos: { name: string; devScript?: boolean; operatorNoDev?: boolean; rootDev?: boolean }[]) => {
@@ -33,18 +33,18 @@ const setup = (repos: { name: string; devScript?: boolean; operatorNoDev?: boole
 const runnable = async (workspace: ReturnType<typeof setup>) =>
     (await discoverPanels(workspace)).map(({ repo, plan }) => ({ repo, hasPanel: plan !== undefined }));
 
-test("discovers role repos + extra clones, sorted, with hasPanel from operator/", async () => {
+test("discovers every repo, sorted, with hasPanel from operator/", async () => {
     const workspace = setup([
-        { name: "intent" },
-        { name: "desired-state", devScript: true },
+        { name: "notes" },
+        { name: "web", devScript: true },
         { name: "app", operatorNoDev: true },
         { name: "acme", devScript: true },
     ]);
     expect(await runnable(workspace)).toEqual([
         { repo: "acme", hasPanel: true },
         { repo: "app", hasPanel: false }, // operator/ present but no `dev` script ⇒ not a runnable panel
-        { repo: "desired-state", hasPanel: true },
-        { repo: "intent", hasPanel: false },
+        { repo: "notes", hasPanel: false },
+        { repo: "web", hasPanel: true },
     ]);
 });
 

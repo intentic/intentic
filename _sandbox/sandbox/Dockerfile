@@ -143,12 +143,11 @@ RUN --mount=type=cache,target=/root/.npm \
 # The provider CLIs — `opencode` (Grok), `cli-proxy-api` (the subscription translator) and `codex` — are
 # feature packs: connected-provider state decides whether each rides the overlay (agent/providers/provider-packs.ts),
 # and the standard profile bakes them all.
-# cloudflared, for one job that has nothing to do with how this sandbox is reached: `intentic deploy apply`
-# shells out to `cloudflared access tcp` to reach a self-host's SSH through the USER'S own Cloudflare tunnel
-# (via:"cloudflared" hosts). It used to share this spot with a `zrok2` binary that WAS the reachability
-# fabric; that fabric is the platform's own edge now, which the daemon dials over an outbound WebSocket with
-# no binary to install (sandbox-contract/ingress-contract.ts). Placed HERE, before the tree COPYs below, so
-# the layer stays cache-stable across source changes.
+# cloudflared, a general tool agents and terminal users reach for to put a local port on a public URL
+# (environment/contents.ts lists it). It has nothing to do with how this sandbox is reached: it used to share
+# this spot with a `zrok2` binary that WAS the reachability fabric; that fabric is the platform's own edge now,
+# which the daemon dials over an outbound WebSocket with no binary to install (sandbox-contract/ingress-contract.ts).
+# Placed HERE, before the tree COPYs below, so the layer stays cache-stable across source changes.
 ARG CLOUDFLARED_VERSION=2026.11.0
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
@@ -212,8 +211,8 @@ COPY --link --from=trees layers/sandbox-deps/ /
 # prepare-image-trees.sh builds starter/starter.Dockerfile through the same scaffolder as Add app, with runtime Node/pnpm paths.
 # normalize-starter.mjs removes volatile install metadata so unchanged templates/lockfiles retain layer digests across releases.
 COPY --link --from=trees layers/starter/ /
-# The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
-# connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
+# The intentic CLI on PATH — ic runs it via `--entrypoint intentic` for the sandbox's own run command, and
+# the Apps panel shells out to `intentic scaffold add-app`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as
 # "executable file not found in $PATH".
 COPY --from=trees cli /opt/intentic-cli

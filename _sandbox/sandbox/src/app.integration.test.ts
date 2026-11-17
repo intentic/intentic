@@ -432,24 +432,6 @@ test("control-token scopes widen: read observes, drive works, only land merges",
     }
 });
 
-test("POST /enroll rejects a wrong connect token and 412s until DevOps (when auth is enforced)", async () => {
-    const app = createApp(
-        services({
-            auth: { authorize: async () => proven("a@x.com", "owner"), authorizeOwner: async () => {} },
-            config: { ...testConfig, connectToken: "ct" },
-        }),
-    );
-    const enroll = (token: string) =>
-        app.request("/enroll", {
-            method: "POST",
-            headers: { "content-type": "application/json", "x-intentic-connect": token },
-            body: JSON.stringify({ name: "prod", user: "deploy", address: "ssh-x.zone", sshKey: "KEY" }),
-        });
-    expect((await enroll("wrong")).status).toBe(401);
-    // Right token, but the desired-state repo is absent under test, so 412 (DevOps not active).
-    expect((await enroll("ct")).status).toBe(412);
-});
-
 test("bearer middleware maps a ForbiddenError to 403 (wrong account) and any other auth failure to 401", async () => {
     // A verified-but-unauthorized identity gets 403 with the daemon's message verbatim.
     const forbiddenApp = createApp(services({ auth: { authorize: rejectForbidden, authorizeOwner: rejectForbidden } }));

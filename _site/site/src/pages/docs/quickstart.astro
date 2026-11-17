@@ -16,10 +16,7 @@ curl -fsSL https://intentic.dev/connect | sh -s -- <SETUP_CODE>`;
 const connectWin = `# Windows (PowerShell)
 $env:SETUP_CODE='<SETUP_CODE>'; irm https://intentic.dev/connect.ps1 | iex`;
 
-const connectAdvanced = `# Also make this machine a deploy target for the agent (its own Cloudflare tunnel).
-curl -fsSL https://intentic.dev/connect | sudo env SELF_HOST=1 CF_TOKEN=<CF_TOKEN> sh -s -- <SETUP_CODE>
-
-# Unattended (no terminal to ask): pre-consent to the Docker install.
+const connectAdvanced = `# Unattended (no terminal to ask): pre-consent to the Docker install.
 curl -fsSL https://intentic.dev/connect | sudo env INSTALL_DOCKER=1 sh -s -- <SETUP_CODE>`;
 
 const composeBootstrap = `# In the folder holding your docker-compose.yml: run once.

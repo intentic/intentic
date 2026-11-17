@@ -7,8 +7,8 @@ import { secretsServer, type SecretsToolsDeps, typeableSecret } from "./secrets-
 /* The one DECISION in the browser exit (the rest is CDP wiring over a live page, the accounts-tools posture). */
 
 const registry: NamedSecret[] = [
-    { name: "GRAFANA_ADMIN_PASSWORD", value: "gen-a8f2k1m4p7q9", source: "generated" },
-    { name: "CLOUDFLARE_API_TOKEN", value: "cf_live_0011223344ff", source: "env" },
+    { name: "GRAFANA_ADMIN_PASSWORD", value: "gen-a8f2k1m4p7q9", source: "sandbox" },
+    { name: "CLOUDFLARE_API_TOKEN", value: "cf_live_0011223344ff", source: "sandbox" },
     { name: "reddit/password", value: "Xk4!mQ2pRt7@wZ9aBc1_", source: "capability" },
 ];
 

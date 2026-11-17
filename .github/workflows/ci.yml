@@ -215,7 +215,7 @@ jobs:
   # Every publisher must explicitly require preflight success; verify groups no longer propagate that verdict.
   # Workflow lint shares this job to avoid another root slot; its cached, pinned binaries are the only network dependency here.
   preflight:
-    # The second DAG root — see the fork boundary on `changes`. The verify groups and `e2e-hermetic` hang off
+    # The second DAG root — see the fork boundary on `changes`. The verify groups hang off
     # this one (they wait for it, and its skip skips them), so it carries the same guard rather than inheriting one.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # The light lane, for `changes`' reason.
@@ -1044,7 +1044,7 @@ jobs:
         run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (explorer-menu)" --keep-status -- cargo xwin clippy --manifest-path _editor/desktop-app/explorer-menu/Cargo.toml --target x86_64-pc-windows-msvc
 
   # The two shipped Rust crates that are not the desktop app: the ic host-side CLI (_sandbox/ic), the binary
-  # behind the connect/recreate/connect-host bootstrap shims, and the Windows launcher stub
+  # behind the connect/recreate bootstrap shims, and the Windows launcher stub
   # (_devices/win-launcher) the machine-side agents register at logon. Same cargo gate as the desktop crate —
   # fmt and clippy reported as desktop-check's comment says, tests — in the same image (it bakes the rust toolchain); no webkit/tauri in
   # either, so both are seconds off a warm registry.
@@ -1480,47 +1480,6 @@ jobs:
             _tools/e2e/.cache/signin/api.log
           retention-days: 7
 
-  # Hermetic infra e2e on pull requests — a NON-BLOCKING sidecar. Boots a Docker-in-Docker host via
-  # testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
-  # external services and no secrets. Needing nothing at all is what earns it a run per pull request.
-  e2e-hermetic:
-    needs: preflight
-    # The fork boundary again — see `changes`. Alone among the pull-request jobs this one names no `changes` output, so
-    # a skipped root does not reach it through the data; it says so itself. It runs whatever preflight concluded, like
-    # every verification job here (see preflight's comment).
-    if: ${{ !cancelled() && needs.preflight.result != 'skipped' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: [self-hosted, intentic]
-    container:
-      image: ghcr.io/intentic/ci-base:latest
-      volumes:
-        - /ci-cache:/ci-cache
-        - /var/run/docker.sock:/var/run/docker.sock
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    # allow_failure: true — it reports, it does not gate.
-    continue-on-error: true
-    timeout-minutes: 45
-    env:
-      INTENTIC_HOST_IMAGE: ghcr.io/intentic/dind-host:latest
-      INTENTIC_LOG_DIR: ${{ github.workspace }}/.e2e-hermetic-logs
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          clean: false
-      - uses: ./.github/actions/pnpm-setup
-        with:
-          lockfile-drift: measure
-      # The CLI tier alone: the api's billing tier is `e2e-billing`, which gates. The root script runs both.
-      - run: pnpm turbo run e2e:hermetic --filter=@intentic/cli
-      - uses: ./.github/actions/upload-artifact-retry
-        if: failure()
-        with:
-          name: e2e-hermetic-logs
-          path: .e2e-hermetic-logs/
-          retention-days: 7
-
   # Publish sandbox/dind-host on relevant main pushes; require core/machine proofs and preflight explicitly, without unrelated group gates.
   # Verify groups run even when preflight fails, so their success alone cannot authorize a publish.
   # Wait for the release verdict and skip when it released: versioned release builds also move latest, avoiding duplicate image work.
@@ -1598,8 +1557,7 @@ jobs:
       # used to get its moving tag written right here, in the same step that built it, while sandbox:latest
       # waited for images-merge. That made the two images move at different times, and images-arm64 is the leg
       # most likely to fail: when it did, the registry held a NEW dind-host:latest beside the PREVIOUS
-      # sandbox:latest — a pair nothing had tested together, and the pair nightly's tiers, verify-images-public
-      # and the shipped connect-host.ps1 all reference by name. images-merge promotes this tag once both
+      # sandbox:latest — a pair nothing had tested together, and the pair nightly's tiers reference by name. images-merge promotes this tag once both
       # sandbox halves are in, so the two images move together or neither does.
       - run: TAGS="sha-${GITHUB_SHA::8}" IMAGES=dind-host bash _tools/scripts/image/publish-images.sh
         shell: bash

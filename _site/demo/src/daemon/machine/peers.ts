@@ -8,9 +8,8 @@ import { demoDevices, switchDemoPairings } from "../../fixture/devices";
 import { pause, pushDomains } from "./machineKit";
 
 // The machines on the other end of this sandbox's doors (the daemon's hosts/, phones/, runners/, sync/): the desktop
-// sync enrollment, the runners heavy work can go to, the phones paired to it, and the codes a command carries to enroll
-// another. Each write changes what the next read says and pushes the domain the real daemon pushes, so every view that
-// shows the machine moves with it.
+// sync enrollment, the runners heavy work can go to, and the phones paired to it. Each write changes what the next read
+// says and pushes the domain the real daemon pushes, so every view that shows the machine moves with it.
 
 const HOUR = 3_600_000;
 const STARTED = Date.now();
@@ -67,9 +66,6 @@ export const revokeSyncMachine = (machine: string): RawJsonOutput<`DELETE /syste
     pushDomains(`hosts`);
     return { ok: true };
 };
-
-// A server-connect code for ConnectHost's command; nothing redeems it, which a real one also waits for.
-export const enrollCode = (): RawJsonOutput<`POST /system/enroll/code`> => ({ code: shortCode(), expiresIn: PAIRING_SECONDS });
 
 // Runners: the build server takes heavy work and is current; the old laptop's runner has not been seen for days and
 // still runs the settings it had then.

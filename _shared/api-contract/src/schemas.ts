@@ -1,4 +1,3 @@
-import type { ResourceType } from "@intentic/resources";
 import { GrantedRoleSchema, MemberRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { PushNotificationSchema } from "@intentic/sandbox-contract/schemas/push";
 import { ManageRightSchema } from "@intentic/sandbox-contract/schemas/members";
@@ -134,27 +133,6 @@ export type HostedMigration = z.infer<typeof HostedMigrationSchema>;
 
 // Avatars/logos as inline data URLs, client-downscaled; caps what the API persists in a row.
 export const ImageDataUrlSchema = z.string().startsWith("data:image/").max(150_000);
-
-// Remove-by-name input for inventory routes; one sandbox per user, so the name identifies the entry.
-export const RemoveInventoryInputSchema = z.object({
-    name: z.string().min(1),
-});
-export type RemoveInventoryInput = z.infer<typeof RemoveInventoryInputSchema>;
-
-// Live infra read: streams `intentic deploy plan` (no apply) over SSE, distinct from the cached status.json.
-// `action` is the reconcile verdict: noop, create, update (with a reason), delete/prune.
-export interface PlanStreamEvent {
-    readonly type: "node" | "result" | "error" | "done";
-    // For type "node": the resource id + its reconcile verdict against live infra.
-    readonly id?: string;
-    readonly resourceType?: string;
-    readonly action?: string;
-    readonly reason?: string;
-    // For type "result": resources found live but absent from the desired graph.
-    readonly orphans?: readonly string[];
-    // For type "error".
-    readonly message?: string;
-}
 
 // ---- sandboxes: the user's workspaces + shared access ----
 
@@ -463,121 +441,6 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
 // Redeemed at /setup/claim for a connect token and reachability grant; the address is derived, not chosen.
 export const SetupCodeSchema = z.object({ code: z.string(), hostname: z.string(), expiresAt: z.string() });
 export type SetupCode = z.infer<typeof SetupCodeSchema>;
-
-// A "view" is a projection of the desired-state graph plus reconciliation drift.
-// Read through the sandbox's own git routes (desired-state.json + status.json); it stays the source of truth.
-// Only non-secret scalar inputs are surfaced; $secret/$ref values are dropped upstream.
-
-// Coarse lenses the closed resource-type vocabulary buckets into, for grouping in the Overview.
-export const ResourceGroupSchema = z.enum(["infra", "git", "deploy", "data", "notify", "other"]);
-export type ResourceGroup = z.infer<typeof ResourceGroupSchema>;
-
-// Maps each resource type to its group; a typed Record, so a new kind with no bucket is a compile error.
-const RESOURCE_GROUP: Record<ResourceType, ResourceGroup> = {
-    host: "infra",
-    cloudflare: "infra",
-    tunnel: "infra",
-    "cf-route": "infra",
-    forgejo: "git",
-    "forgejo-user": "git",
-    "forgejo-org": "git",
-    "forgejo-team": "git",
-    "forgejo-runner": "git",
-    repo: "git",
-    "control-repo": "git",
-    ci: "git",
-    github: "git",
-    "gh-repo": "git",
-    "gh-ci": "git",
-    gitlab: "git",
-    "gl-repo": "git",
-    "gl-ci": "git",
-    komodo: "deploy",
-    "komodo-periphery": "deploy",
-    "komodo-server": "deploy",
-    "komodo-user": "deploy",
-    deployment: "deploy",
-    postgres: "data",
-    "postgres-database": "data",
-    valkey: "data",
-    "valkey-namespace": "data",
-    signoz: "data",
-    authentik: "data",
-    "authentik-client": "data",
-    garage: "data",
-    "garage-bucket": "data",
-    discord: "notify",
-    "forgejo-notify": "notify",
-    "komodo-notify": "notify",
-    stripe: "other",
-    outline: "other",
-    paperless: "other",
-    openproject: "other",
-    invoiceninja: "other",
-    infisical: "other",
-    workspace: "other",
-    backup: "other",
-};
-
-// The coarse group for a resource type; a string outside the closed vocabulary falls to "other".
-export const groupOf = (type: string): ResourceGroup => RESOURCE_GROUP[type as ResourceType] ?? "other";
-
-export const ResourceViewSchema = z.object({
-    id: z.string(),
-    // The resolver's closed kind vocabulary (host/forgejo/komodo/deployment/…), kept open here as a string.
-    type: z.string(),
-    title: z.string(),
-    group: ResourceGroupSchema,
-    // The service's public URL when derivable from a `domain`/`hostname` input, for deep-linking out.
-    url: z.string().optional(),
-    dependsOn: z.array(z.string()),
-    // Non-secret scalar inputs only (string | number | boolean); secrets/refs are dropped.
-    config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
-    // The per-resource reconcile action from status.json, or "unknown" before the first apply or if absent.
-    status: z.string(),
-    // The human-readable drift cause from status.json's step; present for "update" steps only.
-    reason: z.string().optional(),
-});
-export type ResourceView = z.infer<typeof ResourceViewSchema>;
-
-// Where the user logs into a provisioned service, from status.json's value-free access entries.
-// A generated password's value is fetched via the owner-gated /secrets/reveal, keyed by `password.key`.
-export const AccessEntrySchema = z.object({
-    id: z.string(),
-    label: z.string(),
-    url: z.string(),
-    username: z.string().optional(),
-    password: z.object({ source: z.enum([`env`, `generated`]), key: z.string() }).optional(),
-});
-export type AccessEntry = z.infer<typeof AccessEntrySchema>;
-
-export const WorkspaceStateSchema = z.object({
-    resources: z.array(ResourceViewSchema),
-    // From status.json (the last `intentic deploy apply`); undefined before the first apply.
-    converged: z.boolean().optional(),
-    iterations: z.number().optional(),
-    access: z.array(AccessEntrySchema).optional(),
-});
-export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;
-
-// Live Komodo deployments from `intentic deploy deployments`, confirmed live against the Komodo API.
-// `env` carries only non-secret values; runtime detail lives in Komodo's own UI via `komodoDeploymentUrl`.
-export const DeploymentSchema = z.object({
-    // The graph node id (e.g. "app.production"), also the Komodo deployment name.
-    name: z.string(),
-    // The registry image CI pushes and Komodo runs: registry/owner/repo:tag.
-    image: z.string(),
-    tag: z.string(),
-    domain: z.string().optional(),
-    url: z.string().optional(),
-    port: z.number().optional(),
-    env: z.record(z.string(), z.string()),
-    // Whether Komodo currently has this deployment registered (login + ListDeployments matched it).
-    live: z.boolean(),
-    komodoUrl: z.string(),
-    komodoDeploymentUrl: z.string().optional(),
-});
-export type Deployment = z.infer<typeof DeploymentSchema>;
 
 // Push relay: Apple and Firebase only accept pushes from the app's own vendor, so a native install can't be posted to
 // directly. The daemon posts sessionless, proven by its per-device secret; each side holds only the half it needs.

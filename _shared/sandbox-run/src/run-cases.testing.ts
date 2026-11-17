@@ -39,7 +39,7 @@ const FULL = {
     env: [
         ["OWNER_EMAIL", "a@b.c"],
         ["CONNECT_TOKEN", "ict_secret$value"],
-        ["HOST_SSH_KEY", "-----BEGIN KEY-----\nline\n-----END KEY-----"],
+        ["CLOUDFLARE_API_TOKEN", "-----BEGIN KEY-----\nline\n-----END KEY-----"],
         ["SANDBOX_SWAP", "2g"],
     ],
     hostRuntime: ["--device=/dev/net/tun", "--cap-add=NET_ADMIN"],

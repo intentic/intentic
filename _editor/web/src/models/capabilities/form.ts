@@ -1,6 +1,6 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { type CapabilityField, fieldApplies } from "@intentic/extension-manifest";
-import { type CapabilityKind, LOCAL_MODEL_WINDOW_MAX, LOCAL_MODEL_WINDOW_MIN } from "@intentic/sandbox-contract/schemas/capabilities";
+import { LOCAL_MODEL_WINDOW_MAX, LOCAL_MODEL_WINDOW_MIN } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract/schemas/vpn";
 import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { t } from "@intentic/ui/i18n";
@@ -228,22 +228,11 @@ const SHA_RE = /^[0-9a-f]{40}$/u;
 
 export const isCommitSha = (value: string | undefined): boolean => SHA_RE.test(value ?? ``);
 
-// Submit's word in the tile's own vocabulary: editing leads, since a pre-filled form must not offer to "Add" a live
-// connection; DevOps activates.
-export const submitWord = (editing: boolean, kind: CapabilityKind | undefined): string => {
-    if (editing) {
-        return t(`capabilities.form.saveChanges`);
-    }
-    return kind === `devops` ? t(`capabilities.form.activate`) : t(`ui.action.add`);
-};
+// Submit's word: editing leads, since a pre-filled form must not offer to "Add" a live connection.
+export const submitWord = (editing: boolean): string => (editing ? t(`capabilities.form.saveChanges`) : t(`ui.action.add`));
 
 // The same press after a Test that failed: it still saves, and says it does so over the Test's answer.
-export const submitAnywayWord = (editing: boolean, kind: CapabilityKind | undefined): string => {
-    if (editing) {
-        return t(`capabilities.words.saveAnyway`);
-    }
-    return kind === `devops` ? t(`capabilities.words.activateAnyway`) : t(`capabilities.words.addAnyway`);
-};
+export const submitAnywayWord = (editing: boolean): string => (editing ? t(`capabilities.words.saveAnyway`) : t(`capabilities.words.addAnyway`));
 
 // Booleans arrive from the daemon's echo as booleans and from the form as "on"/"off".
 const echoedAnswer = (value: string | number | boolean | undefined): string => {

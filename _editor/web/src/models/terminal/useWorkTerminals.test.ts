@@ -91,7 +91,7 @@ test("work that has exited leaves the running list, whether it succeeded or fail
     const now = Date.now();
     daemonLists(
         agent(`aaaa1111`, false, { exitCode: 0, activityAt: now - 10 * 60_000 }),
-        job(`infra-check`, false, { exitCode: 1, activityAt: now - 3 * HOUR }),
+        job(`site-build`, false, { exitCode: 1, activityAt: now - 3 * HOUR }),
         job(`capability-demo`, true),
     );
 
@@ -130,13 +130,13 @@ test("whatever spoke last is on top: the only ordering that says anything once e
     daemonLists(
         job(`capability-demo`, true, { activityAt: now - 20 * 60_000 }),
         agent(`aaaa1111`, true, { activityAt: now - 60_000 }),
-        job(`infra-check`, true, { activityAt: now - 5 * 60_000 }),
+        job(`site-build`, true, { activityAt: now - 5 * 60_000 }),
     );
 
     const { rows } = mounted(() => useWorkTerminals());
     await waitFor(() => expect(rows.value).toHaveLength(3));
 
-    expect(rows.value.map((row) => row.session)).toEqual([`agent-aaaa1111`, `job-infra-check`, `job-capability-demo`]);
+    expect(rows.value.map((row) => row.session)).toEqual([`agent-aaaa1111`, `job-site-build`, `job-capability-demo`]);
 });
 
 test("the rail's badge excludes work terminals even with the legacy opt-in stored", async () => {

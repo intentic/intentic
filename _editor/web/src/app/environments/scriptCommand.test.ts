@@ -25,12 +25,12 @@ const load = (production: boolean): void => {
 
 test("local dev renders the repo-path form: never a curl of the deployed site", () => {
     load(false);
-    expect(bashCommand(`cleanupHost`, `sudo `, ``)).toBe(`sudo sh _site/site/public/scripts/cleanup-host.sh`);
+    expect(bashCommand(`cleanup`, `sudo `, ``)).toBe(`sudo sh _site/site/public/scripts/cleanup.sh`);
 });
 
 test("production renders the vanity-url curl one-liner", () => {
     load(true);
-    expect(bashCommand(`cleanupHost`, `sudo `, ``)).toBe(`curl -fsSL https://intentic.dev/cleanup-host | sudo sh`);
+    expect(bashCommand(`cleanup`, `sudo `, ``)).toBe(`curl -fsSL https://intentic.dev/cleanup | sudo sh`);
 });
 
 test("a PowerShell script with no arguments is piped straight into iex", () => {

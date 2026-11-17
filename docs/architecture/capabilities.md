@@ -13,7 +13,7 @@ flowchart LR
 
 ## The shape
 
-- `CapabilityKindSchema` in [`capabilities.ts`](../../_shared/sandbox-contract/src/schemas/capabilities.ts) lists the kinds. Roughly: tools for the agent (`cli`, `mcp`, `plugin`, `agent`, `endpoint`, `localmodel`), accounts (`identity`, `browser`, and `webext`, the owner's own browser, which a persona reaches only by naming it the way it names a site account: [`persona-capability.ts`](../../_shared/sandbox-contract/src/policy/persona-capability.ts)), machines (`device`, `ssh`, `docker`), the network (`vpn`, `exit`, `netdisk`), and the sandbox's own reach (`devops`, `monorepo`, `extension`, `wallet`, `fleet`, `link`).
+- `CapabilityKindSchema` in [`capabilities.ts`](../../_shared/sandbox-contract/src/schemas/capabilities.ts) lists the kinds. Roughly: tools for the agent (`cli`, `mcp`, `plugin`, `agent`, `endpoint`, `localmodel`), accounts (`identity`, `browser`, and `webext`, the owner's own browser, which a persona reaches only by naming it the way it names a site account: [`persona-capability.ts`](../../_shared/sandbox-contract/src/policy/persona-capability.ts)), machines (`device`, `ssh`, `docker`), the network (`vpn`, `exit`, `netdisk`), and the sandbox's own reach (`extension`, `wallet`, `fleet`, `link`).
 - The active set is `.intentic/config/capabilities.json`. Each kind has one handler in [`handlers/`](../../_sandbox/sandbox/src/capabilities/handlers), with an idempotent `apply` and a `status` probe; [`registry.ts`](../../_sandbox/sandbox/src/capabilities/registry.ts) is the total map, so a kind without a handler does not compile.
 
 ## The catalog

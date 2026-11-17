@@ -1,15 +1,9 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { Readable } from "node:stream";
-import { parseEnv } from "node:util";
 import { createGzip } from "node:zlib";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { SkillDraft } from "@intentic/sandbox-contract/schemas/settings";
 import { pack } from "tar-stream";
 import { services } from "../harness/route-services.testing.js";
-import { testConfig } from "../env.config.testing.js";
-import { workspacePaths } from "../workspace/workspace.js";
 import type { MigratedAutomation } from "./adapter-shared.js";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
 import { type AssistantSetup, applyAssistantSetup } from "./assistants.js";
@@ -195,11 +189,9 @@ test("one item failing is one failed row, not a dead migration", async () => {
     expect(report.failed).toEqual([{ id: "capability:mcp:linear", label: "MCP server, linear", error: expect.stringContaining("already exists") }]);
 });
 
-test("imported secrets join desired-state/.env beside what it already holds, even when two arrivals land at once", async () => {
-    const root = await mkdtemp(join(tmpdir(), "assistant-secrets-"));
-    await mkdir(join(root, "desired-state"), { recursive: true });
-    await writeFile(join(root, "desired-state/.env"), "EXISTING_KEY=kept\n");
-    const target = services({ workspace: workspacePaths(root), config: { ...testConfig, workspaceRoot: root } });
+test("imported secrets join the sandbox's own store beside what it already holds, even when two arrivals land at once", async () => {
+    const target = services();
+    await target.sandboxSecrets.set("EXISTING_KEY", "kept");
     const arrival = (key: string): AssistantSetup => ({
         source: "hermes",
         files: new Map([
@@ -214,10 +206,9 @@ test("imported secrets join desired-state/.env beside what it already holds, eve
     );
 
     expect(reports.flatMap((report) => report.failed)).toEqual([]);
-    expect(parseEnv(await readFile(join(root, "desired-state/.env"), "utf8"))).toEqual({
+    expect(await target.sandboxSecrets.all()).toEqual({
         EXISTING_KEY: "kept",
         FIRST_KEY: "value-of-FIRST_KEY",
         SECOND_KEY: "value-of-SECOND_KEY",
     });
-    await rm(root, { recursive: true, force: true });
 });

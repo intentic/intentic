@@ -13,8 +13,6 @@ import { PhoneConfigSchema } from "./phone.js";
 // truth for what's active, and `mcp`-kind entries also feed the agent's MCP servers each turn.
 
 export const CapabilityKindSchema = z.enum([
-    "devops",
-    "monorepo",
     "mcp",
     "cli",
     "plugin",
@@ -365,10 +363,6 @@ export type DeviceConfig = z.infer<typeof DeviceConfigSchema>;
 export type AcpAgentConfig = z.infer<typeof AcpAgentConfigSchema>;
 export type EndpointConfig = z.infer<typeof EndpointConfigSchema>;
 export const CapabilitySchema = z.discriminatedUnion("kind", [
-    z.object({ id: entryId, kind: z.literal("devops"), config: z.object({}) }),
-    // A pnpm+turbo monorepo the user scaffolds as its own repo, named by `id`; apps are added afterwards from its
-    // operator panel.
-    z.object({ id: entryId, kind: z.literal("monorepo"), config: z.object({}) }),
     z.object({ id: entryId, kind: z.literal("mcp"), config: McpConfigSchema }),
     z.object({ id: entryId, kind: z.literal("cli"), config: CliConfigSchema }),
     z.object({ id: entryId, kind: z.literal("plugin"), config: PluginConfigSchema }),

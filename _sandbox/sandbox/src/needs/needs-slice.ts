@@ -1,12 +1,9 @@
-import { existsSync } from "node:fs";
 import { askedAudience } from "../push/push-audience.js";
 import { childActor } from "../auth/principal.js";
 import { join } from "node:path";
-import { parseEnv } from "node:util";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 import { grantSite } from "@intentic/sandbox-contract/schemas/needs";
-import { ENV_FILE } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { contributionEnv, contributionFor, contributionRegistry, contributionSecretFields } from "../capabilities/contributions.js";
@@ -23,9 +20,7 @@ import { onRuntimeChange } from "../seams/runtime-feed.js";
 import { deliverWake } from "../seams/wake-delivery.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { needRaised, needResolved } from "../push/notifications.js";
-import { upsertEnv } from "../secrets/env-text.js";
 import { defineSlice } from "../seams/slice.js";
-import { textFile } from "../store/plain-files/text-file.js";
 import { capabilityNeed } from "./kinds/capability-need.js";
 import { automationNeed } from "./kinds/automation-need.js";
 import { environmentNeed } from "./kinds/environment-need.js";
@@ -81,23 +76,11 @@ const usableNow = async (services: Services, capability: Capability): Promise<re
     return Object.entries(contributionEnv(connector.spec, config)).map(([key, value]) => `${key}_${suffix}=${value}`);
 };
 
-// Stores a secret where its reference resolves: in desired-state/.env when that is where the name already lives (its
-// value would shadow the sandbox store's otherwise), else in the sandbox's own store.
-const keepSecret = async (services: Services, name: string, value: string): Promise<void> => {
-    const desiredState = services.workspace.repos["desired-state"];
-    const env = textFile(join(desiredState, ENV_FILE), 0o600);
-    if (existsSync(desiredState) && name in parseEnv(await env.read())) {
-        await env.update((current) => upsertEnv(current, name, value));
-        return;
-    }
-    await services.sandboxSecrets.set(name, value);
-};
-
 // A secret need over the finished services: the registry, the stores a value is kept in, and the keyrings.
 const secretNeedOf = (whole: NeedsSliceDeps["whole"]) =>
     secretNeed({
         registry: () => whole().secretRegistry(),
-        keep: (name, value) => keepSecret(whole(), name, value),
+        keep: (name, value) => whole().sandboxSecrets.set(name, value),
         deviceHeld: async () => (await whole().deviceSecrets.listed()).map((entry) => entry.pointer.name),
         keepOn: (name, value, keepOn) => keepOnDevice(whole(), name, value, keepOn),
     });

@@ -9,7 +9,6 @@ import type {
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../../app/devFill";
-import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../lib/queryKeys";
@@ -27,57 +26,15 @@ import { useSandboxSession } from "../../client/session/sandboxSession";
 // daemon's 403 message as a thrown Error. Plain async on purpose (no cache).
 export const reveal = async (key: string): Promise<string> => (await sandboxRpc.secrets.reveal({ key })).value;
 
-export function useSecretKeys() {
-    const { query, error } = useSandboxQuery({
-        queryKey: rpcKey(`secrets.list`),
-        // 412 until DevOps is active: no .env holds keys yet. Any other refusal is a failed read, never "no keys".
-        queryFn: () =>
-            sandboxRpc.secrets.list().catch((failure: unknown) => {
-                if (failure instanceof SandboxHttpError && failure.status === 412) {
-                    return { keys: [] };
-                }
-                throw failure;
-            }),
-    });
-    return {
-        hasKey: (key: string): boolean => (query.data.value?.keys ?? []).includes(key),
-        // Why the keys are unknown after a failed read, while hasKey answers false for every key.
-        keysError: error,
-    };
-}
-
-// "Missing" means a secret the intent declares that the sandbox lacks; generated and capability/provider entries
-// aren't the user's to set, so they don't count.
-const missingRequired = (entries: readonly SecretInventoryEntry[]): number =>
-    entries.filter((entry) => entry.kind === `env` && entry.requiredBy.length > 0 && entry.status === `missing`).length;
-
 export function useSecretInventory() {
     const queryClient = useQueryClient();
     const { query, loaded } = useSandboxQuery(rpcQuery(`secrets.inventory`));
     const inventory = computed<SecretInventoryEntry[]>(() => query.data.value?.entries ?? []);
     return {
         inventory,
-        missingRequiredCount: computed(() => missingRequired(inventory.value)),
         // Waited for until the first answer lands, so the page never shows a fake empty state.
         loaded,
         refreshInventory: (): void => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) }),
-    };
-}
-
-// Attention count for app-wide chrome, mounted regardless of whether a secrets surface is open. Same query as the
-// inventory but with its own staleTime/no-refetch-on-focus, since /secrets/inventory is an expensive fan-out that a
-// permanently mounted observer would otherwise re-run on every window focus. Writes still invalidate it, so the
-// badge updates immediately; only ambient polling is skipped.
-const AMBIENT_STALE_MS = 5 * 60 * 1000;
-export function useMissingSecretCount() {
-    const { query } = useSandboxQuery({
-        ...rpcQuery(`secrets.inventory`),
-        staleTime: AMBIENT_STALE_MS,
-        refetchOnWindowFocus: false,
-    });
-    return {
-        missingRequiredCount: computed(() => missingRequired(query.data.value?.entries ?? [])),
-        countPending: computed(() => query.isPending.value),
     };
 }
 

@@ -3,8 +3,8 @@
 // `docker login` first and so can't tell a public package from a private one. Asks the registry's token endpoint
 // directly, not `docker pull` (which would use the runner's login), and confirms the tag's manifest actually exists.
 
-// What connect scripts pull unauthenticated: sandbox stable/core-stable, dind-host latest (Windows self-host).
-const images = (process.env.IMAGES ?? "ghcr.io/intentic/sandbox:stable ghcr.io/intentic/sandbox:core-stable ghcr.io/intentic/dind-host:latest")
+// What connect scripts pull unauthenticated: sandbox stable/core-stable.
+const images = (process.env.IMAGES ?? "ghcr.io/intentic/sandbox:stable ghcr.io/intentic/sandbox:core-stable")
     .split(/\s+/)
     .filter(Boolean);
 

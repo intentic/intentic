@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import type { CapabilitiesStore } from "../capabilities-store.js";
 import { checks } from "../invariant.js";
@@ -45,5 +45,5 @@ test("the value is never in the message: a diagnostic that prints the token has 
 });
 
 test("an entry with no credential fields at all is not a finding", async () => {
-    await expect(run([{ id: "devops", kind: "devops", config: {} }])).resolves.toBeUndefined();
+    await expect(run([CapabilitySchema.parse({ id: "laptop", kind: "device", config: { platform: "linux" } })])).resolves.toBeUndefined();
 });

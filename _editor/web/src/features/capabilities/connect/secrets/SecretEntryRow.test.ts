@@ -52,7 +52,7 @@ jest.mock(`./SecretPopover.vue`, () => ({ default: SecretPopoverStub }));
 const { default: SecretEntryRow } = await import("./SecretEntryRow.vue");
 
 const ROW: SecretRow = {
-    entry: { key: `DATABASE_URL`, kind: `env`, status: `set`, requiredBy: [], storedAt: `desired-state/.env`, revealable: true },
+    entry: { key: `DATABASE_URL`, kind: `env`, status: `set`, storedAt: `the sandbox`, revealable: true },
     group: `yours`,
     title: `DATABASE_URL`,
     mono: true,
@@ -133,7 +133,7 @@ it("reads every rule as its answer, approver first, with nothing to fill in at r
     expect(text).toContain(`Not needed`);
     expect(text).toContain(`Any host`);
     expect(text).toContain(`Asks each time`);
-    expect(text).toContain(`desired-state/.env`);
+    expect(text).toContain(`the sandbox`);
     // An answer, not a form: no switch, no box and no Save until one is pressed.
     expect(el.querySelectorAll(`input, textarea`)).toHaveLength(0);
     expect(el.querySelector(`[data-popover]`)).toBeNull();
@@ -293,7 +293,6 @@ const DEVICE_ROW: SecretRow = {
         key: `VPN_PASSWORD`,
         kind: `device`,
         status: `set`,
-        requiredBy: [],
         storedAt: `the keyring on rog`,
         revealable: false,
         device: { machine: `rog`, mode: `each-use`, online: true, locked: false, source: `keyring` },

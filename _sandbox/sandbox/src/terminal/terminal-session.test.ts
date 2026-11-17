@@ -35,8 +35,8 @@ test("an attached session is never reaped: a browser is looking at it right now"
 });
 
 test("`keep` spares work the panes can't see: a job whose runner has more queued", () => {
-    const stdout = listPanes(["job-slow", 0, 3 * HOUR, 1], ["job-infra-check", 0, 3 * HOUR, 1]);
-    expect(reap(stdout, { keep: (session) => session === "job-slow" })).toEqual(["job-infra-check"]);
+    const stdout = listPanes(["job-slow", 0, 3 * HOUR, 1], ["job-build", 0, 3 * HOUR, 1]);
+    expect(reap(stdout, { keep: (session) => session === "job-slow" })).toEqual(["job-build"]);
 });
 
 test("web-* shells keep their own, far longer clock: they are the user's own places, not records", () => {

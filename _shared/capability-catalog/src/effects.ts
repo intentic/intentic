@@ -35,8 +35,6 @@ export type CapabilityEffect =
     | { readonly kind: "process"; readonly names: readonly string[] }
     // Registers an mcp__<id>__ server the agent connects to next turn.
     | { readonly kind: "mcp" }
-    // Scaffolds workspace repositories; empty while a name-derived repo is still unnamed.
-    | { readonly kind: "scaffold"; readonly repos: readonly string[] }
     // Extension code runs inside the app with the owner's session; an owner-only trust decision.
     | { readonly kind: "trusted-code" }
     // Chromium profile at .intentic/local/browser/<id>, one per account; `platform` names what it's a profile of.
@@ -66,7 +64,7 @@ export type CapabilityEffect =
 
 export interface CapabilityEffectInput {
     readonly kind: CapabilityKind;
-    // The instance name, the skill name for cli/browser, the repo name for monorepo.
+    // The instance name, the skill name for cli/browser.
     readonly id?: string | undefined;
     // Live form values, or a CapabilitySummary's secret-stripped config echo (hasToken/hasSecret booleans).
     readonly config: Record<string, string | number | boolean | undefined>;
@@ -96,8 +94,6 @@ const host = (value: string | number | boolean | undefined): string | undefined 
 const ENGINE_OPTIONS = ["registryMirror", "insecureRegistries", "addressPool"] as const;
 
 const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => readonly CapabilityEffect[]> = {
-    devops: () => [{ kind: "scaffold", repos: ["intent", "desired-state"] }],
-    monorepo: (input) => [{ kind: "scaffold", repos: input.id === undefined || input.id.length === 0 ? [] : [input.id] }],
     mcp: (input) => {
         const effects: CapabilityEffect[] = [{ kind: "mcp" }];
         if (hasToken(input.config)) {

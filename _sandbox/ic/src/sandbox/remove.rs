@@ -404,7 +404,7 @@ fn announce_removal(slug: &str) {
 }
 
 /// One sandbox by slug: its 3 containers, 4 named volumes, and network. Idempotent (missing = no-op). The
-/// dind pair is the Windows self-host deploy target connect.ps1 stands up beside the sandbox. Takes the sandbox's lock,
+/// dind pair is the Windows deploy target older setups stood up beside the sandbox. Takes the sandbox's lock,
 /// waiting for a swap or a backup of it to finish rather than pulling its containers out from under it.
 ///
 /// Err says what was not done and where that left the sandbox; the caller counts it as not removed (2026-10-11: every

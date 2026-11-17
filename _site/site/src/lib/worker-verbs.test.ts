@@ -82,7 +82,6 @@ describe("every verb", () => {
         ["/uninstall", 'set -- "$@"', "@args", "uninstall.sh"],
         ["/device/sandbox-abc.intentic.app/AB12-CD34", "set -- 'sandbox-abc.intentic.app' 'AB12-CD34'", "-Sandbox 'sandbox-abc.intentic.app' -Code 'AB12-CD34'", "device.sh"],
         ["/sync/sandbox-abc.intentic.app/AB12CD34", "set -- 'sandbox-abc.intentic.app' 'AB12CD34'", "-Sandbox 'sandbox-abc.intentic.app' -Code 'AB12CD34'", "sync.sh"],
-        ["/server/box.example.com/AB12CD34", "set -- 'box.example.com' 'AB12CD34'", "-Sandbox 'box.example.com' -Code 'AB12CD34'", "connect-host.sh"],
     ];
 
     test("the table covers every verb", () => {
@@ -175,7 +174,7 @@ describe("refusals", () => {
         expect(refused("/remove/sandbox-abc/more")).toBe("remove takes an optional sandbox name.");
         expect(refused("/uninstall/everything")).toBe("uninstall takes nothing after it.");
         expect(refused("/setup")).toBe("setup takes a setup code and an optional sync folder.");
-        expect(refused("/server/box.example.com")).toBe("server takes a sandbox address and a code.");
+        expect(refused("/device/box.example.com")).toBe("device takes a sandbox address and a code.");
     });
 });
 
@@ -210,7 +209,7 @@ describe("injection", () => {
     });
 
     test("the ps1 param block stays the first statement inside the block", () => {
-        for (const file of ["connect.ps1", "recreate.ps1", "cleanup.ps1", "connect-host.ps1", "uninstall.ps1"]) {
+        for (const file of ["connect.ps1", "recreate.ps1", "cleanup.ps1", "uninstall.ps1"]) {
             const body = injectPs1(script(file), resolved);
             const inner = body.slice("& {\n".length, body.lastIndexOf("\n}"));
             // Comments (the help block) are not statements; the first code is `param(`.

@@ -82,7 +82,7 @@ const connected = {
         }),
     ),
     inventory: jest.fn(async () => ({
-        entries: [{ key: `DATABASE_URL`, kind: `env` as const, status: `set` as const, requiredBy: [], storedAt: `the sandbox`, revealable: true }],
+        entries: [{ key: `DATABASE_URL`, kind: `env` as const, status: `set` as const, storedAt: `the sandbox`, revealable: true }],
     })),
 };
 jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({

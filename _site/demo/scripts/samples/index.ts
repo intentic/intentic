@@ -19,10 +19,8 @@ import { extensionsSamples } from "./extensions.samples.ts";
 import { gitSamples } from "./git.samples.ts";
 import { historySamples } from "./history.samples.ts";
 import { hubSamples } from "./hub.samples.ts";
-import { intenticSamples } from "./intentic.samples.ts";
 import { issuesSamples } from "./issues.samples.ts";
 import { logsSamples } from "./logs.samples.ts";
-import { inventorySamples } from "./inventory.samples.ts";
 import { loopsSamples } from "./loops.samples.ts";
 import { needsSamples } from "./needs.samples.ts";
 import { netdiskSamples } from "./netdisk.samples.ts";
@@ -97,8 +95,6 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
         approvals: approvalsSamples(context),
         activity: activitySamples(context),
         history: historySamples(context),
-        intentic: intenticSamples(context),
-        inventory: inventorySamples(context),
         netdisk: netdiskSamples(context),
         pages: pagesSamples(context),
         public: publicSamples(context),

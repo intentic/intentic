@@ -11,10 +11,6 @@ export { SANDBOX_ID } from "./sandbox-id.js";
 export const sandboxIdFromToken = (connectToken: string): string | undefined =>
     connectToken === "" ? undefined : sha256Hex(connectToken).slice(0, 12);
 
-// A per-host SSH tunnel's stable 12-hex id, salted with the host name so each enrolled deploy target gets its own
-// ssh-<id>.<zone>. Shared by the CLI and the platform API, which must derive the identical id.
-export const hostSshIdFromToken = (connectToken: string, hostName: string): string => sha256Hex(`${connectToken}:${hostName}`).slice(0, 12);
-
 // Eight is enough for a monorepo's dev servers, and the hard cap on preview DNS records one sandbox can cost.
 export const PORT_SLOT_COUNT = 8;
 

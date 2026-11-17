@@ -10,7 +10,7 @@ import {
 import { WorkspacePublishSchema } from "@intentic/sandbox-contract/state/definition";
 import { ArrivalApplySchema, ArrivalScanSchema } from "@intentic/sandbox-contract/state/arrival";
 import { SpeechWakeClaimSchema } from "@intentic/sandbox-contract/schemas/speech";
-import { EnrollCodeRequestSchema, SyncPairRequestSchema } from "@intentic/sandbox-contract/schemas/short-codes";
+import { SyncPairRequestSchema } from "@intentic/sandbox-contract/schemas/short-codes";
 import { PhoneWakeRegistrationSchema } from "@intentic/sandbox-contract/schemas/phone";
 import { removeDemoBlock } from "../../fixture/sandbox";
 import { enginesView, revertEngine, setEngineChannel, updateEngine } from "./engines";
@@ -29,7 +29,6 @@ import { answer, inputOf } from "./machineKit";
 import { abandonArrival, applyArrival, arrivalHosts, planFromBundle, planFromHost } from "./arrivals";
 import { bundleDownload, bundleExports, bundleTicket, removeBundle, startBundle } from "./bundles";
 import {
-    enrollCode,
     forgetRunner,
     pairPhone,
     phonesList,
@@ -118,7 +117,7 @@ const speechRoutes = {
     },
 } satisfies RawRoutes;
 
-// The machines on this sandbox's other doors (daemon/peers.ts): desktop sync, runners, phones, and a server's code.
+// The machines on this sandbox's other doors (daemon/peers.ts): desktop sync, runners and phones.
 const peerRoutes = {
     "GET /system/sync": () => answer(`GET /system/sync`, syncStatus()),
     "POST /system/sync/pair": async ({ request, url }) => {
@@ -126,10 +125,6 @@ const peerRoutes = {
         return answer(`POST /system/sync/pair`, syncPairing(url.searchParams.get(`mode`) === `mirror`));
     },
     "DELETE /system/authorized-key/{machine}": ({ param }) => answer(`DELETE /system/authorized-key/{machine}`, revokeSyncMachine(param(`machine`))),
-    "POST /system/enroll/code": async ({ request }) => {
-        await inputOf(EnrollCodeRequestSchema, request);
-        return answer(`POST /system/enroll/code`, enrollCode());
-    },
     "GET /system/runners": () => answer(`GET /system/runners`, { runners: runnersList() }),
     "DELETE /system/runners/{id}": ({ param }) => answer(`DELETE /system/runners/{id}`, forgetRunner(param(`id`))),
     "POST /system/runners/{id}/definition/sync": async ({ param }) =>

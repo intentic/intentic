@@ -4,7 +4,7 @@ import { partialMatchKey } from "@tanstack/vue-query";
 // reading the id off the last position. The scoping rule is mocked to a fixed id so keys can be spelled out in full.
 jest.mock("../../app/storage/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-here`] }));
 
-const { agentReviewPrefixes, AGENTS, APPS, pushedKeys, rpcKey, rpcKeyAt, rpcPrefix, WORKSPACE_STATE, workingReviewKeys } = await import(
+const { agentReviewPrefixes, AGENTS, APPS, pushedKeys, rpcKey, rpcKeyAt, rpcPrefix, WORKSPACE_APPS, workingReviewKeys } = await import(
     "../queryKeys"
 );
 const { sandboxQueryPredicate } = await import("../../features/sandbox/live/systemEventRouting");
@@ -80,9 +80,9 @@ describe("ofSandbox", () => {
     // must be swept the same way, or the ledger keeps painting a workspace that's gone.
     it("is found by the sweep that drops one sandbox's cached state", () => {
         const laptop = sandboxQueryPredicate(`sbx-laptop`);
-        expect(laptop({ queryKey: WORKSPACE_STATE.ofSandbox(`sbx-laptop`) })).toBe(true);
-        expect(laptop({ queryKey: WORKSPACE_STATE.ofSandbox(`sbx-guest`) })).toBe(false);
-        expect(laptop({ queryKey: WORKSPACE_STATE.of() })).toBe(false);
+        expect(laptop({ queryKey: WORKSPACE_APPS.ofSandbox(`sbx-laptop`) })).toBe(true);
+        expect(laptop({ queryKey: WORKSPACE_APPS.ofSandbox(`sbx-guest`) })).toBe(false);
+        expect(laptop({ queryKey: WORKSPACE_APPS.of() })).toBe(false);
     });
 
     // Naming the active box produces the identical key, not a second cache entry for the same data.
@@ -92,9 +92,9 @@ describe("ofSandbox", () => {
 
     // `every` still reaches every box's entries, so a write in one sandbox invalidates that sandbox's copy too.
     it("leaves the family-wide prefix reaching across every box", () => {
-        expect(WORKSPACE_STATE.every).toEqual([`workspace`, `state`]);
-        for (const key of [WORKSPACE_STATE.of(), WORKSPACE_STATE.ofSandbox(`sbx-laptop`)]) {
-            expect(key.slice(0, WORKSPACE_STATE.every.length)).toEqual([...WORKSPACE_STATE.every]);
+        expect(WORKSPACE_APPS.every).toEqual([`workspace`, `apps`]);
+        for (const key of [WORKSPACE_APPS.of(), WORKSPACE_APPS.ofSandbox(`sbx-laptop`)]) {
+            expect(key.slice(0, WORKSPACE_APPS.every.length)).toEqual([...WORKSPACE_APPS.every]);
         }
     });
 });

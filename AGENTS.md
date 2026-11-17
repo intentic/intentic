@@ -6,7 +6,7 @@ that invalidated it.** There is no second place to remember: the repository-leve
 
 `docs/architecture/` also holds how the system is put together, one subject per page — `topology.md`,
 `sandbox.md`, `platform.md`, `app-plane.md`, `extensions.md`, `capabilities.md`, `packages.md`,
-`conventions.md`, `testing.md`, `deploy-engine.md`, `languages.md`, `repo.md` — and `ARCHITECTURE.md` at the
+`conventions.md`, `testing.md`, `languages.md`, `repo.md` — and `ARCHITECTURE.md` at the
 root is the index into them, nothing more. The machinery around the code goes in `docs/ops/` (`docs/README.md`
 states the line). A decision's reasons go in the README or architecture page that states the rule, as a short
 dated note beside it naming the alternative it rejected, if there was one: a landed commit is one line with no

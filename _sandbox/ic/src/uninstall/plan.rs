@@ -36,9 +36,6 @@ pub struct Facts {
     pub distros: Vec<String>,
     pub app: bool,
     pub cache_bytes: u64,
-    /// This is a server that runs deployments for its owner (`ic machine enroll`, /opt/intentic): they are not part of
-    /// an uninstall, and ic, which manages and removes them (`ic machine remove`), stays with them.
-    pub deploys: bool,
     /// Things on this device that are not Intentic's and stay, as a person names them.
     pub stays: Vec<String>,
 }
@@ -243,9 +240,7 @@ pub fn steps(facts: &Facts, choice: Choice, without_app: bool) -> Vec<Planned> {
             if app {
                 planned_steps.push(planned(Step::App, "Uninstall the Intentic app"));
             }
-            if !facts.deploys {
-                planned_steps.push(planned(Step::Ic, "Remove ic"));
-            }
+            planned_steps.push(planned(Step::Ic, "Remove ic"));
         }
         Choice::KeepSandboxes => {
             if app {
@@ -372,9 +367,6 @@ pub fn found(facts: &Facts) -> Vec<String> {
 /// What a person is told stays, whatever they chose: what is not Intentic's, and the files of theirs it synced. Pure.
 pub fn stays(facts: &Facts) -> Vec<String> {
     let mut stays = facts.stays.clone();
-    if facts.deploys {
-        stays.push("the deployments this server runs, with ic to manage them (ic machine remove takes them off)".to_string());
-    }
     if facts.folders > 0 {
         stays.push("the files in your synced folders".to_string());
     }
@@ -574,7 +566,6 @@ mod tests {
             distros: vec![],
             app: true,
             cache_bytes: 1_400_000_000,
-            deploys: false,
             stays: vec!["Docker Desktop".to_string(), "WSL".to_string()],
         }
     }
@@ -812,21 +803,6 @@ mod tests {
         assert!(
             consequence.ends_with("Docker Desktop, WSL and the files in your synced folders stay.")
         );
-    }
-
-    #[test]
-    fn a_server_keeps_ic_for_its_deployments() {
-        let server = Facts {
-            deploys: true,
-            windows: false,
-            ..device()
-        };
-        assert!(!steps(&server, Choice::Everything, false)
-            .iter()
-            .any(|planned| planned.step == Step::Ic));
-        assert!(stays(&server)
-            .iter()
-            .any(|stay| stay.contains("ic machine remove")));
     }
 
     #[test]

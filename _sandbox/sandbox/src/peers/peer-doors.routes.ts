@@ -39,7 +39,7 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
     const webextRoutes = webextPeerRoutes(services);
     const phoneRoutes = phonePeerRoutes(services);
     return {
-        // What a device, sync or server-connect command's short code is redeemed for: public, a device's first contact.
+        // What a device or sync command's short code is redeemed for: public, a device's first contact.
         "POST /system/redeem/{code}": createRedeemRoute({ codes: services.redeemCodes, sandboxUrl: () => services.config.sandbox.publicUrl }),
         ...peerRouteTable(HOST_PEER, hostRoutes),
         ...peerRouteTable(WEBEXT_PEER, webextRoutes),

@@ -36,9 +36,8 @@ const secretRoute = procedure.meta({ floor: "maintainer", control: "never", righ
 // someone does not reach them, and the handlers hold them to the owner.
 const ownerKeyringRoute = procedure.meta({ floor: "maintainer", control: "never" });
 
-// User-supplied secrets, in the gitignored desired-state/.env once DevOps is active and the sandbox's own store before
-// it; `apply` reloads them, no restart. `inventory` aggregates every store (never values) and always answers. `reveal` alone
-// returns a value, owner-only, POST so the key avoids the URL.
+// User-supplied secrets, in the sandbox's own store; a set value resolves with no restart. `inventory` aggregates every
+// store (never values) and always answers. `reveal` alone returns a value, owner-only, POST so the key avoids the URL.
 export const secretsContract = {
     set: secretRoute
         .route({
@@ -46,7 +45,7 @@ export const secretsContract = {
             path: "/secrets",
             summary: "Store a secret",
             description:
-                "Writes one name and value where the agent's references resolve it, without a restart: desired-state/.env once DevOps is active, the sandbox's own secret store before that.",
+                "Writes one name and value into the sandbox's own secret store, where the agent's references resolve it, without a restart.",
         })
         .input(SecretSetSchema)
         .output(OkSchema),
@@ -95,7 +94,7 @@ export const secretsContract = {
             path: "/secrets/inventory",
             summary: "Every secret this sandbox holds, from everywhere",
             description:
-                "One view across all the places secrets live here: what exists, where it came from and whether it is working. Never any values. This one always answers, even before there is a store to write to.",
+                "One view across all the places secrets live here: what exists, where it came from and whether it is working. Never any values. This one always answers, even before anything has been stored.",
         })
         .output(SecretInventorySchema),
     reveal: secretRoute

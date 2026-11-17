@@ -1,8 +1,7 @@
 // short codes: the single-use 8-character code a copy-paste command carries instead of a token. The sandbox mints one
-// beside each device, sync or server-connect token it hands out; the install script redeems it at the sandbox's public
+// beside each device or sync token it hands out; the install script redeems it at the sandbox's public
 // POST /system/redeem/<code>, which answers `KEY=value` lines (KIND, SANDBOX_URL, then the kind's own values).
 import { z } from "zod";
-import { INVENTORY_NAME_MAX, INVENTORY_NAME_RE } from "./inventory.js";
 
 // Crockford base32 (no I, L, O, U), 8 characters: 40 bits. Redemption accepts any case and one hyphen in the middle.
 export const SHORT_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -10,7 +9,7 @@ export const SHORT_CODE_LENGTH = 8;
 export const ShortCodeSchema = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{8}$/);
 
 // What each kind of code redeems to, in its answer's KIND line.
-export const ShortCodeKindSchema = z.enum(["device", "sync", "server"]);
+export const ShortCodeKindSchema = z.enum(["device", "sync"]);
 export type ShortCodeKind = z.infer<typeof ShortCodeKindSchema>;
 
 // A value that rides one `KEY=value` line: no line breaks or other control characters.
@@ -46,14 +45,3 @@ export const SyncPairRequestSchema = z.object({
     takeover: z.boolean().optional().describe("Take sync over from another machine already enrolled."),
 });
 export type SyncPairRequest = z.infer<typeof SyncPairRequestSchema>;
-
-// POST /system/enroll/code: mints a server-connect code backed by a single-use enroll token.
-export const EnrollCodeRequestSchema = z.object({
-    hostName: z.string().min(1).max(INVENTORY_NAME_MAX).regex(INVENTORY_NAME_RE).optional().describe("What the server will be called."),
-});
-export type EnrollCodeRequest = z.infer<typeof EnrollCodeRequestSchema>;
-export const EnrollCodeAnswerSchema = z.object({
-    code: ShortCodeSchema,
-    expiresIn: z.number().describe("Seconds until the code and its enroll token expire."),
-});
-export type EnrollCodeAnswer = z.infer<typeof EnrollCodeAnswerSchema>;

@@ -64,11 +64,11 @@ test("a session is busy with whatever is in front of its shell, and with nothing
 
 // The last window's exit status is the last command's, why bin/tmux-run exits with the command's own code.
 test("the exit status is the last window's, and absent while that pane still runs", () => {
-    const finished = paneStates(listPanes(["job-infra-check", 1, "0", ""], ["job-infra-check", 1, "1", ""]));
-    expect(finished.get("job-infra-check")?.exitCode).toBe(1);
+    const finished = paneStates(listPanes(["job-build", 1, "0", ""], ["job-build", 1, "1", ""]));
+    expect(finished.get("job-build")?.exitCode).toBe(1);
 
-    const running = paneStates(listPanes(["job-infra-check", 1, "1", ""], ["job-infra-check", 0, "", "intentic"]));
-    expect(running.get("job-infra-check")?.exitCode).toBeUndefined();
+    const running = paneStates(listPanes(["job-build", 1, "1", ""], ["job-build", 0, "", "intentic"]));
+    expect(running.get("job-build")?.exitCode).toBeUndefined();
 });
 
 test("the activity stamp comes back in epoch MS, and an unreadable one reads as 0: unknown, never 1970", () => {

@@ -12,10 +12,6 @@ import { readWorkspaceGraph } from "./lib/workspace-graph.mjs";
 // "<package in _shared/> -> <package outside it>": why the edge stands.
 const EXCEPTIONS = new Map([
     [
-        "@intentic/api-contract -> @intentic/resources",
-        "src/schemas.ts types a plan's resources with `ResourceType`, the deploy tool's own vocabulary, which _shared/README.md keeps in _deploy/ because three of its four dependents are deploy-internal; the manifest declares it as a runtime dependency for a type-only import. Needs an owner decision: move the type below both, or accept the edge.",
-    ],
-    [
         "@intentic/extension-ui -> @intentic/ui",
         "The extension UI kit is a curated slice of the app's design system: src/ re-exports _editor/ui, scripts/build.mjs compiles it from there, and the host's import map supplies the shell's own instances at runtime (extension-ui/README.md). Needs an owner decision: move the slice into _shared/, or accept the edge.",
     ],

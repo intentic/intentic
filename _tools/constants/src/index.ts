@@ -89,10 +89,6 @@ export const INSTALL_SCRIPTS_DIR = "_site/site/public/scripts";
 export const INSTALL_SCRIPTS = {
     sh: { path: "/connect", file: "connect.sh" },
     ps1: { path: "/connect.ps1", file: "connect.ps1" },
-    // "device", not "host": /connect-host enrolls a deploy target, /device connects the machine the user is on.
-    hostSh: { path: "/connect-host", file: "connect-host.sh" },
-    hostPs1: { path: "/connect-host.ps1", file: "connect-host.ps1" },
-    cleanupHost: { path: "/cleanup-host", file: "cleanup-host.sh" },
     desktopSh: { path: "/sync", file: "sync.sh" },
     desktopPs1: { path: "/sync.ps1", file: "sync.ps1" },
     deviceSh: { path: "/device", file: "device.sh" },

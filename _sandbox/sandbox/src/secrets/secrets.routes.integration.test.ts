@@ -1,11 +1,5 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { workspacePaths } from "../workspace/workspace.js";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-
-import { SETTLES, waitFor } from "@intentic/testing/bun";
 
 import { createApp } from "../app.js";
 
@@ -18,32 +12,15 @@ import { secretsSliceFake } from "./secrets-slice.testing.js";
 // Drives the secrets routes over the daemon's HTTP surface the way the browser does; fakes and the client are shared
 // from route-services.testing.ts and its siblings.
 
-// A scaffolded desired-state checkout on disk: an artifact requiring HOST_SSH_KEY, an .env holding it plus an
-// undeclared EXTRA_TOKEN, and a generated admin password in .secrets.json.
-const secretsWorkspace = (): ReturnType<typeof workspacePaths> => {
-    const root = mkdtempSync(join(tmpdir(), "sandbox-secrets-"));
-    const workspace = workspacePaths(root);
-    mkdirSync(workspace.repos["desired-state"], { recursive: true });
-    const artifact = {
-        version: 1,
-        resources: {
-            host: { id: "host", type: "host", inputs: { sshKey: { $secret: { source: "env", key: "HOST_SSH_KEY" } } }, dependsOn: [] },
-            forgejo: {
-                id: "forgejo",
-                type: "forgejo",
-                inputs: { adminPassword: { $secret: { source: "generated", key: "FORGEJO_ADMIN_PASSWORD" } } },
-                dependsOn: [],
-            },
-        },
-    };
-    writeFileSync(join(workspace.repos["desired-state"], "desired-state.json"), JSON.stringify(artifact));
-    writeFileSync(join(workspace.repos["desired-state"], ".env"), 'HOST_SSH_KEY="pem"\nEXTRA_TOKEN="abc"\n');
-    writeFileSync(join(workspace.repos["desired-state"], ".secrets.json"), JSON.stringify({ FORGEJO_ADMIN_PASSWORD: "pw1" }));
-    return workspace;
+// Two secrets a person set, kept in the sandbox's own store the way the Secrets view's set keeps them.
+const seeded = async (overrides: Parameters<typeof services>[0] = {}): Promise<ReturnType<typeof services>> => {
+    const svc = services(overrides);
+    await svc.sandboxSecrets.set("HOST_SSH_KEY", "pem-body-0001aa");
+    await svc.sandboxSecrets.set("EXTRA_TOKEN", "extra-token-0002bb");
+    return svc;
 };
 
-test("without DevOps, set / list / reveal / remove use the sandbox's own store (the desired-state repo is absent under test)", async () => {
-    // Keeping a key for the agent never waits on a deploy pipeline being scaffolded first.
+test("set / list / reveal / remove use the sandbox's own store", async () => {
     const client = clientFor(createApp(services()));
     expect(await client.secrets.set({ key: "CLOUDFLARE_API_TOKEN", value: "x" })).toEqual({ ok: true });
     expect(await client.secrets.list()).toEqual({ keys: ["CLOUDFLARE_API_TOKEN"] });
@@ -85,33 +62,17 @@ test("a value too short to mask is flagged on its inventory row, and regenerate 
     expect(await errorCode(client.secrets.regenerate({ key: "NOBODY_SET_THIS" }))).toBe("NOT_FOUND");
 });
 
-test("secrets.inventory merges artifact requirements, .env keys, credentialed capabilities, and provider accounts", async () => {
+test("secrets.inventory merges the secrets a person set, credentialed capabilities, and provider accounts", async () => {
     const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "gh-token" } };
-    const client = clientFor(createApp(services({ workspace: secretsWorkspace(), capabilities: memoryCapabilitiesStore([github]) })));
+    const client = clientFor(createApp(await seeded({ capabilities: memoryCapabilitiesStore([github]) })));
     const { entries } = await client.secrets.inventory();
     expect(entries).toEqual([
-        {
-            key: "FORGEJO_ADMIN_PASSWORD",
-            kind: "generated",
-            status: "set",
-            requiredBy: [{ resourceId: "forgejo", type: "forgejo" }],
-            storedAt: "desired-state/.secrets.json",
-            revealable: true,
-        },
-        {
-            key: "HOST_SSH_KEY",
-            kind: "env",
-            status: "set",
-            requiredBy: [{ resourceId: "host", type: "host" }],
-            storedAt: "desired-state/.env",
-            revealable: true,
-        },
-        { key: "EXTRA_TOKEN", kind: "env", status: "set", requiredBy: [], storedAt: "desired-state/.env", revealable: true },
+        { key: "HOST_SSH_KEY", kind: "env", status: "set", storedAt: `${STATE_DIR}/secrets/auth/sandbox-secrets.json`, revealable: true },
+        { key: "EXTRA_TOKEN", kind: "env", status: "set", storedAt: `${STATE_DIR}/secrets/auth/sandbox-secrets.json`, revealable: true },
         {
             key: "github",
             kind: "capability",
             status: "connected",
-            requiredBy: [],
             storedAt: `${STATE_DIR}/secrets/auth/capability-secrets.json`,
             revealable: true,
         },
@@ -120,7 +81,6 @@ test("secrets.inventory merges artifact requirements, .env keys, credentialed ca
             kind: "provider",
             label: "Claude · Claude",
             status: "connected",
-            requiredBy: [],
             storedAt: `${STATE_DIR}/secrets/auth/claude/default.json`,
             revealable: false,
         },
@@ -129,7 +89,7 @@ test("secrets.inventory merges artifact requirements, .env keys, credentialed ca
 
 test("secrets.inventory joins the use ledger: env keys by name, a capability by any of its fields", async () => {
     const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "gh-token" } };
-    const svc = services({ workspace: secretsWorkspace(), capabilities: memoryCapabilitiesStore([github]) });
+    const svc = await seeded({ capabilities: memoryCapabilitiesStore([github]) });
     await svc.secretUses.record({ name: "EXTRA_TOKEN", lane: "shell", detail: "curl https://api", at: 10 });
     await svc.secretUses.record({ name: "github/token", lane: "shell", detail: "gh api /user", at: 20 });
     const { entries } = await clientFor(createApp(svc)).secrets.inventory();
@@ -141,8 +101,7 @@ test("secrets.inventory joins the use ledger: env keys by name, a capability by 
 
 test("secrets.inventory joins each entry's host guard: the owner's by name, on or off, a connector's own by capability", async () => {
     const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "gh-token" } };
-    const svc = services({
-        workspace: secretsWorkspace(),
+    const svc = await seeded({
         capabilities: memoryCapabilitiesStore([github]),
         hostGuards: async () => [
             { subject: "EXTRA_TOKEN", kind: "secret", guard: true, hosts: ["api.example.com"], source: "owner" },
@@ -155,7 +114,6 @@ test("secrets.inventory joins each entry's host guard: the owner's by name, on o
     expect(byKey.get("EXTRA_TOKEN")?.hosts).toEqual({ guard: true, list: ["api.example.com"], source: "owner" });
     expect(byKey.get("HOST_SSH_KEY")?.hosts).toEqual({ guard: false, list: ["ssh.example.com"], source: "owner" });
     expect(byKey.get("github")?.hosts).toEqual({ guard: true, list: ["api.github.com", "github.com"], source: "connector" });
-    expect(byKey.get("FORGEJO_ADMIN_PASSWORD")?.hosts).toBeUndefined();
 });
 
 // The request `secrets hosts … add` sends, raw: the subject in the path and again in the body, as the CLI writes it.
@@ -194,7 +152,6 @@ test("secrets.inventory lists what a computer's keyring shares as device rows, a
         key: "VPN_PASSWORD",
         kind: "device",
         status: "set",
-        requiredBy: [],
         storedAt: "in the keyring on rog",
         revealable: false,
         device: { machine: "rog", mode: "each-use", online: true, locked: false, source: "keyring" },
@@ -217,26 +174,22 @@ test("secrets.inventory answers pre-scaffold with capability/provider entries on
 });
 
 test("secrets.reveal returns values to the operating tier and refuses lower roles", async () => {
-    const workspace = secretsWorkspace();
-    const client = clientFor(createApp(services({ workspace })));
-    expect(await client.secrets.reveal({ key: "HOST_SSH_KEY" })).toEqual({ value: "pem" });
-    expect(await client.secrets.reveal({ key: "FORGEJO_ADMIN_PASSWORD" })).toEqual({ value: "pw1" });
+    const client = clientFor(createApp(await seeded()));
+    expect(await client.secrets.reveal({ key: "HOST_SSH_KEY" })).toEqual({ value: "pem-body-0001aa" });
     expect(await errorCode(client.secrets.reveal({ key: "GHOST" }))).toBe("NOT_FOUND");
 
     const maintainerClient = clientFor(
         createApp(
-            services({
-                workspace,
+            await seeded({
                 auth: { authorize: async () => proven("m@example.com", "maintainer"), authorizeOwner: rejectForbidden },
             }),
         ),
     );
-    expect(await maintainerClient.secrets.reveal({ key: "HOST_SSH_KEY" })).toEqual({ value: "pem" });
+    expect(await maintainerClient.secrets.reveal({ key: "HOST_SSH_KEY" })).toEqual({ value: "pem-body-0001aa" });
 
     const collaboratorClient = clientFor(
         createApp(
-            services({
-                workspace,
+            await seeded({
                 auth: { authorize: async () => proven("c@example.com", "collaborator"), authorizeOwner: rejectForbidden },
             }),
         ),
@@ -244,37 +197,10 @@ test("secrets.reveal returns values to the operating tier and refuses lower role
     expect(await errorCode(collaboratorClient.secrets.reveal({ key: "HOST_SSH_KEY" }))).toBe("FORBIDDEN");
 });
 
-test("secrets.set / remove rewrite .env and fire a best-effort `secrets push` for the CI copy", async () => {
-    const pushes: string[][] = [];
-    const client = clientFor(
-        createApp(
-            services({
-                workspace: secretsWorkspace(),
-                async *intentic(run) {
-                    pushes.push([...run.args]);
-                    yield { kind: `log`, message: `pushed` };
-                },
-            }),
-        ),
-    );
-    await client.secrets.set({ key: "MyMixed_Key", value: "v1" });
-    expect((await client.secrets.list()).keys.toSorted()).toEqual(["EXTRA_TOKEN", "HOST_SSH_KEY", "MyMixed_Key"]);
-    await client.secrets.remove({ key: "EXTRA_TOKEN" });
-    expect((await client.secrets.list()).keys.toSorted()).toEqual(["HOST_SSH_KEY", "MyMixed_Key"]);
-    await waitFor(
-        () =>
-            expect(pushes).toEqual([
-                ["deploy", "secrets", "push"],
-                ["deploy", "secrets", "push"],
-            ]),
-        SETTLES,
-    );
-});
-
-// The lost-update regression: `set` is read-modify-write, so before its writes were serialized two overlapping calls
-// both read the pre-write file and the second erased the first one's key, while both answered ok.
+// The lost-update regression: `set` is read-modify-write, so unserialized, two overlapping calls would both read the
+// pre-write file and the second erase the first one's key, while both answered ok.
 test("concurrent secrets.set calls all land, none clobbering a write still in flight", async () => {
-    const client = clientFor(createApp(services({ workspace: secretsWorkspace() })));
+    const client = clientFor(createApp(await seeded()));
     await Promise.all([
         client.secrets.set({ key: "STRIPE_KEY", value: "sk_live_1" }),
         client.secrets.set({ key: "OPENAI_KEY", value: "sk-oai-2" }),
@@ -283,21 +209,12 @@ test("concurrent secrets.set calls all land, none clobbering a write still in fl
     expect((await client.secrets.list()).keys.toSorted()).toEqual(["EXTRA_TOKEN", "HOST_SSH_KEY", "OPENAI_KEY", "SENTRY_DSN", "STRIPE_KEY"]);
 });
 
-// The same race across verbs, and the one that matters most: a `set` overlapping a `remove` used to restore the removed
-// key from its stale snapshot, leaving a credential the owner was told had been revoked.
+// The same race across verbs, and the one that matters most: a `set` overlapping a `remove` must not restore the removed
+// key from a stale snapshot, leaving a credential the owner was told had been revoked.
 test("a secrets.set overlapping a secrets.remove does not resurrect the removed key", async () => {
-    const client = clientFor(createApp(services({ workspace: secretsWorkspace() })));
+    const client = clientFor(createApp(await seeded()));
     await Promise.all([client.secrets.set({ key: "NEW_TOKEN", value: "added" }), client.secrets.remove({ key: "EXTRA_TOKEN" })]);
     expect((await client.secrets.list()).keys.toSorted()).toEqual(["HOST_SSH_KEY", "NEW_TOKEN"]);
-});
-
-// A .env value is wrapped in one of three quote characters, so a value holding all three cannot be written; the user
-// gets a refusal naming what to change rather than a 500 about parsers.
-test("secrets.set refuses a value holding all three quote characters, as a bad request", async () => {
-    const client = clientFor(createApp(services({ workspace: secretsWorkspace() })));
-    expect(await errorCode(client.secrets.set({ key: "PW", value: "p'a\"s`s" }))).toBe("BAD_REQUEST");
-    // Refused before the write: the store is untouched, not half-rewritten.
-    expect((await client.secrets.list()).keys.toSorted()).toEqual(["EXTRA_TOKEN", "HOST_SSH_KEY"]);
 });
 
 // A gate names exactly who may release a credential, and the owner writes it alone because a maintainer is who it may

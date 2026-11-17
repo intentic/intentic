@@ -66,11 +66,6 @@ export const RAW_ROUTES = {
     "GET /system/browser-view": { auth: "door", beforeBoot: true, control: "never" },
     // The sandbox's own desktop, watched and driven by the owner (desktop/desktop-view.ts); the same query ticket.
     "GET /system/desktop-view": { auth: "door", beforeBoot: true, control: "never" },
-    // Deploy-target enrollment, gated by the connect token.
-    "POST /enroll": { auth: "door", control: "never" },
-    // A server-connect code for the command that connects a server: its single-use enroll token stands in for the connect
-    // token. Anybody who operates the sandbox may connect a server to it.
-    "POST /system/enroll/code": { control: "never" },
     // An event automation's webhook, gated by the automation's own token.
     "POST /automations/{id}/fire": { auth: "door" },
     // The release gate a pipeline runner waits on, gated by the workflow's minted gate token.

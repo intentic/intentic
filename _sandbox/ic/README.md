@@ -207,8 +207,8 @@ flowchart LR
   halves, each on its own; each run journals itself with a heartbeat in `~/.intentic/device-moves.json`, and the next
   `move-*` or `ic sandbox tidy` settles a run that died (removes a target's partial copy, starts a source it stopped).
   A source that sent everything and never heard the verdict stays stopped and says so: the target may be up, and two
-  copies must not run. Not carried: a Windows sandbox's dind deploy target container (its volume goes if the sandbox
-  mounts it), and host bind mounts other than the key. Advertised as the `sandbox-move` feature.
+  copies must not run. Not carried: the dind deploy target container older setups stood up beside a Windows sandbox
+  (its volume goes if the sandbox mounts it), and host bind mounts other than the key. Advertised as the `sandbox-move` feature.
 - **Nothing old is let go until the new version has proved itself.** A swap parks the old container, and a new version
   that never answers, never commits its state journal, reports its conversion failed, or keeps crashing is undone at
   once. Crashing is netd's word (`health.rs`): three restarts of the daemon in ten minutes with it down again, read off
@@ -584,8 +584,8 @@ flowchart LR
     the system's uninstaller is the one way to remove the app, so the `--json` inventory and the `intentic-uninstall:`
     markers that dialog read went with it._ The app uninstaller ic starts gets `INTENTIC_UNINSTALL=done`, so its own hook does not call ic back. The person's
     page is [/docs/uninstall/](../../_site/site/src/pages/docs/uninstall.astro).
-- `ic docker prepare` checks and, with consent, installs what Docker needs; `ic machine enroll` makes the host a deploy
-  target (`ic machine remove` takes it off again); `ic runner up` starts a runner container for a parent sandbox.
+- `ic docker prepare` checks and, with consent, installs what Docker needs; `ic runner up` starts a runner container for
+  a parent sandbox.
 - On Windows, `ic docker prepare` ends every piped run with one `intentic-prepare-summary: {json}` line (ready,
   needsSetup, or cantRun; engine choice; download size and time estimates; machine facts; what is already fine in
   `met`). Each `intentic-requirement:` row carries `"admin"` and `"ours"`. New checks: physical memory (under 7 GiB is

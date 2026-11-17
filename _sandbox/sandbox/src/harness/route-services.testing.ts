@@ -247,7 +247,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // The real probe, as composition.ts fills it: a suite adding an ACP agent spawns its command.
         probeAcpAgent,
         probePiAgent,
-        async *intentic() {},
         // The engine's own announcements, as composition binds them, and the reactions it subscribes.
         events: createDomainEvents((name, error) => context.self().logger.warn({ err: error, event: name }, "domain event: a reaction failed")),
         ...rest,

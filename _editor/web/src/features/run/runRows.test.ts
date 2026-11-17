@@ -13,8 +13,6 @@ const panel = (over: Partial<PanelSummary>): PanelSummary => ({
     running: false,
     healthy: false,
     servers: [],
-    deployConfig: false,
-    desiredState: false,
     directoryUi: false,
     monorepo: false,
     tests: false,

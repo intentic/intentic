@@ -52,14 +52,14 @@ test("ONE unreadable entry never takes the rest of the manifest down with it", a
     await writeFile(
         path,
         JSON.stringify([
-            { id: "devops", kind: "devops", config: {} },
+            { id: "laptop", kind: "device", config: { platform: "linux" } },
             // A vpn entry in the shape that predates the provider union: unreadable by this daemon.
             { id: "office", kind: "vpn", config: { config: "[Interface]\n", enabled: "on" } },
             { id: "linear", kind: "mcp", config: { url: "https://a/mcp" } },
         ]),
     );
 
-    expect((await store.list()).map((capability) => capability.id)).toEqual(["devops", "linear"]);
+    expect((await store.list()).map((capability) => capability.id)).toEqual(["laptop", "linear"]);
     // The drop is reported, never silent: a capability vanishing from the UI must be diagnosable.
     expect(invalid).toEqual(["office"]);
 });

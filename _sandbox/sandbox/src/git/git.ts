@@ -1,22 +1,6 @@
 import { errorMessage, stderrOf } from "@intentic/base/errors";
 import type { PushRefusal } from "@intentic/sandbox-contract/schemas/git/git";
-import { GIT_GLOBAL_ARGS, type GitRunner, literalPathspecs } from "@intentic/base/git";
-import type { TerminalRunner } from "../terminal/terminal-run.js";
-import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { CommitSigner } from "../git-identity.js";
-
-// A GitRunner that runs visibly through a terminal session; output is the pane's combined stream (stderr merged), and a
-// non-zero exit throws like defaultGit's. Generic git verbs live in @intentic/base/git.
-export const terminalGit =
-    (runner: TerminalRunner, session: string): GitRunner =>
-    async (dir, args) => ({
-        // Marks pathspecs like the direct runner (literalPathspecs) so a visible git acts on the same paths.
-        stdout: await runner.run(session, ["git", ...GIT_GLOBAL_ARGS, "-C", dir, ...literalPathspecs(args)].map(shellQuote).join(" "), {
-            cwd: dir,
-            window: "git",
-        }),
-        stderr: "",
-    });
 
 // The `-c user.*` prefix that makes `signer` the committer of the commit a command creates (panel commits,
 // publish-file.ts, sequence ops), and its author too unless `signer.author` names the person behind it (`author.*`).
@@ -44,7 +28,7 @@ export const gitFailureReason = (error: unknown, fallback: string): string => {
 
 // The same reading for text with no exception object: the combined stdout/stderr tail a terminal run hands back
 // (git/push-run.ts).
-export const gitVerdictLine = (text: string, fallback: string): string => {
+const gitVerdictLine = (text: string, fallback: string): string => {
     const lines = text
         .split("\n")
         .map((line) => line.trim())

@@ -1,7 +1,7 @@
 # Convergence
 
 How the long-lived things intentic leaves behind (containers, volumes, sync sessions, login entries, records, tunnels,
-hosted apps, deployed resources) return to the shape the current release expects, by themselves, on machines nobody is
+hosted apps) return to the shape the current release expects, by themselves, on machines nobody is
 watching.
 
 (2026-10-05) A survey of the owner's own machines found:
@@ -33,7 +33,6 @@ flowchart LR
    - Mutagen sessions: `intentic-owner` labels ([`mutagen.ts`](../../_devices/machine/src/sync/mutagen.ts)).
    - Daemon children: `INTENTIC_DAEMON_GEN` ([`workload-stamp.ts`](../../_sandbox/sandbox/src/seams/workload-stamp.ts)).
    - Tunnels: an instance id ([`identity.rs`](../../_sandbox/netd/crates/tunnel/src/identity.rs)).
-   - Deployed resources: `intentic.owner` ([`stamp.ts`](../../_deploy/providers/src/core/stamp.ts)).
 2. **Ownership is a lease.**
    - The environment that keeps a sandbox writes `/history/.ic/keeper.json` inside it on every keeper pass. The
      other side of a PC adopts the sandbox when that heartbeat has been silent for half an hour
@@ -54,8 +53,7 @@ flowchart LR
    - the daemon's boot pass over `.agents/skills/`, which sets aside a skill a release retired
      ([`skill-retirement.ts`](../../_sandbox/sandbox/src/settings/skill-retirement.ts)) and leaves one it cannot read
      or attribute;
-   - the platform's daily sweeps, including the app-shape check;
-   - the deploy engine's daily drift check.
+   - the platform's daily sweeps, including the app-shape check.
 5. **Every store has a retention**, and goes through a trash first wherever a person might want it back:
    - `ic` backups and records;
    - the agent's trash and audit log;
@@ -63,8 +61,7 @@ flowchart LR
    - dind data, and the desktop app's run logs.
 6. **Destroy only on positive evidence.** A side `ic` cannot read is Unknown, never "mine"
    ([`side.rs`](../../_sandbox/ic/src/sandbox/side.rs)). A listing docker would not give is a failure, not an empty
-   machine. A hosted app without a tombstone is `forgotten`, reported and left standing. A deployed resource without
-   an owner stamp is reported, never pruned.
+   machine. A hosted app without a tombstone is `forgotten`, reported and left standing.
 
 ## Where a release reaches an old install
 

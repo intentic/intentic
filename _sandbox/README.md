@@ -20,15 +20,16 @@ The acp-bridge in the diagram runs on the user's device, so it lives in [_device
 | --- | --- |
 | [agent-context](agent-context) | What an agent is told as a session opens (the project map) and the readings that measure it |
 | [claude-plugin](claude-plugin) | The `intentic` Claude Code plugin: trimmed Bash output, session context, fileq and iq, measured savings |
+| [cli](cli) | `intentic`, baked into the image: the sandbox's canonical `docker run` and monorepo scaffolding |
 | [fileq](fileq) | Agent CLI reading binary files (docx, pdf, images, archives) as budgeted markdown |
 | [netd](netd) | Rust network daemon: owns every port and the tunnel, supervises the daemon |
 | [gate](gate) | `intentic-gate`: a CI pipeline waits on a release gate's verdict |
 | [gate-action](gate-action) | GitHub Action: wait on a release gate or wake an automation |
-| [ic](ic) | Rust host CLI: run, update and repair sandboxes, runners and deploy targets |
+| [ic](ic) | Rust host CLI: run, update and repair sandboxes and runners |
 | [issue-sdk](issue-sdk) | Bug reporter a site embeds to send crashes to a sandbox agent |
 | [ocr](ocr) | `ocr`: the text on an image read on this machine (PP-OCRv6), the privacy shield's reader |
 | [output-cleaners](output-cleaners) | Trims agent Bash output, keeps the raw text retrievable, and ledgers each cleaner's saving |
 | [sandbox](sandbox) | The daemon: runs agents in worktrees, serves the workspace, lands their work |
-| [scaffold](scaffold) | Intent-repo skeleton, template scaffolding and `deploy.config` rendering for CLI and daemon |
+| [scaffold](scaffold) | App monorepo scaffolding from a template source, for the CLI and the daemon |
 | [webchat-widget](webchat-widget) | Visitor chat widget a site embeds to talk to a sandbox agent |
 | [webq](webq) | Agent CLI fetching web pages as budgeted markdown, with bounded crawls |

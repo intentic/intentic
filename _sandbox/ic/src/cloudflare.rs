@@ -2,10 +2,9 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::tty;
 use crate::util::{bail, Result};
 
-/* Connect flows call Cloudflare directly; tunnel and DNS creation use `intentic tunnel`. */
+/* The connect preflight checks the owner's Cloudflare token (CF_TOKEN) here, directly against Cloudflare. */
 
 const API: &str = "https://api.cloudflare.com/client/v4";
 
@@ -53,118 +52,4 @@ pub fn validate_token(token: &str) -> Result<()> {
         return Err(invalid());
     }
     Ok(())
-}
-
-#[derive(Deserialize)]
-struct ZonesEnvelope {
-    #[serde(default)]
-    result: Vec<Zone>,
-    #[serde(default)]
-    result_info: Option<PageInfo>,
-}
-
-#[derive(Deserialize)]
-struct PageInfo {
-    #[serde(default)]
-    total_pages: u32,
-}
-
-/// How many pages of 50 zones are read before the list is taken as complete: an account with more than a thousand
-/// zones picks from the first thousand rather than holding a setup on a request per page.
-const ZONE_PAGES_MAX: u32 = 20;
-
-/// Whether the page just read says there is another after it. A reply that names no page count is a single page, as
-/// the platform's and the deploy engine's own clients read it (`_platform/api/src/sandbox/cloudflare.ts`,
-/// `_deploy/providers/src/network/cloudflare-api.ts`), which this one used to differ from by reading page one only.
-fn more_zone_pages(envelope: &ZonesEnvelope, page: u32) -> bool {
-    page < ZONE_PAGES_MAX
-        && envelope
-            .result_info
-            .as_ref()
-            .is_some_and(|info| info.total_pages > page)
-}
-
-/// Every zone name the token can see, 50 to a page.
-fn zone_names(token: &str) -> Result<Vec<String>> {
-    let mut names = Vec::new();
-    let mut page = 1;
-    loop {
-        let mut response = agent()
-            .get(format!("{API}/zones?per_page=50&page={page}"))
-            .header("Authorization", &format!("Bearer {token}"))
-            .call()
-            .map_err(|err| crate::util::Fail(format!("could not list Cloudflare zones: {err}")))?;
-        let envelope: ZonesEnvelope = response
-            .body_mut()
-            .read_json()
-            .map_err(|err| crate::util::Fail(format!("could not list Cloudflare zones: {err}")))?;
-        let more = more_zone_pages(&envelope, page);
-        names.extend(envelope.result.into_iter().map(|zone| zone.name));
-        if !more {
-            return Ok(names);
-        }
-        page += 1;
-    }
-}
-
-#[derive(Deserialize)]
-struct Zone {
-    name: String,
-}
-
-/// Resolve the zone the tunnel lives under BEFORE the tunnel step, so a token that sees several zones gets a
-/// clear choice here instead of a bare "multiple zones" crash deep inside the CLI: one zone auto-picks, more
-/// prompt on the terminal, and a non-interactive run gets the exact remedy (set ZONE) with the options named.
-pub fn resolve_zone(token: &str, subject: &str) -> Result<String> {
-    crate::ui::note("resolving the Cloudflare zone…");
-    let zones = zone_names(token)?;
-    if zones.is_empty() {
-        bail!("the Cloudflare API token sees no zones — add a domain to the account, or broaden the token's Zone:Read scope, at https://dash.cloudflare.com/profile/api-tokens, then re-run.");
-    }
-    if zones.len() == 1 {
-        crate::ui::note(&format!(
-            "using the only zone the token sees — {}.",
-            zones[0]
-        ));
-        return Ok(zones[0].clone());
-    }
-    if tty::have_tty() {
-        let choices: Vec<(String, String)> =
-            zones.iter().map(|z| (z.clone(), String::new())).collect();
-        let question = format!("Pick the Cloudflare zone {subject} should use:");
-        match crate::ui::pick(&question, &choices, false)? {
-            Some(indices) if !indices.is_empty() => {
-                let zone = &zones[indices[0]];
-                crate::ui::note(&format!("using zone {zone}."));
-                return Ok(zone.clone());
-            }
-            _ => {
-                crate::ui::cancelled();
-                bail!("no zone was selected.");
-            }
-        }
-    }
-    let listing: String = zones.iter().map(|zone| format!("  - {zone}\n")).collect();
-    bail!(
-        "the Cloudflare API token sees multiple zones; set ZONE to choose one. The token can use:\n{listing}       Re-run with ZONE set in the environment (alongside CF_TOKEN), e.g. ZONE={}",
-        zones[0]
-    );
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn zone_pages_follow_the_count_the_reply_names() {
-        let page = |json: &str| serde_json::from_str::<super::ZonesEnvelope>(json).unwrap();
-        let first_of_three =
-            page(r#"{"result":[{"name":"a.dev"}],"result_info":{"page":1,"total_pages":3}}"#);
-        assert!(super::more_zone_pages(&first_of_three, 1));
-        assert!(!super::more_zone_pages(&first_of_three, 3));
-        // No count named: one page, as the TypeScript clients read it.
-        assert!(!super::more_zone_pages(&page(r#"{"result":[]}"#), 1));
-        // A count past the cap stops at the cap rather than walking every page.
-        let huge = page(r#"{"result":[],"result_info":{"total_pages":500}}"#);
-        assert!(super::more_zone_pages(&huge, super::ZONE_PAGES_MAX - 1));
-        assert!(!super::more_zone_pages(&huge, super::ZONE_PAGES_MAX));
-    }
 }

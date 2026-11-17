@@ -11,7 +11,7 @@ import { z } from "zod";
 
 // Cloudflare zone listing for the setup screen (user's token) and DNS for sandboxes' loopback certs (intentic's token);
 // tunnels are provisioned in sandbox/reachability.ts. Pre-migration sandboxes are still reachable only through old
-// tunnel DNS records, which the sweep below treats as live. No dependency on @intentic/providers.
+// tunnel DNS records, which the sweep below treats as live.
 
 // Cloudflare rejected the token (invalid, inactive, or missing Zone:Read); the router maps this to a user-facing
 // BAD_REQUEST.

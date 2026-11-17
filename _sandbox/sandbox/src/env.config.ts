@@ -9,7 +9,7 @@ import { z } from "zod";
 
 // Env var name = schema path in SCREAMING_SNAKE per segment; the shape is a fixed external contract.
 export const configSchema = z.object({
-    // Workspace dir; the three repos (intent, desired-state, app) clone under <root>/<role>.
+    // Workspace dir; every repo sits under it.
     workspaceRoot: z.string().default(WORKSPACE_ROOT),
     // Daemon-owned history and protected git dirs; kept outside workspaceRoot so an agent rm -rf can't reach it.
     historyRoot: z.string().default(HISTORY_ROOT),
@@ -211,7 +211,7 @@ export const CONFIG_SECRET_ENV: readonly string[] = inspectSchema(configSchema)
     .map((leaf) => leaf.envName);
 
 // Every secret the container's environment can carry: the schema's own, and the runner's replayed ones the schema does not
-// read (a self-host deploy key, a runner's pairing token). The two lists are the only ways a variable gets in.
+// read (a runner's pairing token). The two lists are the only ways a variable gets in.
 export const CONTAINER_SECRET_ENV: readonly string[] = [...new Set([...CONFIG_SECRET_ENV, ...REPLAY_SECRET_ENV])];
 
 // Where this sandbox is reachable from outside, as its config says: the zone, its id, and the outbox's slot and base URL.

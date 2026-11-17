@@ -1,5 +1,4 @@
 use crate::checks;
-use crate::cloudflare;
 use crate::contract::{self, RunRequest};
 use crate::docker;
 use crate::health;
@@ -16,7 +15,7 @@ use crate::sandbox::{
 use crate::tty;
 use crate::ui;
 use crate::util;
-use crate::util::{bail, kv_lines, slug_from_token, slug_of_hostname, step, Result};
+use crate::util::{bail, slug_from_token, slug_of_hostname, step, Result};
 
 /* Run the AI-agent workspace sandbox on THIS machine and expose it to the browser — connect.sh/.ps1's post-Docker half. */
 
@@ -83,16 +82,12 @@ fn connect(
         sync_dir.is_some(),
     )?;
     let syncing = sync_dir.is_some();
-    let self_host = env("SELF_HOST").is_some();
 
     let mut connect_token = env("CONNECT_TOKEN").unwrap_or_default();
     /* The reachability grant names this sandbox and the edge that presents it to the daemon. */
     let mut sandbox_grant = env("SANDBOX_GRANT").unwrap_or_default();
     let mut ingress_url = env("INGRESS_URL").unwrap_or_default();
     let mut sandbox_hostname = env("SANDBOX_HOSTNAME").unwrap_or_default();
-    // Only SELF_HOST needs a zone now: it publishes THIS machine's sshd for the deploy engine, on the user's
-    // own Cloudflare. The sandbox's own address comes from the platform's edge.
-    let mut zone = env("ZONE").unwrap_or_default();
     let mut sync_pair_token = env("SYNC_PAIR_TOKEN").unwrap_or_default();
     let mut host_pair_token = env("HOST_PAIR_TOKEN").unwrap_or_default();
     let mut owner_email = env("OWNER_EMAIL").unwrap_or_default();
@@ -117,13 +112,6 @@ fn connect(
         label: "Download the sandbox image",
         weight: 240,
     });
-    if self_host && cfg!(unix) {
-        plan.push(ui::PlanStep {
-            phase: "creating-tunnel",
-            label: "Publish this machine's SSH",
-            weight: 30,
-        });
-    }
     plan.extend([
         ui::PlanStep {
             phase: "starting-sandbox",
@@ -337,41 +325,6 @@ fn connect(
     if let Some(warning) = reachability_warning(&sandbox_hostname, &sandbox_grant, &ingress_url) {
         ui::warn(&warning);
     }
-    // SELF_HOST still wants the user's OWN Cloudflare token: it publishes THIS machine's sshd so the sandbox
-    // can deploy to it, which is the deploy engine's fabric — not the sandbox's, which the hub now serves.
-    if self_host && cf_token.is_empty() {
-        bail!("SELF_HOST needs your own Cloudflare API token (CF_TOKEN) — it publishes this machine's SSH for\n       the deploy engine. Create one at https://dash.cloudflare.com/profile/api-tokens with:\n       Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit.");
-    }
-    if self_host && zone.is_empty() {
-        zone = cloudflare::resolve_zone(&cf_token, "this machine")?;
-    }
-
-    // When requested, wire this machine as a deploy target before starting the sandbox — HOST_SSH_KEY and
-    // SELF_HOST_* ride into the container's env below. Two shapes for one idea: Linux/macOS registers the
-    // machine itself (service user + sshd + host tunnel); Windows can't be a native SSH+Docker target, so a
-    // privileged Docker-in-Docker "host" container stands in as the deploy target instead.
-    let mut host_ssh_key = env("HOST_SSH_KEY").unwrap_or_default();
-    let mut self_host_user = env("SELF_HOST_USER").unwrap_or_default();
-    let mut self_host_address = String::new();
-    // The via names the transport to a self-host target. Windows never sets one: its dind target is reached
-    // directly by name on the shared network, so there is no via to send (hence the unused-mut allow there).
-    #[cfg_attr(windows, allow(unused_mut))]
-    let mut self_host_via = String::new();
-    #[cfg(unix)]
-    if self_host {
-        let root = crate::selfhost::Root::acquire("SELF_HOST setup")?;
-        let user = if self_host_user.is_empty() {
-            "intentic".to_string()
-        } else {
-            self_host_user.clone()
-        };
-        host_ssh_key = crate::selfhost::setup_service_user(&root, &user, "intentic-self-host")?;
-        self_host_user = user;
-        ui::note(&format!(
-            "this server is registered as a deploy target (user '{self_host_user}')."
-        ));
-    }
-
     // A replace keeps the image the sandbox runs (its environment build included) unless SANDBOX_IMAGE names another,
     // and the resolvers it was made with unless SANDBOX_DNS does.
     if let Some(replacing) = &replacing {
@@ -382,8 +335,7 @@ fn connect(
             sandbox_dns = dns.clone();
         }
     }
-    // Resolve the image up front (a slow first pull shouldn't look like a hang) — and the tunnel step below,
-    // which runs this same image via `--entrypoint intentic`, must never execute a stale locally-cached tag.
+    // Resolve the image up front, so a slow first pull doesn't look like a hang.
     reporter.stage("pulling-image");
     let keeps_image = replacing.as_ref().is_some_and(|replacing| {
         replacing
@@ -424,50 +376,9 @@ fn connect(
         format!("https://{sandbox_hostname}")
     };
 
-    // Expose THIS machine's sshd over its own tunnel so the sandbox can deploy to it through `cloudflared
-    // access` — a NAT'd local machine the sandbox can't reach by IP.
-    #[cfg(unix)]
-    if self_host {
-        step("creating-tunnel", "creating the host SSH tunnel…");
-        let mut host_args: Vec<String> = vec![
-            "run".into(),
-            "--rm".into(),
-            "--entrypoint".into(),
-            "intentic".into(),
-            "-e".into(),
-            format!("CLOUDFLARE_API_TOKEN={cf_token}"),
-            "-e".into(),
-            format!("CONNECT_TOKEN={connect_token}"),
-        ];
-        if !zone.is_empty() {
-            host_args.push("-e".into());
-            host_args.push(format!("ZONE={zone}"));
-        }
-        host_args.extend([sandbox_image.clone(), "tunnel".into(), "host".into()]);
-        let arg_refs: Vec<&str> = host_args.iter().map(String::as_str).collect();
-        let host_out = docker::capture(&arg_refs).map_err(|err| {
-            crate::util::Fail(format!("failed to create the host SSH tunnel: {}", err.0))
-        })?;
-        let lookup = kv_lines(&host_out);
-        let host_tunnel_token = lookup("HOST_SSH_TUNNEL_TOKEN").unwrap_or_default();
-        self_host_address = lookup("HOST_SSH_HOSTNAME").unwrap_or_default();
-        if host_tunnel_token.is_empty() || self_host_address.is_empty() {
-            bail!("failed to create the host SSH tunnel (see the output above).");
-        }
-        self_host_via = "cloudflared".to_string();
-        let root = crate::selfhost::Root::acquire("SELF_HOST setup")?;
-        let cloudflared_version = env_or("CLOUDFLARED_VERSION", "2026.11.0");
-        crate::selfhost::install_cloudflared(&root, &cloudflared_version)?;
-        crate::selfhost::run_ssh_connector(&root, &host_tunnel_token, "the connect one-liner")?;
-        ui::note(&format!(
-            "this host's SSH is reachable through the tunnel at {self_host_address}."
-        ));
-    }
-
     step("starting-sandbox", "starting sandbox…");
     reporter.stage("starting-sandbox");
-    // Created first because the container joins it: a Windows self-host target (the dind container above) is
-    // reached by name on it, and nothing else on this machine is.
+    // Created first because the container joins it.
     crate::sandbox::ensure_network(&slug)?;
     // A replace cuts the agents' turns, which are picked up again once the sandbox is back (resume.rs).
     if replacing.is_some() {
@@ -477,17 +388,6 @@ fn connect(
             "`ic sandbox connect` set this sandbox up again from a setup code, replacing its container.",
         );
         resume::ask(&container);
-    }
-
-    // Windows self-host: the Docker-in-Docker deploy target, ALONGSIDE the sandbox on Docker Desktop, not
-    // inside it — the control plane stays an unprivileged container outside its (privileged) targets, and it
-    // reaches this one over SSH by name on the shared network. The key is generated INSIDE the target.
-    #[cfg(windows)]
-    if self_host {
-        let (key, user, address) = start_dind_target(&slug, &log)?;
-        host_ssh_key = key;
-        self_host_user = user;
-        self_host_address = address;
     }
 
     // The platform as seen FROM the container, for the daemon's announce (URL + liveness phone-home).
@@ -528,10 +428,6 @@ fn connect(
         ("HOST_PLATFORM", host_platform()),
         ("HOST_LABEL", &host_label),
         ("CLOUDFLARE_API_TOKEN", &cf_token),
-        ("HOST_SSH_KEY", &host_ssh_key),
-        ("SELF_HOST_USER", &self_host_user),
-        ("SELF_HOST_ADDRESS", &self_host_address),
-        ("SELF_HOST_VIA", &self_host_via),
         (
             "AGENT_AUTH_DIR",
             if agent_auth_volume.is_some() {
@@ -843,7 +739,7 @@ fn connect(
         ui::warn("this device wasn't connected, so its sandboxes won't be manageable from your browser. Add it any time from Capabilities.");
     }
 
-    ending(&slug, &container, &sandbox_public_url, self_host);
+    ending(&slug, &container, &sandbox_public_url);
     Ok(())
 }
 
@@ -1164,8 +1060,8 @@ fn reachability_warning(hostname: &str, grant: &str, ingress: &str) -> Option<St
 }
 
 /* THE ENDING, RANKED — because the old one was seven lines of equal weight and the reader had to find the two that mattered among them. */
-fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
-    let mut footnotes: Vec<(String, String)> = vec![
+fn ending(slug: &str, container: &str, public_url: &str) {
+    let footnotes: Vec<(String, String)> = vec![
         (
             "its logs".to_string(),
             format!("docker logs -f {container}"),
@@ -1180,12 +1076,6 @@ fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
             crate::logfile::log_dir().display().to_string(),
         ),
     ];
-    if !self_host {
-        footnotes.push((
-            "deploy here".to_string(),
-            "run the setup again with SELF_HOST=1 (needs sudo)".to_string(),
-        ));
-    }
     if ui::is_rich() {
         let (address, instruction) = if public_url.is_empty() {
             (
@@ -1214,9 +1104,6 @@ fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
         ui::plain(
             "Return to the platform: your sandbox announces itself and setup continues automatically.",
         );
-    }
-    if !self_host {
-        ui::plain("Reachable only, no deploy target. To deploy an app onto this device later, run the setup again with SELF_HOST=1 (needs sudo).");
     }
     ui::plain(&format!(
         "Logs: docker logs -f {container} (connect logs: {})",
@@ -1582,77 +1469,6 @@ pub fn machine_label() -> String {
         })
         .map(|name| name.trim().to_string())
         .unwrap_or_else(|| "this-device".to_string())
-}
-
-/// The Windows deploy target: a privileged dind-host container on the shared network. Returns the private
-/// key, user and address the sandbox will deploy through.
-#[cfg(windows)]
-fn start_dind_target(slug: &str, log: &Log) -> Result<(String, String, String)> {
-    use crate::sandbox::DIND_PREFIX;
-    let dind_container = format!("{DIND_PREFIX}{slug}");
-    let network = crate::sandbox::trash::network(slug);
-    let dind_image = env_or("DIND_IMAGE", "ghcr.io/intentic/dind-host:latest");
-    let dind_volume = format!("intentic-dind-docker-{slug}");
-    ui::note("starting the Docker-in-Docker deploy target…");
-    docker::quiet(&["rm", "-f", &dind_container]);
-    crate::sandbox::labels::create_volume(
-        &dind_volume,
-        slug,
-        crate::sandbox::labels::Kind::VolumeDindDocker,
-    );
-    let labels = crate::sandbox::labels::here(slug, crate::sandbox::labels::Kind::Dind);
-    let mut run: Vec<&str> = vec!["run"];
-    run.extend(labels.iter().map(String::as_str));
-    let mount = format!("{dind_volume}:/var/lib/docker");
-    run.extend_from_slice(&[
-        "-d",
-        "--privileged",
-        "--restart",
-        "unless-stopped",
-        "--name",
-        &dind_container,
-        "--network",
-        &network,
-        "-e",
-        "DOCKER_TLS_CERTDIR=",
-        "-v",
-        &mount,
-        "--dns",
-        "1.1.1.1",
-        "--dns",
-        "1.0.0.1",
-        &dind_image,
-    ]);
-    docker::capture(&run).map_err(|err| {
-        crate::util::Fail(format!(
-            "failed to start the Docker-in-Docker deploy target: {}",
-            err.0
-        ))
-    })?;
-    for _ in 0..60 {
-        if docker::exec_ok(&dind_container, &["true"]) {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
-    // A fresh ed25519 key inside the target, authorized as its only key (root-owned, 600 — sshd rejects
-    // loose modes); the private half rides into the sandbox as HOST_SSH_KEY.
-    if !docker::exec_ok(
-        &dind_container,
-        &[
-            "sh",
-            "-c",
-            "ssh-keygen -t ed25519 -N \"\" -C intentic-dind -f /root/.ssh/intentic_ed25519 >/dev/null && cat /root/.ssh/intentic_ed25519.pub > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys",
-        ],
-    ) {
-        bail!("failed to provision the deploy target's SSH key (log: {}).", log.path.display());
-    }
-    let key = docker::exec_capture(&dind_container, &["cat", "/root/.ssh/intentic_ed25519"])
-        .ok_or_else(|| {
-            crate::util::Fail("could not read the deploy target's SSH key".to_string())
-        })?;
-    ui::note(&format!("deploy target '{dind_container}' is ready (the sandbox reaches it over SSH on the shared network)."));
-    Ok((key, "root".to_string(), dind_container))
 }
 
 #[cfg(test)]

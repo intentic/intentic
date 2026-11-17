@@ -1,6 +1,5 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { REPO_ROLES } from "@intentic/scaffold";
 import { isPublicPath, isReferencePath, PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { walkDirs } from "./dir-walk.js";
 
@@ -9,8 +8,11 @@ import { walkDirs } from "./dir-walk.js";
 // The walk stops at the first `.git` boundary; a nested repo belongs to its parent, as git itself sees it.
 // The workspace root's own `.git` (the shadow root repo) is never a workspace repo.
 
-// Reserved {repo} names: role names, "root" (the workspace's own repo), the reference shelf, and the outbox.
-const RESERVED = new Set<string>([...REPO_ROLES, "root", REFERENCE_DIR, PUBLIC_DIR]);
+// The names of the fixed-role repos the retired deploy engine read. Still refused, in step with the contract's reserved
+// project-folder names (ids/project-dir.ts), which ic and the desktop app mirror.
+export const ROLE_REPO_NAMES: readonly string[] = ["intent", "desired-state", "app"];
+// Reserved {repo} names: the role names, "root" (the workspace's own repo), the reference shelf, and the outbox.
+const RESERVED = new Set<string>([...ROLE_REPO_NAMES, "root", REFERENCE_DIR, PUBLIC_DIR]);
 // A safe path segment: starts alphanumeric, no separators or `..`.
 const SEGMENT = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 // Guards a pathological tree: repos past this depth aren't discovered; a giant dir farm stops scanning.

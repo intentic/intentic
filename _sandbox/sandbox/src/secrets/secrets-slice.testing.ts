@@ -129,7 +129,7 @@ export const secretsSliceFake = (devices: KeyringDevices & KeyringSyncDevices = 
                 copies = change(copies);
             },
         },
-        // The sandbox's own store, in memory: what a need's card and a DevOps-less Secrets view write.
+        // The sandbox's own store, in memory: what a need's card and the Secrets view write.
         sandboxSecrets: {
             all: async () => kept,
             get: async (name: string) => kept[name],

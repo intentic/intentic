@@ -30,9 +30,6 @@ export interface HostsSlice {
     readonly syncPairings: Pairings<SyncMode>;
     // The short codes a copy-paste command carries instead of a token (peers/redeem-codes.ts).
     readonly redeemCodes: RedeemCodes;
-    // Single-use tokens for POST /enroll, minted behind a server-connect code so the long-lived connect token never
-    // leaves the sandbox; what a server named at mint time rides along.
-    readonly enrollTokens: Pairings<{ readonly hostName?: string | undefined }>;
     // A device's own loopback ports, reached from the sandbox (`devices reach`, device-tunnels.ts).
     readonly deviceTunnels: DeviceTunnels;
     // What lets a run the owner started from the editor act on its one computer (device-door.ts).
@@ -52,8 +49,6 @@ export const hostsSlice = defineSlice<HostsSlice>({
         hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
         syncPairings: pairings<SyncMode>(syncPairBurns(historyRoot)),
         redeemCodes: redeemCodes(),
-        // Never replayable, so no burn file: minted and spent in-process.
-        enrollTokens: pairings(),
         deviceTunnels: createDeviceTunnels({ hub: () => whole().hostHub, logger }),
         runGrants: createRunGrants(),
         runBuilds: createRunBuilds(),

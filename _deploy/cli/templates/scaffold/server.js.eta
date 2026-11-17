@@ -1,9 +1,0 @@
-import { createServer } from "node:http";
-
-// Komodo sets PORT in production; the sandbox's app process manager injects PORT for the live preview.
-const port = Number(process.env.PORT ?? 3000);
-
-createServer((_req, res) => {
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    res.end("<!doctype html><title>intentic app</title><h1>It works 🎉</h1><p>Edit <code>server.js</code> — the agent works on this repo.</p>");
-}).listen(port, () => console.log(`app listening on :${port}`));

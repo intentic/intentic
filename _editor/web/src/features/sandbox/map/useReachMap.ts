@@ -166,7 +166,7 @@ export function useReachMap(models: () => readonly ModelSource[]) {
             areas: areas.query.data.value ?? [],
             personas: personas.value,
             capabilities: connections,
-            secrets: inventory.value.filter((entry) => (entry.kind === `env` || entry.kind === `generated`) && entry.status === `set`).map((entry) => entry.key),
+            secrets: inventory.value.filter((entry) => entry.kind === `env` && entry.status === `set`).map((entry) => entry.key),
             // Subscriptions and the trial; an endpoint or a local model is a connection, and stands as one.
             models: models()
                 .filter((source) => source.kind === `account` || source.kind === `trial`)

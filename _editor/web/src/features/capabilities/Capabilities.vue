@@ -267,7 +267,7 @@ onBeforeUnmount(() => {
                             :label="rowState(selected, soleInstance).label"
                         />
                     </template>
-                    <template v-if="soleInstance && selected.kind !== 'devops'" #actions>
+                    <template v-if="soleInstance" #actions>
                         <Button :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" @click="confirmRemoveId = soleInstance.id">
                             <template #icon><Icon name="trash" /></template>
                         </Button>

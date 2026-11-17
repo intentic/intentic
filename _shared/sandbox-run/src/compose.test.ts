@@ -29,7 +29,7 @@ test("a credential is a variable of the .env, never a value in the file, and com
     expect(compose).not.toContain("ict_secret");
     expect(compose).not.toContain("BEGIN KEY");
     expect(env["CONNECT_TOKEN"]).toBe("ict_secret$value");
-    expect(env["HOST_SSH_KEY"]).toContain("\n");
+    expect(env["CLOUDFLARE_API_TOKEN"]).toContain("\n");
     // The loopback port derives from the id, as the run line's does, and rides in the .env.
     expect(env["LOCAL_PORT"]).toBe(sandboxRunArgv(RUN_CASES.full).find((arg) => arg.startsWith("127.0.0.1:"))?.split(":")[1]);
 });

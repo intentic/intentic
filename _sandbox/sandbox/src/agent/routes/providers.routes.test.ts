@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { providersContract } from "@intentic/sandbox-contract/contracts/providers.contract";
 import { TRIAL_ENDPOINT_ID, TRIAL_LABEL } from "@intentic/sandbox-contract/models/agent-catalog";
@@ -31,7 +31,7 @@ test("names the ACP agents and endpoints, and nothing else the box connects to",
         // The rows this read exists to leave out: a chat can't be addressed to them, and naming them here would hand
         // the connector inventory to a tier that cannot read it.
         { id: "github", kind: "cli", config: { provider: "github" } },
-        { id: "monorepo", kind: "monorepo", config: {} },
+        CapabilitySchema.parse({ id: "laptop", kind: "device", config: { platform: "linux" } }),
     ]);
 
     expect(await providers.list()).toMatchObject({

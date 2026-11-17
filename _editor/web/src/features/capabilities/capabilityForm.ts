@@ -344,8 +344,8 @@ export const useCapabilityForm = (host: FormHost) => {
         // agent reaches).
         submitLabel: computed(() =>
             probeResult.value?.checked === true && !probeResult.value.ok
-                ? submitAnywayWord(editing.value !== undefined, selected.value?.kind)
-                : submitWord(editing.value !== undefined, selected.value?.kind),
+                ? submitAnywayWord(editing.value !== undefined)
+                : submitWord(editing.value !== undefined),
         ),
         // Every box counts as visited from a submit on; a refusal past this point is one the reader is shown.
         touchAll: (): void => {

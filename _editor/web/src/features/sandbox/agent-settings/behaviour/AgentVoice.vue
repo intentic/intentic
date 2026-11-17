@@ -216,7 +216,7 @@ const commitCloudVoice = commitCloud(`voice`);
 const { query: inventoryRead } = useSandboxQuery({ ...rpcQuery(`secrets.inventory`), enabled: computed(() => cloud.value !== undefined) });
 const secretNames = computed(() =>
     (inventoryRead.data.value?.entries ?? [])
-        .filter((entry) => (entry.kind === `env` || entry.kind === `generated`) && entry.status !== `missing`)
+        .filter((entry) => entry.kind === `env` && entry.status !== `missing`)
         .map((entry) => entry.key)
         .toSorted(),
 );

@@ -27,7 +27,7 @@ const { default: SecretHostsEditor } = await import("./SecretHostsEditor.vue");
 // Built the way the Secrets view builds its rows, so the row carries exactly what the view would hand the editor.
 const rowWith = (entry: Partial<SecretInventoryEntry> = {}): SecretRow =>
     secretRow(
-        { key: `GITHUB_TOKEN`, kind: `env`, status: `set`, requiredBy: [], storedAt: `desired-state/.env`, revealable: true, ...entry },
+        { key: `GITHUB_TOKEN`, kind: `env`, status: `set`, storedAt: `the sandbox`, revealable: true, ...entry },
         { capabilities: [], extensions: [] },
     );
 

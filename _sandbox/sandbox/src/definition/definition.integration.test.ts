@@ -154,7 +154,7 @@ test("derive reads the live stores: remotes become references, a remoteless repo
     const sourceServices = servicesFor(source, {
         capabilities: memoryCapabilitiesStore([{ id: "linear", kind: "mcp", config: { url: "https://mcp.linear.app/sse" } } as Capability]),
         sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ workspaceMap: false }) },
-        secretRegistry: async () => [{ name: "OPENAI_API_KEY", value: "sk-test", source: "env" as const }],
+        secretRegistry: async () => [{ name: "OPENAI_API_KEY", value: "sk-test", source: "sandbox" as const }],
     });
     const { definition, omitted } = await deriveDefinition(sourceServices);
 

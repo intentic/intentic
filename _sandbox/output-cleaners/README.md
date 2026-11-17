@@ -48,9 +48,8 @@ flowchart LR
   JSON compaction also requests retrieval, even when the original JSON occupied only one line.
 - `filter-stats.mjs` is the only reading of the ledger: the daemon's savings route and the plugin's stats command
   both call `summarizeStats`, so the two reports cannot disagree.
-- Secret values come from the sandbox's own stores (`secretValues`), the ones `SECRET_STORES` lists: the desired-state
-  `.env` (read with `util.parseEnv`) and `.secrets.json`, and the auth root's `sandbox-secrets.json`, capability
-  vault, `keyring-copies.json` (entries a keyring on the owner's computer shares in `copy` mode) and
+- Secret values come from the sandbox's own stores (`secretValues`), the ones `SECRET_STORES` lists, all in the auth
+  root: `sandbox-secrets.json`, the capability vault, `keyring-copies.json` (entries a keyring on the owner's computer shares in `copy` mode) and
   `keyring-released.json` (values a keyring released for one use, which the daemon writes only so they mask here and
   empties when it starts). Outside a sandbox that list is empty and only the credential-shaped patterns redact. The daemon's tool-result
   masking imports `SECRET_STORES`, `surfaceForms`, `secretReference` and `SECRET_VALUE_MIN` from here, so the two lanes

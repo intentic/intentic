@@ -15,8 +15,6 @@ await registerExtensionMessages(extensionIdOf(manifest), messages);
 const facts = (repo: string): RepoFacts => ({
     repo,
     hasPanel: false,
-    deployConfig: false,
-    desiredState: false,
     directoryUi: false,
     monorepo: false,
     tests: false,

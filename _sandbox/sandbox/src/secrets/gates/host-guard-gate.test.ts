@@ -91,7 +91,7 @@ const judgeDown = () =>
 
 // The exit as a turn wires it: the reference resolves only if the guard lets the use through.
 const accessThrough = (gate: ReturnType<typeof createHostGuardGate>): SecretAccess => ({
-    list: async () => [{ name: "GITHUB_TOKEN", value: "ghp_value", source: "env" }],
+    list: async () => [{ name: "GITHUB_TOKEN", value: "ghp_value", source: "sandbox" }],
     used: () => {},
     release: async (names, _lane, _detail, target) => {
         const verdict = await gate.check(asked(target, { names }));

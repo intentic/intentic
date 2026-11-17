@@ -3,10 +3,10 @@ import { ORPCError } from "@orpc/client";
 import { z } from "zod";
 import { acquireStreamSlot } from "./streamBudget";
 
-// Reads a daemon stream of IntenticLine frames (`intentic.run` and its kin) as they arrive; a failure the daemon reports
+// Reads a daemon stream of IntenticLine frames (a capability's `add`, a device's agent flow) as they arrive; a failure the daemon reports
 // mid-stream becomes one last kind:"error" line, so callers stop on it rather than on a throw. One connection-pool
 // permit per read, since these can hold a socket for minutes; released in the generator's `finally`, even on early break.
-export async function* readIntenticLines(frames: AsyncIterable<IntenticLine>): AsyncGenerator<IntenticLine> {
+async function* readIntenticLines(frames: AsyncIterable<IntenticLine>): AsyncGenerator<IntenticLine> {
     const slot = await acquireStreamSlot(`attach`);
     try {
         for await (const line of frames) {

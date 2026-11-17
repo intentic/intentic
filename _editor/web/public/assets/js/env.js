@@ -103,8 +103,7 @@
       ps1: () => []
     },
     device: coded(`device.sh`, `device.ps1`),
-    sync: coded(`sync.sh`, `sync.ps1`),
-    server: coded(`connect-host.sh`, `connect-host.ps1`)
+    sync: coded(`sync.sh`, `sync.ps1`)
   };
   var ONE_LINER_VERBS = Object.keys(VERBS);
 

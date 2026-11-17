@@ -290,7 +290,7 @@ describe("the asking commands speak the needs contract", () => {
     });
 
     it("secrets generate with no options leaves the length and the alphabet to the daemon's defaults", async () => {
-        server.answer = () => ({ status: 200, body: SecretGeneratedSchema.parse({ key: "WEBHOOK_SECRET", length: 64, stored: "env" }) });
+        server.answer = () => ({ status: 200, body: SecretGeneratedSchema.parse({ key: "WEBHOOK_SECRET", length: 64, stored: "sandbox" }) });
         const result = await run(server.port, "secrets", ["generate", "WEBHOOK_SECRET"]);
         expect(result.code).toBe(0);
         expect(server.seen[0]?.body).toEqual({ key: "WEBHOOK_SECRET" });

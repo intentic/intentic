@@ -7,7 +7,7 @@ flowchart LR
     ic["ic"] --> proto(["output protocol"])
     agents["intentic-machine"] --> proto
     shims["install scripts<br/>connect · device · sync · fix · …"] --> proto
-    cli["intentic<br/>deploy CLI"] --> proto
+    cli["intentic<br/>image CLI"] --> proto
     proto --> person["a person<br/>rich terminal"]
     proto --> desktop["desktop app<br/>reads the markers"]
     proto --> daemon["sandbox daemon<br/>reads ndjson"]
@@ -19,7 +19,7 @@ Everything a person sees comes from one of three places, and all three draw the 
 - [`_devices/local-agent/src/ui.ts`](../../_devices/local-agent/src/ui.ts) for `intentic-machine`;
 - the shim kit pasted into every install script, for the few lines a script prints before it hands over to one of those binaries.
 
-The `intentic` deploy CLI adds structured output ([`_deploy/cli/src/lib/output.ts`](../../_deploy/cli/src/lib/output.ts)).
+The `intentic` CLI baked into the sandbox image adds structured output ([`_sandbox/cli/src/lib/output.ts`](../../_sandbox/cli/src/lib/output.ts)).
 
 Nothing else prints to a person. The `terminal-output` check counts direct prints in `ic` and `intentic-machine` outside their renderers and fails on a new one. Machine output (a `--json` document, a marker line a parser reads) is the one right reason to write directly, and says so with `// allow(terminal-output): <reason>`.
 
@@ -144,17 +144,17 @@ The headline says what did not happen. `problem:` says why, in terms of the read
 | Say | Not | Means |
 | --- | --- | --- |
 | device | machine, PC, computer, host, this side | the computer the person is typing on |
-| server | host, deploy target | a computer enrolled to run deployments |
+| server | host | a computer away from the person that runs a sandbox |
 | sandbox | box, container | one Intentic sandbox |
 | remove | clean up, uninstall, reset | take a sandbox off the device; recoverable for 7 days with `ic sandbox restore` |
 | delete | purge, remove permanently | erase for good; confirmed by typing the name |
-| connect / disconnect | enroll, link, pair, attach | a device or server joining or leaving a sandbox |
+| connect / disconnect | enroll, link, pair, attach | a device joining or leaving a sandbox |
 | update, roll back, rebuild | recreate, swap | move a sandbox to another image |
 | stop, start, restart | power off, wake | a sandbox's containers |
 
 `uninstall` names one thing only: taking Intentic itself off a device (`ic uninstall`, the `uninstall` one-liner, the Windows uninstaller). Taking a sandbox off a device stays `remove`.
 
-Command names keep their spelling (`ic machine enroll`, `ic sandbox purge`) because scripts and the desktop app call them. Only the prose follows this table.
+Command names keep their spelling (`ic sandbox purge`) because scripts and the desktop app call them. Only the prose follows this table.
 
 **Typography:**
 
@@ -185,14 +185,14 @@ irm https://intentic.dev/<verb>/<arg> | iex
 | `update/<sandbox>`, `rollback/<sandbox>`, `restart/<sandbox>`, `rebuild/<sandbox>/<hash>` | the sandbox's name | `recreate` |
 | `remove[/<sandbox>]` | the sandbox's name, or nothing to pick from a list | `cleanup`, which hands over to `ic sandbox remove` |
 | `uninstall` | nothing, and what the person adds after it reaches `ic` (`\| sh -s -- --dry-run`) | `uninstall`, which hands over to `ic uninstall` |
-| `device/<host>/<code>`, `sync/<host>/<code>`, `server/<host>/<code>` | the sandbox's address and a code the sandbox minted | `device`, `sync`, `connect-host` |
+| `device/<host>/<code>`, `sync/<host>/<code>` | the sandbox's address and a code the sandbox minted | `device`, `sync` |
 
 The PowerShell client is told apart by its User-Agent; a trailing `.ps1` or `.sh` on the last segment picks one outright. The older flat paths (`/connect`, `/device.ps1`, …) keep working for every command already pasted somewhere.
 
 **No secrets in the command.** A pairing token, a connect token or a Cloudflare token never appears in a command, so it never lands in shell history or a leftover `$env:` variable. Where an action needs one, the command carries a code instead:
 
 - **Setup and fix codes** come from the platform and expire within 30 minutes.
-- **Device, sync and server codes** come from the sandbox itself. Each is 8 characters of Crockford base32, single-use, and expires in 10 minutes. The script spends it first, before it downloads anything, at `https://<host>/system/redeem/<code>` (rate-limited), and gets back what the old command carried.
+- **Device and sync codes** come from the sandbox itself. Each is 8 characters of Crockford base32, single-use, and expires in 10 minutes. The script spends it first, before it downloads anything, at `https://<host>/system/redeem/<code>` (rate-limited), and gets back what the old command carried.
 - **A server code** stands for a single-use enroll token, so the sandbox's long-lived connect token never leaves it.
 - **The Cloudflare token** is asked for on the terminal, with what is typed hidden, and is not stored on the server.
 
@@ -240,13 +240,11 @@ In plain mode a row settles as `ok`, `warn`, `FAIL` or `skip` in one aligned col
 
 `--json` puts JSON, and only JSON, on stdout; every human line moves to stderr. Callers read the last stdout line that starts with `{` or `[`.
 
-The `intentic` deploy CLI reads `INTENTIC_OUTPUT`:
+The `intentic` CLI reads `INTENTIC_OUTPUT`:
 
-- `text` (the default, and the fallback for any unknown value): prose and live apply progress.
+- `text` (the default, and the fallback for any unknown value): prose.
 - `json`: silent during the run, then one document.
 - `ndjson`: one JSON object per line, each with a `kind` and a `t` stamp in epoch milliseconds, ending with `kind: "result"`.
-
-Every mode passes through a redactor that masks known secret values. The sandbox daemon always runs it with `ndjson` and parses each line as `IntenticLine` from `@intentic/sandbox-contract`.
 
 ## Exit codes
 

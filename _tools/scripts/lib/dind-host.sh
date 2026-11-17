@@ -38,8 +38,7 @@ start_dind_host() {
     fi
 
     # connect.sh refuses to start without curl (it would otherwise die mid-run on a raw "command not found");
-    # the dind image is Alpine and ships only busybox wget. Installed here rather than baked into dind-host,
-    # which keeps that image exactly what the deployment e2e needs it to be.
+    # the dind image is Alpine and ships only busybox wget.
     # It reaches Alpine's mirror, so it is retried through a short outage, and what apk said is shown when it never
     # gets through: discarded, a runner with no route out ended the drill on a bare exit 1 (run 42359893687).
     local attempt apk_output

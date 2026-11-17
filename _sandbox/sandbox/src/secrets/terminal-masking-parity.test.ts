@@ -2,7 +2,6 @@ import * as terminal from "@intentic/output-cleaners/cleaners";
 import { CREDENTIAL_ISSUER_PREFIXES, CREDENTIAL_ISSUERS, maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
 import { SECRET_REFERENCE } from "@intentic/sandbox-contract/schemas/needs";
 import { SECRET_MASK_MIN } from "@intentic/sandbox-contract/schemas/secrets";
-import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { capabilitySecretsDocument } from "../capabilities/credentials/secret-vault.js";
 import { keyringCopiesDocument, RELEASED_VALUES_FILE } from "./device/keyring-stores.js";
 import { sandboxSecretsDocument } from "./sandbox-secrets.js";
@@ -27,13 +26,11 @@ test("the terminal and the contract know the same issuers, with the same bodies"
 });
 
 test("the terminal reads every store the registry resolves, at the paths the daemon's own documents name", () => {
-    expect(terminal.SECRET_STORES.map(({ root, path }) => `${root}:${path}`)).toEqual([
-        `desiredState:${ENV_FILE}`,
-        `auth:${sandboxSecretsDocument.path}`,
-        `desiredState:${SECRETS_FILE}`,
-        `auth:${capabilitySecretsDocument.path}`,
-        `auth:${keyringCopiesDocument.path}`,
-        `auth:${RELEASED_VALUES_FILE}`,
+    expect(terminal.SECRET_STORES.map(({ path }) => path)).toEqual([
+        sandboxSecretsDocument.path,
+        capabilitySecretsDocument.path,
+        keyringCopiesDocument.path,
+        RELEASED_VALUES_FILE,
     ]);
     // Read as the daemon writes them: a keyring's copies and its released values are both flat name -> value files.
     expect(terminal.SECRET_STORES.slice(-2).map(({ layout, source }) => `${layout}:${source}`)).toEqual(["flat:copy", "flat:device"]);

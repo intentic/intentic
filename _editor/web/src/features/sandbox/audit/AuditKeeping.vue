@@ -70,7 +70,7 @@ const NO_SECRET = `__none__`;
 const secretOptions = computed(() => [
     { value: NO_SECRET, label: t(`sandbox.sandboxAudit.forwardSecretNone`) },
     ...inventory.value
-        .filter((entry) => (entry.kind === `env` || entry.kind === `generated`) && entry.status === `set`)
+        .filter((entry) => entry.kind === `env` && entry.status === `set`)
         .map((entry) => ({ value: entry.key, label: entry.key })),
 ]);
 const pickSecret = (value: string | undefined): void => {

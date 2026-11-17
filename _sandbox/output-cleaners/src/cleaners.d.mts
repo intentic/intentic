@@ -51,13 +51,12 @@ export const SECRET_VALUE_MIN: number;
 // What of a multi-line value masks on its own: each line, and each entry's value where it reads as a dotenv.
 export const multilineParts: (value: string) => string[];
 
-// One store a secret value lives in: which root it sits under, its path there, how it lays out its values, and what the
-// daemon's registry records a value from it as.
+// One store a secret value lives in: its path under the auth root, how it lays out its values, and what the daemon's
+// registry records a value from it as.
 export interface SecretStore {
-    readonly root: "auth" | "desiredState";
     readonly path: string;
-    readonly layout: "env" | "flat" | "vault";
-    readonly source: "env" | "sandbox" | "generated" | "capability" | "copy" | "device";
+    readonly layout: "flat" | "vault";
+    readonly source: "sandbox" | "capability" | "copy" | "device";
 }
 
 // Every store, in the order a name two of them hold resolves.

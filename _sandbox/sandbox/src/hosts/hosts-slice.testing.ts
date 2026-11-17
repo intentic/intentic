@@ -14,7 +14,6 @@ export const hostsSliceFake = ({ historyRoot }: SliceFakeContext) =>
         syncPairings: pairings<SyncMode>(syncPairBurns(historyRoot)),
         redeemCodes: redeemCodes(),
         runBuilds: createRunBuilds(),
-        enrollTokens: pairings(),
         // No connected device, which is what the daemon answers with no host card granted; every planned turn asks,
         // so every route running a turn needs it.
         hostReach: async () => undefined,

@@ -42,16 +42,12 @@ mod fetch;
 mod health;
 mod image_cache;
 mod logfile;
-#[cfg(unix)]
-mod machine;
 mod os;
 mod platform;
 mod prepare;
 mod record;
 mod runner;
 mod sandbox;
-#[cfg(unix)]
-mod selfhost;
 mod shape;
 mod tty;
 mod ui;
@@ -74,7 +70,7 @@ pub const VERSION: &str = match option_env!("IC_VERSION") {
 #[command(
     name = "ic",
     version = VERSION,
-    about = "intentic on this device — sandboxes and deploy targets",
+    about = "intentic on this device",
     disable_help_subcommand = true
 )]
 struct Cli {
@@ -87,9 +83,6 @@ enum Command {
     /// The sandbox containers on this device
     #[command(subcommand)]
     Sandbox(SandboxCommand),
-    /// This server as a deploy target for a sandbox
-    #[command(subcommand)]
-    Machine(DeviceCommand),
     /// Runners on this device — execution containers a parent sandbox dispatches turns to
     #[command(subcommand)]
     Runner(RunnerCommand),
@@ -1245,21 +1238,6 @@ enum RunnerCommand {
     },
 }
 
-#[derive(Subcommand)]
-enum DeviceCommand {
-    /// Enroll this server as a deploy target for an existing sandbox (the Infra screen's one-liner)
-    Enroll,
-    /// Remove everything intentic put on this deploy target — stacks, volumes, state, tunnel, service user
-    Remove {
-        /// Skip the confirmation (headless runs; CONFIRM=1 works too)
-        #[arg(short = 'y', long = "yes")]
-        yes: bool,
-        /// Leave the service user + its home (and SSH keys) in place
-        #[arg(long = "keep-user")]
-        keep_user: bool,
-    },
-}
-
 fn main() {
     engine::adopt();
     #[cfg(windows)]
@@ -1576,7 +1554,6 @@ fn main() {
                 confirm,
             }),
         },
-        Command::Machine(command) => run_machine(command),
         Command::Runner(command) => match command {
             RunnerCommand::Up {
                 parent_url,
@@ -1779,16 +1756,6 @@ fn resumed(no_resume: bool, verb: impl FnOnce() -> util::Result<()>) -> util::Re
     verb()
 }
 
-#[cfg(unix)]
-fn run_machine(command: DeviceCommand) -> util::Result<()> {
-    match command {
-        DeviceCommand::Enroll => machine::enroll::run(),
-        DeviceCommand::Remove { yes, keep_user } => {
-            machine::remove::run(machine::remove::Args { yes, keep_user })
-        }
-    }
-}
-
 /// `ic os`: refused with exit 3 off Intentic OS, before anything else (os/mod.rs).
 #[cfg(unix)]
 fn run_os(command: OsCommand) -> util::Result<()> {
@@ -1927,15 +1894,6 @@ fn run_os_sound(command: OsSoundCommand) -> util::Result<()> {
 fn run_os(_command: OsCommand) -> util::Result<()> {
     ui::error("ic os manages Intentic OS, which is a Linux; there is nothing for it to manage on Windows.");
     std::process::exit(os::NOT_INTENTIC_OS);
-}
-
-/// Windows can't be a native SSH+Docker deploy target — its stand-in is the Docker-in-Docker container
-/// `ic sandbox connect` starts with SELF_HOST=1, not an enrolment of the machine itself.
-#[cfg(windows)]
-fn run_machine(_command: DeviceCommand) -> util::Result<()> {
-    Err(util::Fail(
-        "machine enrolment connects Linux servers. On Windows, deploy locally instead: re-run the sandbox setup with $env:SELF_HOST='1', which stands up a Docker-in-Docker deploy target beside the sandbox.".to_string(),
-    ))
 }
 
 #[cfg(test)]
@@ -2411,23 +2369,6 @@ mod tests {
         assert_eq!(confirm.as_deref(), Some("abc"));
     }
 
-    #[test]
-    fn machine_verbs_parse_and_removal_never_implies_consent() {
-        assert!(parse(&["machine", "enroll"]).is_ok());
-        let Ok(Cli {
-            command: Command::Machine(DeviceCommand::Remove { yes, keep_user }),
-        }) = parse(&["machine", "remove"])
-        else {
-            panic!("machine remove did not parse")
-        };
-        assert!(
-            !yes,
-            "machine remove tears down a whole host — consent is never a default"
-        );
-        assert!(!keep_user);
-        assert!(parse(&["machine", "remove", "-y", "--keep-user"]).is_ok());
-    }
-
     /* `ic os` is spelled by the contract's argv builders (_shared/sandbox-contract/src/schemas/intentic-os.ts), the
     desktop app (src-tauri/src/os.rs) and the image's systemd units; each spelling they use parses, and nothing that
     would reboot a machine is implied by a flag that only reads. */
@@ -2691,7 +2632,7 @@ mod tests {
         }
     }
 
-    /* `docker prepare` is on the shims' critical path — connect.ps1 and connect-host.ps1 both stop dead if it will not parse. */
+    /* `docker prepare` is on the shims' critical path — connect.ps1 stops dead if it will not parse. */
     #[test]
     fn docker_prepare_defaults_to_asking_and_to_acting() {
         let Ok(Cli {

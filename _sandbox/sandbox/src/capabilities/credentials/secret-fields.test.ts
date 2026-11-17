@@ -11,8 +11,6 @@ import { generateSshKey } from "./ssh-keys.js";
 const SHA = "9305c108986b03875ea559a7e59f9004df550e7f";
 
 const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
-    devops: [{ id: "devops", kind: "devops", config: {} }],
-    monorepo: [{ id: "monorepo", kind: "monorepo", config: {} }],
     mcp: [{ id: "linear", kind: "mcp", config: { url: "https://a/mcp", token: "mcp_tok" } }],
     cli: [{ id: "github", kind: "cli", config: { provider: "github", token: "ghp_x", git: "on" } }],
     plugin: [{ id: "iq", kind: "plugin", config: { url: "https://github.com/a/b.git", ref: "main", path: "sub", token: "ghp_x" } }],

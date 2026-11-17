@@ -15,7 +15,6 @@ test("the credentials sealed at boot are exactly the table's secret rows", () =>
         "CLOUDFLARE_API_TOKEN",
         "CONNECT_TOKEN",
         "HOST_PAIR_TOKEN",
-        "HOST_SSH_KEY",
         "RUNNER_PAIR_TOKEN",
         "SANDBOX_GRANT",
         "SYNC_PAIR_TOKEN",

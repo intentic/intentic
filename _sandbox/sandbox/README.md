@@ -56,10 +56,10 @@ value import closing a cycle between two of them fails too (standing ones: `_too
 | Layer | Holds | Directories |
 | --- | --- | --- |
 | foundation | storage, ports and primitives every other layer stands on; they know no subsystem | `store/` `seams/` `http/` `offload/` `netd/` `fences/` `speech/` `areas/` `workload/` `safety/` `tunnel/` `image/` `retry/` |
-| host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `access/` `personas/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `intentic/` `activity/` `audit/` `org/` |
+| host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `access/` `personas/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `activity/` `audit/` `org/` |
 | connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `webchat/` `issues/` `definition/` |
 | agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
-| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `inventory/` `portability/` `migrations/` `history/` `retention/` `hub/` |
+| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `portability/` `migrations/` `history/` `retention/` `hub/` |
 | composition | boot wiring and whole-daemon self-checks, which import every layer and are imported by none | `bootstrap/` `invariants/` `harness/` |
 | (none) | in no layer: the boundary check places no module here | `e2e/` |
 <!-- <<< end of generated layers.json -->
@@ -245,10 +245,9 @@ flowchart LR
   against the computer's sha256 before it passes on the last piece. Each chunk waits up to two minutes, and packing or
   unpacking a folder up to ten. (In the shinobi-society audit, agents moved a 12 MB tarball with `docker cp` through
   rog's `run_command`.)
-- A device, desktop sync or a server joins with a command that carries a short code, never a token
+- A device or desktop sync joins with a command that carries a short code, never a token
   (`peers/redeem-codes.ts`). The code is 8 characters, single-use and expires in 10 minutes. The device's script spends
-  it at the public `POST /system/redeem/<code>`, which is rate-limited, and gets back what the command used to carry.
-  A server's code stands for a single-use enroll token, so the sandbox's long-lived connect token stays here. Codes live
+  it at the public `POST /system/redeem/<code>`, which is rate-limited, and gets back what the command used to carry. Codes live
   in memory only, so a restart voids them and the person copies a new command.
 - A device's enrollment is written with the machine id its agent sends when it redeems the pairing
   (`POST /system/hosts/enroll`, `PeerEnrollmentRequestSchema`), so the computer joins its sync row as one machine card

@@ -153,22 +153,16 @@ export const TOOL_PINS = [
     {
         id: "cloudflared",
         label: "cloudflared",
-        // The binary the image bakes and `ic` installs, and the container image the deploy graph, the self-host compose
-        // and the Windows host one-liner run: one upstream, moved together, or a user's tunnel and their sandbox's
-        // cloudflared are different builds (which is how three versions were once live at once).
+        // The binary the image bakes, and the container image the platform's self-host compose and the turbo cache run:
+        // one upstream, moved together (three versions were once live at once).
         upstream: { kind: "github-release", repo: "cloudflare/cloudflared" },
         sites: [
             site(DOCKERFILE, /^ARG CLOUDFLARED_VERSION=(\S+)$/gm, 1),
-            site("_sandbox/ic/src/machine/enroll.rs", /"CLOUDFLARED_VERSION"[^\n]*?"(\d{4}\.\d+\.\d+)"/g, 1),
-            site("_sandbox/ic/src/sandbox/connect.rs", /"CLOUDFLARED_VERSION"[^\n]*?"(\d{4}\.\d+\.\d+)"/g, 1),
             ...[
-                "_deploy/state-resolver/src/lib/images.ts",
-                "_deploy/sdk/src/__fixtures__/deploy.graph.ts",
                 "_tools/selfhost/platform/docker-compose.yml",
                 // Already on 2026.10.0 when the rest were on 2026.9.3: moved by hand, alone, which is the drift this
                 // table exists to stop.
                 "_tools/turbo-cache/docker-compose.yml",
-                "_site/site/public/scripts/connect-host.ps1",
             ].flatMap((file) => [
                 site(file, /cloudflare\/cloudflared:(\d{4}\.\d+\.\d+)@sha256:[a-f0-9]{64}/g, 1),
                 site(file, /cloudflare\/cloudflared:\d{4}\.\d+\.\d+@sha256:([a-f0-9]{64})/g, 1, "digest"),

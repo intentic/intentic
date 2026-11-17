@@ -152,7 +152,7 @@
     "-e",
     "CONNECT_TOKEN=ict_secret$value",
     "-e",
-    "HOST_SSH_KEY=-----BEGIN KEY-----\nline\n-----END KEY-----",
+    "CLOUDFLARE_API_TOKEN=-----BEGIN KEY-----\nline\n-----END KEY-----",
     "-e",
     "SANDBOX_SWAP=2g",
     "env:tag"

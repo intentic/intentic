@@ -39,7 +39,6 @@
                 "endpoints",
                 "trial",
                 "system",
-                "intentic",
                 "activity",
                 "audit",
                 "org"
@@ -87,7 +86,6 @@
                 "needs",
                 "approvals",
                 "settings",
-                "inventory",
                 "portability",
                 "migrations",
                 "history",

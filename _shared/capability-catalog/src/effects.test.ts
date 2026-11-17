@@ -82,11 +82,6 @@ describe("capabilityEffects", () => {
         }
     });
 
-    it("scaffolds the monorepo under the instance name", () => {
-        expect(capabilityEffects({ kind: "monorepo", id: "shop", config: {} })).toEqual([{ kind: "scaffold", repos: ["shop"] }]);
-        expect(capabilityEffects({ kind: "monorepo", config: {} })).toEqual([{ kind: "scaffold", repos: [] }]);
-    });
-
     it("derives cli secret and image from the connector spec", () => {
         const github = capabilityEffects({ kind: "cli", id: "github", config: { provider: "github" }, contribution: connector() });
         expect(github).toEqual([

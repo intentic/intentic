@@ -106,6 +106,7 @@ import { sharesDocument } from "../share/share-store.js";
 import { conversationsSchemaStep } from "../store/conversations-db.js";
 import { conversionsDocument } from "../store/evolution/state-convergence.js";
 import { borrowedAccountsLeftoversStep } from "../store/evolution/steps/borrowed-accounts-leftovers.js";
+import { deployLedgersLeftoversStep } from "../store/evolution/steps/deploy-ledgers-leftovers.js";
 import { fieldNotesLeftoversStep } from "../store/evolution/steps/field-notes-leftovers.js";
 import { landCheckLeftoversStep } from "../store/evolution/steps/land-check-leftovers.js";
 import { projectsHostLeftoversStep } from "../store/evolution/steps/projects-host-leftovers.js";
@@ -307,6 +308,7 @@ export const stateSteps = (): readonly StructuralStep[] =>
         earlierDefaultsStep,
         conversationsSchemaStep,
         borrowedAccountsLeftoversStep,
+        deployLedgersLeftoversStep,
         fieldNotesLeftoversStep,
         landCheckLeftoversStep,
         projectsHostLeftoversStep,

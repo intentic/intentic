@@ -1,31 +1,33 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { capabilitySecretsDocument, fileSecretVault } from "../capabilities/credentials/secret-vault.js";
 import { hasSecretReferences, resolveSecretReferences, secretReference, secretRegistryOf, type KeptFromKeyrings } from "./secret-registry.js";
 import { fileSandboxSecrets } from "./sandbox-secrets.js";
 import { maskTargets } from "../agent/tools/agent-redaction.js";
 
-// Secrets live in four stores (SECRET_STORES: DevOps .env, the sandbox's own, deploy-generated values, capability
-// vault); pins that the registry unions them, each value keeps its reference name, and a store that fails fails the
-// read: its values could not be masked.
+// Secrets live in the stores SECRET_STORES lists (the sandbox's own, the capability vault, a keyring's copies and the
+// values a keyring released); pins that the registry unions them, each value keeps its reference name, and a store that
+// fails fails the read: its values could not be masked.
 
 const withStores = (keyrings?: KeptFromKeyrings) => {
     const root = mkdtempSync(join(tmpdir(), "secret-registry-"));
-    const repo = join(root, "desired-state");
     const vault = fileSecretVault(capabilitySecretsDocument, join(root, "auth", "capability-secrets.json"));
-    const write = async (file: string, body: string): Promise<void> => {
-        await mkdir(repo, { recursive: true });
-        await writeFile(join(repo, file), body);
-    };
     const sandbox = fileSandboxSecrets(join(root, "auth", "sandbox-secrets.json"));
-    return { vault, write, sandbox, registry: secretRegistryOf(vault, () => repo, sandbox, keyrings) };
+    return { vault, sandbox, registry: secretRegistryOf(vault, sandbox, keyrings) };
 };
 
 test("names are a value-free projection of the last successful registry read", async () => {
-    const { sandbox, registry, write } = withStores();
+    let failing = false;
+    const { sandbox, registry } = withStores({
+        copies: async () => {
+            if (failing) {
+                throw new Error("EACCES");
+            }
+            return {};
+        },
+        released: () => ({}),
+    });
     expect(registry.names?.()).toBeUndefined();
     await sandbox.set("API_TOKEN", "synthetic-fixture");
     await registry();
@@ -33,7 +35,7 @@ test("names are a value-free projection of the last successful registry read", a
     const refreshing = registry();
     expect(registry.names?.()).toEqual(["API_TOKEN"]);
     await refreshing;
-    await write(SECRETS_FILE, "invalid JSON");
+    failing = true;
     await expect(registry()).rejects.toThrow();
     expect(registry.names?.()).toBeUndefined();
 });
@@ -52,14 +54,12 @@ test("the names projection excludes device releases but retains sandbox-held and
     expect(registry.names?.()).toContain("DEVICE_TOKEN");
 });
 
-test("the registry is the union of all three stores, each value under its name", async () => {
-    const { vault, write, registry } = withStores();
+test("the registry is the union of the stores, each value under its name", async () => {
+    const { vault, sandbox, registry } = withStores();
     await vault.set("reddit", { password: "Xk4!mQ2pRt7@wZ9aBc1_" });
-    await write(ENV_FILE, "CLOUDFLARE_API_TOKEN=cf_live_0011223344ff\n");
-    await write(SECRETS_FILE, JSON.stringify({ GRAFANA_ADMIN_PASSWORD: "gen-a8f2k1m4p7q9" }));
+    await sandbox.set("CLOUDFLARE_API_TOKEN", "cf_live_0011223344ff");
     expect((await registry()).toSorted((a, b) => a.name.localeCompare(b.name))).toEqual([
-        { name: "CLOUDFLARE_API_TOKEN", value: "cf_live_0011223344ff", source: "env" },
-        { name: "GRAFANA_ADMIN_PASSWORD", value: "gen-a8f2k1m4p7q9", source: "generated" },
+        { name: "CLOUDFLARE_API_TOKEN", value: "cf_live_0011223344ff", source: "sandbox" },
         { name: "reddit/password", value: "Xk4!mQ2pRt7@wZ9aBc1_", source: "capability" },
     ]);
 });
@@ -71,10 +71,6 @@ test("a vault capability holding several fields names each one", async () => {
 });
 
 test("an unreadable vault fails the whole read rather than answering without its values", async () => {
-    const root = mkdtempSync(join(tmpdir(), "secret-registry-"));
-    const repo = join(root, "desired-state");
-    await mkdir(repo, { recursive: true });
-    await writeFile(join(repo, ENV_FILE), "CLOUDFLARE_API_TOKEN=cf_live_0011223344ff\n");
     const broken = secretRegistryOf(
         {
             get: async () => ({}),
@@ -85,8 +81,7 @@ test("an unreadable vault fails the whole read rather than answering without its
             remove: async () => {},
             values: async () => [],
         },
-        () => repo,
-        { all: async () => ({}) },
+        { all: async () => ({ CLOUDFLARE_API_TOKEN: "cf_live_0011223344ff" }) },
     );
     await expect(broken()).rejects.toThrow("EACCES");
 });
@@ -105,7 +100,7 @@ test("a credential connected mid-turn is in the very next read", async () => {
 
 test("resolution replaces known references, reports uses once, and names the unknown", () => {
     const secrets = [
-        { name: "CLOUDFLARE_API_TOKEN", value: "cf_live_0011223344ff", source: "env" as const },
+        { name: "CLOUDFLARE_API_TOKEN", value: "cf_live_0011223344ff", source: "sandbox" as const },
         { name: "reddit/password", value: "Xk4!mQ2pRt7@wZ9aBc1_", source: "capability" as const },
     ];
     const text = `curl -H "Authorization: Bearer ${secretReference("CLOUDFLARE_API_TOKEN")}" -d '{"again":"${secretReference(
@@ -119,25 +114,18 @@ test("resolution replaces known references, reports uses once, and names the unk
     expect(resolved.unknown).toEqual(["NOPE"]);
 });
 
-test("a generated value that is not a string is left out rather than failing the read", async () => {
-    const { write, registry } = withStores();
-    await write(SECRETS_FILE, JSON.stringify({ GRAFANA_ADMIN_PASSWORD: "gen-a8f2k1m4p7q9", REPLICAS: 3 }));
-    expect((await registry()).map((secret) => secret.name)).toEqual(["GRAFANA_ADMIN_PASSWORD"]);
-});
-
 test("the reference pre-check answers the same however often it is asked", () => {
     const command = `curl -H "x: ${secretReference("CLOUDFLARE_API_TOKEN")}"`;
     expect([hasSecretReferences(command), hasSecretReferences(command), hasSecretReferences("echo plain")]).toEqual([true, true, false]);
 });
 
-test("a secret kept without DevOps resolves by its plain name, and the desired-state .env wins a name both hold", async () => {
-    const { sandbox, write, registry } = withStores();
+test("a secret a person kept resolves by its plain name, and wins a name a keyring's copy also holds", async () => {
+    const { sandbox, registry } = withStores({ copies: async () => ({ SHARED_NAME: "from-a-keyring-copy" }), released: () => ({}) });
     await sandbox.set("OPENAI_API_KEY", "sk-sandbox-kept-value-01");
     await sandbox.set("SHARED_NAME", "from-the-sandbox-store");
-    await write(ENV_FILE, "SHARED_NAME=from-the-env-file\n");
     const byName = new Map((await registry()).map((secret) => [secret.name, secret]));
     expect(byName.get("OPENAI_API_KEY")).toEqual({ name: "OPENAI_API_KEY", value: "sk-sandbox-kept-value-01", source: "sandbox" });
-    expect(byName.get("SHARED_NAME")).toEqual({ name: "SHARED_NAME", value: "from-the-env-file", source: "env" });
+    expect(byName.get("SHARED_NAME")).toEqual({ name: "SHARED_NAME", value: "from-the-sandbox-store", source: "sandbox" });
 });
 
 test("a keyring's copies are listed like a stored secret, and a value a keyring released is listed under its own source, to mask", async () => {
@@ -145,7 +133,7 @@ test("a keyring's copies are listed like a stored secret, and a value a keyring 
     const vault = fileSecretVault(capabilitySecretsDocument, join(root, "auth", "capability-secrets.json"));
     const sandbox = fileSandboxSecrets(join(root, "auth", "sandbox-secrets.json"));
     const released = new Map([["VPN_PASSWORD", "released-vpn-value-123"]]);
-    const registry = secretRegistryOf(vault, () => join(root, "desired-state"), sandbox, {
+    const registry = secretRegistryOf(vault, sandbox, {
         copies: async () => ({ DB_PASSWORD: "copied-db-value-456" }),
         released: () => Object.fromEntries(released),
     });

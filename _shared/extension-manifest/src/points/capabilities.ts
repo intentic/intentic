@@ -329,7 +329,7 @@ const contributionBase = {
     fields: z.array(CapabilityFieldSchema),
 };
 
-// A capability card as data; kinds with genuine device privilege (docker, vpn, extension, devops) live in the platform
+// A capability card as data; kinds with genuine device privilege (docker, vpn, extension) live in the platform
 // catalog instead, since a manifest that could name them would grant itself that privilege.
 export const CapabilityContributionSchema = z
     .discriminatedUnion("kind", [

@@ -74,8 +74,6 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
     running: false,
     healthy: false,
     servers: [],
-    deployConfig: false,
-    desiredState: false,
     directoryUi: false,
     monorepo: false,
     tests: false,
@@ -91,13 +89,7 @@ const idsFor = (repo: string, panels: PanelSummary[]): string[] =>
         .map(({ extension }) => extension.id);
 
 describe(`apps extension`, () => {
-    it(`excludes the intent/infrastructure repo: it surfaces as Infrastructure, not as an app monorepo`, () => {
-        const ids = idsFor(`intentic-app`, [panel({ repo: `intentic-app`, deployConfig: true, monorepo: true })]);
-        expect(ids).toContain(`infrastructure`);
-        expect(ids).not.toContain(`apps`);
-    });
-
-    it(`still surfaces a plain monorepo as an app monorepo`, () => {
+    it(`surfaces a plain monorepo as an app monorepo`, () => {
         expect(idsFor(`shop`, [panel({ repo: `shop`, monorepo: true })])).toContain(`apps`);
     });
 });
@@ -123,14 +115,6 @@ describe(`apps extension, merged tests view`, () => {
         expect(tile?.repo).toBeUndefined();
         expect(tile?.icon).toBe(`bolt`);
         expect(tile?.props).toEqual({ repo: `lib`, monorepo: false });
-    });
-
-    it(`the intent monorepo's tests surface as a tests-only tile beside Infrastructure, never a browsable app monorepo`, () => {
-        const panels = [panel({ repo: `intent`, monorepo: true, tests: true, deployConfig: true })];
-        const tile = appsTile(`intent`, panels);
-        expect(tile?.repo).toBeUndefined();
-        expect(tile?.props).toEqual({ repo: `intent`, monorepo: false });
-        expect(contributes(`infrastructure`, `intent`, panels)).toBe(true);
     });
 
     it(`the old vitest extension id is gone`, () => {
@@ -256,7 +240,7 @@ describe(`rail order`, () => {
             { id: `production`, kind: `cli`, config: { provider: `komodo` } },
         ];
         const rail = detectActivations(
-            [panel({ repo: `demo`, hasPanel: true, userStories: true, deployConfig: true, desiredState: true })],
+            [panel({ repo: `demo`, hasPanel: true, userStories: true })],
             capabilities,
         )
             .filter(({ extension }) => extension.surface === `rail`)
@@ -501,7 +485,7 @@ describe(`the work band`, () => {
     // two calls hand back equal groups that are not the same objects. Asserted on the tiles themselves, not on the
     // band count, so the failure reads as "the rail is empty" rather than as an internal detail.
     it(`lands every on the rail tile in a band, however many times the group table is built`, () => {
-        const tiles = [{ id: `chat` }, { id: `agents` }, { id: `approvals` }, { id: `live-status` }, { id: `stranger` }];
+        const tiles = [{ id: `chat` }, { id: `agents` }, { id: `approvals` }, { id: `documentation` }, { id: `stranger` }];
         const banded = railBands(tiles, (tile) => tile.id).flatMap((band) => band.items.map((item) => item.id));
         expect(banded.toSorted()).toEqual(tiles.map((tile) => tile.id).toSorted());
     });

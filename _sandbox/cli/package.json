@@ -1,0 +1,47 @@
+{
+    "name": "@intentic/cli",
+    "version": "0.0.0",
+    "description": "The `intentic` command in the sandbox image: the sandbox container's canonical docker-run command, its host probes, and monorepo/app scaffolding",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/cli"
+    },
+    "files": [
+        "dist"
+    ],
+    "bin": {
+        "intentic": "./dist/cli.js"
+    },
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "scripts": {
+        "build": "tsc",
+        "typecheck": "bun check -p tsconfig.test.json",
+        "watch": "tsc --build --watch",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/constants": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/sandbox-run": "workspace:*",
+        "@intentic/scaffold": "workspace:*",
+        "@puristic/env": "catalog:",
+        "@stricli/core": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+        "tsx": "catalog:"
+    }
+}

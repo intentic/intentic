@@ -11,8 +11,8 @@ import { keyringModeWords } from "../../capabilities/connect/secrets/keyringWord
 // (managed elsewhere, named via `capabilityTile`). `attention` is only ever a secrets-tab fix, never a connection's own
 // health.
 
-/** Where a row belongs; the first three cases are the owner's to set. `device` lives in a keyring on one of the owner's computers. */
-export type SecretGroup = `required` | `yours` | `generated` | `credential` | `provider` | `device`;
+/** Where a row belongs; `yours` is the owner's to set. `device` lives in a keyring on one of the owner's computers. */
+export type SecretGroup = `yours` | `credential` | `provider` | `device`;
 
 export interface SecretRow {
     readonly entry: SecretInventoryEntry;
@@ -25,7 +25,7 @@ export interface SecretRow {
     readonly detail: string;
     readonly logo?: string | undefined;
     readonly icon: string;
-    /** Something is owed here: a required value nobody set, a value too short to hide, or a copy CI never got. */
+    /** Something is owed here: a value too short to hide. */
     readonly attention: boolean;
     /** That debt in the reader's words, absent when there is none. */
     readonly note?: string | undefined;
@@ -59,36 +59,27 @@ export interface SecretSources {
     readonly extensions: readonly ExtensionSummary[];
 }
 
-// A generated value is intentic's to write; a provider account is the subscription's. Neither is typed in.
-const GROUPS: Readonly<Record<SecretInventoryEntry[`kind`], SecretGroup | undefined>> = {
-    env: undefined,
-    generated: `generated`,
+// A provider account is the subscription's, never typed in.
+const GROUPS: Readonly<Record<SecretInventoryEntry[`kind`], SecretGroup>> = {
+    env: `yours`,
     capability: `credential`,
     provider: `provider`,
     device: `device`,
 };
 
-const groupOf = (entry: SecretInventoryEntry): SecretGroup => GROUPS[entry.kind] ?? (entry.requiredBy.length > 0 ? `required` : `yours`);
-
 // Fallback glyph when a tile declares none, and the fixed glyph every AI subscription wears (no tile to ask).
 const CREDENTIAL_GLYPH = `key`;
 const PROVIDER_GLYPH = `sparkles`;
-
-const usedBy = (entry: SecretInventoryEntry): string =>
-    entry.requiredBy.length === 0 ? `` : t(`sandbox.secretRows.usedBy`, { users: entry.requiredBy.map((use) => use.resourceId).join(`, `) });
 
 // Who has to release a gated value, as the row says it.
 const needsApproval = (approvers: readonly string[]): string =>
     t(`sandbox.secretRows.needsApprovalFrom`, { approvers: approvers.join(` ${t(`sandbox.secretRows.or`)} `) });
 
-// Priority: an unset value, then a stale CI copy. A gate needing approval is not a debt (never sets `attention`)
-// but still worth a line so a reader sees why a turn could not use it.
+// An unset value first. A gate needing approval is not a debt (never sets `attention`) but still worth a line so a
+// reader sees why a turn could not use it.
 const noteOf = (entry: SecretInventoryEntry): string | undefined => {
     if (entry.status === `missing`) {
         return t(`sandbox.secretRows.notSet`);
-    }
-    if (entry.ci !== undefined && !entry.ci.synced) {
-        return t(`sandbox.secretRows.ciMissing`);
     }
     return entry.gate === undefined ? undefined : needsApproval(entry.gate.approvers);
 };
@@ -132,7 +123,7 @@ const credentialRow = (entry: SecretInventoryEntry, sources: SecretSources): Sec
 // The Type into… route takes an env-var name, so a value is typeable only once it is stored under one. A provider
 // account's credential and a connection's are never typed by hand.
 const typeableHere = (entry: SecretInventoryEntry, group: SecretGroup): boolean =>
-    (group === `required` || group === `yours` || group === `generated`) && entry.status !== `missing` && SECRET_KEY_RE.test(entry.key);
+    group === `yours` && entry.status !== `missing` && SECRET_KEY_RE.test(entry.key);
 
 const DEVICE_GLYPH = `desktop`;
 
@@ -193,7 +184,7 @@ const deviceRow = (entry: SecretInventoryEntry): SecretRow => {
 // box, and a row silently disappearing is worse than a thin one.
 const bareRow = (entry: SecretInventoryEntry, group: SecretGroup): SecretRow => {
     const title = entry.label ?? entry.key;
-    const detail = group === `provider` ? t(`sandbox.secretRows.aiSubscription`) : usedBy(entry);
+    const detail = group === `provider` ? t(`sandbox.secretRows.aiSubscription`) : ``;
     return {
         entry,
         group,
@@ -201,9 +192,9 @@ const bareRow = (entry: SecretInventoryEntry, group: SecretGroup): SecretRow => 
         mono: entry.label === undefined,
         detail,
         icon: group === `provider` ? PROVIDER_GLYPH : CREDENTIAL_GLYPH,
-        attention: (group === `required` && entry.status === `missing`) || (entry.ci !== undefined && !entry.ci.synced),
+        attention: false,
         note: noteOf(entry),
-        editable: group === `required` || group === `yours` || group === `credential`,
+        editable: group === `yours` || group === `credential`,
         removable: group === `yours`,
         // No gate for an unset value (nothing to release) or a provider account (would block every turn).
         ...(entry.status !== `missing` && group !== `provider` ? { gateSubject: entry.key } : {}),
@@ -215,9 +206,8 @@ const bareRow = (entry: SecretInventoryEntry, group: SecretGroup): SecretRow => 
     };
 };
 
-// A value the model reads in full is a debt like an unset one, and said first. One press may replace it only where a
-// person set it here (`required`/`yours`): a connection's password and a keyring's entry must match what the account or
-// computer holds, and a generated value is the deploy's, already long.
+// A value the model reads in full is a debt, and said first. One press may replace it only where a person set it here
+// (`yours`): a connection's password and a keyring's entry must match what the account or computer holds.
 const withTooShort = (row: SecretRow): SecretRow => {
     const names = row.entry.tooShort ?? [];
     if (names.length === 0) {
@@ -227,13 +217,13 @@ const withTooShort = (row: SecretRow): SecretRow => {
         ...row,
         attention: true,
         note: t(`sandbox.secretRows.tooShort`),
-        tooShort: { names, replaceable: row.group === `required` || row.group === `yours` },
+        tooShort: { names, replaceable: row.group === `yours` },
         haystack: `${row.haystack} too short`,
     };
 };
 
 const rowOf = (entry: SecretInventoryEntry, sources: SecretSources): SecretRow => {
-    const group = groupOf(entry);
+    const group = GROUPS[entry.kind];
     if (group === `device`) {
         return deviceRow(entry);
     }

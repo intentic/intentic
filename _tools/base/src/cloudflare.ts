@@ -1,9 +1,8 @@
 import { errorMessage } from "./errors.js";
 
 // THE CLOUDFLARE V4 API, AS EVERY TIER CALLS IT: a bearer token, Cloudflare's success envelope, a 30 s deadline, and
-// its paging. The deploy engine's providers (_deploy/providers/src/network/cloudflare-api.ts) and the platform
-// (_platform/api/src/sandbox/cloudflare.ts) each kept a copy of this, and only one of them knew a zone out of DNS records
-// (81045) from any other refusal. No schema library here, on purpose: base depends on nothing, so the envelope is checked
+// its paging. Callers once each kept a copy of this, and only one of them knew a zone out of DNS records (81045) from any
+// other refusal. No schema library here, on purpose: base depends on nothing, so the envelope is checked
 // by hand and each caller validates `result` with its own schemas.
 
 export const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";

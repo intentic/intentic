@@ -68,7 +68,7 @@ describe("secret need", () => {
     });
 
     it("asks for a replacement even though one is stored, and is not met by the old value existing", async () => {
-        const { kind } = harness([{ name: "NPM_TOKEN", value: "old", source: "env" }]);
+        const { kind } = harness([{ name: "NPM_TOKEN", value: "old", source: "sandbox" }]);
         const answer = await kind.resolve({ kind: "secret", name: "NPM_TOKEN", replace: true }, context);
         expect(answer).toMatchObject({ kind: "raise", title: "A new value for NPM_TOKEN", subject: { replace: true } });
         expect(await kind.check(needOf({ kind: "secret", name: "NPM_TOKEN", replace: true }))).toBeUndefined();
@@ -78,7 +78,7 @@ describe("secret need", () => {
         const { kind, stored } = harness();
         const need = needOf({ kind: "secret", name: "STRIPE_KEY" });
         expect(await kind.check(need)).toBeUndefined();
-        stored.push({ name: "STRIPE_KEY", value: "sk_test", source: "env" });
+        stored.push({ name: "STRIPE_KEY", value: "sk_test", source: "sandbox" });
         expect(await kind.check(need)).toMatchObject({ result: "STRIPE_KEY is stored." });
     });
 

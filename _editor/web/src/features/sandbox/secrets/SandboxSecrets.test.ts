@@ -17,7 +17,6 @@ const inventory = ref<SecretInventoryEntry[]>([]);
 jest.mock(`../../../models/capabilities/useSecrets`, () => ({
     useSecretInventory: () => ({
         inventory,
-        missingRequiredCount: ref(0),
         loaded: computed(() => ({ state: `ready`, data: { entries: inventory.value }, refreshing: false, refreshError: undefined })),
         refreshInventory: () => {},
     }),
@@ -63,7 +62,7 @@ jest.mock(`../../../models/capabilities/useCapabilities`, () => ({
 const extensions = ref<ExtensionSummary[]>([]);
 jest.mock(`../../../models/extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: extensions }) }));
 
-// Reached only by the CI push, which nothing here presses: faked because the client has no environment here.
+// Reached only by generating a value, which nothing here presses: faked because the client has no environment here.
 jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
 
 // The two "Manage..." controls are links now, so the mock carries a stand-in for them. No `?add=` on the address: the
@@ -79,8 +78,7 @@ const { default: SandboxSecrets } = await import("./SandboxSecrets.vue");
 
 const entry = (over: Partial<SecretInventoryEntry> & Pick<SecretInventoryEntry, `key` | `kind`>): SecretInventoryEntry => ({
     status: `set`,
-    requiredBy: [],
-    storedAt: `desired-state/.env`,
+    storedAt: `the sandbox`,
     revealable: true,
     ...over,
 });
@@ -132,7 +130,6 @@ const disclosures = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelect
 
 beforeEach(() => {
     capabilities.value = [
-        capability(`devops`, `devops`),
         ...IDENTITIES.map((id) => capability(id, `identity`, { email: `${id}@gmail.com` })),
         capability(`github`, `cli`, { provider: `github` }),
         capability(`discord`, `cli`, { provider: `discord` }),
@@ -140,9 +137,8 @@ beforeEach(() => {
     ];
     extensions.value = [];
     inventory.value = [
-        entry({ key: `CF_API_TOKEN`, kind: `env`, status: `missing`, requiredBy: [{ resourceId: `shop-dns`, type: `dns` }] }),
+        entry({ key: `ROOT_PASSWORD`, kind: `env`, tooShort: [`ROOT_PASSWORD`] }),
         entry({ key: `SMTP_PASSWORD`, kind: `env` }),
-        entry({ key: `DB_PASSWORD`, kind: `generated`, ci: { synced: false } }),
         ...IDENTITIES.map(credential),
         credential(`github`),
         credential(`discord`),
@@ -184,9 +180,9 @@ it(`pins what is owed above everything, instead of a banner counting it`, () => 
     const el = mount();
     const heading = text(el).indexOf(`Needs attention`);
     expect(heading).toBeGreaterThanOrEqual(0);
-    expect(text(el)).toContain(`CF_API_TOKEN`);
-    expect(text(el)).not.toContain(`required secret`);
-    expect(heading).toBeLessThan(text(el).indexOf(`Required by your intent`));
+    expect(text(el)).toContain(`ROOT_PASSWORD`);
+    expect(heading).toBeLessThan(text(el).indexOf(`ROOT_PASSWORD`));
+    expect(text(el).indexOf(`ROOT_PASSWORD`)).toBeLessThan(text(el).indexOf(`SMTP_PASSWORD`));
 });
 
 it(`names a credential by its account and its address, not by the key alone`, async () => {
@@ -310,7 +306,7 @@ it(`leads Needs attention with the credentials agents asked for and still wait o
     expect(all).toContain(`Waiting for your answer in Passwords on rog`);
     expect(all).not.toContain(`FortiClient VPN`);
     expect(all.indexOf(`Needs attention`)).toBeLessThan(all.indexOf(`dashboard.stripe.com`));
-    expect(all.indexOf(`dashboard.stripe.com`)).toBeLessThan(all.indexOf(`CF_API_TOKEN`));
+    expect(all.indexOf(`dashboard.stripe.com`)).toBeLessThan(all.indexOf(`ROOT_PASSWORD`));
     expect(el.querySelector(`[data-secret-want] a[href="intentic://passwords"]`)).not.toBeNull();
 });
 

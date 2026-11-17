@@ -29,7 +29,7 @@ const { default: SecretTypeInto } = await import("./SecretTypeInto.vue");
 
 const rowWith = (entry: Partial<SecretInventoryEntry> = {}): SecretRow =>
     secretRow(
-        { key: `VPN_PASSWORD`, kind: `env`, status: `set`, requiredBy: [], storedAt: `desired-state/.env`, revealable: true, ...entry },
+        { key: `VPN_PASSWORD`, kind: `env`, status: `set`, storedAt: `the sandbox`, revealable: true, ...entry },
         { capabilities: [], extensions: [] },
     );
 

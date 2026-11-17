@@ -5,7 +5,6 @@
 import { createDecipheriv, createHash, hkdfSync } from "node:crypto";
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import * as util from "node:util";
 
 import { bodyBytes, invocation, multilineParts } from "./cleaner-shapes.mjs";
 import { dedupeRuns, elideWideRuns } from "./repeated-output.mjs";
@@ -318,23 +317,20 @@ export { multilineParts };
 export { contextualEntries, maskValues } from "./short-secrets.mjs";
 
 // Every store a stored secret value lives in, in the order a name two of them hold resolves. The daemon's registry
-// (src/secrets/secret-registry.ts) walks this same list, so the terminal cannot miss a store the tools mask. `root` is
-// the auth root (AGENT_AUTH_DIR) or the desired-state repo; `layout` is how the file holds its values:
-//   - `env`: a dotenv, read with util.parseEnv like the deploy tooling reads it (quotes, backticks, `# comments`);
+// (src/secrets/secret-registry.ts) walks this same list, so the terminal cannot miss a store the tools mask. Each sits
+// in the auth root (AGENT_AUTH_DIR); `layout` is how the file holds its values:
 //   - `flat`: JSON {name: value};
 //   - `vault`: JSON {id: {field: value}}, each value named `<id>/<field>`.
 // `source` is what the registry records a value as coming from.
 export const SECRET_STORES = [
-    { root: "desiredState", path: ".env", layout: "env", source: "env" },
     // Pasted on a need's card or the Secrets view (src/secrets/sandbox-secrets.ts).
-    { root: "auth", path: "sandbox-secrets.json", layout: "flat", source: "sandbox" },
-    { root: "desiredState", path: ".secrets.json", layout: "flat", source: "generated" },
-    { root: "auth", path: "capability-secrets.json", layout: "vault", source: "capability" },
+    { path: "sandbox-secrets.json", layout: "flat", source: "sandbox" },
+    { path: "capability-secrets.json", layout: "vault", source: "capability" },
     // A keyring entry shared in `copy` mode, kept here as an ordinary secret (src/secrets/device/keyring-stores.ts).
-    { root: "auth", path: "keyring-copies.json", layout: "flat", source: "copy" },
+    { path: "keyring-copies.json", layout: "flat", source: "copy" },
     // Values a keyring on the owner's computer released for one use each, kept only so they mask: never resolved from
     // here, and emptied when the daemon starts (src/secrets/device/keyring-stores.ts).
-    { root: "auth", path: "keyring-released.json", layout: "flat", source: "device" },
+    { path: "keyring-released.json", layout: "flat", source: "device" },
 ];
 
 const secretValueCache = new Map();
@@ -456,11 +452,6 @@ export const surfaceForms = (value) => {
 // [name, value] for every string value a store's text holds, by its SECRET_STORES layout. Reads only VALUES; a key name
 // is not a secret.
 const namedValues = (text, layout) => {
-    if (layout === "env") {
-        // Called through the namespace: parseEnv is Node 20.12+, and a named import missing from an older node fails the
-        // whole module at link time; a call that throws only costs this one store.
-        return Object.entries(util.parseEnv(text));
-    }
     const parsed = JSON.parse(text);
     if (layout === "flat") {
         return Object.entries(parsed).filter(([, value]) => typeof value === "string");
@@ -499,14 +490,9 @@ const harvest = (text, layout) => {
 // Where the stores live, from the daemon's own env for this turn. AGENT_AUTH_DIR is the provider-credential root;
 // unset falls back to .intentic/secrets/auth, matching composition.ts.
 export const secretValues = (env = process.env) => {
-    const roots = {
-        auth:
-            env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== ""
-                ? env.AGENT_AUTH_DIR
-                : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/secrets/auth"),
-        desiredState: join(env.WORKSPACE_ROOT ?? "/work", "desired-state"),
-    };
-    return SECRET_STORES.flatMap(({ root, path, layout }) => readIfChanged(join(roots[root], path), layout, env)).toSorted(
+    const auth =
+        env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== "" ? env.AGENT_AUTH_DIR : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/secrets/auth");
+    return SECRET_STORES.flatMap(({ path, layout }) => readIfChanged(join(auth, path), layout, env)).toSorted(
         (a, b) => b.target.length - a.target.length,
     );
 };

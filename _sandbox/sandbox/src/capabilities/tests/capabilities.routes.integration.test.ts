@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract/policy/reserved-servers";
-import { stashedMarker } from "@intentic/sandbox-contract/schemas/capabilities";
+import { CapabilitySchema, stashedMarker } from "@intentic/sandbox-contract/schemas/capabilities";
 import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { gitFullHead, gitHead } from "@intentic/base/git";
 
@@ -28,19 +28,16 @@ import { fileSshKeyStore } from "../ssh-key-store.js";
 // Fakes and the client are shared (route-services.testing.ts and its siblings); what lives here is what these routes
 // do.
 
-test("capabilities.list reports each capability with its status; devops can't be removed, unknown is NOT_FOUND", async () => {
+test("capabilities.list reports each capability with its status; a kind with no teardown can't be removed, unknown is NOT_FOUND", async () => {
     // Isolated workspace so recommendations depend on this test's tree, not whatever's checked out under /work.
-    const client = clientFor(
-        createApp(services({ workspace: tempWorkspace([]), capabilities: memoryCapabilitiesStore([{ id: "devops", kind: "devops", config: {} }]) })),
-    );
-    // devops status is derived from the repos on disk: absent under test, so it reads inactive.
-    expect(await client.capabilities.list()).toEqual({
-        // `secrets` names the credential keys an edit form must not treat as empty: devops holds none.
-        capabilities: [{ id: "devops", kind: "devops", status: { state: "inactive" }, config: {}, secrets: [] }],
-        recommendations: [],
-    });
-    // DevOps has no teardown (deleting the repos is data loss): CONFLICT; an unknown id is NOT_FOUND.
-    expect(await errorCode(client.capabilities.remove({ id: "devops" }))).toBe("CONFLICT");
+    const docker = CapabilitySchema.parse({ id: "docker", kind: "docker", config: {} });
+    const client = clientFor(createApp(services({ workspace: tempWorkspace([]), capabilities: memoryCapabilitiesStore([docker]) })));
+    const listed = await client.capabilities.list();
+    expect(listed.recommendations).toEqual([]);
+    // `secrets` names the credential keys an edit form must not treat as empty: Docker holds none.
+    expect(listed.capabilities).toEqual([expect.objectContaining({ id: "docker", kind: "docker", status: expect.objectContaining({ state: expect.any(String) }), secrets: [] })]);
+    // Docker has no teardown (de-privileging live engine state is too destructive): CONFLICT; an unknown id is NOT_FOUND.
+    expect(await errorCode(client.capabilities.remove({ id: "docker" }))).toBe("CONFLICT");
     expect(await errorCode(client.capabilities.remove({ id: "ghost" }))).toBe("NOT_FOUND");
 });
 

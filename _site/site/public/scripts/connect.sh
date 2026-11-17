@@ -1,6 +1,6 @@
 #!/bin/sh
 # POSIX bootstrap: install Docker if needed, obtain ic, then hand setup-code claims, tunnels and launch to ic sandbox connect.
-# Elevate only Docker installation. Direct-token automation uses CONNECT_TOKEN/SANDBOX_GRANT; CF_TOKEN is solely for SELF_HOST SSH.
+# Elevate only Docker installation. Direct-token automation uses CONNECT_TOKEN/SANDBOX_GRANT; CF_TOKEN is the owner's own Cloudflare token.
 # Refresh ic each run, falling back to installed bytes only on download failure; IC_BIN selects a development build.
 # Desktop release pins may copy an exactly matching INTENTIC_IC_PATH binary. Usage: curl -fsSL https://intentic.dev/setup/<CODE> | sh.
 set -eu
@@ -690,7 +690,7 @@ ic_fetch
 
 # Everything else (claim, tunnels, launch, sync) is ic's. Flags pass through untouched; the setup code goes last,
 # behind `--`, so a code beginning with a hyphen is a value rather than an unknown flag. The env this shell carries
-# (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, SYNC_DIR, …) rides along. A person this run just added to the docker group does
+# (CF_TOKEN, SANDBOX_IMAGE, SYNC_DIR, …) rides along. A person this run just added to the docker group does
 # not carry that group in this session yet, so ic runs under it through sudo, as that same person.
 kit_suspend
 if [ -n "$DOCKER_INSTALLED" ] && [ "$(id -u)" != 0 ] && ! docker version >/dev/null 2>&1; then

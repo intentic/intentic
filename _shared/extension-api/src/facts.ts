@@ -6,12 +6,8 @@
 // based on what the repo contains, not its name.
 export interface RepoFacts {
     readonly repo: string;
-    // The workspace role this repo dir occupies; absent for extra clones.
-    readonly role?: "intent" | "desired-state" | "app" | undefined;
     // Whether the repo ships a runnable dev server (a package.json `dev` script at operator/ or the root).
     readonly hasPanel: boolean;
-    readonly deployConfig: boolean;
-    readonly desiredState: boolean;
     readonly directoryUi: boolean;
     readonly monorepo: boolean;
     readonly tests: boolean;

@@ -14,7 +14,7 @@ I should not have to answer at all where nobody needs to decide. A secret the ta
 - [ ] An ask is kept after its turn ends and across a restart; answering it later continues the conversation without anyone typing "go on", unless I turned that off
 - [ ] Asking for something the turn can already use answers "use it"; something connected but withheld by the persona, meant for another host, or whose credential is refused is answered as exactly that, never as "already connected"
 - [ ] The card for a server, a CLI account, an endpoint or the sandbox fleet holds the connection's own form, pre-filled with what the agent passed, with the credential left for me; an SSH card generates the key and shows only the public half and the line that authorizes it
-- [ ] A secret's card has one masked field, needs no DevOps set up first, and its value never appears in the transcript, a log or the agent's context
+- [ ] A secret's card has one masked field, and its value never appears in the transcript, a log or the agent's context
 - [ ] A persona grant, a folder, a shelf, a device switch and a Docker engine option are each allowed on the card with one press, saying before the press whether it needs a rebuild or a restart
 - [ ] Proposed image steps are shown on the card and approved one tool at a time; steps that would re-download everything on every image update are refused before they reach me
 - [ ] A site the agent asks for in my own browser shows as a card in the chat too, and the conversation continues as soon as I allow it in the browser

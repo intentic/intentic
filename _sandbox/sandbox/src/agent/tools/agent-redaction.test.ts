@@ -1,5 +1,5 @@
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import { type NamedSecret, SecretStoreUnreadableError } from "../../secrets/secret-registry.js";
+import type { NamedSecret } from "../../secrets/secret-registry.js";
 import { WITHHELD, maskDeep, maskTargets, redactionHooks, unmaskableSecrets } from "./agent-redaction.js";
 
 // Masking must not depend on which tool fetched the value (it used to be Bash-only); a value masks to
@@ -154,13 +154,6 @@ test("a result that cannot be checked against the secrets is withheld, never sho
     };
     expect(await fire(failing, "Read", { file: { content: `token ${TOKEN}` } })).toEqual({
         hookSpecificOutput: { hookEventName: "PostToolUse", updatedToolOutput: `${WITHHELD} (SyntaxError)` },
-    });
-    // The registry's own refusal is worded to be shown, so it names the file.
-    const refusing = async (): Promise<readonly NamedSecret[]> => {
-        throw new SecretStoreUnreadableError("desired-state/.secrets.json is not valid JSON");
-    };
-    expect(await fire(refusing, "Read", "ok")).toEqual({
-        hookSpecificOutput: { hookEventName: "PostToolUse", updatedToolOutput: `${WITHHELD} (desired-state/.secrets.json is not valid JSON)` },
     });
 });
 

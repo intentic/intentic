@@ -159,7 +159,7 @@ pub fn nul_frame(pairs: &[(&str, &str)]) -> Vec<u8> {
     framed
 }
 
-/// Parse `KEY=value` lines (the setup-code claim, `intentic tunnel …` output) into a lookup. First
+/// Parse `KEY=value` lines (the setup-code claim, a container's environment) into a lookup. First
 /// occurrence wins, mirroring how the scripts' `sed -n 's/^KEY=//p' | head -1` reads.
 pub fn kv_lines(text: &str) -> impl Fn(&str) -> Option<String> + '_ {
     move |key: &str| {
@@ -169,33 +169,6 @@ pub fn kv_lines(text: &str) -> impl Fn(&str) -> Option<String> + '_ {
                 .map(str::to_string)
         })
     }
-}
-
-/// HOST_NAME normalized to a valid deploy.config identifier (^[a-zA-Z_]\w*$): lower-cased, trimmed,
-/// non-alnum/underscore → `_`, a leading digit prefixed with `_`; "self" is reserved (legacy HOST_SSH_KEY)
-/// and becomes "host". Empty in, empty out — the caller decides the fallback. Unix-only like its one
-/// caller, machine enrolment (Windows deploy targets go through connect's dind path instead).
-#[cfg(unix)]
-pub fn normalize_host_name(raw: &str) -> String {
-    let mut name: String = raw
-        .trim()
-        .to_lowercase()
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if name.starts_with(|c: char| c.is_ascii_digit()) {
-        name.insert(0, '_');
-    }
-    if name == "self" {
-        name = "host".to_string();
-    }
-    name
 }
 
 #[cfg(test)]
@@ -311,15 +284,6 @@ mod tests {
         assert_eq!(plural(2, "other sandbox"), "2 other sandboxes");
         assert_eq!(plural(2, "network"), "2 networks");
         assert_eq!(plural(2, "patch"), "2 patches");
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn host_names_normalize_like_connect_host() {
-        assert_eq!(normalize_host_name("My-Server.local"), "my_server_local");
-        assert_eq!(normalize_host_name("9front"), "_9front");
-        assert_eq!(normalize_host_name("self"), "host");
-        assert_eq!(normalize_host_name("  "), "");
     }
 }
 

@@ -3,7 +3,7 @@ import { errnoCode } from "@intentic/base/errors";
 import { contextualEntries, maskValues, multilineParts, SECRET_VALUE_MIN } from "@intentic/output-cleaners/cleaners";
 import { classifyCommand } from "@intentic/sandbox-contract/policy/command-classes";
 import { maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
-import { type NamedSecret, SecretStoreUnreadableError, secretReference, surfaceForms } from "../../secrets/secret-registry.js";
+import { type NamedSecret, secretReference, surfaceForms } from "../../secrets/secret-registry.js";
 
 // Masks every tool's PostToolUse output, not just Bash's, closing the gap where masking depended on how a value was
 // fetched. Values mask to `{{secret:name}}`, not a blank, so a read-then-rewrite round-trips. A second, shape-based
@@ -92,12 +92,11 @@ const mapStrings = (value: unknown, transform: (text: string) => string): unknow
 export const maskDeep = (value: unknown, targets: readonly MaskTarget[]): unknown => mapStrings(value, (text) => maskString(text, targets));
 
 export const WITHHELD =
-    "[intentic withheld this tool's output: the sandbox's secrets could not be read to mask it. Check the secrets stores (desired-state .env and secrets file, the capability vault) and try again.]";
+    "[intentic withheld this tool's output: the sandbox's secrets could not be read to mask it. Check the secrets stores (the sandbox's own secrets, the capability vault) and try again.]";
 
-// Names what failed without quoting it: only the registry's own error is worded to be shown, any other message could
-// carry a slice of the secrets file it choked on.
+// Names what failed without quoting it: a message could carry a slice of the secrets file it choked on.
 export const withheld = (error: unknown): string =>
-    `${WITHHELD} (${error instanceof SecretStoreUnreadableError ? error.message : (errnoCode(error) ?? (error instanceof Error ? error.name : "unknown failure"))})`;
+    `${WITHHELD} (${errnoCode(error) ?? (error instanceof Error ? error.name : "unknown failure")})`;
 
 export const redactionHooks = (secrets: () => Promise<readonly NamedSecret[]>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     // No matcher: covers every tool, including ones nobody has written yet, rather than a remembered list.

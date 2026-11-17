@@ -34,15 +34,15 @@ test("ripgrep's arm64 checksum is found past the amd64 arm, not on it", () => {
     assert.match(text, new RegExp(`arm64\\) target=aarch64-unknown-linux-musl; rg_sha=${"f".repeat(64)}`));
 });
 
-const IMAGE = `    cloudflared: "cloudflare/cloudflared:2026.9.3@sha256:${A}",\n`;
+const IMAGE = `        image: cloudflare/cloudflared:2026.9.3@sha256:${A}\n`;
 
 test("a cloudflared image reference moves its tag and its digest as two values", () => {
-    const file = "_deploy/state-resolver/src/lib/images.ts";
+    const file = "_tools/turbo-cache/docker-compose.yml";
     const tagged = rewrite(IMAGE, patternOf("cloudflared", "version", file), "2026.10.0");
     const digested = rewrite(tagged.text, patternOf("cloudflared", "digest", file), B);
     assert.equal(tagged.count, 1);
     assert.equal(digested.count, 1);
-    assert.equal(digested.text, `    cloudflared: "cloudflare/cloudflared:2026.10.0@sha256:${B}",\n`);
+    assert.equal(digested.text, `        image: cloudflare/cloudflared:2026.10.0@sha256:${B}\n`);
 });
 
 test("a bun image reference moves its tag and its digest as two values, in a COPY --from as in a FROM", () => {
@@ -71,7 +71,7 @@ test("bun's catalog entry and its exclusions move together, and allowBuilds' `bu
 test("a reference with a fake digest is not a pin site", () => {
     const { count } = rewrite(
         `image: "cloudflare/cloudflared:2026.9.3@sha256:aaaa"`,
-        patternOf("cloudflared", "version", "_deploy/state-resolver/src/lib/images.ts"),
+        patternOf("cloudflared", "version", "_tools/turbo-cache/docker-compose.yml"),
         "2026.10.0",
     );
     assert.equal(count, 0);

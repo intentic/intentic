@@ -178,16 +178,13 @@ describe("the route table", () => {
     });
 });
 
-// The callers that cannot import this module spell its values themselves: `ic` and the edge in Rust, the site's
-// Windows server script in PowerShell. Each spelling is read here, so the contract and they cannot drift apart unnoticed.
+// The callers that cannot import this module spell its values themselves: `ic` and the edge in Rust. Each spelling is read here, so the contract and they cannot drift apart unnoticed.
 describe("callers in other languages spell the contract's values", () => {
     const source = (path: string): string => readFileSync(join(repoRoot(import.meta.url), path), "utf8");
 
     it("`ic` sends the connect token in the contract's header", () => {
-        for (const path of ["_sandbox/ic/src/platform.rs", "_sandbox/ic/src/machine/enroll.rs"]) {
-            expect([...source(path).matchAll(/\.header\("(x-intentic-[a-z-]+)"/gu)].map((match) => match[1])).toContain(CONNECT_TOKEN_HEADER);
-        }
-        expect(source("_site/site/public/scripts/connect-host.ps1")).toContain(`@{ '${CONNECT_TOKEN_HEADER}' = $ConnectToken }`);
+        const sent = [...source("_sandbox/ic/src/platform.rs").matchAll(/\.header\("(x-intentic-[a-z-]+)"/gu)].map((match) => match[1]);
+        expect(sent).toContain(CONNECT_TOKEN_HEADER);
     });
 
     it("`ic` calls the contract's paths", () => {

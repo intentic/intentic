@@ -3,14 +3,14 @@
 #   sandbox    the AI-agent workspace daemon + CLI — TWO PROFILES of one Dockerfile (image-packs/profiles.json):
 #              `standard` (core + the standard feature packs, composed by compose-image-dockerfile.mjs) owns
 #              the plain tags every runner references; the minimal `core` rides `core-` prefixed tags
-#   dind-host  a Docker-in-Docker + sshd deploy-target "host" — connect.ps1 stands one up on Windows so a
-#              server-less user can deploy locally (the e2e harness uses the same recipe, from _tools/dind-host)
+#   dind-host  a clean Docker-in-Docker host the desktop setup and update-survival drills install into
+#              (_tools/dind-host, started by _tools/scripts/lib/dind-host.sh)
 # Used by CI — the Images workflow (latest + commit SHA on push to main, one job per arch) and the release
 # (release-images.sh: the version + the moving `stable` tag, via semantic-release publishCmd) — and runnable
 # by hand:
 #   docker login ghcr.io && TAGS=0.1.0 pnpm publish:images
 # TAGS is a space-separated tag list; every listed tag is pushed. On release the moving `stable` tag — the one
-# every connect script and _deploy/state-resolver/src/lib/images.ts reference — is pushed onto the new version
+# every connect script references — is pushed onto the new version
 # as part of that same publish, so a passing pipeline IS the ship (COMPATIBILITY.md). Unpinned: no digest to
 # maintain. The GHCR packages must be made public once so tenant hosts can pull them unauthenticated.
 set -euo pipefail
@@ -21,7 +21,7 @@ set -euo pipefail
 
 TAGS="${TAGS:?set TAGS (space-separated, e.g. "0.1.0" or "latest sha-abc1234")}"
 # Which of the two images to build — the multi-arch flow builds `sandbox` per arch on different runners while
-# `dind-host` stays a single amd64 build (it exists for the Windows-local flow; nothing pulls it on arm).
+# `dind-host` stays a single amd64 build (only the amd64 CI drills pull it).
 IMAGES="${IMAGES:-sandbox dind-host}"
 # Per-arch tag suffix ("-amd64"/"-arm64") for the multi-arch flow: each runner builds its NATIVE arch under
 # `<tag><suffix>`, and merge-image-manifests.sh publishes the plain tag as one multi-arch manifest. The

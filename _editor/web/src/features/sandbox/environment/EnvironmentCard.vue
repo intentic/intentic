@@ -50,7 +50,7 @@ const actionNotice = computed<NoticeModel | undefined>(() =>
 const { canShip: canOperate, isOwner } = useRole();
 
 // The derived environment state (shared with the shell's rebuild banner via one vue-query fetch).
-const { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug, localImage } = useEnvironment();
+const { state, query, isFetching, proposal, pending, applied, recurring, slug, localImage } = useEnvironment();
 
 // A hosted sandbox has no host to run `ic` on, so its rebuild is a platform button (HostedRebuild) rather
 // than a device command (HostRecreate). Read off the active sandbox's platform row.
@@ -214,7 +214,6 @@ const route = computed(() =>
         pending: pending.value !== undefined,
         hosted: hosted.value !== undefined,
         owner: isOwner.value,
-        serverManaged: serverManaged.value,
         composeManaged: state.value?.manager === `compose`,
         fromCheckout: fromCheckout.value,
         slug: slug.value,
@@ -324,11 +323,6 @@ watch(
                     :text="proposal !== undefined"
                 />
                 <p v-else-if="route === `owner-only`" class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerRebuild`) }}</p>
-                <p v-else-if="route === `server`" class="text-2xs text-subtle">
-                    {{ t(`sandbox.environmentCard.appliesOnNext`) }}
-                    <span class="font-mono">intentic deploy apply</span>
-                    {{ t(`sandbox.environmentCard.againstSandboxsHost`) }}
-                </p>
                 <!-- Compose owns the container: the edit to its file and Compose's redeploy, never the `ic` one-liner. -->
                 <ComposeRebuild v-else-if="route === `compose` && pending" :hash="pending.hash" :content="pending.content" />
                 <!-- The checkout rebuild itself is on the Sandbox tab; this only points there. -->

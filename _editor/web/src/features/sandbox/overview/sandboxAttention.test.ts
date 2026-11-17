@@ -13,9 +13,8 @@ import type { DiskPressure } from "@intentic/sandbox-contract/schemas/metrics";
 import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { activeSandboxId } from "../../../app/storage/activeSandbox";
 
-// The four seams this list reads besides the accounts: each is a live query elsewhere, and none of them decides
+// The seams this list reads besides the accounts: each is a live query elsewhere, and none of them decides
 // whether a turn can run, which is the only question these tests ask.
-jest.mock(`../../../models/capabilities/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
 jest.mock(`../../../models/sandbox/devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, heldPorts: { value: [] } }) }));
 // An approved recipe not yet built, only where a test says so; and the hosted build of it, none unless a test starts one.
 const pending: { value: { hash: string; content: string } | undefined } = { value: undefined };

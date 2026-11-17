@@ -17,7 +17,7 @@ import type { KeyringSync, KeyringSyncDevices } from "./keyring-sync.js";
 
 // The stores a person or a connection fills on this sandbox: a name one of them holds is the sandbox's, whatever a
 // keyring shares under it. A keyring's copy is the keyring's entry, kept here, and lists as the keyring's.
-const SANDBOX_SOURCES: ReadonlySet<NamedSecret["source"]> = new Set(["env", "sandbox", "generated", "capability"]);
+const SANDBOX_SOURCES: ReadonlySet<NamedSecret["source"]> = new Set(["sandbox", "capability"]);
 export const sandboxHeld = (secret: Pick<NamedSecret, "source">): boolean => SANDBOX_SOURCES.has(secret.source);
 
 const REFRESH_EVERY_MS = 60_000;
@@ -39,7 +39,6 @@ export const deviceInventoryEntry = ({ machine, pointer, online, locked }: Devic
     key: pointer.name,
     kind: "device",
     status: "set",
-    requiredBy: [],
     storedAt: `in the keyring on ${machine}`,
     revealable: false,
     device: { machine, mode: pointer.mode, online, ...opt("locked", locked), source: pointer.source },

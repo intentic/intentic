@@ -12,6 +12,7 @@ import type { DocumentSpec } from "./documents.js";
 import { clearNewestRun,newestRunDocument } from "../newest-run.js";
 import { commitState, convergeState, resetStateStatus, type StateRoots } from "./state-convergence.js";
 import type { StructuralStep } from "./state-steps.js";
+import { deployLedgersLeftoversStep } from "./steps/deploy-ledgers-leftovers.js";
 import { landCheckLeftoversStep } from "./steps/land-check-leftovers.js";
 import { projectsHostLeftoversStep } from "./steps/projects-host-leftovers.js";
 import { fieldNotesLeftoversStep } from "./steps/field-notes-leftovers.js";
@@ -150,6 +151,24 @@ test("a capability of the kind device was once called becomes a device, and with
     expect((await json(path)) as unknown[]).toHaveLength(3);
 });
 
+// Self-hosting withdrawn (2026-11-17): a DevOps card stops parsing, so it is retired and every other entry reads on.
+test("a DevOps card is retired with self-hosting, and the connections beside it read on", async () => {
+    const roots = await volumes();
+    const path = join(roots.workspace, capabilitiesDocument.path);
+    await put(path, [
+        { id: "devops", kind: "devops", config: {} },
+        { id: "gh", kind: "cli", config: { provider: "github" } },
+    ]);
+    expect((await fileCapabilitiesStore(path).list()).map(({ id, kind }) => `${id}:${kind}`)).toEqual(["gh:cli"]);
+
+    const outcome = await converge(roots, [capabilitiesDocument], []);
+    expect(outcome.plan?.converts).toEqual(
+        expect.arrayContaining([
+            { document: capabilitiesDocument.path, change: "retires a DevOps card, withdrawn with self-hosting", detail: '{"id":"devops","kind":"devops","config":{}}' },
+        ]),
+    );
+});
+
 test("an automation that named a model gets a one-rung ladder; its runs and webhook token move where they live now", async () => {
     const roots = await volumes();
     const manifest = join(roots.workspace, automationsDocument.path);
@@ -244,6 +263,30 @@ test("what the retired field notes kept is deleted, and nothing else is touched"
     await commitState(roots);
     clearNewestRun();
     expect((await converge(roots, [], [fieldNotesLeftoversStep])).plan?.steps ?? []).toEqual([]);
+});
+
+// What the retired deploy engine's runs kept on /history (2026-11-17): deleted, the emptied folder with it, and every
+// other file there left as it was.
+test("the retired deploy engine's apply log and check event files are deleted, and nothing else is touched", async () => {
+    const roots = await volumes();
+    const applyEvents = join(roots.history, "apply-events.ndjson");
+    const checks = join(roots.history, "check-events");
+    const kept = join(roots.history, "project-deliveries.json");
+    await put(applyEvents, { kind: "start" });
+    await put(join(checks, "one.ndjson"), { kind: "log" });
+    await put(join(checks, "two.ndjson"), { kind: "log" });
+    await put(kept, { queue: [], attached: [] });
+
+    const outcome = await converge(roots, [], [deployLedgersLeftoversStep]);
+
+    expect(outcome.plan?.steps).toEqual([{ document: "deploy-ledgers-leftovers", change: "deletes 3 file(s) the retired deploy engine's runs left behind" }]);
+    const left = await readdir(roots.history);
+    expect(left).not.toContain("apply-events.ndjson");
+    expect(left).not.toContain("check-events");
+    expect(await json(kept)).toEqual({ queue: [], attached: [] });
+    await commitState(roots);
+    clearNewestRun();
+    expect((await converge(roots, [], [deployLedgersLeftoversStep])).plan?.steps ?? []).toEqual([]);
 });
 
 // The folder registry of the retired one sandbox per computer (2026-10-21): deleted, and the folders it named, their

@@ -116,8 +116,6 @@ const family = (...path: readonly string[]): QueryFamily => ({
 
 // ---- workspace ----
 
-// The infrastructure read-model: two desired-state files read and projected into one state.
-export const WORKSPACE_STATE = family(`workspace`, `state`);
 // Every monorepo's apps, one read per repo.
 export const WORKSPACE_APPS = family(`workspace`, `apps`);
 // Search results by page, as an infinite query holds them.
@@ -145,7 +143,6 @@ export const SANDBOX_TRASH = family(`sandbox-trash`);
 // of plain names (an extension's `api.sandbox.key("apps", repo)`) can ever equal it and store another shape under it.
 export const APPS = family(`apps`);
 export const BUNDLE_EXPORTS = family(`bundle-exports`);
-export const DEPLOYMENTS = family(`deployments`);
 export const ENGINES = family(`engines`);
 export const ENVIRONMENT = family(`environment`);
 export const ENVIRONMENT_CONTENTS = family(`environment-contents`);

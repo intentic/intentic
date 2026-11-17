@@ -442,7 +442,7 @@ useGettingStarted();
             <GettingStartedRing v-if="!isGuest" />
             <RailMore v-if="!isGuest" :tiles="moreTiles" />
 
-            <!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. A
+            <!-- Every "add" here writes to the sandbox's own configuration or clones into /work, never platform storage. A
                  guest or anyone below a maintainer connects nothing: what this box can reach is the operator's decision. -->
             <button
                 v-if="!isGuest && maker"

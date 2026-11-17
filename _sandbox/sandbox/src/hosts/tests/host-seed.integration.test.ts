@@ -26,7 +26,7 @@ const tempServices = (): { services: Services; entries: Capability[]; historyRoo
     const armed: string[] = [];
     const services = {
         logger: { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined },
-        workspace: { root, repos: { intent: join(root, "intent") } },
+        workspace: { root },
         files: { write: writeWorkspaceFile, read: readWorkspaceFile, remove: removeWorkspacePath },
         config: { historyRoot, extensionsDir: EXTENSIONS_DIR },
         capabilities: {

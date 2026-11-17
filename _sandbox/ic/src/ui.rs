@@ -1526,6 +1526,7 @@ pub fn confirm_typed(
 
 /// A secret the person pastes (an API token): the question and what it is for, then a read with echo off. `None` when
 /// nobody is at the terminal or the terminal cannot hide what is typed; callers stop and name the variable to set.
+#[cfg(unix)]
 pub fn secret(question: &str, consequence: &str) -> Option<String> {
     ask_with(
         question,

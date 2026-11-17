@@ -24,7 +24,7 @@ the conversion journal's pre-images, the parked container. Docker Desktop's "Pur
 into a restic repository on this machine's own disk, outside Docker (`~/.intentic/backups/<slug>/repo`): incremental,
 deduplicated, and encrypted with a key kept apart from it (`~/.intentic/keys/backup-<slug>.key`), so the repository
 alone reveals nothing, secrets included, to whatever else reads or syncs that folder. restic runs in its own pinned
-image (the deploy engine's, _deploy/state-resolver/src/lib/images.ts), so nothing is installed on the host.
+image (RESTIC_IMAGE below), so nothing is installed on the host.
 
 Since 2026-11-11 a backup is self-contained: each snapshot also carries the sandbox's at-rest key, sealed under the backup
 password (backup_seal.rs), so the repository and its key are all a restore on another machine, or into another sandbox,

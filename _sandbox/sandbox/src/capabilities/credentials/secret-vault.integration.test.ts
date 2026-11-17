@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "../capabilities-store.js";
 import { capabilitySecretsDocument, fileSecretVault, type SecretVault } from "./secret-vault.js";
@@ -121,7 +121,7 @@ test("a value in BOTH places keeps the vault's, the one a working service authen
 
 test("an entry with no credential at all is left where it is", async () => {
     const { inner, manifest, sweep } = swept();
-    await inner.upsert({ id: "devops", kind: "devops", config: {} });
+    await inner.upsert(CapabilitySchema.parse({ id: "laptop", kind: "device", config: { platform: "linux" } }));
     const before = await onDisk(manifest);
     expect(await sweep()).toEqual([]);
     expect(await onDisk(manifest)).toBe(before);

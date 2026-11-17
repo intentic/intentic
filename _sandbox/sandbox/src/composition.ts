@@ -1,7 +1,6 @@
 import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { queueWhole } from "./agent/tools/agent-terminals.js";
 import { join } from "node:path";
-import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { wakeLocalModel as wakeLocalModelServer } from "./capabilities/handlers/localmodel.handler.js";
@@ -61,7 +60,6 @@ import { createKimiSlice, type KimiSlice } from "./runtimes/kimi/kimi-provider.j
 import { GROK_BUILD } from "./runtimes/grok-build/grok-build-cli.js";
 import { createCliParts } from "./runtimes/vendor-cli/vendor-cli-slice.js";
 import { codexRolloutRemover } from "./runtimes/codex/codex-sessions.js";
-import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
 import { discoverRepos } from "./workspace/layout/repo-discovery.js";
 import { filePushStore, pushDocument, type PushStore } from "./push/push-store.js";
@@ -256,7 +254,6 @@ export interface Services
     readonly push: PushStore;
     // Sends push notifications; notifyIfAway is suppressed while someone is actively watching, notify always fires.
     readonly pushSender: PushSender;
-    readonly intentic: (run: IntenticRun, signal?: AbortSignal) => AsyncGenerator<IntenticLine>;
     // What turns and the fleet announce; `wireReactions` below subscribes what reacts to it.
     readonly events: DomainEvents;
     // Everything a stopped conversation holds (processes, terminals, browsers, temp), reclaimed on its own clock.
@@ -529,7 +526,6 @@ const createDaemonMembers = (
         ),
         driftSweep: createDriftSweep({ workspace, runtimeInstalls, conversations, logger }),
         // Bound to the daemon logger so a CLI run's lifecycle is attributable from daemon.log.
-        intentic: (run: IntenticRun, signal?: AbortSignal) => runIntentic(run, signal, logger),
         speech: createSpeech({ cacheDir: statePath(workspace.root, ".intentic/local/cache/"), log: (message) => logger.info(`speech: ${message}`) }),
         // Reads live sockets through the shared scan rather than the assigned port, since a monorepo can pin its own.
         panelUpstreamOf: createPanelUpstreamResolver({

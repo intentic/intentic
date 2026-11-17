@@ -3,7 +3,6 @@ import { t } from "@intentic/ui/i18n";
 import { RUN_VIEW_ID } from "../workbench/views/registry";
 
 // Stay in-app rather than move to `_extensions/*`: each touches privileged internals a clean extension can't reach.
-// - infrastructure + live-status: platform (Cloudflare provisioning), build environment, secret management.
 // - directory-ui: DirectoryUiHost's sandboxed-iframe bridge, shared with the workspace file-open path.
 // - run: the sandbox's live apps and the owner's computers' runs together (preview targets, device runs, terminals).
 // - codebase-health: the index the daemon builds for the workspace, and the tab store it opens files through.
@@ -17,29 +16,6 @@ export const coreViews = (): readonly ViewRegistration[] => [
         // Every workspace has one: what its repositories run and where, or, before any of them says, how to make one runnable.
         detect: () => [{ key: RUN_VIEW_ID, title: t(`run.view.title`), icon: `play` }],
         view: async () => (await import(`../features/run/RunView.vue`)).default,
-    },
-    {
-        id: `infrastructure`,
-        label: t(`views.words.infrastructure`),
-        surface: `rail`,
-        // deploy.config.ts is the ledger's day-one marker; the role dir is the fallback for a renamed one.
-        detect: (repos) => {
-            const intent = repos.find((repo) => repo.deployConfig || repo.role === `intent`);
-            return intent === undefined ? [] : [{ key: intent.repo, title: t(`views.words.infrastructure`), icon: `server`, repo: intent.repo }];
-        },
-        view: async () => (await import(`./infrastructure/InfrastructureView.vue`)).default,
-    },
-    {
-        id: `live-status`,
-        label: t(`views.words.liveStatus`),
-        surface: `rail`,
-        // A fresh desired-state repo has no content marker until the first resolve, so the role dir is day-one
-        // evidence. `cloud`, not `sitemap`, pairs it with Infrastructure's `server` (declared vs. actually up).
-        detect: (repos) => {
-            const target = repos.find((repo) => repo.role === `desired-state` || repo.desiredState);
-            return target === undefined ? [] : [{ key: target.repo, title: t(`views.words.liveStatus`), icon: `cloud`, repo: target.repo }];
-        },
-        view: async () => (await import(`./live-status/LiveStatusView.vue`)).default,
     },
     {
         id: `codebase-health`,

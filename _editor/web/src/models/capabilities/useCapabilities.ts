@@ -14,8 +14,7 @@ import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { useRole } from "../../client/sandbox/useRole";
 
 // The sandbox's unified capability manifest (.intentic/config/capabilities.json), read/written via the daemon's
-// /capabilities routes. `add` streams its apply, like the provision flow. Presence of a kind means it's active (e.g.
-// DevOps present shows its operator panels in the sidebar).
+// /capabilities routes. `add` streams its apply, like the provision flow.
 
 // A catalog form's answer as the daemon takes it: the form fills config by field, as strings, and the daemon's schema
 // coerces and validates it, refusing what does not fit in its own words; checking it here would pre-empt those.

@@ -20,7 +20,6 @@ describe("the container's secret environment", () => {
             "ANTHROPIC_API_KEY",
             "OPENAI_API_KEY",
             "CLOUDFLARE_API_TOKEN",
-            "HOST_SSH_KEY",
             "RUNNER_PAIR_TOKEN",
         ]) {
             expect(CONTAINER_SECRET_ENV).toContain(name);
@@ -43,7 +42,7 @@ describe("the container's secret environment", () => {
 
 describe("sealing the daemon's environment", () => {
     test("removes every secret name and keeps everything else", () => {
-        const env: NodeJS.ProcessEnv = { CONNECT_TOKEN: "c", HOST_SSH_KEY: "k", OPENAI_API_KEY: "o", PATH: "/usr/bin", WORKSPACE_ROOT };
+        const env: NodeJS.ProcessEnv = { CONNECT_TOKEN: "c", RUNNER_PAIR_TOKEN: "r", OPENAI_API_KEY: "o", PATH: "/usr/bin", WORKSPACE_ROOT };
         sealConfigSecrets({ secretEnv: CONTAINER_SECRET_ENV, keys }, env);
         expect(env).toEqual({ PATH: "/usr/bin", WORKSPACE_ROOT });
     });

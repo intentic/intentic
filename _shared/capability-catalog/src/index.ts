@@ -11,7 +11,6 @@ import {
     type LocalModelWindow,
 } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type ExitPoint, TOR_EXIT_COUNTRIES, VPNGATE_EXIT_COUNTRIES } from "@intentic/sandbox-contract/schemas/exit";
-import type { ServiceKind } from "@intentic/sandbox-contract/schemas/inventory";
 import { EXTENSION_ENTRY, PLUGIN_ENTRY } from "./git-tiles.js";
 import { SSH_ENTRY } from "./ssh.js";
 
@@ -62,70 +61,6 @@ const countryOption = (point: ExitPoint): { value: string; label: string } => ({
     label: `${point.countryName}${point.share === undefined ? "" : ` — ${point.share >= 0.01 ? Math.round(point.share * 100) : "<1"}% of capacity`}`,
 });
 
-// Catalog the web renders add forms from; only user-provided, non-secret fields appear. Servers and Cloudflare register
-// through their own connect steps, never a bare form.
-export interface InventoryFieldDescriptor {
-    readonly key: string;
-    readonly label: string;
-    readonly kind: "text" | "number";
-}
-// Self-hosted service catalog for the infra operator panel's "Add service" dialog: one tile per deployable service,
-// then its fields form.
-export interface InventoryServiceDescriptor {
-    readonly service: ServiceKind;
-    readonly label: string;
-    readonly logo?: string | undefined;
-    // An @intentic/ui IconName fallback glyph, rendered when no simple-icons `logo` fits the brand.
-    readonly icon?: string | undefined;
-    readonly description: string;
-    readonly fields: readonly InventoryFieldDescriptor[];
-}
-export const INVENTORY_SERVICES: readonly InventoryServiceDescriptor[] = [
-    {
-        service: "signoz",
-        label: "SigNoz",
-        icon: "wave-pulse",
-        description: "Observability, traces, logs and metrics.",
-        fields: [{ key: "domain", label: "Domain", kind: "text" }],
-    },
-    {
-        service: "outline",
-        label: "Outline",
-        logo: "outline",
-        description: "Team wiki and docs.",
-        fields: [{ key: "domain", label: "Domain", kind: "text" }],
-    },
-    {
-        service: "paperless",
-        label: "Paperless-ngx",
-        logo: "paperlessngx",
-        description: "Scan, index and archive documents.",
-        fields: [{ key: "domain", label: "Domain", kind: "text" }],
-    },
-    {
-        service: "openproject",
-        label: "OpenProject",
-        logo: "openproject",
-        description: "Project management and issue tracking.",
-        fields: [{ key: "domain", label: "Domain", kind: "text" }],
-    },
-    {
-        service: "invoiceninja",
-        label: "Invoice Ninja",
-        logo: "invoiceninja",
-        description: "Invoicing, quotes and payments.",
-        fields: [{ key: "domain", label: "Domain", kind: "text" }],
-    },
-    {
-        // No infisical slug in simple-icons; uses the semantic lock glyph instead.
-        service: "infisical",
-        label: "Infisical",
-        icon: "lock",
-        description: "Secrets management for apps and teams.",
-        fields: [{ key: "domain", label: "Domain", kind: "text" }],
-    },
-];
-
 // POST /capabilities body: id, kind, and kind-specific config built from the form; the daemon validates the
 // discriminated shape. Values are strings; empty optional fields are omitted.
 export interface AddCapabilityInput {
@@ -140,14 +75,14 @@ export interface AddCapabilityInput {
 // when: gates a field on the answers already given.
 // multiline: keeps the newlines a pasted PEM needs.
 
-// Display grouping in the "+" grid, by what a tile is for, not its technical `kind`. `platform` tiles unlock a new
-// workspace area; the rest connect existing tools.
+// Display grouping in the "+" grid, by what a tile is for, not its technical `kind`. `platform` tiles add to the
+// sandbox itself; the rest connect existing tools.
 export type CapabilityCategory =
     "platform" | "code" | "observability" | "data" | "communication" | "business" | "devices" | "servers" | "deploy" | "extend";
 
 // The grid's sections, in render order, with their headers. Tiles are grouped by `category` under these.
 export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; readonly label: string; readonly hint: string }[] = [
-    { id: "platform", label: "Platform", hint: "Scaffold managed repos that appear as their own operator panels." },
+    { id: "platform", label: "Platform", hint: "Services that run inside the sandbox itself." },
     { id: "code", label: "Code & issues", hint: "Repos, issues and pipelines as agent tools." },
     { id: "observability", label: "Observability", hint: "Query errors, traces, logs and metrics." },
     { id: "data", label: "Data", hint: "Let the agent query your SQL databases." },
@@ -373,24 +308,6 @@ const PHONE_SCOPE_FIELDS: readonly CapabilityField[] = [
 ];
 
 export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
-    {
-        id: "devops",
-        name: "DevOps",
-        kind: "devops",
-        category: "platform",
-        description: "Scaffold the two repos self-hosting runs from.",
-        fields: [],
-        hint: "Creates the intent and desired-state repos, which open as the Infrastructure and Live status panels. Declare machines, services and apps there.",
-    },
-    {
-        id: "monorepo",
-        name: "pnpm + turbo monorepo",
-        kind: "monorepo",
-        category: "platform",
-        description: "Scaffold an empty pnpm + turbo monorepo.",
-        fields: [],
-        hint: "Names the repo. Once it's created, open its panel to add a Hono API, a Vue web app, or an Astro landing page.",
-    },
     {
         id: "docker",
         name: "Docker",

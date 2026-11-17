@@ -97,7 +97,6 @@ export const UNSERVED = {
     "POST /devices/{name}/tunnels": NOT_THE_EDITORS,
     // The `diagnostics` command on the agent's PATH; the editor reads the same records through the logs routes.
     "POST /diagnostics": NOT_THE_EDITORS,
-    "POST /enroll": NOT_THE_EDITORS,
     "POST /fleet/message": NOT_THE_EDITORS,
     "POST /fleet/resume": NOT_THE_EDITORS,
     "POST /intake/{id}/report": OFF_SITE,

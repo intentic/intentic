@@ -74,7 +74,6 @@ const {
     stagedPlan,
     preparing,
     info,
-    serverManaged,
     slug,
     skipServed,
     skipVersion,
@@ -148,7 +147,7 @@ const minute = computed(() => Math.floor(clock.value / 60_000));
 // the image the last swap replaced or the version it parked, and a machine to run the rollback on.
 const canRollBack = computed(() =>
     hosted.value === undefined
-        ? (rollbackTo.value !== undefined || parkedReady.value) && slug.value !== undefined && !serverManaged.value && composeOffer.value === undefined
+        ? (rollbackTo.value !== undefined || parkedReady.value) && slug.value !== undefined && composeOffer.value === undefined
         : active.value?.hosted?.canRollBack === true && isOwner.value,
 );
 const plan = computed(() =>
@@ -234,7 +233,7 @@ const planRefused = computed(() => updateAvailable.value && stagedPlan.value?.ok
 // The update is actually on offer from this card right now: the offer's own card, rather than the quiet group.
 const offering = computed(() => updateAvailable.value && localImage.value === undefined && !planRefused.value);
 // The previous version stays parked for a day only where `ic` does the swap: not hosted, under a deploy or under Compose.
-const throughIc = computed(() => hosted.value === undefined && !serverManaged.value && composeOffer.value === undefined);
+const throughIc = computed(() => hosted.value === undefined && composeOffer.value === undefined);
 // UPDATES THAT TAKE THEMSELVES. Where the daemon can (self-hosted, through the machine's ic), a downloaded update waits
 // for a quiet moment and installs by itself (UpdateAutoStatus says when, and what it waits for); the gold button stays,
 // as "Update now", for whoever would rather not wait. The switch says whether it does any of that.
@@ -262,8 +261,7 @@ const facts = computed((): Fact[] => {
           ? t(`capabilities.hostRecreate.costRestartOnlyShort`)
           : t(`capabilities.hostRecreate.costBuildThenRestartShort`);
     return [
-        // A deploy decides its own restart, so what it costs is not this card's to say.
-        ...(serverManaged.value ? [] : [{ icon: `clock` as const, label: t(`sandbox.sandboxUpdateCard.factDowntime`), tip: downtimeTip }]),
+        { icon: `clock` as const, label: t(`sandbox.sandboxUpdateCard.factDowntime`), tip: downtimeTip },
         { icon: `shield`, label: t(`sandbox.sandboxUpdateCard.factFilesStay`), tip: t(`sandbox.sandboxUpdateCard.filesStay`) },
         ...(throughIc.value
             ? [{ icon: `undo` as const, label: t(`sandbox.sandboxUpdateCard.factUndo`), tip: t(`sandbox.sandboxUpdateCard.previousStaysReady`) }]
@@ -305,7 +303,7 @@ const quietHeading = computed(() => {
 const rebuilding = ref(false);
 // "Having trouble?" joins the checkout rebuild's row when nothing would sit between them at the group's foot.
 const troubleBesideRebuild = computed(
-    () => canRollBack.value && !plan.value.rollbackWhy && localImage.value !== undefined && !serverManaged.value && !updateAvailable.value,
+    () => canRollBack.value && !plan.value.rollbackWhy && localImage.value !== undefined && !updateAvailable.value,
 );
 // The foot's own "Having trouble?": wherever the way back is offered and nothing else already opens it.
 const troubleAtFoot = computed(() => canRollBack.value && !plan.value.rollbackWhy && !troubleBesideRebuild.value);
@@ -320,7 +318,7 @@ const quietBody = computed(
         newsNotice.value !== undefined ||
         plan.value.skipped !== undefined ||
         skipNotice.value !== undefined ||
-        (slug.value !== undefined && !serverManaged.value && (localImage.value !== undefined || planRefused.value)) ||
+        (slug.value !== undefined && (localImage.value !== undefined || planRefused.value)) ||
         planRefused.value ||
         rollbackShown.value,
 );
@@ -406,11 +404,7 @@ const finePrint = computed(
                             class="flex min-w-0 flex-col gap-3.5 @xl/update:max-w-72 @xl/update:shrink-0"
                             :class="hasNotes && `@4xl/update:max-w-none`"
                         >
-                            <p v-if="serverManaged" class="text-xs text-muted">
-                                {{ t(`sandbox.sandboxUpdateCard.sandboxUpdatesOnNext`) }} <span class="font-mono text-content">intentic deploy apply</span>
-                                {{ t(`sandbox.sandboxUpdateCard.againstHost`) }}
-                            </p>
-                            <UpdateComposeCommand v-else-if="composeOffer" :offer="composeOffer" />
+                            <UpdateComposeCommand v-if="composeOffer" :offer="composeOffer" />
                             <template v-else-if="hosted">
                                 <!-- Own block so the column's stretch doesn't draw the button at full width. -->
                                 <div v-if="isOwner">
@@ -596,7 +590,7 @@ const finePrint = computed(
                     </p>
                     <Notice v-if="skipNotice" :of="skipNotice" />
 
-                    <div v-if="slug && !serverManaged && (localImage || planRefused)" :id="UPDATE_ACTION_ANCHOR" class="flex flex-col gap-2">
+                    <div v-if="slug && (localImage || planRefused)" :id="UPDATE_ACTION_ANCHOR" class="flex flex-col gap-2">
                         <!-- A sandbox on a checkout-built base is not updated from the registry: a pull would REPLACE its image with a published build, not refresh it. -->
                         <template v-if="localImage">
                             <!-- "Having trouble?" rides with the rebuild: beside its button, then on the progress's action row

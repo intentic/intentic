@@ -31,11 +31,10 @@ export interface TypeableSecret {
     readonly guard: ProgramGuard;
 }
 
-// Only user-kept kinds: a capability's own credential has its own lanes (type_credential, env vars).
-const USER_KEPT: ReadonlySet<NamedSecret["source"]> = new Set(["env", "sandbox", "generated"]);
-
+// Only what a person kept in the sandbox's own store: a capability's own credential has its own lanes (type_credential,
+// env vars).
 export const typeableSecret = (registry: readonly NamedSecret[], name: string): NamedSecret | undefined =>
-    registry.find((secret) => secret.name === name && USER_KEPT.has(secret.source));
+    registry.find((secret) => secret.name === name && secret.source === "sandbox");
 
 export interface KeyringTyping {
     readonly link: Pick<KeyringLink, "type">;

@@ -40,10 +40,10 @@ test("a neutral sandbox (no role repos on disk) reports no sync failures", async
     });
 });
 
-test("syncs only the repos that exist (own a .git), skipping the never-scaffolded ones", async () => {
+test("syncs only the repos that exist (own a .git), skipping a folder that is not one", async () => {
     await withWorkspace(async (root) => {
-        const paths = workspacePaths(root);
-        await mkdir(join(paths.repos.app, ".git"), { recursive: true }); // app built; intent + desired-state absent (no DevOps)
+        await mkdir(join(root, "app", ".git"), { recursive: true });
+        await mkdir(join(root, "notes"), { recursive: true });
         const results = await syncWorkspaceRepos(makeServices(root), 0);
         expect(results.map(({ repo }) => repo)).toEqual(["app"]);
         expect(results.some(({ outcome }) => outcome.status === "error")).toBe(false);

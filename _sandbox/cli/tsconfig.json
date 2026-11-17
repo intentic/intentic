@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "references": [
+        { "path": "../../_tools/constants" },
+        { "path": "../../_tools/base" },
+        { "path": "../../_shared/sandbox-contract" },
+        { "path": "../../_shared/sandbox-run" },
+        { "path": "../../_sandbox/scaffold" }
+    ],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

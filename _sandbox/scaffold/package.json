@@ -1,7 +1,7 @@
 {
     "name": "@intentic/scaffold",
     "version": "0.0.0",
-    "description": "Shared scaffold for an intentic workspace, the intent-repo skeleton + deploy.config managed-region render/parse, used by the CLI's `init` and the sandbox daemon",
+    "description": "App monorepo scaffolding from an intentic template source, shared by the intentic CLI and the sandbox daemon",
     "license": "MIT",
     "type": "module",
     "repository": {
@@ -36,10 +36,7 @@
         "test": "suites"
     },
     "dependencies": {
-        "@intentic/base": "workspace:*",
-        "@intentic/constants": "workspace:*",
-        "@intentic/graph": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*"
+        "@intentic/base": "workspace:*"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

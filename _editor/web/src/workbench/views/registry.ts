@@ -117,12 +117,8 @@ const judge = (): RailGroup => ({
 // Workflows is a LISTED first-party extension like the judge band's (installed from the registry), declared here so an
 // install lands its tile beside Automations.
 const setup = (): RailGroup => ({ id: `setup`, label: t(`views.words.setUp`), items: [signal(`workflows`), signal(`automations`)] });
-// Consulted deliberately, not summoned; Documentation badges rarely and meaningfully, the others don't at all.
-const know = (): RailGroup => ({
-    id: `know`,
-    label: t(`views.registry.know`),
-    items: [signal(`documentation`), signal(`infrastructure`), signal(`live-status`)],
-});
+// Consulted deliberately, not summoned; Documentation badges rarely and meaningfully.
+const know = (): RailGroup => ({ id: `know`, label: t(`views.registry.know`), items: [signal(`documentation`)] });
 
 // The Work band. Run follows the Workspace, a tile of its own and always there: starting what the files make, here or
 // natively on one of the owner's computers, is part of the loop the band serves, not news. Devices closes it: the machines this sandbox reaches, a place to go as This computer is in a local

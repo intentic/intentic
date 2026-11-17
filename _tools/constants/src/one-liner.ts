@@ -32,11 +32,11 @@ export const SAFE_ARG = /^[A-Za-z0-9._~/-]+$/;
 /** The folder the setup page syncs by default, and the only kind whose leaf can ride a setup one-liner. */
 export const DEFAULT_SYNC_ROOT = "~/intentic";
 
-/** Whether `host` is a hostname a device/sync/server one-liner can carry (lowercase it first). */
+/** Whether `host` is a hostname a device or sync one-liner can carry (lowercase it first). */
 export const isOneLinerHost = (host: string): boolean => HOSTNAME_PATTERN.test(host) && !/^\d+$/.test(host.slice(host.lastIndexOf(".") + 1));
 
 /**
- * A sandbox's address as a device, sync or server one-liner carries it: the bare hostname of its https URL. Undefined
+ * A sandbox's address as a device or sync one-liner carries it: the bare hostname of its https URL. Undefined
  * for one no one-liner can reach (localhost, an IP, a port), which keeps its environment-variable command.
  */
 export const oneLinerHostOf = (sandboxUrl: string | undefined | null): string | undefined => {
@@ -95,7 +95,7 @@ const shortCode = arg(`code`, SHORT_CODE_PATTERN);
 
 const RECREATE = { sh: `recreate.sh`, ps1: `recreate.ps1` } as const;
 
-// A device, sync or server connect: the sandbox's address and the code it minted, which the script redeems there.
+// A device or sync connect: the sandbox's address and the code it minted, which the script redeems there.
 const coded = (sh: string, ps1: string): VerbSpec => ({
     files: { sh, ps1 },
     required: [host, shortCode],
@@ -176,7 +176,6 @@ const VERBS = {
     },
     device: coded(`device.sh`, `device.ps1`),
     sync: coded(`sync.sh`, `sync.ps1`),
-    server: coded(`connect-host.sh`, `connect-host.ps1`),
 } as const satisfies Record<string, VerbSpec>;
 
 export type OneLinerVerb = keyof typeof VERBS;

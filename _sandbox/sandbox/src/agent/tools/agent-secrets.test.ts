@@ -17,7 +17,7 @@ const TOKEN = "cf_live_0011223344ff";
 type Release = SecretAccess["release"];
 const allowAll: Release = async () => ({ ok: true });
 
-const access = (secrets: NamedSecret[] = [{ name: "CLOUDFLARE_API_TOKEN", value: TOKEN, source: "env" }], release: Release = allowAll) => {
+const access = (secrets: NamedSecret[] = [{ name: "CLOUDFLARE_API_TOKEN", value: TOKEN, source: "sandbox" }], release: Release = allowAll) => {
     const uses: SecretUseReport[] = [];
     const reads: number[] = [];
     const asked: { names: readonly string[]; lane: string; detail: string }[] = [];

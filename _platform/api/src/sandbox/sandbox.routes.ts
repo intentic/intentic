@@ -254,7 +254,7 @@ export const sandboxRoutes = {
         await context.prisma.sandboxMember.deleteMany({ where: { sandboxId: input.sandboxId, email: user.email.toLowerCase() } });
         return { ok: true };
     }),
-    // Zones a pasted Cloudflare token can see, for the deploy engine's own apps — unrelated to sandbox reachability.
+    // Zones a pasted Cloudflare token can see, for the setup screen's own-zone option.
     // Token used once here, never persisted or logged.
     zones: os.sandbox.zones.handler(async ({ context, input }) => {
         requireUser(context);

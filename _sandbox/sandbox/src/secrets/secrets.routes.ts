@@ -1,11 +1,5 @@
 import { noteAudit } from "../audit/audit-http.js";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
-import { join } from "node:path";
-import { parseEnv } from "node:util";
-import { UnquotableValueError } from "@intentic/sandbox-run/quote";
-import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
+import { errorMessage } from "@intentic/base/errors";
 import { secretField } from "../capabilities/summary.js";
 import { lastUseByName, type SecretUse } from "./secret-uses.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
@@ -18,7 +12,6 @@ import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.co
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { stateRelPath } from "../state-paths.js";
-import { envKeys, removeEnv, upsertEnv } from "./env-text.js";
 import { sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { unmaskableSecrets } from "../agent/tools/agent-redaction.js";
 import { guardForEntry } from "./guards/host-guards.js";
@@ -29,13 +22,12 @@ import { createDeviceSecretRoutes } from "./device/device-secrets.routes.js";
 import { deviceInventoryEntry } from "./device/device-secrets.js";
 import type { DevicePointer } from "./device/keyring-link.js";
 import { createCredentialPolicyRoutes, credentialPolicies } from "../capabilities/broker/broker-policy.routes.js";
-import { type TextFile, textFile } from "../store/plain-files/text-file.js";
 
 // The whole `Services`, not a Pick: the inventory hands `services` on to every provider module's secretEntries, and a
 // Pick would go stale with each module edit.
 export type SecretsRoutesDeps = Services;
 
-// The newest ledger row for one entry: env/generated match by exact name; a capability entry is one row for a vault
+// The newest ledger row for one entry: env matches by exact name; a capability entry is one row for a vault
 // with several fields, so any field's use counts.
 const lastUseFor = (entry: Pick<SecretInventoryEntry, "key" | "kind">, lastByName: ReadonlyMap<string, SecretUse>): SecretUse | undefined => {
     if (entry.kind === "provider") {
@@ -88,34 +80,15 @@ const flagTooShort = async (services: Pick<SecretsRoutesDeps, "secretRegistry">,
 // A sandbox-held secret's program guard, where the owner set one; a keyring's row carries its keyring's own list.
 const withPrograms = (entries: readonly SecretInventoryEntry[], guards: readonly SecretProgramGuard[]): SecretInventoryEntry[] =>
     entries.map((entry) => {
-        const guard = entry.kind === "env" || entry.kind === "generated" ? guards.find((candidate) => candidate.subject === entry.key) : undefined;
+        const guard = entry.kind === "env" ? guards.find((candidate) => candidate.subject === entry.key) : undefined;
         return guard === undefined ? entry : { ...entry, programs: { programs: guard.programs, packages: guard.packages, anyField: guard.anyField, source: "owner" } };
     });
 
-// User-supplied secrets go to desired-state/.env (mode 0600) once DevOps has scaffolded that repo, and to the sandbox's
-// own store (sandbox-secrets.ts) before it; reveal reads both, and inventory always answers. Every set/remove fires a best-effort `deploy secrets push` for the CI
-// copy. `providerAccounts` answers every provider's connected-account rows, which the router reads from the provider
+// User-supplied secrets go to the sandbox's own store (sandbox-secrets.ts); reveal reads it, and inventory always
+// answers. `providerAccounts` answers every provider's connected-account rows, which the router reads from the provider
 // modules themselves.
 export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccounts: () => Promise<readonly SecretInventoryEntry[]>) => {
     const i = implement(secretsContract).$context<OrpcContext>();
-    const desiredState = (): string => services.workspace.repos["desired-state"];
-    const envPath = (): string => join(desiredState(), ENV_FILE);
-    // Resolved per call rather than once: the desired-state repo isn't scaffolded when these routes are built.
-    const envFile = (): TextFile => textFile(envPath(), 0o600);
-    const read = async (): Promise<string> => await envFile().read();
-    const devopsActive = (): boolean => existsSync(desiredState());
-    // `envLine` cannot express a value holding all three quote characters; refused as a bad request naming the value,
-    // since a raw throw here reads as a server fault the user cannot act on.
-    const writeEnv = async (change: (current: string) => string): Promise<void> => {
-        try {
-            await envFile().update(change).then(() => services.secretsChanged());
-        } catch (error) {
-            if (error instanceof UnquotableValueError) {
-                throw new ORPCError("BAD_REQUEST", { message: error.message });
-            }
-            throw error;
-        }
-    };
     // Whether this caller may see a value in the clear: reveal is for whoever runs secrets (the owner, Full access, or a
     // member given Secrets), and a gated credential is held to its approvers there as at every other release. A loopback
     // daemon has one person, who answers for everything.
@@ -152,13 +125,6 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             });
         }
     };
-    const pushToCi = (): void => {
-        void (async () => {
-            for await (const line of services.intentic({ args: ["deploy", "secrets", "push"], cwd: services.workspace.root })) {
-                void line;
-            }
-        })().catch((error: unknown) => services.logger.warn({ err: error }, "secrets push after set failed"));
-    };
     return {
         // Where each secret may be sent: its own module, since who may change a list turns on more than a role.
         ...createSecretHostRoutes(services),
@@ -168,44 +134,22 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
         ...createDeviceSecretRoutes(services),
         // How each connection's credential reaches the agent and what it may do there (broker/broker-policy.routes.ts).
         ...createCredentialPolicyRoutes(services),
-        // With DevOps, into desired-state/.env, which deploys and the CI copy read; without it, into the sandbox's own
-        // store (sandbox-secrets.ts), so keeping a key for the agent never needs a deploy pipeline scaffolded first.
         set: i.set.handler(async ({ input }) => {
             noteAudit({ target: input.key });
-            if (devopsActive()) {
-                await writeEnv((current) => upsertEnv(current, input.key, input.value));
-                pushToCi();
-            } else {
-                await services.sandboxSecrets.set(input.key, input.value);
-            }
+            await services.sandboxSecrets.set(input.key, input.value);
             return { ok: true } as const;
         }),
         // Making a random value, new or in place of one a person set (secret-generate.routes.ts).
-        ...createSecretGenerateRoutes(services, { devopsActive, read, writeEnv, pushToCi, keptOnDevice: (key) => keptOnDevice(services, key) }),
-        list: i.list.handler(async () => {
-            const kept = Object.keys(await services.sandboxSecrets.all());
-            const env = devopsActive() ? envKeys(await read()) : [];
-            return { keys: [...new Set([...env, ...kept])] };
-        }),
+        ...createSecretGenerateRoutes(services, (key) => keptOnDevice(services, key)),
+        list: i.list.handler(async () => ({ keys: Object.keys(await services.sandboxSecrets.all()) })),
         remove: i.remove.handler(async ({ input }) => {
-            const kept = await services.sandboxSecrets.remove(input.key);
-            if (devopsActive()) {
-                await writeEnv((current) => removeEnv(current, input.key));
-                pushToCi();
-            } else if (!kept) {
+            if (!(await services.sandboxSecrets.remove(input.key))) {
                 throw new ORPCError("NOT_FOUND", { message: `no secret named "${input.key}"` });
             }
             return { ok: true } as const;
         }),
         inventory: i.inventory.handler(async ({ context }) => {
-            const [repoEntries, capabilities, connectors, providerEntries, uses, gates, kept, hostGuards, policies, onDevices, programGuards] = await Promise.all([
-                // A display surface: one unparseable repo file costs its own rows, said in the log, not the whole panel.
-                existsSync(desiredState())
-                    ? collectSecretInventory(desiredState()).catch((error: unknown) => {
-                          services.logger.warn({ err: error }, "secrets inventory: the desired-state repo's secret files could not be read");
-                          return [];
-                      })
-                    : [],
+            const [capabilities, connectors, providerEntries, uses, gates, kept, hostGuards, policies, onDevices, programGuards] = await Promise.all([
                 services.capabilities.list(),
                 contributionRegistry(services),
                 // Every provider's connected-account rows, from the modules themselves, not hand-kept here.
@@ -234,7 +178,6 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                     key: capability.id,
                     kind: "capability",
                     status: "connected",
-                    requiredBy: [],
                     // The vault, not the manifest: the manifest never holds the value, which lives beside the provider
                     // logins.
                     storedAt: stateRelPath(".intentic/secrets/auth/", "capability-secrets.json"),
@@ -242,7 +185,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 }));
             // Joins the ledger's newest row per entry, so inventory alone answers when the agent last spent it.
             const lastByName = lastUseByName(uses);
-            // The gate for one entry, by the exits' own subject rule: env/generated rows are a secret subject,
+            // The gate for one entry, by the exits' own subject rule: env rows are a secret subject,
             // capability rows a capability subject; a provider account has neither.
             const gateFor = (entry: Pick<SecretInventoryEntry, "key" | "kind">): CredentialGate | undefined => {
                 if (entry.kind === "provider") {
@@ -275,19 +218,15 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                           },
                       };
             };
-            // Kept without DevOps: a person's own, like the .env's rows, one row per name the .env does not already hold.
-            const repoKeys = new Set(repoEntries.map((entry) => entry.key));
-            const keptEntries: SecretInventoryEntry[] = Object.keys(kept)
-                .filter((key) => !repoKeys.has(key))
-                .map((key) => ({
-                    key,
-                    kind: "env",
-                    status: "set",
-                    requiredBy: [],
-                    storedAt: stateRelPath(".intentic/secrets/auth/", sandboxSecretsDocument.path),
-                    revealable: true,
-                }));
-            const ownRows = [...repoEntries, ...keptEntries, ...capabilityEntries, ...providerEntries];
+            // A person's own, set here or generated.
+            const keptEntries: SecretInventoryEntry[] = Object.keys(kept).map((key) => ({
+                key,
+                kind: "env",
+                status: "set",
+                storedAt: stateRelPath(".intentic/secrets/auth/", sandboxSecretsDocument.path),
+                revealable: true,
+            }));
+            const ownRows = [...keptEntries, ...capabilityEntries, ...providerEntries];
             // One row per key: a name a row above already lists is the sandbox's, whatever a keyring shares under it.
             const listedKeys = new Set(ownRows.map((entry) => entry.key));
             const deviceRows = onDevices.filter((entry) => !listedKeys.has(entry.pointer.name)).map(deviceInventoryEntry);
@@ -296,7 +235,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
         reveal: i.reveal.handler(async ({ input, context }) => {
             noteAudit({ target: input.key });
             await ensureRight(services, context.headers, "secrets");
-            // Capability credentials first (key = capability id): they exist whether or not DevOps is active.
+            // Capability credentials first (key = capability id).
             const capability = await services.capabilities.get(input.key);
             if (capability !== undefined) {
                 const field = secretField(capability, await contributionRegistry(services));
@@ -306,24 +245,11 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                     return { value };
                 }
             }
-            // Every other store answers to a secret of this name.
+            // The sandbox's own store answers to a secret of this name.
             await refuseUnlessReleasable(context.identity, "secret", input.key);
             const keptValue = await services.sandboxSecrets.get(input.key);
             if (keptValue !== undefined) {
                 return { value: keptValue };
-            }
-            if (!devopsActive()) {
-                throw await notFound(services, input.key);
-            }
-            const envValue = parseEnv(await read())[input.key];
-            if (typeof envValue === "string") {
-                return { value: envValue };
-            }
-            // Only absence is "no generated secrets": an unreadable file must not answer NOT_FOUND for a secret it holds.
-            const generatedRaw = (await readFile(join(desiredState(), SECRETS_FILE), "utf8").catch(undefinedIfMissing)) ?? "{}";
-            const generatedValue = (JSON.parse(generatedRaw) as Record<string, unknown>)[input.key];
-            if (typeof generatedValue === "string") {
-                return { value: generatedValue };
             }
             throw await notFound(services, input.key);
         }),

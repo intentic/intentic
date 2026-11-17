@@ -56,10 +56,9 @@ export interface SecretsSlice {
     // The most a conversation's tools may be, from the same chain (access/principal-chain.ts): the turn's premise caps
     // its persona's shelves with it, after conversation grants, so neither lifts a shelf the chain withholds.
     readonly toolCeiling: ConversationCeilingOf;
-    // Secrets a person keeps without DevOps: pasted into a need's card, or added on the Secrets view.
+    // Secrets a person keeps: pasted into a need's card, or added on the Secrets view.
     readonly sandboxSecrets: SandboxSecrets;
-    // A secret was stored or removed here, by any door (the sandbox store, or desired-state/.env through the Secrets
-    // routes, which call `secretsChanged`): open needs check now (2026-10-20). Answers the unsubscribe.
+    // A secret was stored or removed here, by any door: open needs check now (2026-10-20). Answers the unsubscribe.
     readonly onSecretsChanged: (listener: () => void) => () => void;
     readonly secretsChanged: () => void;
     // Each secret's host guard, the second half of its approval beside the named approvers: the owner's settings,
@@ -193,7 +192,7 @@ export const createSecretsSlice = ({
     // Read fresh each call, like the registry: a guard the owner tightens mid-turn holds from the very next use.
     const hostGuards = hostGuardReaders(secretHostGuards, connectorHosts, connectorHostMetadata);
     const keyrings = createKeyringParts({ authRoot, hub: deviceHub, publicUrl, logger });
-    const secretRegistry = secretRegistryOf(secretVault, () => workspace.repos["desired-state"], sandboxSecrets, {
+    const secretRegistry = secretRegistryOf(secretVault, sandboxSecrets, {
         // A connections hub entry is the hub's to read (hub/), never a value an agent spends by name.
         copies: async () => withoutHubEntries(await keyrings.keyringCopies.all()),
         released: () => keyrings.releasedDeviceValues.all(),

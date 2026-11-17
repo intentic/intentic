@@ -70,6 +70,19 @@ export const capabilitiesDocument = defineDocument({
                 return { ...entry, config };
             },
         ),
+        // 2026-11-17: the monorepo card was withdrawn. It only ran `intentic scaffold monorepo` once and reported whether
+        // the folder existed, a template rather than a connection; the repo it made stays, and the CLI still scaffolds one.
+        retireEntries(
+            "retires a monorepo card, withdrawn as a one-shot scaffold rather than a connection",
+            (entry): entry is { kind: "monorepo" } => isJsonObject(entry) && entry["kind"] === "monorepo",
+        ),
+        // 2026-11-17: self-hosting was withdrawn, and the DevOps card with it. It held no credential, only switched on the
+        // intent and desired-state repos the deploy engine read; those repos stay on disk, and their `.env` secrets move
+        // into the sandbox's own store at boot (secrets/desired-state-secrets.ts).
+        retireEntries(
+            "retires a DevOps card, withdrawn with self-hosting",
+            (entry): entry is { kind: "devops" } => isJsonObject(entry) && entry["kind"] === "devops",
+        ),
     ],
 });
 

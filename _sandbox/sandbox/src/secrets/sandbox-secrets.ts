@@ -2,8 +2,8 @@ import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 
-// Secrets a person keeps for the agent without DevOps: pasted into a need's card (docs/architecture/needs.md), or added
-// on the Secrets view in a sandbox with no desired-state repo to hold a `.env`. Beside the capability vault under the
+// Secrets a person keeps for the agent: pasted into a need's card (docs/architecture/needs.md), added on the Secrets
+// view, generated, or imported from another assistant's setup. Beside the capability vault under the
 // auth root (mode 0600), off the file routes, the tree walk and the search index, and resolved by the same
 // `{{secret:NAME}}` reference as every other store. Not a barrier against a shell, like the vault it sits beside.
 

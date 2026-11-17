@@ -1,22 +1,17 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import type { ArrivalHost, ArrivalReport, AssistantSource } from "@intentic/sandbox-contract/state/arrival";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { spawnableProviders } from "../agent/subagents/spawn-catalog.js";
-import { ENV_FILE } from "@intentic/scaffold";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { composeEnvironment } from "../environment/overlay.js";
-import { upsertEnv } from "../secrets/env-text.js";
 import { switchOwnSkill, writeOwnSkill } from "../settings/skills.js";
-import { textFile } from "../store/plain-files/text-file.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import type { Files, SourcePlan } from "./adapter-shared.js";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
-import { applyMigration, type MigrationDeps, SecretsInactiveError } from "./apply.js";
+import { applyMigration, type MigrationDeps } from "./apply.js";
 import { diagnoseArchive } from "./diagnose.js";
 import { detectHermes, planHermes } from "./hermes.js";
 import { probeHost, scanHost } from "./host-scan.js";
@@ -154,20 +149,13 @@ const migrationDeps = (services: Services): MigrationDeps => {
             }
             await services.capabilities.upsert(capability);
         },
-        // Secrets route's own write: the same queued textFile over desired-state/.env at mode 0600, gated the same way
-        // (no DevOps checkout, no store).
-        setSecret: async (key, value) => {
-            const desiredState = services.workspace.repos["desired-state"];
-            if (!existsSync(desiredState)) {
-                throw new SecretsInactiveError();
-            }
-            await textFile(join(desiredState, ENV_FILE), 0o600).update((current) => upsertEnv(current, key, value));
-        },
+        // The Secrets route's own write: into the sandbox's own store, where every reference resolves.
+        setSecret: (key, value) => services.sandboxSecrets.set(key, value),
     };
 };
 
 // Lands the ticked rows of a re-derived plan; the pipeline has already dropped the held setup by now, since a fixable
-// failure is about the target (activate DevOps, free disk), not the held bytes.
+// failure is about the target (a full disk), not the held bytes.
 export const applyAssistantSetup = async (
     services: Services,
     setup: AssistantSetup,
@@ -175,17 +163,10 @@ export const applyAssistantSetup = async (
 ): Promise<ArrivalReport> => {
     const report = await applyMigration(migrationDeps(services), assistantPlan(setup), selection);
     // Same convergence the capability-add route runs, once after the loop: folds fragments into the overlay and updates
-    // the translator's endpoints. Imported secrets mirror to CI the same fire-and-forget way the secrets route does.
+    // the translator's endpoints.
     if (report.applied.some((entry) => entry.group === "capability")) {
         await composeEnvironment(services);
         await syncEndpointCompat(services);
-    }
-    if (report.applied.some((entry) => entry.group === "secret")) {
-        void (async () => {
-            for await (const line of services.intentic({ args: ["deploy", "secrets", "push"], cwd: services.workspace.root })) {
-                void line;
-            }
-        })().catch((error: unknown) => services.logger.warn({ err: error }, "secrets push after an assistant arrival failed"));
     }
     services.history.notifyUserWrite();
     return { ...report, refused: [...report.refused, ...skippedLines(setup.skipped)] };

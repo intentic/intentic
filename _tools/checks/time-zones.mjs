@@ -18,7 +18,7 @@ const STATIC_SITE = "_site/site/";
 
 // Where a `Date`'s local components mean the CONTAINER's clock rather than a reader's. Browser and extension-view code
 // is excluded by omission: there, local components are the reader's own clock and are the correct thing to read.
-const DAEMON_ROOTS = ["_sandbox/sandbox/src/", "_platform/api/src/", "_devices/", "_deploy/"];
+const DAEMON_ROOTS = ["_sandbox/sandbox/src/", "_platform/api/src/", "_devices/"];
 
 const LOCAL_COMPONENTS = /\.(?:get|set)(?:Hours|Minutes|Seconds|Date|Month|FullYear|Day)\(/;
 const BARE_CRON = /new Cron\(\s*[^,)]+\)/;

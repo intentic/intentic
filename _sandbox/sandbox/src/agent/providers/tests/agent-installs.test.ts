@@ -73,7 +73,7 @@ test.each([
     "docker run --rm node:24 bash -c 'apt-get update && apt-get install -y tmux'",
     // A quoted argument is not a command: splitting on | or ; can turn a search pattern into an install.
     'rg -n "^FROM|^ARG NODE|apt-get install -y --no-install-recommends" _sandbox/sandbox/Dockerfile | head -20',
-    'rg -n "irm |iex|curl.*\\| sh|SANDBOX_URL=" src/inventory/enroll-host.ts | head -10',
+    'rg -n "irm |iex|curl.*\\| sh|SANDBOX_URL=" src/peers/redeem-codes.ts | head -10',
     "echo 'RUN apt-get update && apt-get install -y curl ca-certificates' > /tmp/frag",
     // A heredoc's lines are data to the shell, not commands it runs.
     "python3 - <<'PYEOF'\nsubprocess.run('apt-get install -y tmux')\nprint('pip install requests')\nPYEOF",

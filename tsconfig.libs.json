@@ -2,12 +2,6 @@
     "files": [],
     "references": [
         { "path": "_tools/base" },
-        { "path": "_deploy/graph" },
-        { "path": "_deploy/resources" },
-        { "path": "_deploy/state-resolver" },
-        { "path": "_deploy/sdk" },
-        { "path": "_deploy/engine" },
-        { "path": "_deploy/providers" },
         { "path": "_shared/extension-manifest" },
         { "path": "_shared/sandbox-contract" },
         { "path": "_devices/desktop-automation" },
@@ -17,6 +11,6 @@
         { "path": "_shared/workspace-setup" },
         { "path": "_search/iq-engine" },
         { "path": "_search/iq" },
-        { "path": "_deploy/cli" }
+        { "path": "_sandbox/cli" }
     ]
 }

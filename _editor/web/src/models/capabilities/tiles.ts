@@ -29,8 +29,6 @@ export const CATEGORY_ICONS: Readonly<Record<CapabilityCategory, IconName>> = {
 // Fallback glyph tier when a tile has no logo (or it fails to load): a kind's own icon, never bare initials, since
 // the kind is always known. No entry here falls to the bolt.
 const KIND_ICONS: Readonly<Record<string, IconName>> = {
-    devops: `server`,
-    monorepo: `sitemap`,
     plugin: `th-large`,
     browser: `globe`,
     identity: `user`,

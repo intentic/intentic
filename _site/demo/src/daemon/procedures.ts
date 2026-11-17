@@ -20,10 +20,8 @@ import { extensionsDoors } from "./extensions/extensions.handler";
 import { gitDoors } from "./git/git.handler";
 import { historyDoors } from "./git/history.handler";
 import { hubDoors } from "./account/hub.handler";
-import { intenticDoors } from "./machine/intentic.handler";
 import { issuesDoors } from "./extensions/issues.handler";
 import { logsDoors } from "./machine/logs.handler";
-import { inventoryDoors } from "./machine/inventory.handler";
 import { loopsDoors } from "./board/loops.handler";
 import { needsDoors } from "./board/needs.handler";
 import { netdiskDoors } from "./machine/netdisk.handler";
@@ -94,8 +92,6 @@ export const procedures = {
     approvals: approvalsDoors,
     activity: activityDoors,
     history: historyDoors,
-    intentic: intenticDoors,
-    inventory: inventoryDoors,
     netdisk: netdiskDoors,
     pages: pagesDoors,
     public: publicDoors,

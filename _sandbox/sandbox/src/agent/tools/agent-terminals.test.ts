@@ -342,7 +342,7 @@ test("the kinds sent to a runner travel with the table", async () => {
 
 test("a line that resolved a secret sends nothing to a runner, whatever its kind", async () => {
     const bundle: SecretAccess = {
-        list: async () => [{ name: "TOKEN", value: "t0k3n", source: "env" }],
+        list: async () => [{ name: "TOKEN", value: "t0k3n", source: "sandbox" }],
         used: () => {},
         release: async () => ({ ok: true }),
     };

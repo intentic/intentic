@@ -44,6 +44,4 @@ cheap to take: depending on one never pulls in a second part.
 [`shared-boundary.mjs`](../_tools/checks/shared-boundary.mjs) enforces the rule on every manifest and import, type-only
 imports included, and records each standing exception with its reason:
 
-- `api-contract` imports `ResourceType` from [`_deploy/resources`](../_deploy/resources). The type stays in `_deploy/`
-  because its other dependents are all deploy-internal.
 - `extension-ui` re-exports [`_editor/ui`](../_editor/ui), because the kit is a slice of the app's own design system.

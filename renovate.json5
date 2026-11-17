@@ -5,37 +5,15 @@
     // a commit sha the step is immutable, and the `# v7.0.1` comment beside it is what Renovate reads to keep
     // the pin current — the readable version stays visible without being what Actions resolves.
     extends: ["config:recommended", "helpers:pinGitHubActionDigests"],
-    // Strict locking: every THIRD-PARTY docker image in the IMAGES map is pinned to a tag + sha256 digest. Keep
-    // digests maintained so a pin is always immutable. The first-party `sandbox` is intentionally unpinned (it
-    // tracks the moving `stable` release tag the release publishes), so no manager below covers it.
+    // Strict locking: every THIRD-PARTY docker image is pinned to a tag + sha256 digest. Keep digests maintained
+    // so a pin is always immutable. The first-party `sandbox` is intentionally unpinned (it tracks the moving
+    // `stable` release tag the release publishes).
     pinDigests: true,
     // cloudflared, binary and image, belongs to the daily tool bump (.github/workflows/tools.yml, which moves its tag and
     // digest at every site _tools/scripts/tools/tool-pins.mjs lists). Two bots writing one pin open competing pull
     // requests, so Renovate leaves it alone. The same goes for anything else that table lists: Bun, the image three
     // Dockerfiles copy it from and the catalog's npm package, is one pin there.
     ignoreDeps: ["cloudflare/cloudflared", "oven/bun", "bun"],
-    customManagers: [
-        {
-            // Read each pin from the frozen IMAGES map. The `renovate:` hint comment above an entry supplies the
-            // depName; the string literal supplies the current tag + digest. This keeps images.ts plain TypeScript
-            // with no build-time generation.
-            customType: "regex",
-            managerFilePatterns: ["/_deploy/state-resolver/src/lib/images\\.ts$/"],
-            matchStrings: [
-                'renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)[\\s\\S]*?"[^"]*:(?<currentValue>[^"@]+)@(?<currentDigest>sha256:[a-f0-9]+)"',
-            ],
-        },
-        {
-            // The starter Dockerfile the CI providers commit into a fresh repo that has none. It is a string
-            // literal in TypeScript, so the dockerfile manager never sees it — but it is an image we make
-            // somebody else build, which is exactly where a rotting pin is least visible.
-            customType: "regex",
-            managerFilePatterns: ["/_deploy/providers/src/core/ci-yaml\\.ts$/"],
-            matchStrings: ['busybox:(?<currentValue>[^@"]+)@(?<currentDigest>sha256:[a-f0-9]+)'],
-            depNameTemplate: "busybox",
-            datasourceTemplate: "docker",
-        },
-    ],
     packageRules: [
         {
             // The Agent SDK BUNDLES the Claude Code CLI binary the sandbox actually executes (see its
@@ -48,22 +26,6 @@
             matchPackageNames: ["@anthropic-ai/claude-agent-sdk", "@anthropic-ai/claude-agent-sdk-*"],
             schedule: ["at any time"],
             automerge: true,
-        },
-        {
-            // The SigNoz stack (server + collector + zookeeper + clickhouse) is version-interdependent and its bumps
-            // re-port the compose/collector/cluster configs in signoz.ts from SigNoz's reference deploy — group them
-            // into one PR so a reviewer sees and validates the whole stack move together.
-            groupName: "signoz stack",
-            matchPackageNames: ["signoz/signoz", "signoz/signoz-otel-collector", "signoz/zookeeper", "clickhouse/clickhouse-server"],
-        },
-        {
-            // FerretDB and its documentdb-extended postgres are paired by tag; bump them together.
-            groupName: "ferretdb",
-            matchPackageNames: ["ghcr.io/ferretdb/ferretdb", "ghcr.io/ferretdb/postgres-documentdb"],
-        },
-        {
-            groupName: "komodo",
-            matchPackageNames: ["ghcr.io/moghtech/komodo-core", "ghcr.io/moghtech/komodo-periphery"],
         },
     ],
 }

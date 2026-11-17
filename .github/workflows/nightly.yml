@@ -70,7 +70,7 @@ env:
   CI_HOST_JOBS: "6"
 
 jobs:
-  # Run all e2e tasks; suites declare their own Docker/Cloudflare/Discord/Stripe test-key requirements and name missing inputs when skipping.
+  # Run all e2e tasks; suites declare their own Docker/Discord/Stripe test-key requirements and name missing inputs when skipping.
   # Passing covers only unlocked tiers; absent credentials must not fail the job. Add secrets to unlock coverage without editing this list.
   # Browser-stack tests use e2e:browser separately because their localhost services are not this job's stack.
   e2e:
@@ -90,7 +90,6 @@ jobs:
       # until its file finishes, so the default 10 min silence detector must allow those explicit budgets.
       SUITES_SILENCE_MS: "1800000"
       # SANDBOX_E2E_IMAGE is deliberately UNSET — the image build step below says why.
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       DISCORD_E2E_BOT_TOKEN: ${{ secrets.DISCORD_E2E_BOT_TOKEN }}
       DISCORD_E2E_SENDER_TOKEN: ${{ secrets.DISCORD_E2E_SENDER_TOKEN }}
       DISCORD_E2E_CHANNEL_ID: ${{ secrets.DISCORD_E2E_CHANNEL_ID }}
@@ -102,8 +101,8 @@ jobs:
         with:
           persist-credentials: false
           clean: false
-      # Whatever these tiers still PULL from a private package — the CLI lane's dind-host, or an image a
-      # debugging run points SANDBOX_E2E_IMAGE at — authenticates client-side, because the host daemon behind
+      # Whatever these tiers still PULL from a private package — an image a debugging run points
+      # SANDBOX_E2E_IMAGE at — authenticates client-side, because the host daemon behind
       # the mounted socket holds no registry credential. The daemon under test is built below, not pulled.
       - uses: ./.github/actions/ghcr-login
         with:

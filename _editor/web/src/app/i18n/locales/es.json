@@ -1489,8 +1489,6 @@
             "runsInApp": "Se ejecuta en la app",
             "runsProcesses": "Ejecuta el proceso en segundo plano: {names} | Ejecuta los procesos en segundo plano: {names}",
             "runsSandboxContainerPrivileged": "Ejecuta el contenedor del sandbox en modo privilegiado, lo que necesita su propio motor de Docker aislado",
-            "scaffoldsRepos": "Crea la estructura del repositorio {repos} | Crea la estructura de los repositorios {repos}",
-            "scaffoldsRepository": "Crea la estructura de un repositorio",
             "spendAsks": "Permite al agente gastar dinero real: hasta ${perPayment} por pago y ${daily} al día, y te pregunta en el chat cada vez",
             "spendAuto": "Permite al agente gastar dinero real, hasta ${perPayment} por pago y ${daily} al día, y los pagos pequeños se hacen sin preguntar",
             "storesSecretInSandbox": "Guarda un secreto en tu sandbox, nunca visible en Archivos",
@@ -1959,7 +1957,6 @@
         },
         "words": {
             "access": "Acceso",
-            "activateAnyway": "Activar de todos modos",
             "addAnyway": "Añadir de todos modos",
             "needsSandboxRebuild": "Necesita reconstruir el sandbox",
             "hideValue": "Ocultar el valor",
@@ -1972,7 +1969,7 @@
         "categories": {
             "platform": {
                 "label": "Plataforma",
-                "hint": "Crea repos gestionados que aparecen como sus propios paneles de operador."
+                "hint": "Servicios que se ejecutan dentro del propio sandbox."
             },
             "code": {
                 "label": "Código e incidencias",
@@ -2012,15 +2009,6 @@
             }
         },
         "catalog": {
-            "devops": {
-                "description": "Crea los dos repos desde los que funciona el autoalojamiento.",
-                "hint": "Crea los repos de intención y de estado deseado, que se abren como los paneles Infraestructura y Estado en vivo. Declara allí máquinas, servicios y apps."
-            },
-            "monorepo": {
-                "name": "Monorepo pnpm + turbo",
-                "description": "Crea un monorepo pnpm + turbo vacío.",
-                "hint": "Da nombre al repo. Una vez creado, abre su panel para añadir una API Hono, una app web Vue o una landing page Astro."
-            },
             "docker": {
                 "description": "Ejecuta contenedores, con su propio Engine + Compose.",
                 "fields": {
@@ -2605,7 +2593,6 @@
             "renaming": "Renombrando {name} a {to}"
         },
         "form": {
-            "activate": "Activar",
             "advanced": "Avanzado",
             "browserAdvanced": "Deja que el agente inicie sesión por ti (opcional)",
             "fieldRequired": "Este campo es obligatorio.",
@@ -3083,10 +3070,6 @@
             "viaSshAgentFor": "firmado para {detail} por el agente ssh",
             "releasedBy": "Liberado por {who}",
             "storedIn": "Guardado en",
-            "generatedForYou": "Generado para ti",
-            "ciLabel": "Copia en CI",
-            "ciSynced": "Al día",
-            "ciOutOfDate": "Desactualizada",
             "whoChanges": "Esto lo cambian el propietario, alguien con acceso total o quien gestione Secretos."
         },
         "fleetAllow": {
@@ -5720,46 +5703,14 @@
                 "unlisted": "no incluida"
             }
         },
-        "reconcileStatus": {
-            "changesPending": "cambios pendientes",
-            "gerund": {
-                "creating": "creando",
-                "removing": "eliminando",
-                "updating": "actualizando",
-                "working": "trabajando"
-            },
-            "live": {
-                "drift": "desajuste",
-                "inSync": "sincronizado",
-                "toCreate": "por crear",
-                "toRemove": "por eliminar",
-                "unknown": "desconocido"
-            },
-            "plan": {
-                "create": "crear",
-                "noChange": "sin cambios",
-                "remove": "eliminar",
-                "unknown": "desconocido",
-                "update": "actualizar"
-            },
-            "planCheckFailed": "Ha fallado la comprobación del plan."
-        },
         "useCloudflareZones": {
             "couldntCheck": "No se han podido comprobar las zonas de Cloudflare de este token.",
             "noZones": "Este token no puede ver ninguna zona de Cloudflare: añade un dominio a la cuenta o amplía su permiso Zone:Read."
-        },
-        "useDeployments": {
-            "couldNotLoad": "No se han podido cargar tus despliegues ({status}): {message}",
-            "listingFailed": "No se han podido listar tus despliegues.",
-            "noAnswer": "La consulta de tus despliegues ha terminado sin respuesta."
         },
         "useExtensionList": {
             "blockedByRegistry": "Bloqueada por su registro: {reason}",
             "updateRolledBack": "actualización revertida",
             "updateUnhealthy": "actualización defectuosa"
-        },
-        "useWorkspaceState": {
-            "notValidJson": "{path} no es JSON válido."
         }
     },
     "local": {
@@ -7983,9 +7934,7 @@
             "composeStepRedeploy": "Vuelve a desplegarlo",
             "composeStepRedeployElsewhere": "o pulsa Deploy en Komodo o Portainer",
             "activeOverlay": "Superposición activa",
-            "againstSandboxsHost": "contra el host de este sandbox.",
             "applied": "aplicada",
-            "appliesOnNext": "Se aplica en la próxima",
             "approvedOverlayPendingRebuild": "Superposición aprobada (reconstrucción pendiente)",
             "awaitingReview": "esperando revisión",
             "contents": "Contenido",
@@ -8816,7 +8765,6 @@
             "noRepositoryToPushTo": "No hay repositorio al que enviar este trabajo",
             "portsTaken": "{count} puerto ocupado por otro sandbox en tu máquina | {count} puertos ocupados por otro sandbox en tu máquina",
             "rebuildNeededToFinish": "Hace falta reconstruir para terminar de preparar tus nuevas capacidades",
-            "requiredSecretsMissing": "Falta {count} secreto obligatorio | Faltan {count} secretos obligatorios",
             "sandboxUpdateReadyTo": "Hay una actualización del sandbox lista para aplicar: un reinicio de medio minuto aproximadamente",
             "peopleAskForAccess": "{count} persona pide acceso | {count} personas piden acceso",
             "cleanBuildOutput": "Limpiar resultados de compilación",
@@ -9140,20 +9088,12 @@
             "generateRandom": "Generar uno aleatorio",
             "couldNotGenerate": "No se pudo generar el secreto.",
             "capabilityCredentials": "Credenciales de capacidades",
-            "ciInSync": "CI sincronizada",
-            "generatedByIntentic": "Generado por intentic",
-            "intentDeclaresNoUser": "Tu intención todavía no declara secretos aportados por el usuario.",
             "keyAccountWhatUses": "Clave, cuenta o quién lo usa…",
             "keyName": "NOMBRE_CLAVE",
             "manageCapabilities": "Gestionar capacidades",
             "missing": "Falta",
             "neverShown": "Nunca se muestra",
-            "nothingGeneratedYetAppear": "Todavía no se ha generado nada: estos aparecen tras tu primer despliegue.",
-            "pushToCi": "Enviar a CI",
-            "pushedToCi": "Secretos enviados a CI",
-            "pushingToCi": "Enviando secretos a CI",
             "readingSandboxsSecrets": "Leyendo los secretos de tu sandbox…",
-            "requiredByIntent": "Requerido por tu intención",
             "secrets": "Tus secretos",
             "sessionOrSigningKeys": "Claves de sesión o firma",
             "showMoreAccounts": "Mostrar {collapsedCredentialCount} cuentas más",
@@ -9162,7 +9102,6 @@
             "nameTooLong": "Un nombre tiene como máximo {max} caracteres; este tiene {length}.",
             "nameCharacters": "Letras, dígitos y guiones bajos; no puede empezar por un dígito.",
             "nameTaken": "{name} ya existe aquí. Guardar reemplaza su valor.",
-            "couldntPushToCi": "No se pudieron enviar los secretos a CI.",
             "onYourComputers": "En tus ordenadores",
             "openInPasswords": "Abrir en Contraseñas",
             "wantAs": "{place} como {username}",
@@ -9281,7 +9220,6 @@
             "notShared": "Este sandbox pertenece a otra cuenta y no ha compartido el acceso con {presented}. Pide acceso a su propietario: esto desaparece solo en cuanto te lo conceda."
         },
         "sandboxUpdateCard": {
-            "againstHost": "frente a su host.",
             "alreadyDownloadedHereReleased": "{stagedBehind} se descargó aquí, pero desde entonces se ha publicado {latest}: actualizar toma la más nueva.",
             "midTurnRestart": "Hay un agente a mitad de turno ahora mismo; reiniciar el sandbox interrumpe su trabajo. | Hay {count} agentes a mitad de turno ahora mismo; reiniciar el sandbox interrumpe su trabajo.",
             "midTurnRollback": "Hay un agente a mitad de turno ahora mismo; revertir interrumpe su trabajo. | Hay {count} agentes a mitad de turno ahora mismo; revertir interrumpe su trabajo.",
@@ -9292,7 +9230,6 @@
             "restartingOntoNewImage": "Reiniciando sobre la imagen nueva",
             "restartingSandbox": "Reiniciando este sandbox",
             "rollBackToPrevious": "Volver a la versión anterior",
-            "sandboxUpdatesOnNext": "Este sandbox se actualiza en el próximo",
             "havingTrouble": "¿Tienes problemas?",
             "takePublishedImageInstead": "Tomar la imagen publicada en su lugar",
             "waitFleetToSettle": "Espera a que la flota se asiente, o continúa si te parece aceptable.",
@@ -10008,14 +9945,6 @@
                     "label": "Centro de conexiones",
                     "where": "conexiones guardadas en tu ordenador y llevadas a los sandboxes"
                 },
-                "intentic": {
-                    "label": "Despliegues",
-                    "where": "planes de despliegue y las ejecuciones que los aplican"
-                },
-                "inventory": {
-                    "label": "Inventario de despliegue",
-                    "where": "lo que este espacio de trabajo tiene y quiere desplegar"
-                },
                 "issues": {
                     "label": "Incidencias",
                     "where": "problemas comunicados y sus informes"
@@ -10420,11 +10349,9 @@
         },
         "secretRows": {
             "aiSubscription": "Suscripción de IA",
-            "ciMissing": "CI aún no tiene esto",
             "needsApprovalFrom": "necesita aprobación de {approvers}",
             "notSet": "sin definir",
             "or": "o",
-            "usedBy": "usado por {users}",
             "offline": "Sin conexión",
             "locked": "Bloqueado",
             "ready": "Listo",
@@ -12469,9 +12396,6 @@
                 "waitingHealth": "Esperar a que arranque"
             }
         },
-        "words": {
-            "useLettersNumbersHyphens": "Usa solo letras, números y guiones."
-        },
         "useHostedLane": {
             "startFailed": "Ahora mismo no se pudo iniciar una máquina para ti.",
             "outOfMachines": "Ahora mismo no nos quedan máquinas, así que no podemos construirte otra en este momento.",
@@ -12996,98 +12920,9 @@
         }
     },
     "views": {
-        "addWantDialog": {
-            "appMonorepo": "Tu aplicación del monorepo {repo}.",
-            "apps": "Tus aplicaciones",
-            "couldNotAdd": "No se pudo añadir.",
-            "couldntListAppsIn": "No se pudieron listar las aplicaciones de este espacio de trabajo.",
-            "deployedOnNextApply": ") y se despliega en la próxima aplicación: la plataforma no guarda nada.",
-            "domainLabelTooLong": "Una etiqueta de dominio tiene como máximo {max} caracteres; esta tiene {length}.",
-            "nameRule": "Esto se convierte en un nombre en tu configuración de despliegue: letras latinas, dígitos y guiones bajos, sin empezar por un dígito.",
-            "nameTooLong": "Un nombre tiene como máximo {max} caracteres; este tiene {length}.",
-            "pickServer": "Elige un servidor",
-            "pickWhatWantTo": "Elige qué quieres ejecutar en tu propio servidor. Queda declarado en tu intención (",
-            "reachableAt": "✓ Accesible en",
-            "server": "Servidor",
-            "use": "Usar {name}"
-        },
-        "applyProgress": {
-            "adoptFailedSeeLogs": "No se pudo adoptar; abre los registros de abajo para ver los detalles.",
-            "applied": "Aplicado",
-            "applyFailed": "La aplicación falló",
-            "applyFailedDot": "No se pudo aplicar.",
-            "applyFailedSeeLogs": "No se pudo aplicar; abre los registros de abajo para ver los detalles.",
-            "applyFailedToStart": "No se pudo iniciar la aplicación.",
-            "applyingChanges": "Aplicando los cambios…",
-            "convergedIn": "Convergió en {count} iteración. | Convergió en {count} iteraciones.",
-            "didntFullyConvergeRe": "No convergió del todo; puede hacer falta volver a aplicar.",
-            "finishingUp": "Terminando…",
-            "leftInPlace": "se deja como está",
-            "notInYourIntent": "No está en tu intención: {ids}",
-            "progressStreamDroppedReconnecting": "Se cortó el flujo de progreso: reconectando… (la aplicación sigue en marcha)",
-            "resolveFailedSeeLogs": "No se pudo resolver; abre los registros de abajo para ver los detalles."
-        },
-        "changePreview": {
-            "couldntWorkOutWhat": "No se pudo averiguar qué cambiaría.",
-            "everythingUpToDate": "Todo está al día: nada que aplicar.",
-            "intentDeclaresSecretsArent": "Tu intención declara secretos que todavía no están en tu sandbox. Gestiónalos cuando quieras en",
-            "plannedChanges": "Cambios previstos",
-            "previewChanges": "Previsualizar los cambios",
-            "previewToSeeWhat": "Previsualiza para ver qué creará, actualizará o eliminará aplicar tus deseos: antes de que cambie nada.",
-            "reCheck": "Volver a comprobar",
-            "sandboxSecrets": "Secretos del sandbox",
-            "setSecretsToPreview": "Define {count} secreto para previsualizar el cambio | Define {count} secretos para previsualizar el cambio",
-            "toCreate": "por crear",
-            "toRemove": "por eliminar",
-            "toUpdate": "por actualizar",
-            "wantsChangedSincePreview": "Tus deseos han cambiado desde esta previsualización: vuelve a comprobar para ver lo último.",
-            "workingOutWhatChange": "Averiguando qué va a cambiar…"
-        },
-        "cloudflareConnect": {
-            "couldNotConnect": "No se pudo conectar Cloudflare.",
-            "enableCloudflare": "Activar Cloudflare",
-            "replaceTokenInSandbox": "Reemplazar el token en los secretos del sandbox",
-            "sandboxAlreadyCloudflareToken": "Tu sandbox ya tiene un token de Cloudflare. Actívalo para que este servicio sea accesible en tu dominio.",
-            "sandboxOnly": "Solo en tu sandbox",
-            "tunnelDns": "Túnel, ruta DNS",
-            "using": "✓ Usando"
-        },
-        "connectHost": {
-            "alreadyMachineInIntent": "ya es una máquina de tu intención. Conectarla la reemplaza.",
-            "anyHost": "Cualquier host",
-            "cloudflareApiToken": "Token de API de Cloudflare",
-            "commandOnceTokenValid": "El comando aparece en cuanto el token de arriba parezca válido.",
-            "connectMachine": "Conectar una máquina",
-            "connectServer": "Conectar un servidor",
-            "defaultsToMachinesHostname": "por defecto, el nombre de host de la máquina",
-            "doesntLookLikeCloudflare": "Eso no parece un token de API de Cloudflare: revisa si se ha colado algo al copiar y pegar.",
-            "enterHostName": "Introduce un nombre de host para generar el comando de esta máquina.",
-            "enterTokenToReveal": "Introduce tu token de API de Cloudflare para ver el comando.",
-            "hostNameOptional": "Nombre de host (opcional)",
-            "howConnectingMachineWorks": "Cómo funciona conectar una máquina",
-            "oneCommandRunOn": "Un comando, ejecutado en el servidor. Pide permisos de root y configura Cloudflare de paso.",
-            "ownerConnectsServers": "Solo el propietario de este sandbox puede conectar un servidor: el comando lleva su token de conexión, que solo tiene él.",
-            "preparingCommand": "Preparando tu comando…",
-            "repeatPerMachine": "Repite en cada máquina",
-            "runOn": "Ejecutar en",
-            "runOnMachineWant": "Comando para ejecutar en el servidor donde quieres desplegar",
-            "savedInIntent": "✓ Guardado en la intención como",
-            "shortNameMachineIn": "Un nombre corto para esta máquina en tu intención.",
-            "useLowercaseLettersDigits": "Usa solo minúsculas, dígitos y guiones.",
-            "userKeyTunnel": "Usuario, clave SSH, túnel",
-            "waitingMachinesToRegister": "Esperando a que las máquinas se registren: cada una aparece en tu lista de servidores según la conectas. Vuelve a ejecutar el comando en cada host que quieras añadir.",
-            "zoneReadDnsEdit": "Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Viaja con el comando hasta tu host, nunca a la plataforma.",
-            "showCommand": "Mostrar el comando",
-            "codeFailed": "La sandbox no pudo crear un comando ({status}).",
-            "asksCloudflareToken": "Ejecuta esto en el servidor, que te pedirá allí tu token de API de Cloudflare (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit), así el token nunca sale de él.",
-            "fullAccessConnectsServers": "Solo el propietario o alguien con acceso total puede conectar un servidor a este sandbox."
-        },
         "coreViews": {
             "health": "Salud",
             "ui": "Interfaz"
-        },
-        "dependencyGraph": {
-            "noDesiredStateYet": "Todavía no hay estado deseado. Declara backends en Configuración y después aprovisiona."
         },
         "extensionDocument": {
             "extensionExplains": "La extensión que explica",
@@ -13100,148 +12935,10 @@
         "extensionView": {
             "loading": "Cargando esta vista"
         },
-        "infraDeclare": {
-            "addServer": "Añadir un servidor",
-            "appServiceAboveFirst": "una aplicación o un servicio arriba: la primera aplicación prepara entonces tu servidor para ejecutarlo.",
-            "applyChanges": "Aplicar los cambios",
-            "apps2": "Aplicaciones",
-            "appsGetStripeApi": "Tus aplicaciones reciben la clave de API de Stripe al desplegarse.",
-            "appsInMonoreposIn": ": las aplicaciones de tus monorepos están en el catálogo.",
-            "askedWhenNeeded": "Servidor, Cloudflare: cuando haga falta",
-            "belowRepairs": "de abajo lo repara.",
-            "buildsWhatConfiguredOn": "Construye lo que configuraste en tu servidor.",
-            "connectCloudflareServicesReached": "Conecta Cloudflare para que tus servicios sean accesibles en un dominio.",
-            "connectServerAboveApply": "Conecta un servidor arriba: entonces aplicar construye en él lo que quieres.",
-            "connectStripe": "Conectar Stripe",
-            "connectStripeAccountApps": "Conecta tu cuenta de Stripe para que tus aplicaciones puedan cobrar.",
-            "couldNotConnectStripe": "No se pudo conectar Stripe.",
-            "couldNotLinkGithub": "No se pudo vincular GitHub.",
-            "couldNotLinkGitlab": "No se pudo vincular GitLab.",
-            "couldNotRemoveEntry": "No se pudo quitar la entrada.",
-            "couldntReadInventory": "No se pudo leer tu inventario.",
-            "declared": "Declarado",
-            "defaultSelfHosted": "Lo predeterminado es autoalojado",
-            "deploymentEngineKomodoUnreachable": "Tu motor de despliegue (Komodo) no está accesible en tu servidor: los despliegues no pueden ponerse en marcha hasta que vuelva.",
-            "devopsReposLiveOn": "Tus repos de DevOps viven en GitHub: no hay Forgejo que ejecutar.",
-            "devopsReposLiveOn2": "Tus repos de DevOps viven en GitLab: no hay Forgejo que ejecutar.",
-            "entryApp": "App",
-            "entryServer": "Servidor",
-            "everythingAlreadyDeployedKeeps": "todo lo ya desplegado sigue funcionando en él",
-            "forgejo": "Forgejo",
-            "forgets": "Esto olvida",
-            "fromMonorepos": "De tus monorepos",
-            "ghp": "ghp_…",
-            "githubPersonalAccessToken": "Token de acceso personal de GitHub",
-            "githubSourceControlDoesnt": "El control de versiones de GitHub todavía no admite bases de datos ni cachés gestionadas. Usa el valor autoalojado por defecto si tu aplicación necesita una.",
-            "gitlabPersonalAccessToken": "Token de acceso personal de GitLab",
-            "gitlabSourceControlDoesnt": "El control de versiones de GitLab todavía no admite bases de datos ni cachés gestionadas. Usa el valor autoalojado por defecto si tu aplicación necesita una.",
-            "gitlabUrl": "URL de GitLab",
-            "glpat": "glpat-…",
-            "includingOnHostBackup": "incluido el repositorio de copia de seguridad en el host",
-            "installsKomodo": "Instala Komodo en tu servidor para ejecutar despliegues, y luego despliega lo que configuraste. Tarda unos minutos.",
-            "installsKomodoAndForgejo": "Instala Komodo y Forgejo en tu servidor para ejecutar despliegues, y luego despliega lo que configuraste. Tarda unos minutos.",
-            "inventoryEntryStoredSsh": "de tu inventario: su entrada y la clave SSH guardada. La máquina en sí no se toca:",
-            "leaveBlankGitlabCom": "Déjalo en blanco para gitlab.com.",
-            "linkGithub": "Vincular GitHub",
-            "linkGitlab": "Vincular GitLab",
-            "liveStatus": "Estado en vivo →",
-            "noAppYet": "Todavía no hay aplicación.",
-            "noServerYetOne": "Todavía no hay servidor. Se pide uno cuando algo que quieres lo necesita.",
-            "noServicesYet": "Todavía no hay servicios.",
-            "optionalSelfHosted": "(opcional: autoalojado)",
-            "or": "o",
-            "outlinePaperlessNgxOpenproject": ": Outline, Paperless-ngx, OpenProject, SigNoz y más.",
-            "previewChangesAboveApply": "Previsualiza tus cambios arriba y luego aplícalos.",
-            "provisionedLink": "(aprovisionado para ti). Vincula",
-            "removeApp": "Quitar la aplicación",
-            "removeServer": "Quitar el servidor",
-            "removeService": "Quitar el servicio",
-            "runOnServerRoot": "Ejecútalo en el servidor (como root) para borrar todo lo que intentic dejó allí",
-            "scriptListsExactlyWhat": "El script lista exactamente lo que encontró y pregunta antes de eliminar nada: los contenedores desplegados y sus volúmenes (bases de datos incluidas), el estado de despliegue bajo /opt/intentic:",
-            "serverCount": "{count} servidor | {count} servidores",
-            "services": "Servicios",
-            "servicesLike": "Outline, SigNoz, …",
-            "servicesPutOnDomain": "Tus servicios se pueden poner en un dominio, accesible a través de un túnel de Cloudflare.",
-            "setUpDeploy": "Preparar y desplegar",
-            "sk": "sk_…",
-            "sourceControl": "Control de versiones",
-            "storedInSandboxsEnv": "Guardado en el .env de tu sandbox como",
-            "stripeApiKey": "Clave de API de Stripe",
-            "toUseOneInstead": "para usar una en su lugar.",
-            "tunnelConnectorServiceIntentic": ", el servicio conector del túnel y el usuario de servicio de intentic. Docker en sí se queda. El túnel de Cloudflare y los registros DNS de este host se limpian desde aquí en la próxima aplicación, no con el script.",
-            "unlink": "Desvincular",
-            "untilCleanUp": "hasta que lo limpies.",
-            "what": "Lo que tienes",
-            "whatWant": "Lo que quieres",
-            "whatWantNeedsDomain": "Lo que quieres necesita un dominio: Cloudflare lo pone en uno, accesible a través de un túnel."
-        },
-        "infrastructureApplyProgress": {
-            "applyingChangesFailed": "Aplicar tus cambios falló."
-        },
-        "inventoryServices": {
-            "infisical": "Gestión de secretos para apps y equipos.",
-            "invoiceninja": "Facturas, presupuestos y pagos.",
-            "openproject": "Gestión de proyectos y seguimiento de incidencias.",
-            "outline": "Wiki y documentación del equipo.",
-            "paperless": "Escanea, indexa y archiva documentos.",
-            "signoz": "Observabilidad, trazas, registros y métricas."
-        },
-        "liveStatusView": {
-            "couldNotRevealPassword": "No se pudo mostrar la contraseña.",
-            "couldNotRunLiveCheck": "No se pudo hacer una comprobación en vivo ({status}).",
-            "couldntListWhatsRunning": "No se pudo listar lo que está en marcha.",
-            "couldntReadWorkspacesState": "No se pudo leer el estado de este espacio de trabajo.",
-            "deploymentEngineKomodoUnreachable": "Tu motor de despliegue (Komodo) no está accesible en tu servidor: los estados en vivo de abajo solo reflejan la configuración deseada.",
-            "graphLegend": "Leyenda del grafo",
-            "hidePassword": "Ocultar la contraseña",
-            "liveCheck": "Comprobación en vivo",
-            "liveCheckFailed": "La comprobación en vivo falló.",
-            "matchUpToDate": "Si coinciden: al día",
-            "noLiveDeploymentsYet": "Todavía no hay despliegues en vivo. Conecta una aplicación en tu intención y aprovisiona para verla aquí.",
-            "noResourcesRead": "No se han leído recursos.",
-            "notDeployed": "Sin desplegar",
-            "orphans": "Huérfanos (en vivo pero fuera de la intención): {ids}",
-            "password": "contraseña:",
-            "password2": "contraseña: tu",
-            "reReadLiveCluster": "Estado real del clúster",
-            "readingLiveInfrastructure": "Leyendo la infraestructura en vivo…",
-            "refreshToReadLive": "Recarga para leer el estado en vivo de tu infraestructura.",
-            "revealPassword": "Mostrar la contraseña",
-            "status": "Estado",
-            "user": "usuario:",
-            "yourConfig": "Tu configuración",
-            "yourServer": "Tu servidor"
-        },
-        "planPreview": {
-            "checkingNode": "Comprobando {node}…",
-            "planFailedStatus": "El plan falló ({status}).",
-            "previewFailed": "La vista previa falló.",
-            "readingLive": "Leyendo tu infraestructura en vivo…",
-            "resolveFailed": "No se pudo resolver.",
-            "resolveFailedStatus": "No se pudo resolver ({status}).",
-            "resolving": "Resolviendo tu configuración…",
-            "secretsUnreadable": "No se pudo leer qué secretos tiene este sandbox: {reason}",
-            "stalled": "La vista previa se atascó; última actividad: {activity}. Cancela y reintenta, o revisa el sandbox.",
-            "starting": "iniciando"
-        },
-        "provisionError": {
-            "forgejoUnreachable": "{raw}: aún no se puede acceder al servicio git (Forgejo); su túnel de Cloudflare no tiene un origen activo. Suele resolverse cuando \"apply\" termina de desplegarlo, así que reintenta en un momento.",
-            "missingSecret": "El despliegue necesita un valor para {key} que aún no está definido: defínelo abajo (o en Secretos del sandbox) y vuelve a aplicar.",
-            "sshUnreachable": "{raw}: el sandbox no pudo acceder al host de despliegue por SSH. Asegúrate de que el túnel SSH del host está activo (vuelve a ejecutar el script de conexión) y de que su destino de despliegue es accesible."
-        },
         "registry": {
             "judge": "Juzgar",
             "know": "Saber",
             "work": "Trabajar"
-        },
-        "resourceDetails": {
-            "closeDetails": "Cerrar los detalles",
-            "config": "Configuración",
-            "dependsOn": "Depende de",
-            "live": "en vivo",
-            "notDeployed": "sin desplegar",
-            "reason": "Motivo:",
-            "requiredBy": "Requerido por"
         },
         "vocabulary": {
             "accept": "Aceptar",
@@ -13324,23 +13021,9 @@
             "unsavedChangeCount": "{count} cambio sin guardar | {count} cambios sin guardar"
         },
         "words": {
-            "creates": "Crea",
             "noOpenPorts": "Sin puertos abiertos",
-            "onceListZones": "Una vez, para zonas",
-            "stored": "Guardado",
-            "used": "Uso",
             "workspaceRoot": "la raíz del espacio de trabajo",
             "setUp": "Preparar",
-            "liveStatus": "Estado en vivo",
-            "planned": "Previsto",
-            "runningNow": "En marcha ahora",
-            "live": "En vivo",
-            "komodo": "Komodo",
-            "access": "Acceso",
-            "infrastructure": "Infraestructura",
-            "selfHostedServices": "Servicios autoalojados",
-            "whatWantNeedsServer": "Lo que quieres necesita un servidor donde ejecutarse.",
-            "connectCloudflare": "Conectar Cloudflare",
             "neverOnPlatform": ": nunca en la plataforma.",
             "pasteCloudflareApiToken": "Pega tu token de API de Cloudflare",
             "whyCloudflareApiToken": "Por qué hace falta el token de API de Cloudflare",

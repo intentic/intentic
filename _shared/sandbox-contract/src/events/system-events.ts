@@ -8,8 +8,8 @@ import { WorkspaceTreeDeltaSchema } from "../schemas/workspace/workspace-tree.js
 // Frames about the sandbox rather than a turn: liveness, boot progress, what moved (repos, refs, running processes,
 // presence, the fleet), and account headroom. One stream carries them all.
 
-// One parsed line from `intentic … --output ndjson`; open-ended, so any string `kind` plus extra fields pass through.
-// The apply-events tail also mints `start`/`exit`/`heartbeat` sentinel kinds alongside the engine's own.
+// One progress line a streamed run yields (a capability's apply, an exit's start, a disk's mount); open-ended, so any
+// string `kind` plus extra fields pass through.
 export const IntenticLineSchema = z.looseObject({ kind: z.string() });
 export type IntenticLine = z.infer<typeof IntenticLineSchema>;
 

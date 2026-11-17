@@ -17,7 +17,7 @@ const cards = parkedCards(memoryFleet().conversations);
 const VALUE = "sk-live-0123456789abcdef";
 
 const secrets: SecretAccess = {
-    list: async () => [{ name: "STRIPE_KEY", value: VALUE, source: "env" }],
+    list: async () => [{ name: "STRIPE_KEY", value: VALUE, source: "sandbox" }],
     used: () => {},
     release: async () => ({ ok: true }),
 };

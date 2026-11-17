@@ -47,16 +47,11 @@ export const REPLAY_VARS = [
     { name: "INGRESS_URL", role: "platform" },
     // The owner's own Cloudflare account, on the path where they mint their own tunnels.
     { name: "CLOUDFLARE_API_TOKEN", role: "platform", secret: true },
-    // A multi-line private key for self-hosted deploys: this machine wired as a deploy target.
-    { name: "HOST_SSH_KEY", role: "machine", secret: true },
-    { name: "SELF_HOST_USER", role: "machine" },
     { name: "SYNC_PAIR_TOKEN", role: "machine", secret: true },
     // Describes the machine, which a recreate doesn't move off; the daemon can't re-derive it.
     { name: "HOST_PAIR_TOKEN", role: "machine", secret: true },
     { name: "HOST_PLATFORM", role: "machine" },
     { name: "HOST_LABEL", role: "machine" },
-    { name: "SELF_HOST_ADDRESS", role: "machine" },
-    { name: "SELF_HOST_VIA", role: "machine" },
     // The owner's explicit cgroup cap; replayed so it re-emits, unlike docker update's silent retune.
     { name: "SANDBOX_MEMORY", role: "choice" },
     // The owner's other standing asks, replayed like the memory cap: CPU ceiling and runtime directives.
@@ -90,8 +85,8 @@ export const REPLAY_ENV: readonly ReplayName[] = REPLAY_VARS.map(({ name }) => n
 // The replayed names whose value is a credential (ReplayVar's `secret`).
 export const REPLAY_SECRET_ENV: ReadonlySet<ReplayName> = new Set(REPLAY_VARS.flatMap((entry) => ("secret" in entry ? [entry.name] : [])));
 
-// `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values:
-// HOST_SSH_KEY is a multi-line private key, so anything line-based re-splits it.
+// `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values: a
+// multi-line value (a private key, a definition) is re-split by anything line-based.
 export const parseNulEnv = (dump: string): [string, string][] =>
     dump
         .split("\0")

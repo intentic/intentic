@@ -143,7 +143,6 @@ describe("memberRefusal for a person given part of the sandbox", () => {
         expect(memberRefusal(maintainer, "GET", "/members")).toBeUndefined();
         expect(memberRefusal(maintainer, "POST", "/privacy/reveal")).toBeUndefined();
         expect(memberRefusal(maintainer, "POST", "/settings/agent-domain")).toBeUndefined();
-        expect(memberRefusal(maintainer, "POST", "/system/enroll/code")).toBeUndefined();
         expect(memberRefusal(maintainer, "POST", "/system/passkeys/policy")).toMatchObject({ floor: "owner" });
         expect(memberRefusal(maintainer, "POST", "/platform/relink")).toMatchObject({ floor: "owner" });
     });

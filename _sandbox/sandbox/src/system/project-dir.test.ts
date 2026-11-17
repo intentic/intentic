@@ -1,11 +1,11 @@
 import { MEMORY_FILE, WORKSPACE_ROOT } from "@intentic/constants";
 import { isProjectDirName, RESERVED_PROJECT_DIR_NAMES } from "@intentic/sandbox-contract/ids/project-dir";
 import { STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
-import { REPO_ROLES } from "@intentic/scaffold";
 import { IGNORED_DIRS, PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Config } from "../env.config.js";
 import { testConfig } from "../env.config.testing.js";
 import { COMMON_EXCLUDES } from "../workspace/layout/git-layout.js";
+import { ROLE_REPO_NAMES } from "../workspace/layout/repo-discovery.js";
 import { projectDirComplaint, projectDirOf, seedsStarterSite } from "./project-dir.js";
 
 // testConfig's workspace root is the container's own, so a value built on it reads as `ic` would hand it over.
@@ -71,6 +71,6 @@ test("the folder is read against the configured workspace root", () => {
 // seen), nor any top-level name repo discovery or the boot keeps for the daemon.
 test("no project folder can be a name the daemon walks past or keeps for itself", () => {
     const plainExcludes = COMMON_EXCLUDES.filter((pattern) => !/[*!]/.test(pattern));
-    const daemonNames = [...IGNORED_DIRS, ...plainExcludes, ...REPO_ROLES, "root", REFERENCE_DIR, PUBLIC_DIR, STARTER_REPO, MEMORY_FILE];
+    const daemonNames = [...IGNORED_DIRS, ...plainExcludes, ...ROLE_REPO_NAMES, "root", REFERENCE_DIR, PUBLIC_DIR, STARTER_REPO, MEMORY_FILE];
     expect(daemonNames.filter((name) => isProjectDirName(name))).toEqual([]);
 });

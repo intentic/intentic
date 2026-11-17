@@ -23,8 +23,6 @@ ic uninstall --keep-sandboxes --yes
 # Delete everything, data included. 3 is how many sandboxes and runners --dry-run counted.
 ic uninstall --delete-data --confirm 3`;
 
-const server = `curl -fsSL https://intentic.dev/cleanup-host | sudo sh`;
-
 const oneSandbox = `curl -fsSL https://intentic.dev/remove | sh`;
 
 const choices = [
@@ -206,22 +204,12 @@ const choices = [
         last lines say which step and what to do), and <strong>2</strong> when the command line itself was wrong.
     </p>
 
-    <h2 id="servers">One sandbox, or a server</h2>
+    <h2 id="one-sandbox">One sandbox</h2>
     <p>
         To take a single sandbox off a computer and keep Intentic, use <code>remove</code>. It lists the sandboxes and removes the one you
         pick, and <code>ic sandbox restore &lt;name&gt;</code> brings it back within 7 days:
     </p>
     <DocsCodeBlock code={oneSandbox} lang="bash" title="One sandbox" />
-    <p>
-        A server you connected for deployments is not touched by uninstalling Intentic from your own computer. On the server, run:
-    </p>
-    <DocsCodeBlock code={server} lang="bash" title="On the server, as root" />
-    <p>
-        It runs <code>ic machine remove</code>, which lists what Intentic put on the server and asks once. Then it removes the deployed
-        services and their volumes (databases included), <code>/opt/intentic</code>, the SSH tunnel connector and the service user. It
-        keeps Docker Engine, the SSH server and the <code>cloudflared</code> program. It cannot reach your Cloudflare account, so remove the
-        server on the <strong>Infrastructure</strong> page too and apply: that deletes its tunnels and DNS records.
-    </p>
 
     <DocsRelated
         links={[

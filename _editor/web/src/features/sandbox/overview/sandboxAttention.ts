@@ -6,7 +6,6 @@ import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
 import { acpProviders, endpointProviders } from "../../../models/providers/providerCatalog";
 import { accessKnown, providerReady } from "../../../models/providers/access";
-import { useMissingSecretCount } from "../../../models/capabilities/useSecrets";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSyncHealth } from "../../../models/sandbox/devices/useDevices";
@@ -152,7 +151,6 @@ export function useSandboxAttention() {
     const { pending: waitingExtensions } = useExtensions();
     const rebuilding = useRebuildUnderWay(pending);
     const { updateAvailable, updateStaged } = useSandboxVersion();
-    const { missingRequiredCount } = useMissingSecretCount();
     const { stoppedOn, heldPorts } = useSyncHealth();
     // The two ways this sandbox's work can exist in exactly one place: no copy on a computer of the owner's, and no
     // repository it could be pushed to. Both are standing conditions with a tab that resolves them, which is what
@@ -239,17 +237,6 @@ export function useSandboxAttention() {
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.desktopSyncStopped`, { devices: stoppedOn.value.join(`, `) }),
                     to: here(page.devices()),
-                    kind: `needs`,
-                },
-            },
-            {
-                when: missingRequiredCount.value > 0,
-                item: {
-                    icon: `key`,
-                    tone: `warning`,
-                    message: t(`sandbox.sandboxAttention.requiredSecretsMissing`, { count: missingRequiredCount.value }, missingRequiredCount.value),
-                    to: here(page.sandboxSettings(`secrets`)),
-                    count: missingRequiredCount.value,
                     kind: `needs`,
                 },
             },

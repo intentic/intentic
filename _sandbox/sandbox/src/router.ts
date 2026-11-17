@@ -31,8 +31,6 @@ import { createGitRoutes } from "./git/git.routes.js";
 import { createDeviceSystemRoutes } from "./hosts/devices.routes.js";
 import { createAccountsRoutes } from "./agent/routes/accounts.routes.js";
 import { createHistoryRoutes } from "./history/history.routes.js";
-import { createIntenticRoutes } from "./intentic/intentic.routes.js";
-import { createInventoryRoutes } from "./inventory/inventory.routes.js";
 import { createIssuesRoutes } from "./issues/issues.routes.js";
 import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createLoopsRoutes } from "./loops/loops.routes.js";
@@ -176,7 +174,6 @@ export const createRouter = (services: Services): SandboxRouter => ({
     hub: createHubRoutes(services),
     skills: createSkillsRoutes(services),
     areas: createAreasRoutes(services),
-    intentic: createIntenticRoutes(services),
     endpoints: createEndpointsRoutes(services),
     git: createGitRoutes(services),
     history: createHistoryRoutes(services),
@@ -187,7 +184,6 @@ export const createRouter = (services: Services): SandboxRouter => ({
         ...createWorkspaceMediaRoutes(services),
         ...createWorkspaceFollowRoutes(services),
     },
-    inventory: createInventoryRoutes(services),
     issues: createIssuesRoutes(services),
     logs: createLogsRoutes(services),
     loops: createLoopsRoutes(services),

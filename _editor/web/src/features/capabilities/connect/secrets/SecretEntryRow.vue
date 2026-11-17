@@ -272,14 +272,6 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                                 ></span
                             >
                             <span v-else :class="VALUE_TEXT">{{ stored.said }}</span>
-                            <span v-if="stored.note" :class="VALUE_NOTE">{{ stored.note }}</span>
-                        </span>
-                    </SecretFact>
-                    <SecretFact v-if="row.entry.ci !== undefined" :label="t(`capabilities.secretFacts.ciLabel`)">
-                        <span :class="FIXED_VALUE">
-                            <span :class="row.entry.ci.synced ? VALUE_TEXT : `text-sm text-warning`">{{
-                                row.entry.ci.synced ? t(`capabilities.secretFacts.ciSynced`) : t(`capabilities.secretFacts.ciOutOfDate`)
-                            }}</span>
                         </span>
                     </SecretFact>
                 </dl>

@@ -10,14 +10,6 @@ import { mergeFenced } from "./merge.js";
 // the unit, so one bad item never costs the rest; re-runnable, since fences and upserts are idempotent and an existing
 // capability id refuses rather than overwrites. Deps are narrowed to six auditable functions, not full Services.
 
-// Thrown by `setSecret` when there's no env store to write into (DevOps inactive); typed so the loop reports it as a
-// precondition, not breakage.
-export class SecretsInactiveError extends Error {
-    constructor() {
-        super("there is no env secret store until DevOps is active: activate it, then run the import again with just the secret items");
-    }
-}
-
 export interface MigrationDeps {
     // Workspace-root-relative, forward-slash. Undefined ⇒ no such file (memory merges start from empty).
     readonly readWorkspaceFile: (relPath: string) => Promise<string | undefined>;

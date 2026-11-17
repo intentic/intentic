@@ -1,9 +1,9 @@
-// secrets: user-supplied env-var secrets the daemon writes to desired-state/.env
+// secrets: user-supplied env-var secrets the daemon keeps in the sandbox's own secret store
 import { BrokerRuleSchema } from "@intentic/extension-manifest";
 import { z } from "zod";
 import { KEYRING_PROGRAMS_MAX, KeyringPackageSchema, KeyringProgramSchema, KeyringShareModeSchema, KeyringSourceSchema } from "./keyring.js";
 import { SECRET_HOST_MAX, SECRET_HOST_PATTERN_RE, SECRET_HOSTS_MAX } from "../policy/secret-hosts.js";
-// Straight to the sandbox daemon, never through the platform; `apply` reloads .env with no restart. `list` returns keys
+// Straight to the sandbox daemon, never through the platform; a set value resolves with no restart. `list` returns keys
 // only; `reveal` is the one owner-only exception that returns a value.
 // An env var name, as a shell exports it. Exported so the browser validates against this rather than restating it:
 // stated twice, the two drifted, and a box with no limit fed a rejection the user could not have predicted.
@@ -52,7 +52,7 @@ export const SecretRegenerateSchema = SecretGenerateSchema.extend({
 export const SecretGeneratedSchema = z.object({
     key: z.string().describe("The name it is stored under."),
     length: z.number().int().describe("How many characters it is, which a reader's validation may care about."),
-    stored: z.enum(["env", "sandbox"]).describe("Where it was kept: desired-state/.env once DevOps is active, the sandbox's own store before that."),
+    stored: z.literal("sandbox").describe("Where it was kept: the sandbox's own secret store."),
 });
 
 // A wall against the agent's own judgment, not a compromised container: a shell here can read the policy same as the
@@ -294,21 +294,17 @@ export const SandboxKeyringPairResultSchema = z.object({
 });
 
 export const SecretInventoryEntrySchema = z.object({
-    // Env-var key for env|generated; `<provider>:<accountId>` for provider; capability instance id otherwise.
+    // Env-var key for env; `<provider>:<accountId>` for provider; capability instance id otherwise.
     key: z.string().describe("What identifies it. Unique across the whole inventory, so several accounts of one provider each get their own entry."),
     kind: z
-        .enum(["env", "generated", "capability", "provider", "device"])
+        .enum(["env", "capability", "provider", "device"])
         .describe(
-            "Where it came from: you set it, the sandbox generated it, a connection needs it, it is a model account's credential, or it lives in the keyring on one of your computers and this sandbox holds only a pointer to it.",
+            "Where it came from: you set it (or had the sandbox generate it), a connection needs it, it is a model account's credential, or it lives in the keyring on one of your computers and this sandbox holds only a pointer to it.",
         ),
-    // e.g. "<ProviderName> · <accountLabel>" for provider entries; absent on env/generated.
+    // e.g. "<ProviderName> · <accountLabel>" for provider entries; absent on env.
     label: z.string().optional().describe("A friendlier name, for entries that have one."),
     status: z.enum(["missing", "set", "connected"]).describe("Whether it exists and, for a connection, whether it is working."),
-    // Resources referencing it via `{$secret}` refs.
-    requiredBy: z
-        .array(z.object({ resourceId: z.string().describe("Which resource."), type: z.string().describe("What kind of resource it is.") }))
-        .describe("What is waiting on it. Empty for a connection's or an account's own credential."),
-    // e.g. "desired-state/.env".
+    // e.g. ".intentic/secrets/auth/sandbox-secrets.json".
     storedAt: z.string().describe("Where it actually lives, in words."),
     revealable: z.boolean().describe("Whether its value can be shown at all. Everything except a model account's credential can be."),
     // From the masking floor (agent-redaction.ts): names only, never values or lengths.
@@ -318,14 +314,6 @@ export const SecretInventoryEntrySchema = z.object({
         .describe(
             "Which of its values are too short for the sandbox to hide from the model everywhere, by the name the agent sees each under. They are hidden only right after a word, flag or address that names a secret, and read in full anywhere else. Absent when none are.",
         ),
-    // Forgejo Actions only, and only after adopt, on env|generated entries.
-    ci: z
-        .object({
-            synced: z.boolean().describe("Whether the pipeline has it."),
-            pushedAt: z.string().optional().describe("When it was last sent there."),
-        })
-        .optional()
-        .describe("Whether a copy has been given to the build pipeline."),
     // Records only the lane and a destination (command/script head, or page host) — never values.
     lastUse: z
         .object({

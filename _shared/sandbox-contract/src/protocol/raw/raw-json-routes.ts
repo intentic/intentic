@@ -37,7 +37,7 @@ import {
     PhonePasswordsPairSchema,
 } from "../../schemas/phone-passwords.js";
 import { OkSchema } from "../../schemas/shared.js";
-import { EnrollCodeAnswerSchema, EnrollCodeRequestSchema, PeerPairingAnswerSchema, SyncPairAnswerSchema, SyncPairRequestSchema } from "../../schemas/short-codes.js";
+import { PeerPairingAnswerSchema, SyncPairAnswerSchema, SyncPairRequestSchema } from "../../schemas/short-codes.js";
 import { SpeechStatusSchema, SpeechTranscriptSchema, SpeechWakeClaimSchema, SpeechWakeGrantSchema } from "../../schemas/speech.js";
 import {
     AuthenticationOptionsSchema,
@@ -119,7 +119,6 @@ export const RAW_JSON_ROUTES = {
     // The voices a sandbox speaks with, for the Voice settings (schemas/voice.ts).
     "GET /speech/voices": { output: VoicesViewSchema },
     // A server-connect code for the owner's command (short-codes.ts).
-    "POST /system/enroll/code": { input: EnrollCodeRequestSchema, output: EnrollCodeAnswerSchema },
     // The roster is ownership's; every write answers the roster after it.
     "GET /members": { output: MembersRosterSchema },
     "POST /members": { input: MemberGrantSchema, output: MembersListSchema },

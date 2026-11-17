@@ -121,7 +121,6 @@ export const providerAccountEntry = (provider: string, providerName: string, id:
     kind: "provider",
     label: `${providerName} · ${label}`,
     status: "connected",
-    requiredBy: [],
     storedAt,
     revealable: false,
 });

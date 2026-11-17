@@ -238,8 +238,7 @@ The owner approves on the card in the chat (or on the platform's **Sandbox page 
 lists the same drafts). Approving is theirs alone; the rebuild only runs outside this container, and who runs
 it depends on where the sandbox lives. On a HOSTED sandbox (a machine the platform runs, `SANDBOX_VM=1` in this container's env) the
 owner presses **Rebuild now** on that card and the platform builds it on a machine of its own, which takes a
-few minutes and counts against the sandbox's awake hours. A server-managed sandbox applies it on the next
-`intentic deploy apply`. On a sandbox the owner runs themselves, the rebuild happens on their machine — and
+few minutes and counts against the sandbox's awake hours. On a sandbox the owner runs themselves, the rebuild happens on their machine — and
 **if that machine is connected as a device, it is yours to run** once they have approved: `list_sandboxes`
 finds this sandbox by its slug there, and `swap_sandbox` rebuilds the approved environment. Doing so restarts
 this container and therefore ends your turn, so say that first and get a yes; with no device connected, the
@@ -280,9 +279,3 @@ browser on their device.
 
 The last three apply on a dockerd restart (seconds, no rebuild) but the restart stops whatever the engine is
 running; the card says so before the press, and your `--why` should say what is running that it would stop. Say which parts of the task are blocked meanwhile.
-
-For a SERVER-managed sandbox, also wire the approved overlay into the intent so `intentic deploy apply` builds it:
-in `intent/deploy.config.ts`, pass
-`dockerfile: readFileSync("/work/.intentic/local/environment.approved.Dockerfile", "utf8")` to the
-`i.want.workspace(…)` input: the content lands in the git-reviewed desired-state, which is the approval
-gate on that path.

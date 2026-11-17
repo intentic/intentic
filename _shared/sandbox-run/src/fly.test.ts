@@ -44,11 +44,11 @@ describe(`flyMachineConfig`, () => {
             ...run,
             env: [
                 [`OWNER_EMAIL`, `o@example.com`],
-                [`HOST_SSH_KEY`, ``],
+                [`SYNC_PAIR_TOKEN`, ``],
             ],
         });
         expect(config.env[`OWNER_EMAIL`]).toBe(`o@example.com`);
-        expect(`HOST_SSH_KEY` in config.env).toBe(false);
+        expect(`SYNC_PAIR_TOKEN` in config.env).toBe(false);
     });
 
     it(`keeps the volume layout under the mount path, the entrypoint's VM mode links onto these`, () => {

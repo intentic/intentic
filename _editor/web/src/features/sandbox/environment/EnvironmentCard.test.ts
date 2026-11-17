@@ -55,7 +55,6 @@ jest.mock(`../../../models/sandbox/environment/useEnvironment`, () => ({
         pending,
         applied,
         recurring,
-        serverManaged: ref(false),
         slug,
         localImage,
     }),

@@ -13,8 +13,6 @@ const repo = (name: string, facts: Partial<Omit<PanelSummary, `repo`>>): PanelSu
     installed: true,
     healthy: false,
     servers: [],
-    deployConfig: false,
-    desiredState: false,
     directoryUi: false,
     monorepo: false,
     tests: false,
@@ -24,10 +22,6 @@ const repo = (name: string, facts: Partial<Omit<PanelSummary, `repo`>>): PanelSu
 });
 
 export const FIXTURE_PANELS: PanelSummary[] = [
-    // → infrastructure; its deployConfig also keeps apps and dependencies off this repo.
-    repo(`intent`, { role: `intent`, deployConfig: true }),
-    // → `live-status`.
-    repo(`desired-state`, { role: `desired-state`, desiredState: true }),
     // → apps (monorepo branch), dependencies, and acceptance (userStories).
     repo(`platform`, { monorepo: true, tests: true, userStories: true }),
     // → preview (fallback view): kept unclaimed elsewhere, and not running, to avoid usePanels' 4s poll loop.
@@ -69,8 +63,6 @@ export interface ExpectedActivation {
 
 export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
     // core views (in the app, not an extension package)
-    { id: `infrastructure`, key: `intent`, surface: `rail`, why: `the intent repo's deploy.config.ts` },
-    { id: `live-status`, key: `desired-state`, surface: `rail`, why: `the desired-state repo` },
     { id: `directory-ui`, key: `designer`, surface: `directory`, why: `designer ships .intentic/ui` },
 
     // An activation, not a place on the rail: whether a tile is drawn is the app's own question (RAIL_GROUPS). "Always on" means the

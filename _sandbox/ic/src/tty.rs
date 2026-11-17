@@ -105,13 +105,6 @@ pub fn ask_secret(prompt: &str) -> Option<String> {
     Some(line.trim_end_matches(['\r', '\n']).to_string())
 }
 
-/// Windows has no `stty`, and nothing that asks for a secret runs there (server enrollment is Linux only): no answer,
-/// which callers treat as nobody at the terminal and stop with the variable to set instead.
-#[cfg(windows)]
-pub fn ask_secret(_prompt: &str) -> Option<String> {
-    None
-}
-
 /// Write one line to the terminal, beside a question: what answering does, or the rows to pick from. Nothing when
 /// there is no terminal, since a line meant for the person asking has no other reader.
 pub fn say(line: &str) {

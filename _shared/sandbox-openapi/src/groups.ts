@@ -325,22 +325,6 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         description:
             "Which countries a provider offers, bringing an exit up, moving it, taking a fresh address in the same country, and checking where the world actually sees you. That last check is what the others are judged against: a switch that quietly left traffic where it was is the failure this exists to rule out.",
     },
-    {
-        name: "inventory",
-        shelf: "connections",
-        label: "Inventory",
-        summary: "What this sandbox has and what it wants, as declared deployment intent",
-        description:
-            "The entries in the workspace's deployment configuration. Adding or removing one rewrites that file and commits it, exactly as an agent editing it by hand would, and answers with the whole updated list so a caller redraws from one response.",
-    },
-    {
-        name: "intentic",
-        shelf: "connections",
-        label: "Platform CLI",
-        summary: "Run the in-sandbox platform tool and follow its output as it arrives",
-        description:
-            "Runs the sandbox's own command-line tool and streams its output line by line. The reconcile is separated out because it takes minutes: it starts a background job and answers at once, and its event stream replays from the beginning and then follows live, so a page refresh does not lose the progress.",
-    },
 
     // Models and accounts
     {

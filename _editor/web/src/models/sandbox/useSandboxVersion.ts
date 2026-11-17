@@ -19,7 +19,7 @@ import { pairHealthKey } from "@intentic/sandbox-contract/models/agent-catalog";
 // `poll` is the update card's own re-read while a download it draws is under way (updateDownload.ts); every other reader
 // leaves it out, so only an open card ever polls.
 export function useSandboxVersion(poll?: Ref<number | false>) {
-    const { serverManaged, state: envState, localImage } = useEnvironment();
+    const { state: envState, localImage } = useEnvironment();
 
     const read = rpcQuery(`system.info`);
     const { query } = useSandboxQuery(poll === undefined ? read : { ...read, refetchInterval: poll });
@@ -93,7 +93,6 @@ export function useSandboxVersion(poll?: Ref<number | false>) {
         preparing,
         runtimeIssue,
         pairIssue,
-        serverManaged,
         slug,
         skipServed,
         skipVersion,

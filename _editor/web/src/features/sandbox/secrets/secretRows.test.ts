@@ -8,8 +8,7 @@ import { matchesSecret, type SecretSources, secretRow, secretRows } from "./secr
 
 const entry = (over: Partial<SecretInventoryEntry> & Pick<SecretInventoryEntry, `key` | `kind`>): SecretInventoryEntry => ({
     status: `set`,
-    requiredBy: [],
-    storedAt: `desired-state/.env`,
+    storedAt: `the sandbox`,
     revealable: true,
     ...over,
 });
@@ -55,27 +54,18 @@ it(`keeps a credential whose connection has gone, rather than dropping it from a
 
 it(`splits what the owner keeps from what merely lives in the box`, () => {
     const groups = [
-        entry({ key: `CF_TOKEN`, kind: `env`, requiredBy: [{ resourceId: `site`, type: `dns` }] }),
         entry({ key: `SPARE`, kind: `env` }),
-        entry({ key: `DB_PASSWORD`, kind: `generated` }),
         entry({ key: `claude:acc`, kind: `provider`, label: `Claude · you@example.com`, status: `connected`, revealable: false }),
     ].map((secret) => secretRow(secret, sources()));
-    expect(groups.map((row) => row.group)).toEqual([`required`, `yours`, `generated`, `provider`]);
-    // Only the owner's own values are removable; generated and provider rows never are.
-    expect(groups.map((row) => row.removable)).toEqual([false, true, false, false]);
-    expect(groups.map((row) => row.editable)).toEqual([true, true, false, false]);
+    expect(groups.map((row) => row.group)).toEqual([`yours`, `provider`]);
+    // Only the owner's own values are removable; provider rows never are.
+    expect(groups.map((row) => row.removable)).toEqual([true, false]);
+    expect(groups.map((row) => row.editable)).toEqual([true, false]);
 });
 
-it(`owes attention for a required value nobody set and for a copy CI never got, and for nothing else`, () => {
-    const missingRequired = secretRow(
-        entry({ key: `CF_TOKEN`, kind: `env`, status: `missing`, requiredBy: [{ resourceId: `s`, type: `d` }] }),
-        sources(),
-    );
+it(`says an unset value is not set, without counting it as an errand`, () => {
     const missingSpare = secretRow(entry({ key: `SPARE`, kind: `env`, status: `missing` }), sources());
-    const stale = secretRow(entry({ key: `DB_PASSWORD`, kind: `generated`, ci: { synced: false } }), sources());
-    expect([missingRequired.attention, missingSpare.attention, stale.attention]).toEqual([true, false, true]);
-    expect([missingRequired.note, missingSpare.note]).toEqual([`not set`, `not set`]);
-    expect(stale.note).not.toBe(missingRequired.note);
+    expect([missingSpare.attention, missingSpare.note]).toEqual([false, `not set`]);
 });
 
 it(`leaves another page's errand off this tab, while still sorting it to the top of its own group`, () => {
@@ -110,11 +100,6 @@ it(`finds a credential by the things its row actually shows`, () => {
     expect(matchesSecret(row, ``, true)).toBe(false);
 });
 
-it(`searches an env secret by what uses it, not only by its key`, () => {
-    const row = secretRow(entry({ key: `CF_TOKEN`, kind: `env`, requiredBy: [{ resourceId: `shop-dns`, type: `dns` }] }), sources());
-    expect(matchesSecret(row, `shop-dns`, false)).toBe(true);
-});
-
 it(`says who has to approve a gated row, and does not count it as an errand`, () => {
     const gated = secretRow(entry({ key: `DATABASE_URL`, kind: `env`, gate: { approvers: [`bob@corp.com`], scope: `use` } }), sources());
     expect(gated.note).toBe(`needs approval from bob@corp.com`);
@@ -133,7 +118,6 @@ it(`lets a real debt outrank the gate note on one row`, () => {
             key: `CF_TOKEN`,
             kind: `env`,
             status: `missing`,
-            requiredBy: [{ resourceId: `s`, type: `d` }],
             gate: { approvers: [`bob@corp.com`], scope: `use` },
         }),
         sources(),
@@ -206,8 +190,6 @@ it(`says a kept secret cannot be used only where its share makes that true`, () 
 it(`offers Type into… and a program list only for a value stored under a name the route takes`, () => {
     const stored = secretRow(entry({ key: `DATABASE_URL`, kind: `env` }), sources());
     expect([stored.typeable, stored.programsHere]).toEqual([true, true]);
-    const generated = secretRow(entry({ key: `SESSION_KEY`, kind: `generated` }), sources());
-    expect(generated.typeable).toBe(true);
     // Nothing to type yet, a model account's credential, a connection's: none of them.
     expect(secretRow(entry({ key: `SPARE`, kind: `env`, status: `missing` }), sources()).typeable).toBe(false);
     expect(secretRow(entry({ key: `claude:acc`, kind: `provider`, revealable: false }), sources()).typeable).toBe(false);

@@ -58,9 +58,8 @@ export const lastUseWords = (use: LastUse, now: number = Date.now()): SecretFact
 // A path is read character by character; "the capability vault" is read as words.
 const PATH_LIKE = /^[^\s]*\/[^\s]*$/u;
 
-/** Where it lives, and that the sandbox made it when it did. */
-export const storedWords = (entry: Pick<SecretInventoryEntry, `storedAt` | `kind`>): SecretFactWords & { readonly path: boolean } => ({
+/** Where it lives, and whether that is a path to read character by character. */
+export const storedWords = (entry: Pick<SecretInventoryEntry, `storedAt`>) => ({
     said: entry.storedAt,
     path: PATH_LIKE.test(entry.storedAt),
-    note: entry.kind === `generated` ? t(`capabilities.secretFacts.generatedForYou`) : undefined,
 });

@@ -107,8 +107,6 @@ const kindLines = (kind: Capability[`kind`], id: string): string[] => {
             return [`Cloning the plugin…`, `Loaded the plugin's skills and commands.`];
         case `extension`:
             return [`Cloning the extension…`, `Checked its manifest and permissions.`, `Started its backend.`];
-        case `monorepo`:
-            return [`Scaffolding pnpm + turbo monorepo "${id}"…`, `Monorepo "${id}" ready, open its panel to add apps (API / Web / Landing).`];
         case `device`:
             return [`Minted a pairing command for ${id}.`, `Waiting for ${id} to dial in.`];
         case `browser`:
@@ -188,10 +186,6 @@ const renameRefusal = (kind: CapabilitySummary[`kind`]): string | undefined => {
     switch (kind) {
         case `docker`:
             return `Docker is part of the sandbox itself, not a connection you name.`;
-        case `devops`:
-            return `DevOps is one per sandbox and has no name of its own to change.`;
-        case `monorepo`:
-            return `This name is the monorepo's folder in your workspace, rename the repository itself instead.`;
         case `fleet`:
             return `there is one account connection per sandbox, so its name is not a handle anything uses`;
         default:

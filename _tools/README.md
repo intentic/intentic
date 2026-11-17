@@ -28,7 +28,7 @@ itself depends on a package outside `_shared/` and `_tools/` loses that standing
 | [constants](constants) | Ports, paths, origins and tables several packages must agree on |
 | [desktop-smoke](desktop-smoke) | Bare Debian image that installs the Linux desktop build and deep-links it |
 | [desktop-smoke-windows](desktop-smoke-windows) | Installs the shipped Windows installer on a real machine and drives it |
-| [dind-host](dind-host) | Docker-in-Docker plus sshd, standing in for a deploy host |
+| [dind-host](dind-host) | Docker-in-Docker host the desktop setup and update drills install into |
 | [e2e](e2e) | Browser tiers against a local stack, plus screenshots, mobile gate, promo |
 | [extension-example](extension-example) | Seed of the reference extension, one contribution of every kind |
 | [fake-model](fake-model) | A scripted model that drives a provider's real CLI offline |

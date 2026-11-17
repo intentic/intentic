@@ -1,7 +1,4 @@
 {
-    "_deploy/cli/src/host-ssh-tunnel/host-ssh-tunnel.ts": "standing when the check arrived (2026-10-16)",
-    "_deploy/engine/src/reconcile/reconcile.ts": "standing when the check arrived (2026-10-16)",
-    "_deploy/providers/src/core/list-stamped.ts": "standing when the check arrived (2026-10-16)",
     "_devices/browser/src/launch.ts": {
         "count": 3,
         "why": "standing when the check arrived (2026-10-16)"
@@ -611,7 +608,6 @@
     "_sandbox/sandbox/src/git-identity.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/git/changes/code-counts.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/git/changes/ignored-outputs.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/sandbox/src/git/git.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/git/ops/commit-message.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/git/ops/git-gc.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/git/ops/stale-git-locks.ts": "standing when the check arrived (2026-10-16)",

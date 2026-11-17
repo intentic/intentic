@@ -22,7 +22,7 @@ const tmux = requires(existsSync(TMUX_RUN_BIN), "tmux-run at /usr/local/bin/tmux
 
 const VALUE = "tok-4f9c2e81b7d3a6";
 const secrets: SecretAccess = {
-    list: async () => [{ name: "API_TOKEN", value: VALUE, source: "env" }],
+    list: async () => [{ name: "API_TOKEN", value: VALUE, source: "sandbox" }],
     used: () => {},
     release: async () => ({ ok: true }),
 };

@@ -4,8 +4,6 @@ import type { Services } from "../composition.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { fleetRelease, fleetWhoami } from "../sandboxes/fleet-client.js";
 import { relayWalletEnsure } from "../wallet/wallet-signer.js";
-import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
-import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";
 import type { EndpointCatalog } from "../endpoints/endpoint-catalog.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import type { HostHub, HostStore } from "../hosts/host-peer.js";
@@ -15,7 +13,7 @@ import type { PhoneWake } from "../phones/phone-wake.js";
 import type { ResolvedContribution } from "./contributions.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
-// Narrow slice of the daemon a handler may touch, no agent/auth/sessions; scaffolder closures wrap Services helpers.
+// Narrow slice of the daemon a handler may touch, no agent/auth/sessions; closures wrap Services helpers.
 // Shell work goes through terminalRun into job-capability-<id>.
 export interface CapabilityCtx {
     readonly logger: Services["logger"];
@@ -58,9 +56,6 @@ export interface CapabilityCtx {
     // The token revoking itself, for one the editor minted for the card (its `tokenId`): what removing that card, or
     // replacing its token, does on the platform.
     readonly fleetRelease: (token: string) => Promise<{ readonly status: number; readonly body: string }>;
-    readonly scaffoldNeutralLedger: (session: string) => Promise<void>;
-    readonly ensureIntentInstallable: (session: string) => Promise<void>;
-    readonly scaffoldMonorepo: (name: string, session: string) => Promise<void>;
     // Spawns an ACP agent and initializes it, proving the command speaks ACP: the agent handler's apply and status. A
     // runtime of its own (runtimes/acp/acp-probe.ts), above capabilities/, so it arrives through Services.
     readonly probeAcpAgent: Services["probeAcpAgent"];
@@ -73,7 +68,7 @@ export interface CapabilityCtx {
 }
 
 // A capability kind's behavior: apply is idempotent and streams progress, status is a fast non-blocking probe.
-// A kind with no remove can't be torn down (devops).
+// A kind with no remove can't be torn down.
 // fragment: a code-versioned Dockerfile fragment this entry bakes in, deduped by exact content; must be self-contained.
 // Several may return so two kinds needing the same privilege (vpn, exit: /dev/net/tun) share a byte-identical block.
 // A capability's id is the agent's handle for it (skill file, env suffix, ssh alias, profile dir); rename is a
@@ -104,7 +99,7 @@ export interface CapabilityHandler {
     readonly installed?: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<unknown>;
 }
 
-// Builds the handler context from full Services, wrapping the existing scaffolders as session-scoped closures.
+// Builds the handler context from full Services, wrapping the platform calls as closures.
 export const capabilityCtx = (services: Services): CapabilityCtx => {
     return {
         logger: services.logger,
@@ -130,9 +125,6 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         walletEnsure: (network) => relayWalletEnsure(services.config, network),
         fleetWhoami: (token) => fleetWhoami(services.config, token),
         fleetRelease: (token) => fleetRelease(services.config, token),
-        scaffoldNeutralLedger: (session) => scaffoldNeutralLedger(services, session),
-        ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
-        scaffoldMonorepo: (name, session) => scaffoldAppMonorepo(services, name, session),
         probeAcpAgent: services.probeAcpAgent,
         probePiAgent: services.probePiAgent,
         sshKeys: services.sshKeys,

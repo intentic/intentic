@@ -145,8 +145,6 @@ const GROUP_OF_KIND = new Map<CapabilityKind, GroupKey>([
     [`plugin`, `services`],
     [`extension`, `services`],
     [`agent`, `services`],
-    [`devops`, `services`],
-    [`monorepo`, `services`],
     [`wallet`, `services`],
     [`identity`, `accounts`],
     [`browser`, `accounts`],

@@ -10,8 +10,8 @@ import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { usePublicOutbox } from "../../models/workspace/push/usePublicOutbox";
 import { appTargets, mergeTargets, portTargets, type PreviewTarget, portTargetId, publicTarget, repoTargets } from "../../models/preview/previewModel";
 
-// The live list. `active` gates the per-monorepo apps fan-out while the panel is mounted (same economy as
-// useWorkspaceApps); panels/outbox ride reads the shell holds. No clock: the daemon's runtime push invalidates panels
+// The live list. `active` gates the per-monorepo apps fan-out while the panel is mounted; panels/outbox ride reads the
+// shell holds. No clock: the daemon's runtime push invalidates panels
 // and apps together; the outbox rides the file watcher's public push.
 export function usePreviewTargets(active: Ref<boolean>) {
     const queryClient = useQueryClient();

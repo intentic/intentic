@@ -38,7 +38,6 @@ jest.mock(`../../../../models/sandbox/useSandboxVersion`, () => ({
         stagedBehind: ref(undefined),
         stagedPlan,
         preparing,
-        serverManaged: ref(false),
         slug,
         composeManaged,
         skipServed,

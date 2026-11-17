@@ -17,15 +17,10 @@ pub const IC: &str = "dev.intentic.ic";
 pub enum Kind {
     Sandbox,
     Runner,
-    /// The Windows deploy target beside a sandbox (connect.rs, Windows only).
-    #[cfg_attr(not(windows), allow(dead_code))]
-    Dind,
     BackupWorker,
     VolumeWorkspace,
     VolumeHistory,
     VolumeDocker,
-    #[cfg_attr(not(windows), allow(dead_code))]
-    VolumeDindDocker,
     Network,
     Environment,
     TrashMarker,
@@ -36,12 +31,10 @@ impl Kind {
         match self {
             Kind::Sandbox => "sandbox",
             Kind::Runner => "runner",
-            Kind::Dind => "dind",
             Kind::BackupWorker => "backup-worker",
             Kind::VolumeWorkspace => "volume-workspace",
             Kind::VolumeHistory => "volume-history",
             Kind::VolumeDocker => "volume-docker",
-            Kind::VolumeDindDocker => "volume-dind-docker",
             Kind::Network => "network",
             Kind::Environment => "environment",
             Kind::TrashMarker => "trash-marker",

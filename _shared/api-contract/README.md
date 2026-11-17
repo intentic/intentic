@@ -56,8 +56,6 @@ flowchart LR
   `sandbox-contract`. A name means one thing across the two: the platform's minted ticket is `MintedOwnerTicket`
   (sandbox-contract's `OwnerTicket` is the claim a daemon decodes), and its sandbox domain is
   `sandboxRegistryContract`.
-- `ResourceType` comes from `_deploy/resources`, a recorded exception to the rule that `_shared/` depends on no other
-  part (see [the area README](../README.md)).
 
 ## Key files
 

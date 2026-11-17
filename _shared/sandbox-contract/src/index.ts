@@ -23,8 +23,6 @@ import { extensionsContract } from "./contracts/extensions.contract.js";
 import { gitContract } from "./contracts/git.contract.js";
 import { historyContract } from "./contracts/history.contract.js";
 import { hubContract } from "./contracts/hub.contract.js";
-import { intenticContract } from "./contracts/intentic.contract.js";
-import { inventoryContract } from "./contracts/inventory.contract.js";
 import { issuesContract } from "./contracts/issues.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
 import { loopsContract } from "./contracts/loops.contract.js";
@@ -82,8 +80,6 @@ export const sandboxContract: {
     git: typeof gitContract;
     history: typeof historyContract;
     hub: typeof hubContract;
-    intentic: typeof intenticContract;
-    inventory: typeof inventoryContract;
     issues: typeof issuesContract;
     logs: typeof logsContract;
     loops: typeof loopsContract;
@@ -135,8 +131,6 @@ export const sandboxContract: {
     git: gitContract,
     history: historyContract,
     hub: hubContract,
-    intentic: intenticContract,
-    inventory: inventoryContract,
     issues: issuesContract,
     logs: logsContract,
     loops: loopsContract,

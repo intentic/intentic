@@ -53,7 +53,7 @@ const alwaysShared = computed(() =>
 );
 // Values a person or the sandbox keeps, by the name a reference spends them under. A connection's own credential is its
 // row above, and a model account's is the runtime's, never an agent's to spend.
-const secrets = computed(() => inventory.value.filter((entry) => entry.kind === `env` || entry.kind === `generated`).map((entry) => entry.key));
+const secrets = computed(() => inventory.value.filter((entry) => entry.kind === `env`).map((entry) => entry.key));
 
 const reading = computed(() => capabilitiesQuery.isPending.value || inventoryQuery.isPending.value);
 

@@ -267,7 +267,7 @@ test.skipIf(!cli.runs)(cli.title("a turn's tool list is all the model is offered
 // The value a stored secret holds in the test below, and the seam a turn resolves and masks it through.
 const STORED = "tok-77a1c9e05b2d48";
 const storedSecrets: SecretAccess = {
-    list: async () => [{ name: "LIVE_TOKEN", value: STORED, source: "env" }],
+    list: async () => [{ name: "LIVE_TOKEN", value: STORED, source: "sandbox" }],
     used: () => {},
     release: async () => ({ ok: true }),
 };

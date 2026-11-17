@@ -24,6 +24,7 @@
             "packages": [
                 "_sandbox/agent-context",
                 "_sandbox/claude-plugin",
+                "_sandbox/cli",
                 "_sandbox/fileq",
                 "_sandbox/netd",
                 "_sandbox/gate",
@@ -136,22 +137,6 @@
             ]
         },
         {
-            "accent": "5",
-            "id": "deploy",
-            "name": "Deployment engine",
-            "oneLiner": "A bundled tool that turns 'what I want' into running servers. Not part of the product.",
-            "packages": [
-                "_deploy/cli",
-                "_deploy/engine",
-                "_deploy/examples",
-                "_deploy/graph",
-                "_deploy/providers",
-                "_deploy/resources",
-                "_deploy/sdk",
-                "_deploy/state-resolver"
-            ]
-        },
-        {
             "accent": "neutral",
             "id": "platform",
             "name": "Account",
@@ -243,11 +228,7 @@
             "term": "panel"
         },
         {
-            "means": "A description of what you want to exist. The deployment engine's input, not the product's.",
-            "term": "intent"
-        },
-        {
-            "means": "The product you look at. Separate from the deployment engine, which is a bundled tool.",
+            "means": "The product you look at and drive: the editor, the sandbox daemons it talks to, and the platform between them.",
             "term": "the app plane"
         },
         {

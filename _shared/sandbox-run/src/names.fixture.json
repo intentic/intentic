@@ -23,14 +23,6 @@
             { "token": "tök€n-é 日本", "id": "b95e944e48c7" }
         ]
     },
-    "hostSshIds": {
-        "about": "sha256 of `<connect token>:<host name>` as UTF-8, first 12 hex: a deploy server's tunnel id (the contract's hostSshIdFromToken). connect-host.ps1 digests the same input the same way when a code's answer carries no HOST_ID. No PowerShell runs in the suites, so a test of the contract reads that script's source for the salted input and the cut; these vectors pin the TS half to the digest.",
-        "vectors": [
-            { "token": "token", "hostName": "web-1", "id": "ecddc8235644" },
-            { "token": "connect-token-one", "hostName": "db", "id": "28c5c2752bdd" },
-            { "token": "tök€n-é 日本", "hostName": "laptop-é", "id": "4fa5f43fa8c6" }
-        ]
-    },
     "hostnameSlugs": {
         "about": "The slug a hostname names a sandbox by: its first label, lowercased as DNS reads it, and none for an empty label. sandbox-run's slugOfHostname (TS) and ic's slug_of_hostname (util.rs, which connect.rs names a container by) are each held to these.",
         "vectors": [

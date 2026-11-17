@@ -52,7 +52,7 @@ services:
             SANDBOX_OVERLAY_RUNTIME: "--privileged"
             OWNER_EMAIL: "a@b.c"
             CONNECT_TOKEN: ${CONNECT_TOKEN:?run the .env bootstrap first}
-            HOST_SSH_KEY: ${HOST_SSH_KEY:?run the .env bootstrap first}
+            CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?run the .env bootstrap first}
             SANDBOX_SWAP: "2g"
             INTENTIC_AT_REST_KEY_FILE: "/run/secrets/intentic-at-rest-key"
             HOST_PLATFORM: "linux"

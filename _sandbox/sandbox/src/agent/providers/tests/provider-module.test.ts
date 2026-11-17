@@ -29,7 +29,6 @@ test("a translator-backed provider's inventory rows are its auth files, keyed by
             kind: "provider",
             label: "Gemini · me@example.com",
             status: "connected",
-            requiredBy: [],
             storedAt: authStateRelPath("cliproxy"),
             revealable: false,
         },

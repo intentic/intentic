@@ -41,18 +41,18 @@ const serve = async (server: http.Server): Promise<number> => {
 };
 
 test("panels.list enumerates every repo with its operator panel + runtime status", async () => {
-    const workspace = tempWorkspace([{ name: "app", panel: true }, { name: "desired-state" }]);
+    const workspace = tempWorkspace([{ name: "app", panel: true }, { name: "notes" }]);
     const client = panelsClient(workspace, {
         // Zone from the public URL; hostname's sandbox id from the connect token (sha256("token")[0:12]=3c469e9d6c58).
         config: { ...testConfig, connectToken: "token", sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
         // "app" answers on a dead port (unhealthy); neither repo gets a previewUrl since neither is routable.
         processes: fakeProcesses({ app: 1 }),
     });
-    const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, tests: false, userStories: false, docs: false };
+    const facts = { directoryUi: false, monorepo: false, tests: false, userStories: false, docs: false };
     expect(await client.list()).toEqual({
         panels: [
-            { repo: "app", hasPanel: true, start: devStart, installed: false, running: true, healthy: false, servers: [], port: 1, role: "app", ...facts },
-            { repo: "desired-state", hasPanel: false, installed: true, running: false, healthy: false, servers: [], role: "desired-state", ...facts },
+            { repo: "app", hasPanel: true, start: devStart, installed: false, running: true, healthy: false, servers: [], port: 1, ...facts },
+            { repo: "notes", hasPanel: false, installed: true, running: false, healthy: false, servers: [], ...facts },
         ],
     });
 });
@@ -94,8 +94,6 @@ test("panels.list advertises previewUrl only while the preview hostname really s
 test("panels.list reports the content facts extensions detect on", async () => {
     const workspace = tempWorkspace([{ name: "extra" }]);
     const dir = join(workspace.root, "extra");
-    writeFileSync(join(dir, "deploy.config.ts"), "export default {};");
-    writeFileSync(join(dir, "desired-state.json"), "{}");
     writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages: []");
     writeFileSync(join(dir, "turbo.json"), "{}");
     mkdirSync(join(dir, `${STATE_DIR}`, "ui"), { recursive: true });
@@ -112,8 +110,6 @@ test("panels.list reports the content facts extensions detect on", async () => {
                 running: false,
                 healthy: false,
                 servers: [],
-                deployConfig: true,
-                desiredState: true,
                 directoryUi: true,
                 monorepo: true,
                 tests: false,
@@ -139,9 +135,6 @@ test("panels.list advertises no previewUrl without a connect token (loopback: no
                 running: false,
                 healthy: false,
                 servers: [],
-                role: "app",
-                deployConfig: false,
-                desiredState: false,
                 directoryUi: false,
                 monorepo: false,
                 tests: false,
@@ -190,7 +183,7 @@ test("panels.list gives the panel's own terminal to the assigned port the scan c
 });
 
 test("panels.start runs the repo's operator dir, rejects unknown repos + repos with no panel; stop is idempotent", async () => {
-    const workspace = tempWorkspace([{ name: "app", panel: true }, { name: "desired-state" }]);
+    const workspace = tempWorkspace([{ name: "app", panel: true }, { name: "notes" }]);
     const processes = fakeProcesses();
     const client = panelsClient(workspace, { processes });
 
@@ -199,7 +192,7 @@ test("panels.start runs the repo's operator dir, rejects unknown repos + repos w
     // What it typed is the run plan's, and any window it opens goes to the sandbox desktop.
     expect(processes.specs[0]).toMatchObject({ command: "test -d node_modules || pnpm install && pnpm dev", desktop: true, durable: true });
     // No operator/ means BAD_REQUEST; an unknown repo is NOT_FOUND.
-    expect(await errorCode(client.start({ repo: "desired-state" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.start({ repo: "notes" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.start({ repo: "ghost" }))).toBe("NOT_FOUND");
     expect(await client.stop({ repo: "app" })).toEqual({ ok: true });
     expect(processes.stopped).toEqual(["app"]);

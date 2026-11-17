@@ -8,7 +8,6 @@ import SecretEntryRow from "../../capabilities/connect/secrets/SecretEntryRow.vu
 import SecretField from "../../../parts/capabilities/SecretField.vue";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../models/extensions/useExtensions";
-import { untilResult } from "../../../lib/intenticStream";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSecretInventory } from "../../../models/capabilities/useSecrets";
 import { useKeyrings } from "../../capabilities/connect/secrets/useKeyrings";
@@ -17,7 +16,6 @@ import SecretKeyrings from "./SecretKeyrings.vue";
 import SecretWantRow from "./SecretWantRow.vue";
 import { waitingWants } from "./secretWants";
 import { useWants } from "./useWants";
-import { useOperation } from "../../../workbench/operations/operations";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
@@ -39,9 +37,6 @@ const VISIBLE_WHEN_COLLAPSED = 3;
 const { inventory, loaded, refreshInventory } = useSecretInventory();
 const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
-
-// Gated on DevOps being `active` (not merely present): scaffolding-in-progress still 412s on /secrets writes.
-const devopsActive = computed(() => capabilities.value.some((entry) => entry.kind === `devops` && entry.status.state === `active`));
 
 // Provider accounts are excluded here (they live on the Agent tab) so nothing downstream must filter them.
 const rows = computed<SecretRow[]>(() =>
@@ -76,9 +71,7 @@ const wants = computed(() => {
     return waitingWants(needs.value).filter((want) => needle === `` || want.haystack.includes(needle));
 });
 const held = (group: SecretGroup): SecretRow[] => matches.value.filter((row) => !row.attention && row.group === group);
-const required = computed(() => held(`required`));
 const yours = computed(() => held(`yours`));
-const generated = computed(() => held(`generated`));
 const credentials = computed(() => held(`credential`));
 // Kept in a keyring on one of the owner's computers: this sandbox holds a pointer, so they are a group of their own.
 const onComputers = computed(() => held(`device`));
@@ -112,7 +105,7 @@ const emptyNote = computed<string | undefined>(() => {
     return rows.value.length === 0 ? t(`sandbox.sandboxSecrets.noCredentialsYet`) : t(`sandbox.sandboxSecrets.nothingMatchesFilter`);
 });
 
-// Add-a-secret (any env key the user wants available at apply time); collapsed until invoked, or opened on arrival by
+// Add-a-secret (any env key the user wants available to the sandbox); collapsed until invoked, or opened on arrival by
 // a link naming the key (`/sandbox/secrets?add=NAME`), which is how an agent's message points at the one to add.
 const route = useRoute();
 const linked = typeof route.query[`add`] === `string` ? route.query[`add`] : ``;
@@ -167,36 +160,10 @@ const generateOne = async (): Promise<void> => {
     }
 };
 
-// CI sync: a stale entry gets the "Push to CI" action, which streams `intentic deploy secrets push`. Kept in the
-// operations ledger, not here: the push runs on in the sandbox for seconds to tens of seconds whether or not this page
-// stays open, and coming back mid-push has to show it running, not offer it again over the first.
-const ciStale = computed(() => inventory.value.some((entry) => entry.ci !== undefined && !entry.ci.synced));
-const ciKnown = computed(() => inventory.value.some((entry) => entry.ci !== undefined));
-const push = useOperation(`secrets/ci/push`);
-const pushing = push.busy;
-const pushError = push.failure;
-const pushToCi = async (): Promise<void> => {
-    await push.run({
-        what: t(`sandbox.sandboxSecrets.pushingToCi`),
-        done: () => t(`sandbox.sandboxSecrets.pushedToCi`),
-        failed: t(`sandbox.sandboxSecrets.couldntPushToCi`),
-        task: async () => {
-            const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `secrets`, `push`] });
-            try {
-                await untilResult(lines, { failed: () => t(`sandbox.sandboxSecrets.couldntPushToCi`) });
-            } finally {
-                // Re-read however it ended, so the stale marks show what the sandbox now records rather than what was hoped.
-                refreshInventory();
-            }
-        },
-    });
-};
 </script>
 
 <template>
     <div class="flex flex-col gap-6">
-        <NoticeStack :of="[pushError]" />
-
         <!-- Content waits for inventory, drawn meanwhile as the page last looked in this sandbox. -->
         <Await :of="loaded" imprint="sandbox.secrets" :label="t(`sandbox.sandboxSecrets.readingSandboxsSecrets`)">
             <!-- Until it has been seen once: the shape of the coming list (rows with a key and reveal control), not a spinner. -->
@@ -221,17 +188,6 @@ const pushToCi = async (): Promise<void> => {
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                     <Button :as="RouterLink" :to="here(page.capabilities())" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" tier="boring" />
-                    <Button
-                        v-if="ciKnown"
-                        :label="ciStale ? t(`sandbox.sandboxSecrets.pushToCi`) : t(`sandbox.sandboxSecrets.ciInSync`)"
-                        size="small"
-                        :tier="ciStale ? `accent` : `boring`"
-                        :disabled="!ciStale || pushing"
-                        :loading="pushing"
-                        @click="pushToCi"
-                    >
-                        <template #icon><Icon :name="ciStale ? `cloud-upload` : `check`" /></template>
-                    </Button>
                 </div>
 
                 <!-- Shown only while something is owed: the rows themselves, not a count of them. -->
@@ -246,20 +202,9 @@ const pushToCi = async (): Promise<void> => {
                     />
                 </RowGroup>
 
-                <!-- The owner's own: what they must keep, what they chose to keep, what intentic keeps for them. -->
+                <!-- The owner's own, then what their computers keep, then what connections hold. -->
                 <div class="flex flex-col gap-6">
-                    <RowGroup v-if="devopsActive && groupVisible(required)" :label="t(`sandbox.sandboxSecrets.requiredByIntent`)">
-                        <RowNote v-if="required.length === 0">{{ t(`sandbox.sandboxSecrets.intentDeclaresNoUser`) }}</RowNote>
-                        <SecretEntryRow
-                            v-for="row in required"
-                            :key="row.entry.key"
-                            :row="row"
-                            :expanded="opened === row.entry.key"
-                            @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
-                        />
-                    </RowGroup>
-
-                    <!-- A person's own secrets need no DevOps: without it they go to the sandbox's own store, the one a need's card writes to too. -->
+                    <!-- A person's own secrets live in the sandbox's own store, the one a need's card writes to too. -->
                     <!-- Drawn only once it holds something, or while a new one is being named: an empty group is just a header. -->
                     <RowGroup v-if="(yours.length > 0 || adding) && groupVisible(yours)" :label="t(`sandbox.sandboxSecrets.secrets`)">
                         <SecretEntryRow
@@ -320,17 +265,6 @@ const pushToCi = async (): Promise<void> => {
                         />
                     </RowGroup>
                     <SecretKeyrings v-if="keyrings.length > 0 && !filtering" />
-
-                    <RowGroup v-if="devopsActive && groupVisible(generated)" :label="t(`sandbox.sandboxSecrets.generatedByIntentic`)">
-                        <RowNote v-if="generated.length === 0">{{ t(`sandbox.sandboxSecrets.nothingGeneratedYetAppear`) }}</RowNote>
-                        <SecretEntryRow
-                            v-for="row in generated"
-                            :key="row.entry.key"
-                            :row="row"
-                            :expanded="opened === row.entry.key"
-                            @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
-                        />
-                    </RowGroup>
 
                     <!-- Same collapse-behind-toggle pattern as the Agent tab, once there are enough rows to crowd the rest of it. -->
                     <RowGroup v-if="groupVisible(visibleCredentials)" :label="t(`sandbox.sandboxSecrets.capabilityCredentials`)">

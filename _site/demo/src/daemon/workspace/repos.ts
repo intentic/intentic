@@ -81,8 +81,6 @@ export const workspacePanels = (): PanelSummary[] =>
         installed: false,
         healthy: false,
         servers: [],
-        deployConfig: false,
-        desiredState: false,
         directoryUi: false,
         monorepo: isMonorepo(repo),
         tests: hasTests(repo),

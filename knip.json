@@ -75,8 +75,6 @@
                 "_editor/mobile-core/fixtures/*.mjs"
             ],
             "ignore": [
-                "desired-state/**",
-                "intent/**",
                 "_tools/extension-example/seed/**",
                 "_editor/ios-app/**",
                 "_editor/android-app/**",
@@ -153,15 +151,12 @@
                 "bin/*.test.mjs",
                 "scripts/*.{sh,mjs}"
             ],
-            // @playwright/mcp is found with require.resolve (browser-tools.ts); graph and sdk are linked into /work/intent
-            // by path (ensure-intent.ts); the image runs iq from node_modules (Dockerfile); pino-pretty is a transport loaded
-            // by name (logger.ts).
+            // @playwright/mcp is found with require.resolve (browser-tools.ts); the image runs iq from node_modules
+            // (Dockerfile); pino-pretty is a transport loaded by name (logger.ts).
             "ignoreDependencies": [
                 "@intentic/webq",
                 "vitest",
                 "@playwright/mcp",
-                "@intentic/graph",
-                "@intentic/sdk",
                 "@intentic/iq",
                 "pino-pretty"
             ]
@@ -175,10 +170,10 @@
         "_sandbox/fileq": {
             "entry": ["src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
-        "_deploy/cli": {
-            "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.{ts,mts,mjs}", "doh-lookup.mjs"],
-            // dind-host is read from node_modules as a docker build context (demo.ts); tsx is spawned from node_modules/.bin.
-            "ignoreDependencies": ["@intentic/dind-host", "tsx"]
+        "_sandbox/cli": {
+            "entry": ["src/cli.ts", "src/**/*.test.{ts,mts,mjs}"],
+            // tsx is spawned from node_modules/.bin (sandbox-run.command.integration.test.ts).
+            "ignoreDependencies": ["tsx"]
         },
         "_devices/machine": {
             "entry": ["src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
@@ -256,12 +251,6 @@
             "entry": ["src/index.ts", "src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_devices/*": {
-            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
-        },
-        "_deploy/examples": {
-            "entry": ["*.config.ts"]
-        },
-        "_deploy/*": {
             "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         // The grammars are imported dynamically by @intentic/code-read's table, which this package's highlighter loads.

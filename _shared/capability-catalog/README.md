@@ -18,8 +18,8 @@ flowchart LR
   runtime directive) from the same data the handlers consume, so no card keeps a hand-written list.
 - Product data only: this package holds no wire schemas. Kinds and exit-point vocabularies come from
   `@intentic/sandbox-contract`.
-- Also here: `INVENTORY_SERVICES` for the infra panel's "Add service" dialog, and the memory sizing for local model
-  tiles, printed in binary gigabytes because it is compared against a machine's RAM.
+- Also here: the memory sizing for local model tiles, printed in binary gigabytes because it is compared against a
+  machine's RAM.
 
 ## Key files
 

@@ -378,7 +378,7 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         id: `secrets-add`,
         slug: `secrets`,
         title: () => t(`sandbox.sandboxSecrets.addSecret`),
-        terms: () => [t(`sandbox.sandboxSecrets.manageCapabilities`), t(`sandbox.sandboxSecrets.pushToCi`), t(`sandbox.search.secretsAdd`)],
+        terms: () => [t(`sandbox.sandboxSecrets.manageCapabilities`), t(`sandbox.search.secretsAdd`)],
     },
     {
         id: `secrets-keyrings`,

@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { ArrivalItem } from "@intentic/sandbox-contract/state/arrival";
 import { panelSession } from "@intentic/sandbox-contract/session-names";
@@ -14,10 +14,8 @@ import { ensureProjectRepo } from "../git/remote/project-repo.js";
 import { ensureRepoGitDirs } from "../git/remote/repo-git-dirs.js";
 import { repairWorkspaceExecutableBits } from "../git/exec-bits/exec-bit-repair.js";
 import { commitRootBaseline, ensureLocalRootRepo, ensureRootRepo } from "../git/remote/root-repo.js";
-import { applyEventsPath, applyRunLive } from "../intentic/apply-events.js";
-import { checkEventsDir } from "../intentic/check-run.js";
-import { INFRA_APPLY_KEY } from "../intentic/infra-apply.js";
 import { arrivedPrewarmed } from "../system/boot/prewarm.js";
+import { moveDesiredStateSecrets } from "../secrets/desired-state-secrets.js";
 import { projectDirOf, seedsStarterSite } from "../system/project-dir.js";
 import { restoreAuthorizedKeys } from "../peers/desktop-sync.js";
 import { automationsDocument } from "../automations/automations-store.js";
@@ -58,27 +56,20 @@ interface BootChainStep {
     readonly failure?: string;
 }
 
-// Kills a previous daemon's panel, agent and job tmux sessions, re-adopting a live infra apply, dockerd or model server,
+// Kills a previous daemon's panel, agent and job tmux sessions, re-adopting a live dockerd or model server,
 // and the terminal of every job an agent kept running for the person (2026-10-05: they were killed at every restart,
 // though keeping them is the point of `keep`); the tmux server is container-wide, so they are the container owner's to
 // sweep. Then what an earlier daemon run left running outside tmux (system/boot/generation-sweep.ts).
-const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promise<void> => {
+const sweepStaleSessions = async ({ logger, services }: BootRun): Promise<void> => {
     // A server that outlived the last daemon (or that netd started) still hands every new pane netd's sockets.
     await prepareTmuxServer(logger, { SSH_AUTH_SOCK: services.sshAgent.owner });
-    // An events log that cannot be read spares whatever apply session exists: killing a live infra apply mid-run is the
-    // costlier mistake.
     // A session that could not be adopted is swept as stale below, so the refusal is said, not dropped.
-    const adopted = (key: string, options: { oneShot?: true }): Promise<boolean> =>
-        services.processes.adopt(key, options).catch((error: unknown) => {
+    const adopted = (key: string): Promise<boolean> =>
+        services.processes.adopt(key, {}).catch((error: unknown) => {
             logger.warn({ err: error, key }, "boot: a managed session could not be adopted, so it is swept as stale");
             return false;
         });
-    const applyLive =
-        (await applyRunLive(applyEventsPath(config.historyRoot)).catch((error: unknown) => {
-            logger.warn({ err: error }, "boot: the infra apply's event log could not be read, its session is spared if one is alive");
-            return true;
-        })) && (await adopted(INFRA_APPLY_KEY, { oneShot: true }));
-    const dockerAlive = await adopted(DOCKER_PANEL_KEY, {});
+    const dockerAlive = await adopted(DOCKER_PANEL_KEY);
     // Killing a live model server discards a loaded model, minutes to reload.
     const capabilities = await services.capabilities.list().catch((error: unknown) => {
         logger.warn({ err: error }, "boot: capabilities could not be listed, so no local model server is spared the stale sweep");
@@ -87,7 +78,7 @@ const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promis
     const modelKeys = capabilities.flatMap((capability) => (capability.kind === "localmodel" ? [localModelPanelKey(capability.id)] : []));
     const modelsAlive: string[] = [];
     for (const key of modelKeys) {
-        if (await adopted(key, {})) {
+        if (await adopted(key)) {
             modelsAlive.push(panelSession(key));
         }
     }
@@ -98,7 +89,6 @@ const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promis
         logger.info({ sessions: kept }, "boot: terminals with unfinished background job records are adopted, not swept");
     }
     await killStaleManagedSessions([
-        ...(applyLive ? [panelSession(INFRA_APPLY_KEY)] : []),
         ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
         ...modelsAlive,
         ...kept,
@@ -191,6 +181,14 @@ const vaultLooseSecrets = async ({ logger, services }: BootRun): Promise<void> =
     }
 };
 
+// Said only when something moved: every later boot finds the marker and does nothing.
+const moveDeploySecrets = async ({ config, logger, services }: BootRun): Promise<void> => {
+    const outcome = await moveDesiredStateSecrets(config.workspaceRoot, config.historyRoot, services.sandboxSecrets);
+    if (outcome !== undefined) {
+        logger.info(outcome, "secrets: the desired-state repo's secrets were copied into the sandbox's own store; the repo is left as it was");
+    }
+};
+
 // Before the baseline commit, or the seeded repo's files show as a phantom add.
 const seedStarter = async ({ logger, services }: BootRun): Promise<void> => {
     const outcome = await seedStarterSite(services);
@@ -269,6 +267,14 @@ const BOOT_STEPS: readonly BootChainStep[] = [
             }
         },
         failure: "ssh keys not moved into the key store, so those aliases still read their key from a file the agent can read",
+    },
+    // Before vaultSecrets, whose masking check then sees the values it copied.
+    {
+        key: "deploySecrets",
+        label: "Moving deploy secrets into the sandbox's store",
+        when: ({ role }) => role.roots,
+        run: moveDeploySecrets,
+        failure: "the desired-state repo's secrets were not copied into the sandbox's own store; the next boot tries again",
     },
     { key: "vaultSecrets", label: "Securing stored credentials", run: vaultLooseSecrets },
     // Before any step that starts a process of its own.
@@ -408,9 +414,5 @@ export const runBootSteps = async (phase: BootPhase, runnerEnv: RunnerModeEnv | 
         await (failure === undefined
             ? phase.services.boot.step(step.key, run)
             : phase.services.boot.tolerate(step.key, run, (error) => phase.logger.warn({ err: error }, failure)));
-    }
-    // A previous boot's check runs left per-run event files behind; their streams died with the daemon.
-    if (phase.role.roots) {
-        void rm(checkEventsDir(phase.config.historyRoot), { recursive: true, force: true });
     }
 };

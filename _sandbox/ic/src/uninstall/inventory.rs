@@ -66,7 +66,6 @@ pub fn gather() -> Inventory {
         distros,
         app: app.is_some(),
         cache_bytes: cache_bytes(),
-        deploys: cfg!(unix) && Path::new("/opt/intentic").is_dir(),
         stays: stays(engine_here, docker_cli),
     };
     Inventory { facts, rows, app }

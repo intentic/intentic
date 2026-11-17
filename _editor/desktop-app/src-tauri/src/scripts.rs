@@ -2815,7 +2815,7 @@ mod tests {
         }
     }
 
-    /* `connect.ps1`, `connect-host.ps1`, `recreate.ps1`, `fix.ps1` and `cleanup.ps1` are each handed to `irm | iex` as a standalone string: there is no import. */
+    /* `connect.ps1`, `recreate.ps1`, `fix.ps1` and `cleanup.ps1` are each handed to `irm | iex` as a standalone string: there is no import. */
     #[test]
     fn every_copy_of_the_ic_download_is_the_same_download() {
         let scripts = powershell_scripts();
@@ -2826,8 +2826,8 @@ mod tests {
             }
         }
         assert!(
-            blocks.len() >= 5,
-            "expected connect/connect-host/recreate/fix/cleanup to carry this block, found {}",
+            blocks.len() >= 4,
+            "expected connect/recreate/fix/cleanup to carry this block, found {}",
             blocks.len()
         );
         let (first_path, first) = &blocks[0];
@@ -2871,8 +2871,8 @@ mod tests {
         }
         // uninstall.ps1 downloads ic too when none is installed, and `ic uninstall` then takes the entry off again.
         assert!(
-            blocks.len() == 6,
-            "expected connect/connect-host/recreate/fix/cleanup/uninstall to carry this, found {}",
+            blocks.len() == 5,
+            "expected connect/recreate/fix/cleanup/uninstall to carry this, found {}",
             blocks.len()
         );
         let (first_path, first) = &blocks[0];

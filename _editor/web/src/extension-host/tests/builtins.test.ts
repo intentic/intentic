@@ -90,10 +90,7 @@ const richCapabilities: readonly CapabilityFacts[] = [
 // Every fact true, so a detect() that gates on evidence still yields its activations and its icons can be checked.
 const richRepo: RepoFacts = {
     repo: `demo`,
-    role: `app`,
     hasPanel: true,
-    deployConfig: true,
-    desiredState: true,
     directoryUi: true,
     monorepo: true,
     tests: true,

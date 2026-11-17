@@ -30,7 +30,7 @@ const listed = (list: readonly string[] | undefined, id: string): boolean => lis
 
 /**
  * Whether a persona carrying these accounts (its `capabilities`) and these shelves may act through a capability. A kind
- * absent from the switch (an agent runtime, a devops entry, a VPN) passes untouched, so a new kind is never silently
+ * absent from the switch (an agent runtime, a VPN) passes untouched, so a new kind is never silently
  * denied.
  */
 export const personaAllowsCapability = (capability: CapabilityRef, accounts: readonly string[], shelves: PersonaShelves): boolean => {
