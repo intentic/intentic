@@ -753,6 +753,23 @@
             "groupedLabel": "Sesje zgrupowane",
             "groupedValue": "{count} · {size}"
         },
+        "boardNight": {
+            "tipTitle": "Dobranoc",
+            "tipNote": "Agenci nie czekają na ciebie",
+            "begin": "Zacznij noc",
+            "until": "do {time}",
+            "headingDay": "Zacznij noc teraz",
+            "headingNight": "Noc do {time}",
+            "whenDay": "Do {time}, za {span}",
+            "whenHand": "Zaczęta o {since} · kończy się za {span}",
+            "whenHours": "Twoje godziny nocne · kończą się za {span}",
+            "decide": "Agenci nie będą czekać na twoje odpowiedzi: wybiorą opcję, którą polecają, i wypiszą, co zdecydowali za ciebie.",
+            "defer": "Agenci nie będą czekać na twoje odpowiedzi: dokończą to, co od nich nie zależy, a pytanie zostawią na rano.",
+            "stillAsks": "Tylko gdy nikogo nie ma w edytorze. Uprawnienia nadal czekają na ciebie.",
+            "hours": "Godziny nocne",
+            "goodNight": "Dobranoc",
+            "end": "Zakończ noc"
+        },
         "ownerMark": {
             "controlToken": "Token sterujący",
             "ownAccount": "Własne",
@@ -5889,6 +5906,9 @@
             "group": "Godziny nocne",
             "keep": "Przestrzegaj godzin nocnych",
             "keepNote": "Gdy śpisz i nikogo nie ma w edytorze, pytanie nie zatrzymuje już agenta do rana.",
+            "byHand": "Noc do {time}",
+            "byHandNote": "Zaczęta ręcznie o {since} z tablicy agentów. Skończy się sama rano.",
+            "endByHand": "Zakończ noc",
             "hours": "Noc",
             "from": "Noc zaczyna się o",
             "to": "Noc kończy się o",

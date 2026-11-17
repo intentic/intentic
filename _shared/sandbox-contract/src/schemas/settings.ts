@@ -582,7 +582,7 @@ export const SandboxSettingsSchema = z.object({
     // sandbox rather than parking the turn until morning. Off until the owner sets the hours: a sleep window guessed for
     // them would decide things in their name at an hour they never chose.
     nightHours: NightHoursSchema.prefault({}).describe(
-        "The hours you sleep, on this sandbox's clock. While they last and nobody is at the editor, a question an agent asks no longer stops its turn until morning: it is answered with the agent's own recommendation, or kept for the morning while the agent finishes everything else, as `questions` says. A plan an agent chose to make is approved the same way under `decide`; permissions, held commands and anything asked of a named person still wait for you.",
+        "The hours you sleep, on this sandbox's clock, and a night you begin early by hand, which lasts until the next morning. While it is night and nobody is at the editor, a question an agent asks no longer stops its turn until morning: it is answered with the agent's own recommendation, or kept for the morning while the agent finishes everything else, as `questions` says. A plan an agent chose to make is approved the same way under `decide`; permissions, held commands and anything asked of a named person still wait for you.",
     ),
     // Which repositories' own declarations (`<repo>/.intentic/checks.json`) the owner has switched on, each against the
     // fingerprint of what was declared when they did. A declaration that has since changed no longer matches its

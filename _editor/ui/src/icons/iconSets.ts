@@ -110,6 +110,7 @@ export const ICONS = {
     microphone: OBJECT_GLYPHS[`microphone`],
     mobile: OBJECT_GLYPHS[`mobile`],
     moon: STATUS_GLYPHS[`moon`],
+    "moon-fill": STATUS_GLYPHS[`moon-fill`],
     palette: OBJECT_GLYPHS[`palette`],
     paperclip: OBJECT_GLYPHS[`paperclip`],
     pause: ACTION_GLYPHS[`pause`],

@@ -33,6 +33,18 @@ test("in force only when switched on, inside the window, and with nobody at the 
     expect(nightNow(undefined, [], THREE_AM)).toBeUndefined();
 });
 
+test("a night begun by hand is night until the next morning, hours switched on or not, and the editor rule still holds", () => {
+    const earlyNight = Date.parse("2026-11-04T21:10:00Z");
+    const byHand = settingsWith({ on: false, questions: "defer", asleepSince: earlyNight });
+    expect(nightNow(byHand, [], Date.parse("2026-11-04T21:30:00Z"))).toEqual({ questions: "defer", until: "07:00" });
+    expect(nightNow(byHand, [], THREE_AM)).toEqual({ questions: "defer", until: "07:00" });
+    // Said good night and lingered at the chat: still asked.
+    expect(nightNow(byHand, ["owner@corp.com"], Date.parse("2026-11-04T21:30:00Z"))).toBeUndefined();
+    // The morning ends it by itself, and the evening after is an ordinary one again.
+    expect(nightNow(byHand, [], Date.parse("2026-11-05T07:00:00Z"))).toBeUndefined();
+    expect(nightNow(byHand, [], Date.parse("2026-11-05T21:30:00Z"))).toBeUndefined();
+});
+
 test("read on the sandbox's clock: 03:00 UTC is 04:00 in Warsaw, still night; 06:30 UTC is morning there", () => {
     const warsaw = settingsWith({ on: true, questions: "defer" }, "Europe/Warsaw");
     expect(nightNow(warsaw, [], THREE_AM)).toEqual({ questions: "defer", until: "07:00" });

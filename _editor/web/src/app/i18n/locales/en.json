@@ -659,6 +659,23 @@
             "groupedLabel": "Grouped sessions",
             "groupedValue": "{count} · {size}"
         },
+        "boardNight": {
+            "tipTitle": "Good night",
+            "tipNote": "Agents stop waiting on you",
+            "begin": "Begin the night",
+            "until": "until {time}",
+            "headingDay": "Begin the night now",
+            "headingNight": "Night until {time}",
+            "whenDay": "Until {time}, in {span}",
+            "whenHand": "You began it at {since} · ends in {span}",
+            "whenHours": "Your night hours · end in {span}",
+            "decide": "Agents won't wait for your answers: they take the option they recommend and list what they decided for you.",
+            "defer": "Agents won't wait for your answers: they finish what doesn't depend on one and save the question for the morning.",
+            "stillAsks": "Only while nobody is at the editor. Permissions still wait for you.",
+            "hours": "Night hours",
+            "goodNight": "Good night",
+            "end": "End night"
+        },
         "buildIdeas": {
             "pageMyBusiness": "A page for my business",
             "personalProfile": "A personal profile",
@@ -6492,6 +6509,9 @@
             "group": "Night hours",
             "keep": "Keep night hours",
             "keepNote": "While you sleep and nobody is at the editor, a question no longer stops an agent until morning.",
+            "byHand": "Night until {time}",
+            "byHandNote": "Begun by hand at {since} from the Agents board. It ends by itself in the morning.",
+            "endByHand": "End night",
             "hours": "Night",
             "from": "Night starts at",
             "to": "Night ends at",

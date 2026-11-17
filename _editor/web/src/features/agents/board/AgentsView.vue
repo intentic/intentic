@@ -62,6 +62,7 @@ import { useBoardCommands } from "./view/boardCommands";
 import { laneHeads, useBoardLanes } from "./view/boardLanes";
 import NoMatchesNote from "./NoMatchesNote.vue";
 import BoardMetrics from "../metrics/BoardMetrics.vue";
+import BoardNight from "../night/BoardNight.vue";
 import { LIVE_METRICS_KEY } from "../../../models/sandbox/liveMetrics";
 import { usePhoneLanes } from "./view/phoneLanes";
 import { useBoardLaunches } from "./view/boardLaunches";
@@ -363,17 +364,13 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                      popover off them (BoardMetrics.vue). In the header, so they take none of the board's height. -->
                 <BoardMetrics v-if="!mobile && liveMetrics !== undefined" :metrics="liveMetrics" :compact="narrow" />
                 <!-- Appears exactly when two or more chats sit side by side (the panes are the selection); opens a draft composed from their transcripts but not sent. -->
-                <Button
-                    v-if="chatStrip.panes.length >= 2"
-                    size="small"
-                    tier="boring"
-                    :disabled="synthesizing"
-                    class="shrink-0"
-                    @click="synthesize"
-                >
+                <Button v-if="chatStrip.panes.length >= 2" size="small" tier="boring" :disabled="synthesizing" class="shrink-0" @click="synthesize">
                     <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />{{ t(`agents.agentsView.synthesize`) }}
                     {{ chatStrip.panes.length }}
                 </Button>
+                <!-- The night begun by hand, for an evening someone goes to bed before their night hours: a bare moon at rest,
+                     lit with the morning while it is night (BoardNight.vue). On a phone it holds this corner alone. -->
+                <BoardNight />
                 <!-- A phone floats it over the board instead (below), where the thumb is and the filters get the row. -->
                 <Button tier="boring" v-if="!mobile && starts" size="small" thumb class="shrink-0" @click="startAgent()">
                     <Icon name="plus" />{{ words.newAgent }}

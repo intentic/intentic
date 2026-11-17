@@ -1,13 +1,15 @@
-import { type ClockTime, type NightQuestions, withinNight } from "@intentic/sandbox-contract/schemas/night-hours";
+import { type ClockTime, nightAt, type NightQuestions } from "@intentic/sandbox-contract/schemas/night-hours";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { asZone, UTC } from "@intentic/sandbox-contract/time";
 
 /* WHETHER IT IS THE OWNER'S NIGHT, RIGHT NOW.
 
-   Three things together (settings `nightHours`): the owner switched night hours on, the sandbox's clock is inside the
-   window they set, and nobody is at the editor (presence.ts `peopleAtEditor`: a tab on screen somebody touched in the
-   last few minutes). The third is what keeps a person who stayed up from having their questions answered for them
-   while they sit at the chat: night hours stand in for a person who is asleep, never for one who is there.
+   Two things together (settings `nightHours`): it is night, and nobody is at the editor (presence.ts `peopleAtEditor`:
+   a tab on screen somebody touched in the last few minutes). Night is the owner's hours switched on with the sandbox's
+   clock inside their window, or a night they began by hand (the Agents board's moon) whose morning has not come. The
+   editor rule is what keeps a person who stayed up, or said good night and lingered, from having their questions
+   answered for them while they sit at the chat: night hours stand in for a person who is asleep, never for one who is
+   there.
 
    Asked when a turn is planned (its instructions say so) and again as each card night hours may answer is raised and
    while it waits (parked-cards.ts), so a turn begun in the evening stops asking once the night has begun. */
@@ -24,12 +26,12 @@ type NightSettings = Pick<SandboxSettings, "nightHours" | "timezone">;
 
 /** Night hours in force at an instant, from the settings and who is at the editor; undefined when they are not. */
 export const nightNow = (settings: NightSettings | undefined, atEditor: readonly string[], at: number): NightNow | undefined => {
-    if (settings === undefined || !settings.nightHours.on || atEditor.length > 0) {
+    if (settings === undefined || atEditor.length > 0) {
         return undefined;
     }
     // An unset zone is UTC, as for every other wall-clock rule here: the row beside the hours says which clock it is.
     const zone = asZone(settings.timezone) ?? UTC;
-    return withinNight(settings.nightHours, zone, at) ? { questions: settings.nightHours.questions, until: settings.nightHours.to } : undefined;
+    return nightAt(settings.nightHours, zone, at) ? { questions: settings.nightHours.questions, until: settings.nightHours.to } : undefined;
 };
 
 export interface NightClock {

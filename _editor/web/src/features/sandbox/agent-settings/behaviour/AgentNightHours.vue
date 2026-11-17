@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ClockTimeSchema, type NightHours, NightHoursSchema, type NightQuestions, nightLength } from "@intentic/sandbox-contract/schemas/night-hours";
+import { ClockTimeSchema, nightByHandUntil, type NightHours, NightHoursSchema, type NightQuestions, nightLength } from "@intentic/sandbox-contract/schemas/night-hours";
 import { asZone, localZone, UTC, zoneLabel } from "@intentic/sandbox-contract/time";
-import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import { Button, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
+import { formatClock } from "@intentic/ui/format";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
@@ -22,6 +24,16 @@ const night = computed((): NightHours => settings.value?.nightHours ?? NightHour
 const patchNight = (change: Partial<NightHours>): void => patch({ nightHours: { ...night.value, ...change } });
 
 const zone = computed(() => asZone(settings.value?.timezone) ?? UTC);
+
+// A night begun by hand (the Agents board's moon), in force whatever the switch says: said here as its own row, so the
+// switch above never reads as the whole story while one is running. Its times are instants, so on the reader's clock.
+const now = useNow(true, 60_000);
+const byHandUntil = computed(() => nightByHandUntil(night.value, zone.value, now.value));
+const byHandLine = computed(() => (night.value.asleepSince === undefined ? `` : t(`sandbox.agentNightHours.byHandNote`, { since: formatClock(night.value.asleepSince) })));
+const endByHand = (): void => {
+    const { asleepSince: _ended, ...rest } = night.value;
+    patch({ nightHours: rest });
+};
 
 // How long the night is, and on whose clock where that is not the reader's: "8 h a night, on Europe/Warsaw time".
 const lengthLine = computed(() => {
@@ -73,6 +85,17 @@ const questionsNote = computed(() =>
         <Row icon="moon" :title="t(`sandbox.agentNightHours.keep`)" :description="t(`sandbox.agentNightHours.keepNote`)">
             <template #control>
                 <ToggleSwitch :model-value="night.on" :disabled="settings === undefined" @update:model-value="(on: boolean) => patchNight({ on })" />
+            </template>
+        </Row>
+        <Row
+            v-if="byHandUntil !== undefined"
+            data-night-by-hand
+            icon="moon-fill"
+            :title="t(`sandbox.agentNightHours.byHand`, { time: formatClock(byHandUntil) })"
+            :description="byHandLine"
+        >
+            <template #control>
+                <Button size="small" tier="boring" @click="endByHand">{{ t(`sandbox.agentNightHours.endByHand`) }}</Button>
             </template>
         </Row>
         <template v-if="night.on">

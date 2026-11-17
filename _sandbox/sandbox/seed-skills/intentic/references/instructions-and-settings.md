@@ -103,3 +103,8 @@ with the question. A plan the agent chose to make is approved under the first an
 owner launched the turn in plan mode for, permissions, held commands and cards for a named person always wait. The
 turn is told under "Connected right now", and the frozen card says **Picked for you** or **Saved for morning**. Someone
 at the editor in the middle of the night is asked as usual.
+
+To go to bed early, the moon in the Agents board's header begins the night now (**Good night**), whether or not night
+hours are switched on: it lasts until the night's end time (the morning), then ends by itself. While it is night the
+moon is lit with that time ("until 07:00"); pressing it again ends a night begun there (**End night**), and the Night
+hours card shows it as its own row with the same button.

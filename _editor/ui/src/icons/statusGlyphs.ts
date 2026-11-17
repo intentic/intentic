@@ -41,6 +41,7 @@ export const STATUS_GLYPHS = {
     wifi: { outline: `M2 7c6-5 14-5 20 0 M6 12c4-3 8-3 12 0 M9 16c2-1 4-1 6 0`, solid: `m12 19 2 2-2 2-2-2Z` },
     sun: { outline: `M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z M12 2v2 M12 20v2 M2 12h2 M20 12h2 M5 5l1 1 M18 18l1 1 M5 19l1-1 M18 6l1-1` },
     moon: { outline: `M21 14a9 9 0 0 1-11-11 9 9 0 1 0 11 11Z` },
+    "moon-fill": { outline: ``, solid: `M21 14a9 9 0 0 1-11-11 9 9 0 1 0 11 11Z` },
     "volume-up": { outline: `M3 9h4l6-5v16l-6-5H3Z M17 8c2 2 2 6 0 8 M19 4c4 4 4 12 0 16` },
     "volume-off": { outline: `M3 9h4l6-5v16l-6-5H3Z M17 9l5 6 M22 9l-5 6` },
 } satisfies Record<string, Glyph>;

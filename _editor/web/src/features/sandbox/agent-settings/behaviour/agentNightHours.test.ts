@@ -56,6 +56,22 @@ test("off until the owner sets it: one switch, and no hours to read", () => {
     expect(fromBox(host)).toBeNull();
 });
 
+test("a night begun from the board is its own row, switch off or on, and ending it writes back only the stamp", async () => {
+    const begun = { ...NightHoursSchema.parse({}), asleepSince: Date.now() - 1000 };
+    settings.value = { ...settings.value, nightHours: begun };
+    const host = mount();
+    await nextTick();
+
+    const row = host.querySelector<HTMLElement>(`[data-night-by-hand]`);
+    expect(row?.textContent).toContain(`Night until`);
+    expect(fromBox(host)).toBeNull();
+    [...row!.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`End night`))?.click();
+    await nextTick();
+
+    expect(patch).toHaveBeenCalledWith({ nightHours: NightHoursSchema.parse({}) });
+    expect(host.querySelector(`[data-night-by-hand]`)).toBeNull();
+});
+
 test("on, it shows the night and its length, read on the sandbox's own clock", async () => {
     settings.value = { ...settings.value, nightHours: NIGHT_ON };
     const host = mount();

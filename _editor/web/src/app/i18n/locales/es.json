@@ -659,6 +659,23 @@
             "groupedLabel": "Sesiones agrupadas",
             "groupedValue": "{count} · {size}"
         },
+        "boardNight": {
+            "tipTitle": "Buenas noches",
+            "tipNote": "Los agentes no te esperan",
+            "begin": "Empezar la noche",
+            "until": "hasta las {time}",
+            "headingDay": "Empezar la noche ahora",
+            "headingNight": "Noche hasta las {time}",
+            "whenDay": "Hasta las {time}, dentro de {span}",
+            "whenHand": "La empezaste a las {since} · termina dentro de {span}",
+            "whenHours": "Tus horas de sueño · terminan dentro de {span}",
+            "decide": "Los agentes no esperarán tus respuestas: eligen la opción que recomiendan y enumeran lo que decidieron por ti.",
+            "defer": "Los agentes no esperarán tus respuestas: terminan lo que no depende de ellas y guardan la pregunta para la mañana.",
+            "stillAsks": "Solo mientras nadie esté en el editor. Los permisos siguen esperándote.",
+            "hours": "Horas de sueño",
+            "goodNight": "Buenas noches",
+            "end": "Terminar la noche"
+        },
         "buildIdeas": {
             "pageMyBusiness": "Una página para mi negocio",
             "personalProfile": "Un perfil personal",
@@ -6492,6 +6509,9 @@
             "group": "Horas de sueño",
             "keep": "Respetar tus horas de sueño",
             "keepNote": "Mientras duermes y nadie está en el editor, una pregunta ya no detiene a un agente hasta la mañana.",
+            "byHand": "Noche hasta las {time}",
+            "byHandNote": "Empezada a mano a las {since} desde el tablero de agentes. Termina sola por la mañana.",
+            "endByHand": "Terminar la noche",
             "hours": "Noche",
             "from": "La noche empieza a las",
             "to": "La noche termina a las",

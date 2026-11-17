@@ -1,5 +1,5 @@
 import { asZone, UTC } from "../time/zone.js";
-import { NightHoursSchema, nightLength, withinNight } from "./night-hours.js";
+import { morningAfter, nightAt, nightByHandUntil, NightHoursSchema, nightLength, withinNight } from "./night-hours.js";
 
 // The window is read on a named clock, so every instant below is built in that zone's own terms.
 const WARSAW = asZone("Europe/Warsaw")!;
@@ -39,6 +39,37 @@ test("read on the sandbox's own clock, summer and winter alike, not the containe
     expect(withinNight(night, WARSAW, at("2026-07-04T21:30:00Z"))).toBe(true);
     // 06:30 UTC in November is 07:30 in Warsaw: morning there, though still before 07:00 UTC.
     expect(withinNight(night, WARSAW, at("2026-11-05T06:30:00Z"))).toBe(false);
+});
+
+test("the morning after an instant is the next time the clock reads `to`, today's or tomorrow's", () => {
+    expect(morningAfter({ to: "07:00" }, UTC, at("2026-11-04T21:40:00Z"))).toBe(at("2026-11-05T07:00:00Z"));
+    expect(morningAfter({ to: "07:00" }, UTC, at("2026-11-05T02:00:00Z"))).toBe(at("2026-11-05T07:00:00Z"));
+    // `to` itself is already the morning: the one after it is a day away.
+    expect(morningAfter({ to: "07:00" }, UTC, at("2026-11-05T07:00:00Z"))).toBe(at("2026-11-06T07:00:00Z"));
+    // On the sandbox's clock: 07:00 in Warsaw is 06:00 UTC in winter, 05:00 UTC in summer.
+    expect(morningAfter({ to: "07:00" }, WARSAW, at("2026-11-04T21:40:00Z"))).toBe(at("2026-11-05T06:00:00Z"));
+    expect(morningAfter({ to: "07:00" }, WARSAW, at("2026-07-04T21:40:00Z"))).toBe(at("2026-07-05T05:00:00Z"));
+    // Across the October changeover the clock goes back an hour overnight; the morning is still 07:00 on the wall.
+    expect(morningAfter({ to: "07:00" }, WARSAW, at("2026-10-24T20:00:00Z"))).toBe(at("2026-10-25T06:00:00Z"));
+});
+
+test("a night begun by hand lasts until that morning, whatever the hours or the switch say", () => {
+    const hours = NightHoursSchema.parse({ on: false, asleepSince: at("2026-11-04T21:40:00Z") });
+    expect(nightByHandUntil(hours, UTC, at("2026-11-04T21:40:00Z"))).toBe(at("2026-11-05T07:00:00Z"));
+    expect(nightAt(hours, UTC, at("2026-11-04T22:00:00Z"))).toBe(true);
+    expect(nightAt(hours, UTC, at("2026-11-05T06:59:00Z"))).toBe(true);
+    expect(nightAt(hours, UTC, at("2026-11-05T07:00:00Z"))).toBe(false);
+    // Read a minute behind the press (a fast browser, a clock that ticks by the minute), it has begun all the same.
+    expect(nightAt(hours, UTC, at("2026-11-04T21:39:00Z"))).toBe(true);
+    // Long before the press it was an ordinary evening, and the next evening is one again.
+    expect(nightAt(hours, UTC, at("2026-11-04T21:00:00Z"))).toBe(false);
+    expect(nightAt(hours, UTC, at("2026-11-05T23:30:00Z"))).toBe(false);
+});
+
+test("without a night begun by hand, it is night only inside switched-on hours", () => {
+    expect(nightAt(NightHoursSchema.parse({ on: true }), UTC, at("2026-11-04T23:30:00Z"))).toBe(true);
+    expect(nightAt(NightHoursSchema.parse({ on: false }), UTC, at("2026-11-04T23:30:00Z"))).toBe(false);
+    expect(nightByHandUntil(NightHoursSchema.parse({ on: true }), UTC, at("2026-11-04T23:30:00Z"))).toBeUndefined();
 });
 
 test("its length is said in minutes across midnight", () => {
