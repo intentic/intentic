@@ -637,6 +637,12 @@
       "since": "v1.342.0"
     }
   ],
+  "history:offload-profiles.json": [
+    {
+      "type": "{ profiles?: { durationMs?: number; key: string; lastAt: number; peakMemoryMb?: number; peaks?: number[]; runs: number }[] }",
+      "since": "unreleased"
+    }
+  ],
   "history:panels.json": [
     {
       "type": "{ key: string; port?: number; spec: { command: string; cwd: string; portEnv?: string[] } }[]",

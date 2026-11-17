@@ -64,6 +64,7 @@ import { inboundLinksDocument } from "../links/inbound-links.js";
 import { linkedChildrenDocument } from "../links/linked-children-store.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
 import { needsDocument } from "../needs/needs-store.js";
+import { commandProfilesDocument } from "../offload/command-profiles.js";
 import { syncEnrollmentsDocument } from "../peers/desktop-sync.js";
 import { hostEnrollmentsDocument, hostPairConsumedDocument, phoneEnrollmentsDocument, phonePairConsumedDocument, runnerEnrollmentsDocument, runnerPairConsumedDocument, syncPairConsumedDocument, webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
 import { peerToolsDocument } from "../peers/peer-tool-memory.js";
@@ -206,6 +207,7 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     loopDesignsDocument,
     loopsDocument,
     needsDocument,
+    commandProfilesDocument,
     syncEnrollmentsDocument,
     hostEnrollmentsDocument,
     hostPairConsumedDocument,
@@ -233,10 +235,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     runnerIdentityDocument,
     safetyLogDocument,
     autostartDocument,
-    credentialGatesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,

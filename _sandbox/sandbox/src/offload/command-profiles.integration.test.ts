@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commandKey, fileCommandProfiles } from "./command-profiles.js";
@@ -21,6 +21,30 @@ describe("the kind a line is profiled under", () => {
 });
 
 describe("the profiles", () => {
+    test("reads an existing profile file and keeps its measurements on update", async () => {
+        const root = mkdtempSync(join(tmpdir(), "profiles-"));
+        writeFileSync(
+            join(root, "offload-profiles.json"),
+            JSON.stringify({ profiles: [{ key: "cargo: cargo test -p a", runs: 2, peakMemoryMb: 9_000, durationMs: 85_000, lastAt: 1_001, peaks: [9_000, 4_000] }] }),
+        );
+        const profiles = fileCommandProfiles(root, () => 1_002);
+        expect(await profiles.lookup("cargo", "cargo test -p a")).toEqual({ key: "cargo: cargo test -p a", runs: 2, peakMemoryMb: 9_000, durationMs: 85_000, lastAt: 1_001 });
+        await profiles.record("cargo", "cargo test -p a", { peakMemoryMb: 6_000, durationMs: 50_000 });
+        expect(await profiles.list()).toEqual([{ key: "cargo: cargo test -p a", runs: 3, peakMemoryMb: 9_000, durationMs: 74_500, lastAt: 1_002 }]);
+    });
+
+    test("updates through separate handles keep every run", async () => {
+        const root = mkdtempSync(join(tmpdir(), "profiles-"));
+        const first = fileCommandProfiles(root, () => 1_000);
+        const second = fileCommandProfiles(root, () => 1_000);
+        await Promise.all([
+            first.record("cargo", "cargo test -p a", { peakMemoryMb: 9_000 }),
+            second.record("cargo", "cargo test -p a", { peakMemoryMb: 4_000 }),
+        ]);
+        expect(await first.list()).toEqual([{ key: "cargo: cargo test -p a", runs: 2, peakMemoryMb: 9_000, lastAt: 1_000 }]);
+        expect(await second.list()).toEqual(await first.list());
+    });
+
     test("plan memory by the worst of the last runs, average time, and survive a restart", async () => {
         const root = mkdtempSync(join(tmpdir(), "profiles-"));
         let clock = 1_000;

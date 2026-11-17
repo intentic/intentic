@@ -1,9 +1,8 @@
-import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { writeFileAtomic } from "@intentic/base/fs";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import { type CommandProfile, CommandProfileSchema } from "@intentic/sandbox-contract/schemas/offload";
 import { z } from "zod";
+import { defineDocument } from "../store/evolution/documents.js";
+import { openDocument } from "../store/open-document.js";
 
 /* WHAT EACH KIND OF HEAVY LINE TOOK, the last few times a runner ran it (RunnerCommand exit's `peakMemoryMb` and
    `durationMs`). The fleet places the next run of the same kind by it (runners/fleet-advice.ts `placeCommand`): a line
@@ -15,7 +14,6 @@ import { z } from "zod";
    targets, profile and features (`cargo test -p shinobi-society --release`), never a test filter or `-j`, so every
    filtered run of one suite counts towards one profile. For anything else, the program and its first two words. */
 
-const PROFILES_FILE = "offload-profiles.json";
 const MAX_KINDS = 300;
 // Memory is planned for the worst of the last few runs; time is a moving average.
 const PEAKS_KEPT = 5;
@@ -67,6 +65,13 @@ const StoredSchema = CommandProfileSchema.extend({ peaks: z.array(z.number().int
 type Stored = z.infer<typeof StoredSchema>;
 const FileSchema = z.object({ profiles: z.array(StoredSchema).default([]) });
 
+export const commandProfilesDocument = defineDocument({
+    root: "history",
+    path: "offload-profiles.json",
+    portability: "carry",
+    schema: FileSchema,
+});
+
 export interface Measured {
     readonly peakMemoryMb?: number | undefined;
     readonly durationMs?: number | undefined;
@@ -79,16 +84,6 @@ export interface CommandProfiles {
 }
 
 const publicOf = ({ peaks: _peaks, ...profile }: Stored): CommandProfile => profile;
-
-// A torn or hand-broken file reads as empty, which the schema then refuses: profiles relearn in a few runs.
-const parseJson = (text: string): ReturnType<typeof JSON.parse> => {
-    try {
-        return JSON.parse(text);
-    } catch {
-        // allow(silent-catch): see above; nothing in this file is worth refusing a placement over
-        return {};
-    }
-};
 
 const updated = (previous: Stored | undefined, key: string, measured: Measured, now: number): Stored => {
     const peaks = [...(previous?.peaks ?? []), ...(measured.peakMemoryMb === undefined ? [] : [measured.peakMemoryMb])].slice(-PEAKS_KEPT);
@@ -110,48 +105,26 @@ const updated = (previous: Stored | undefined, key: string, measured: Measured, 
 };
 
 export const fileCommandProfiles = (historyRoot: string, now: () => number = Date.now): CommandProfiles => {
-    const path = join(historyRoot, PROFILES_FILE);
-    let loaded: Promise<Map<string, Stored>> | undefined;
-    let writing: Promise<void> = Promise.resolve();
-
-    const load = (): Promise<Map<string, Stored>> => {
-        loaded ??= (async () => {
-            const text = await readFile(path, "utf8").catch(undefinedIfMissing);
-            if (text === undefined) {
-                return new Map<string, Stored>();
-            }
-            const parsed = FileSchema.safeParse(parseJson(text));
-            return new Map((parsed.success ? parsed.data.profiles : []).map((profile) => [profile.key, profile]));
-        })();
-        return loaded;
-    };
-
-    const save = (profiles: Map<string, Stored>): Promise<void> => {
-        const kept = [...profiles.values()].toSorted((left, right) => right.lastAt - left.lastAt).slice(0, MAX_KINDS);
-        writing = writing.then(() => writeFileAtomic(path, `${JSON.stringify({ profiles: kept }, null, 1)}\n`));
-        return writing;
-    };
+    // Unreadable profiles relearn in a few runs; the document layer preserves the old file before replacing it.
+    const file = openDocument(commandProfilesDocument, join(historyRoot, commandProfilesDocument.path), { fallback: () => ({ profiles: [] }) });
 
     return {
         lookup: async (label, command) => {
-            const found = (await load()).get(commandKey(label, command));
+            const key = commandKey(label, command);
+            const found = (await file.read()).profiles.find((profile) => profile.key === key);
             return found === undefined ? undefined : publicOf(found);
         },
         record: async (label, command, measured) => {
             if (measured.peakMemoryMb === undefined && measured.durationMs === undefined) {
                 return;
             }
-            const profiles = await load();
-            const key = commandKey(label, command);
-            profiles.set(key, updated(profiles.get(key), key, measured, now()));
-            if (profiles.size > MAX_KINDS) {
-                const oldest = [...profiles.values()].toSorted((left, right) => left.lastAt - right.lastAt)[0];
-                if (oldest !== undefined) {
-                    profiles.delete(oldest.key);
-                }
-            }
-            await save(profiles);
+            await file.update((current) => {
+                const profiles = new Map(current.profiles.map((profile) => [profile.key, profile]));
+                const key = commandKey(label, command);
+                profiles.set(key, updated(profiles.get(key), key, measured, now()));
+                return { profiles: [...profiles.values()].toSorted((left, right) => right.lastAt - left.lastAt).slice(0, MAX_KINDS) };
+            });
         },
-        list: async () => [...(await load()).values()].toSorted((left, right) => right.lastAt - left.lastAt).map(publicOf),
+        list: async () => (await file.read()).profiles.toSorted((left, right) => right.lastAt - left.lastAt).map(publicOf),
     };
 };

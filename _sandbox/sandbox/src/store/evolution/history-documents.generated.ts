@@ -45,6 +45,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "member-commit-identity.json", portability: "carry" },
     { path: "member-getting-started.json", portability: "carry" },
     { path: "model-refusals.json", portability: "carry" },
+    { path: "offload-profiles.json", portability: "carry" },
     { path: "panels.json", portability: "derived" },
     { path: "peer-tools.json", portability: "derived" },
     { path: "phone-enrollments.json", portability: "identity", note: "Pair your phone again from its card: the app is still installed." },
