@@ -8,7 +8,9 @@ import type {
     MachineLoad,
     MachineStanding,
     MachineStrain,
-    SessionsPlacement,FleetPressure
+    SessionsPlacement,
+    FleetPressure,
+    OffloadNeeds,
 } from "@intentic/sandbox-contract/schemas/offload";
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { Services } from "../composition.js";
@@ -23,7 +25,7 @@ import { credentialsTravel, runnerSlots } from "./runner-scheduler.js";
 // suggested only when this machine is busy, that one is strictly better off, and the session could actually start
 // there: the turn would refuse otherwise (stream-agent.ts), and a suggestion that ends in a refusal is worse than none.
 // The same reading and the same rule place a spawned child nobody placed (child-placement.ts) and a heavy command sent
-// to "any machine with room" (`roomierRunner`), so a session, a subagent and a test run never disagree about which
+// to "any machine with room" (`placeCommand`), so a session, a subagent and a test run never disagree about which
 // machine has room.
 
 const MB = 1_048_576;
@@ -255,18 +257,79 @@ export const readRunners = async (deps: FleetReadDeps, options: { readonly refre
 // A heavy command carries no model and no sign-in, so nothing but a machine's room decides whether it may go there.
 const COMMAND_FIT: SessionFit = { areas: false, shielded: false, travels: true };
 
+// A line that finished in less than this on its last runs stays here while this sandbox is merely busy: the snapshot
+// and the round trip would cost more than the wait in its own queue.
+const SHORT_COMMAND_MS = 20_000;
+
+// What one heavy line asks of the machine it runs on (offload/offload.routes.ts builds it from what the caller said and
+// what the line's profile measured), and whether it was asked for in so many words (`remote-run`).
+export interface CommandAsk {
+    readonly needs: OffloadNeeds;
+    readonly eager: boolean;
+    // How long the same kind of line took on its last runs, when known.
+    readonly durationMs?: number | undefined;
+}
+
+// Where it goes: a runner, or here (`why` says so when the caller should hear it).
+export type CommandPlace = { readonly runner: string; readonly name: string } | { readonly runner?: undefined; readonly why?: string };
+
+// Whether a machine can take the line. Here it is the machine's size that counts (a line that fits waits in its own
+// queue); on a runner the room it has now, since a runner short of it would only hold the line in its queue instead.
+export const fitsNeeds = (facts: RunnerFacts, needs: OffloadNeeds, room: "size" | "now"): boolean => {
+    if (needs.gpu === true && (facts.gpus ?? []).length === 0) {
+        return false;
+    }
+    if (needs.memoryMb === undefined) {
+        return true;
+    }
+    const size = facts.memoryLimitMb ?? facts.memoryMb;
+    return (room === "now" ? (facts.memoryFreeMb ?? size) : size) >= needs.memoryMb;
+};
+
+const needsInWords = (needs: OffloadNeeds): string =>
+    [needs.memoryMb === undefined ? undefined : `${String(Math.round(needs.memoryMb / 1024))} GiB of memory free`, needs.gpu === true ? "a GPU" : undefined]
+        .filter((part) => part !== undefined)
+        .join(" and ");
+
+const bestOf = (candidates: readonly { readonly machine: FleetMachine; readonly load: MachineLoad }[]) =>
+    candidates.toSorted(
+        (left, right) =>
+            RANK[left.load.standing] - RANK[right.load.standing] ||
+            right.load.headroom - left.load.headroom ||
+            left.load.load - right.load.load ||
+            left.machine.name.localeCompare(right.machine.name),
+    )[0];
+
 /**
- * The runner a heavy command should run on instead of here (settings `offload.commands` set to "any machine with room"):
- * none while this machine is calm, so a quiet sandbox never pays for a snapshot and a round trip, and otherwise the
- * runner the session advice would suggest, strictly better off by standing and by headroom.
+ * The machine a heavy line should run on (settings `offload.commands` set to "any machine with room", or `remote-run`).
+ * Only machines that fit what it needs (memory it measured or was said to need, a GPU) are candidates. Without `eager`
+ * it stays here while this sandbox is calm and fits it, and while merely busy for a line that finishes in seconds, so a
+ * quiet sandbox never pays for a snapshot and a round trip; it goes to a runner strictly better off than here, or to any
+ * runner that fits when here does not. `eager` takes the roomiest runner that fits whatever here's standing.
  */
-export const roomierRunner = async (deps: FleetReadDeps): Promise<{ readonly runner: string; readonly name: string } | undefined> => {
+export const placeCommand = async (deps: FleetReadDeps, ask: CommandAsk): Promise<CommandPlace> => {
+    const facts = await measureHere(deps);
     const here = await readHere(deps);
-    if (here.standing === "calm") {
-        return undefined;
+    const hereFits = fitsNeeds(facts, ask.needs, "size");
+    if (!ask.eager && hereFits && (here.standing === "calm" || (here.standing === "busy" && ask.durationMs !== undefined && ask.durationMs < SHORT_COMMAND_MS))) {
+        return {};
     }
     const runners = await readRunners(deps, { refresh: true });
-    return suggestionFor("auto", here, runners.map((runner) => fleetMachine(runner, COMMAND_FIT)));
+    const fitting = runners
+        .filter((runner) => runner.online && runner.facts !== undefined && fitsNeeds(runner.facts, ask.needs, "now"))
+        .map((runner) => fleetMachine(runner, COMMAND_FIT));
+    const candidates = fitting.flatMap((machine) => (machine.load === undefined || machine.load.standing === "full" ? [] : [{ machine, load: machine.load }]));
+    const best = ask.eager || !hereFits ? bestOf(candidates) : bestOf(candidates.filter(({ load }) => RANK[load.standing] < RANK[here.standing] && load.headroom > here.headroom));
+    if (best !== undefined) {
+        return { runner: best.machine.runner, name: best.machine.name };
+    }
+    if (!hereFits) {
+        return { why: `no machine has ${needsInWords(ask.needs)} for it right now` };
+    }
+    if (ask.eager) {
+        return { why: runners.length === 0 ? "no runner is set up on another machine" : "no runner with room fits it right now" };
+    }
+    return {};
 };
 
 /**

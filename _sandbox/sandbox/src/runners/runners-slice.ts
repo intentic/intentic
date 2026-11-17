@@ -3,6 +3,7 @@ import type { CompositionCore } from "../composition.js";
 import { createPeerHub, type PeerDoorDeps } from "../peers/peer-hub.js";
 import { defineSlice } from "../seams/slice.js";
 import { filePeerStore } from "../peers/peer-store.js";
+import { type CommandProfiles, fileCommandProfiles } from "../offload/command-profiles.js";
 import { createRemoteTurns, type RemoteTurns } from "./held-turns/remote-turns.js";
 import type { ParentCredentials } from "./runner-credentials.js";
 import { RUNNER_PEER, type RunnerAnnounced, type RunnerClient, type RunnerHub, type RunnerStore } from "./runner-peer.js";
@@ -18,6 +19,8 @@ export interface RunnersSlice {
     // When this daemon is a runner, the turns it runs for its parent, held past the socket that dispatched them
     // (remote-turns.ts); empty on any other daemon.
     readonly remoteTurns: RemoteTurns;
+    // What each kind of heavy line took on its last offloaded runs, which places the next one (offload/command-profiles.ts).
+    readonly commandProfiles: CommandProfiles;
 }
 
 // Builds the runners slice: the same peer door as a device or a browser, with the parent left for runner mode to fill.
@@ -26,6 +29,7 @@ const createRunnersSlice = ({ historyRoot, logger, peerTools }: PeerDoorDeps): R
     runnerHub: createPeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>(RUNNER_PEER.hub, logger, peerTools),
     runnerParent: {},
     remoteTurns: createRemoteTurns(),
+    commandProfiles: fileCommandProfiles(historyRoot),
 });
 
 export const runnersSlice = defineSlice<RunnersSlice>({

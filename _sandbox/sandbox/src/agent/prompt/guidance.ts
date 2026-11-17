@@ -213,7 +213,10 @@ const fleetFull = (facts: EntryFacts): string => {
             ? ""
             : ` Subagents you start with ${toolName(facts, "subagents", "spawn")} and leave \`on\` out go there by themselves; the ` +
               "ones your runtime runs in-process stay here and add to the load, so start work that builds or tests with the spawn tool.";
-    return `This sandbox is full right now (memory or CPU), while ${machines} room.${spawn}`;
+    return (
+        `This sandbox is full right now (memory or CPU), while ${machines} room.${spawn}` +
+        " A build or test of your own can go there with `remote-run [--out PATH]... [--needs mem=12G,gpu] -- <command>`: it runs on the machine with most room and brings back its output, exit code, every file it edited and each --out it made (a built binary, rendered frames), or runs here when none fits."
+    );
 };
 const devicesOf = ({ hostDevices }: GuidanceFacts): HostDeviceReach => hostDevices ?? { ids: [] };
 const browsersOf = ({ ownBrowsers }: GuidanceFacts): OwnBrowserReach => ownBrowsers ?? { browsers: [], unlisted: [] };

@@ -18,9 +18,30 @@ export const OffloadTargetSchema = z.object({
 });
 export type OffloadTarget = z.infer<typeof OffloadTargetSchema>;
 
+// What a line needs of the machine it runs on, said by whoever starts it (`remote-run --needs mem=12G,gpu`); the
+// daemon adds what the line's own profile measured (offload/command-profiles.ts). A machine short of it is never picked.
+export const OffloadNeedsSchema = z.object({
+    memoryMb: z.number().int().positive().optional(),
+    gpu: z.boolean().optional(),
+});
+export type OffloadNeeds = z.infer<typeof OffloadNeedsSchema>;
+
+// The question `offload-run` asks before it snapshots anything. `eager` (remote-run's) picks the machine with the most
+// room that fits even while this sandbox is calm; without it a line leaves only a busy sandbox, or one it does not fit.
+// `label` and `command` name the line, so what it measured on earlier runs counts.
+export const OffloadTargetInputSchema = z.object({
+    runner: z.string().min(1),
+    memoryMb: z.coerce.number().int().positive().optional(),
+    gpu: z.stringbool().optional(),
+    eager: z.stringbool().optional(),
+    label: z.string().min(1).max(80).optional(),
+    command: z.string().max(4000).optional(),
+});
+export type OffloadTargetInput = z.infer<typeof OffloadTargetInputSchema>;
+
 // What settings `offload.commands` names instead of one runner: whichever has the most room at the moment the command
-// starts, and only while this sandbox is busy (runners/fleet-advice.ts `roomierRunner`). While this sandbox is calm the
-// command runs here without a word. Reserved: no runner is ever enrolled under it.
+// starts, and only while this sandbox is busy or cannot fit the line (runners/fleet-advice.ts `placeCommand`). While
+// this sandbox is calm the command runs here without a word. Reserved: no runner is ever enrolled under it.
 export const OFFLOAD_ANY_RUNNER = "auto";
 
 export const OffloadRunSchema = RunnerCommandSchema.extend({ runner: z.string().min(1) });
@@ -43,8 +64,24 @@ export const OffloadRecordSchema = z.object({
     endedAt: z.number().optional(),
     code: z.number().int().optional(),
     failure: z.string().optional(),
+    // What the runner measured: the most memory the line held at once, and how long it ran there.
+    peakMemoryMb: z.number().int().nonnegative().optional(),
+    durationMs: z.number().int().nonnegative().optional(),
 });
 export type OffloadRecord = z.infer<typeof OffloadRecordSchema>;
+
+// What earlier runs of one kind of line measured (offload/command-profiles.ts), keyed by its rule and the parts of the
+// line that decide its size (`cargo test -p shinobi-society`, not the test filter after it).
+export const CommandProfileSchema = z.object({
+    key: z.string().min(1),
+    runs: z.number().int().positive(),
+    // The most any of the last few runs held: memory is planned for the worst recent run, not the average.
+    peakMemoryMb: z.number().int().nonnegative().optional(),
+    // A moving average of how long it ran, on whichever machine.
+    durationMs: z.number().int().nonnegative().optional(),
+    lastAt: z.number(),
+});
+export type CommandProfile = z.infer<typeof CommandProfileSchema>;
 
 // One kind of heavy work the owner can send elsewhere: a heavy-command rule this sandbox queues (its id, as settings
 // `offload.commands` keys it) and the pattern that sorts a line into it.

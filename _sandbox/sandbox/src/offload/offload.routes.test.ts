@@ -8,6 +8,7 @@ import { createOffloadRoutes } from "./offload.routes.js";
 import { failureOf, orpcLink } from "../peers/orpc-link.testing.js";
 import { mergeHeavyRules } from "@intentic/constants/heavy-rules";
 import { measureHereForTest } from "../runners/fleet-advice.js";
+import { type CommandProfiles, commandKey, type Measured } from "./command-profiles.js";
 
 // This sandbox's side of an offloaded command: whether a runner can take it, the runner's frames relayed unchanged, and
 // every way a runner cannot take it after all answering with one refusal, which sends the line back here.
@@ -24,7 +25,23 @@ interface FakeRunner {
 const QUIET: RunnerFacts = { cpus: 8, memoryMb: 32_768, freeDiskMb: 100_000, load: 0.1, memoryFreeMb: 28_000 };
 const SWAMPED: RunnerFacts = { ...QUIET, cpus: 16, load: 2 };
 
-const world = (runners: Record<string, FakeRunner | "offline">, facts: Record<string, RunnerFacts> = {}) => {
+// Profiles in memory, keyed the way the file keeps them; `recorded` is every measurement handed in.
+const memoryProfiles = (peaks: Record<string, number> = {}) => {
+    const recorded: Array<{ readonly key: string; readonly measured: Measured }> = [];
+    const profiles: CommandProfiles = {
+        lookup: async (label, command) => {
+            const key = commandKey(label, command);
+            return peaks[key] === undefined ? undefined : { key, runs: 1, peakMemoryMb: peaks[key], lastAt: 0 };
+        },
+        record: async (label, command, measured) => {
+            recorded.push({ key: commandKey(label, command), measured });
+        },
+        list: async () => [],
+    };
+    return { profiles, recorded };
+};
+
+const world = (runners: Record<string, FakeRunner | "offline">, facts: Record<string, RunnerFacts> = {}, profiles: CommandProfiles = memoryProfiles().profiles) => {
     const deps: OffloadDeps = {
         runners: unstubbed<OffloadDeps["runners"]>("runners", {
             list: async () => Object.keys(runners).map((id) => ({ id, host: id === "runner-omen" ? "omen" : undefined })) as never,
@@ -62,6 +79,7 @@ const world = (runners: Record<string, FakeRunner | "offline">, facts: Record<st
         privacyShield: unstubbed<OffloadDeps["privacyShield"]>("privacyShield", {}),
         sandboxSettings: unstubbed<OffloadDeps["sandboxSettings"]>("sandboxSettings", {}),
         workspace: unstubbed<OffloadDeps["workspace"]>("workspace", {}),
+        commandProfiles: profiles,
     };
     return createOffloadRoutes(deps);
 };
@@ -85,6 +103,8 @@ const run = (runner: string): OffloadRun => ({
     command: "pnpm test src/app",
     env: {},
     exports: [],
+    outputs: [],
+    have: {},
     label: "bun-test",
 });
 
@@ -125,6 +145,40 @@ describe("whether any machine with room can take a command", () => {
         expect(await call(routes.target, { runner: "auto" }, { context })).toEqual({ runner: "runner-omen", name: "omen", ready: true });
     });
 
+    test("never picks a machine short of what the command needs, and leaves a calm sandbox for one that has it", async () => {
+        const GPU: RunnerFacts = { ...QUIET, gpus: [{ name: "RTX 3080", memoryMb: 16_384 }] };
+        measureHereForTest(async () => ({ ...QUIET, gpus: [] }));
+        const routes = world({ "runner-omen": { cancelled: [] }, "runner-z440": { cancelled: [] } }, { "runner-omen": QUIET, "runner-z440": GPU });
+        // This sandbox is calm, yet it has no GPU: the one runner with one takes it.
+        expect(await call(routes.target, { runner: "auto", gpu: "true" }, { context })).toMatchObject({ runner: "runner-z440", ready: true });
+        // No machine has 64 GiB free: here, saying why.
+        expect(await call(routes.target, { runner: "auto", memoryMb: 65_536 }, { context })).toMatchObject({ ready: false, why: expect.stringContaining("64 GiB") });
+    });
+
+    test("plans by the most memory the same kind of command held on its last runs", async () => {
+        measureHereForTest(async () => ({ ...QUIET, memoryLimitMb: 18_432 }));
+        const command = "cargo test -p shinobi-society -- visibility::tests";
+        const { profiles } = memoryProfiles({ [commandKey("cargo-verify", command)]: 20_000 });
+        const routes = world({ "runner-omen": { cancelled: [] }, "runner-z440": { cancelled: [] } }, { "runner-omen": QUIET, "runner-z440": { ...QUIET, memoryFreeMb: 12_000 } }, profiles);
+        // 20 GB does not fit this 18 GB sandbox, nor z440's 12 GB free: omen, calm sandbox or not.
+        expect(await call(routes.target, { runner: "auto", label: "cargo-verify", command: "cargo test -p shinobi-society -- other::filter" }, { context })).toMatchObject({
+            runner: "runner-omen",
+            ready: true,
+        });
+    });
+
+    test("picks the roomiest runner that fits while this sandbox is calm when asked in so many words, or says why it cannot", async () => {
+        measureHereForTest(async () => QUIET);
+        const routes = world({ "runner-omen": { cancelled: [] } }, { "runner-omen": QUIET });
+        expect(await call(routes.target, { runner: "auto", eager: "true" }, { context })).toMatchObject({ runner: "runner-omen", ready: true });
+        expect(await call(world({}).target, { runner: "auto", eager: "true" }, { context })).toMatchObject({ ready: false, why: "no runner is set up on another machine" });
+    });
+
+    test("checks a runner named outright against what the command needs", async () => {
+        const routes = world({ "runner-omen": { cancelled: [] } }, { "runner-omen": { ...QUIET, gpus: [] } });
+        expect(await call(routes.target, { runner: "runner-omen", gpu: "true" }, { context })).toMatchObject({ ready: false, why: "omen has no GPU this command can use" });
+    });
+
     test("stays here in silence when no runner is better off, or none is online", async () => {
         measureHereForTest(async () => SWAMPED);
         expect(await call(world({ "runner-omen": { cancelled: [] } }, { "runner-omen": SWAMPED }).target, { runner: "auto" }, { context })).toMatchObject({ ready: false });
@@ -147,6 +201,15 @@ describe("an offloaded run", () => {
         expect(runs).toEqual([
             { runId: "run-0000abcd", runner: "runner-omen", name: "omen", label: "bun-test", command: "pnpm test src/app", startedAt: expect.any(Number), endedAt: expect.any(Number), code: 0 },
         ]);
+    });
+
+    test("keeps what the runner measured, on the run's record and in its kind's profile", async () => {
+        const { profiles, recorded } = memoryProfiles();
+        const routes = world({ "runner-omen": { frames: [{ kind: "exit", code: 0, ran: true, files: {}, peakMemoryMb: 7_100, durationMs: 93_000 }], cancelled: [] } }, {}, profiles);
+        await frames(routes, run("runner-omen"));
+        expect(recorded).toEqual([{ key: commandKey("bun-test", "pnpm test src/app"), measured: { peakMemoryMb: 7_100, durationMs: 93_000 } }]);
+        const { runs } = await call(routes.runs, undefined, { context });
+        expect(runs[0]).toMatchObject({ peakMemoryMb: 7_100, durationMs: 93_000, code: 0 });
     });
 
     test("is refused, so it runs here, when the runner is offline or predates offloading", async () => {

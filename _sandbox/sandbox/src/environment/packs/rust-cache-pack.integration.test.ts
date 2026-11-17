@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, openSync, readlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { DEFAULT_PRIVACY_SHIELD } from "@intentic/sandbox-contract/schemas/privacy";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
@@ -118,4 +118,14 @@ test("the wrapper is plain rustc without sccache, without a cache dir, or where 
     const file = join(mkdtempSync(join(tmpdir(), "history-")), "sccache");
     writeFileSync(file, "");
     expect(wrap(wrapper, { ...stub, SCCACHE_DIR: file })).toBe("plain");
+});
+
+// The cc crate compiles a build script's C and C++ through RUSTC_WRAPPER only when the wrapper's file is named like a
+// cache it knows (cc 1.11's VALID_WRAPPERS): the pack names the same wrapper through a link called sccache, off the PATH.
+test("the wrapper is reached through a link the cc crate recognises, so a bundled C++ library is cached too", async () => {
+    const content = (await readPack("rust-cache"))!.content;
+    const wrapper = /ENV RUSTC_WRAPPER=(\S+)/u.exec(content)?.[1] ?? "";
+    expect(basename(wrapper)).toBe("sccache");
+    expect(wrapper.startsWith("/usr/local/bin/")).toBe(false);
+    expect(content).toContain(`ln -sf /usr/local/bin/rustc-cached ${wrapper}`);
 });

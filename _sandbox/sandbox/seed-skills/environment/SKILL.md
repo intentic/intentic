@@ -114,8 +114,8 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ```
 
 **Write no compiler-cache lines into a Rust recipe.** Wherever the overlay installs a Rust toolchain, the daemon
-composes the `rust-cache` pack in front of it by itself: sccache, a `rustc-cached` wrapper as `RUSTC_WRAPPER`, and one
-cache at `/history/cache/sccache` (30 GB cap) that every checkout's builds read and fill, so a new conversation's first
+composes the `rust-cache` pack in front of it by itself: sccache, a `rustc-cached` wrapper as `RUSTC_WRAPPER` (through a
+link named `sccache`, so the C and C++ a build script compiles with the cc crate is cached as well), and one cache at `/history/cache/sccache` (30 GB cap) that every checkout's builds read and fill, so a new conversation's first
 build takes the dependencies other checkouts already compiled instead of compiling them again. It outlives a restart,
 and Settings → Storage counts it as a build cache. It caches library crates; proc-macros, build scripts, binaries and
 the workspace's own crates still compile in each checkout. A recipe that sets its own `RUSTC_WRAPPER` keeps it and gets

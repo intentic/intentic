@@ -114,6 +114,7 @@ test("a full sandbox is said with the machines that have room, and the spawn too
     const note = surroundingsNote(fleet(), "c1", FRESH, pressed)?.text ?? "";
     expect(note).toContain("This sandbox is full right now (memory or CPU), while omen and z440 have room.");
     expect(note).toContain("`mcp__subagents__spawn`");
+    expect(note).toContain("`remote-run [--out PATH]... [--needs mem=12G,gpu] -- <command>`");
     expect(surroundingsNote(fleet(), "c1", FRESH, { ...pressed, subagents: false })?.text).not.toContain("spawn");
     expect(surroundingsNote(fleet(), "c1", FRESH, QUIET)).toBeUndefined();
     // Said once, then cleared in words that say the sandbox has room again.

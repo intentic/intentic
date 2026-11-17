@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// offload-run --to <runner> --label <rule> [--here <prefix>] [--env NAME]… [--export NAME]… -- <command> [args…]
+// offload-run --to <runner> --label <rule> [--here <prefix>] [--env NAME]… [--export NAME]… [--out PATH]…
+//             [--needs mem=12G,gpu] [--eager] -- <command> [args…]
+// offload-run --remote-run [--to <runner>] [--out PATH]… [--needs …] [--env NAME]… -- <command> [args…]   (bin/remote-run)
 //
 // Runs one heavy command on a runner on one of the owner's machines instead of in this sandbox (settings `offload`). It
 // is put in front of the line by the daemon, never typed: by the agent's Bash hook when the line matches a heavy-command
@@ -20,15 +22,41 @@
 // --env NAME carries this environment's value of NAME to the runner. Nothing else travels, and no secret ever: the hook
 // runs a line that resolved one here.
 //
+// --out PATH names something the command makes that has to come back whole, which the patch never carries because git
+// ignores it: a binary it built (`--out target/debug/integra`), a directory of frames it rendered (`--out /tmp/vfx`).
+// Inside the repository or under /tmp; a file this tree already holds byte for byte is not sent again. --needs says what
+// the machine must have (`mem=12G`, `gpu`): a runner short of it is never picked. --eager (remote-run's) picks the
+// machine with the most room that fits even while this sandbox is calm; without it "auto" leaves only a busy sandbox,
+// or one the command does not fit.
+//
+// --remote-run is how an agent asks for it in so many words (bin/remote-run): "auto", eager, labelled `remote-run`,
+// and run here as it is when no machine fits.
+//
 // Auth is the per-boot agent token, which auth/grants.ts admits to the /offload routes. node:http rather than fetch:
 // a quiet test suite can print nothing for longer than undici's body timeout, which would cut a healthy run.
 
 import { execFileSync, spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import {
+    chmodSync,
+    closeSync,
+    copyFileSync,
+    existsSync,
+    lstatSync,
+    mkdirSync,
+    mkdtempSync,
+    openSync,
+    readdirSync,
+    readFileSync,
+    renameSync,
+    rmSync,
+    writeFileSync,
+    writeSync,
+} from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { gunzipSync } from "node:zlib";
 
 // The per-boot agent token; a test points INTENTIC_AGENT_TOKEN_PATH at its own.
 const TOKEN_PATH = process.env.INTENTIC_AGENT_TOKEN_PATH ?? "/run/intentic/agent.token";
@@ -42,15 +70,44 @@ const say = (line) => process.stderr.write(`offload: ${line}\n`);
 // POSIX single-quoting, the same rule as @intentic/sandbox-run's shellQuote.
 const quote = (word) => (/^[\w@%+=:,./-]+$/u.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`);
 
+// `mem=12G,gpu` as the daemon asks it: memory in MiB, and whether a GPU is needed. A word it does not know is said.
+const parseNeeds = (spec) => {
+    const needs = {};
+    for (const word of String(spec ?? "").split(",").map((part) => part.trim()).filter((part) => part !== "")) {
+        const memory = /^mem(?:ory)?=(\d+(?:\.\d+)?)\s*([kmgt]?)i?b?$/iu.exec(word);
+        if (memory !== null) {
+            const scale = { "": 1 / 1_048_576, k: 1 / 1024, m: 1, g: 1024, t: 1024 * 1024 }[memory[2].toLowerCase()];
+            needs.memoryMb = Math.max(1, Math.ceil(Number(memory[1]) * scale));
+        } else if (/^gpu$/iu.test(word)) {
+            needs.gpu = true;
+        } else {
+            say(`--needs: "${word}" is not something a machine can be asked for (mem=<size>, gpu); ignored`);
+        }
+    }
+    return needs;
+};
+
 const parseArgs = (argv) => {
     const at = argv.indexOf("--");
     const flags = at === -1 ? argv : argv.slice(0, at);
     const command = at === -1 ? [] : argv.slice(at + 1);
-    const options = { to: undefined, label: "heavy", here: "", env: [], exports: [] };
+    const options = { to: undefined, label: "heavy", here: "", env: [], exports: [], outputs: [], needs: {}, eager: false };
+    if (flags.includes("--remote-run")) {
+        Object.assign(options, { to: "auto", label: "remote-run", eager: true });
+    }
     for (let index = 0; index < flags.length; index += 1) {
         const flag = flags[index];
         const value = flags[index + 1];
-        if (flag === "--to") {
+        if (flag === "--remote-run") {
+            continue;
+        } else if (flag === "--eager") {
+            options.eager = true;
+            continue;
+        } else if (flag === "--out") {
+            options.outputs.push(value);
+        } else if (flag === "--needs") {
+            options.needs = { ...options.needs, ...parseNeeds(value) };
+        } else if (flag === "--to") {
             options.to = value;
         } else if (flag === "--label") {
             options.label = value;
@@ -70,7 +127,10 @@ const parseArgs = (argv) => {
 
 const { options, command } = parseArgs(process.argv.slice(2));
 if (command.length === 0) {
-    process.stderr.write("usage: offload-run --to <runner> --label <rule> [--here <prefix>] [--env NAME]… [--export NAME]… -- <command>\n");
+    process.stderr.write(
+        "usage: offload-run --to <runner> --label <rule> [--here <prefix>] [--env NAME]… [--export NAME]… [--out PATH]… [--needs mem=12G,gpu] [--eager] -- <command>\n" +
+            "       remote-run [--to <runner>] [--out PATH]… [--needs mem=12G,gpu] [--env NAME]… -- <command>\n",
+    );
     process.exit(2);
 }
 
@@ -205,6 +265,167 @@ const bringBack = (toplevel, exit) => {
     }
 };
 
+// Each --out as the runner reads it: repo-relative, or absolute under /tmp. Anything else could never come back, so the
+// command runs here instead, where it makes the path itself.
+const outputPaths = (toplevel, outputs) => {
+    const paths = [];
+    for (const given of outputs) {
+        const absolute = resolve(process.cwd(), given);
+        const inRepo = relative(toplevel, absolute);
+        if (inRepo !== "" && !inRepo.startsWith("..") && !isAbsolute(inRepo)) {
+            paths.push(inRepo.split("\\").join("/"));
+        } else if (absolute.startsWith("/tmp/")) {
+            paths.push(absolute);
+        } else {
+            return { refused: `--out ${given} is neither inside this repository nor under /tmp, so it could not come back` };
+        }
+    }
+    return { paths };
+};
+
+// Where an output path lands here.
+const destinationOf = (toplevel, path) => (path.startsWith("/tmp/") ? path : join(toplevel, path));
+
+const sha256File = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
+
+// What this tree already holds at each output, by digest, named as the runner will name it (a directory's files joined
+// to it), so a binary rebuilt from unchanged sources is said rather than sent.
+const haveOf = (toplevel, paths) => {
+    const have = {};
+    let counted = 0;
+    const walk = (absolute, path) => {
+        for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+            if (counted >= 20_000) {
+                return;
+            }
+            const childAbsolute = join(absolute, entry.name);
+            const childPath = `${path.replace(/\/+$/u, "")}/${entry.name}`;
+            if (entry.isDirectory()) {
+                walk(childAbsolute, childPath);
+            } else if (entry.isFile()) {
+                have[childPath] = sha256File(childAbsolute);
+                counted += 1;
+            }
+        }
+    };
+    for (const path of paths) {
+        const absolute = destinationOf(toplevel, path);
+        try {
+            const info = lstatSync(absolute);
+            if (info.isFile()) {
+                have[path] = sha256File(absolute);
+            } else if (info.isDirectory()) {
+                walk(absolute, path);
+            }
+        } catch {
+            // Not here yet: everything at that path comes back.
+        }
+    }
+    return have;
+};
+
+// Output files as they arrive: each written beside where it goes, checked against its digest, then moved in place, so a
+// run cut off mid-file never leaves half a binary where the whole one was.
+const receiver = (toplevel, runId) => {
+    const open = new Map();
+    let delivered = 0;
+    let bytes = 0;
+    let same = 0;
+    const failed = [];
+    const drop = (path) => {
+        const file = open.get(path);
+        if (file !== undefined) {
+            closeSync(file.fd);
+            rmSync(file.part, { force: true });
+            open.delete(path);
+        }
+    };
+    const take = (frame) => {
+        if (frame.same === true) {
+            same += 1;
+            return;
+        }
+        let file = open.get(frame.path);
+        if (file === undefined) {
+            const destination = destinationOf(toplevel, frame.path);
+            mkdirSync(dirname(destination), { recursive: true });
+            const part = `${destination}.offload-${runId}.part`;
+            file = { destination, part, fd: openSync(part, "w"), hash: createHash("sha256"), size: 0 };
+            open.set(frame.path, file);
+        }
+        if (frame.data !== undefined) {
+            const piece = gunzipSync(Buffer.from(frame.data, "base64"));
+            writeSync(file.fd, piece);
+            file.hash.update(piece);
+            file.size += piece.length;
+        }
+        if (frame.end !== undefined) {
+            closeSync(file.fd);
+            open.delete(frame.path);
+            if (file.hash.digest("hex") !== frame.end.sha256 || file.size !== frame.end.size) {
+                rmSync(file.part, { force: true });
+                failed.push(frame.path);
+                return;
+            }
+            chmodSync(file.part, frame.end.mode);
+            renameSync(file.part, file.destination);
+            delivered += 1;
+            bytes += file.size;
+        }
+    };
+    // Whatever never finished is removed, and the tally said.
+    const finish = () => {
+        for (const path of [...open.keys()]) {
+            failed.push(path);
+            drop(path);
+        }
+        return { delivered, bytes, same, failed };
+    };
+    return { take, finish };
+};
+
+// One line on what came back whole, and one for each kind of output that did not.
+const sayOutputs = (brought, exit, declared, name) => {
+    // A runner from before outputs reads the run without them and measures nothing either: say so, rather than leave the
+    // caller looking for a binary that never came.
+    const accounted = brought.delivered + brought.same + brought.failed.length + (exit.missing ?? []).length + (exit.tooBig ?? []).length;
+    if (declared.length > 0 && accounted === 0 && exit.durationMs === undefined) {
+        say(`the runner on ${name} predates --out, so ${declared.join(", ")} stayed there; update it from Devices`);
+    }
+    if (brought.delivered > 0 || brought.same > 0) {
+        const same = brought.same > 0 ? `, ${brought.same} already here unchanged` : "";
+        say(`brought back ${brought.delivered} output file${brought.delivered === 1 ? "" : "s"} (${megabytes(brought.bytes)})${same}`);
+    }
+    if ((exit.missing ?? []).length > 0) {
+        say(`never made there: ${exit.missing.join(", ")}`);
+    }
+    if ((exit.tooBig ?? []).length > 0) {
+        say(`too big to bring back, left on the runner: ${exit.tooBig.join(", ")}`);
+    }
+    if (brought.failed.length > 0) {
+        say(`did not arrive whole, so not put in place: ${brought.failed.join(", ")}`);
+    }
+};
+
+const megabytes = (bytes) => `${(bytes / 1_048_576).toFixed(bytes < 10 * 1_048_576 ? 1 : 0)} MB`;
+
+// The question asked before anything is copied, with what the command needs and what it is, for "auto" to place by.
+const targetPath = (to, command) => {
+    const query = new URLSearchParams();
+    if (options.needs.memoryMb !== undefined) {
+        query.set("memoryMb", String(options.needs.memoryMb));
+    }
+    if (options.needs.gpu === true) {
+        query.set("gpu", "true");
+    }
+    if (options.eager) {
+        query.set("eager", "true");
+    }
+    query.set("label", options.label);
+    query.set("command", command.slice(0, 4000));
+    return `/offload/runners/${encodeURIComponent(to)}?${query.toString()}`;
+};
+
 const main = async () => {
     if (options.to === undefined || options.to === "") {
         runHere("no runner named");
@@ -215,7 +436,7 @@ const main = async () => {
     // exactly that answer; any other carries its reason.
     let target;
     try {
-        const answer = await call("GET", `/offload/runners/${encodeURIComponent(options.to)}`);
+        const answer = await call("GET", targetPath(options.to, command.map(quote).join(" ")));
         target = answer.status === 200 ? JSON.parse(answer.text) : undefined;
     } catch {
         target = undefined;
@@ -236,6 +457,11 @@ const main = async () => {
     }
     if (repo === undefined) {
         runHere("this repository is not one the runner can fetch");
+        return;
+    }
+    const outputs = outputPaths(toplevel, options.outputs);
+    if (outputs.refused !== undefined) {
+        runHere(outputs.refused);
         return;
     }
 
@@ -269,6 +495,8 @@ const main = async () => {
     process.on("SIGINT", () => stop("SIGINT"));
 
     const env = Object.fromEntries(options.env.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]]));
+    const have = haveOf(toplevel, outputs.paths);
+    const files = receiver(toplevel, runId);
     let buffer = "";
     let exit;
     let refused;
@@ -277,6 +505,8 @@ const main = async () => {
             say(`[${target.name}] ${frame.text}`);
         } else if (frame.kind === "output") {
             (frame.stream === "stderr" ? process.stderr : process.stdout).write(frame.text);
+        } else if (frame.kind === "file") {
+            files.take(frame);
         } else if (frame.kind === "exit") {
             exit = frame;
         } else if (frame.kind === "refused") {
@@ -297,6 +527,8 @@ const main = async () => {
                 command: command.map(quote).join(" "),
                 env,
                 exports: options.exports,
+                outputs: outputs.paths,
+                have,
                 label: options.label,
             },
             (chunk) => {
@@ -327,6 +559,7 @@ const main = async () => {
         refused ??= exit === undefined ? `the daemon could not be reached (${error.message})` : undefined;
     }
     dropRef();
+    const brought = files.finish();
     if (exit === undefined) {
         if (stopped) {
             process.exit(143);
@@ -346,6 +579,7 @@ const main = async () => {
         say(`${target.name}: ${exit.failure}`);
     }
     bringBack(toplevel, exit);
+    sayOutputs(brought, exit, outputs.paths, target.name);
     process.exit(exit.code);
 };
 

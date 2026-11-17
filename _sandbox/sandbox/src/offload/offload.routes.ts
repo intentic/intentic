@@ -1,20 +1,30 @@
 import { errorMessage } from "@intentic/base/errors";
-import { OFFLOAD_ANY_RUNNER, type OffloadFrame, type OffloadRecord, type OffloadTarget } from "@intentic/sandbox-contract/schemas/offload";
+import {
+    OFFLOAD_ANY_RUNNER,
+    type OffloadFrame,
+    type OffloadNeeds,
+    type OffloadRecord,
+    type OffloadTarget,
+    type OffloadTargetInput,
+} from "@intentic/sandbox-contract/schemas/offload";
 import { offloadContract } from "@intentic/sandbox-contract/contracts/offload.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { areasOf } from "../auth/principal.js";
-import { type FleetAdviceDeps, fleetAdvice, roomierRunner } from "../runners/fleet-advice.js";
+import { type FleetAdviceDeps, fitsNeeds, fleetAdvice, placeCommand } from "../runners/fleet-advice.js";
+import { opt } from "../opt.js";
 
 /* THIS SANDBOX'S SIDE OF AN OFFLOADED COMMAND (settings `offload`). The in-sandbox `offload-run` command asks whether the
    runner a kind of heavy work goes to can take it, snapshots the tree, then runs the line through here, which relays it
    to that runner (runners/runner-command.ts) and streams its frames back unchanged. Nothing here decides WHAT goes where:
    the Bash hook already put `offload-run --to <runner>` in front of the line from the setting. A runner that cannot take
    it answers with one refusal, and `offload-run` runs the line here instead. The one decision made here is for a kind
-   sent to "any machine with room" (OFFLOAD_ANY_RUNNER): which runner, if any, at the moment the line starts. */
+   sent to "any machine with room" (OFFLOAD_ANY_RUNNER) or asked for with `remote-run`: which runner, if any, at the
+   moment the line starts, by what it needs (said, and measured on its earlier runs: command-profiles.ts) and how full
+   each machine is (runners/fleet-advice.ts `placeCommand`). Each run's measurements go back into its profile. */
 
-export type OffloadDeps = Pick<Services, "runners" | "runnerHub" | "logger" | "heavyCommands"> & FleetAdviceDeps;
+export type OffloadDeps = Pick<Services, "runners" | "runnerHub" | "logger" | "heavyCommands" | "commandProfiles"> & FleetAdviceDeps;
 
 // Recent runs the runner card lists; a few dozen is enough to see what went where, and it is all in memory.
 const RECORDS_KEPT = 40;
@@ -26,22 +36,52 @@ const nameOf = async (deps: OffloadDeps, runner: string): Promise<string> => {
     return enrolled?.host ?? runner;
 };
 
-// "Any machine with room": the runner the fleet reading picks, else here without a word, since a calm sandbox running its
-// own tests is not news. A pick that fails the checks below by the time it is asked is said like any other.
-const anyTarget = async (deps: OffloadDeps): Promise<OffloadTarget> => {
-    let picked: Awaited<ReturnType<typeof roomierRunner>>;
-    try {
-        picked = await roomierRunner(deps);
-    } catch (error) {
-        deps.logger.warn({ err: error }, "offload: the fleet could not be read, the line runs here");
-        picked = undefined;
-    }
-    return picked === undefined ? { runner: OFFLOAD_ANY_RUNNER, name: "this sandbox", ready: false } : await offloadTarget(deps, picked.runner);
+// What the line needs: what its caller said, raised to what the same kind of line held on its last runs.
+const askOf = async (deps: OffloadDeps, input: OffloadTargetInput): Promise<{ readonly needs: OffloadNeeds; readonly durationMs?: number | undefined }> => {
+    // allow(silent-catch): an unreadable profile file places the line by what was said alone
+    const profile = input.label === undefined || input.command === undefined ? undefined : await deps.commandProfiles.lookup(input.label, input.command).catch(() => undefined);
+    const memoryMb = Math.max(input.memoryMb ?? 0, profile?.peakMemoryMb ?? 0);
+    return { needs: { ...opt("memoryMb", memoryMb > 0 ? memoryMb : undefined), ...opt("gpu", input.gpu === true ? true : undefined) }, durationMs: profile?.durationMs };
 };
 
-export const offloadTarget = async (deps: OffloadDeps, runner: string): Promise<OffloadTarget> => {
+// "Any machine with room": the runner the fleet reading picks, else here, without a word while this sandbox has room
+// (a calm sandbox running its own tests is not news), with one when the caller should hear why (`remote-run` that
+// found no runner, a line no machine fits). A pick that fails the checks below by the time it is asked is said too.
+const anyTarget = async (deps: OffloadDeps, input: OffloadTargetInput): Promise<OffloadTarget> => {
+    const ask = await askOf(deps, input);
+    let picked: Awaited<ReturnType<typeof placeCommand>>;
+    try {
+        picked = await placeCommand(deps, { ...ask, eager: input.eager === true });
+    } catch (error) {
+        deps.logger.warn({ err: error }, "offload: the fleet could not be read, the line runs here");
+        picked = {};
+    }
+    if (picked.runner === undefined) {
+        return { runner: OFFLOAD_ANY_RUNNER, name: "this sandbox", ready: false, ...opt("why", picked.why) };
+    }
+    return await offloadTarget(deps, { ...input, runner: picked.runner });
+};
+
+// A runner named outright is still checked against what the line needs: a build that needs a GPU is not sent to a
+// machine without one because the setting named it.
+const shortOf = async (deps: OffloadDeps, input: OffloadTargetInput, runner: string, name: string): Promise<string | undefined> => {
+    const { needs } = await askOf(deps, input);
+    if (needs.memoryMb === undefined && needs.gpu !== true) {
+        return undefined;
+    }
+    const facts = deps.runnerHub.state(runner).facts;
+    if (facts === undefined || fitsNeeds(facts, needs, "now")) {
+        return undefined;
+    }
+    return needs.gpu === true && (facts.gpus ?? []).length === 0
+        ? `${name} has no GPU this command can use`
+        : `${name} has ${String(Math.round((facts.memoryFreeMb ?? facts.memoryMb) / 1024))} GiB free and this command needs ${String(Math.round((needs.memoryMb ?? 0) / 1024))} GiB`;
+};
+
+export const offloadTarget = async (deps: OffloadDeps, input: OffloadTargetInput): Promise<OffloadTarget> => {
+    const { runner } = input;
     if (runner === OFFLOAD_ANY_RUNNER) {
-        return await anyTarget(deps);
+        return await anyTarget(deps, input);
     }
     const name = await nameOf(deps, runner);
     const enrolled = (await deps.runners.list()).some((entry) => entry.id === runner);
@@ -51,7 +91,8 @@ export const offloadTarget = async (deps: OffloadDeps, runner: string): Promise<
     if (deps.runnerHub.client(runner) === undefined) {
         return { runner, name, ready: false, why: `${name} is offline (the machine is asleep or its runner is stopped)` };
     }
-    return { runner, name, ready: true };
+    const short = await shortOf(deps, input, runner, name);
+    return short === undefined ? { runner, name, ready: true } : { runner, name, ready: false, why: short };
 };
 
 // A runner that predates offloading has no such procedure: its oRPC peer answers 404, which the client raises as
@@ -71,10 +112,10 @@ export const createOffloadRoutes = (deps: OffloadDeps) => {
     };
 
     return {
-        target: i.target.handler(async ({ input }) => await offloadTarget(deps, input.runner)),
+        target: i.target.handler(async ({ input }) => await offloadTarget(deps, input)),
         run: i.run.handler(async function* ({ input, signal }): AsyncGenerator<OffloadFrame> {
             const { runner, ...command } = input;
-            const target = await offloadTarget(deps, runner);
+            const target = await offloadTarget(deps, { runner });
             const client = deps.runnerHub.client(runner);
             if (!target.ready || client === undefined) {
                 yield { kind: "refused", why: target.why ?? `${target.name} cannot take it right now` };
@@ -101,8 +142,16 @@ export const createOffloadRoutes = (deps: OffloadDeps) => {
                         Object.assign(entry, {
                             endedAt: Date.now(),
                             code: frame.code,
-                            ...(frame.failure === undefined ? {} : { failure: frame.failure }),
+                            ...opt("failure", frame.failure),
+                            ...opt("peakMemoryMb", frame.peakMemoryMb),
+                            ...opt("durationMs", frame.durationMs),
                         });
+                        // What it took goes into its profile, which places the next run of the same kind of line.
+                        if (frame.ran) {
+                            deps.commandProfiles
+                                .record(command.label, command.command, { peakMemoryMb: frame.peakMemoryMb, durationMs: frame.durationMs })
+                                .catch((error: Error) => deps.logger.warn({ err: error }, "offload: a run's measurements could not be kept"));
+                        }
                     }
                     yield frame;
                 }

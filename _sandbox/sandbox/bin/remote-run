@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# remote-run [--to <runner>] [--out PATH]... [--needs mem=12G,gpu] [--env NAME]... -- <command> [args...]
+#
+# Runs one heavy command on the machine with the most room among this sandbox's runners on the owner's computers, and
+# brings back what it changed, as if it had run here: its output as it comes, its exit code, every file it edited, and
+# each --out PATH it made whole (a binary it built, a directory of frames it rendered: inside the repository or under
+# /tmp). --needs rules out a machine short of memory or without a GPU. When no runner is connected, or none fits, it
+# runs here, exactly as typed, after one line saying why. A compound line goes as one command:
+#   remote-run --out target/debug/integra -- cargo build -p shinobi-society-native --bin integra
+#   remote-run --out /tmp/vfx -- bash -c 'cargo build --bin integra && target/debug/integra vfx preview --out /tmp/vfx'
+#
+# It is offload-run asked in so many words (bin/offload-run --remote-run); the heavy-command table exempts both, so
+# neither is queued here for work that runs elsewhere.
+exec offload-run --remote-run "$@"

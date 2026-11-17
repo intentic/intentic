@@ -8,6 +8,7 @@ import {
     OffloadKindSchema,
     OffloadRecordSchema,
     OffloadRunSchema,
+    OffloadTargetInputSchema,
     OffloadTargetSchema,
 } from "../schemas/offload.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -24,9 +25,9 @@ export const offloadContract = {
             path: "/offload/runners/{runner}",
             summary: "Whether a runner can take a heavy command",
             description:
-                "Answers whether the runner a kind of heavy work is sent to is connected and able to run it, before anything is copied to it. When it is not, the command runs in this sandbox and says why.",
+                "Answers whether the runner a kind of heavy work is sent to is connected and able to run it, before anything is copied to it. When it is not, the command runs in this sandbox and says why. Naming what the command needs (memory, a GPU) rules out a machine short of it; for \"auto\" it picks the machine with room that fits.",
         })
-        .input(z.object({ runner: z.string().min(1) }))
+        .input(OffloadTargetInputSchema)
         .output(OffloadTargetSchema),
     run: offloadRoute
         .route({

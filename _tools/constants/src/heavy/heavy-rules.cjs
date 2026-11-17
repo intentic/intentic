@@ -49,6 +49,11 @@ const SHIPPED_HEAVY_COMMANDS = Object.freeze({
         // The turn check and the cache warmer each plan one as a turn ends, and queued behind two typechecks a plan waited
         // longer than the whole Stop allows.
         { id: "turbo-dry-run", pattern: "^turbo\\b.*\\s--dry(-run)?(=\\S+)?(\\s|$)", exempt: true },
+        // The commands that send work to a runner (bin/offload-run, bin/remote-run): what they carry runs elsewhere, so
+        // holding a slot here for it would only keep local work waiting, and the command they name (`remote-run -- pnpm
+        // test`) would otherwise read as the heavy program itself. When they run it here after all, each program it starts
+        // is judged as it starts, like any other.
+        { id: "offload", pattern: "^(offload-run|remote-run)\\b", exempt: true },
         // A repo-wide verification, one at a time in the same pool: two of them are the most expensive thing that can
         // happen to a sandbox at once (measured: 24.9 GiB against a 16 GiB cap), and the second is usually the same
         // work over the same tree, which turbo's cache makes nearly free once the first is done. Never two at once,

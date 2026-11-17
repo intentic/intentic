@@ -1,8 +1,11 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { offloadRef, type RunnerCommand, type RunnerCommandFrame } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { gunzipSync } from "node:zlib";
+import { createTreePool, treeSlotPath } from "./offload/offload-trees.js";
 import { createRunnerCommands, offloadTreeOf } from "./runner-command.js";
 
 // One offloaded line on a runner, against real git: the parent's snapshot fetched into the runner's own tree, the line's
@@ -36,13 +39,38 @@ const parent = (): { readonly root: string; readonly ref: string } => {
     return { root, ref };
 };
 
-const commands = (root: string) => {
+const commands = (root: string, trees = 1) => {
     const offloadRoot = mkdtempSync(join(tmpdir(), "offload-runner-"));
     return {
         offloadRoot,
-        runner: createRunnerCommands({ offloadRoot, gitUrl: () => root, gitEnv: process.env, queue: async (line) => line }),
+        runner: createRunnerCommands({ offloadRoot, gitUrl: () => root, gitEnv: process.env, queue: async (line) => line, trees: createTreePool(offloadRoot, trees) }),
     };
 };
+
+// The output files the frames carried, put back together the way offload-run does it: each piece one gzip member.
+const delivered = (frames: readonly RunnerCommandFrame[]): Map<string, { readonly bytes: Buffer; readonly mode?: number; readonly sha256?: string; readonly same?: boolean }> => {
+    const files = new Map<string, { bytes: Buffer; mode?: number; sha256?: string; same?: boolean }>();
+    for (const frame of frames) {
+        if (frame.kind !== "file") {
+            continue;
+        }
+        const file = files.get(frame.path) ?? { bytes: Buffer.alloc(0) };
+        if (frame.data !== undefined) {
+            file.bytes = Buffer.concat([file.bytes, gunzipSync(Buffer.from(frame.data, "base64"))]);
+        }
+        if (frame.end !== undefined) {
+            file.mode = frame.end.mode;
+            file.sha256 = frame.end.sha256;
+        }
+        if (frame.same === true) {
+            file.same = true;
+        }
+        files.set(frame.path, file);
+    }
+    return files;
+};
+
+const sha256 = (bytes: Buffer | string): string => createHash("sha256").update(bytes).digest("hex");
 
 const input = (ref: string, command: string, extra: Partial<RunnerCommand> = {}): RunnerCommand => ({
     runId: "run-00000001",
@@ -52,6 +80,8 @@ const input = (ref: string, command: string, extra: Partial<RunnerCommand> = {})
     command,
     env: {},
     exports: [],
+    outputs: [],
+    have: {},
     label: "bun-test",
     ...extra,
 });
@@ -138,5 +168,68 @@ describe("an offloaded line", () => {
         expect(exit.code).toBe(1);
         expect(exit.failure).toContain("run-missing0");
         expect(exit.ran).toBe(false);
+    });
+
+    test("hands back the outputs it was asked for whole, ignored ones and a directory's files included, before its exit", async () => {
+        const { root, ref } = parent();
+        const { runner } = commands(root);
+        const size = 3 * 1024 * 1024 + 17;
+        const frames = await all(
+            runner.run(
+                input(ref, `mkdir -p frames && head -c ${String(size)} /dev/zero | tr '\\0' x > ignored.txt && chmod 755 ignored.txt && echo one > frames/a.png && echo two > frames/b.png`, {
+                    outputs: ["ignored.txt", "frames", "never-made.bin"],
+                }),
+            ),
+        );
+        const files = delivered(frames);
+        const big = "x".repeat(size);
+        expect(files.get("ignored.txt")?.bytes.length).toBe(size);
+        expect(sha256(files.get("ignored.txt")?.bytes ?? "")).toBe(sha256(big));
+        expect(files.get("ignored.txt")?.mode).toBe(0o755);
+        expect(files.get("ignored.txt")?.sha256).toBe(sha256(big));
+        expect(files.get("frames/a.png")?.bytes.toString()).toBe("one\n");
+        expect(files.get("frames/b.png")?.bytes.toString()).toBe("two\n");
+        // More than one piece for a file past a MiB, and every file frame before the exit.
+        expect(frames.filter((frame) => frame.kind === "file" && frame.path === "ignored.txt" && frame.data !== undefined).length).toBeGreaterThan(1);
+        expect(frames.findLastIndex((frame) => frame.kind === "file")).toBeLessThan(frames.length - 1);
+        expect(exitOf(frames)).toMatchObject({ code: 0, missing: ["never-made.bin"] });
+        expect(exitOf(frames).durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    test("says an output the caller already holds byte for byte instead of sending it", async () => {
+        const { root, ref } = parent();
+        const { runner } = commands(root);
+        const frames = await all(runner.run(input(ref, "echo same > out.bin; echo changed > other.bin", { outputs: ["out.bin", "other.bin"], have: { "out.bin": sha256("same\n"), "other.bin": sha256("stale\n") } })));
+        const files = delivered(frames);
+        expect(files.get("out.bin")).toMatchObject({ same: true, bytes: Buffer.alloc(0) });
+        expect(files.get("other.bin")?.bytes.toString()).toBe("changed\n");
+    });
+
+    test("measures the most memory everything the line started held at once", async () => {
+        const { root, ref } = parent();
+        const { runner } = commands(root);
+        // A child shell holding a 64 MiB string for longer than one sample (`node` under bun test is bun, which allocates
+        // lazily, so a shell keeps the figure honest).
+        const exit = exitOf(await all(runner.run(input(ref, `bash -c 'x=$(head -c 67108864 /dev/zero | tr "\\\\0" x); sleep 2; echo \${#x}'`))));
+        expect(exit.peakMemoryMb).toBeGreaterThanOrEqual(60);
+    });
+
+    test("runs two lines of one repo at once in trees of their own, and the second waits when the pool is full", async () => {
+        const { root, ref } = parent();
+        const two = commands(root, 2);
+        const [first, second] = await Promise.all([
+            all(two.runner.run(input(ref, "pwd; sleep 1", { runId: "run-0000000a" }))),
+            all(two.runner.run(input(ref, "pwd; sleep 1", { runId: "run-0000000b" }))),
+        ]);
+        const where = (frames: readonly RunnerCommandFrame[]): string => frames.flatMap((frame) => (frame.kind === "output" ? [frame.text.trim()] : [])).join("");
+        expect(new Set([where(first), where(second)])).toEqual(new Set([treeSlotPath(two.offloadRoot, "app", 0), treeSlotPath(two.offloadRoot, "app", 1)]));
+
+        const one = commands(root, 1);
+        const [a, b] = await Promise.all([
+            all(one.runner.run(input(ref, "pwd", { runId: "run-0000000c" }))),
+            all(one.runner.run(input(ref, "pwd", { runId: "run-0000000d" }))),
+        ]);
+        expect([where(a), where(b)]).toEqual([treeSlotPath(one.offloadRoot, "app", 0), treeSlotPath(one.offloadRoot, "app", 0)]);
+        expect([...a, ...b].some((frame) => frame.kind === "status" && frame.text.includes("waiting for one to come free"))).toBe(true);
     });
 });

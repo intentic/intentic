@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { BudgetSnapshot } from "../workload/resource-budget.js";
 import { FACTS_FRESH_MS, type FactsHub, refreshRunnerFacts } from "./fleet-facts.js";
-import { machineFacts } from "./machine-facts.js";
+import { machineFacts, parseGpuQuery } from "./machine-facts.js";
 
 // A runner's facts are its hello's until someone asks again. What compares machines asks here: only the online ones,
 // at most once per freshness window, and one ask per runner however many callers want it at once.
@@ -60,6 +60,7 @@ test("a machine is measured by its own budget and pressure, with its load over i
         pressure: async () => ({ cpu: { some: 42, full: 0 }, memory: undefined, io: undefined }),
         os: () => ({ cores: 8, totalMemoryBytes: 64 * GIB, loadOne: 4 }),
         disk: async () => ({ freeBytes: 10 * GIB }),
+        gpus: async () => [{ name: "NVIDIA GeForce RTX 3080 Laptop GPU", memoryMb: 16_384 }],
     });
     expect(facts).toEqual({
         cpus: 8,
@@ -70,7 +71,16 @@ test("a machine is measured by its own budget and pressure, with its load over i
         memoryLimitMb: 16_384,
         memoryStall: 3,
         cpuPressure: 42,
+        gpus: [{ name: "NVIDIA GeForce RTX 3080 Laptop GPU", memoryMb: 16_384 }],
     });
+});
+
+// What nvidia-smi's csv query answers, by name and memory; a name with commas of its own keeps them.
+test("a machine's GPUs are read off nvidia-smi's answer", () => {
+    expect(parseGpuQuery("NVIDIA GeForce RTX 5080 Laptop GPU, 16303\nTesla, Inc. X, 8192\n")).toEqual([
+        { name: "NVIDIA GeForce RTX 5080 Laptop GPU", memoryMb: 16_303 },
+        { name: "Tesla, Inc. X", memoryMb: 8_192 },
+    ]);
 });
 
 test("what a machine cannot measure is left out, never reported as zero", async () => {
@@ -81,6 +91,7 @@ test("what a machine cannot measure is left out, never reported as zero", async 
         },
         os: () => ({ cores: 4, totalMemoryBytes: 8 * GIB, loadOne: 1 }),
         disk: async () => undefined,
+        gpus: async () => [],
     });
-    expect(facts).toEqual({ cpus: 4, memoryMb: 8_192, freeDiskMb: 0, load: 0.25, memoryStall: 0 });
+    expect(facts).toEqual({ cpus: 4, memoryMb: 8_192, freeDiskMb: 0, load: 0.25, memoryStall: 0, gpus: [] });
 });

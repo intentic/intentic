@@ -8,20 +8,26 @@ import { promisify } from "node:util";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { RunnerCommand, RunnerCommandFrame } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { endSession } from "../seams/session-processes.js";
+import { opt } from "../opt.js";
+import { createTreePool, treeSlotPath, treesFor, type TreeLease, type TreePool } from "./offload/offload-trees.js";
+import { expandOutputs, type OutputFile, outputFrames } from "./offload/runner-outputs.js";
+import { watchSessionPeak } from "./offload/session-memory.js";
 
 /* ONE OFFLOADED LINE, RUN ON THIS RUNNER FOR ITS PARENT (settings `offload`, the parent's offload/ service).
 
    The code arrives as a snapshot commit of the parent's tree, uncommitted and untracked work included, which this runner
-   fetches through the parent's git door into a tree of its own under /history/offload/<repo>. That tree is kept between
-   runs and never cleaned of what git ignores, so node_modules, emitted declarations and build caches stay warm: only a
+   fetches through the parent's git door into a tree of its own under /history/offload/<repo> (or <repo>~2, ~3: one per
+   line running at once, leased from offload-trees.ts). A tree is kept between runs and never cleaned of what git
+   ignores, so node_modules, emitted declarations and build caches stay warm: only a
    changed lockfile or manifest reinstalls, and only a changed tree re-runs the repository's own `offload:prepare`
    script (its build outputs, the part of a tree git does not carry). It lives outside /work, so this runner's own
    daemon never reconciles it or checks it after an install.
 
    The line runs under this runner's own heavy queue, in a session of its own, so a cancel or a timeout ends everything
-   it started. Its output streams back as it comes; its end carries the exit, every file it changed as a binary patch
-   against the snapshot (formatters, a regenerated lock, a fixer's edit), and the files it wrote to the variables the
-   parent asked for back. */
+   it started. Its output streams back as it comes; then the outputs the parent declared come back whole (a built binary,
+   rendered frames: runner-outputs.ts); its end carries the exit, every file it changed as a binary patch against the
+   snapshot (formatters, a regenerated lock, a fixer's edit), the files it wrote to the variables the parent asked for
+   back, and how much memory and time it took (session-memory.ts), which the parent plans the next run of it by. */
 
 const execFileAsync = promisify(execFile);
 
@@ -58,6 +64,8 @@ export interface RunnerCommandDeps {
     readonly gitEnv: NodeJS.ProcessEnv;
     // Runs a line under this runner's heavy table (agent-terminals.ts queueWhole): its heavy programs queue here as they start.
     readonly queue: (line: string) => Promise<string>;
+    // The trees lines run in, leased one per run; by default as many as the runner's memory holds builds for.
+    readonly trees?: TreePool;
 }
 
 const gitIn = async (deps: RunnerCommandDeps, cwd: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): Promise<string> => {
@@ -65,7 +73,8 @@ const gitIn = async (deps: RunnerCommandDeps, cwd: string, args: readonly string
     return stdout;
 };
 
-export const offloadTreeOf = (offloadRoot: string, repo: string): string => join(offloadRoot, encodeURIComponent(repo));
+// A repo's first tree, the one a runner used before trees were pooled.
+export const offloadTreeOf = (offloadRoot: string, repo: string): string => treeSlotPath(offloadRoot, repo, 0);
 
 // A frame channel: producers push, the generator drains, `end` closes it once the last frame is in.
 const channel = () => {
@@ -157,8 +166,7 @@ const readStamp = async (path: string): Promise<string> => ((await readFile(path
 
 // Brings the offload tree to the snapshot: fetched through the git door, checked out over whatever the last run left,
 // untracked files cleaned but ignored ones kept; then installed and prepared when what they depend on moved.
-const prepareTree = async (deps: RunnerCommandDeps, input: RunnerCommand, say: (text: string) => void, signal: AbortSignal): Promise<string> => {
-    const tree = offloadTreeOf(deps.offloadRoot, input.repo);
+const prepareTree = async (deps: RunnerCommandDeps, tree: string, input: RunnerCommand, say: (text: string) => void, signal: AbortSignal): Promise<string> => {
     await mkdir(tree, { recursive: true });
     if (!existsSync(join(tree, ".git"))) {
         say(`${input.repo}: first offloaded run here, fetching the whole repository once`);
@@ -209,90 +217,162 @@ export interface RunningCommands {
     readonly cancel: (runId: string) => void;
 }
 
+type ExitFrame = Extract<RunnerCommandFrame, { kind: "exit" }>;
+
+// The tree a run leased, once it has one: released only after its outputs are read.
+interface LeaseHolder {
+    lease?: TreeLease;
+}
+
+// How a run ended before its outputs went back: the exit to send last, and the outputs to send before it.
+interface Ending {
+    readonly exit: ExitFrame;
+    readonly files: readonly OutputFile[];
+    readonly missing: readonly string[];
+}
+
+const ended = (exit: ExitFrame): Ending => ({ exit, files: [], missing: [] });
+
+interface LineRun {
+    readonly code: number;
+    readonly signal?: string;
+    readonly durationMs: number;
+    readonly peakMemoryMb?: number;
+}
+
+// The line itself, in the tree, in a session of its own: a cancel ends the line and every group it started (turbo's
+// tasks, bun's workers), not just the shell, and everything it started is measured together.
+const runLine = async (line: string, cwd: string, env: NodeJS.ProcessEnv, push: (frame: RunnerCommandFrame) => void, signal: AbortSignal): Promise<LineRun> => {
+    const startedAt = Date.now();
+    const child = spawn("bash", ["-c", line], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"], env });
+    const peak = child.pid === undefined ? undefined : watchSessionPeak(child.pid);
+    const decoders = { stdout: new StringDecoder("utf8"), stderr: new StringDecoder("utf8") };
+    for (const stream of ["stdout", "stderr"] as const) {
+        child[stream].on("data", (chunk: Buffer) => {
+            const text = decoders[stream].write(chunk);
+            if (text !== "") {
+                push({ kind: "output", stream, text });
+            }
+        });
+    }
+    const stop = (): void => void (child.pid === undefined ? undefined : endLine(child.pid));
+    signal.addEventListener("abort", stop, { once: true });
+    const exit = await new Promise<{ code: number; signal?: string }>((resolve) => {
+        child.on("error", () => resolve({ code: 127 }));
+        child.on("close", (code, killed) => resolve(killed === null ? { code: code ?? 1 } : { code: 128 + 15, signal: killed }));
+    });
+    signal.removeEventListener("abort", stop);
+    const durationMs = Date.now() - startedAt;
+    const peakMemoryMb = peak?.stop();
+    // The line is back, so nothing it started should outlive it here either.
+    if (child.pid !== undefined) {
+        // allow(silent-catch): a process already exited needs no further session cleanup
+        await endSession(child.pid).catch(() => false);
+    }
+    return { ...exit, durationMs, ...opt("peakMemoryMb", peakMemoryMb) };
+};
+
+// What the line left: every file it changed as a patch, the files it wrote to the exported variables, and the outputs it
+// was asked for, still on disk to be read once the exit is decided.
+const endingOf = async (
+    deps: RunnerCommandDeps,
+    input: RunnerCommand,
+    tree: string,
+    scratch: string,
+    exported: Readonly<Record<string, string>>,
+    line: LineRun,
+    say: (text: string) => void,
+    signal: AbortSignal,
+): Promise<Ending> => {
+    const patch = await changesOf(deps, tree, scratch);
+    const files: Record<string, string> = {};
+    for (const [name, path] of Object.entries(exported)) {
+        const bytes = await readFile(path).catch(undefinedIfMissing);
+        if (bytes !== undefined && bytes.length <= EXPORT_CEILING_BYTES) {
+            files[name] = bytes.toString("base64");
+        }
+    }
+    const tooBig = Buffer.byteLength(patch) > PATCH_CEILING_BYTES;
+    if (tooBig) {
+        say(`the line changed ${String(Math.round(Buffer.byteLength(patch) / 1024 / 1024))} MB of tracked files; too much to be an edit, so it stays on this runner`);
+    }
+    const outputs = input.outputs.length === 0 ? { files: [], missing: [] } : await expandOutputs(tree, input.outputs);
+    const stopped = signal.aborted ? `stopped: ${String((signal.reason as Error | undefined)?.message ?? "cancelled")}` : undefined;
+    const exit: ExitFrame = {
+        kind: "exit",
+        ran: true,
+        code: line.code,
+        ...opt("signal", line.signal),
+        ...opt("failure", stopped),
+        ...opt("patchBase64", patch !== "" && !tooBig ? Buffer.from(patch).toString("base64") : undefined),
+        files,
+        durationMs: line.durationMs,
+        ...opt("peakMemoryMb", line.peakMemoryMb),
+    };
+    return { exit, files: outputs.files, missing: outputs.missing };
+};
+
+// The exit as sent: what it was, with the outputs that never came back named.
+const finalExit = (done: Ending, tooBig: readonly string[]): ExitFrame => ({
+    ...done.exit,
+    ...opt("missing", done.missing.length === 0 ? undefined : [...done.missing]),
+    ...opt("tooBig", tooBig.length === 0 ? undefined : [...tooBig]),
+});
+
 export const createRunnerCommands = (deps: RunnerCommandDeps): RunningCommands => {
     const running = new Map<string, AbortController>();
+    const trees = deps.trees ?? createTreePool(deps.offloadRoot, treesFor());
+
+    // Leases a tree, brings it to the snapshot, runs the line and reads what it left. Never throws: every way it ends is
+    // an Ending.
+    const execute = async (input: RunnerCommand, scratch: string, holder: LeaseHolder, push: (frame: RunnerCommandFrame) => void, signal: AbortSignal): Promise<Ending> => {
+        const say = (text: string): void => push({ kind: "status", text });
+        let tree: string;
+        try {
+            holder.lease = await trees.acquire(input.repo, signal, say);
+            tree = await prepareTree(deps, holder.lease.tree, input, say, signal);
+        } catch (error) {
+            const failure = signal.aborted ? `stopped: ${errorMessage(signal.reason)}` : errorMessage(error);
+            return ended({ kind: "exit", code: 1, failure, ran: false, files: {} });
+        }
+        try {
+            const exported = Object.fromEntries(input.exports.map((name) => [name, join(scratch, `export-${name}`)]));
+            const line = await deps.queue(input.command);
+            say(`running \`${input.label}\` here`);
+            const result = await runLine(line, join(tree, input.cwd), { ...process.env, ...input.env, ...exported }, push, signal);
+            return await endingOf(deps, input, tree, scratch, exported, result, say, signal);
+        } catch (error) {
+            return ended({ kind: "exit", code: 1, failure: errorMessage(error), ran: true, files: {} });
+        }
+    };
 
     const run = (input: RunnerCommand): AsyncGenerator<RunnerCommandFrame> => {
         const out = channel();
         const controller = new AbortController();
         running.set(input.runId, controller);
-        const say = (text: string): void => out.push({ kind: "status", text });
         const timer = setTimeout(() => controller.abort(new Error("timed out")), input.timeoutMs ?? DEFAULT_TIMEOUT_MS);
         timer.unref();
+        const holder: LeaseHolder = {};
+        const scratch = mkdtemp(join(tmpdir(), "offload-"));
+        const ending = scratch.then((dir) => execute(input, dir, holder, out.push, controller.signal)).finally(() => out.end());
 
-        void (async () => {
-            const scratch = await mkdtemp(join(tmpdir(), "offload-"));
+        // The line's frames as they come, then its outputs read lazily (a slow link holds the reading, not this runner's
+        // memory), then the exit. The tree is released and the scratch removed only after, so the next run cannot check
+        // out over outputs still being read, whichever way this one ends.
+        async function* frames(): AsyncGenerator<RunnerCommandFrame> {
             try {
-                let tree: string;
-                try {
-                    tree = await prepareTree(deps, input, say, controller.signal);
-                } catch (error) {
-                    out.push({ kind: "exit", code: 1, failure: errorMessage(error), ran: false, files: {} });
-                    return;
-                }
-                const exported = Object.fromEntries(input.exports.map((name) => [name, join(scratch, `export-${name}`)]));
-                const line = await deps.queue(input.command);
-                say(`running \`${input.label}\` here`);
-                const child = spawn("bash", ["-c", line], {
-                    cwd: join(tree, input.cwd),
-                    // A session of its own, so a cancel ends the line and every group it started (turbo's tasks, bun's
-                    // workers), not just the shell.
-                    detached: true,
-                    stdio: ["ignore", "pipe", "pipe"],
-                    env: { ...process.env, ...input.env, ...exported },
-                });
-                const decoders = { stdout: new StringDecoder("utf8"), stderr: new StringDecoder("utf8") };
-                for (const stream of ["stdout", "stderr"] as const) {
-                    child[stream].on("data", (chunk: Buffer) => {
-                        const text = decoders[stream].write(chunk);
-                        if (text !== "") {
-                            out.push({ kind: "output", stream, text });
-                        }
-                    });
-                }
-                const stop = (): void => void (child.pid === undefined ? undefined : endLine(child.pid));
-                controller.signal.addEventListener("abort", stop, { once: true });
-                const ended = await new Promise<{ code: number; signal?: string }>((resolve) => {
-                    child.on("error", () => resolve({ code: 127 }));
-                    child.on("close", (code, signal) => resolve(signal === null ? { code: code ?? 1 } : { code: 128 + 15, signal }));
-                });
-                controller.signal.removeEventListener("abort", stop);
-                // The line is back, so nothing it started should outlive it here either.
-                if (child.pid !== undefined) {
-                    // allow(silent-catch): a process already exited needs no further session cleanup
-                    await endSession(child.pid).catch(() => false);
-                }
-                const patch = await changesOf(deps, tree, scratch);
-                const files: Record<string, string> = {};
-                for (const [name, path] of Object.entries(exported)) {
-                    const bytes = await readFile(path).catch(undefinedIfMissing);
-                    if (bytes !== undefined && bytes.length <= EXPORT_CEILING_BYTES) {
-                        files[name] = bytes.toString("base64");
-                    }
-                }
-                const tooBig = Buffer.byteLength(patch) > PATCH_CEILING_BYTES;
-                if (tooBig) {
-                    say(`the line changed ${String(Math.round(Buffer.byteLength(patch) / 1024 / 1024))} MB of tracked files; too much to be an edit, so it stays on this runner`);
-                }
-                out.push({
-                    kind: "exit",
-                    ran: true,
-                    code: ended.code,
-                    ...(ended.signal === undefined ? {} : { signal: ended.signal }),
-                    ...(controller.signal.aborted ? { failure: `stopped: ${String((controller.signal.reason as Error | undefined)?.message ?? "cancelled")}` } : {}),
-                    ...(patch !== "" && !tooBig ? { patchBase64: Buffer.from(patch).toString("base64") } : {}),
-                    files,
-                });
-            } catch (error) {
-                out.push({ kind: "exit", code: 1, failure: errorMessage(error), ran: true, files: {} });
+                yield* out.drain();
+                const done = await ending;
+                const tooBig = done.files.length === 0 || controller.signal.aborted ? [] : yield* outputFrames(done.files, input.have, controller.signal);
+                yield finalExit(done, tooBig);
             } finally {
                 clearTimeout(timer);
                 running.delete(input.runId);
-                await rm(scratch, { recursive: true, force: true });
-                out.end();
+                holder.lease?.release();
+                await rm(await scratch, { recursive: true, force: true });
             }
-        })();
-        return out.drain();
+        }
+        return frames();
     };
 
     return {

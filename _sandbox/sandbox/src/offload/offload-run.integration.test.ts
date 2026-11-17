@@ -29,6 +29,8 @@ const repo = (): string => {
 };
 
 const servers: Server[] = [];
+// Every "can a runner take it" question the stand-in daemon was asked, its query read into an object.
+const targets: Array<Record<string, string>> = [];
 afterEach(() => {
     for (const server of servers.splice(0)) {
         server.close();
@@ -45,6 +47,8 @@ const daemon = async (root: string, ready: boolean): Promise<{ readonly port: nu
         req.on("end", () => {
             void (async () => {
                 if (req.method === "GET" && req.url?.startsWith("/offload/runners/") === true) {
+                    const url = new URL(req.url, "http://daemon");
+                    targets.push({ runner: decodeURIComponent(url.pathname.split("/").at(-1) ?? ""), ...Object.fromEntries(url.searchParams) });
                     res.writeHead(200, { "content-type": "application/json" });
                     res.end(JSON.stringify(ready ? { runner: "r1", name: "omen", ready } : { runner: "r1", name: "omen", ready, why: "omen is offline" }));
                     return;
@@ -110,5 +114,54 @@ describe("offload-run", () => {
         expect(ran.stderr).toContain("omen is offline; running it here");
         expect(existsSync(marker)).toBe(true);
         expect(asked).toEqual([]);
+    });
+
+    test("brings back what it was asked for whole: an ignored binary in the repository and a directory under /tmp", async () => {
+        const root = repo();
+        writeFileSync(join(root, ".gitignore"), "target/\n");
+        const frames = mkdtempSync(join(tmpdir(), "offload-run-frames-"));
+        const { port, asked } = await daemon(root, true);
+        const ran = await offloadRun(root, port, [
+            "--to",
+            "r1",
+            "--out",
+            "target/debug/app",
+            "--out",
+            frames,
+            "--",
+            "bash",
+            "-c",
+            `mkdir -p target/debug ${frames} && printf '#!/bin/sh\\necho built\\n' > target/debug/app && chmod 755 target/debug/app && echo frame > ${frames}/1.png`,
+        ]);
+        expect(ran.code).toBe(0);
+        expect(execFileSync(join(root, "target/debug/app"), { encoding: "utf8" })).toBe("built\n");
+        expect(readFileSync(join(frames, "1.png"), "utf8")).toBe("frame\n");
+        expect(ran.stderr).toContain("brought back 2 output files");
+        expect(asked[0]?.outputs).toEqual(["target/debug/app", frames]);
+
+        // Asked again with the same results already here: said, not sent.
+        const again = await offloadRun(root, port, ["--to", "r1", "--out", "target/debug/app", "--", "bash", "-c", "mkdir -p target/debug && printf '#!/bin/sh\\necho built\\n' > target/debug/app && chmod 755 target/debug/app"]);
+        expect(again.code).toBe(0);
+        expect(Object.keys(asked[1]?.have ?? {})).toEqual(["target/debug/app"]);
+        expect(again.stderr).toContain("1 already here unchanged");
+    });
+
+    test("runs here, saying why, when an --out could never come back", async () => {
+        const root = repo();
+        const { port, asked } = await daemon(root, true);
+        const ran = await offloadRun(root, port, ["--to", "r1", "--out", "/etc/elsewhere", "--", "bash", "-c", "echo local"]);
+        expect(ran.stdout).toBe("local\n");
+        expect(ran.stderr).toContain("neither inside this repository nor under /tmp");
+        expect(asked).toEqual([]);
+    });
+
+    test("as remote-run, asks for any machine eagerly with what the command needs, and runs it here as typed when none can", async () => {
+        const root = repo();
+        const { port, asked } = await daemon(root, false);
+        const ran = await offloadRun(root, port, ["--remote-run", "--needs", "mem=12G,gpu", "--", "bash", "-c", "echo here; exit 5"]);
+        expect(ran.code).toBe(5);
+        expect(ran.stdout).toBe("here\n");
+        expect(asked).toEqual([]);
+        expect(targets.at(-1)).toMatchObject({ runner: "auto", memoryMb: "12288", gpu: "true", eager: "true", label: "remote-run" });
     });
 });

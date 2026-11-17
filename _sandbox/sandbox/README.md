@@ -1008,7 +1008,9 @@ flowchart LR
 - Every checkout's Rust builds share one compiler cache (2026-11-17, the shinobi-society audit). Wherever the overlay
   installs a Rust toolchain and sets no `RUSTC_WRAPPER` of its own, the daemon composes the `rust-cache` pack in front of
   the custom section (`environment/packs/rust-cache-pack.ts`, `image-packs/rust-cache.Dockerfile`): sccache 0.10.0, a
-  `rustc-cached` wrapper as `RUSTC_WRAPPER`, and `SCCACHE_DIR=/history/cache/sccache` capped at 30 GB, so it reaches
+  `rustc-cached` wrapper as `RUSTC_WRAPPER` (named through the link `/usr/local/lib/rust-cache/sccache`, since the cc
+  crate reuses the wrapper for a build script's C and C++ only under a cache's own name, so a bundled C++ library such as
+  `duckdb`'s is cached too), and `SCCACHE_DIR=/history/cache/sccache` capped at 30 GB, so it reaches
   agent shells, tmux panes and subagents alike, survives restarts, and is counted by Settings → Storage as a build cache.
   sccache keys a crate by sources, flags and toolchain rather than the target directory, so a new conversation's first
   build takes every library crate some checkout already compiled; proc-macros, build scripts, binaries and the

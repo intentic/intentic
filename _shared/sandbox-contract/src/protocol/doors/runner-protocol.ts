@@ -173,6 +173,9 @@ export const RunnerFactsSchema = z.object({
     // Absent where the kernel does not report it.
     cpuPressure: z.number().nonnegative().optional(),
     memoryStall: z.number().nonnegative().optional(),
+    // The GPUs a program there can use (passed through to the container), by name and memory; empty where there is none,
+    // absent from a runner that predates the question. What a heavy command that needs one is placed by.
+    gpus: z.array(z.object({ name: z.string(), memoryMb: z.number().int().nonnegative() })).optional(),
 });
 export type RunnerFacts = z.infer<typeof RunnerFactsSchema>;
 
@@ -291,6 +294,18 @@ export const OFFLOAD_REF_PREFIX = "refs/intentic-offload/";
 export const offloadRef = (runId: string): string => `${OFFLOAD_REF_PREFIX}${runId}`;
 const OffloadRunIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{7,63}$/u);
 const EnvNameSchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/u);
+const Sha256Schema = z.string().regex(/^[0-9a-f]{64}$/u);
+
+// A path an offloaded line makes that its caller needs back besides edits: a binary it built, a picture it rendered.
+// Repo-relative, ignored paths included (`target/debug/integra`), or absolute under /tmp; a directory brings back every
+// file under it. Never anywhere else on the runner, and never out of the repo by `..`.
+export const OffloadOutputPathSchema = z
+    .string()
+    .min(1)
+    .max(1024)
+    .refine((path) => !path.split("/").includes(".."), "must not climb out by ..")
+    .refine((path) => !path.startsWith("/") || path.startsWith("/tmp/"), "an absolute output must be under /tmp/");
+export const isTmpOutput = (path: string): boolean => path.startsWith("/tmp/");
 
 export const RunnerCommandSchema = z.object({
     runId: OffloadRunIdSchema,
@@ -306,6 +321,11 @@ export const RunnerCommandSchema = z.object({
     // Variables the line writes a file to (a report path): the runner points each at a scratch file and hands the file
     // back with the exit.
     exports: z.array(EnvNameSchema).max(8).default([]),
+    // Paths the line makes that come back whole, as `file` frames before the exit (OffloadOutputPathSchema).
+    outputs: z.array(OffloadOutputPathSchema).max(16).default([]),
+    // What the caller already holds at an output path (a directory's files by their own paths), by sha256: a file the
+    // same byte for byte is said, not sent.
+    have: z.record(z.string(), Sha256Schema).default({}),
     // The heavy-command rule it matched here, named in the runner's own output and queue.
     label: z.string().min(1).max(80),
     timeoutMs: z
@@ -317,12 +337,25 @@ export const RunnerCommandSchema = z.object({
 });
 export type RunnerCommand = z.infer<typeof RunnerCommandSchema>;
 
+// One output file coming back, in pieces sent in order: each `data` is one gzip member of the next bytes, base64, and
+// the last piece carries `end` with the whole file's size, mode and sha256, which the caller checks before it puts the
+// file in place. `same` instead of data says the caller already holds it byte for byte.
+export const RunnerFileFrameSchema = z.object({
+    kind: z.literal("file"),
+    path: z.string().min(1),
+    data: z.string().optional(),
+    end: z.object({ size: z.number().int().nonnegative(), mode: z.number().int().nonnegative(), sha256: Sha256Schema }).optional(),
+    same: z.boolean().optional(),
+});
+export type RunnerFileFrame = z.infer<typeof RunnerFileFrameSchema>;
+
 // What a running command streams back: narration of the runner's own steps (fetch, install, queue), the line's output
-// as it comes, and last its end: the exit, every file it changed as a binary git patch against the snapshot, and the
-// exported files, base64.
+// as it comes, the output files asked for, and last its end: the exit, every file it changed as a binary git patch
+// against the snapshot, and the exported files, base64.
 export const RunnerCommandFrameSchema = z.union([
     z.object({ kind: z.literal("status"), text: z.string() }),
     z.object({ kind: z.literal("output"), stream: z.enum(["stdout", "stderr"]), text: z.string() }),
+    RunnerFileFrameSchema,
     z.object({
         kind: z.literal("exit"),
         code: z.number().int(),
@@ -333,6 +366,13 @@ export const RunnerCommandFrameSchema = z.union([
         ran: z.boolean().default(true),
         patchBase64: z.string().optional(),
         files: z.record(EnvNameSchema, z.string()).default({}),
+        // How heavy the line was there, for the parent's command profiles (offload/command-profiles.ts): the most
+        // memory everything it started held at once, and how long it ran. Absent where the runner could not measure.
+        peakMemoryMb: z.number().int().nonnegative().optional(),
+        durationMs: z.number().int().nonnegative().optional(),
+        // Outputs asked for that the line never made, and ones too big to bring back.
+        missing: z.array(z.string()).optional(),
+        tooBig: z.array(z.string()).optional(),
     }),
 ]);
 export type RunnerCommandFrame = z.infer<typeof RunnerCommandFrameSchema>;

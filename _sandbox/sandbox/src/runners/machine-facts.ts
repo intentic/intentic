@@ -1,7 +1,10 @@
+import { existsSync } from "node:fs";
 import { statfs } from "node:fs/promises";
 import { cpus, loadavg, totalmem } from "node:os";
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { GPU_LIBRARY_ENV, gpuHere, WSL_GPU_LIBRARY_PATH } from "../hosts/gpu/gpu-state.js";
 import { type Pressure, readPressure } from "../system/resources/cgroup.js";
+import { runCheck } from "../workload/run-check.js";
 import { opt } from "../opt.js";
 import type { BudgetSnapshot, ResourceBudget } from "../workload/resource-budget.js";
 
@@ -25,7 +28,10 @@ export interface MachineFactsSources {
     readonly pressure?: () => Promise<Pressure>;
     readonly os?: () => OsReading;
     readonly disk?: (path: string) => Promise<{ readonly freeBytes: number } | undefined>;
+    readonly gpus?: () => Promise<GpuFacts>;
 }
+
+type GpuFacts = NonNullable<RunnerFacts["gpus"]>;
 
 const realOs = (): OsReading => ({
     cores: cpus().length,
@@ -37,6 +43,49 @@ const realDisk = async (path: string): Promise<{ freeBytes: number } | undefined
     // allow(silent-catch): a disk that can't be read reports nothing free, the answer a host should plan around.
     const disk = await statfs(path).catch(() => undefined);
     return disk === undefined ? undefined : { freeBytes: disk.bavail * disk.bsize };
+};
+
+const GPU_QUERY_MS = 5_000;
+const NAMELESS: GpuFacts = [{ name: "GPU", memoryMb: 0 }];
+
+// `name, memory MiB` per line, as nvidia-smi's csv query answers it.
+export const parseGpuQuery = (text: string): GpuFacts =>
+    text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "")
+        .map((line) => {
+            const comma = line.lastIndexOf(",");
+            const memory = Number(line.slice(comma + 1).trim());
+            return { name: line.slice(0, comma).trim() || "GPU", memoryMb: Number.isFinite(memory) ? Math.max(0, Math.round(memory)) : 0 };
+        });
+
+// The GPUs passed through to this container, asked once per daemon: a GPU does not come and go while one runs. Only
+// where gpuHere says a device node is there (the same test gpu-run makes), and only nvidia-smi's management query, which
+// renders nothing; on WSL its libraries are where the engine mounts them. A GPU it cannot name is still a GPU.
+const realGpus = async (): Promise<GpuFacts> => {
+    if (!gpuHere()) {
+        return [];
+    }
+    const libraries = process.env[GPU_LIBRARY_ENV] ?? WSL_GPU_LIBRARY_PATH;
+    const wsl = existsSync(libraries);
+    const tool = wsl && existsSync(`${libraries}/nvidia-smi`) ? `${libraries}/nvidia-smi` : "nvidia-smi";
+    const ran = await runCheck({
+        argv: [tool, "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+        env: wsl ? { ...process.env, LD_LIBRARY_PATH: libraries } : process.env,
+        timeoutMs: GPU_QUERY_MS,
+        workload: { class: "command" },
+        kind: "probe",
+        captureBytes: 4096,
+    });
+    // A GPU whose tool is missing or slow is still there; it is only nameless.
+    const gpus = ran.exitCode === 0 ? parseGpuQuery(ran.stdout) : [];
+    return gpus.length > 0 ? gpus : NAMELESS;
+};
+let gpusOnce: Promise<GpuFacts> | undefined;
+const cachedGpus = (): Promise<GpuFacts> => {
+    gpusOnce ??= realGpus();
+    return gpusOnce;
 };
 
 // The budget's own reading, not a second one: what the turn door admits by is what "free" means everywhere.
@@ -55,12 +104,13 @@ const budgetFigures = (snapshot: BudgetSnapshot | undefined): Pick<RunnerFacts, 
 // freeDiskMb is read where the workspace lives, which is the disk a turn actually fills.
 export const machineFacts = async (workspaceRoot: string, sources: MachineFactsSources): Promise<RunnerFacts> => {
     const os = (sources.os ?? realOs)();
-    const [disk, snapshot, pressure] = await Promise.all([
+    const [disk, snapshot, pressure, gpus] = await Promise.all([
         (sources.disk ?? realDisk)(workspaceRoot),
         // allow(silent-catch): a budget that cannot read its files measures nothing, and the facts say so by omission.
         sources.budget.snapshot().catch(() => undefined),
         // allow(silent-catch): a kernel without PSI reports no pressure, which the schema already reads as absent.
         (sources.pressure ?? readPressure)().catch(() => undefined),
+        (sources.gpus ?? cachedGpus)(),
     ]);
     const cores = Math.max(1, os.cores);
     return {
@@ -71,5 +121,6 @@ export const machineFacts = async (workspaceRoot: string, sources: MachineFactsS
         load: Math.round((os.loadOne / cores) * 100) / 100,
         ...budgetFigures(snapshot),
         ...opt("cpuPressure", pressure?.cpu?.some),
+        gpus,
     };
 };

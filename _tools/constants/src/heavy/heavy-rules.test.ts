@@ -70,6 +70,11 @@ test.each(["turbo run typecheck --filter=@intentic/demo --only --dry=json", "tur
     expect(matched(invocation)).toBeUndefined();
 });
 
+// What a runner runs holds no slot here, and the command it carries is not read as the heavy program itself.
+test.each(["remote-run -- pnpm test", "offload-run --to auto --label cargo -- cargo test -p a", "remote-run --out target/debug/x -- cargo build"])("the offload command %s is exempt", (invocation) => {
+    expect(matchInvocation(invocation, mergeHeavyRules())).toBeUndefined();
+});
+
 test(`the run a dry run plans still takes turns`, () => {
     // The demo's own typecheck compiles the editor's source, so it takes the editor's lane rather than the shared pool.
     expect(matched(`turbo run typecheck --filter=@intentic/demo --only`)).toBe(`editor-typecheck`);

@@ -14,6 +14,12 @@
 # namespace's build failed with "extern location for itoa does not exist", its dependency written into the first one's
 # target/. It also closes fd 9, the build queue's slot lock (bin/queue-run): the server outlives the build by its idle
 # timeout, and one started holding the lock kept the slot from every build queued behind it (shinobi, 2026-11-05).
+# RUSTC_WRAPPER names the wrapper through a link called `sccache` (/usr/local/lib/rust-cache/sccache, off the PATH, so
+# the wrapper's own `sccache` is still the real one): the cc crate reuses RUSTC_WRAPPER for the C and C++ a build script
+# compiles only when the wrapper's file is named sccache, cachepot, buildcache or kache (cc 1.11 rustc_wrapper_fallback).
+# Named `rustc-cached`, every checkout and every offload tree compiled a bundled C++ library from scratch: measured
+# 2026-11-17 on shinobi-society, whose `duckdb` (features `bundled`) is the build its agents were told never to start at
+# the workspace root because it exhausts memory.
 RUN set -eu; v=0.10.0; \
     case "$(dpkg --print-architecture)" in \
       amd64) arch=x86_64; sha=1fbb35e135660d04a2d5e42b59c7874d39b3deb17de56330b25b713ec59f849b ;; \
@@ -45,7 +51,9 @@ RUN set -eu; v=0.10.0; \
         'SCCACHE_SERVER_UDS="/tmp/sccache-$ns.sock" exec sccache "$@" 9>&-' \
         > /usr/local/bin/rustc-cached; \
     chmod 755 /usr/local/bin/rustc-cached; \
+    mkdir -p /usr/local/lib/rust-cache; \
+    ln -sf /usr/local/bin/rustc-cached /usr/local/lib/rust-cache/sccache; \
     sccache --version
-ENV RUSTC_WRAPPER=/usr/local/bin/rustc-cached \
+ENV RUSTC_WRAPPER=/usr/local/lib/rust-cache/sccache \
     SCCACHE_DIR=/history/cache/sccache \
     SCCACHE_CACHE_SIZE=30G
