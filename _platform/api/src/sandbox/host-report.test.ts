@@ -54,6 +54,13 @@ describe(`skipsWrite`, () => {
         expect(skipsWrite(storedAged(0, { ...healthy, asleep: true }), healthy, NOW)).toBe(false);
     });
 
+    it(`writes a wake's fixing reported right after a repair's, and skips a wake's own repeat`, () => {
+        const fixing: HostReportInput = { ...checking, stage: `fixing` };
+        expect(skipsWrite(storedAged(0, fixing), { ...fixing, waking: true }, NOW)).toBe(false);
+        expect(skipsWrite(storedAged(0, { ...fixing, waking: true }), fixing, NOW)).toBe(false);
+        expect(skipsWrite(storedAged(0, { ...fixing, waking: true }), { ...fixing, waking: true }, NOW)).toBe(true);
+    });
+
     it(`writes when there is nothing stored, and when the stored one is from the future`, () => {
         expect(skipsWrite(null, checking, NOW)).toBe(false);
         expect(skipsWrite(storedAged(-1), checking, NOW)).toBe(false);

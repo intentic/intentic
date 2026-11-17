@@ -488,7 +488,14 @@ fn put_to_sleep(slug: &str, source: Source, alarm: Option<u64>) -> Result<()> {
     let reporter = Reporter::of(slug);
     power::sleep(slug, alarm)?;
     if let Some(reporter) = reporter {
-        let body = reporter.body(source, Stage::Done, None, Some(Outcome::Healthy), &[], true);
+        let body = reporter.body(
+            source,
+            Told::Asleep,
+            Stage::Done,
+            None,
+            Some(Outcome::Healthy),
+            &[],
+        );
         report::post_until_taken(&reporter.target, body);
     }
     Ok(())
@@ -496,7 +503,16 @@ fn put_to_sleep(slug: &str, source: Source, alarm: Option<u64>) -> Result<()> {
 
 /* REPORTING FOR A SANDBOX THAT SLEEPS OR WAKES, beside the fix engine's own reports and named the same way (the
 container's HOST_LABEL, this side's os and environment), so the page sees one reporter. The page reads the newest:
-`asleep` says asleep, a `fixing` while it wakes says who is waking it, and a `done` after says it is back. */
+`asleep` says asleep, a `fixing` while it wakes says who is waking it, and a `done` after says it is back. The stages
+are the fix engine's, so every wake report also says `waking` (2026-11-17): without it the page read a wake as the
+machine "fixing" the sandbox and its end as "fixed", a repair nobody needed, between "Waking" and the sandbox back. */
+
+/// What a report of this file tells the page: the sandbox went to sleep, or it is being woken from one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Told {
+    Asleep,
+    Waking,
+}
 
 struct Reporter {
     target: Target,
@@ -537,11 +553,11 @@ impl Reporter {
     fn body(
         &self,
         source: Source,
+        told: Told,
         stage: Stage,
         doing: Option<&str>,
         outcome: Option<Outcome>,
         checks: &[Check],
-        asleep: bool,
     ) -> Value {
         let env = side::here().env;
         model::wire(&model::Report {
@@ -553,7 +569,8 @@ impl Reporter {
             doing,
             outcome,
             checks,
-            asleep,
+            asleep: told == Told::Asleep,
+            waking: told == Told::Waking,
         })
     }
 }
@@ -750,7 +767,7 @@ impl Waker {
                 poster.send(
                     &reporter.target,
                     Stage::Fixing,
-                    reporter.body(source, Stage::Fixing, Some(doing), None, &[], false),
+                    reporter.body(source, Told::Waking, Stage::Fixing, Some(doing), None, &[]),
                 );
             }
         };
@@ -775,14 +792,15 @@ impl Waker {
             let done = match &failed {
                 None => reporter.body(
                     source,
+                    Told::Waking,
                     Stage::Done,
                     None,
                     Some(Outcome::Healthy),
                     &[],
-                    false,
                 ),
                 Some(error) => reporter.body(
                     source,
+                    Told::Waking,
                     Stage::Done,
                     None,
                     Some(Outcome::Failed),
@@ -792,7 +810,6 @@ impl Waker {
                         format!("start it: ic sandbox start {slug}"),
                         Fix::You,
                     )],
-                    false,
                 ),
             };
             poster.send(&reporter.target, Stage::Done, done);

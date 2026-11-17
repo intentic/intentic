@@ -943,6 +943,7 @@ impl Engine {
                 outcome: None,
                 checks: &checks,
                 asleep: chain::asleep(&sandbox.facts),
+                waking: false,
             });
             self.poster.send(target, stage, body);
         }
@@ -995,6 +996,7 @@ impl Engine {
                     outcome: Some(outcome),
                     checks: &checks,
                     asleep: chain::asleep(&sandbox.facts),
+                    waking: false,
                 }),
                 self.upkeep.as_ref(),
             );
@@ -1083,6 +1085,7 @@ impl Engine {
                         outcome: Some(outcome),
                         checks: &snapshot.host_checks,
                         asleep: false,
+                        waking: false,
                     }),
                     self.upkeep.as_ref(),
                 );

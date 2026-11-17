@@ -103,8 +103,10 @@ export const withHostReport = (stored: unknown, report: HostReport): Prisma.Inpu
  * says the same stage and outcome. A change of either always lands, so `done` is never lost to the throttle. A stored
  * `at` from the future (another replica's clock) does not hold writes back. */
 export const skipsWrite = (held: HostReport | null, next: HostReportInput, nowMs: number): boolean => {
-    // Falling asleep or waking is a change too: a sleep reported a second after a healthy fix must land.
-    if (held === null || held.stage !== next.stage || held.outcome !== next.outcome || (held.asleep === true) !== (next.asleep === true)) {
+    // Falling asleep or waking is a change too: a sleep reported a second after a healthy fix must land, and so must a
+    // wake's `fixing` a second after a repair's, or the page goes on calling the wake a repair.
+    const changed = (key: `asleep` | `waking`): boolean => (held?.[key] === true) !== (next[key] === true);
+    if (held === null || held.stage !== next.stage || held.outcome !== next.outcome || changed(`asleep`) || changed(`waking`)) {
         return false;
     }
     const age = nowMs - Date.parse(held.at);

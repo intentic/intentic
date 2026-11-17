@@ -64,7 +64,7 @@ const reportLines = (report: HostReport, now: number): string[] => {
     const outcome = report.outcome === undefined ? `` : `, ${report.outcome}`;
     return [
         `machine report: ${report.machine} (${report.os}${env}, by ${report.source}) at ${when}`,
-        `  stage: ${report.stage}${outcome}${report.asleep === true ? `, sandbox asleep` : ``}`,
+        `  stage: ${report.stage}${outcome}${report.asleep === true ? `, sandbox asleep` : ``}${report.waking === true ? `, waking it from sleep` : ``}`,
         ...(report.doing === undefined ? [] : [`  doing: ${report.doing}`]),
         ...report.checks.flatMap((check) => [
             `  [${CHECK_MARK[check.state]}] ${check.label}`,

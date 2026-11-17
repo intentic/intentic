@@ -179,8 +179,47 @@ const busyNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis, { ki
     );
 };
 
+/* A WAKE FROM SLEEP IS NOT A REPAIR (2026-11-17). `ic sandbox wakes` reports the start in the fix engine's stages, a
+`fixing` while it runs and a `done` after, so a sandbox opened after a sleep read "Waking acme", then "rog is fixing
+acme", then "rog fixed acme": a repair nobody needed, named between the sleep and the sandbox back. Its reports now say
+`waking`, and it reads "Waking" throughout, on the asleep notice's clock so the meter carries on rather than restarting.
+Only a start that failed reads otherwise, and it names the wake, not a fault found. */
+const wakeNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis, { kind: "machine" }>): DiagnosisNotice => {
+    const { report } = diagnosis;
+    const machine = machineName(input, report);
+    if (diagnosis.standing === `needs-you`) {
+        return notice(
+            {
+                title: t(`sandbox.diagnosis.wakeFailedTitle`, { machine, name: input.name }),
+                body: t(`sandbox.diagnosis.wakeFailedBody`),
+                waiting: false,
+                findings: findingsOf(report),
+                action: input.owner ? `fix` : undefined,
+            },
+            chainOf([`ok`, `ok`, `down`, `unknown`], machine),
+        );
+    }
+    const started = diagnosis.standing === `fixed`;
+    // The diagnosis's own patience on the outage's clock: none while the machine is still starting it (its report goes
+    // stale first), and FIXED_PATIENCE_MS from the word that it started.
+    const left = FIXED_PATIENCE_MS - Math.max(0, input.now - reportTime(report));
+    return notice(
+        {
+            title: t(`sandbox.diagnosis.asleepTitle`, { name: input.name }),
+            body: started ? t(`sandbox.diagnosis.wakeStartedBody`, { machine }) : t(`sandbox.diagnosis.wakeStartingBody`, { machine }),
+            waiting: true,
+            sayAtOnce: true,
+            wait: { elapsedMs: input.outageMs, expectedMs: USUAL_MS.asleep, giveUpMs: started ? input.outageMs + Math.max(0, left) : undefined },
+        },
+        chainOf(started ? [`ok`, `ok`, `ok`, `working`] : [`ok`, `ok`, `working`, `unknown`], machine),
+    );
+};
+
 const machineNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis, { kind: "machine" }>): DiagnosisNotice => {
     const { report } = diagnosis;
+    if (report.waking === true) {
+        return wakeNotice(input, diagnosis);
+    }
     const machine = machineName(input, report);
     const findings = findingsOf(report);
     if (diagnosis.standing === `working`) {
@@ -190,7 +229,7 @@ const machineNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis, {
                 body: report.doing ?? t(`sandbox.diagnosis.machineChecking`),
                 waiting: true,
                 findings,
-                // The machine's own word, current: waking it (`ic sandbox wakes`) or mending it.
+                // The machine's own word, current: it is mending it.
                 sayAtOnce: true,
                 wait: { elapsedMs: input.outageMs, expectedMs: USUAL_MS.mending },
             },

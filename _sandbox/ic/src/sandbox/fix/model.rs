@@ -564,6 +564,9 @@ pub struct Report<'a> {
     /// The keeper put the sandbox to sleep for idleness and it is still down (`ic sandbox sleep`): the page says it is
     /// asleep, and that opening it starts it, rather than reading a stopped container as broken.
     pub asleep: bool,
+    /// The run is a wake from that sleep (`ic sandbox wakes`), not a repair: its `fixing` and `done` are the start's, and
+    /// the page says it is waking rather than that the machine is fixing it.
+    pub waking: bool,
 }
 
 /// The platform's caps (`HostCheckSchema`, `HostReportInputSchema`): a value past one fails the whole report, so it
@@ -623,6 +626,10 @@ pub fn wire(report: &Report<'_>) -> Value {
     // Only ever `true`: a report that says nothing of sleep is one about a sandbox that is not asleep.
     if report.asleep {
         body["asleep"] = json!(true);
+    }
+    // The same: a report that says nothing of a wake is a repair's.
+    if report.waking {
+        body["waking"] = json!(true);
     }
     body
 }
@@ -795,6 +802,7 @@ mod tests {
             outcome: Some(Outcome::NeedsYou),
             checks: &checks,
             asleep: false,
+            waking: false,
         });
         assert_eq!(
             body,
@@ -833,6 +841,7 @@ mod tests {
                 outcome: Some(Outcome::Healthy),
                 checks: &[],
                 asleep,
+                waking: false,
             })
         };
         assert_eq!(
@@ -848,6 +857,28 @@ mod tests {
             })
         );
         assert_eq!(report(false).get("asleep"), None);
+    }
+
+    #[test]
+    fn a_wake_says_so_on_its_fixing_and_a_repair_carries_no_key() {
+        let report = |waking: bool| {
+            wire(&Report {
+                source: Source::Agent,
+                machine: "m",
+                os: "linux",
+                env: None,
+                stage: Stage::Fixing,
+                doing: Some("Waking it up: somebody opened it"),
+                outcome: None,
+                checks: &[],
+                asleep: false,
+                waking,
+            })
+        };
+        assert_eq!(report(true)["waking"], json!(true));
+        assert_eq!(report(true)["stage"], json!("fixing"));
+        assert_eq!(report(true).get("asleep"), None);
+        assert_eq!(report(false).get("waking"), None);
     }
 
     #[test]
@@ -899,6 +930,7 @@ mod tests {
             outcome: Some(Outcome::Fixed),
             checks: &[],
             asleep: false,
+            waking: false,
         });
         assert_eq!(body["doing"], json!("Starting Docker Desktop"));
         assert_eq!(body["env"], json!("archlinux"));
@@ -914,6 +946,7 @@ mod tests {
             outcome: None,
             checks: &[],
             asleep: false,
+            waking: false,
         });
         assert_eq!(
             clipped["doing"].as_str().map(|s| s.chars().count()),

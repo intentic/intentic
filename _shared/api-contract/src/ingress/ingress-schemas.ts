@@ -204,6 +204,11 @@ export const HostReportInputSchema = z.object({
     // (`ic sandbox sleep`), and it starts again when somebody asks for it (POST /host-report/wakes). Absent while awake,
     // and from an older `ic`.
     asleep: z.boolean().optional(),
+    // (2026-11-17) The run is a wake from that sleep, not a repair: `ic sandbox wakes` starting the sandbox because
+    // somebody opened it or its alarm came due, on the `fixing` it posts while the start runs and the `done` after. The
+    // stages are the fix engine's, so without this the page read a wake as "fixing" and its end as "fixed". Absent on a
+    // repair, and from an older `ic`.
+    waking: z.boolean().optional(),
 });
 export type HostReportInput = z.infer<typeof HostReportInputSchema>;
 

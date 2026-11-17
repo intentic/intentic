@@ -117,6 +117,44 @@ describe(`the machine's own report`, () => {
     });
 });
 
+// `ic sandbox wakes` reports a start from sleep in the fix engine's stages; it once read "rog is fixing acme" and "rog
+// fixed acme" between "Waking acme" and the sandbox back.
+describe(`a wake from sleep, in a repair's stages`, () => {
+    const starting = report({ stage: `fixing`, outcome: undefined, checks: [], doing: `Waking it up: somebody opened it`, waking: true });
+    const started = report({ outcome: `healthy`, checks: [], waking: true });
+
+    it(`says it is waking while its machine starts it, on the asleep notice's clock, never that it is being fixed`, () => {
+        const shown = present({ kind: `machine`, report: starting, standing: `working` });
+        expect(shown).toMatchObject({ title: `Waking acme`, waiting: true, tone: `info`, action: undefined, sayAtOnce: true });
+        expect(shown.body).toContain(`rog is starting it now`);
+        expect(shown.wait).toEqual({ elapsedMs: 20_000, expectedMs: USUAL_MS.asleep, giveUpMs: undefined });
+        expect(shown.chain.map((link) => link.state)).toEqual([`ok`, `ok`, `working`, `unknown`]);
+    });
+
+    it(`still says waking once its machine has started it, until it dials in or the diagnosis's patience runs out`, () => {
+        const shown = present({ kind: `machine`, report: started, standing: `fixed` });
+        expect(shown).toMatchObject({ title: `Waking acme`, waiting: true, action: undefined, sayAtOnce: true });
+        expect(shown.body).toContain(`running again on rog`);
+        // Reported a minute ago: the rest of FIXED_PATIENCE_MS, from where the outage's clock stands.
+        expect(shown.wait).toEqual({ elapsedMs: 20_000, expectedMs: USUAL_MS.asleep, giveUpMs: 20_000 + FIXED_PATIENCE_MS - 60_000 });
+        expect(shown.chain.map((link) => link.state)).toEqual([`ok`, `ok`, `ok`, `working`]);
+    });
+
+    it(`names a start that failed as the wake that failed, and hands the owner the command`, () => {
+        const error = { id: `container`, label: `Sandbox container`, state: `fail` as const, problem: `docker start failed`, remedy: `start it: ic sandbox start acme`, fix: `you` as const };
+        const failed = report({ outcome: `failed`, checks: [error], waking: true });
+        const shown = present({ kind: `machine`, report: failed, standing: `needs-you` });
+        expect(shown).toMatchObject({ title: `rog couldn't wake acme`, waiting: false, action: `fix` });
+        expect(shown.findings.map((check) => check.id)).toEqual([`container`]);
+        expect(present({ kind: `machine`, report: failed, standing: `needs-you` }, { owner: false }).action).toBeUndefined();
+    });
+
+    it(`leaves a repair's words to a repair`, () => {
+        const repair = report({ stage: `fixing`, outcome: undefined, checks: [], doing: `Starting Docker Desktop` });
+        expect(present({ kind: `machine`, report: repair, standing: `working` }).title).toBe(`rog is fixing acme`);
+    });
+});
+
 describe(`this side of the connection`, () => {
     it(`blames nothing on the sandbox when this device is offline, and offers nothing`, () => {
         const shown = present({ kind: `offline` });
@@ -165,7 +203,7 @@ describe(`a wait said at once`, () => {
     });
 
     it(`is its machine saying it is starting it`, () => {
-        const waking = report({ stage: `fixing`, checks: [], doing: `Waking it` });
+        const waking = report({ stage: `fixing`, checks: [], doing: `Waking it up: somebody opened it`, waking: true });
         expect(present({ kind: `machine`, report: waking, standing: `working` }).sayAtOnce).toBe(true);
     });
 
