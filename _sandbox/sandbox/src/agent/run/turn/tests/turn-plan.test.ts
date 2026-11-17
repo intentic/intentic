@@ -634,12 +634,13 @@ describe("a conversation whose account can no longer serve it", () => {
             claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
                 list: async () => [
                     { id: "seatless", label: "seatless", connectedAt: 0 },
-                    { id: "spare", label: "spare", connectedAt: 1 },
+                    ...(ready ? [{ id: "spare", label: "spare", connectedAt: 1 }] : []),
                 ],
             }),
             claudeSeats: memorySeats(seat.marks),
             claudeSeatCheck: scriptedSeatCheck({ seats: memorySeats(seat.marks), answer: () => seat.probe.answer, now: () => seat.now }).check,
-            // The refused seat reads emptiest, as a seat nothing ran on does; the spare is ready only when it has a reading.
+            // Without a spare this is a single-account user: an unread connected spare still qualifies for a move.
+            // The refused seat reads emptiest, as a seat nothing ran on does.
             accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", {
                 read: async () => (ready ? { seatless: { ...roomy, windows: [] }, spare: roomy } : { seatless: { ...roomy, windows: [] } }),
             }),

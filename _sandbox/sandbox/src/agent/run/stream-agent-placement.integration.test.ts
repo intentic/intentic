@@ -282,7 +282,7 @@ test("a clean isolated turn rebases onto the main line, lands into the main tree
     const frames = await collect(streamAgent(s, input, undefined));
 
     expect(frames).toStrictEqual([
-        { kind: "worktree", branch: "agent/placed-lands", base: base.slice(0, 7), unenforced: true, sync: { commits: 1, blocked: [] } },
+        { kind: "worktree", branch: "agent/placed-lands", base: base.slice(0, 7), unenforced: true, sync: { commits: 1, blocked: [], cause: "turn-open" } },
         { kind: "checkpoint", id: "worktree:0", index: 0 },
         OWN_CHECKOUT_OPENING_PREAMBLE,
         { kind: "delta", text: "shipped" },
@@ -470,7 +470,7 @@ test("a card settling mid-turn rebases the branch again, restates where it stand
         { kind: "checkpoint", id: "worktree:0", index: 0 },
         OWN_CHECKOUT_OPENING_PREAMBLE,
         { kind: "delta", text: "asked" },
-        { kind: "worktree", branch: "agent/placed-resync", base: moved.slice(0, 7), unenforced: true, sync: { commits: 1, blocked: [] } },
+        { kind: "worktree", branch: "agent/placed-resync", base: moved.slice(0, 7), unenforced: true, sync: { commits: 1, blocked: [], cause: "answer" } },
         { kind: "done" },
     ]);
     expect(emitted).toStrictEqual([

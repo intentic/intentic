@@ -991,12 +991,13 @@ describe("a conversation on an account its organisation turned off", () => {
         seats: Record<string, { at: number; reason: string }>,
         ready: readonly string[],
         probe: { answer: SeatProbe; now: number } = { answer: STILL_OFF, now: Date.now() },
+        accounts: readonly string[] = ["acct-a", "acct-b", "acct-c"],
     ) => {
         const tokens: string[] = [];
         const daemon = services({
             claudeStore: {
                 read: async (id) => ({ id, label: id, connectedAt: 0, accessToken: `tok-${id}` }),
-                list: async () => ["acct-a", "acct-b", "acct-c"].map((id) => ({ id, label: id, connectedAt: 0 })),
+                list: async () => accounts.map((id) => ({ id, label: id, connectedAt: 0 })),
             },
             claudeSeats: memorySeats(seats),
             claudeSeatCheck: scriptedSeatCheck({ seats: memorySeats(seats), answer: () => probe.answer, now: () => probe.now }).check,
@@ -1047,7 +1048,8 @@ describe("a conversation on an account its organisation turned off", () => {
     it("re-tests a marked account a turn names when no other can serve: held while refused, run once it answers", async () => {
         const seats: Record<string, { at: number; reason: string }> = {};
         const probe = { answer: STILL_OFF, now: Date.now() };
-        const { tokens, client } = fleet(seats, [], probe);
+        // A single-account user: an unread connected spare would still qualify for a move.
+        const { tokens, client } = fleet(seats, [], probe, ["acct-a"]);
         await runAgentTurn(client, { prompt: "start", conversationId: "conv-pick", account: "acct-a" });
         seats["acct-a"] = SEAT_OFF;
 
@@ -1065,7 +1067,7 @@ describe("a conversation on an account its organisation turned off", () => {
     it("sends the held words on the account once a re-test finds its access back", async () => {
         const seats: Record<string, { at: number; reason: string }> = {};
         const probe = { answer: STILL_OFF, now: Date.now() };
-        const { daemon, tokens, client } = fleet(seats, [], probe);
+        const { daemon, tokens, client } = fleet(seats, [], probe, ["acct-a"]);
         await runAgentTurn(client, { prompt: "start", conversationId: "conv-back", account: "acct-a" });
         seats["acct-a"] = SEAT_OFF;
         await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-back", messageId: "m-back" });
@@ -1082,7 +1084,7 @@ describe("a conversation on an account its organisation turned off", () => {
 
     it("holds the words for a press when no account can serve, spawning nothing", async () => {
         const seats: Record<string, { at: number; reason: string }> = {};
-        const { daemon, tokens, client } = fleet(seats, []);
+        const { daemon, tokens, client } = fleet(seats, [], undefined, ["acct-a"]);
         await runAgentTurn(client, { prompt: "start", conversationId: "conv-held", account: "acct-a" });
         seats["acct-a"] = SEAT_OFF;
 
