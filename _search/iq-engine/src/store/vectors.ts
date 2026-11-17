@@ -22,8 +22,17 @@ const stretch = (vec: Float32Array): Uint8Array => {
     return new Uint8Array(out.buffer);
 };
 
-/** Stores a freshly computed embedding for `chunkId` and marks the chunk embedded. */
+// A chunk's vector is written by whoever embeds it first, and two iq processes topping up the same backlog both can:
+// each read the chunk as pending before either wrote. So a write replaces what the chunk holds instead of inserting
+// beside it. vec0 tables take no `INSERT OR REPLACE` or upsert, hence the delete first. 2026-11-17, the
+// shinobi-society audit: concurrent searches failed with "UNIQUE constraint failed on chunk_vectors primary key".
+const dropVector = (db: SqliteDb, chunkId: number): void => {
+    db.run("DELETE FROM chunk_vectors WHERE chunk_id = ?", asInt(chunkId));
+};
+
+/** Stores a freshly computed embedding for `chunkId`, replacing any it holds, and marks the chunk embedded. */
 export const putVector = (db: SqliteDb, chunkId: number, fileId: number, vec: Float32Array): void => {
+    dropVector(db, chunkId);
     db.run(
         "INSERT INTO chunk_vectors (chunk_id, embedding, file_id) VALUES (?, vec_quantize_int8(?, 'unit'), ?)",
         asInt(chunkId),
@@ -39,6 +48,7 @@ export const putVector = (db: SqliteDb, chunkId: number, fileId: number, vec: Fl
 export const copyVector = (db: SqliteDb, chunkId: number, fileId: number, quantized: Uint8Array): void => {
     // vec_int8 is required here: sqlite-vec infers element type from blob length, and 384 bytes would misread as 96
     // floats.
+    dropVector(db, chunkId);
     db.run("INSERT INTO chunk_vectors (chunk_id, embedding, file_id) VALUES (?, vec_int8(?), ?)", asInt(chunkId), quantized, asInt(fileId));
     db.run("UPDATE chunks SET embedded = 1 WHERE id = ?", chunkId);
 };

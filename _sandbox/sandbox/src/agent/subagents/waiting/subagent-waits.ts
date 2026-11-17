@@ -91,15 +91,22 @@ export const waitForSubagents = (actors: Actors, conversationId: string, options
         evaluate();
     });
 
-/** Every parent parked in a wait right now, with its children on `provider` that failed or are paused for a re-run. */
-export const parentsWaitingOn = (actors: Actors, provider: string): readonly { readonly parent: string; readonly children: readonly string[] }[] => {
+/**
+ * Every parent parked in a wait right now, with its children on `provider` that are paused for a re-run, or failed in a
+ * way `owed` says the news is for (capacity-reopened.ts: a failure on that provider's capacity, not yet told).
+ */
+export const parentsWaitingOn = (
+    actors: Actors,
+    provider: string,
+    owed: (record: SubagentRecord) => boolean = () => true,
+): readonly { readonly parent: string; readonly children: readonly string[] }[] => {
     const waiters = actors.holdings(WAITERS);
     const parents = new Set(waiters.entries().flatMap(([id]) => waiters.holder(id) ?? []));
     return [...parents].flatMap((parent) => {
         const children = actors
             .holdings(ROSTER)
             .of(parent)
-            .filter((record) => record.provider === provider && (record.status === "failed" || record.status === "paused"))
+            .filter((record) => record.provider === provider && (record.status === "paused" || (record.status === "failed" && owed(record))))
             .map((record) => record.id);
         return children.length === 0 ? [] : [{ parent, children }];
     });

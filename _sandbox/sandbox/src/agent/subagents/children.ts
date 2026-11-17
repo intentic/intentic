@@ -53,7 +53,7 @@ import { dispatchOf, placementOf } from "../../runners/child-placement.js";
 import { childPlacementRefusal, placeStartingChild } from "./child-placement-live.js";
 import type { DelegateAsk } from "../../links/linked-children.js";
 import type { LinkListing } from "../../links/link-listing.js";
-import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, wearingParent, withRun } from "./child-spec.js";
+import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, failedOnCapacity, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, wearingParent, withRun } from "./child-spec.js";
 import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
 import { elsewhereFor, spentAsked } from "./child-listing.js";
 import { seatLine } from "./child-admission.js";
@@ -157,6 +157,8 @@ export interface ChildRecord {
     pending: PendingChildCard | undefined;
     // Waiting for memory before its turn starts: `running`, with no turn yet to steer.
     queued: boolean;
+    // Refused for memory before any turn was admitted (true), admitted once (false), else not known.
+    unstarted?: boolean;
     // Waiting for a turn somebody else started on its conversation to end before this one starts: `running`, with no
     // turn of the parent's to steer either.
     behind: boolean;
@@ -635,7 +637,7 @@ const settleChildTurn = async (
         settleChild(services.conversations, childId, {
             status: cancelled || killed !== undefined ? "killed" : tally.failure !== undefined ? "failed" : "completed",
             report: closing,
-            ...opt("error", error),
+            ...opt("error", error), capacity: failedOnCapacity(tally),
         });
     }
     giveSeatBack();
@@ -699,19 +701,11 @@ const admitRoom = async (services: Services, childId: string, kid: ChildRecord |
     if (kid !== undefined) {
         kid.queued = true;
     }
-    const room = await services.resources.admit({
-        workload: "agentRuntime",
-        attended: false,
-        owner: childId,
-        where,
-        forTurn: true,
-        wait: {
-            onShort: (diagnosis) =>
-                noteSpawnedChild(services.conversations, childId, { status: "pending", summary: `Waiting for memory: ${diagnosis}.` }),
-        },
-    });
+    const onShort = (diagnosis: string): void => noteSpawnedChild(services.conversations, childId, { status: "pending", summary: `Waiting for memory: ${diagnosis}.` });
+    const room = await services.resources.admit({ workload: "agentRuntime", attended: false, owner: childId, where, forTurn: true, wait: { onShort } });
     if (kid !== undefined) {
         kid.queued = false;
+        kid.unstarted = room.verdict === "run" ? false : kid.unstarted !== false && kid.sessionId === undefined;
     }
     if (room.verdict !== "run") {
         return room.message;
@@ -1263,8 +1257,10 @@ const followUp = async (services: Services, parent: ChildParent, kid: ChildRecor
     // Seat is claimed; same handoff-or-refund rule as startChild covers a throw before the turn starts.
     let handedOff = false;
     try {
+        // Refused for memory before it ever ran, a child never read its task (the shinobi-society audit, 2026-11-17).
+        const asked = kid.unstarted === true ? `${kid.spec.prompt}\n\n${message}` : message;
         const turn: TurnInput & { conversationId: string } = {
-            prompt: kid.spec.result === undefined ? message : `${message}\n\n${RESULT_REMINDER}`,
+            prompt: kid.spec.result === undefined ? asked : `${asked}\n\n${RESULT_REMINDER}`,
             conversationId: childId,
             // Ignored by a conversation already open. When the first turn never opened it (refused for memory, turned
             // away, or ended before it got that far), this one does, and opens it as the spawn would have.

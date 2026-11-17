@@ -588,7 +588,7 @@ const preflight = async (
     const going = await continuationOf(services, execution, { input, history, held, way, rollover, resumed, delivery, signal, localCwd });
     clock.mark("history");
     const base = baseRequestOf(services, turnInput, { execution, history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
-    const frames = createTurnFrames(effectiveCwd, resumed, Date.now(), turnShellEdits(localCwd, effectiveCwd));
+    const frames = createTurnFrames(effectiveCwd, resumed, Date.now(), turnShellEdits(localCwd, effectiveCwd, services, input));
     const context = {
         base,
         attachmentPaths: attachments.paths,

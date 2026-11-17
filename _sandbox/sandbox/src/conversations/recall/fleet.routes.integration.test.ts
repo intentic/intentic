@@ -32,6 +32,9 @@ beforeEach(() => {
 interface FleetAnswer {
     readonly agents?: readonly FleetRow[];
     readonly indexing?: boolean;
+    readonly total?: number;
+    readonly truncated?: boolean;
+    readonly maxLimit?: number;
     readonly agent?: FleetRecall;
     readonly transcript?: { readonly total: number; readonly messages?: readonly FleetMessage[]; readonly rows?: readonly { readonly at: number }[] };
     readonly detail?: FleetMessageDetail;
@@ -170,6 +173,11 @@ test("the roster answers every conversation, newest first, with what a caller ne
     expect(agents.map((agent) => agent.title)).toEqual([deriveTitle(PUBLISH_PROMPT), deriveTitle(PIPELINE_PROMPT)]);
     // Limit pages the newest entries; it is not a filter.
     expect((await rosterOf(app, "/fleet?limit=1")).map((agent) => agent.id)).toEqual(["clear-marsh-8c46"]);
+    // A page says whether it is the whole answer (the shinobi-society audit, 2026-11-17).
+    const page = await fleet(app, "/fleet?limit=1");
+    expect({ total: page.body.total, truncated: page.body.truncated, maxLimit: page.body.maxLimit }).toEqual({ total: 2, truncated: true, maxLimit: 100 });
+    const whole = await fleet(app, "/fleet");
+    expect({ total: whole.body.total, truncated: whole.body.truncated }).toEqual({ total: 2, truncated: false });
 });
 
 // The branch case percent-encodes `agent/...` to one path segment, staying inside the grant's one-segment glob while

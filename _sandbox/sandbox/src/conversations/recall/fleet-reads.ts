@@ -6,7 +6,7 @@ import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { type BundlePromptReader, conversationBundle } from "./fleet-bundle.js";
 import { resolveFleetHandle } from "./fleet-handles.js";
-import { type HandleResolution, candidateOf, fleetRecall, fleetRoster, fleetSearch, present, type RosterOptions } from "./fleet-recall.js";
+import { type HandleResolution, candidateOf, fleetRecall, fleetRosterPage, fleetSearchPage, present, type RosterOptions } from "./fleet-recall.js";
 import { fleetMessageDetail, fleetMessages, fleetRows } from "./fleet-transcript.js";
 
 // The fleet's READS, apart from the routes that serve them (fleet.routes.ts for this sandbox's own agents, and a link's
@@ -111,17 +111,22 @@ export const createFleetReads = (services: Services, readerOf: FleetReaderOf, re
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const query = c.req.query("q")?.trim();
         const options = rosterOptionsOf(c);
-        const found = query === undefined || query === "" ? fleetRoster(services, options) : await fleetSearch(services, query, options);
-        // Only the conversations this caller may read: a row is a title, and a search hit a line of the transcript.
+        // Only the conversations this caller may read, kept before the page is cut: a row is a title, and a search hit a
+        // line of the transcript.
         const reads = await readerOf(c);
-        const agents = found.filter((row) => reads(row.id));
+        const page = query === undefined || query === "" ? fleetRosterPage(services, options, reads) : await fleetSearchPage(services, query, options, reads);
+        // `total` and `truncated` say whether this page is the whole answer (2026-11-17, the shinobi-society audit: a page
+        // cut at its limit read as the whole fleet). `limit` stops at MAX_LIMIT; past it, `--repo`, `--owner` or a search
+        // narrows instead.
+        const agents = page.rows;
+        const counted = { total: page.total, truncated: page.total > agents.length, maxLimit: MAX_LIMIT };
         // `indexing` marks a backfill still running, so an empty result may still grow rather than mean nothing exists;
         // `coverage` says how far through the conversations that pass has got.
         if (query === undefined || query === "") {
-            return c.json({ agents });
+            return c.json({ agents, ...counted });
         }
         const coverage = services.saidIndex.coverage?.();
-        return c.json({ agents, indexing: services.saidIndex.indexing(), ...present({ coverage }) });
+        return c.json({ agents, ...counted, indexing: services.saidIndex.indexing(), ...present({ coverage }) });
     },
     /** GET /fleet/:handle: one conversation, whole; `?transcript=1` adds the record, bounded by `last` and `grep`
      *  (`&raw=1` as stored rows rather than lines); `?message=<n>` adds that one message whole, as `detail`;

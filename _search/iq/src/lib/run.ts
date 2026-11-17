@@ -281,7 +281,9 @@ export const readStdin = (): Promise<string> =>
     });
 
 // `iq multi`: several queries sharing one process spawn and one --budget, split equally (min 150 tokens per section);
-// per-line flags override command-level ones. Exits 0 if any section hit, 1 if all empty.
+// per-line flags override command-level ones. Exits 0 if any section hit, 1 if all empty, 2 if none hit and one failed.
+// A query that throws is that line's error, like a line that does not parse: 2026-11-17, the shinobi-society audit
+// found a batch whose first sections had printed hits exit 2, because a later query's throw escaped to the CLI.
 export const runMulti = async (context: CommandContext, flags: SearchFlags, queries: readonly string[], input?: string): Promise<void> => {
     const mode = resolveMode(flags, loadConfig().intenticOutput);
     const source = queries.length > 0 ? queries : ((input ?? (await readStdin())).split("\n") as readonly string[]);
@@ -293,6 +295,11 @@ export const runMulti = async (context: CommandContext, flags: SearchFlags, quer
     const root = workspaceRoot();
     const budget = Math.max(150, Math.floor(flags.budget / lines.length));
     let anyHit = false;
+    let anyFailed = false;
+    const writeError = (prefix: string, line: string, message: string): void => {
+        anyFailed = true;
+        context.process.stdout.write(mode === "text" ? `${prefix} iq: ${line}, error: ${message}\n` : `${JSON.stringify({ kind: "error", line, message })}\n`);
+    };
     for (const [i, line] of lines.entries()) {
         const prefix = `[${i + 1}/${lines.length}]`;
         let parsed = parseMultiLine(line);
@@ -309,23 +316,24 @@ export const runMulti = async (context: CommandContext, flags: SearchFlags, quer
             }
         }
         if (parsed.error !== undefined) {
-            const message = `${prefix} iq: ${line}, error: ${parsed.error}\n`;
-            if (mode === "text") {
-                context.process.stdout.write(message);
-            } else {
-                context.process.stdout.write(`${JSON.stringify({ kind: "error", line, message: parsed.error })}\n`);
-            }
+            writeError(prefix, line, parsed.error);
             continue;
         }
         const merged: SearchFlags = { ...flags, ...parsed.scope };
-        const outcome = await engine.run({
-            verb: parsed.verb,
-            query: parsed.query,
-            scope: toScope(merged),
-            render: { ...toRender(flags), budget },
-            options: parsed.options,
-            echo: echoOf(parsed.verb, parsed.query, merged, parsed.options),
-        });
+        let outcome: QueryOutcome;
+        try {
+            outcome = await engine.run({
+                verb: parsed.verb,
+                query: parsed.query,
+                scope: toScope(merged),
+                render: { ...toRender(flags), budget },
+                options: parsed.options,
+                echo: echoOf(parsed.verb, parsed.query, merged, parsed.options),
+            });
+        } catch (error) {
+            writeError(prefix, line, errorMessage(error));
+            continue;
+        }
         if (mode === "text") {
             context.process.stdout.write(`${prefix} ${outcome.text}${i < lines.length - 1 ? "\n" : ""}`);
         } else {
@@ -333,5 +341,5 @@ export const runMulti = async (context: CommandContext, flags: SearchFlags, quer
         }
         anyHit ||= outcome.exitCode === 0;
     }
-    (context.process as { exitCode?: number | string | null }).exitCode = anyHit ? 0 : 1;
+    (context.process as { exitCode?: number | string | null }).exitCode = anyHit ? 0 : anyFailed ? 2 : 1;
 };

@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+// When the daemon rebased a conversation's branch onto the main line: as its turn opened (`turn-open`), after the person
+// answered a card it waited on (`answer`), or mid-turn between two of the agent's tool calls (`between-tools`), which the
+// agent never waited for. The shinobi-society audit (2026-11-17): a mid-turn catch-up said "while this agent waited", and
+// the agent hunted for what had reset its fix.
+export const WorktreeSyncCauseSchema = z.enum(["turn-open", "answer", "between-tools"]);
+export type WorktreeSyncCause = z.infer<typeof WorktreeSyncCauseSchema>;
+
 // The sandbox's own notice rows (a land, a hold, a renewal, a stop), as a code and the facts they were worded from. The
 // row's `text` stays the English sentence, which older apps, stored transcripts and agents reading their own history
 // go on reading; `noticeCode` beside it is what lets an app say the same thing in the reader's language and words.
@@ -64,8 +71,12 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
     // The conversation's view of the workspace failed to come up, and `layers` of its dependency layers were set aside
     // for fresh ones before the turn went on (agent-events.ts workspace_repaired).
     z.object({ code: z.literal("workspaceRepaired"), params: z.object({ layers: count }) }),
-    // The branch was rebased onto `commits` new commits, and/or could not be in the repos named in `blocked`.
-    z.object({ code: z.literal("synced"), params: z.object({ commits: count, blocked: z.string().optional() }) }),
+    // The branch was rebased onto `commits` new commits, and/or could not be in the repos named in `blocked`; `cause` says
+    // when (absent reads as a turn's opening, as before it was said), `base` the commit it now sits on.
+    z.object({
+        code: z.literal("synced"),
+        params: z.object({ commits: count, blocked: z.string().optional(), cause: WorktreeSyncCauseSchema.optional(), base: z.string().optional() }),
+    }),
     z.object({ code: z.literal("intoParent") }),
     z.object({ code: z.literal("intoParentClash"), params: z.object({ files: count }) }),
     z.object({ code: z.literal("landHeld") }),

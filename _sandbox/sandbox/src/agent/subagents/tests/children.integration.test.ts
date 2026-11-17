@@ -830,6 +830,45 @@ describe("a follow-up that meets a turn somebody else started", () => {
     // The room a turn is admitted with is held only briefly, so a follow-up that waited behind another turn asks for room
     // again before it starts: otherwise the door would judge it afresh with its run already live, and the child would
     // read as working with nothing running for as long as that second wait lasted.
+    // shinobi-society, 2026-11-17: three children were refused for memory before their first turn, and the "start now"
+    // sent to them was all one of them ever read of its task.
+    it("carries the task itself when the first turn was refused for memory before it ran", async () => {
+        const prompts: string[] = [];
+        const body = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
+            prompts.push(input.prompt);
+            yield { kind: "done" };
+        };
+        const driven = drivenBy(spawnServices({}, [], actors), body);
+        let turns = 0;
+        const services = unstubbed<Services>("services", {
+            ...driven,
+            resources: {
+                ...driven.resources,
+                admit: (request) => {
+                    if (request.forTurn === true && request.owner !== undefined && (turns += 1) === 1) {
+                        return Promise.resolve({ verdict: "refuse" as const, message: "The machine is short of memory", waitedMs: 600_000 });
+                    }
+                    return driven.resources.admit(request);
+                },
+            },
+        });
+        const result = await spawnChild(services, parent, { prompt: "port it", provider: "cursor", model: "composer-2.5" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(prompts).toEqual([]);
+        await sendToChild(services, parent, result.id, "Start now.");
+        await settled(result.id);
+        expect(prompts).toHaveLength(1);
+        expect(prompts[0]).toContain("port it");
+        expect(prompts[0]).toContain("Start now.");
+        // Once a turn ran, a follow-up is its own words again.
+        await sendToChild(services, parent, result.id, "And the lexer.");
+        await settled(result.id);
+        expect(prompts[1]).not.toContain("port it");
+    });
+
     it("asks for room again once the turn it waited behind has ended, before its own starts", async () => {
         const conflictResolved = Promise.withResolvers<void>();
         const body = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {

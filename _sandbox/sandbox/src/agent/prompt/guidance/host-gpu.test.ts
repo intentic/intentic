@@ -15,6 +15,9 @@ test("on a Windows PC the turn is told it is the owner's display GPU, to ask thr
     expect(text).toContain("`gpu-run <command…>`");
     expect(text).toContain("`--ignore-gpu-blocklist`");
     expect(text).toContain("owner's own browser on their device");
+    // shinobi-society, 2026-11-15..17: agents prefixed `env -u LD_LIBRARY_PATH` to cargo, Blender and Chrome 28 times
+    // across 5 conversations, though the entrypoint already leaves the GPU's libraries out.
+    expect(text).toContain("there is nothing to unset");
 });
 
 // A privileged container sees every device node of the VM, /dev/dxg included, with nothing to drive it.

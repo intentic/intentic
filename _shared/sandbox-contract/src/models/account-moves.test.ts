@@ -8,7 +8,15 @@ const SEATLESS: AccountState = { kind: "blocked", fix: "admin", reason: "no seat
 
 test("proven room wins wherever the provider publishes an allowance, and nothing else does", () => {
     expect(moveDestination([entry("unread", UNREAD), entry("low", { kind: "ready", room: 5 }), entry("high", { kind: "ready", room: 60 })], true)?.id).toBe("high");
-    expect(moveDestination([entry("unread", UNREAD), entry("spent", SPENT)], true)).toBeUndefined();
+    expect(moveDestination([entry("unread", UNREAD), entry("line", { kind: "ready", room: 0 })], true)).toBeUndefined();
+});
+
+// The shinobi-society audit (2026-11-17): a Claude account refused for its seat, the other's reading aged out.
+test("where every account with a reading is refused, an unread one qualifies even where the provider publishes an allowance", () => {
+    expect(moveDestination([entry("unread", UNREAD), entry("spent", SPENT)], true)?.id).toBe("unread");
+    expect(moveDestination([entry("seatless", SEATLESS), entry("flapping", UNREAD, true), entry("steady", UNREAD)], true)?.id).toBe("steady");
+    expect(moveDestination([entry("unread", UNREAD)], true)?.id).toBe("unread");
+    expect(moveDestination([], true)).toBeUndefined();
 });
 
 // The 2026-10-29 sandbox: a Devin account refused for its weekly quota, two connected beside it that nothing had refused.

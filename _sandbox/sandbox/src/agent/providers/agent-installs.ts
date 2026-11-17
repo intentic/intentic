@@ -213,6 +213,9 @@ const tokenize = (command: string): CommandSegment[] => {
 // The words of each invocation, quotes honoured; callers outside this file want words, not a joined string to re-split.
 export const commandWords = (command: string): string[][] => tokenize(command).map((segment) => [...segment.words]);
 
+// Each invocation's words with the operator it ended on, for a reader of pipelines (verification/pipeline-filters.ts).
+export const commandSegments = (command: string): readonly { readonly words: readonly string[]; readonly next?: string }[] => tokenize(command);
+
 const shellWords = (command: string): string[] => tokenize(command).flatMap((segment) => segment.words);
 
 const executableOf = (words: readonly string[]): string | undefined => words[0]?.split("/").at(-1);

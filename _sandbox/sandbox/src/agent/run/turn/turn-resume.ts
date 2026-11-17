@@ -17,6 +17,7 @@ import { planApproval, planRevision } from "../../prompt/plan-revision.js";
 import type { Services } from "../../../composition.js";
 import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript, recordUnrecordedRuns, runLogFor } from "../../../sessions/turn-transcript.js";
 import { carriedRun, drawnOf, dropRunLog, saidMidTurn } from "./recovery/cut-turn-rows.js";
+import { anotherRerunEarned, rerunsSpentWhy } from "./recovery/rerun-budget.js";
 import { offerAnswerWords, permissionAnswer, restoreParkedCard } from "./recovery/restored-offers.js";
 import type { Caller } from "../../../auth/auth.js";
 import { POST_PLAN_MODE } from "../harness/claude-code-runner.js";
@@ -42,6 +43,7 @@ import { restartCost } from "../../../system/boot/restarts/restart-record.js";
 import { notResumedReason, type RestartResume } from "./recovery/restart-resume-policy.js";
 import { spentUntil } from "./holds/allowance-gate.js";
 import { releaseRoomHolds } from "./holds/room-holds.js";
+import { releaseAccountHolds } from "./holds/account-refusal-release.js";
 import { memoryRerunsOf, memoryTail } from "./holds/memory-kill.js";
 import { holdCutForMemory } from "./recovery/memory-restart.js";
 import { limitDue } from "./holds/limit-due.js";
@@ -621,6 +623,11 @@ export const createTurnResumeScheduler = (services: Services, backstopMs = RESUM
         } catch (error) {
             services.logger.error({ err: error }, "resume pass: a low-memory hold could not be let go, the next pass tries again");
         }
+        try {
+            await releaseAccountHolds(services, now);
+        } catch (error) {
+            services.logger.error({ err: error }, "resume pass: an account refusal's words could not be let go, the next pass tries again");
+        }
     };
     const passes = nudgedPass(pass, {
         backstopMs,
@@ -878,7 +885,7 @@ export const recordOrRerun = async (
 ): Promise<void> => {
     const drawn = await drawnOf(services, entry);
     const recordedAs = { drawn, run: entry.run?.id };
-    const { spent, stale } = resumeBars(entry, now);
+    const { spent, stale } = resumeBars(entry, now, anotherRerunEarned(entry, drawn, resume, previousRun()));
     // A restart memory caused holds its turns for the memory release, whatever the restart answer (memory-restart.ts).
     if (resume.memory !== undefined && !spent && !stale) {
         await holdCutForMemory(services, entry, resume.memory, recordedAs, now);
@@ -898,7 +905,7 @@ export const recordOrRerun = async (
         }
         await dropRunLog(services, entry);
         await consumeEntry(services, entry);
-        const why = notResumedWhy(resume, spent);
+        const why = notResumedWhy(resume, spent, entry.attempts);
         recordInterrupted(services, entry, `not resumed: ${why}`, now);
         services.logger.info(
             { ...cutTurnFields(services, entry), why, spent, stale, policy: resume },
@@ -925,11 +932,11 @@ export const recordOrRerun = async (
 
 // Why a cut turn stays on the record rather than running again, in the words its line and its ledger row carry: the
 // boot's policy first, then the turn's own bars.
-const notResumedWhy = (resume: RestartResume, spent: boolean): string => {
+const notResumedWhy = (resume: RestartResume, spent: boolean, attempts: number): string => {
     if (!resume.resume) {
         return notResumedReason(resume);
     }
-    return spent ? "its one re-run is already spent" : "it is older than a re-run is wanted";
+    return spent ? rerunsSpentWhy(attempts) : "it is older than a re-run is wanted";
 };
 
 // What every line about a journalled turn a restart cut says of it: which conversation, the run it was, the session it

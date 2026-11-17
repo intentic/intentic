@@ -39,13 +39,17 @@ it(`never offers the account a standing refusal names, whatever its last reading
     setAccountUsage(`claude`, `b`, reading(10));
     providerRefusals.value = { claude: [{ kind: `limit`, account: `b`, at: Date.now(), message: `usage limit reached` }] };
 
-    expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBeUndefined();
+    expect(fallbackAccount(`claude`, `a`, [account(`a`), account(`b`)])?.id).toBeUndefined();
 });
 
-it(`does not offer an account nobody has measured`, () => {
+// A reading that went stale is no refusal (account-moves.ts, the shinobi-society audit of 2026-11-17); one that could
+// still serve keeps an unread account out.
+it(`offers an account nobody has measured only once every measured one is refused`, () => {
     setAccountUsage(`claude`, `a`, reading(99));
+    expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBe(`b`);
 
-    expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBeUndefined();
+    setAccountUsage(`claude`, `b`, reading(SPENT_UTILIZATION));
+    expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBe(`c`);
 });
 
 // The 2026-10-29 Devin chat: refused for its weekly quota, offered nothing, with two accounts nothing had refused.
@@ -81,11 +85,12 @@ it(`does not offer an account that needs reconnecting`, () => {
 it(`treats the contract's one spent line as spent, and anything short of it as room`, () => {
     setAccountUsage(`claude`, `a`, reading(99));
     setAccountUsage(`claude`, `b`, reading(SPENT_UTILIZATION));
+    const two = [account(`a`), account(`b`)];
 
-    expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBeUndefined();
+    expect(fallbackAccount(`claude`, `a`, two)?.id).toBeUndefined();
 
     setAccountUsage(`claude`, `b`, reading(SPENT_UTILIZATION - 1));
-    expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBe(`b`);
+    expect(fallbackAccount(`claude`, `a`, two)?.id).toBe(`b`);
 });
 
 it(`picks the account with the most room, not the first connected`, () => {

@@ -20,7 +20,7 @@ import { type SubagentWaitOptions, type SubagentWaitUntil, listSubagentSessions,
 import { type SubagentsWaitOptions, type SubagentsWaitOutcome, waitForSubagents } from "./subagent-waits.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { whenSteered } from "../../../conversations/actor/conversation-holdings.js";
-import { ROSTER } from "../../../conversations/actor/subagent-roster.js";
+import { ROSTER, subagentRunning } from "../../../conversations/actor/subagent-roster.js";
 import { opt } from "../../../opt.js";
 import { withdrawQueuedReport } from "./queued-reports.js";
 
@@ -192,10 +192,15 @@ export const waitForChildren = async (
 ): Promise<SubagentsWaitOutcome | { readonly outcome: "message"; readonly agents: readonly SubagentSession[] }> => {
     const heard = new AbortController();
     const signal = anySignal(heard.signal, options.signal);
+    // Fixed here, as the wait fixes them: words said into the turn hand back the children waited on as they stand, not an
+    // empty list that reads as nothing being waited on (2026-11-17, the shinobi-society audit).
+    const targets = options.targets ?? actors.holdings(ROSTER).of(conversationId).filter(subagentRunning).map((record) => record.id);
+    const standing = (): readonly SubagentSession[] =>
+        listSubagentSessions(actors).filter((agent) => agent.conversationId === conversationId && targets.includes(agent.id));
     try {
         const result = await Promise.race([
-            waitForSubagents(actors, conversationId, { ...options, signal }),
-            wordsSaid(actors, conversationId, signal).then(() => ({ outcome: "message" as const, agents: [] })),
+            waitForSubagents(actors, conversationId, { ...options, targets, signal }),
+            wordsSaid(actors, conversationId, signal).then(() => ({ outcome: "message" as const, agents: standing() })),
         ]);
         // Every ending this wait hands over comes back out of the queue, or it arrives a second time.
         if (result.outcome !== "message" && result.outcome !== "timeout") {

@@ -3,13 +3,20 @@ import type { Logger } from "pino";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
 import type { AccountReopened } from "../../usage/serviceability/state-log.js";
+import { ROSTER } from "../../conversations/actor/subagent-roster.js";
+import { CAPACITY_FAILED } from "./child-records.js";
+import type { SubagentRecord } from "./subagents.js";
 import { parentsWaitingOn } from "./waiting/subagent-waits.js";
 
 /* CAPACITY BACK, SAID TO WHOEVER IS WAITING ON IT. A parent whose children failed or paused on a spent provider sat in
    its wait while the second Claude account came back at 13:29:30; the only sign was a log line, and a person told the
    parent at 13:31 (2026-10-17). An account coming back to ready is said into the turn of every parent parked in a wait
    with a child on that provider failed or paused, which hands its wait back at once (outcome `message`). Nothing is said
-   to a parent that is not waiting: it reads the listing when it next spawns, and a wake of its own would cost a turn. */
+   to a parent that is not waiting: it reads the listing when it next spawns, and a wake of its own would cost a turn.
+   Only for children the news is about (2026-11-17, the shinobi-society audit, where five such notices each cut a
+   parent's 1800 s wait short for children that had failed on a runner's workspace prep or were long replaced): one
+   paused for a re-run, or one whose failure was that provider's capacity (child-records.ts CAPACITY_FAILED), and each
+   failed one once per ending, since a second account coming back is no news about it. */
 
 export interface CapacityNoticeDeps {
     readonly conversations: Pick<ConversationActors, "holdings">;
@@ -31,6 +38,8 @@ const noticeOf = (event: AccountReopened, children: readonly string[]): string =
 /** Hears each account coming back and tells the parents waiting on it; one notice per account per ten minutes. */
 export const capacityNoticer = (deps: CapacityNoticeDeps): ((event: AccountReopened) => void) => {
     const said = new Map<string, number>();
+    // Each failed child's ending already named in a notice; a paused one is named while its pause lasts.
+    const told = new Set<string>();
     const now = deps.now ?? Date.now;
     return (event) => {
         const key = `${event.provider}\u0000${event.account}`;
@@ -38,12 +47,17 @@ export const capacityNoticer = (deps: CapacityNoticeDeps): ((event: AccountReope
         if (last !== undefined && now() - last < SAID_FOR_MS) {
             return;
         }
-        const waiting = parentsWaitingOn(deps.conversations, event.provider);
+        const owed = (record: SubagentRecord): boolean =>
+            deps.conversations.holdings(CAPACITY_FAILED).get(record.id) === true && !told.has(`${record.id}\u0000${String(record.endedAt)}`);
+        const waiting = parentsWaitingOn(deps.conversations, event.provider, owed);
         if (waiting.length === 0) {
             return;
         }
         said.set(key, now());
         for (const { parent, children } of waiting) {
+            for (const child of children) {
+                told.add(`${child}\u0000${String(deps.conversations.holdings(ROSTER).get(child)?.endedAt)}`);
+            }
             void tellParent(deps, parent, event, children);
         }
     };

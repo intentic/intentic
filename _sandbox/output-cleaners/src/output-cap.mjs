@@ -151,3 +151,12 @@ export const capOutput = (lines, command, limits) => {
     }
     return priorityCap(lines, maxLines, maxBytes, capped, headLines);
 };
+
+// A cut marker of the cap's or the fail tail's ("… 412 lines elided …"), not the read cap's, which says what to do already.
+const CUT_MARKER = /^… ((?:\d+ (?:earlier )?lines|output) elided(?: \(\d+ bytes\))?) …$/gm;
+
+// Points each cut marker at the retained raw output, once there is one to point at. 2026-11-17, the shinobi-society
+// audit: the marker sat mid-output saying only that lines were gone, while the way back was named in the footer's last
+// line, and agents re-ran commands to see what had been cut.
+export const pointCutMarkers = (body, retained) =>
+    retained === undefined ? body : body.replace(CUT_MARKER, (_marker, cut) => `… ${cut}: retrieve-output ${retained} [pattern] prints them …`);

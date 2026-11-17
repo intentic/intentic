@@ -142,9 +142,13 @@ flowchart LR
   container. When `full avg10` has held at or above 20% for 10 s while the pressure is the sandbox's own (memory and
   swap together at or above 80% of a bounded `memory.max`, in the leaf or in the whole container, or neither bounded
   to measure against), or the leaf has held at or above 95% of both a bounded `memory.max` and a bounded, non-zero
-  `swap.max` for 5 s, it SIGKILLs the one process with the highest `oom_score` outside the daemon's leaf (in
+  `swap.max` for 5 s, it SIGKILLs the one process whose kill frees the most outside the daemon's leaf (in
   `workload`, or in a Docker container the sandbox runs itself, under `/docker`; never pid 1, netd or Node, nor a
-  kernel thread, a zombie or a process the kernel scores 0), alone and not its group, then rests 15 s; it reads what that process was first (its memory, command
+  kernel thread, a zombie or a process the kernel scores 0), alone and not its group, then rests 15 s. "Frees the
+  most" is its resident memory and swap weighed up by its tier (`oom_score_adj`: size × (1000 + tier) / 1000), and a
+  victim holds at least 2% of the sandbox's memory and swap in use (else at least 32 MiB; else nothing is killed).
+  (2026-11-17, the shinobi-society audit: ranking by the kernel's `oom_score` let a build's tier outweigh size, so the
+  guard killed 20 KB `sccache` processes one after another while a 9.9 GB command ran on.) Then it reads what that process was first (its memory, command
   line, group, cgroup and the `INTENTIC_TURN_OWNER` stamp, the command line and owner off its own thread with a 2 s
   deadline, since they are read out of memory that may be in swap) and appends it to `memory-kills.jsonl`. The pressure
   has to be the sandbox's own because every sandbox on a host shares the VM's memory: on 2026-11-05 the sandbox next to

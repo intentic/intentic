@@ -22,20 +22,165 @@ import {
     secretValues,
     sessionKeyFromLog,
 } from "./cleaners.mjs";
+import { pointCutMarkers } from "./output-cap.mjs";
 
 // Lines a trim must drop before the footer adds the retrieval handle, not just the counts.
 const RETRIEVAL_MIN_DROPPED = 20;
 
+
+// Pipelines: which stages only filter, and what the last pipeline's statuses say of the check.
+// Which stages of a command's last pipeline only filter what an earlier stage printed. grep and its kin exit 1 when
+// nothing matched: past the first stage that is the filter's answer, not a failure of the check before it. 2026-11-17,
+// the shinobi-society audit: `cargo test 2>&1 | grep -E "FAILED|panicked" | head` with every test passing was footed
+// "an earlier stage failed", and the verification ledger read the check as failing. The daemon's reader of this footer
+// keeps the same set (_sandbox/sandbox/src/agent/verification/pipeline-filters.ts).
+
+const FILTERS = new Set(["grep", "egrep", "fgrep", "zgrep", "rg", "ag", "ack"]);
+
+// Words in front of the program that matters.
+const PREFIXES = new Set(["sudo", "env", "time", "command", "nice", "exec", "nohup"]);
+const SHELLS = new Set(["bash", "sh", "zsh", "dash"]);
+const WRAPPER_DEPTH = 4;
+
+// The operator at `index`: one that ends a stage (`|`, `|&`) or the whole pipeline (`&&`, `||`, `;`, `&`, a newline),
+// with how many characters it spans. The `&` of `2>&1` belongs to its redirection.
+const operatorAt = (command, index, word) => {
+    const character = command[index];
+    const next = command[index + 1];
+    if (character === "|") {
+        return next === "|" ? { ends: "pipeline", length: 2 } : { ends: "stage", length: next === "&" ? 2 : 1 };
+    }
+    if (character === ";" || character === "\n") {
+        return { ends: "pipeline", length: 1 };
+    }
+    return character === "&" && !/[<>]$/.test(word) ? { ends: "pipeline", length: next === "&" ? 2 : 1 } : undefined;
+};
+
+// A quoted run from just past its opening quote: its text, and the index of the closing quote.
+const quotedAt = (command, start, quote) => {
+    let text = "";
+    let index = start;
+    for (; index < command.length && command[index] !== quote; index += 1) {
+        const escaped = command[index] === "\\" && quote === '"' && index + 1 < command.length;
+        index += escaped ? 1 : 0;
+        text += command[index];
+    }
+    return { text, end: index };
+};
+
+// The command's pipelines, each a list of stages, each a list of words; quotes honoured, so a quoted `|` splits nothing.
+const pipelinesOf = (command) => {
+    const pipelines = [[]];
+    let words = [];
+    let word = "";
+    const endWord = () => {
+        if (word !== "") {
+            words.push(word);
+        }
+        word = "";
+    };
+    const endStage = () => {
+        endWord();
+        if (words.length > 0) {
+            pipelines.at(-1).push(words);
+        }
+        words = [];
+    };
+    for (let index = 0; index < command.length; index += 1) {
+        const character = command[index];
+        const operator = operatorAt(command, index, word);
+        if (character === "'" || character === '"') {
+            const quoted = quotedAt(command, index + 1, character);
+            word += quoted.text;
+            index = quoted.end;
+        } else if (character === "\\") {
+            word += command[index + 1] ?? "";
+            index += 1;
+        } else if (operator !== undefined) {
+            endStage();
+            pipelines.push(...(operator.ends === "pipeline" ? [[]] : []));
+            index += operator.length - 1;
+        } else if (/\s/.test(character)) {
+            endWord();
+        } else {
+            word += character;
+        }
+    }
+    endStage();
+    return pipelines.filter((pipeline) => pipeline.length > 0);
+};
+
+// A stage's program, past env assignments and prefix words.
+const programOf = (words) => {
+    const program = words.find((word) => !PREFIXES.has(word) && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) ?? "";
+    return program.split("/").at(-1);
+};
+
+// The last pipeline: how many stages it has, and which of them past the first are filters. A lone `bash -c '…'` is read
+// for the script it runs.
+const lastPipelineOf = (command, depth = 0) => {
+    const pipelines = pipelinesOf(command);
+    const stages = pipelines.at(-1) ?? [];
+    if (pipelines.length === 1 && stages.length === 1 && depth < WRAPPER_DEPTH && SHELLS.has(programOf(stages[0]))) {
+        const words = stages[0];
+        const flag = words.findIndex((word) => /^-[A-Za-z]*c[A-Za-z]*$/.test(word));
+        if (flag !== -1 && words[flag + 1] !== undefined) {
+            return lastPipelineOf(words[flag + 1], depth + 1);
+        }
+    }
+    return { stages: stages.length, filters: new Set(stages.flatMap((words, index) => (index > 0 && FILTERS.has(programOf(words)) ? [index] : []))) };
+};
+
 // 128 + SIGPIPE: a writer cut off by the reader closing early (`| head`), which is the reader's choice, not a failure.
 const SIGPIPE_STATUS = "141";
 
-// The last pipeline's statuses when a stage before the last failed and the exit code still reads 0, else undefined.
-export const maskedFailure = (exitCode, pipeline) => {
+const statusesOf = (pipeline) => {
     const statuses = pipeline.trim() === "" ? [] : pipeline.trim().split(/\s+/);
-    if (exitCode !== "0" || statuses.length < 2 || !statuses.every((status) => /^\d+$/.test(status))) {
+    return statuses.length >= 2 && statuses.every((status) => /^\d+$/.test(status)) ? statuses : undefined;
+};
+
+// The stages known to be filters, when the statuses are this command's last pipeline's.
+const filtersFor = (statuses, command) => {
+    const read = lastPipelineOf(command);
+    return read.stages === statuses.length ? read.filters : new Set();
+};
+
+// Whether the exit code says nothing about the check: 0, or a last-stage filter's 1 (it matched nothing).
+const exitSaysNothing = (exitCode, statuses, filters) => exitCode === "0" || (exitCode === "1" && statuses.at(-1) === "1" && filters.has(statuses.length - 1));
+
+// The last pipeline's statuses when a stage before the last failed while the exit code says nothing of it, else
+// undefined. A filter's 1 before the last stage is not a failure.
+export const maskedFailure = (exitCode, pipeline, command = "") => {
+    const statuses = statusesOf(pipeline);
+    if (statuses === undefined) {
         return undefined;
     }
-    return statuses.slice(0, -1).some((status) => status !== "0" && status !== SIGPIPE_STATUS) ? statuses.join(" ") : undefined;
+    const filters = filtersFor(statuses, command);
+    const failed = statuses.slice(0, -1).some((status, index) => status !== "0" && status !== SIGPIPE_STATUS && !(status === "1" && filters.has(index)));
+    return failed && exitSaysNothing(exitCode, statuses, filters) ? statuses.join(" ") : undefined;
+};
+
+// The statuses when the exit code is 1 only because the last stage is a filter that matched nothing, every stage before
+// it fine, else undefined.
+const filterMissed = (exitCode, pipeline, command) => {
+    const statuses = statusesOf(pipeline);
+    if (exitCode !== "1" || statuses === undefined || maskedFailure(exitCode, pipeline, command) !== undefined) {
+        return undefined;
+    }
+    return exitSaysNothing(exitCode, statuses, filtersFor(statuses, command)) ? statuses.join(" ") : undefined;
+};
+
+// The footer's exit clause, and whether it says more than the exit code alone (so it is worth a line of its own even
+// when nothing was trimmed): an earlier stage that failed, or a last-stage filter that matched nothing.
+export const exitClause = (exitCode, pipeline, command) => {
+    const masked = maskedFailure(exitCode, pipeline, command);
+    if (masked !== undefined) {
+        return { exit: `exit ${exitCode} (pipeline: ${masked} — an earlier stage failed)`, telling: true };
+    }
+    const missed = filterMissed(exitCode, pipeline, command);
+    return missed === undefined
+        ? { exit: `exit ${exitCode}`, telling: false }
+        : { exit: `exit ${exitCode} (pipeline: ${missed} — the filter matched nothing)`, telling: true };
 };
 
 // ripgrep's -r is --replace, not grep's recursive flag: in a cluster like `-rn` it rewrites every match to "n".
@@ -88,8 +233,7 @@ export const filterOutput = (
     const lines = cleaned.lines;
     stages.push(...cleaned.stages);
     const body = bodyFromLines(lines, raw, exitCode);
-    const masked = maskedFailure(exitCode, pipeline);
-    const exit = masked === undefined ? `exit ${exitCode}` : `exit ${exitCode} (pipeline: ${masked} — an earlier stage failed)`;
+    const { exit, telling } = exitClause(exitCode, pipeline, command);
     // Below rewrites the whole body, weighed the same way the line stages are. `guard`: if the result is longer than
     // raw, filtering failed, so raw goes back out — the last line of defence, not the first. What the command's own
     // exit and words say (`notes`) is appended after it: the guard judges filtering, and these are not filtering.
@@ -100,7 +244,7 @@ export const filterOutput = (
             stages.push({ id: "guard", saved: text.length - raw.length });
             out = raw;
         }
-        const extra = [...(masked === undefined || (footed && out === text) ? [] : [`--- [${exit}, ${durationS}s]`]), ...commandNotes(command, raw)];
+        const extra = [...(!telling || (footed && out === text) ? [] : [`--- [${exit}, ${durationS}s]`]), ...commandNotes(command, raw)];
         if (extra.length === 0) {
             return { out, stages };
         }
@@ -128,7 +272,7 @@ export const filterOutput = (
     const retained = dropped >= RETRIEVAL_MIN_DROPPED || cut > 0 ? keep() : undefined;
     const handle = retained === undefined ? "" : ` · full: retrieve-output ${retained} [pattern]`;
     const summary = footerSummary(dropped, rawCount, kept, stages);
-    const withFooter = `${body}\n--- [${exit}, ${durationS}s] ${summary}${handle}\n`;
+    const withFooter = `${pointCutMarkers(body, retained)}\n--- [${exit}, ${durationS}s] ${summary}${handle}\n`;
     // New lossy summaries must remain retrievable even below twenty dropped lines. If their pointer cannot be
     // kept or cannot pay for itself, rerun without those stages; the ordinary cleaners retain their own policy.
     if (mustSkipSummaries(stages, retained, withFooter.length, raw.length)) {
@@ -147,9 +291,25 @@ export const filterOutput = (
     return withFooter.length <= raw.length ? emitted(withFooter, "footer", true) : emitted(`${body}\n`, "footer", false);
 };
 
-// Retained unfiltered outputs: the newest files survive, one run's text is kept to its tail past the char cap.
-const RETAIN_FILES = 30;
+// Retained unfiltered outputs: the newest files survive, one run's text is kept to its tail past the char cap. One
+// directory serves every conversation of the sandbox, so 30 files was a few minutes of a busy fleet's commands and a
+// footer's retrieve-output path could be gone before it was followed (2026-11-17, the shinobi-society audit). 500 keeps
+// far longer, and the byte budget keeps a run of huge build logs from filling the disk instead.
+const RETAIN_FILES = 500;
+const RETAIN_TOTAL_BYTES = 200_000_000;
 const RETAIN_MAX_CHARS = 2_000_000;
+
+// The files past the newest RETAIN_FILES, or past RETAIN_TOTAL_BYTES counted newest first; never the one just written.
+const overRetention = (aged, written) => {
+    let total = 0;
+    return aged
+        .toSorted((a, b) => b.at - a.at)
+        .filter((file, index) => {
+            total += file.size;
+            return file.entry !== written && (index >= RETAIN_FILES || total > RETAIN_TOTAL_BYTES);
+        })
+        .map((file) => file.entry);
+};
 
 // Writes one run's unfiltered output where the footer can point at it, redacted like everything else that leaves
 // here, then prunes the oldest. Undefined when it cannot be written, so no footer names a file that is not there.
@@ -162,12 +322,13 @@ export const retainIn =
             writeFileSync(file, redactText(text.length > maxChars ? text.slice(-maxChars) : text, values));
             const aged = readdirSync(dir).flatMap((entry) => {
                 try {
-                    return [{ entry, at: statSync(join(dir, entry)).mtimeMs }];
+                    const stats = statSync(join(dir, entry));
+                    return [{ entry, at: stats.mtimeMs, size: stats.size }];
                 } catch {
                     return []; // Pruned by a concurrent filter between the listing and the stat.
                 }
             });
-            for (const { entry } of aged.toSorted((a, b) => b.at - a.at).slice(RETAIN_FILES)) {
+            for (const entry of overRetention(aged, name)) {
                 rmSync(join(dir, entry), { force: true });
             }
             return file;

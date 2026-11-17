@@ -12,6 +12,7 @@ import { MEMORY_KILLS_FILE, type MemoryKill, MemoryKillSchema, parseLines } from
 import { recentJobProcess, recentJobRunner } from "../../../system/resources/process-scan.js";
 import { steerTurn } from "../../checkpoints/agent-steering.js";
 import { JOBS, type JobRecord } from "./background-jobs.js";
+import { killSteers } from "./memory-kill-steers.js";
 import { MEMORY_KILL_FILE, OUTPUT_FILE } from "./job-files.js";
 import { jobRunnerPids } from "./job-processes.js";
 import { appendRunFile, writeRunFile } from "./run-files.js";
@@ -30,8 +31,9 @@ import { appendRunFile, writeRunFile } from "./run-files.js";
    - marks that job's ending in its capture dir, so its report (`wait`, job-report.ts), the watch its end wakes
      (background-adoption.ts) and its output file say what killed it, instead of a bare 137;
    - tells the conversation: into its live turn, as the sandbox's own words between two tool calls, so the agent hears it
-     while it can still act on it; and in Activity, filed under the conversation, either way. It never starts a turn: a
-     conversation at rest hears it from its job's ending when that wakes it, or reads it in Activity. */
+     while it can still act on it, every kill of a few seconds in one steer (memory-kill-steers.ts); and in Activity,
+     filed under the conversation, either way. It never starts a turn: a conversation at rest hears it from its job's
+     ending when that wakes it, or reads it in Activity. */
 
 // The conversation an owner stamp names; the two reserved owners are the daemon's own work, nobody's to tell.
 const conversationOf = (owner: string | undefined): string | undefined =>
@@ -46,6 +48,8 @@ export interface MemoryKillDeps {
     readonly logger: Pick<Logger, "info" | "warn">;
     // A backstop for a change the watch on the logs directory missed.
     readonly pollMs?: number;
+    // How long a conversation's kills are collected into one steer (memory-kill-steers.ts): injected by tests.
+    readonly steerWindowMs?: number;
     // The pid leading each job dir's pane, and what the shared scan last saw of a runner and of a job's process, by pid:
     // injected by tests.
     readonly runnerPids?: (dirs: readonly string[]) => Promise<ReadonlyMap<string, number>>;
@@ -101,8 +105,15 @@ const markJob = (dir: string, sentence: string): boolean => {
     }
 };
 
+// Into the live turn at once, between two tool calls, as the sandbox's words: a turn at rest is never started for it. The
+// follower hands its kills to a batch instead (memory-kill-steers.ts).
+const steerNow =
+    (conversations: Actors) =>
+    (conversationId: string, said: string): void =>
+        void steerTurn(conversations, conversationId, { text: said, voice: "sandbox" });
+
 /** One kill: its job's ending marked, its conversation told. Never throws for a kill nobody can be told of. */
-export const tellMemoryKill = async (deps: MemoryKillDeps, kill: MemoryKill): Promise<void> => {
+export const tellMemoryKill = async (deps: MemoryKillDeps, kill: MemoryKill, steer = steerNow(deps.conversations)): Promise<void> => {
     const job = await jobOfKill(deps, kill);
     const sentence = killSentence(kill);
     const marked = job === undefined ? false : markJob(job.dir, sentence);
@@ -117,8 +128,7 @@ export const tellMemoryKill = async (deps: MemoryKillDeps, kill: MemoryKill): Pr
     const subject = job?.record === undefined ? "A process this conversation started" : `Background job "${job.record.job.label}" (${job.record.shellId ?? job.record.job.id})`;
     // The kill in the sentence every place tells one in (memory-kill-words.ts), after what it was to this conversation.
     const said = `${subject}: ${sentence}.`;
-    // Into the live turn, between two tool calls, as the sandbox's words: a turn at rest is never started for it.
-    steerTurn(deps.conversations, conversationId, { text: said, voice: "sandbox" });
+    steer(conversationId, said);
     await deps.activity.append({ direction: "system", type: "memory.killed", conversationId, content: said, extra: { kill } });
 };
 
@@ -246,6 +256,7 @@ export const startMemoryKillFollower = (deps: MemoryKillDeps): MemoryKillFollowe
     const dir = logsRoot(deps.historyRoot);
     const path = join(dir, MEMORY_KILLS_FILE);
     let mark = markOfEnd(path);
+    const steers = killSteers(deps.conversations, deps.steerWindowMs);
     let queue: Promise<void> = Promise.resolve();
     // The kills already told, the newest few hundred: a file cut or replaced under the follower may be read again from
     // its start (readLinesFrom), and a kill is told once however often its line is read.
@@ -264,7 +275,7 @@ export const startMemoryKillFollower = (deps: MemoryKillDeps): MemoryKillFollowe
         mark = read.mark;
         const { text } = read;
         for (const kill of parseLines(text, MemoryKillSchema).filter(fresh)) {
-            await tellMemoryKill(deps, kill).catch((error: Error) => {
+            await tellMemoryKill(deps, kill, steers.add).catch((error: Error) => {
                 deps.logger.warn({ err: error, pid: kill.pid, comm: kill.comm }, "memory kill: could not be told to its conversation");
             });
         }
@@ -296,6 +307,7 @@ export const startMemoryKillFollower = (deps: MemoryKillDeps): MemoryKillFollowe
         stop: () => {
             clearInterval(timer);
             watcher?.close();
+            steers.flush();
             if (active === follower) {
                 active = undefined;
             }

@@ -1,6 +1,6 @@
 import type { AgentEvent } from "../events/agent-events.js";
 import type { TranscriptRow } from "../events/transcript.js";
-import { noticeCode } from "../events/sandbox-notice.js";
+import { noticeCode, type WorktreeSyncCause } from "../events/sandbox-notice.js";
 
 // The notices a turn's work leaves as it moves: an install starting, the branch rebased onto the workspace while it
 // waited, and where the finished work went (landed, held, conflicted, or into a parent's checkout).
@@ -50,12 +50,24 @@ export const installRow = (event: { readonly reach: "own-copy" | "main-tree"; re
 };
 
 // One line reporting the daemon's rebase of this agent's branch onto the current workspace; `blocked` names repos it
-// couldn't rebase, where the turn ran from an older base.
-export const syncLine = (sync: { commits: number; blocked: readonly string[] }): string => {
+// couldn't rebase, where the turn ran from an older base. Worded by when it ran: a frame with no `cause` predates it and
+// reads as a turn's opening, as it always did. A mid-turn catch-up only ever moves the branch where the main line touched
+// none of the files it changed (land/sync.ts, the `clear` gate), and says so with the commit to diff against: in the
+// shinobi-society audit (2026-11-17) "while this agent waited" sent an agent hunting for what had reset its fix.
+export interface SyncFacts {
+    readonly commits: number;
+    readonly blocked: readonly string[];
+    readonly cause?: WorktreeSyncCause | undefined;
+}
+export const syncLine = (sync: SyncFacts, base?: string): string => {
+    const plural = sync.commits === 1 ? `` : `s`;
+    const onto = base === undefined || base === `` ? `` : ` \`git diff ${base}\` shows this agent's own changes on top of the new base.`;
     const moved =
-        sync.commits > 0
-            ? `Your workspace moved on while this agent waited, its branch was rebased onto your latest ${sync.commits} commit${sync.commits === 1 ? `` : `s`}.`
-            : undefined;
+        sync.commits === 0
+            ? undefined
+            : sync.cause === `between-tools`
+              ? `The main line moved on during this turn: its ${sync.commits} newer commit${plural} ${sync.commits === 1 ? `was` : `were`} rebased under this agent's branch between two of its tool calls. None of the files this agent changed were touched.${onto}`
+              : `Your workspace moved on while this agent waited, its branch was rebased onto your latest ${sync.commits} commit${plural}.`;
     const blocked =
         sync.blocked.length > 0
             ? `Couldn't rebase onto your workspace in ${sync.blocked.join(`, `)}: the turn is running from the older base, so its land may need a resolve.`

@@ -115,12 +115,12 @@ const fleetOf = (entries: Readonly<Record<string, PersistedAgent>>): AgentsRegis
 
 type Strayed = Readonly<Record<string, readonly StrayStanding[]>>;
 
-const runCheckouts = async (entries: Readonly<Record<string, PersistedAgent>>, strayed: Strayed): Promise<void> => {
+const runCheckouts = async (entries: Readonly<Record<string, PersistedAgent>>, strayed: Strayed, live: readonly string[] = []): Promise<void> => {
     const check = checkNamed("stray-work-reaches-its-own-branch", {
         agents: fleetOf(entries),
         conversations: actorsOf({}),
         agentWorktrees: SETTLED,
-        live: () => [],
+        live: () => live.map((conversationId) => ({ conversationId, startedAt: NOW })),
         now: () => NOW,
         strays: async (id) => strayed[id] ?? [],
     });
@@ -150,6 +150,17 @@ test("a detached HEAD is named as one: it is not a branch, so there is no name t
     await expect(runCheckouts({ c1: ONE_REPO }, { c1: [{ repo: "registry", carried: false, uncommitted: false }] })).rejects.toThrow(
         /c1\/registry on a detached HEAD$/,
     );
+});
+
+// The shinobi-society audit (2026-11-17): six "on a detached HEAD" alarms in three days, each a checkout mid-rebase.
+test("a checkout in the middle of a rebase or merge is not a stray, nor is one whose turn is still running", async () => {
+    await expect(runCheckouts({ c1: ONE_REPO }, { c1: [{ repo: "registry", carried: false, uncommitted: false, operation: "rebase" }] })).resolves.toBeUndefined();
+    await expect(
+        runCheckouts({ c1: ONE_REPO }, { c1: [{ repo: "registry", branch: "topic", carried: false, uncommitted: true, operation: "merge" }] }),
+    ).resolves.toBeUndefined();
+    const detached = { c1: [{ repo: "registry", carried: false, uncommitted: false }] };
+    await expect(runCheckouts({ c1: ONE_REPO }, detached, ["c1"])).resolves.toBeUndefined();
+    await expect(runCheckouts({ c1: ONE_REPO, c2: ONE_REPO }, { ...detached, c2: detached.c1 }, ["c1"])).rejects.toThrow(/: c2\/registry on a detached HEAD$/);
 });
 
 // A non-isolated conversation runs in the owner's own tree, which is on whatever branch the owner put it on. It has no

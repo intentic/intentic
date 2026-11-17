@@ -206,6 +206,10 @@ export const fakeAcpAgentApp = (
             if (text.includes("explode")) {
                 throw new Error("the agent exploded");
             }
+            if (text.includes("deaf")) {
+                // Hears no cancel and never settles: what a wedged agent does with a stop.
+                return await new Promise<never>(() => {});
+            }
             if (text.includes("stall")) {
                 // Never streams, and answers only a cancel: the adapter's inactivity watchdog must fire.
                 await new Promise<void>((resolve) => stalled.set(params.sessionId, resolve));

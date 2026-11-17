@@ -29,6 +29,8 @@ const BROKEN = `This conversation's copy of the workspace could not be set up, a
 const FOLDED: readonly TranscriptRow[] = [
     ...turn([{ kind: `worktree`, branch: `agent/x`, base: `abc1234`, sync: { commits: 1, blocked: [] } }]),
     ...turn([{ kind: `worktree`, branch: `agent/x`, base: `abc1234`, sync: { commits: 3, blocked: [`web`, `api`] } }]),
+    // A catch-up between two tool calls (the shinobi-society audit, 2026-11-17), which the agent never waited for.
+    ...turn([{ kind: `worktree`, branch: `agent/x`, base: `abc1234`, sync: { commits: 2, blocked: [], cause: `between-tools` } }]),
     ...turn([{ kind: `compact`, trigger: `auto` }], `stopped`),
     ...turn([{ kind: `landed`, landed: true }]),
     ...turn([{ kind: `landed`, landed: true, deps: { missing: 1, started: [`deps-1`], deferred: false } }]),
@@ -180,6 +182,16 @@ describe(`a sandbox notice, as the chat says it`, () => {
     });
 
     // A home's land is committed by itself as well, so the Changes panel the plain sentence points to holds none of it.
+    it(`says a catch-up between two tool calls as one the agent never waited for, naming the base to a developer only`, () => {
+        const between = FOLDED.find((row) => row.noticeCode?.code === `synced` && row.noticeCode.params?.[`cause`] === `between-tools`);
+        expect(between === undefined ? undefined : noticeLine(between, `developer`)).toBe(
+            "The main line moved on during this turn: its 2 newer commits were rebased under this agent's branch between two of its tool calls. None of the files this agent changed were touched. `git diff abc1234` shows this agent's own changes on top of the new base.",
+        );
+        expect(between === undefined ? undefined : noticeLine(between, `maker`)).toBe(
+            `Your files moved on during this turn: 2 newer changes were brought into this assistant's draft between two of its steps. None of the files it changed were touched.`,
+        );
+    });
+
     it(`says a home's land was committed too, and keeps its dependency clause`, () => {
         const [plain, withDeps] = [
             ...turn([{ kind: `landed`, landed: true, land: `land-1` }]),

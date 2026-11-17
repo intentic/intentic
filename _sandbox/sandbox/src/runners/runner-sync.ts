@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { exitCodeOf } from "@intentic/base/errors";
@@ -7,6 +7,7 @@ import { gitHeaderEnv } from "@intentic/base/git";
 import { untranslatedEnv } from "@intentic/base/process";
 import { type RunnerSync, runnerGitUrl, runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
+import { DEFINITION_SOURCES } from "../definition/definition.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
@@ -36,6 +37,8 @@ const exclusively = <T>(work: () => Promise<T>): Promise<T> => {
 // went out). With the parent's own branch, it is how a pull tells work the parent has from work it never received.
 const deliveredRef = (conversationId: string): string => `refs/runner-delivered/${conversationId}`;
 const rescueRef = (conversationId: string, at: number): string => `refs/runner-rescue/${conversationId}/${at}`;
+// Where uncommitted edits in the mirror's own working dir are kept before it moves onto the parent's main line.
+const mainRescueRef = (at: number): string => `refs/runner-rescue/main-line/${at}`;
 
 export interface RunnerSyncDeps {
     readonly workspaceRoot: string;
@@ -137,6 +140,33 @@ const keepUndelivered = async (
     said(kept);
 };
 
+// Before the mirror's working dir moves onto the parent's main line, keeps its uncommitted edits to tracked files under a
+// rescue ref and clears them, so the checkout cannot refuse. In the shinobi-society audit (2026-11-17) every runner
+// placement failed here ("Your local changes ... would be overwritten by checkout: .intentic/config/capabilities.json"):
+// the runner's own daemon writes its definition sources (DEFINITION_SOURCES) into this same /work. Those are the runner's
+// own live stores, which win over what the workspace delivers, so they are put back as they were once the checkout is
+// done; anything else a person changed here stays on the rescue ref, named in the sync's lines.
+const setAsideLocalEdits = async (identity: RunnerIdentity, cwd: string, said: (kept: string) => void): Promise<() => Promise<void>> => {
+    const head = await revParse(identity, cwd, "HEAD");
+    if (head === "" || (await git(identity, cwd, ["status", "--porcelain", "--untracked-files=no"])) === "") {
+        return async () => undefined;
+    }
+    const changed = (await git(identity, cwd, ["diff", "--name-status", "--no-renames", "HEAD"])).split("\n").filter((line) => line !== "");
+    const snapshot = await git(identity, cwd, ["-c", "user.name=intentic runner", "-c", "user.email=runner@intentic.invalid", "stash", "create", "local edits in the runner's mirror"]);
+    const kept = mainRescueRef(Date.now());
+    await git(identity, cwd, ["update-ref", kept, snapshot]);
+    said(kept);
+    await git(identity, cwd, ["reset", "--hard", "-q", "HEAD"]);
+    const own = changed.map((line) => ({ status: line[0], path: line.slice(line.indexOf("\t") + 1) })).filter((entry) => DEFINITION_SOURCES.includes(entry.path));
+    return async () => {
+        for (const { status, path } of own) {
+            await (status === "D"
+                ? rm(join(cwd, path), { force: true })
+                : git(identity, cwd, ["restore", `--source=${snapshot}`, "--worktree", "--", path]));
+        }
+    };
+};
+
 export const syncFromParent = (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> =>
     exclusively(() => pullFromParent(deps, identity, input, onLine));
 
@@ -149,8 +179,13 @@ const pullFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, in
         const url = runnerGitUrl(identity.parentUrl, repo);
         onLine(`${repo}: fetching from the parent…`);
         await git(identity, workingDir, ["fetch", "--no-tags", url, `+refs/heads/${mainBranch}:${PARENT_MAIN_REF}`]);
+        const putBack = await setAsideLocalEdits(identity, workingDir, (kept) => onLine(`${repo}: kept uncommitted edits in the runner's copy under ${kept} before syncing`));
         // Moves this mirror onto the parent's own branch name, converging rather than growing a second history.
-        await git(identity, workingDir, ["checkout", "-B", mainBranch, PARENT_MAIN_REF]);
+        try {
+            await git(identity, workingDir, ["checkout", "-B", mainBranch, PARENT_MAIN_REF]);
+        } finally {
+            await putBack();
+        }
         // Tolerates a branch the parent hasn't created yet: this repo just starts at main instead of failing. Any other
         // failure fails the sync, since the parent hard-resets onto what comes back and main lacks the earlier turns.
         const fetched = await git(identity, workingDir, ["fetch", "--no-tags", url, `+refs/heads/${input.branch}:${PARENT_TURN_REF}`])

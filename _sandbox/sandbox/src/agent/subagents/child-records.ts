@@ -26,7 +26,14 @@ export interface ChildSettlement {
     readonly status: "completed" | "failed" | "killed";
     readonly report: string;
     readonly error?: string;
+    // A failure on its provider's capacity (a spent allowance, a rate limit, an outage): what that provider's capacity
+    // coming back answers (capacity-reopened.ts).
+    readonly capacity?: boolean;
 }
+
+// The children whose last turn failed on their provider's capacity, held by the parent: the only failed ones a notice
+// that capacity is back is about (capacity-reopened.ts). Any other ending of the child takes it off.
+export const CAPACITY_FAILED: Holding<true> = { name: "children failed on capacity" };
 
 // Told of every child turn's ending once its record and row have settled; in this process's memory, like the records.
 const SETTLED = new Set<(childId: string, settlement: ChildSettlement) => void>();
@@ -41,6 +48,12 @@ export const onChildSettled = (listener: (childId: string, settlement: ChildSett
 // reads it, not a wait of its parent's), and whoever listens hears it.
 export const settleChild = (actors: Pick<ConversationActors, "holdings" | "send">, childId: string, settlement: ChildSettlement): void => {
     settleSpawnedChild(actors, childId, settlement);
+    const parent = actors.holdings(ROSTER).get(childId)?.conversationId;
+    if (settlement.status === "failed" && settlement.capacity === true && parent !== undefined) {
+        actors.holdings(CAPACITY_FAILED).hold(parent, childId, true, childId);
+    } else {
+        actors.holdings(CAPACITY_FAILED).drop(childId);
+    }
     if (actors.holdings(CHILDREN).get(childId)?.spec.run !== undefined) {
         markSubagentEndingReported(actors, childId);
     }

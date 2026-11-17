@@ -197,3 +197,18 @@ test("a checkout switched onto the shared main line is detached before the check
     expect(await carryStrayWork(worktrees, ID, conversation.repos, snapshot)).toEqual([{ repo: "root", carried: 1 }]);
     expect(await sh(work, "show", `${OWN}:app.ts`)).toBe("one\ntwo EDITED\nthree");
 });
+
+// The shinobi-society audit (2026-11-17): a copy mid-rebase stands on a detached HEAD, which the fleet's invariant read
+// as stranded work. Its standing now says the rebase is under way.
+test("a copy in the middle of a rebase says so in its standing", async () => {
+    const { worktrees, conversation, cwd } = await setup();
+    await writeFile(join(cwd, "app.ts"), "one\nmine\nthree\n");
+    const mine = await commit(cwd, "mine");
+    await sh(cwd, "checkout", "-q", "-b", "side", "HEAD~1");
+    await writeFile(join(cwd, "app.ts"), "one\ntheirs\nthree\n");
+    await commit(cwd, "theirs");
+    await exec("git", ["-C", cwd, "rebase", mine]).catch(() => undefined);
+    const [standing] = await strayStandings(worktrees, ID, conversation.repos);
+    expect(standing).toMatchObject({ repo: "root", operation: "rebase" });
+    expect(standing?.branch).toBeUndefined();
+});

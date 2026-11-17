@@ -11,7 +11,7 @@ import type { SubagentKind, SubagentSession, SubagentStatus, SubagentVerificatio
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Holding } from "../../conversations/actor/conversation-holdings.js";
 import { publishRuntimeChange, publishRuntimeMilestone } from "../../seams/runtime-feed.js";
-import { childVerification, childVerificationNote, forgetChild, resetChildVerification } from "./child-verification.js";
+import { childVerificationNote, forgetChild, resetChildVerification, settledChildVerification, stampChildVerification } from "./child-verification.js";
 import { LIVE, ROSTER, subagentRunning } from "../../conversations/actor/subagent-roster.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../opt.js";
@@ -259,7 +259,7 @@ const patch = (actors: Actors, id: string, fields: Partial<SubagentRecord>): Age
     // The one place a child's end is recorded, whichever arrival got here first; read once, never re-stamped.
     if (record.endedAt === undefined && !subagentRunning(record)) {
         record.endedAt = record.activityAt;
-        record.verification = childVerification(actors, record.id);
+        stampChildVerification(actors, record);
     }
     // Only on real change; a status move skips the window progress ticks fold under (2026-10-20).
     (changed.some(([key]) => key === "status") ? publishRuntimeMilestone : publishRuntimeChange)("subagents");
@@ -320,7 +320,7 @@ export interface SubagentTaskMessage {
 }
 
 // A task id to the record it opened, held by the turn's conversation; only task_started carries both.
-const TASKS: Holding<string> = { name: "subagent tasks" };
+export const TASKS: Holding<string> = { name: "subagent tasks" };
 
 // True only when `subagent_type` is set or `task_type` is `local_agent`, deliberately a whitelist so an unknown future
 // type is left off. Adopted later anyway via SubagentStop's meta file if unlabelled.
@@ -621,9 +621,9 @@ export const pairLiveSubagents = async (actors: Actors): Promise<void> => {
     await readServed(actors);
 };
 
-/** Whether anything checked a child's work: the stamped verdict once it has ended. */
-export const subagentVerification = (actors: Actors, id: string): SubagentVerification | undefined =>
-    actors.holdings(ROSTER).get(id)?.verification ?? childVerification(actors, id);
+/** Whether anything checked a child's work, once a shell scan still out at its end has landed; else its stamped verdict. */
+export const subagentVerification = async (actors: Actors, id: string): Promise<SubagentVerification | undefined> =>
+    (await settledChildVerification(actors, id)) ?? actors.holdings(ROSTER).get(id)?.verification;
 
 // `paired` hears each child SubagentStop pairs, which says where its record is (subagent-transcript.ts recordInto).
 export const subagentHooks = (turn: SubagentTurn, paired?: (child: SubagentRecord) => void): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
@@ -639,7 +639,7 @@ export const subagentHooks = (turn: SubagentTurn, paired?: (child: SubagentRecor
                     if (input.hook_event_name !== "PostToolUse") {
                         return { continue: true };
                     }
-                    const verification = subagentVerification(turn.conversations, input.tool_use_id);
+                    const verification = await subagentVerification(turn.conversations, input.tool_use_id);
                     const note = verification === undefined ? undefined : childVerificationNote(verification);
                     return note === undefined
                         ? { continue: true }

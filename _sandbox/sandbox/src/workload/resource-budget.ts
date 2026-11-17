@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
-import { anySignal, sleep } from "@intentic/base/async";
 import {
     COST_BYTES,
     costBytesOf,
+    countedBytesOf,
     freeBytesOf,
     judge,
     type HostRoom,
@@ -17,6 +17,7 @@ import {
     STALL_PERCENT,
     STALL_SUSTAINED_PERCENT,
 } from "@intentic/constants/memory-room";
+import { createHolds, holdFor, type Holds, type Taken } from "./room-wait-queue.js";
 import type { WorkloadClass } from "./workload-class.js";
 
 // The one place this daemon decides whether there is room for more work. One sampler reads the sandbox's memory by the
@@ -83,6 +84,9 @@ export interface AdmitRequest {
         readonly signal?: AbortSignal | undefined;
         // Told once, on the first short reading, with what is short.
         readonly onShort?: (diagnosis: string) => void;
+        // Give the wait up before its deadline once waiting cannot help (memory-room.mjs `stuckWait`): for a caller that
+        // starts its work anyway when the wait ends (the room socket's heavy commands), not one that would not start.
+        readonly giveUpWhenStuck?: boolean;
     };
     // The door will be asked again for this owner (a child admitted before its turn is started): the admission is kept
     // for it, and the door's own admission takes it instead of judging a second time.
@@ -92,7 +96,16 @@ export interface AdmitRequest {
 export type Admission =
     | { readonly verdict: "run"; readonly waitedMs: number }
     | { readonly verdict: "wait"; readonly message: string; readonly waitedMs: number }
-    | { readonly verdict: "refuse"; readonly message: string; readonly memory?: ShortMemory; readonly waitedMs: number };
+    | {
+          readonly verdict: "refuse";
+          readonly message: string;
+          readonly memory?: ShortMemory;
+          readonly waitedMs: number;
+          // Held work only: what was still short when its hold ended, without the sentence around it, and whether the hold
+          // was given up early because waiting could not help (`giveUpWhenStuck`).
+          readonly diagnosis?: string;
+          readonly stuck?: boolean;
+      };
 
 export interface ResourceBudget {
     // The shared reading, no older than `maxAgeMs` (a second by default); 0 for a reading taken now.
@@ -123,18 +136,11 @@ interface Reservation {
     readonly bytes: number;
     readonly at: number;
     readonly pid: number | undefined;
+    // What counted against the limit in the reading it was admitted on: how far the reading has grown since is the work
+    // it was for showing up, which it stops holding (`localHeld`). Undefined where no reading measured it.
+    readonly countedAt: number | undefined;
     // Kept for the door's own admission of the same owner, which takes it instead of judging.
     ticket: boolean;
-}
-
-// Work held for room, in the order it asked. Every look judges the whole queue on one reading, oldest first, so a
-// waiter whose timer happens to fire first cannot take room from one that has waited longer (2026-10-20).
-interface Waiter {
-    readonly request: AdmitRequest;
-    // The latest verdict on it.
-    judged: RoomJudgement;
-    // Ends its current nap early: set while it naps.
-    wake: (() => void) | undefined;
 }
 
 // The reading, by the formula, off files read without blocking; `readText` answers one path with its text or undefined.
@@ -148,6 +154,24 @@ export const readMemoryReading = async (
     return readingFrom((path) => texts.get(path));
 };
 
+// What `held` reservations still hold off a reading that counts `counted` against the limit: their bytes, less what the
+// reading has grown by since the oldest of them was admitted.
+// 2026-11-17, the shinobi-society audit: a reservation was held whole for RESERVATION_MS while the work it was for already
+// showed in the reading, so a cargo build counted twice and a second one within 90 s needed ~15 GiB free, not 8. The
+// reading's growth is the sandbox's, not one process's, so it may be some other work's: that is still counted in the
+// reading, so free memory stays what is really there. Growth from the oldest admission's reading is the most any of them
+// can have grown; a reading that fell since (something else let go) shrinks nothing.
+export const heldOff = (held: readonly Pick<Reservation, "bytes" | "countedAt">[], counted: number | undefined): number => {
+    const whole = held.reduce((sum, reserved) => sum + reserved.bytes, 0);
+    const bases = held.flatMap((reserved) => (reserved.countedAt === undefined ? [] : [reserved.countedAt]));
+    if (counted === undefined || bases.length === 0) {
+        return whole;
+    }
+    const grown = Math.max(0, counted - Math.min(...bases));
+    const shrinkable = held.reduce((sum, reserved) => sum + (reserved.countedAt === undefined ? 0 : reserved.bytes), 0);
+    return whole - shrinkable + Math.max(0, shrinkable - grown);
+};
+
 // Whether a process is still running here; one this daemon may not signal still counts as running.
 const processAlive = (pid: number): boolean => {
     try {
@@ -158,63 +182,6 @@ const processAlive = (pid: number): boolean => {
     }
 };
 
-type Taken = { readonly at: number; readonly reading: MemoryReading };
-
-interface Holds {
-    // Holds `request`, judged short once already (`first`), until a look admits it, `expired()` says its time is up, or
-    // `signal` aborts; answers the last verdict.
-    readonly hold: (
-        request: AdmitRequest,
-        first: RoomJudgement,
-        until: { readonly expired: () => boolean; readonly intervalMs: number; readonly signal: AbortSignal | undefined },
-    ) => Promise<RoomJudgement>;
-    // Lets the work already held judge the newest reading first; at once when nothing is held.
-    readonly settle: () => Promise<void>;
-    // Look again now; `fresh` asks a new reading, for a change the last reading cannot show (a process exited).
-    readonly look: (fresh: boolean) => void;
-    readonly stop: () => void;
-}
-
-// A held waiter's sleep until its next look: `ms`, cut short by an abort or by a look that admitted it.
-const nap = async (waiter: Waiter, ms: number, signal: AbortSignal | undefined): Promise<void> => {
-    const woken = new AbortController();
-    waiter.wake = () => woken.abort();
-    await sleep(ms, { signal: anySignal(signal, woken.signal) });
-    waiter.wake = undefined;
-};
-
-// What held work is answered once its hold ends.
-const heldAdmission = (judged: RoomJudgement, diagnosis: string, waitedMs: number): Admission => {
-    if (judged.verdict === "run") {
-        return { verdict: "run", waitedMs };
-    }
-    const minutes = Math.max(1, Math.round(waitedMs / 60_000));
-    return {
-        verdict: "refuse",
-        message: `${judged.diagnosis ?? diagnosis}. This background work waited ${minutes} minute${minutes === 1 ? "" : "s"} for room and did not start: work people send gets the room first.`,
-        ...(judged.memory === undefined ? {} : { memory: judged.memory }),
-        waitedMs,
-    };
-};
-
-// Holds work nobody waits on, told once what is short, until a look admits it or its deadline passes.
-const holdFor = async (
-    holds: Holds,
-    request: AdmitRequest,
-    { judged, diagnosis }: { readonly judged: RoomJudgement; readonly diagnosis: string },
-    defaults: { readonly startedAt: number; readonly now: () => number; readonly deadlineMs: number; readonly intervalMs: number },
-): Promise<Admission> => {
-    const { startedAt, now } = defaults;
-    const wait = request.wait ?? {};
-    wait.onShort?.(diagnosis);
-    const deadlineMs = wait.deadlineMs ?? defaults.deadlineMs;
-    const last = await holds.hold(request, judged, {
-        expired: () => now() - startedAt >= deadlineMs,
-        intervalMs: wait.intervalMs ?? defaults.intervalMs,
-        signal: wait.signal,
-    });
-    return heldAdmission(last, diagnosis, now() - startedAt);
-};
 
 // The sampler: a reading every `sampleMs`, each also a look for held work so room it sees is taken at once.
 const startSampler = (sampleMs: number, reading: () => Promise<Taken>, holds: Pick<Holds, "look">): ReturnType<typeof setInterval> | undefined => {
@@ -233,104 +200,6 @@ const startSampler = (sampleMs: number, reading: () => Promise<Taken>, holds: Pi
     return timer;
 };
 
-// The queue of held work. `take` reads (fresh, or one a second old), `decide` judges and claims, `dropGone` forgets
-// reservations whose holder exited or aged out and says whether any went.
-const createHolds = ({
-    take,
-    decide,
-    dropGone,
-    holderCheckMs,
-}: {
-    readonly take: (fresh: boolean) => Promise<Taken>;
-    readonly decide: (request: AdmitRequest, taken: Taken) => RoomJudgement;
-    readonly dropGone: () => boolean;
-    readonly holderCheckMs: number;
-}): Holds => {
-    const queue: Waiter[] = [];
-    let passing: Promise<void> | undefined;
-    let again = false;
-    let fresh = false;
-    let holderTimer: ReturnType<typeof setInterval> | undefined;
-
-    const judgeQueue = async (): Promise<void> => {
-        do {
-            again = false;
-            // Taken before the read, so a change told during it asks the next read fresh rather than being cleared.
-            const wantFresh = fresh;
-            fresh = false;
-            const taken = await take(wantFresh);
-            for (const waiter of queue) {
-                if (waiter.judged.verdict !== "run") {
-                    waiter.judged = decide(waiter.request, taken);
-                    if (waiter.judged.verdict === "run") {
-                        waiter.wake?.();
-                    }
-                }
-            }
-        } while (again && queue.some((waiter) => waiter.judged.verdict !== "run"));
-    };
-    // One look at a time; a look asked during one runs once more after it, on a reading of its own.
-    const pass = (): Promise<void> => {
-        if (passing !== undefined) {
-            again = true;
-            return passing;
-        }
-        const running = judgeQueue().finally(() => {
-            passing = undefined;
-        });
-        passing = running;
-        return running;
-    };
-    const look = (wantFresh: boolean): void => {
-        if (queue.length === 0) {
-            return;
-        }
-        fresh ||= wantFresh;
-        void pass()
-            // allow(silent-catch): a failed look is the waiter's own next look, which rethrows to its caller
-            .catch(() => undefined);
-    };
-    const watchHolders = (): void => {
-        if (holderTimer === undefined && holderCheckMs > 0) {
-            holderTimer = setInterval(() => {
-                if (dropGone()) {
-                    look(true);
-                }
-            }, holderCheckMs);
-            holderTimer.unref();
-        }
-    };
-    const leave = (waiter: Waiter): void => {
-        queue.splice(queue.indexOf(waiter), 1);
-        if (queue.length === 0) {
-            clearInterval(holderTimer);
-            holderTimer = undefined;
-        }
-    };
-
-    const hold: Holds["hold"] = async (request, first, { expired, intervalMs, signal }) => {
-        const waiter: Waiter = { request, judged: first, wake: undefined };
-        const over = (): boolean => expired() || signal?.aborted === true;
-        queue.push(waiter);
-        watchHolders();
-        try {
-            while (waiter.judged.verdict !== "run" && !over()) {
-                await nap(waiter, intervalMs, signal);
-                await pass();
-            }
-            return waiter.judged;
-        } finally {
-            leave(waiter);
-        }
-    };
-
-    return {
-        hold,
-        settle: () => (queue.length === 0 ? Promise.resolve() : pass()),
-        look,
-        stop: () => clearInterval(holderTimer),
-    };
-};
 
 // (2026-11-02) The sandbox's reading with the machine it runs on beside it, so work nobody waits on also waits for that
 // machine (memory-room.mjs `hostShortOf`). Where the host part comes from is handed over at boot, once the device hub
@@ -396,10 +265,11 @@ export const createResourceBudget = ({
         }
         return [...reservations.values()];
     };
-    const localHeld = (at: number, except?: string): number =>
-        live(at)
-            .filter((held) => held.place === "local" && (except === undefined || held.owner !== except))
-            .reduce((sum, held) => sum + held.bytes, 0);
+    const localHeld = (taken: Taken, except?: string): number =>
+        heldOff(
+            live(taken.at).filter((reserved) => reserved.place === "local" && (except === undefined || reserved.owner !== except)),
+            countedBytesOf(taken.reading),
+        );
 
     const reading = async (maxAgeMs = REUSE_MS): Promise<{ readonly at: number; readonly reading: MemoryReading }> => {
         const last = recent.at(-1);
@@ -426,7 +296,7 @@ export const createResourceBudget = ({
     };
 
     const snapshotOf = (taken: { readonly at: number; readonly reading: MemoryReading }): BudgetSnapshot => {
-        const reservedBytes = localHeld(taken.at);
+        const reservedBytes = localHeld(taken);
         const free = freeBytesOf(taken.reading);
         return {
             at: taken.at,
@@ -439,7 +309,9 @@ export const createResourceBudget = ({
         };
     };
 
-    const claim = (request: AdmitRequest, at: number): void => {
+    // `taken` is the reading the admission was judged on, or only its time where none was (work sent to a runner).
+    const claim = (request: AdmitRequest, taken: Taken | { readonly at: number; readonly reading?: undefined }): void => {
+        const { at } = taken;
         nextId += 1;
         reservations.set(String(nextId), {
             owner: request.owner,
@@ -448,6 +320,7 @@ export const createResourceBudget = ({
             at,
             // A pid this daemon cannot see (another pid namespace) would read as exited at once: the timed hold stands.
             pid: request.pid !== undefined && alive(request.pid) ? request.pid : undefined,
+            countedAt: taken.reading === undefined ? undefined : countedBytesOf(taken.reading),
             ticket: request.forTurn === true && request.owner !== undefined,
         });
     };
@@ -467,11 +340,11 @@ export const createResourceBudget = ({
         const judged = judge(taken.reading, {
             workload: request.workload,
             attended: request.attended,
-            reservedBytes: localHeld(taken.at, request.owner),
+            reservedBytes: localHeld(taken, request.owner),
             size: request.size,
         });
         if (judged.verdict === "run") {
-            claim(request, taken.at);
+            claim(request, taken);
         }
         return judged;
     };
@@ -487,14 +360,14 @@ export const createResourceBudget = ({
         holderCheckMs,
     });
 
-    const personHasRoom = (taken: { readonly at: number; readonly reading: MemoryReading }, reservedBytes = localHeld(taken.at)): boolean =>
+    const personHasRoom = (taken: { readonly at: number; readonly reading: MemoryReading }, reservedBytes = localHeld(taken)): boolean =>
         judge(taken.reading, { workload: "agentRuntime", attended: true, reservedBytes }).verdict === "run";
 
     const admit = async (request: AdmitRequest): Promise<Admission> => {
         const startedAt = now();
         // Work that runs on a runner takes nothing from this sandbox, so this sandbox has no say in it.
         if (request.where !== undefined && request.where !== "local") {
-            claim(request, startedAt);
+            claim(request, { at: startedAt });
             return { verdict: "run", waitedMs: 0 };
         }
         if (redeem(request.owner, startedAt)) {
@@ -517,7 +390,7 @@ export const createResourceBudget = ({
             // Keyed by person: one member's choice to go ahead does not answer for another who has not been told.
             const who = request.actor ?? "";
             if (warned.has(who)) {
-                claim(request, taken.at);
+                claim(request, taken);
                 return { verdict: "run", waitedMs: 0 };
             }
             warned.add(who);
@@ -546,7 +419,7 @@ export const createResourceBudget = ({
         // whole run of readings rather than only the newest.
         roomSince: async () => {
             const taken = await reading();
-            const reserved = localHeld(taken.at);
+            const reserved = localHeld(taken);
             if (!personHasRoom(taken, reserved)) {
                 return undefined;
             }

@@ -2,6 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import { inGitCallerPart, withGitCallerPart } from "@intentic/base/git";
 import { type FreshSession, profileOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
+import type { WorktreeSyncCause } from "@intentic/sandbox-contract/events/sandbox-notice";
 import { landAgent } from "../../../conversations/land/land.js";
 import { afterLand } from "../../../conversations/land/rederive.js";
 import { intoOf, landTargetOf, underLeases } from "../../../conversations/land/land-target.js";
@@ -203,8 +204,15 @@ export async function* anchorIsolatedTurn(
 export type WorktreeFrame = Extract<AgentEvent, { kind: "worktree" }>;
 
 // Where the branch stands, for a worktree and a runner's mirror alike: `base` always names where it sits now,
-// `unenforced` a container rewriting tool paths, and `sync` what the rebase that just ran moved or could not.
-export const worktreeFrame = (worktree: ConversationWorktree, onto: ReadonlyMap<string, string>, enforced: boolean, synced: readonly RepoSync[]): WorktreeFrame => {
+// `unenforced` a container rewriting tool paths, and `sync` what the rebase that just ran moved or could not, and when
+// (`cause`), so a catch-up between two tool calls is not told as one the agent waited through.
+export const worktreeFrame = (
+    worktree: ConversationWorktree,
+    onto: ReadonlyMap<string, string>,
+    enforced: boolean,
+    synced: readonly RepoSync[],
+    cause?: WorktreeSyncCause,
+): WorktreeFrame => {
     const root = worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0];
     return {
         kind: "worktree",
@@ -216,6 +224,7 @@ export const worktreeFrame = (worktree: ConversationWorktree, onto: ReadonlyMap<
                   sync: {
                       commits: synced.filter((repo) => repo.blocked !== true).reduce((total, repo) => total + repo.commits, 0),
                       blocked: synced.filter((repo) => repo.blocked === true).map((repo) => repo.repo),
+                      ...opt("cause", cause),
                   },
               }
             : {}),

@@ -1,6 +1,15 @@
 import { askRoom, type MemoryReading } from "@intentic/constants/memory-room";
 import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
-import { type Admission, type AdmitRequest, createResourceBudget, hostAwareReading, readMemoryReading, type ResourceBudget, WORKLOAD_COST_BYTES } from "./resource-budget.js";
+import {
+    type Admission,
+    type AdmitRequest,
+    createResourceBudget,
+    heldOff,
+    hostAwareReading,
+    readMemoryReading,
+    type ResourceBudget,
+    WORKLOAD_COST_BYTES,
+} from "./resource-budget.js";
 
 const GIB = 1024 ** 3;
 
@@ -233,6 +242,48 @@ test("held work that waits out its deadline is turned away with what was still s
     expect(message(turnedAway)).toBe(
         "Sandbox memory is low: 9.9 GiB of 10.0 GiB used. This background work waited 1 minute for room and did not start: work people send gets the room first.",
     );
+});
+
+// 2026-11-17, the shinobi-society audit: a cargo build's reservation was held whole for ninety seconds while the build
+// already showed in the reading, so a second build within them needed ~15 GiB free rather than 8.
+test("a reservation stops holding what its work already shows in the reading, and a reading that fell shrinks nothing", async () => {
+    let reading = box(18, 1);
+    const budget = budgetOf(() => reading);
+    const cargo = (owner: string): AdmitRequest => ({ workload: "toolchain", attended: false, owner, size: "cargo-build" });
+    expect((await budget.admit(cargo("a"))).verdict).toBe("run");
+    expect((await budget.snapshot()).reservedBytes).toBe(7 * GIB);
+    reading = box(18, 5);
+    expect((await budget.snapshot()).reservedBytes).toBe(3 * GIB);
+    reading = box(18, 0.5);
+    expect((await budget.snapshot()).reservedBytes).toBe(7 * GIB);
+    reading = box(18, 9);
+    expect((await budget.snapshot()).reservedBytes).toBe(0);
+    // 9 GiB free and nothing held: a second build's 7 GiB and a person's 1 fit.
+    expect((await budget.admit(cargo("b"))).verdict).toBe("run");
+    expect((await budget.admit(cargo("c"))).verdict).toBe("wait");
+});
+
+test("the reading's growth is counted from the oldest admission, and only against reservations a reading measured", () => {
+    expect(heldOff([], 10 * GIB)).toBe(0);
+    expect(heldOff([{ bytes: 7 * GIB, countedAt: 2 * GIB }], undefined)).toBe(7 * GIB);
+    expect(heldOff([{ bytes: 7 * GIB, countedAt: 2 * GIB }, { bytes: 7 * GIB, countedAt: 6 * GIB }], 10 * GIB)).toBe(6 * GIB);
+    expect(heldOff([{ bytes: GIB, countedAt: undefined }, { bytes: 7 * GIB, countedAt: 2 * GIB }], 20 * GIB)).toBe(GIB);
+});
+
+test("held work asked to give up once waiting cannot help ends early and says so; other held work waits out its deadline", async () => {
+    const short = (): MemoryReading => box(10, 9.9);
+    const asked = (giveUpWhenStuck: boolean) =>
+        createResourceBudget({ read: async () => short(), now: ticking(), sampleMs: 0, waitIntervalMs: 1 }).admit({
+            ...background("a"),
+            wait: { deadlineMs: 600_000, giveUpWhenStuck },
+        });
+    const gaveUp = await asked(true);
+    expect(gaveUp).toMatchObject({ verdict: "refuse", stuck: true, diagnosis: "Sandbox memory is low: 9.9 GiB of 10.0 GiB used" });
+    expect(gaveUp.waitedMs).toBeGreaterThanOrEqual(30_000);
+    expect(gaveUp.waitedMs).toBeLessThan(60_000);
+    const waited = await asked(false);
+    expect(waited).toMatchObject({ verdict: "refuse", stuck: false });
+    expect(waited.waitedMs).toBeGreaterThanOrEqual(600_000);
 });
 
 // (2026-11-02) rog: the sandbox's VM had room while Windows under it had 1.1 GB left.

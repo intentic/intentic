@@ -79,7 +79,7 @@ describe("command classification", () => {
 describe("checks behind a shell wrapper", () => {
     test.each([
         ["/bin/bash -lc 'pnpm --filter @intentic/sandbox test agent-verification'", "pnpm --filter @intentic/sandbox test agent-verification"],
-        [`bash -lc "cd /work/intentic && pnpm typecheck"`, "cd /work/intentic && pnpm typecheck"],
+        [`bash -lc "cd /work/intentic && pnpm typecheck"`, "pnpm typecheck"],
         ["zsh -lc 'tsc --noEmit -p tsconfig.json'", "tsc --noEmit -p tsconfig.json"],
         [`sh -c 'eval "pnpm test"'`, "pnpm test"],
     ])("%s is a check, named by the script it runs", (command, check) => {
@@ -101,12 +101,28 @@ describe("checks behind a shell wrapper", () => {
         expect(ledger.standing().state).toBe("unproven");
     });
 
-    // A wrapper around several commands is named whole: no single script inside it is the check.
-    test("a wrapped command alongside another keeps its whole line as the name", () => {
+    test("a wrapped command alongside another is named by the script inside it", () => {
         const ledger = createVerificationLedger();
         ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
         ledger.noteCommand("cd /work && bash -lc 'pnpm test'", "passed", "");
-        expect(ledger.standing().check).toBe("cd /work && bash -lc 'pnpm test'");
+        expect(ledger.standing().check).toBe("pnpm test");
+    });
+});
+
+// The shinobi-society audit (2026-11-17): a card named a whole `cd … && cargo test … | tail` line, cut at 200
+// characters, where the check was the one invocation in it.
+describe("the part of a line named as the check", () => {
+    test.each([
+        ["cd crates/net && cargo test -p net 2>&1 | tail -40", "cargo test -p net"],
+        ["pnpm lint && pnpm test", "pnpm test"],
+        ["cd a && cargo test -p a; cd ../b && cargo test -p b", "cargo test -p a && cargo test -p b"],
+        [`cd web && CI=1 pnpm exec suites "src/a b.test.ts" 2>&1 | grep -v noise`, "pnpm exec suites 'src/a b.test.ts'"],
+        ["CI=1 npx vitest run", "CI=1 npx vitest run"],
+    ])("%s is named %s", (command, check) => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
+        ledger.noteCommand(command, "passed", "");
+        expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check });
     });
 });
 
@@ -305,7 +321,16 @@ describe("the frame-fed ledger", () => {
         ledger.note(editCall("1", `${WORKSPACE_ROOT}/src/a.ts`));
         ledger.note(shellCall("2", "pnpm test 2>&1 | grep -v noise"));
         ledger.note(shellResult("2", "1 failed\n--- [exit 0 (pipeline: 1 0 — an earlier stage failed), 3s]"));
-        expect(ledger.standing()).toEqual({ state: "failing", paths: ["/work/src/a.ts"], check: "pnpm test 2>&1 | grep -v noise" });
+        expect(ledger.standing()).toEqual({ state: "failing", paths: ["/work/src/a.ts"], check: "pnpm test" });
+    });
+
+    // The shinobi-society audit: a passing `cargo test | grep FAILED | head` read as failing on grep's no-match 1.
+    test("a filter stage that matched nothing does not fail the check before it", () => {
+        const ledger = createFrameLedger();
+        ledger.note(editCall("1", `${WORKSPACE_ROOT}/src/a.rs`));
+        ledger.note(shellCall("2", `cargo test 2>&1 | grep -E "FAILED|panicked" | head -20`));
+        ledger.note(shellResult("2", "--- [exit 0 (pipeline: 0 1 0 — an earlier stage failed), 9s]"));
+        expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.rs"], check: "cargo test" });
     });
 
     // Devin (`devin acp`) reports a finished command as a completed call whose text ends "Exited with code N".
@@ -406,6 +431,23 @@ describe("reading how a command exited", () => {
         ["✓ reports the child's exit code 1 to the caller", undefined],
     ] as const)("%j exited %p", (text, code) => {
         expect(commandExitCode(text)).toBe(code);
+    });
+
+    // grep and rg exit 1 when nothing matched: past the first stage that is the filter's answer, not a failure.
+    test.each([
+        ["cargo test 2>&1 | grep FAILED | head", "--- [exit 0 (pipeline: 0 1 0 — an earlier stage failed), 0s]", 0],
+        ["pnpm test 2>&1 | grep FAIL", "--- [exit 1 (pipeline: 0 1 — the filter matched nothing), 0s]", 0],
+        ["pnpm test 2>&1 | rg -n FAIL", "--- [exit 1 (pipeline: 0 1 — the filter matched nothing), 0s]", 0],
+        ["bash -lc 'pnpm test | grep FAIL'", "--- [exit 1 (pipeline: 0 1 — the filter matched nothing), 0s]", 0],
+        ["pnpm test 2>&1 | grep FAIL", "--- [exit 1 (pipeline: 1 1 — an earlier stage failed), 0s]", 1],
+        ["cargo test 2>&1 | grep FAILED | head", "--- [exit 0 (pipeline: 101 1 0 — an earlier stage failed), 0s]", 101],
+        ["grep -n TODO src/a.ts | head", "--- [exit 0 (pipeline: 1 0 — an earlier stage failed), 0s]", 1],
+        ["pnpm test | sort | head", "--- [exit 0 (pipeline: 0 1 0 — an earlier stage failed), 0s]", 1],
+        // Statuses of another length are not the last pipeline's: no stage is known to be a filter.
+        ["pnpm test | grep FAIL | head; echo done", "--- [exit 0 (pipeline: 0 1 0 — an earlier stage failed), 0s]", 1],
+        ["pnpm test 2>&1 | grep FAIL", "--- [exit 1, 0s]", 1],
+    ] as const)("%s with %j exited %p", (command, text, code) => {
+        expect(commandExitCode(text, command)).toBe(code);
     });
 
     test.each([

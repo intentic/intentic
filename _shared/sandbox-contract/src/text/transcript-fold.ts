@@ -21,7 +21,7 @@ import { unspokenPromptRow } from "../events/agent-words.js";
 import { takeToolUpdate } from "../events/tool-update.js";
 import { needRowText } from "../events/need-wake.js";
 import { noticeCode, sandboxNoticeOf } from "../events/sandbox-notice.js";
-import { installRow, landedRow, syncLine } from "./land-rows.js";
+import { installRow, landedRow, type SyncFacts, syncLine } from "./land-rows.js";
 
 // Folds a turn's frames into rows once, live and for the settled record alike, so a reopened chat matches what was on
 // screen. The main turn's frames are its rows; a frame a subagent produced (tagged with the call that spawned it) nests
@@ -250,7 +250,7 @@ export class TranscriptFold {
                 return line === undefined || notice === undefined ? [] : this.pushRow({ role: "notice", text: line, noticeCode: noticeCode(notice) });
             }
             case "worktree":
-                return this.synced(event.sync);
+                return this.synced(event.sync, event.base);
             case "landed":
                 return this.pushRow(landedRow(event));
             case "compact":
@@ -669,15 +669,18 @@ export class TranscriptFold {
 
     // The rebase notice, less what a resolve turn was sent to fix: that turn opens because the branch couldn't rebase, so
     // saying so again one row under its own errand only repeats it. What did move is still told.
-    private synced(sync: { commits: number; blocked: readonly string[] } | undefined): TranscriptPatch[] {
+    private synced(sync: SyncFacts | undefined, base: string): TranscriptPatch[] {
         if (sync === undefined) {
             return [];
         }
         const opener = this.opener === undefined ? undefined : this.rows[this.opener];
         const told = opener !== undefined && isLandConflict(opener.text) ? { ...sync, blocked: [] } : sync;
-        const text = syncLine(told);
+        // The base is named only where the line says it (a mid-turn catch-up); every other row stays as it was.
+        const named = told.cause === `between-tools` && base !== `` ? base : undefined;
+        const text = syncLine(told, named);
         const blocked = told.blocked.length > 0 ? told.blocked.join(`, `) : undefined;
-        return text === "" ? [] : this.pushRow({ role: "notice", text, noticeCode: noticeCode({ code: "synced", params: { commits: told.commits, blocked } }) });
+        const params = { commits: told.commits, blocked, cause: told.cause, base: named };
+        return text === "" ? [] : this.pushRow({ role: "notice", text, noticeCode: noticeCode({ code: "synced", params }) });
     }
 
     private stampOpener(mutate: (row: TranscriptRow) => void): TranscriptPatch[] {

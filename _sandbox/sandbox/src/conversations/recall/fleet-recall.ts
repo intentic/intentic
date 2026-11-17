@@ -184,25 +184,32 @@ const scopedEntries = (deps: FleetRecallDeps, options: RosterOptions): Persisted
         )
         .sort((left, right) => right.updatedAt - left.updatedAt);
 
-export const fleetRoster = (deps: FleetRecallDeps, options: RosterOptions = {}): readonly FleetRow[] =>
-    scopedEntries(deps, options)
-        .slice(0, options.limit ?? ROSTER_LIMIT)
-        .map((entry) => rowOf(deps, entry));
+// One page of a roster or search, and how many rows the whole answer holds: a page cut at its limit says so, rather than
+// reading as the whole fleet. `keeps` drops what the caller may not read before the page is cut, so the count is theirs.
+export interface FleetPage {
+    readonly rows: readonly FleetRow[];
+    readonly total: number;
+}
+
+type Keeps = (id: string) => boolean;
+const keepsAll: Keeps = () => true;
+
+export const fleetRosterPage = (deps: FleetRecallDeps, options: RosterOptions = {}, keeps: Keeps = keepsAll): FleetPage => {
+    const entries = scopedEntries(deps, options).filter((entry) => keeps(entry.id));
+    return { rows: entries.slice(0, options.limit ?? ROSTER_LIMIT).map((entry) => rowOf(deps, entry)), total: entries.length };
+};
+
+export const fleetRoster = (deps: FleetRecallDeps, options: RosterOptions = {}): readonly FleetRow[] => fleetRosterPage(deps, options).rows;
 
 // Searches the fleet's phrase index once rather than per conversation, deeds included: what an agent hunts for is as
 // often a command or a path it ran as a sentence. A title match counts too, with no snippet: the title is already on
 // the row.
-export const fleetSearch = async (deps: FleetRecallDeps, query: string, options: RosterOptions = {}): Promise<readonly FleetRow[]> => {
+export const fleetSearchPage = async (deps: FleetRecallDeps, query: string, options: RosterOptions = {}, keeps: Keeps = keepsAll): Promise<FleetPage> => {
     const needle = foldOf(query);
     const said = await deps.saidIndex.search(query, "conversation", false, true);
-    const matched = scopedEntries(deps, options).flatMap((entry) => {
-        if (titled(entry, needle)) {
-            return [rowOf(deps, entry)];
-        }
-        const snippet = said.get(entry.id);
-        return snippet === undefined ? [] : [rowOf(deps, entry, snippet)];
-    });
-    return matched.slice(0, options.limit ?? ROSTER_LIMIT);
+    const matched = scopedEntries(deps, options).filter((entry) => keeps(entry.id) && (titled(entry, needle) || said.has(entry.id)));
+    const rows = matched.slice(0, options.limit ?? ROSTER_LIMIT).map((entry) => rowOf(deps, entry, titled(entry, needle) ? undefined : said.get(entry.id)));
+    return { rows, total: matched.length };
 };
 
 // One repo of a conversation's work. `landed` is the registry's one-way flag, free to read; the counts come from git

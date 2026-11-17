@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +11,6 @@ import { memoryFleet } from "../../../conversations/registry/agents-registry.tes
 import { bashTmuxHooks } from "../agent-terminals.js";
 import {
     type BackgroundJob,
-    endJobTheCliStopped,
     jobStatusPath,
     keepBackgroundJob,
     noteJobShell,
@@ -24,6 +23,9 @@ import {
     sweepJobEnds,
 } from "./background-jobs.js";
 import { requires } from "@intentic/testing/requires";
+import { endJobTheCliStopped } from "./job-stop-reasons.js";
+import { jobReport } from "./job-report.js";
+import { completionCheck } from "./background-adoption.js";
 import { onJobEnded } from "./job-ended.js";
 import { INPUT_WAIT_MS } from "./input-wait.js";
 import { lookAtRuns } from "./input-wait-follow.js";
@@ -531,9 +533,14 @@ describe("a stop the CLI made by itself", () => {
     it("ends the job for real, so what the agent was told is true", async () => {
         const { job } = await running("conv-cli-stop", "exec sleep 60", "tu-cli-stop");
         noteJobShell(actors, "tu-cli-stop", "bclistop1");
-        expect(await endJobTheCliStopped(actors, "bclistop1")).toBe(true);
+        expect(await endJobTheCliStopped(actors, "bclistop1", "Background command stopped after reaching its time limit", job.startedAt + 7_200_000)).toBe(true);
         await ended(job);
         expect(card("conv-cli-stop", job.id)).toMatchObject({ stoppedBy: "agent", exitCode: 143 });
+        // 2026-11-17, the shinobi-society audit: a bare 143 after two hours read as a crash; its report says why.
+        const report = await jobReport(actors, job);
+        expect(report.exitCode).toBe(143);
+        expect(report.stoppedBecause).toMatch(/^stopped by Claude Code at its background time limit after 2h 0m \(it said: "Background command stopped/);
+        expect(spawnSync("sh", ["-c", completionCheck(job)], { encoding: "utf8" }).stdout).toContain("stopped by Claude Code at its background time limit after 2h 0m");
         // Nothing left for the turn's ending to judge, so nothing for a watch to wait on.
         expect(settledBackgroundJobs(actors, "conv-cli-stop").running).toEqual([]);
     });

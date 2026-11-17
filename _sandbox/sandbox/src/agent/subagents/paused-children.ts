@@ -52,7 +52,8 @@ const lapse = (services: Services, childId: string, parent: string, kid: ChildRe
     const ranElsewhere = turnRunOf(services.conversations, childId)?.id !== kid.paused?.run;
     endPause(kid);
     const lapsed = `${failure} ${noRerun(ranElsewhere)}`;
-    settleChild(services.conversations, childId, { status: "failed", report: kid.report ?? "", error: lapsed });
+    // A pause is a wall the sandbox re-runs past (a spent allowance, an outage): its lapse is still that wall's.
+    settleChild(services.conversations, childId, { status: "failed", report: kid.report ?? "", error: lapsed, capacity: true });
     keepChild(services, childId);
     void sayToParent(services, parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${lapsed}`);
 };

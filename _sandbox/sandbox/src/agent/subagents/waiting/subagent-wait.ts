@@ -16,6 +16,7 @@ import { HALF_A_MOVE } from "../child-words.js";
 import { SETTLE_WORDS } from "../child-held.js";
 import type { SubagentWaitUntil } from "../subagents.js";
 import { type ChildrenWaitAnswer, childrenWaitAnswer, waitForChildren, waitForNamedWork, waitForWork, workWaitAnswer } from "./work-wait.js";
+import { NO_TARGET, waitTargetOf, waitTargetsOf } from "./wait-targets.js";
 import { opt } from "../../../opt.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { backgroundJobOf, jobFinished, keepBackgroundJob, type KeepOutcome, stopBackgroundJob } from "../../tools/jobs/background-jobs.js";
@@ -295,10 +296,6 @@ const WAIT_WORDS =
     "turn while it waits (the owner, a watch, a subagent's report, a land of a subagent's work), so you read it " +
     "now rather than when the wait runs out.";
 
-// A call naming neither `target` nor `targets` waits on nothing; saying which to name beats guessing "any".
-const NO_TARGET =
-    'Name what to wait on: `target` (a subagent\'s id, a background command\'s ID, "any" or "all"), or `targets` for several children as one.';
-
 // A wait on several children as one (work-wait.ts waitForChildren): `targets`, or every live child for "all".
 const waitOnMany = async (
     deps: SubagentWaitDeps,
@@ -566,9 +563,10 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                         return answer({ outcome: "unknown-target", note: "This turn has no conversation, so it has no children to wait on." });
                     }
                     if (args.targets !== undefined || args.target === "all") {
-                        return answer({ ...(await waitOnMany(deps, deps.conversationId, args.targets, timeoutMs)) });
+                        const targets = await waitTargetsOf(deps.conversations, deps.conversationId, args.targets, deps.signal);
+                        return answer({ ...(await waitOnMany(deps, deps.conversationId, targets, timeoutMs)) });
                     }
-                    const target = args.target;
+                    const target = await waitTargetOf(deps.conversations, deps.conversationId, args.target, deps.signal);
                     if (target === undefined) {
                         return answer({ outcome: "unknown-target", note: NO_TARGET });
                     }

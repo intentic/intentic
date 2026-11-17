@@ -9,7 +9,7 @@ import { churnStorePath } from "./engines/churn-store.js";
 import { type CodebaseHealth, codebaseHealth, type HealthRequest } from "./engines/health.js";
 import { embedPending } from "./engines/semantic.js";
 import type { IndexWorkerData, IndexWorkerEvent, IndexWorkerRequest } from "./indexer/index-worker.js";
-import { indexLag, revalidate, syncModel } from "./indexer/indexer.js";
+import { indexLag, revalidate, type RevalidateResult, syncModel } from "./indexer/indexer.js";
 import { parseEntry } from "./indexer/parse-entry.js";
 import { inThreadScorer } from "./query/scorer.js";
 import { workerScorer } from "./query/worker-scorer.js";
@@ -17,7 +17,7 @@ import type { SqliteDb } from "@intentic/base/sqlite";
 import { compactIndex, isIndexBusy, openIndex } from "./store/db.js";
 import { generationOf, readIndexStatus } from "./store/index-store.js";
 import { claimIndexer, indexerAlive, releaseIndexer } from "./store/indexer-lock.js";
-import type { FileEntry, IndexStatus, QueryOutcome, QueryRequest } from "./types.js";
+import type { EngineFreshness, FileEntry, IndexStatus, QueryOutcome, QueryRequest } from "./types.js";
 import { type Feature, FEATURES } from "./features.js";
 import { dispatch } from "./verbs/dispatch.js";
 import { type VerifyReport, verifyReferences } from "./verify/check.js";
@@ -128,12 +128,13 @@ export interface ResidentEngine {
     close(): Promise<void>;
 }
 
-// What a query can honestly say about the index it just searched: having revalidated it, "fresh" is a fact; having only
-// read it, the answer is the file-level lag instead.
-const freshnessOf = (db: SqliteDb, entries: FileEntry[], sweepStart: number, wrote: boolean): WorkspaceSearchFreshness => {
+// What a query can honestly say about the index it just searched: having revalidated it, "fresh" is a fact, and a pass
+// that changed files says so (EngineFreshness), since its time is this query's own wait, not the index's age; having
+// only read it, the answer is the file-level lag instead.
+const freshnessOf = (db: SqliteDb, entries: FileEntry[], sweepStart: number, pass: RevalidateResult | undefined): EngineFreshness => {
     const ageMs = Date.now() - sweepStart;
-    if (wrote) {
-        return { state: "fresh", ageMs };
+    if (pass !== undefined) {
+        return pass.changed > 0 ? { state: "fresh", ageMs, refreshed: { files: pass.changed, ms: ageMs } } : { state: "fresh", ageMs };
     }
     const lag = indexLag(db, entries);
     return lag === 0 ? { state: "fresh", ageMs } : { state: "stale", ageMs, progress: 1 - lag / Math.max(entries.length, 1), behind: lag };
@@ -165,13 +166,13 @@ export const createEngine = (options: EngineOptions): Engine => {
         entries: FileEntry[];
         // What the sweep, and the index pass if this process ran one, could not read.
         unreadable: string[];
-        indexed: boolean;
+        pass?: RevalidateResult; // the index pass this process ran, when it ran one
     }> => {
         const sweepStart = Date.now();
         const { entries, unreadable } = await sweep(options.root, false);
         if (indexerAlive(indexDir)) {
             const db = openIndex(indexDir, "read");
-            return { db, generation: generationOf(db), sweepStart, entries, unreadable, indexed: false };
+            return { db, generation: generationOf(db), sweepStart, entries, unreadable };
         }
         let db: ReturnType<typeof openIndex> | undefined;
         try {
@@ -179,7 +180,7 @@ export const createEngine = (options: EngineOptions): Engine => {
             const pass = await revalidate(db, entries, parseEntry);
             syncModel(db, options.modelDir);
             compactIndex(db);
-            return { db, generation: pass.generation, sweepStart, entries, unreadable: [...unreadable, ...pass.unreadable], indexed: true };
+            return { db, generation: pass.generation, sweepStart, entries, unreadable: [...unreadable, ...pass.unreadable], pass };
         } catch (error) {
             if (!isIndexBusy(error)) {
                 throw error;
@@ -187,13 +188,13 @@ export const createEngine = (options: EngineOptions): Engine => {
             // Whatever the write pass applied stays; this handle is dropped for a read-only one, refused the same way.
             db?.close();
             const reader = openIndex(indexDir, "read");
-            return { db: reader, generation: generationOf(reader), sweepStart, entries, unreadable, indexed: false };
+            return { db: reader, generation: generationOf(reader), sweepStart, entries, unreadable };
         }
     };
 
     return {
         async run(request) {
-            const { db, generation, sweepStart, entries, unreadable, indexed } = await opened();
+            const { db, generation, sweepStart, entries, unreadable, pass } = await opened();
             try {
                 return await dispatch(
                     {
@@ -201,7 +202,7 @@ export const createEngine = (options: EngineOptions): Engine => {
                         indexDir,
                         db,
                         generation,
-                        freshness: freshnessOf(db, entries, sweepStart, indexed),
+                        freshness: freshnessOf(db, entries, sweepStart, pass),
                         unreadable,
                         // In-thread: a one-shot process serves one query, so a worker would cost a second model load
                         // for nothing.
@@ -212,7 +213,7 @@ export const createEngine = (options: EngineOptions): Engine => {
                             cache: getCache,
                             // Filled inline only here, since nothing indexes in the background; skipped if another owns
                             // the write lock.
-                            topUpEmbeddings: indexed,
+                            topUpEmbeddings: pass !== undefined,
                         }),
                         features: request.features ?? options.features ?? new Set(FEATURES),
                         ...(options.rgPath !== undefined ? { rgPath: options.rgPath } : {}),

@@ -4,8 +4,8 @@ import type { Logger } from "pino";
 import { parentOfActor } from "../../auth/principal.js";
 import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
 import { bookedRerunWords } from "../../conversations/land/child-lands.js";
-import { childVerification } from "./child-verification.js";
 import { familyEnded } from "./family-cancel.js";
+import { settledChildVerification } from "./child-verification.js";
 import { subagentEndingReported, subagentEndingReporter } from "./subagents.js";
 import { noteQueuedReport, queuedChildReportId } from "./waiting/queued-reports.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
@@ -177,7 +177,7 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             failed: settled.failure !== undefined,
             stopped: settled.stopped === true,
             report: reportText(settled, settled.failure === undefined ? undefined : await deps.killNote(settled.conversationId, settled.failure)),
-            verification: childVerification(deps.conversations, settled.conversationId),
+            verification: await settledChildVerification(deps.conversations, settled.conversationId),
             landing: deps.landingOf(settled.conversationId),
             machine: deps.machineOf?.(settled.conversationId),
             review: target.review,

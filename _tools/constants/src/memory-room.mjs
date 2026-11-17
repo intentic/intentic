@@ -442,6 +442,56 @@ export const askFreeSync = ({ socketPath = ROOM_SOCKET } = {}) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// (2026-11-17, the shinobi-society audit) A held command that starts anyway at its deadline gains nothing from the wait
+// when waiting cannot help: in three days that sandbox's heavy commands waited ~50 hours for room (p50 27 s, p90 129 s),
+// and most then printed "still short of memory after 120s — starting anyway". Waiting helps while admitted work holds a
+// reservation (it ends within RESERVATION_MS, or as its process grows into the reading) or while the shortage eases; a
+// wait that has seen neither for STUCK_MS is given up, and the command starts now rather than at the deadline.
+export const STUCK_MS = 30_000;
+// What counts as easing over that window: free memory up by at least this much.
+export const EASED_BYTES = 512 * MIB;
+
+/**
+ * Whether a wait for room has stopped helping: `observe(judged, at)` with each look's verdict and its time answers true
+ * once STUCK_MS of looks have passed with nothing reserved and free memory not up by EASED_BYTES.
+ */
+export const stuckWait = ({ stuckMs = STUCK_MS, easedBytes = EASED_BYTES } = {}) => {
+    let since;
+    let base = 0;
+    return {
+        observe: (judged, at) => {
+            const free = judged.freeBytes ?? 0;
+            if (since === undefined || judged.reservedBytes > 0 || free - base >= easedBytes) {
+                since = at;
+                base = free;
+                return false;
+            }
+            return at - since >= stuckMs;
+        },
+    };
+};
+
+/**
+ * What `memory-room` prints for a command it held, or undefined for one it never held. Says why it waited (`waitedFor`,
+ * the first short reading's diagnosis) and, for one that starts short of room, why it starts anyway.
+ */
+export const waitWords = (label, answer) => {
+    if (!(answer.waitedMs > 0)) {
+        return undefined;
+    }
+    const seconds = Math.round(answer.waitedMs / 1000);
+    const free = answer.freeBytes === undefined ? "?" : gib(answer.freeBytes);
+    const why = answer.waitedFor ?? answer.diagnosis;
+    const held = why === undefined ? "" : ` (${why})`;
+    if (answer.verdict === "run") {
+        return `[memory-room] ${label}: waited ${seconds}s for memory${held}, ${free} free — starting.`;
+    }
+    const still = answer.diagnosis === undefined ? "" : ` Still: ${answer.diagnosis}.`;
+    return answer.stuck === true
+        ? `[memory-room] ${label}: short of memory for ${seconds}s, and waiting longer would not help: nothing admitted is about to let memory go and the shortage has not eased (${free} free) — starting now.${still}`
+        : `[memory-room] ${label}: still short of memory after ${seconds}s (${free} free) — starting anyway.${still}`;
+};
+
 /**
  * The daemon's verdict for one more of `workload`, waiting up to `waitSeconds` for room; where no daemon answers, the
  * same formula over the same files, polled every `intervalMs`. Never throws: every failure is an answer of `run`.
@@ -457,6 +507,7 @@ export const askRoom = async ({
     read = readReadingSync,
     size,
     pid,
+    stuckMs = STUCK_MS,
 } = {}) => {
     const answered = await askSocket(workload, waitSeconds, label, socketPath, size, pid);
     if (answered !== undefined) {
@@ -464,11 +515,25 @@ export const askRoom = async ({
     }
     const startedAt = Date.now();
     let verdict = judge(read(), { workload, attended: false, size });
+    const waitedFor = verdict.diagnosis;
+    const stuck = stuckWait({ stuckMs });
+    let gaveUp = false;
     while (verdict.verdict !== "run" && Date.now() - startedAt < waitSeconds * 1000) {
+        gaveUp = stuck.observe(verdict, Date.now());
+        if (gaveUp) {
+            break;
+        }
         await sleep(intervalMs);
         verdict = judge(read(), { workload, attended: false, size });
     }
-    return { ...verdict, waitedMs: Date.now() - startedAt, source: "formula" };
+    const answer = { ...verdict, waitedMs: Date.now() - startedAt, source: "formula" };
+    if (waitedFor !== undefined) {
+        answer.waitedFor = waitedFor;
+    }
+    if (gaveUp) {
+        answer.stuck = true;
+    }
+    return answer;
 };
 
 // `memory-room --class toolchain --wait 120 --label NAME [--size targeted|editor-typecheck|…] [--pid PID]` holds a command until there is
@@ -499,13 +564,9 @@ const main = async (args) => {
         process.stdout.write(`${JSON.stringify(answer)}\n`);
         return;
     }
-    const free = answer.freeBytes === undefined ? "?" : gib(answer.freeBytes);
-    if (answer.waitedMs > 0) {
-        process.stderr.write(
-            answer.verdict === "run"
-                ? `[memory-room] ${label}: waited ${Math.round(answer.waitedMs / 1000)}s for memory, ${free} free — starting.\n`
-                : `[memory-room] ${label}: still short of memory after ${Math.round(answer.waitedMs / 1000)}s (${free} free) — starting anyway.\n`,
-        );
+    const words = waitWords(label, answer);
+    if (words !== undefined) {
+        process.stderr.write(`${words}\n`);
     }
 };
 

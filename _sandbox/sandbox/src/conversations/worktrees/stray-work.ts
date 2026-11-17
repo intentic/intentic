@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { gitFailureReason, identity } from "../../git/git.js";
 import { headSha } from "../../git/changes/changes.js";
+import { type GitOperation, operationInProgress } from "../../git/ops/operation.js";
 import { branchSha, carriedRef } from "../../git/agent-refs.js";
 import { opt } from "../../opt.js";
 import type { AgentWorktrees } from "./worktrees.js";
@@ -162,6 +163,9 @@ export interface StrayStanding {
     readonly branch?: string;
     readonly carried: boolean;
     readonly uncommitted: boolean;
+    // A rebase, merge, cherry-pick or revert under way in the copy: a rebase stands it on a detached HEAD until it ends,
+    // which is no stray (the shinobi-society audit, 2026-11-17: six false alarms in three days).
+    readonly operation?: GitOperation;
 }
 
 export const strayStandings = async (
@@ -173,17 +177,19 @@ export const strayStandings = async (
     Promise.all(
         (await worktrees.elsewhere(id, repos)).map(async ({ repo, branch }) => {
             const worktree = worktrees.worktreeDir(id, repo);
-            const [head, marker, status] = await Promise.all([
+            const [head, marker, status, operation] = await Promise.all([
                 // allow(silent-catch): a worktree with no readable HEAD has nothing carried, which is what undefined reports.
                 headSha(worktree, git).catch(() => undefined),
                 shaOrUndefined(worktrees.mainDir(repo), carriedRef(id), git),
                 git(worktree, ["status", "--porcelain", "--untracked-files=no"]).catch(() => ({ stdout: "" })),
+                operationInProgress(worktree),
             ]);
             return {
                 repo,
                 ...opt("branch", branch),
                 carried: head !== undefined && head === marker,
                 uncommitted: status.stdout.trim() !== "",
+                ...opt("operation", operation),
             };
         }),
     );

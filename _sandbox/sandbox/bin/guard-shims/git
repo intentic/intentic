@@ -11,7 +11,9 @@
 # (/history/gits), `worktree prune`, `repair`, `move` and `remove` are refused: the sandbox keeps those worktree links
 # itself, and inside the privacy sandbox, which hides the other conversations' checkouts, they look missing, so prune
 # drops their links, repair writes its own paths into them, and move or remove breaks the conversation whose checkout
-# it names. Everything else, and every other command, is the real git at once.
+# it names. In a linked worktree of a kept repo, `stash pop`, `apply` and `drop` take only an entry made on this
+# checkout's own branch, and `stash clear` is refused: the stash is one stack in the shared git dir. Everything else,
+# and every other command, is the real git at once.
 
 # Words are split below, never globbed.
 set -f
@@ -60,7 +62,7 @@ for arg in "$@"; do
 done
 
 case $sub in
-    checkout|switch|symbolic-ref|worktree) ;;
+    checkout|switch|symbolic-ref|worktree|stash) ;;
     *) exec "$real" "$@" ;;
 esac
 
@@ -89,6 +91,92 @@ kept() {
     esac
     return 1
 }
+
+# `stash` in a conversation's own checkout (a linked worktree of a kept repo). Every checkout shares the common git dir,
+# so `refs/stash` is ONE stack for all of them: in the shinobi-society audit (2026-11-17) agents' bare `git stash pop`
+# popped another conversation's entry, 106 files of it, into their own tree, in four conversations. So pop, apply and
+# drop take only an entry made on this checkout's branch (its reflog subject "WIP on <branch>:" or "On <branch>:"):
+# with no entry named, the newest such one; with one named, only if it is such a one. `clear` drops everyone's and is
+# refused. push, list, show and the rest go through.
+stash_refuse() {
+    echo "git: $1" >&2
+    echo "git: stashes are shared by every conversation's checkout of this repository (one \`refs/stash\` stack in the common git dir), so another conversation's entry can sit on top of yours." >&2
+    echo "git: the sandbox already checkpoints your work as commits on this branch; to set changes aside, commit them (a WIP commit) or save them with \`git diff > /tmp/x.patch\` and \`git apply /tmp/x.patch\` later." >&2
+    exit 1
+}
+if [ "$sub" = stash ]; then
+    action=""
+    named=""
+    old_ifs=$IFS
+    IFS='
+'
+    for arg in $past; do
+        case $arg in
+            -*) ;;
+            *) if [ -z "$action" ]; then action=$arg; elif [ -z "$named" ]; then named=$arg; fi ;;
+        esac
+    done
+    IFS=$old_ifs
+    case $action in
+        pop|apply|drop|clear) ;;
+        *) exec "$real" "$@" ;;
+    esac
+    info=$(in_repo rev-parse --path-format=absolute --git-dir --git-common-dir 2>/dev/null) || exec "$real" "$@"
+    git_dir=$(printf '%s\n' "$info" | sed -n 1p)
+    common_dir=$(printf '%s\n' "$info" | sed -n 2p)
+    [ "$git_dir" != "$common_dir" ] && kept "$common_dir" || exec "$real" "$@"
+    [ "$action" != clear ] || stash_refuse "\`git stash clear\` would drop every conversation's stashes, not only this checkout's."
+    branch=$(in_repo symbolic-ref -q --short HEAD 2>/dev/null) || branch=""
+    # One line an entry: its name, its commit, its reflog subject.
+    entries=$(in_repo stash list --format='%gd %H %gs' 2>/dev/null)
+    ours() {
+        [ -n "$branch" ] || return 1
+        case $1 in
+            "WIP on $branch: "*|"On $branch: "*) return 0 ;;
+        esac
+        return 1
+    }
+    if [ -z "$named" ]; then
+        [ -n "$branch" ] || stash_refuse "this checkout is on a detached HEAD, so no stash entry can be told apart as its own."
+        pick=""
+        old_ifs=$IFS
+        IFS='
+'
+        for line in $entries; do
+            subject=${line#* * }
+            if ours "$subject"; then
+                pick=${line%% *}
+                break
+            fi
+        done
+        IFS=$old_ifs
+        [ -n "$pick" ] || stash_refuse "no stash entry was made on this checkout's branch \`$branch\`, so \`git stash $action\` would take another conversation's."
+        exec "$real" "$@" "$pick"
+    fi
+    # An entry named by number (`1`), by its name (`stash@{1}`) or by any other name git resolves to its commit.
+    case $named in
+        *[!0-9]*) want=$named ;;
+        *) want="stash@{$named}" ;;
+    esac
+    commit=$(in_repo rev-parse -q --verify "$want^{commit}" 2>/dev/null) || commit=""
+    old_ifs=$IFS
+    IFS='
+'
+    for line in $entries; do
+        name=${line%% *}
+        rest=${line#* }
+        hash=${rest%% *}
+        subject=${rest#* }
+        if [ "$name" = "$want" ] || [ "$hash" = "$commit" ]; then
+            IFS=$old_ifs
+            ours "$subject" || stash_refuse "\`$named\` was stashed on another branch (\"$subject\"), not on this checkout's \`${branch:-detached HEAD}\`: it is another conversation's work."
+            exec "$real" "$@"
+        fi
+    done
+    IFS=$old_ifs
+    # Not a stash entry at all (`stash apply <commit>`): git's own answer.
+    exec "$real" "$@"
+fi
 
 # `worktree` is read for its own verb, the first word after it; only prune, repair, move and remove, on a kept repo, are
 # refused. list, add, lock and unlock go through.

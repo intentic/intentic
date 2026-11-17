@@ -3,9 +3,10 @@ import { sleep } from "@intentic/base/async";
 import { opt } from "../../../opt.js";
 import { type BackgroundJob, type Holders, jobCommandLine, jobFinished, jobHandle, jobOutputPath, OUTPUT_TAIL_BYTES } from "./background-jobs.js";
 import { inputWaitAt } from "./input-wait-follow.js";
-import { MEMORY_KILL_FILE, OUTPUT_FILE, STATUS_FILE } from "./job-files.js";
+import { MEMORY_KILL_FILE, OUTPUT_FILE, STATUS_FILE, STOP_REASON_FILE } from "./job-files.js";
 import { settleMemoryKills } from "./memory-kills.js";
 import { readRunFile } from "./run-files.js";
+import { fileTail, redirectedOutput } from "./job-redirects.js";
 
 // What a job's reader is handed (`wait`, the work-wait door): its exit, the tail of what it printed, how long it has been
 // quiet, and the prompt it sits at, if any. Split from background-jobs.ts, which holds the jobs themselves.
@@ -31,20 +32,45 @@ export interface JobReport {
     readonly outputFile: string;
     // While it runs: how long since it last printed anything, so an unchanged tail reads as the silence it is.
     readonly quietForSeconds?: number;
+    // While it runs with its output sent to a file of its own (`cmd > log 2>&1`, job-redirects.ts): that file, which
+    // outputTail and quietForSeconds were then read from instead of the empty or stale capture.
+    readonly outputTailFrom?: string;
     // While it sits at a prompt nobody will answer (input-wait.ts): the process waiting, and for how long.
     readonly waitingForInput?: { readonly program: string; readonly pid: number; readonly forSeconds: number };
     // Once it ended because something in it was killed for memory (memory-kills.ts): what, how big, by whom and why.
     readonly killedForMemory?: string;
+    // Once something other than the agent or the person stopped it (Claude Code's background time limit): what and
+    // after how long (job-stop-reasons.ts), so its 143 is not read as a crash.
+    readonly stoppedBecause?: string;
 }
 
-// Whole seconds since the output last grew, from the capture's own mtime; the start when it never printed.
-const quietSince = (job: BackgroundJob, now: number): number | undefined => {
+// When the capture last grew; the start when it never printed, undefined once the tmp sweep took it.
+const capturedAt = (job: BackgroundJob): number | undefined => {
     try {
-        return Math.max(0, Math.round((now - Math.max(job.startedAt, statSync(jobOutputPath(job)).mtimeMs)) / 1000));
+        return Math.max(job.startedAt, statSync(jobOutputPath(job)).mtimeMs);
     } catch {
         // allow(silent-catch): a capture the tmp sweep already took has no silence to measure.
         return undefined;
     }
+};
+
+// A capture quiet this long (or empty) has its processes' own output files looked for (job-redirects.ts): a job that
+// prints to its pane is never charged the /proc walk.
+const REDIRECT_LOOK_MS = 15_000;
+
+// What a running job printed and when it last did: from its capture, or from the file its processes write to when that
+// moved more recently than the capture (an empty capture never moved).
+const runningOutput = async (job: BackgroundJob, now: number, procRoot: string) => {
+    const tail = await tailOf(job, OUTPUT_FILE, OUTPUT_TAIL_BYTES);
+    const at = capturedAt(job);
+    const quietFor = (since: number): number => Math.max(0, Math.round((now - since) / 1000));
+    if (tail === "" || at === undefined || now - at >= REDIRECT_LOOK_MS) {
+        const redirect = await redirectedOutput(job.dir, procRoot);
+        if (redirect !== undefined && (tail === "" || at === undefined || redirect.mtimeMs > at)) {
+            return { tail: await fileTail(redirect.path, OUTPUT_TAIL_BYTES), quiet: quietFor(Math.max(job.startedAt, redirect.mtimeMs)), from: redirect.path };
+        }
+    }
+    return { tail, quiet: at === undefined ? undefined : quietFor(at), from: undefined };
 };
 
 
@@ -76,22 +102,25 @@ const killedForMemory = async (job: BackgroundJob, code: number): Promise<string
     return undefined;
 };
 
-export const jobReport = async (actors: Holders, job: BackgroundJob, now: number = Date.now()): Promise<JobReport> => {
+export const jobReport = async (actors: Holders, job: BackgroundJob, now: number = Date.now(), procRoot = "/proc"): Promise<JobReport> => {
     const finished = jobFinished(job);
     const status = finished ? (await tailOf(job, STATUS_FILE, 64)).trim() : "";
     const code = status === "" ? Number.NaN : Number(status);
     const killed = finished ? await killedForMemory(job, code) : undefined;
-    const quiet = finished ? undefined : quietSince(job, now);
+    const stopped = finished ? (await tailOf(job, STOP_REASON_FILE, 4_000)).trim() || undefined : undefined;
+    const output = finished ? { tail: await tailOf(job, OUTPUT_FILE, OUTPUT_TAIL_BYTES), quiet: undefined, from: undefined } : await runningOutput(job, now, procRoot);
     const waiting = finished ? undefined : inputWaitAt(job.dir);
     return {
         id: jobHandle(actors, job),
         command: jobCommandLine(job.command),
         exitCode: Number.isInteger(code) ? code : undefined,
         running: !finished,
-        outputTail: await tailOf(job, OUTPUT_FILE, OUTPUT_TAIL_BYTES),
+        outputTail: output.tail,
         outputFile: jobOutputPath(job),
+        ...opt("outputTailFrom", output.from),
         ...opt("killedForMemory", killed),
-        ...opt("quietForSeconds", quiet),
+        ...opt("stoppedBecause", stopped),
+        ...opt("quietForSeconds", output.quiet),
         ...opt(
             "waitingForInput",
             waiting === undefined ? undefined : { program: waiting.program, pid: waiting.pid, forSeconds: Math.max(0, Math.round((now - waiting.since) / 1000)) },

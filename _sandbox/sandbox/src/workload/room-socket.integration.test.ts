@@ -71,6 +71,17 @@ test("a wait asked over the socket is held there until the room comes", async ()
     expect(await asked).toMatchObject({ verdict: "run", source: "daemon" });
 });
 
+// 2026-11-17, the shinobi-society audit: waits sat out their two minutes and printed only how much was free.
+test("a wait over the socket that cannot help is given up early, with why it waited and what is still short", async () => {
+    let at = 0;
+    const budget = createResourceBudget({ read: async () => box(10, 9.9), sampleMs: 0, waitIntervalMs: 1, now: () => (at += 1_100) });
+    const socketPath = await serve(budget);
+    const asked = await askRoom({ workload: "toolchain", waitSeconds: 600, socketPath });
+    const short = "Sandbox memory is low: 9.9 GiB of 10.0 GiB used";
+    expect(asked).toMatchObject({ verdict: "refuse", source: "daemon", stuck: true, diagnosis: short, waitedFor: short });
+    expect(asked.waitedMs).toBeLessThan(600_000);
+});
+
 test("a class the budget does not know is refused, and the caller falls back to the formula", async () => {
     const socketPath = await serve(budgetOn(box(16, 4)));
     // @ts-expect-error: the point is a class no WorkloadClass names.

@@ -1,7 +1,7 @@
 //! The process table as the memory guard reads it, and the one kill it makes. Cheap reads first: a process's `stat`,
-//! `oom_score` and `cgroup` come from the kernel's own bookkeeping, while `cmdline` and `environ` are read out of the
+//! `status`, `oom_score`, `oom_score_adj` and `cgroup` come from the kernel's own bookkeeping, while `cmdline` and `environ` are read out of the
 //! process's memory, which under the thrash the guard is for may sit in swap. So the whole table is judged on the cheap
-//! three, and only the few processes a record names are read for their command line and owner, off the guard's thread
+//! five, and only the few processes a record names are read for their command line and owner, off the guard's thread
 //! and with a deadline (`read_memory`).
 
 use std::os::fd::{FromRawFd, OwnedFd};
@@ -39,6 +39,10 @@ pub struct Proc {
     // A kernel thread, a zombie or a process past its exit: nothing a kill would free.
     pub inert: bool,
     pub oom_score: u32,
+    // The tier the daemon stamped on it (src/workload/workload-class.ts): an agent's command 600, a build 800.
+    pub oom_score_adj: i32,
+    // Its resident memory and swap together (`VmRSS` + `VmSwap`): what killing it would free.
+    pub bytes: u64,
     pub cgroup: String,
 }
 
@@ -92,16 +96,51 @@ fn within(cgroup: &str, leaf: &str) -> bool {
         .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
 }
 
-/// The killable processes, the one the kernel would kill first first: highest `oom_score`, which weighs a process's
-/// resident memory, swap and page tables against the memory there is, and its `oom_score_adj` (an agent's command 600,
-/// a build 800, a runtime 100 and up, the daemon 0). A tie goes to the later pid.
+/// The killable processes, the one whose kill frees the most first: its resident memory and swap, weighed up by its
+/// tier (`oom_score_adj`: an agent's command 600, a build 800, a runtime 100 and up), so between two of about one size
+/// the build goes first, but never a small build before a big command. A tie goes to the later pid.
+///
+/// 2026-11-17, the shinobi-society audit: this was the kernel's own `oom_score`, which adds the tier to a process's share
+/// of all memory in thousandths. A tier 200 points up outweighs 20% of the box, so a 20 KB `sccache` under cargo (800)
+/// outranked a 9.9 GB `bake.py` (600): six sccache kills in one burst, a 60 MB thread killed while the 9.9 GB process
+/// ran on, and the same job killed three times, each kill freeing nothing.
 pub fn ranked(procs: Vec<Proc>, spared: &Spared) -> Vec<Proc> {
     let mut ranked: Vec<Proc> = procs
         .into_iter()
         .filter(|proc| killable(proc, spared))
         .collect();
-    ranked.sort_unstable_by_key(|proc| std::cmp::Reverse((proc.oom_score, proc.pid)));
+    ranked.sort_unstable_by_key(|proc| std::cmp::Reverse((weight(proc), proc.pid)));
     ranked
+}
+
+// Its size times (1000 + tier) / 1000: a build (800) weighs 1.8 times its size, a command (600) 1.6, a runtime (100)
+// 1.1. The tier is clamped to the kernel's range, and a killable process has one above -1000 (its oom_score is not 0).
+fn weight(proc: &Proc) -> u128 {
+    let tier = u128::from(
+        proc.oom_score_adj
+            .clamp(-1000, 1000)
+            .saturating_add(1000)
+            .unsigned_abs(),
+    );
+    u128::from(proc.bytes) * tier
+}
+
+// The least a victim may hold, whatever else there is: a kill that frees less than this frees nothing the guard is for.
+const VICTIM_AT_LEAST: u64 = 32 * 1024 * 1024;
+// And the share of the sandbox's memory and swap in use that a victim should hold when any process does: under a 20 GB
+// thrash, a 60 MB process is not the runaway.
+const VICTIM_SHARE_PERCENT: u64 = 2;
+
+/// The process to kill out of `ranked`, with `in_use` the bytes of memory and swap the sandbox holds: the first that
+/// holds at least `VICTIM_SHARE_PERCENT` of that (and `VICTIM_AT_LEAST`), else the first that holds `VICTIM_AT_LEAST`,
+/// else none: killing a process of a few kilobytes frees nothing, and the leaf's own OOM killer is still there.
+pub fn victim(ranked: &[Proc], in_use: Option<u64>) -> Option<&Proc> {
+    let share = in_use.unwrap_or(0) / 100 * VICTIM_SHARE_PERCENT;
+    let floor = share.max(VICTIM_AT_LEAST);
+    ranked
+        .iter()
+        .find(|proc| proc.bytes >= floor)
+        .or_else(|| ranked.iter().find(|proc| proc.bytes >= VICTIM_AT_LEAST))
 }
 
 /// What a record says of a process beyond what `scan` read.
@@ -183,12 +222,23 @@ impl Procs {
             .parse()
             .ok()?;
         let cgroup = cgroup_of(&std::fs::read_to_string(dir.join("cgroup")).ok()?)?.to_owned();
+        // A kernel thread's status has no VmRSS: it holds nothing a kill would free. An unreadable tier is the daemon's
+        // default, 0.
+        let status = std::fs::read_to_string(dir.join("status")).unwrap_or_default();
+        let oom_score_adj = std::fs::read_to_string(dir.join("oom_score_adj"))
+            .ok()
+            .and_then(|adj| adj.trim().parse().ok())
+            .unwrap_or(0);
         Some(Proc {
             pid,
             pgid: stat.pgid,
             starttime: stat.starttime,
             inert: stat.flags & PF_KTHREAD != 0 || matches!(stat.state, 'Z' | 'X' | 'x'),
             oom_score,
+            oom_score_adj,
+            bytes: status_bytes(&status, "VmRSS:")
+                .unwrap_or(0)
+                .saturating_add(status_bytes(&status, "VmSwap:").unwrap_or(0)),
             cgroup,
         })
     }
@@ -346,6 +396,9 @@ mod tests {
 
     use super::*;
 
+    const MIB: u64 = 1024 * 1024;
+
+    // A process of `oom_score` MiB in the daemon's tier, so its size orders it as its score would.
     fn proc(pid: u32, oom_score: u32, cgroup: &str) -> Proc {
         Proc {
             pid,
@@ -353,7 +406,17 @@ mod tests {
             starttime: 100,
             inert: false,
             oom_score,
+            oom_score_adj: 0,
+            bytes: u64::from(oom_score) * MIB,
             cgroup: cgroup.into(),
+        }
+    }
+
+    fn sized(pid: u32, mib: u64, oom_score_adj: i32) -> Proc {
+        Proc {
+            oom_score_adj,
+            bytes: mib * MIB,
+            ..proc(pid, 900, "/workload")
         }
     }
 
@@ -379,9 +442,9 @@ mod tests {
         assert_eq!(parse_stat("4242 (short) S 7 4200"), None);
     }
 
-    // The guard's whole choice, over plain data: what it may never touch, then the highest score.
+    // The guard's whole choice, over plain data: what it may never touch, then the largest.
     #[test]
-    fn the_victim_is_the_highest_score_outside_the_daemons_leaf() {
+    fn the_largest_goes_first_outside_the_daemons_leaf() {
         let procs = vec![
             proc(1, 2000, "/workload"),
             proc(7, 1999, "/daemon"),
@@ -414,6 +477,53 @@ mod tests {
 
     fn ranked_of(procs: Vec<Proc>) -> Vec<Proc> {
         ranked(procs, &SPARED)
+    }
+
+    fn victim_of(procs: Vec<Proc>, in_use_mib: u64) -> Option<u32> {
+        victim(&ranked_of(procs), Some(in_use_mib * MIB)).map(|proc| proc.pid)
+    }
+
+    // 2026-11-17, the shinobi-society audit: the kernel's score put a 20 KB sccache in the build tier ahead of a 9.9 GB
+    // command, and the guard killed sccache after sccache.
+    #[test]
+    fn the_victim_is_the_process_whose_kill_frees_the_most() {
+        let sccache = sized(400, 0, 800);
+        let thread = sized(401, 60, 800);
+        let bake = sized(402, 9_900, 600);
+        assert_eq!(
+            victim_of(vec![sccache.clone(), thread.clone(), bake.clone()], 20_000),
+            Some(402),
+            "the 9.9 GB command, not the build's 20 KB helper or 60 MB thread"
+        );
+        assert_eq!(
+            ranked_of(vec![sized(500, 1_000, 600), sized(501, 1_000, 800)])
+                .first()
+                .map(|proc| proc.pid),
+            Some(501),
+            "of two of one size, the higher tier goes first"
+        );
+        assert_eq!(
+            ranked_of(vec![sized(502, 1_000, 600), sized(503, 600, 800)])
+                .first()
+                .map(|proc| proc.pid),
+            Some(502),
+            "a tier weighs a size up, it does not outrank a bigger process"
+        );
+        assert_eq!(
+            victim_of(vec![sccache.clone(), thread.clone()], 20_000),
+            Some(401),
+            "with nothing near 2% of what is in use, the largest above the 32 MiB floor"
+        );
+        assert_eq!(
+            victim_of(vec![sccache, sized(404, 31, 800)], 20_000),
+            None,
+            "a kill that frees a few kilobytes is no kill"
+        );
+        assert_eq!(
+            victim(&ranked_of(vec![thread]), None).map(|proc| proc.pid),
+            Some(401),
+            "an unread cgroup leaves the absolute floor"
+        );
     }
 
     #[test]
@@ -463,6 +573,7 @@ mod tests {
             b"300 (cc1plus) R 250 250 1 0 -1 4194304 0 0 0 0 0 0 0 0 30 10 1 0 777 0 0",
         );
         write("300", "oom_score", b"1650\n");
+        write("300", "oom_score_adj", b"800\n");
         write("300", "cgroup", b"0::/workload\n");
         write("300", "comm", b"cc1plus\n");
         write(
@@ -494,6 +605,8 @@ mod tests {
                     starttime: 1,
                     inert: true,
                     oom_score: 0,
+                    oom_score_adj: 0,
+                    bytes: 0,
                     cgroup: "/".into(),
                 },
                 Proc {
@@ -502,6 +615,8 @@ mod tests {
                     starttime: 777,
                     inert: false,
                     oom_score: 1650,
+                    oom_score_adj: 800,
+                    bytes: 3 * MIB,
                     cgroup: "/workload".into(),
                 },
             ]

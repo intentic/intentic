@@ -14,8 +14,11 @@ import { opt } from "../../opt.js";
 // Covers a rebuild plus a long run, measured from the entry's start since nothing records when the daemon died.
 const RESUME_MAX_AGE_MS = 6 * 60 * 60_000;
 
-// Exactly once: written as spent before the re-run starts, so the counter survives the crash it guards against.
+// Once: written as spent before the re-run starts, so the counter survives the crash it guards against. A re-run that
+// plainly was not that loop (it made progress, or the restart was the sandbox's own) earns more, up to the ceiling
+// (agent/run/turn/recovery/rerun-budget.ts, 2026-11-17).
 const MAX_RESUME_ATTEMPTS = 1;
+export const RESUME_ATTEMPTS_CEILING = 3;
 
 // Re-resolved at resume time (fresh credentials, worktree state); intersected, not extended, so a turn invalid at the
 // route can't be journalled either. `resume` is kept so a restart keeps the kind its prompt's note already names, and
@@ -109,8 +112,9 @@ export const MAX_PARKED_RESTORES = 3;
 export const parkedRestoreSpent = (entry: Pick<JournalEntry, "attempts">): boolean => entry.attempts >= MAX_PARKED_RESTORES;
 
 // Why a boot leaves an entry interrupted rather than re-running it: its attempt is spent, or it is too old to be wanted.
-export const resumeBars = (entry: JournalEntry, now: number): { readonly spent: boolean; readonly stale: boolean } => ({
-    spent: entry.attempts >= MAX_RESUME_ATTEMPTS,
+// `another`: the entry earned re-runs past the first (rerun-budget.ts), still never past the ceiling.
+export const resumeBars = (entry: JournalEntry, now: number, another = false): { readonly spent: boolean; readonly stale: boolean } => ({
+    spent: entry.attempts >= (another ? RESUME_ATTEMPTS_CEILING : MAX_RESUME_ATTEMPTS),
     stale: now - entry.startedAt > RESUME_MAX_AGE_MS,
 });
 

@@ -1,5 +1,5 @@
-import type { WorkspaceSearchFreshness, WorkspaceSearchTag } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
-import type { Confidence, RankedGroup, RankedHit } from "../types.js";
+import type { WorkspaceSearchTag } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
+import type { Confidence, EngineFreshness, RankedGroup, RankedHit } from "../types.js";
 import { estimateTokens } from "./budget.js";
 import { encodeCursor } from "./cursor.js";
 
@@ -14,7 +14,7 @@ export interface RenderRequest {
     readonly groups: readonly RankedGroup[];
     // Groups already sent in an earlier page; skipped here but counted in the totals.
     readonly offset: number;
-    readonly freshness: WorkspaceSearchFreshness;
+    readonly freshness: EngineFreshness;
     readonly budget: number;
     readonly limit?: number;
     readonly filesOnly?: boolean;
@@ -54,7 +54,9 @@ const CAPSULE_SHARE = 0.5;
 const tagText = (tags: readonly WorkspaceSearchTag[]): string =>
     tags.map((tag) => (tag.score === undefined ? `[${tag.kind}]` : `[${tag.kind} ${tag.score.toFixed(2)}]`)).join(" ");
 
-const freshnessText = (freshness: WorkspaceSearchFreshness): string => {
+const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)}s`;
+
+const freshnessText = (freshness: EngineFreshness): string => {
     if (freshness.state === "building") {
         return `index building ${Math.round((freshness.progress ?? 0) * 100)}%`;
     }
@@ -63,7 +65,11 @@ const freshnessText = (freshness: WorkspaceSearchFreshness): string => {
         const behind = freshness.behind ?? 0;
         return behind > 0 ? `index ${behind} files behind (text matches are live)` : "index catching up (text matches are live)";
     }
-    return `index fresh (${((freshness.ageMs ?? 0) / 1000).toFixed(1)}s)`;
+    const { refreshed } = freshness;
+    if (refreshed !== undefined) {
+        return `index fresh (this query re-indexed ${refreshed.files} changed ${refreshed.files === 1 ? "file" : "files"} first, ${seconds(refreshed.ms)})`;
+    }
+    return `index fresh (${seconds(freshness.ageMs ?? 0)})`;
 };
 
 const hitLine = (hit: RankedHit, showTags: boolean, plain: boolean): string => {

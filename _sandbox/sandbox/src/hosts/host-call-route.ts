@@ -32,6 +32,22 @@ const crossingOf = (message: RpcMessage): { readonly named: string; readonly res
     return { named, rest: { ...message, params: { ...message.params, arguments: rest } } };
 };
 
+// THE SANDBOX READS GO TO AN AWAKE DISTRO TOO (2026-11-17). rog's Windows agent was offline overnight while its WSL
+// agent stayed up, and an audit of the shinobi-society sandbox found list_sandboxes and inspect_sandbox refused, though
+// the distro's agent has the same tools and one Docker engine serves every side: the agent fell back to running `ic
+// sandbox inspect` through run_command by hand. These four only read what `ic` reads from that engine, so whichever
+// side answers gives the same answer. The ones that change a sandbox stay with the Windows side, whose `ic` keeps the
+// ledger and the saved shapes they act on.
+const ENGINE_READS: ReadonlySet<string> = new Set(["list_sandboxes", "inspect_sandbox", "sandbox_logs", "diagnose_sandbox"]);
+
+const ToolCallSchema = z.object({ params: z.object({ name: z.string() }) });
+
+/** Whether `message` calls a tool that reads the machine's one Docker engine alone, which any side of it can answer. */
+const readsEngine = (message: RpcMessage): boolean => {
+    const parsed = ToolCallSchema.safeParse(message);
+    return parsed.success && ENGINE_READS.has(parsed.data.params.name);
+};
+
 const spokenList = (items: readonly string[]): string => (items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1) ?? ""}`);
 
 /** What the agent reads when the Windows side is down and its call did not name a side that is up. Exported for its test. */
@@ -46,7 +62,7 @@ export const partlyConnectedRefusal = (card: string, awake: readonly string[], n
     const how = crossings.length === 1 ? `pass ${crossings[0] ?? ""} to run_command to run there` : `pass ${crossings.join(" or ")} to run_command to run in one`;
     return (
         `${down}: its agent there is not running or cannot reach this sandbox. ${sides}: ${how}. ` +
-        `Every other tool reaches the Windows side only, so it waits until that side is back.`
+        `The sandbox reads (list_sandboxes, inspect_sandbox, sandbox_logs, diagnose_sandbox) are answered there too; every other tool reaches the Windows side only, so it waits until that side is back.`
     );
 };
 
@@ -102,6 +118,10 @@ const crossingRoute =
         const side = crossing === undefined ? undefined : presence.awake.find((key) => key.toLowerCase() === crossing.named.toLowerCase());
         if (side !== undefined && crossing !== undefined) {
             return { id: hostConnectionKey(card, side), message: crossing.rest };
+        }
+        const reader = presence.awake[0];
+        if (crossing === undefined && reader !== undefined && readsEngine(message)) {
+            return { id: hostConnectionKey(card, reader), message };
         }
         return { refusal: partlyConnectedRefusal(card, presence.awake, crossing?.named) };
     };

@@ -1,4 +1,19 @@
-import { askRoom, costBytesOf, countedBytesOf, freeBytesOf, isRoomSize, judge, readingFrom, readReadingSync, SIZE_BYTES, swapFullOf } from "../memory-room.mjs";
+import {
+    askRoom,
+    costBytesOf,
+    countedBytesOf,
+    EASED_BYTES,
+    freeBytesOf,
+    isRoomSize,
+    judge,
+    readingFrom,
+    readReadingSync,
+    SIZE_BYTES,
+    STUCK_MS,
+    stuckWait,
+    swapFullOf,
+    waitWords,
+} from "../memory-room.mjs";
 
 const GIB = 1024 ** 3;
 const CG = "/sys/fs/cgroup";
@@ -302,6 +317,41 @@ test("with no daemon to ask, a short box is waited on by the formula and started
         read: () => short,
     });
     expect(answer).toMatchObject({ verdict: "wait", source: "formula", diagnosis: "Sandbox memory is low: 9.9 GiB of 10.0 GiB used" });
+    expect(answer.waitedFor).toBe("Sandbox memory is low: 9.9 GiB of 10.0 GiB used");
+    expect(answer.stuck).toBeUndefined();
+});
+
+// 2026-11-17, the shinobi-society audit: most of ~50 hours of waits in three days ended "still short ... starting anyway".
+test("a wait with nothing reserved and no easing for STUCK_MS is given up; a reservation or easing starts the window again", () => {
+    const stuck = stuckWait();
+    const short = (freeBytes: number, reservedBytes = 0) => ({ freeBytes, reservedBytes });
+    expect(stuck.observe(short(2 * GIB), 0)).toBe(false);
+    expect(stuck.observe(short(2 * GIB), STUCK_MS - 1)).toBe(false);
+    expect(stuck.observe(short(2 * GIB + EASED_BYTES), STUCK_MS)).toBe(false);
+    expect(stuck.observe(short(2 * GIB, 7 * GIB), 2 * STUCK_MS)).toBe(false);
+    expect(stuck.observe(short(2 * GIB), 2 * STUCK_MS + 1)).toBe(false);
+    expect(stuck.observe(short(2.1 * GIB), 3 * STUCK_MS + 1)).toBe(true);
+});
+
+test("the formula's own wait gives up once waiting cannot help, and says so", async () => {
+    const short = { limitBytes: 10 * GIB, usedBytes: 9.9 * GIB, swapBytes: 0, stallPercent: 0, oomKills: undefined };
+    const startedAt = Date.now();
+    const answer = await askRoom({ workload: "toolchain", waitSeconds: 600, socketPath: "/nonexistent/room.sock", intervalMs: 5, stuckMs: 50, read: () => short });
+    // A little past its window, far short of its ten minutes.
+    expect(Date.now() - startedAt).toBeLessThan(5_000);
+    expect(answer).toMatchObject({ verdict: "wait", stuck: true });
+});
+
+test("what memory-room prints says why it waited and why it starts", () => {
+    const why = "The sandbox's disk is saturated: for 41% of the last ten seconds, everything in it was waiting on the disk";
+    expect(waitWords("cargo", { verdict: "run", waitedMs: 0, freeBytes: GIB })).toBeUndefined();
+    expect(waitWords("cargo", { verdict: "run", waitedMs: 27_000, freeBytes: 10.1 * GIB, waitedFor: why })).toBe(`[memory-room] cargo: waited 27s for memory (${why}), 10.1 GiB free — starting.`);
+    expect(waitWords("cargo", { verdict: "refuse", waitedMs: 120_000, freeBytes: 10.1 * GIB, diagnosis: why, waitedFor: why })).toBe(
+        `[memory-room] cargo: still short of memory after 120s (10.1 GiB free) — starting anyway. Still: ${why}.`,
+    );
+    expect(waitWords("cargo", { verdict: "refuse", waitedMs: 31_000, freeBytes: 6 * GIB, diagnosis: "Sandbox memory is low: 12.0 of 18.0 GiB used", stuck: true })).toMatch(
+        /^\[memory-room\] cargo: short of memory for 31s, and waiting longer would not help: .* — starting now\. Still: Sandbox memory is low: 12\.0 of 18\.0 GiB used\.$/u,
+    );
 });
 
 test("two Cargo admission reservations fit an 18 GiB sandbox with a person reserve", () => {

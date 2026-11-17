@@ -78,7 +78,18 @@ export interface RoomJudgement {
 export interface RoomAnswer extends RoomJudgement {
     readonly waitedMs: number;
     readonly source: "daemon" | "formula";
+    // Why a held command waited: the first short reading's diagnosis.
+    readonly waitedFor?: string;
+    // The wait was given up before its deadline, since waiting could not help (stuckWait).
+    readonly stuck?: boolean;
 }
+
+export const STUCK_MS: number;
+export const EASED_BYTES: number;
+export function stuckWait(options?: { readonly stuckMs?: number; readonly easedBytes?: number }): {
+    readonly observe: (judged: Pick<RoomJudgement, "freeBytes" | "reservedBytes">, at: number) => boolean;
+};
+export function waitWords(label: string, answer: Pick<RoomAnswer, "verdict" | "waitedMs" | "freeBytes" | "diagnosis" | "waitedFor" | "stuck">): string | undefined;
 
 export function readingFrom(read: (path: string) => string | undefined): MemoryReading;
 export function readReadingSync(): MemoryReading;
@@ -100,6 +111,8 @@ export function askRoom(options?: {
     readonly read?: () => MemoryReading;
     readonly size?: RoomSize;
     readonly pid?: number;
+    // How long a wait that cannot help is kept up before it is given up (STUCK_MS).
+    readonly stuckMs?: number;
 }): Promise<RoomAnswer>;
 export function askFree(options?: { readonly socketPath?: string; readonly read?: () => MemoryReading }): Promise<{
     readonly freeBytes: number | undefined;

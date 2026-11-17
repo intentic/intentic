@@ -333,6 +333,36 @@ test("multi: flagged sub-lines hit, error lines report without aborting the batc
     expect(context.process.exitCode).toBe(0);
 });
 
+// A query that throws is its own line's error: a batch whose earlier sections printed hits still exits 0, where the
+// throw used to escape to the CLI and exit 2 (the shinobi-society audit, 2026-11-17). A missing ripgrep makes `find`
+// throw while `def` answers from the index.
+test("multi: a query that throws is its line's error, and earlier hits still exit 0", async () => {
+    let out = "";
+    const context = {
+        process: {
+            stdout: { write: (chunk: string) => void (out += chunk) },
+            stderr: { write: () => true },
+            env: process.env,
+            exitCode: undefined as number | string | null | undefined,
+        },
+    };
+    const flags = { budget: 1500, filesOnly: false, count: false, full: false, json: false, ndjson: false, ignored: false };
+    process.env["IQ_RG_PATH"] = join(root, "no-such-rg");
+    // SAFETY: runMulti reads only process.stdout and sets process.exitCode; its flags read only the fields given here.
+    const multi = (queries: string[]) => runMulti(context as never, flags as never, queries);
+    try {
+        await multi(["def createWidget", "find createWidget"]);
+        expect(out).toContain("[1/2] iq: def createWidget,");
+        expect(out).toMatch(/\[2\/2\] iq: find createWidget, error: .+/);
+        expect(context.process.exitCode).toBe(0);
+        out = "";
+        await multi(["find createWidget"]);
+        expect(context.process.exitCode).toBe(2);
+    } finally {
+        delete process.env["IQ_RG_PATH"];
+    }
+});
+
 test("multi: queries given as arguments need no stdin", async () => {
     let out = "";
     const context = {

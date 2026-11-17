@@ -76,7 +76,9 @@ describe(`a turn left to the conversation's own account`, () => {
     // The 2026-10-29 Devin chat, refused twice on a spent account with two beside it that nothing had refused.
     it(`moves off a spent one where the daemon's move would land, pinned or not, and stays with nowhere to go`, () => {
         expect(servingAccount(`claude`, [row(`mine`, SPENT), row(`other`, ready(80))], { account: `mine`, named: false })).toEqual({ id: `other`, byAllowance: true });
-        expect(servingAccount(`claude`, [row(`mine`, SPENT), row(`unread`, UNREAD)], { account: `mine`, named: false })).toEqual({ id: `mine`, byAllowance: false });
+        expect(servingAccount(`claude`, [row(`mine`, SPENT), row(`line`, ready(0))], { account: `mine`, named: false })).toEqual({ id: `mine`, byAllowance: false });
+        // A reading that went stale is no refusal (account-moves.ts, the shinobi-society audit of 2026-11-17).
+        expect(servingAccount(`claude`, [row(`mine`, SPENT), row(`unread`, UNREAD)], { account: `mine`, named: false })).toEqual({ id: `unread`, byAllowance: true });
         expect(servingAccount(`devin`, [row(`mine`, SPENT), row(`unread`, UNREAD)], { account: `mine`, named: false })).toEqual({ id: `unread`, byAllowance: true });
     });
 
@@ -84,9 +86,15 @@ describe(`a turn left to the conversation's own account`, () => {
         expect(servingAccount(`claude`, FLEET, { account: `work`, named: false })).toEqual({ id: `spare`, byAllowance: true });
     });
 
-    it(`is held on the seatless account when no other one has proven room`, () => {
-        const nowhere = [row(`work`, SEATLESS), row(`unread`, UNREAD), row(`spent`, SPENT)];
+    it(`is held on the seatless account when no other one can serve`, () => {
+        const nowhere = [row(`work`, SEATLESS), row(`line`, ready(0)), row(`unread`, UNREAD), row(`spent`, SPENT)];
         expect(servingAccount(`claude`, nowhere, { account: `work`, named: false })).toEqual({ id: `work`, byAllowance: false });
+        expect(servingAccount(`claude`, [row(`work`, SEATLESS), row(`spent`, SPENT)], { account: `work`, named: false })).toEqual({ id: `work`, byAllowance: false });
+    });
+
+    it(`moves to an unread account once every account with a reading is refused`, () => {
+        const stale = [row(`work`, SEATLESS), row(`unread`, UNREAD), row(`spent`, SPENT)];
+        expect(servingAccount(`claude`, stale, { account: `work`, named: false })).toEqual({ id: `unread`, byAllowance: true });
     });
 
     it(`is held on an expired sign-in, which reconnecting fixes in place`, () => {

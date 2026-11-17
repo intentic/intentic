@@ -52,6 +52,53 @@ const sharedCheckoutsCheck = (agentWorktrees: Pick<AgentWorktrees, "mainDir" | "
     },
 });
 
+// A conversation may stand its checkout on a branch of its own (a CI branch to push, a pull request it was asked to
+// work on), and each turn's close carries what it committed there onto `agent/<id>`, which review and land read
+// (worktrees/stray-work.ts). What this watches is the carry failing: a commit that would not copy over leaves the
+// work somewhere no land reaches. Asked at turn-settled, after the carry ran; the sweep catches conversations that
+// will never run again. Uncommitted edits there are not a finding: they are a turn's work in progress, and the
+// review says they are there.
+// 2026-09-30: this used to fail on any checkout standing elsewhere, reporting and never repairing; the carry replaced
+// pulling the checkout back, which would have taken the other branch's context from an agent asked to work there.
+const strayWorkCheck = (
+    agents: AgentsRegistry,
+    live: () => readonly { readonly conversationId: string }[],
+    strays: NonNullable<FleetRegistryDeps["strays"]>,
+): InvariantCheck => ({
+    name: "stray-work-reaches-its-own-branch",
+    on: ["turn-settled", "sweep"],
+    run: async ({ fail }) => {
+        const ids = agents.ids();
+        const found = new Map<string, string[]>();
+        // A conversation whose turn is still running is mid-work: its carry has not run yet, and a checkout it is
+        // rebasing stands on a detached HEAD until the rebase ends. Its own turn-settled asks again.
+        const running = new Set(live().map(({ conversationId }) => conversationId));
+        // A few conversations at a time: one after another, the archive's thousands of checkouts outlasted the
+        // check's five seconds on a busy disk and the check failed to run (35 times in a week).
+        await mapPool(ids, STRAY_READS_AT_ONCE, async (id) => {
+            const entry = agents.entry(id);
+            // Non-isolated conversations run in the owner's own tree and have no branch of their own to stand on.
+            if (entry === undefined || !isIsolated(entry) || running.has(id)) {
+                return;
+            }
+            // A rebase or merge under way is a person or an agent in the middle of git, not work stranded: the
+            // shinobi-society audit (2026-11-17) found six "on a detached HEAD" alarms in three days, each mid-rebase.
+            const off = (await strays(id, entry.placement.repos)).filter(({ carried, operation }) => !carried && operation === undefined);
+            found.set(
+                id,
+                off.map(({ repo, branch }) => `${id}/${repo} on ${branch ?? "a detached HEAD"}`),
+            );
+        });
+        // In the registry's order, however the reads finished.
+        const stranded = ids.flatMap((id) => found.get(id) ?? []);
+        if (stranded.length > 0) {
+            fail(
+                `${stranded.length} checkout(s) stand off their conversation's own branch with commits the turn's carry could not copy onto agent/<id>, which review and land read: ${stranded.join(", ")}`,
+            );
+        }
+    },
+});
+
 export const checks = ({
     agents,
     conversations,
@@ -61,43 +108,7 @@ export const checks = ({
     now = Date.now,
     strays = (id, repos) => strayStandings(agentWorktrees, id, repos),
 }: FleetRegistryDeps): readonly InvariantCheck[] => [
-    // A conversation may stand its checkout on a branch of its own (a CI branch to push, a pull request it was asked to
-    // work on), and each turn's close carries what it committed there onto `agent/<id>`, which review and land read
-    // (worktrees/stray-work.ts). What this watches is the carry failing: a commit that would not copy over leaves the
-    // work somewhere no land reaches. Asked at turn-settled, after the carry ran; the sweep catches conversations that
-    // will never run again. Uncommitted edits there are not a finding: they are a turn's work in progress, and the
-    // review says they are there.
-    // 2026-09-30: this used to fail on any checkout standing elsewhere, reporting and never repairing; the carry replaced
-    // pulling the checkout back, which would have taken the other branch's context from an agent asked to work there.
-    {
-        name: "stray-work-reaches-its-own-branch",
-        on: ["turn-settled", "sweep"],
-        run: async ({ fail }) => {
-            const ids = agents.ids();
-            const found = new Map<string, string[]>();
-            // A few conversations at a time: one after another, the archive's thousands of checkouts outlasted the
-            // check's five seconds on a busy disk and the check failed to run (35 times in a week).
-            await mapPool(ids, STRAY_READS_AT_ONCE, async (id) => {
-                const entry = agents.entry(id);
-                // Non-isolated conversations run in the owner's own tree and have no branch of their own to stand on.
-                if (entry === undefined || !isIsolated(entry)) {
-                    return;
-                }
-                const off = (await strays(id, entry.placement.repos)).filter(({ carried }) => !carried);
-                found.set(
-                    id,
-                    off.map(({ repo, branch }) => `${id}/${repo} on ${branch ?? "a detached HEAD"}`),
-                );
-            });
-            // In the registry's order, however the reads finished.
-            const stranded = ids.flatMap((id) => found.get(id) ?? []);
-            if (stranded.length > 0) {
-                fail(
-                    `${stranded.length} checkout(s) stand off their conversation's own branch with commits the turn's carry could not copy onto agent/<id>, which review and land read: ${stranded.join(", ")}`,
-                );
-            }
-        },
-    },
+    strayWorkCheck(agents, live, strays),
     sharedCheckoutsCheck(agentWorktrees),
     // A spent allowance's held turn is written onto its entry so a restart keeps the turn and its booking (limit-hold.ts).
     // One the schema refuses lives only as long as the daemon: a restart loses it with no card and no line, as a batch of

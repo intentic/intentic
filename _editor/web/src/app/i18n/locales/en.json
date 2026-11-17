@@ -3535,6 +3535,8 @@
                 "intoParent": "Changes went into the parent agent's checkout, as its in-process subagents' edits do: they reach your workspace with its land.",
                 "intoParentClash": "{count} file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve. | {count} file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve.",
                 "rebased": "Your workspace moved on while this agent waited, its branch was rebased onto your latest {count} commit. | Your workspace moved on while this agent waited, its branch was rebased onto your latest {count} commits.",
+                "rebasedBetweenTools": "The main line moved on during this turn: its {count} newer commit was rebased under this agent's branch between two of its tool calls. None of the files this agent changed were touched. | The main line moved on during this turn: its {count} newer commits were rebased under this agent's branch between two of its tool calls. None of the files this agent changed were touched.",
+                "diffAgainst": "`git diff {base}` shows this agent's own changes on top of the new base.",
                 "rebaseBlocked": "Couldn't rebase onto your workspace in {repos}: the turn is running from the older base, so its land may need a resolve.",
                 "homeLanded": "Landed in your workspace and committed."
             },
@@ -3545,6 +3547,7 @@
                 "intoParent": "Changes went into the parent assistant's draft, as its helpers' edits do: they reach your files when you accept that assistant's work.",
                 "intoParentClash": "{count} file clashes with the parent assistant's own edits, so nothing was written into its draft. The parent was told, and can bring the changes in to sort it out. | {count} files clash with the parent assistant's own edits, so nothing was written into its draft. The parent was told, and can bring the changes in to sort it out.",
                 "rebased": "Your files moved on while this assistant waited, so its draft was brought up to date with your latest {count} change. | Your files moved on while this assistant waited, so its draft was brought up to date with your latest {count} changes.",
+                "rebasedBetweenTools": "Your files moved on during this turn: {count} newer change was brought into this assistant's draft between two of its steps. None of the files it changed were touched. | Your files moved on during this turn: {count} newer changes were brought into this assistant's draft between two of its steps. None of the files it changed were touched.",
                 "rebaseBlocked": "Couldn't bring the draft up to date with your files in {repos}: the assistant is working from an older version, so accepting its work may need a fix first.",
                 "homeLanded": "The changes were accepted into your files and saved as a version."
             },

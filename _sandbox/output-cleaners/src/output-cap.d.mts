@@ -10,3 +10,5 @@ export const capOutput: (
     limits?: { readonly chars?: number; readonly lines?: number; readonly head?: number; readonly tail?: number },
 ) => readonly string[];
 export const priorityCap: (lines: readonly string[], maxLines: number, maxBytes: number, fallback: readonly string[], head?: number) => readonly string[];
+// Points each "… N lines elided …" cut marker at the retained raw output; unchanged when nothing was retained.
+export const pointCutMarkers: (body: string, retained: string | undefined) => string;

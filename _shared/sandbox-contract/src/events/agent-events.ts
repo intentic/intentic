@@ -18,6 +18,7 @@ import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./tr
 import { TranscriptEditorContextSchema } from "./prompt-origins.js";
 import { ReviewFindingsSchema } from "./review.js";
 import { agentNoticeEvent, agentStatusEvent } from "./agent-ui.js";
+import { WorktreeSyncCauseSchema } from "./sandbox-notice.js";
 
 // Every frame an agent turn streams, as one `kind`-discriminated union: turn facts (session, standing, cost) and the
 // attach stream a window joins through. One closed vocabulary, kept in one file.
@@ -133,7 +134,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         branch: z.string(),
         base: z.string(),
         unenforced: z.boolean().optional(),
-        sync: z.object({ commits: z.number(), blocked: z.array(z.string()) }).optional(),
+        // `cause`: when the rebase ran (sandbox-notice.ts WorktreeSyncCauseSchema); absent on a frame from before it was said.
+        sync: z.object({ commits: z.number(), blocked: z.array(z.string()), cause: WorktreeSyncCauseSchema.optional() }).optional(),
         // The runner this turn executes on, when the conversation is placed remotely; absent means this sandbox.
         remote: z.string().optional(),
     }),

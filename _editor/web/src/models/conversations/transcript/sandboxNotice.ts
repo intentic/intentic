@@ -35,6 +35,8 @@ interface LandWords {
     readonly intoParent: () => string;
     readonly intoParentClash: (files: number) => string;
     readonly rebased: (commits: number) => string;
+    // A catch-up between two of the agent's tool calls, which it never waited for; `base` is the commit to diff against.
+    readonly rebasedBetweenTools: (commits: number, base: string | undefined) => string;
     readonly rebaseBlocked: (repos: string) => string;
 }
 
@@ -47,6 +49,11 @@ const LAND_WORDS = {
         intoParent: () => t(`chat.sandboxNotice.developer.intoParent`),
         intoParentClash: (count) => t(`chat.sandboxNotice.developer.intoParentClash`, { count }, count),
         rebased: (count) => t(`chat.sandboxNotice.developer.rebased`, { count }, count),
+        rebasedBetweenTools: (count, base) =>
+            sentences(
+                t(`chat.sandboxNotice.developer.rebasedBetweenTools`, { count }, count),
+                base === undefined ? undefined : t(`chat.sandboxNotice.developer.diffAgainst`, { base }),
+            ),
         rebaseBlocked: (repos) => t(`chat.sandboxNotice.developer.rebaseBlocked`, { repos }),
     },
     maker: {
@@ -57,6 +64,7 @@ const LAND_WORDS = {
         intoParent: () => t(`chat.sandboxNotice.maker.intoParent`),
         intoParentClash: (count) => t(`chat.sandboxNotice.maker.intoParentClash`, { count }, count),
         rebased: (count) => t(`chat.sandboxNotice.maker.rebased`, { count }, count),
+        rebasedBetweenTools: (count) => t(`chat.sandboxNotice.maker.rebasedBetweenTools`, { count }, count),
         rebaseBlocked: (repos) => t(`chat.sandboxNotice.maker.rebaseBlocked`, { repos }),
     },
 } as const satisfies Readonly<Record<Audience, LandWords>>;
@@ -158,8 +166,10 @@ const isStarting = (notice: SandboxNotice): notice is StartingNotice => STARTING
 const landLine = (notice: LandNotice, land: LandWords, place: NoticePlace): string => {
     switch (notice.code) {
         case `synced`: {
-            const { commits, blocked } = notice.params;
-            return sentences(commits > 0 ? land.rebased(commits) : undefined, blocked === undefined ? undefined : land.rebaseBlocked(blocked));
+            // A row from before `cause` was said reads as a turn's opening, as it always did.
+            const { commits, blocked, cause, base } = notice.params;
+            const moved = commits === 0 ? undefined : cause === `between-tools` ? land.rebasedBetweenTools(commits, base) : land.rebased(commits);
+            return sentences(moved, blocked === undefined ? undefined : land.rebaseBlocked(blocked));
         }
         case `intoParent`:
             return land.intoParent();

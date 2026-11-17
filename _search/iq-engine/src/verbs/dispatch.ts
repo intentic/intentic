@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
-    WorkspaceSearchFreshness,
     WorkspaceSearchGroup,
     WorkspaceSearchResult,
 } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
@@ -27,7 +26,7 @@ import { cursorId, decodeCursor, readSpool, writeSpool } from "../render/cursor.
 import { renderList } from "../render/list.js";
 import { renderText, type Rendered } from "../render/text.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
-import type { EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb, Verdict } from "../types.js";
+import type { EngineFreshness, EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb, Verdict } from "../types.js";
 import { classOf, filterScope, langOf, wideSweep } from "../workspace/scan.js";
 import { contextOf, outlineOf, parseAnchor, readOf } from "./context.js";
 import { catalogFacts, literalAnswer, type LiteralAnswer } from "./literal.js";
@@ -42,7 +41,7 @@ export interface DispatchContext {
     readonly db: SqliteDb;
     readonly generation: number;
     // How current the index is: fresh from the CLI, or building/stale mid-revalidation from the daemon.
-    readonly freshness: WorkspaceSearchFreshness;
+    readonly freshness: EngineFreshness;
     // `path (CODE)` per path the sweep or index pass could not read; every answer names them, since it cannot see them.
     readonly unreadable: readonly string[];
     // Runs the semantic scan and cross-encoder rerank: the two stages heavy enough to pick their own thread.

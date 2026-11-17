@@ -242,6 +242,29 @@ describe("following the kills file", () => {
         }
     });
 
+    // 2026-11-17, the shinobi-society audit: seven kills in two minutes reached one turn as seven steers, each cutting the
+    // agent's wait short.
+    test("a burst of kills reaches each conversation's live turn as one steer naming every kill, and Activity once per kill", async () => {
+        const { deps, steered, activity } = listening({ live: true });
+        const follower = startMemoryKillFollower({ ...deps, pollMs: 60_000, steerWindowMs: 60_000 });
+        try {
+            const burst = [kill({ owner: "conv-burst", at: 1, comm: "sccache" }), kill({ owner: "conv-burst", at: 2, comm: "rustc" }), kill({ owner: "conv-burst-other", at: 3 })];
+            appendKill(deps.historyRoot, burst.map((line) => `${JSON.stringify(line)}\n`).join(""));
+            await follower.settle();
+            appendKill(deps.historyRoot, `${JSON.stringify(kill({ owner: "conv-burst", at: 4, comm: "bake.py" }))}\n`);
+            await follower.settle();
+            expect(activity).toHaveLength(4);
+            expect(steered, "nothing is said before the window closes").toEqual([]);
+        } finally {
+            follower.stop();
+        }
+        // Stopping says what the window still held.
+        expect(steered).toEqual([
+            { conversationId: "conv-burst", text: expect.stringMatching(/^3 processes this conversation started were killed for memory:\n- A process .*sccache.*\n- .*rustc.*\n- .*bake\.py/su) },
+            { conversationId: "conv-burst-other", text: `A process this conversation started: ${killSentence(kill({ owner: "conv-burst-other", at: 3 }))}.` },
+        ]);
+    });
+
     test("a job's report waits a moment on a 137 for its kill to be told, and says what killed it", async () => {
         const job = opened("conv-kill-report");
         const { deps } = listening();

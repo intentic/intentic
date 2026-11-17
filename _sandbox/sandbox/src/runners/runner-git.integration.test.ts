@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { serve, type ServerType } from "@hono/node-server";
+import { STATE_DIR } from "@intentic/constants";
 import { runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { Hono } from "hono";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
@@ -222,4 +223,39 @@ test("a pull keeps work the parent never received before it resets the conversat
     expect(await git(runner.workspaceRoot, ["merge-base", "--is-ancestor", unpushed, kept]).then(() => true, () => false)).toBe(true);
     // The checkout itself is the parent's branch again, as before.
     expect(existsSync(join(checkout, "unpushed.md"))).toBe(false);
+});
+
+// The shinobi-society audit (2026-11-17): every runner placement failed with "Your local changes ... would be overwritten
+// by checkout: .intentic/config/capabilities.json", the runner's own daemon having written its definition into the
+// mirror. The pull now keeps such edits and goes on: the runner's own definition files stay as the runner wrote them,
+// and anything else edited there is kept under a rescue ref rather than lost.
+test("a pull survives uncommitted edits in the mirror, keeping the runner's own definition files and rescuing the rest", async () => {
+    const capabilities = join(STATE_DIR, "config", "capabilities.json");
+    await mkdir(join(parentWork, STATE_DIR, "config"), { recursive: true });
+    await writeFile(join(parentWork, capabilities), '{"from":"parent-1"}\n');
+    await git(parentWork, ["add", "."]);
+    await git(parentWork, ["commit", "-m", "capabilities"]);
+    const runner = freshRunner();
+    await syncFromParent(runner, identity, sync("pull"), () => undefined);
+
+    await writeFile(join(runner.workspaceRoot, capabilities), '{"from":"runner"}\n');
+    await writeFile(join(runner.workspaceRoot, "readme.md"), "a person's edit on the runner\n");
+    await writeFile(join(parentWork, capabilities), '{"from":"parent-2"}\n');
+    await writeFile(join(parentWork, "readme.md"), "the parent's readme, moved on\n");
+    await git(parentWork, ["commit", "-am", "both moved"]);
+
+    const said: string[] = [];
+    await syncFromParent(runner, identity, sync("pull"), (line) => void said.push(line));
+    expect(await git(runner.workspaceRoot, ["rev-parse", "HEAD"])).toBe(await git(parentWork, ["rev-parse", mainBranch]));
+    expect(await readFile(join(runner.workspaceRoot, capabilities), "utf8")).toBe('{"from":"runner"}\n');
+    expect(await readFile(join(runner.workspaceRoot, "readme.md"), "utf8")).toBe("the parent's readme, moved on\n");
+    expect(said.filter((line) => line.includes("kept uncommitted edits"))).toHaveLength(1);
+    const kept = await git(runner.workspaceRoot, ["for-each-ref", "--format=%(objectname)", "refs/runner-rescue/main-line/"]);
+    expect(await git(runner.workspaceRoot, ["show", `${kept}:readme.md`])).toBe("a person's edit on the runner");
+
+    // A clean mirror keeps nothing.
+    await git(runner.workspaceRoot, ["checkout", "--", capabilities]);
+    const again: string[] = [];
+    await syncFromParent(runner, identity, sync("pull"), (line) => void again.push(line));
+    expect(again.filter((line) => line.includes("kept uncommitted edits"))).toEqual([]);
 });

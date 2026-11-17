@@ -4,6 +4,7 @@ import type { AgentHarness, AgentProvider, TurnProfile } from "@intentic/sandbox
 import type { ChildRun } from "@intentic/sandbox-contract/events/requests";
 import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { canonicalHarness, loopLabel, loopOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { failureTraitsOf } from "@intentic/sandbox-contract/policy/failure-codes";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { opt } from "../../opt.js";
 import { turnStandingOf } from "../../conversations/actor/turn-standing.js";
@@ -56,6 +57,14 @@ const SANDBOX_SIDE: ReadonlySet<string> = new Set([
 // this sandbox could not make (memory, its own view of the workspace).
 export const providerRefusal = (tally: ChildTurnTally): string | undefined =>
     tally.errored && (tally.code === undefined || !SANDBOX_SIDE.has(tally.code)) ? tally.failure : undefined;
+
+// Whether a child's failure was its provider's capacity (a spent allowance, a rate limit, the provider failing past its
+// retries): the only failures an account coming back answers (capacity-reopened.ts). A runner's workspace prep failing,
+// or anything else nothing coded, is not one (2026-11-17, the shinobi-society audit).
+export const failedOnCapacity = (tally: ChildTurnTally): boolean => {
+    const traits = failureTraitsOf(tally.errored ? tally.code : undefined);
+    return traits !== undefined && (traits.course === "limit" || traits.course === "outage" || traits.kind === "limit");
+};
 
 // A function that runs once, however often it is called: a seat freed by a move must not be freed again by the settle.
 export const onceOnly = (run: () => void): (() => void) => {

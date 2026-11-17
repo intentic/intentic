@@ -12,6 +12,7 @@ import { codedFailure } from "../frames/error-frames.js";
 import { recordQueries } from "../frames/failure-queries.js";
 import { fileFailureWrites, providerAnswered } from "../frames/frame-effects.js";
 import { type SealedDeadline, sealedDeadline } from "./sealed-deadline.js";
+import { endedAfterStop } from "../frames/stop-grace.js";
 import { admittedPlacement, assertAgentExecutionContext, type AgentExecutionContext } from "../../../workload/agent-execution.js";
 
 // A helper job (a title, a commit subject, a verdict, a route) as a request on the turn's own seam: planned by the
@@ -31,6 +32,12 @@ const THINKING_DEADLINE_MS = 90_000;
 
 // How long a provider's own retry may be waited out: long enough to survive a blip, short enough not to hold a caller.
 const MAX_RETRY_WAIT_MS = 15_000;
+
+// How long a stopped attempt's loop gets to wind down before the request walks away from it, and how far past its
+// deadline a runtime's own clock may run. 2026-11-17, the shinobi-society audit: a Devin helper (ACP) told to stop kept
+// its loop waiting on a prompt that never settled, and with no cap of its own it rode the runtime's 30-minute turn
+// default while the caller waited for its 20 seconds.
+const SEALED_STOP_GRACE_MS = 2_000;
 
 export interface SealedAsk {
     // The daemon-issued execution context the request runs under (workload/agent-execution.ts): where its runtime is
@@ -67,7 +74,9 @@ const sealedQueries = (services: Services, askedAt: number): FailureQueries => (
 // run is the issued context's view and the isolation it was admitted with, which armPlan holds the request to
 // (agent/providers/adapter.ts): a helper borrowing a worktree or anchored turn's context (a hand-off summary, the
 // command judge) is launched inside that turn's namespace, and without the isolation it would be refused outright.
-const sealedContext = (services: Services, ask: SealedAsk, prompt: string, signal: AbortSignal): TurnContext => {
+// `capMs` is the runtime's own hard cap (TurnSpec.turnCapMs), a backstop just past the request's deadline: the deadline
+// is what ends the call, and the cap is what ends a loop that did not hear it.
+const sealedContext = (services: Services, ask: SealedAsk, prompt: string, signal: AbortSignal, capMs: number): TurnContext => {
     const root = ask.execution.cwd;
     return {
         base: {
@@ -81,6 +90,7 @@ const sealedContext = (services: Services, ask: SealedAsk, prompt: string, signa
                 ...opt("fast", ask.fast),
                 systemPromptMode: "custom",
                 systemPrompt: SEALED_SYSTEM_PROMPT,
+                turnCapMs: capMs,
             },
             policy: { sealed: true },
             tools: {},
@@ -152,14 +162,28 @@ const failure = async (services: Services, raw: ErrorFrame, ran: SealedRun): Pro
 // Leaving early stops the attempt BEFORE the loop is closed: closing a runtime's frames waits for its loop to wind down,
 // and a loop waiting out a provider's deferred retry winds down only once it is aborted, so closing first would hold the
 // caller until the deadline and then misname the refusal as the clock.
-const runOnce = async (services: Services, ask: SealedAsk, plan: ArmPlan, deadline: SealedDeadline, stop: () => void): Promise<RunOutcome> => {
+// A stopped attempt (the deadline, the caller's cancel) whose loop does not wind down is walked away from after a short
+// grace, as a stopped turn's is (stop-grace.ts), so the call ends on its clock whatever the runtime does.
+const runOnce = async (
+    services: Services,
+    ask: SealedAsk,
+    plan: ArmPlan,
+    deadline: SealedDeadline,
+    attempt: { readonly signal: AbortSignal; readonly stop: () => void },
+): Promise<RunOutcome> => {
+    const { stop } = attempt;
     let text = "";
     let sessionId: string | undefined;
     let answered = false;
     let early: { readonly outcome: RunOutcome } | { readonly error: Error } | undefined;
     // The one request goes out no earlier than this: what its answer may settle (providerAnswered).
     const askedAt = Date.now();
-    const frames: AsyncIterable<AgentEvent> = plan.run(plan.request.spec);
+    const frames: AsyncIterable<AgentEvent> = endedAfterStop(
+        plan.run(plan.request.spec),
+        attempt.signal,
+        () => services.logger.warn({ provider: ask.provider, harness: ask.harness }, "sealed request: the runtime did not wind down after its stop, so it was walked away from"),
+        SEALED_STOP_GRACE_MS,
+    );
     for await (const event of frames) {
         if (event.kind === "session") {
             sessionId = event.sessionId;
@@ -214,7 +238,8 @@ const answerOf = async (
     for (let attempt = 0; attempt < 2; attempt += 1) {
         const own = new AbortController();
         // the second plan reads what the first run's refusal filed
-        const planned = await plan(AbortSignal.any([request, own.signal]));
+        const signal = AbortSignal.any([request, own.signal]);
+        const planned = await plan(signal);
         if (!planned.ok) {
             throw last ?? new Error(planned.message);
         }
@@ -222,7 +247,7 @@ const answerOf = async (
             break;
         }
         // one run at a time, on the account the plan just chose
-        const outcome = await runOnce(services, ask, planned, deadline, () => own.abort());
+        const outcome = await runOnce(services, ask, planned, deadline, { signal, stop: () => own.abort() });
         if ("answer" in outcome) {
             return outcome.answer;
         }
@@ -269,7 +294,7 @@ export const runSealedRequest = async (services: Services, ask: SealedAsk): Prom
         ...opt("conversationId", ask.conversationId),
     };
     try {
-        const plan = (signal: AbortSignal): Promise<TurnArmPlan> => adapter.preflight(services, input, sealedContext(services, ask, sealed.prompt, signal), []);
+        const plan = (signal: AbortSignal): Promise<TurnArmPlan> => adapter.preflight(services, input, sealedContext(services, ask, sealed.prompt, signal, budget + SEALED_STOP_GRACE_MS), []);
         return sealed.restore(await answerOf(services, ask, plan, abort.signal, deadline));
     } catch (error) {
         // A failure once the clock ran out is the clock's, whatever the torn-down loop threw instead.

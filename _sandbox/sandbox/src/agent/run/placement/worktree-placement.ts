@@ -325,7 +325,7 @@ export const worktreePlacement = (
                     dir: deps.agentWorktrees.worktreeDir(conversationId, repo),
                 })),
             );
-            yield worktreeFrame(worktree, onto, enforced, synced);
+            yield worktreeFrame(worktree, onto, enforced, synced, "turn-open");
             // Recorded after the rebase: "before this message" means the branch the agent is about to read.
             yield* inGitCallerPart("turn.checkpoint", anchorIsolatedTurn(deps, conversationId, worktree.repos, turn.snapshot));
             // A fresh checkout, the rebase and the anchor leave racy entries; settled, statuses stop re-reading them.
@@ -339,13 +339,13 @@ export const worktreePlacement = (
             const resync = async (): Promise<AgentEvent | undefined> => {
                 try {
                     const moved = await withGitCallerPart("turn.resync", rebaseLeased);
-                    return moved.length === 0 ? undefined : worktreeFrame(worktree, onto, enforced, moved);
+                    return moved.length === 0 ? undefined : worktreeFrame(worktree, onto, enforced, moved, "answer");
                 } catch (error) {
                     deps.logger.warn({ err: error, id: conversationId }, "agents: sync on a settled card failed");
                     return undefined;
                 }
             };
-            const catchUp = pinned || worktree.fence !== undefined ? undefined : mainCatchUp(deps, conversationId, worktree, rebase, (moved) => worktreeFrame(worktree, onto, enforced, moved));
+            const catchUp = pinned || worktree.fence !== undefined ? undefined : mainCatchUp(deps, conversationId, worktree, rebase, (moved) => worktreeFrame(worktree, onto, enforced, moved, "between-tools"));
             return steps.run({ id: conversationId, cwd: worktree.cwd, fence: worktree.fence, synced, resync, ...opt("catchUp", catchUp) });
         },
         async *land(failed, awaiting) {

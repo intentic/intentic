@@ -1,8 +1,9 @@
 // Types for agent-output-filter.mjs: one Bash command's output, trimmed for the model and accounted for.
 import type { CacheStore, SecretValue, Stage } from "./cleaners.mjs";
 
-// The last pipeline's statuses when an earlier stage failed while the exit code still reads 0.
-export const maskedFailure: (exitCode: string, pipeline: string) => string | undefined;
+// The last pipeline's statuses when an earlier stage failed while the exit code says nothing of it (0, or a last-stage
+// grep's no-match 1); a grep or rg stage's 1 is not a failure.
+export const maskedFailure: (exitCode: string, pipeline: string, command?: string) => string | undefined;
 
 export interface FilterOptions {
     readonly command?: string;
@@ -43,5 +44,5 @@ export interface FilterRunOptions {
 // One command's whole pass; never throws, and falls back to the raw text (redacted) on any failure.
 export const filterRun: (raw: string, options?: FilterRunOptions) => { out: string; heldOut: boolean; stages: Stage[] };
 
-// Shared raw-output retention: newest 30 files, at most two million characters per file.
+// Shared raw-output retention: newest 500 files within 200 MB, at most two million characters per file.
 export const retainIn: (dir: string, name: string, values: readonly SecretValue[], maxChars?: number) => (text: string) => string | undefined;

@@ -425,6 +425,23 @@ describe("foldTurn", () => {
         });
     });
 
+    // The shinobi-society audit (2026-11-17): a catch-up between two tool calls read "while this agent waited".
+    it("words a rebase by when it ran, a frame from before the cause was said reading as it always did", () => {
+        const frame = (cause?: "turn-open" | "answer" | "between-tools"): AgentEvent => {
+            const sync = cause === undefined ? { commits: 1, blocked: [] } : { commits: 1, blocked: [], cause };
+            return { kind: "worktree", branch: "agent/x", base: "abc1234", sync };
+        };
+        const waited = "Your workspace moved on while this agent waited, its branch was rebased onto your latest 1 commit.";
+        expect(foldOf("go", [frame()]).at(-1)?.text).toBe(waited);
+        expect(foldOf("go", [frame("turn-open")]).at(-1)?.text).toBe(waited);
+        expect(foldOf("go", [frame("answer")]).at(-1)?.text).toBe(waited);
+        expect(foldOf("go", [frame("between-tools")]).at(-1)).toEqual({
+            role: "notice",
+            text: "The main line moved on during this turn: its 1 newer commit was rebased under this agent's branch between two of its tool calls. None of the files this agent changed were touched. `git diff abc1234` shows this agent's own changes on top of the new base.",
+            noticeCode: { code: "synced", params: { commits: 1, cause: "between-tools", base: "abc1234" } },
+        });
+    });
+
     it("writes the turn's own events down as notices", () => {
         const events: AgentEvent[] = [
             { kind: "worktree", branch: "agent/x", base: "abc1234", sync: { commits: 2, blocked: [] } },

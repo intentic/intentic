@@ -269,3 +269,65 @@ test("worktree prune, repair, move and remove are refused where the sandbox keep
     expect(shimWith(env, outside, "worktree", "remove", `${outside}-moved`).status).toBe(0);
     expect(git(outside, "worktree", "list")).not.toContain(`${outside}-`);
 });
+
+// The shinobi-society audit (2026-11-17): every conversation's checkout shares one `refs/stash`, and agents' bare
+// `git stash pop` took another conversation's entry.
+test("in a conversation's own checkout, stash pop, apply and drop take only its own branch's entries, and clear is refused", () => {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), "guard-shim-")));
+    const gits = join(base, "gits");
+    const work = join(base, "work");
+    mkdirSync(gits, { recursive: true });
+    mkdirSync(work, { recursive: true });
+    repoAt(work, "--separate-git-dir", join(gits, "root"));
+    const mine = join(base, "mine");
+    const theirs = join(base, "theirs");
+    git(work, "worktree", "add", "-q", mine, "-b", "agent/c1");
+    git(work, "worktree", "add", "-q", theirs, "-b", "agent/c2");
+    const env = { INTENTIC_WORKSPACE_ROOT: work, INTENTIC_GITS_ROOT: gits };
+    const stashIn = (dir: string, text: string, ...args: string[]) => {
+        writeFileSync(join(dir, "a.txt"), text);
+        git(dir, "stash", "push", "-q", ...args);
+    };
+
+    // Nothing of its own yet: a bare pop is refused rather than taking the other checkout's.
+    stashIn(theirs, "theirs-1\n");
+    const none = shimWith(env, mine, "stash", "pop");
+    expect(none.status).toBe(1);
+    expect(none.stderr).toContain("no stash entry was made on this checkout's branch `agent/c1`");
+    expect(none.stderr).toContain("shared by every conversation's checkout");
+    expect(none.stderr).toContain("git diff > /tmp/x.patch");
+    expect(git(work, "stash", "list")).toContain("WIP on agent/c2");
+
+    // Its own entry under someone else's newer one: the bare pop finds its own.
+    stashIn(mine, "mine-1\n", "-m", "keep");
+    stashIn(theirs, "theirs-2\n");
+    expect(shimWith(env, mine, "stash", "pop", "-q").status).toBe(0);
+    expect(readFileSync(join(mine, "a.txt"), "utf8")).toBe("mine-1\n");
+    const left = git(work, "stash", "list");
+    expect(left).not.toContain("On agent/c1");
+    expect(left.split("\n")).toHaveLength(2);
+
+    // Named: another branch's entry is refused by name, by number and by commit; its own goes through.
+    for (const named of ["stash@{0}", "1", git(work, "rev-parse", "stash@{1}")]) {
+        for (const action of ["apply", "drop", "pop"]) {
+            const run = shimWith(env, mine, "stash", action, named);
+            expect(run.status, `${action} ${named}`).toBe(1);
+            expect(run.stderr, `${action} ${named}`).toContain("was stashed on another branch");
+        }
+    }
+    git(mine, "checkout", "-q", "--", "a.txt");
+    stashIn(mine, "mine-2\n");
+    expect(shimWith(env, mine, "stash", "apply", "stash@{0}").status).toBe(0);
+    expect(readFileSync(join(mine, "a.txt"), "utf8")).toBe("mine-2\n");
+    expect(shimWith(env, mine, "stash", "drop").status).toBe(0);
+    expect(git(work, "stash", "list").split("\n")).toHaveLength(2);
+
+    const clear = shimWith(env, mine, "stash", "clear");
+    expect(clear.status).toBe(1);
+    expect(clear.stderr).toContain("would drop every conversation's stashes");
+    // push, list and show go through; and the shared checkout itself is git's own.
+    expect(shimWith(env, mine, "stash", "list").stdout.split("\n")).toHaveLength(2);
+    expect(shimWith(env, mine, "stash", "show", "stash@{0}").status).toBe(0);
+    expect(shimWith(env, work, "stash", "clear").status).toBe(0);
+    expect(git(work, "stash", "list")).toBe("");
+});

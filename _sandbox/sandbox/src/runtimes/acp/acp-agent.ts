@@ -12,7 +12,6 @@ import { ACP, type AgentCapabilities } from "@intentic/sandbox-contract/models/a
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
@@ -25,10 +24,8 @@ import {
     idleWait,
     type IdleWait,
     SETTLED,
-    type TurnTimeouts,
     type TurnWatchdog,
     turnWatchdog,
-    watchedPull,
     withTurnCap,
     expiredFrame,
 } from "../decorators/turn-watchdog.js";
@@ -57,6 +54,7 @@ import {
 } from "./acp-permissions.js";
 import { acpTerminalShell, terminalProgram } from "./acp-terminal.js";
 import { promptUsage } from "./acp-usage.js";
+import { type AcpTimeouts, cancelOnStop, phasePull, sealedWords } from "./acp-prompt.js";
 import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 
 // The ACP provider adapter, the seam runAgent/createCodexAgent/createOpenCodeAgent share: AgentRequest in, AgentEvent out,
@@ -430,12 +428,6 @@ const settledFailure = (response: PromptResponse | undefined, failure: unknown, 
 // The prompt's words as text blocks: one, or a command's words first and the daemon's notes after (command-turn.ts).
 const textBlocks = (text: string, command: string | undefined): ContentBlock[] => commandFirstTexts(text, command).map((part) => ({ type: "text", text: part }));
 
-// A sealed request's words: its system prompt, where it names one, in front of its prompt.
-const sealedWords = (request: AgentRequest): string => {
-    const system = request.spec.systemPrompt?.trim();
-    return system === undefined || system === "" ? request.spec.prompt : `${system}\n\n${request.spec.prompt}`;
-};
-
 // One prompt turn on one session: resolves/creates/loads it, binds routing, and streams mapped updates until the
 // response settles or the watchdog fires. Never emits the terminal `done`; callers do once the whole turn settles.
 async function* runAcpTurn(
@@ -444,7 +436,7 @@ async function* runAcpTurn(
     prompt: ContentBlock[],
     sessionId: string | undefined,
     turn: PhaseTurn & {
-        readonly timeouts: TurnTimeouts;
+        readonly timeouts: AcpTimeouts;
         // The turn's model, settled before every phase's prompt and announced once (`announced` outlives the phase).
         readonly model: { readonly wanted: string | undefined; announced: boolean };
         // The launch's per-session `_meta` (AcpLaunch.sessionMeta).
@@ -487,10 +479,7 @@ async function* runAcpTurn(
     // answer holds its watchdog, and a script the agent runs through `code` is asked of the turn's gate. Per phase, as the
     // queue and clock are; what a tool did between phases waits in the relay.
     const detach = request.hooks.relay?.attach({ push: turn.sink.push, hold: clock.hold, guard: { gate: turn.gate, taint: turn.taint } });
-    const cancel = (): void => void connection.agent.notify(methods.agent.session.cancel, { sessionId: session }).catch(() => {});
-    // A Stop before the session exists reaches an already-aborted signal a bare listener would miss.
-    const unwatchAbort = whenAborted(request.signal, cancel);
-
+    const { cancel, unwatch: unwatchAbort } = cancelOnStop(connection, session, request.signal, wait);
     let settled = false;
     let response: PromptResponse | undefined;
     let failure: unknown;
@@ -506,8 +495,7 @@ async function* runAcpTurn(
             settled = true;
             wait.wake();
         });
-
-    const pull = watchedPull({ take: () => queue.shift(), settled: () => settled, clock, wait });
+    const pull = phasePull(queue, () => settled, { clock, wait, signal: request.signal, graceMs: turn.timeouts.abortGraceMs });
     try {
         for (let next = await pull(); next !== SETTLED; next = await pull()) {
             if (next === EXPIRED) {
@@ -517,7 +505,9 @@ async function* runAcpTurn(
                 cancel();
                 unbind();
                 connection.abandon(session);
-                yield expiredFrame(clock, (why) => `ACP agent timed out: ${why}. It was stopped; send again to retry.`);
+                if (!request.signal.aborted) {
+                    yield expiredFrame(clock, (why) => `ACP agent timed out: ${why}. It was stopped; send again to retry.`);
+                }
                 return { sessionId: session, planText: held.text, errored: true };
             }
             yield next;
@@ -541,7 +531,7 @@ async function* runAcpTurn(
 
 // One pooled process per id: an installed card's own id, or a native provider's per-account key, since the launch's
 // environment is the process's whole identity. A connection failure surfaces as an error frame, then done.
-export const createAcpAgent = (connections: AcpConnections, timeouts: TurnTimeouts = DEFAULT_TURN_TIMEOUTS) =>
+export const createAcpAgent = (connections: AcpConnections, timeouts: AcpTimeouts = DEFAULT_TURN_TIMEOUTS) =>
     async function* runAcpAgent(
         id: string,
         launch: AcpLaunch,

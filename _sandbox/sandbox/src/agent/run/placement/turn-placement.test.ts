@@ -442,6 +442,17 @@ describe("where the branch stands", () => {
     test.each(frames)("%s", (_case, composed, onto, enforced, synced, frame) => {
         expect(worktreeFrame(composed, onto, enforced, synced)).toStrictEqual(frame);
     });
+    // The shinobi-society audit (2026-11-17): a catch-up between two tool calls must not read as one the agent waited for.
+    test("carries when the rebase ran on what it moved", () => {
+        const composed = worktree([{ repo: "root", base: "a".repeat(40) }]);
+        expect(worktreeFrame(composed, new Map(), true, [moved("root", 2)], "between-tools")).toStrictEqual({
+            kind: "worktree",
+            branch: "agent/c",
+            base: "aaaaaaa",
+            sync: { commits: 2, blocked: [], cause: "between-tools" },
+        });
+        expect(worktreeFrame(composed, new Map(), true, [], "between-tools")).toStrictEqual({ kind: "worktree", branch: "agent/c", base: "aaaaaaa" });
+    });
 });
 
 describe("a runner's mirror", () => {

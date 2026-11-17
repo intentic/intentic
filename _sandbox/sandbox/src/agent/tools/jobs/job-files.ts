@@ -21,6 +21,9 @@ export const JOB_FILE = "job.json";
 // Why its command ended, when it was killed for memory: the kill's one sentence (system/resources/memory-kill-words.ts,
 // written by memory-kills.ts), which its report, the watch its end wakes and `wait` all say in place of a bare exit 137.
 export const MEMORY_KILL_FILE = "memory-kill";
+// Why it was stopped, when something other than the agent or the person stopped it (a runtime's own time limit): one
+// sentence (job-stop-reasons.ts), said beside the bare 143 wherever the memory kill's would be.
+export const STOP_REASON_FILE = "stop-reason";
 
 // Every agent run's capture dir, a job's (`intentic-run-job-`) or a foreground call's filed as one when it ran past its
 // time (`intentic-run-`), under the tmp sweep's prefix.

@@ -195,7 +195,12 @@ export async function* dispatchRemoteTurn(
         const live = services.runnerHub.client(runnerId) ?? client;
         const pulled = await drainSync(services, await live.syncWorkspace(sync("pull")));
         if (pulled !== undefined) {
-            yield { kind: "error", message: `Preparing the runner's workspace failed: ${pulled}` };
+            // Said so the agent that placed it can act: the runner's copy is the runner's to repair, and the same task runs
+            // here meanwhile (the shinobi-society audit, 2026-11-17: four children failed on a runner with no way on).
+            yield {
+                kind: "error",
+                message: `Preparing the runner's workspace failed: ${pulled}. Nothing ran there. To run this task anyway, spawn it again with \`on: "here"\`, which runs it in this sandbox.`,
+            };
             yield { kind: "done" };
             return;
         }

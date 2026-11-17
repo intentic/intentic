@@ -15,8 +15,9 @@ import { namedServiceabilities, type ServiceabilityDeps } from "../../../usage/s
 export type BlockedAccountDeps = ServiceabilityDeps & Pick<Services, "claudeSeatCheck">;
 
 export type AccountRoute =
-    // Run where routingFor points.
-    | { readonly kind: "keep" }
+    // Run where routingFor points. `servable` marks a blocked account whose seat a re-test just found back on, which lets
+    // words its refusal held go again by themselves (account-refusal-release.ts); records alone never prove that.
+    | { readonly kind: "keep"; readonly servable?: true }
     // Moved to a ready account of the same provider; the conversation follows (switchAccount's profile write). `reach`
     // marks a move off an account the people it works for may not use (agent/run/decide/account-reach.ts) rather than
     // one that cannot serve; `spent` a move off one the records call spent (account-placement.ts offSpentAccount), which
@@ -43,6 +44,7 @@ export interface AccountLabels {
 }
 
 const KEEP: AccountRoute = { kind: "keep" };
+const SERVABLE: AccountRoute = { kind: "keep", servable: true };
 
 /**
  * Where a turn goes when the account its conversation remembers is blocked. `named` is the account the turn itself
@@ -73,10 +75,10 @@ export const offBlockedAccount = async (
     // Access an admin turned back on is found here, when the probe is due; the turn then runs where it was routed.
     const probed = provider === "claude";
     if (probed && (await deps.claudeSeatCheck.recheck(remembered))) {
-        return KEEP;
+        return SERVABLE;
     }
-    // Proven room; where the plan publishes no reading to prove any (Cursor's, Devin's), an account nothing has refused
-    // (account-moves.ts, the rule the limit move and the editor's offer read too).
+    // Proven room; where the plan publishes no reading to prove any (Cursor's, Devin's), or every account with a reading
+    // is refused, an account nothing has refused (account-moves.ts, the rule the limit move and the editor's offer read too).
     const to = moveDestination(
         accounts.filter((account) => account.id !== remembered),
         reportsPlanLimits(provider),

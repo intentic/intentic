@@ -115,7 +115,7 @@ describe("a conversation remembering an account the records call spent", () => {
         expect(await offSpentAccount(devin([quota]), { ...turn, named: "spent" })).toEqual({ kind: "keep" });
     });
 
-    test("moves a Claude conversation only onto proven room", async () => {
+    test("moves a Claude conversation onto proven room, or an unread account once every read one is refused", async () => {
         const claude = (usage: Record<string, AccountUsage>): BlockedAccountDeps => ({
             ...deps(usage),
             providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", {
@@ -123,7 +123,9 @@ describe("a conversation remembering an account the records call spent", () => {
             }),
         });
         const home = { ...turn, provider: "claude", remembered: "home", model: undefined } as const;
-        expect(await offSpentAccount(claude({}), home)).toEqual({ kind: "keep" });
+        expect(await offSpentAccount(claude({ spare: reading(100) }), home)).toEqual({ kind: "keep" });
         expect(await offSpentAccount(claude({ spare: reading(20) }), home)).toMatchObject({ kind: "move", to: "spare" });
+        // A reading that went stale is no refusal (account-moves.ts, the shinobi-society audit of 2026-11-17).
+        expect(await offSpentAccount(claude({}), home)).toMatchObject({ kind: "move", to: "spare" });
     });
 });

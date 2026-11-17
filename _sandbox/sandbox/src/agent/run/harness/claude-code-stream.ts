@@ -25,7 +25,8 @@ import { noteRetryCause } from "../turn/turn-pulse.js";
 import { MessageTally } from "../spend/message-tally.js";
 import { promptFingerprint } from "../prompt-fingerprint.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../../subagents/subagents.js";
-import { endJobTheCliStopped, noteJobNotice, noteJobShell, noteModelRequest } from "../../tools/jobs/background-jobs.js";
+import { noteJobNotice, noteJobShell, noteModelRequest } from "../../tools/jobs/background-jobs.js";
+import { endJobTheCliStopped } from "../../tools/jobs/job-stop-reasons.js";
 import { TaskChecklist, type TaskOutput, TaskOutputSchema } from "../../../sessions/vocabulary/task-checklist.js";
 import { PageDrafts, streamedDraftFrames } from "../../pages/page-draft.js";
 import { FileDrafts } from "../../pages/file-draft.js";
@@ -117,7 +118,7 @@ const noteBashTask = (turn: SubagentTurn, message: SubagentTaskMessage, steering
             // its first await, so the turn's ending already reads it as stopped, and a stop that failed after that
             // leaves a job no wake waits on and no land is held by, which a person can still stop from its row.
             // allow(silent-catch): no logger reaches the fold, and what a failed stop leaves is said above.
-            void endJobTheCliStopped(turn.conversations, message.task_id)?.catch(() => undefined);
+            void endJobTheCliStopped(turn.conversations, message.task_id, message.summary)?.catch(() => undefined);
         }
     }
 };

@@ -208,3 +208,16 @@ describe("facts under the answer", () => {
         expect(withFacts(1500, false).text).not.toContain("siblings: ");
     });
 });
+
+// A one-shot query that re-indexed first says so, rather than reporting its own wait as the index's age (the
+// shinobi-society audit, 2026-11-17).
+test("the header names a re-index this query ran, and an index it only checked by its age", () => {
+    const header = (freshness: Parameters<typeof renderText>[0]["freshness"]): string =>
+        renderText({ verb: "find", echo: 'find "value"', unit: "matches", style: "hits", showTags: false, groups: groups(1, 1), offset: 0, freshness, budget: 1500, cursorId: "abcd1234" })
+            .text.split("\n")[0] ?? "";
+    expect(header({ state: "fresh", ageMs: 18_000, refreshed: { files: 42, ms: 18_000 } })).toBe(
+        'iq: find "value", 1 matches in 1 files · index fresh (this query re-indexed 42 changed files first, 18.0s) · showing 1/1',
+    );
+    expect(header({ state: "fresh", ageMs: 1_000, refreshed: { files: 1, ms: 1_000 } })).toContain("re-indexed 1 changed file first, 1.0s");
+    expect(header({ state: "fresh", ageMs: 120 })).toContain(" · index fresh (0.1s) · ");
+});

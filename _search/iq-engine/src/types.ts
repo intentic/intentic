@@ -6,6 +6,12 @@ import type {
 } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import type { Feature } from "./features.js";
 
+// How current the index is, as the contract says it, plus what this very call did to make it so: a one-shot query that
+// had to re-index first says how many files and how long, rather than reporting that wait as the index's age.
+// 2026-11-17, the shinobi-society audit: "index fresh (18.0s)" read as an index 18 seconds old, where the 18 seconds
+// were the query's own re-index of what an agent had just changed. Rides into --json output as `freshness.refreshed`.
+export type EngineFreshness = WorkspaceSearchFreshness & { readonly refreshed?: { readonly files: number; readonly ms: number } };
+
 // A bare `q` whose words are not a symbol, path or regex is the semantic pipeline; an exact query that finds nothing
 // escalates into it.
 export type Verb =

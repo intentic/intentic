@@ -34,6 +34,8 @@ test("unowned: the one-shot engine indexes inline and reports the index fresh", 
     const outcome = await engine.run(request({ verb: "def", query: "createWidget" }));
     expect(outcome.exitCode).toBe(0);
     expect(outcome.result.freshness.state).toBe("fresh");
+    // Nothing changed since the build: no re-index to name (the shinobi-society audit, 2026-11-17).
+    expect(outcome.text).toMatch(/ · index fresh \(\d+\.\ds\) · /);
     const db = openIndex(indexDir, "read");
     expect(listFiles(db).has("alpha/src/widget.ts")).toBe(true);
     db.close();
@@ -71,6 +73,8 @@ test("the owner's death hands indexing back: the next query writes again", async
     await writeFile(join(indexDir, "indexer.pid"), "4194304");
     const outcome = await engine.run(request({ verb: "find", query: "export const late" }));
     expect(outcome.result.freshness.state).toBe("fresh");
+    // This query indexed the late file itself, and says so rather than calling that wait the index's age.
+    expect(outcome.text).toMatch(/ · index fresh \(this query re-indexed 1 changed file first, \d+\.\ds\) · /);
     const db = openIndex(indexDir, "read");
     expect(listFiles(db).has("alpha/src/late.ts")).toBe(true);
     db.close();

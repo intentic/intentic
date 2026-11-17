@@ -75,7 +75,7 @@ refs survive. The footer names `retrieve-output` and, for snapshots, `browser_fi
 of errors from the omitted middle remains visible. Images and other content blocks stay untouched.
 
 The daemon keeps originals in the same `logs/raw-output/` directory and uses the same retention helper
-as Bash: the newest 30 files, subject to the daemon’s normal log retention. MCP keeps the whole
+as Bash: the newest 500 files within 200 MB, subject to the daemon’s normal log retention. MCP keeps the whole
 original at save time; Bash retains its two-million-character per-file ceiling. A save failure leaves the result whole. Savings, including the footer cost, enter `filter-stats.jsonl` under `mcp`, grouped by tool.
 The master `outputCleaners` off switch disables MCP cleaning; `outputHoldout` leaves a stable share of
 MCP conversations raw and records them as the control. The dedup, wide and cap selections apply to MCP too; it does not use command-specific cleaners or the repeat cache.

@@ -4,7 +4,7 @@ import { SteeringQueue } from "../../../checkpoints/agent-steering.js";
 import { type BackgroundJob, noteJobShell, openBackgroundJob } from "../../../tools/jobs/background-jobs.js";
 import { noteSpawnedChild, openSpawnedChild, resetSubagents, settleSpawnedChild, subagentEndingReporter } from "../../subagents.js";
 import { noteQueuedReport } from "../queued-reports.js";
-import { waitForWork, workWaitAnswer } from "../work-wait.js";
+import { waitForChildren, waitForWork, workWaitAnswer } from "../work-wait.js";
 import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 
 // One fleet's actors, which hold every record the registry under test files.
@@ -121,6 +121,21 @@ describe("waitForWork", () => {
             expect(await wait).toEqual({ outcome: "message" });
             settleSpawnedChild(actors, "sub-w7", { status: "completed", report: "ported" });
             expect(await waitForWork(actors, "conv-w7", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({ outcome: "finished", agent: { id: "sub-w7" } });
+        } finally {
+            unregister();
+        }
+    });
+
+    // 2026-11-17, the shinobi-society audit: `wait all` came back `message` with `agents: []`, which read as nothing waited on.
+    it("a wait on all that words hand back still names the children it waited on, as they stand", async () => {
+        const unregister = actors.registerTurn("conv-w7b", { abort: () => {}, steering: new SteeringQueue() });
+        openSpawnedChild({ conversationId: "conv-w7b", conversations: actors, subagentsDir: undefined }, { id: "sub-w7b", description: "port it" });
+        try {
+            const wait = waitForChildren(actors, "conv-w7b", { timeoutMs: 10_000 });
+            expect(actors.steer("conv-w7b", "How far along is it?")).toBe(true);
+            const answered = await wait;
+            expect(answered.outcome).toBe("message");
+            expect(answered.agents.map((agent) => [agent.id, agent.status])).toEqual([["sub-w7b", "running"]]);
         } finally {
             unregister();
         }

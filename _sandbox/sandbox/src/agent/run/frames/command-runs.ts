@@ -126,7 +126,7 @@ interface Settled extends Pending {
 
 // The record of a settled call that failed; undefined for a predicate answering no.
 const failureOf = (call: Settled, unstarted: boolean): CommandFailure | undefined => {
-    const exit = call.exitCode ?? commandExitCode(call.text);
+    const exit = call.exitCode ?? commandExitCode(call.text, call.command);
     const lines = outputLines(call.text);
     if (exit === 1 && lines.length === 0) {
         return undefined;

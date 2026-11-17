@@ -8,7 +8,7 @@
 //! - every second it reads the container's memory pressure, and the use and bounds of the `workload` leaf and of the
 //!   whole container, nine small files;
 //! - when the sandbox has been stalling on memory long enough, or the workload leaf has spent its memory and its swap,
-//!   it SIGKILLs the one process the kernel would pick first, outside the daemon's leaf (in `workload`, or in a Docker
+//!   it SIGKILLs the one process whose kill frees the most, outside the daemon's leaf (in `workload`, or in a Docker
 //!   container the sandbox runs itself, under `/docker`), and writes down what it killed and why
 //!   (`memory-kills.jsonl`), so the boot after and the conversation it hurt are told;
 //! - while memory is short it writes a sample every ten seconds (`pressure.jsonl`), the trail the daemon's own sampler
@@ -210,6 +210,17 @@ impl Reading {
         } else {
             "counted as the sandbox's own, with no bound to measure it against".to_string()
         }
+    }
+
+    /// The memory and swap the sandbox holds: the whole container's, or the workload leaf's where the container's
+    /// cannot be read. What a victim's size is measured against (`procs::victim`).
+    pub fn in_use(&self) -> Option<u64> {
+        let held = |usage: &Usage| {
+            usage
+                .memory_current
+                .map(|memory| memory.saturating_add(usage.swap_current.unwrap_or(0)))
+        };
+        held(&self.container).or_else(|| held(&self.workload))
     }
 
     /// Short enough of memory to keep a trail of.
@@ -449,18 +460,20 @@ impl Guard {
         }
     }
 
-    // The one process the kernel would pick first, outside the daemon's leaf, killed and written down: in `workload`, or
-    // in a Docker container the sandbox runs itself (`/docker`), whose processes the sandbox's own /proc lists like any
-    // other. A process gone before the kill is not replaced by the next one: it freed what it held by itself, and the
-    // trigger holds afresh after the cooldown if that was not enough.
+    // The one process whose kill frees the most (`procs::victim`), outside the daemon's leaf, killed and written down: in
+    // `workload`, or in a Docker container the sandbox runs itself (`/docker`), whose processes the sandbox's own /proc
+    // lists like any other. A process gone before the kill is not replaced by the next one: it freed what it held by
+    // itself, and the trigger holds afresh after the cooldown if that was not enough.
     fn act(&mut self, reason: &str, reading: &Reading) {
         let ranked = procs::ranked(self.procs.scan(), &self.spared());
-        let Some(victim) = ranked.first() else {
+        let Some(victim) = procs::victim(&ranked, reading.in_use()) else {
             if !self.nothing_said {
                 self.nothing_said = true;
                 tracing::warn!(
                     reason,
-                    "memory is short, and nothing outside the daemon's cgroup leaf is the guard's to kill"
+                    killable = ranked.len(),
+                    "memory is short, and nothing outside the daemon's cgroup leaf is the guard's to kill or holds \
+                     enough memory for its kill to free any"
                 );
             }
             return;

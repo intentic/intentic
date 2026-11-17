@@ -4,7 +4,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { COST_BYTES, isRoomSize, needBytes, ROOM_SOCKET, type RoomSize, type RoomWorkload } from "@intentic/constants/memory-room";
 import type { Logger } from "pino";
 import type { PerfTracker } from "../system/resources/perf.js";
-import type { ResourceBudget } from "./resource-budget.js";
+import type { Admission, ResourceBudget } from "./resource-budget.js";
 
 // The budget's verdict for the scripts that start heavy work outside a turn (bin/queue-run, through `memory-room`;
 // _tools/scripts/verify/test-workers.mjs), on a Unix socket of its own: never the daemon's socket, which netd
@@ -21,6 +21,85 @@ const isWorkload = (value: string | null): value is RoomWorkload => value !== nu
 export interface RoomSocket {
     readonly close: () => Promise<void>;
 }
+
+// What the room socket answers: the budget's verdict and the sandbox's room after it.
+interface RoomReply {
+    readonly verdict: Admission["verdict"];
+    readonly waitedMs: number;
+    readonly needBytes: number;
+    readonly freeBytes: number | undefined;
+    readonly reservedBytes: number;
+    diagnosis?: string;
+    waitedFor?: string;
+    stuck?: true;
+}
+
+// One `/room` request admitted. Why it waited, from its first short reading, is said with the answer however the wait
+// ends (2026-11-17, the shinobi-society audit: a wait that ended in room said nothing of why it was held, one that ended
+// short said only how much was free). Every caller here starts its command when the answer comes, so a wait that cannot
+// help is given up rather than sat out to its deadline (`giveUpWhenStuck`).
+const admitAsked = async (
+    budget: ResourceBudget,
+    workload: RoomWorkload,
+    params: URLSearchParams,
+    signal: AbortSignal,
+    perf: Pick<PerfTracker, "record"> | undefined,
+): Promise<RoomReply> => {
+    const waitSeconds = Math.min(MAX_WAIT_SECONDS, Math.max(0, Number(params.get("wait")) || 0));
+    const asked = params.get("size") ?? "";
+    const size: RoomSize | undefined = isRoomSize(asked) ? asked : undefined;
+    const pid = Number(params.get("pid"));
+    let waitedFor: string | undefined;
+    const wait = {
+        deadlineMs: waitSeconds * 1000,
+        signal,
+        giveUpWhenStuck: true,
+        onShort: (diagnosis: string) => {
+            waitedFor = diagnosis;
+        },
+    };
+    const admission = await budget.admit({
+        workload,
+        attended: false,
+        where: "local",
+        size,
+        pid: Number.isInteger(pid) && pid > 1 ? pid : undefined,
+        ...(waitSeconds > 0 ? { wait } : {}),
+    });
+    const snapshot = await budget.snapshot();
+    const stuck = admission.verdict === "refuse" && admission.stuck === true;
+    perf?.record("room.admit", admission.waitedMs, {
+        class: workload,
+        size,
+        verdict: admission.verdict,
+        stuck,
+        waitedFor,
+        label: params.get("label") ?? undefined,
+        freeBytes: snapshot.freeBytes,
+        reservedBytes: snapshot.reservedBytes,
+    });
+    const reply: RoomReply = {
+        verdict: admission.verdict,
+        waitedMs: admission.waitedMs,
+        needBytes: needBytes(workload, false, size),
+        freeBytes: snapshot.freeBytes,
+        reservedBytes: snapshot.reservedBytes,
+    };
+    if (admission.verdict === "refuse") {
+        // The bare reason where the hold has one: the sentence a held admission carries says the work "did not start",
+        // which `memory-room`'s caller does anyway.
+        reply.diagnosis = admission.diagnosis ?? admission.message;
+    } else if (admission.verdict === "wait") {
+        reply.diagnosis = admission.message;
+    }
+    if (waitedFor !== undefined) {
+        reply.waitedFor = waitedFor;
+    }
+    if (stuck) {
+        reply.stuck = true;
+    }
+    return reply;
+};
 
 // Each admission's wait goes to perf.jsonl as `room.admit` once it is slow: the gate held heavy commands 17 hours in one
 // week (2026-09-26..10-02) and nothing the daemon logged showed it.
@@ -49,10 +128,6 @@ export const createRoomServer = (budget: ResourceBudget, perf?: Pick<PerfTracker
                 answer(400, { error: `class is one of ${Object.keys(COST_BYTES).join(", ")}` });
                 return;
             }
-            const waitSeconds = Math.min(MAX_WAIT_SECONDS, Math.max(0, Number(url.searchParams.get("wait")) || 0));
-            const asked = url.searchParams.get("size") ?? "";
-            const size: RoomSize | undefined = isRoomSize(asked) ? asked : undefined;
-            const pid = Number(url.searchParams.get("pid"));
             // A caller that hangs up stops holding its place in the wait.
             const gone = new AbortController();
             response.on("close", () => {
@@ -60,31 +135,7 @@ export const createRoomServer = (budget: ResourceBudget, perf?: Pick<PerfTracker
                     gone.abort();
                 }
             });
-            const admission = await budget.admit({
-                workload,
-                attended: false,
-                where: "local",
-                size,
-                pid: Number.isInteger(pid) && pid > 1 ? pid : undefined,
-                ...(waitSeconds > 0 ? { wait: { deadlineMs: waitSeconds * 1000, signal: gone.signal } } : {}),
-            });
-            const snapshot = await budget.snapshot();
-            perf?.record("room.admit", admission.waitedMs, {
-                class: workload,
-                size,
-                verdict: admission.verdict,
-                label: url.searchParams.get("label") ?? undefined,
-                freeBytes: snapshot.freeBytes,
-                reservedBytes: snapshot.reservedBytes,
-            });
-            answer(200, {
-                verdict: admission.verdict,
-                waitedMs: admission.waitedMs,
-                needBytes: needBytes(workload, false, size),
-                freeBytes: snapshot.freeBytes,
-                reservedBytes: snapshot.reservedBytes,
-                ...(admission.verdict === "run" ? {} : { diagnosis: admission.message }),
-            });
+            answer(200, await admitAsked(budget, workload, url.searchParams, gone.signal, perf));
         })().catch((error: unknown) => answer(500, { error: errorMessage(error) }));
     });
 

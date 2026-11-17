@@ -61,9 +61,14 @@ test("an entitlement refusal standing on the account moves it too", async () => 
     expect(await offBlockedAccount(deps({ accounts: TWO, refusal, usage: { spare: reading(30) } }), remembered)).toMatchObject({ kind: "move", to: "spare" });
 });
 
-// An unmeasured account is usable but never read as room, the same bar a limit move's destination clears.
-test("with no ready account the turn is held on the refused one", async () => {
-    expect(await offBlockedAccount(deps({ accounts: TWO, seats: SEAT_OFF }), remembered)).toEqual({
+// The shinobi-society audit (2026-11-17): the seat refused, the other account's reading aged out. A reading that went
+// stale is no refusal, so with every read account refused the unread one is where the turn goes.
+test("with no ready account, an unread one nothing has refused takes the turn", async () => {
+    expect(await offBlockedAccount(deps({ accounts: TWO, seats: SEAT_OFF }), remembered)).toMatchObject({ kind: "move", from: "home", to: "spare" });
+});
+
+test("with every other account refused, the turn is held on the refused one", async () => {
+    expect(await offBlockedAccount(deps({ accounts: TWO, seats: SEAT_OFF, usage: { spare: reading(100) } }), remembered)).toEqual({
         kind: "held",
         account: "home",
         reason: "Your organization has disabled Claude Code.",
@@ -93,7 +98,7 @@ test("a held account whose access came back is re-tested, its mark lifted, and t
     const probe = { answer: STILL_OFF };
     let now = Date.now();
     const { check, probes } = scriptedSeatCheck({ seats: memorySeats(seats), answer: () => probe.answer, now: () => now });
-    const alone = { ...deps({ accounts: TWO }), claudeSeats: memorySeats(seats), claudeSeatCheck: check };
+    const alone = { ...deps({ accounts: TWO.slice(0, 1) }), claudeSeats: memorySeats(seats), claudeSeatCheck: check };
 
     expect(await offBlockedAccount(alone, remembered)).toMatchObject({ kind: "held", account: "home" });
     // Not due again yet: held without asking.
@@ -102,7 +107,8 @@ test("a held account whose access came back is re-tested, its mark lifted, and t
     // The admin turns access back on; the next due re-test finds it.
     probe.answer = BACK_ON;
     now += 2 * FIRST_RECHECK_MS;
-    expect(await offBlockedAccount(alone, remembered)).toEqual({ kind: "keep" });
+    // Marked servable: what lets the words its refusal held go again by themselves (account-refusal-release.ts).
+    expect(await offBlockedAccount(alone, remembered)).toEqual({ kind: "keep", servable: true });
     expect([probes, Object.keys(seats)]).toEqual([["home", "home"], []]);
 });
 

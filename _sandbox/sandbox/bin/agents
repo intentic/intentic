@@ -30,7 +30,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 
-const TOKEN_PATH = "/run/intentic/agent.token";
+// Overridable only so a suite can stand the command up against a stub daemon (fleet-cli.integration.test.ts).
+const TOKEN_PATH = process.env.INTENTIC_AGENT_TOKEN_FILE ?? "/run/intentic/agent.token";
 const PORT = process.env.SANDBOX_PORT ?? "8787";
 
 // The conversation this shell was spawned for (platform/leftovers.ts workloadStamp) — what tells the daemon
@@ -49,13 +50,15 @@ LOOK UP — reach for these instead of searching /history by hand
                                        an id prefix, words from its title, its runtime session id or the
                                        first 8 hex of it, a terminal named for it (\`agent-126a7bc4-%551\`),
                                        a session it ran in earlier, a run or turn id, or the id of an
-                                       in-process subagent one of its turns started (\`a8afce09da420285a\`)
+                                       in-process subagent one of its turns started (\`a8afce09da420285a\`).
+                                       \`self\` (or \`me\`) is the conversation this shell runs for
           [--transcript] [--last <n>] [--grep <text>]
                                        add the record itself: the last <n> messages (default 20), each with
                                        the tools it called, or only the ones carrying a phrase in what they
                                        said or ran (case-insensitive; -i is accepted and changes nothing)
           [--message <n>]              one message whole, by the number --transcript prints: its full text,
                                        each tool call's target or input, exit code and the head of its output
+          [--report]                   its last reply, whole: what a finished conversation reported
           [--no-diff] [--json]         skip the per-repo git counts, or answer as JSON; with --transcript,
                                        the rows exactly as stored
           [--stored]                   what the daemon keeps for it instead, raw JSON: its row in every table of
@@ -63,7 +66,9 @@ LOOK UP — reach for these instead of searching /history by hand
   agents ls [--all] [--limit <n>] [--repo <name>] [--owner <who>] [--json]
                                        the fleet, most recently active first. --all includes the archive;
                                        --repo narrows to conversations spanning one repo; --owner to the
-                                       ones a member answers for (any part of their address)
+                                       ones a member answers for (any part of their address). 30 rows unless
+                                       --limit says more, at most 100; a cut page says how many there are, and
+                                       --json carries \`total\` and \`truncated\`
   agents find '<text>' [--all] [--limit <n>] [--repo <name>] [--owner <who>] [--json]
                                        which conversations said or did this, with the line that proves it,
                                        marked by kind: user (asked by its user), said, ran (a tool call's
@@ -344,6 +349,25 @@ const query = (params) =>
         .map(([key, value]) => `${key}=${encodeURIComponent(value === true ? "1" : value)}`)
         .join("&");
 
+// `self` and `me` name the conversation this shell runs for (2026-11-17, the shinobi-society audit: an agent looking
+// up its own record had to learn its own id first).
+const SELF_HANDLES = new Set(["self", "me"]);
+const handleOf = (handle) => {
+    if (!SELF_HANDLES.has(handle)) {
+        return handle;
+    }
+    return CONVERSATION !== "" ? CONVERSATION : die(`agents: \`${handle}\` names the conversation this shell runs for, and this shell carries none (INTENTIC_TURN_OWNER is unset); name it by its id`);
+};
+
+// The line under a cut page: how many there are, and how to see the rest.
+const pageNote = (answer, flags) => {
+    if (answer.truncated !== true) {
+        return undefined;
+    }
+    const wider = answer.agents.length < (answer.maxLimit ?? 100) ? ` --limit ${Math.min(answer.total, answer.maxLimit ?? 100)}` : "";
+    return `showing ${answer.agents.length} of ${answer.total}: ${wider === "" ? "" : `agents ${flags}${wider} for more, or `}narrow with --repo, --owner or \`agents find\``;
+};
+
 const read = async (path) => {
     const { status, text } = await call("GET", path);
     if (status !== 200) {
@@ -401,6 +425,10 @@ const ls = async (argv) => {
         process.stdout.write("No conversations.\n");
     } else {
         writeRoster(answer.agents);
+        const note = pageNote(answer, `ls${flags.all === true ? " --all" : ""}`);
+        if (note !== undefined) {
+            process.stdout.write(`${note}\n`);
+        }
         process.stdout.write(`more: agents show <id>${flags.all === true ? "" : " · agents ls --all includes the archive"}\n`);
     }
 };
@@ -419,6 +447,10 @@ const find = async (argv) => {
         process.stdout.write(`Nothing said or ran "${text}"${flags.all === true ? "" : " (--all searches the archive too)"}.\n`);
     } else {
         writeRoster(answer.agents);
+        const note = pageNote(answer, `find '${text}'`);
+        if (note !== undefined) {
+            process.stdout.write(`${note}\n`);
+        }
         process.stdout.write("more: agents show <id>\n");
     }
     /* An empty result may be incomplete while the phrase index is still building. */
@@ -671,19 +703,43 @@ const writeMessage = (agent, message) => {
     }
 };
 
+// How far back a report is looked for: the route's own page cap, past which a conversation has said nothing for a while.
+const REPORT_WINDOW = 100;
+
+// The last thing a conversation said, whole, from its record as stored: what `--transcript` cuts to a line and
+// `--message` caps. 2026-11-17, the shinobi-society audit: reading another conversation's report took a transcript
+// listing, then a second call for the message by number, for one reply.
+const report = async (handle, flags) => {
+    const answer = await read(`/fleet/${encodeURIComponent(handle)}?${query({ diff: "0", transcript: true, raw: true, last: REPORT_WINDOW, on: flags.on })}`);
+    const reply = answer.transcript.rows.findLast((row) => row.role === "assistant" && typeof row.text === "string" && row.text.trim() !== "");
+    if (flags.json === true) {
+        process.stdout.write(`${JSON.stringify({ agent: answer.agent.id, status: answer.agent.status, report: reply ?? null }, undefined, 2)}\n`);
+        return;
+    }
+    if (reply === undefined) {
+        process.stdout.write(`${answer.agent.id} has said nothing in its last ${Math.min(REPORT_WINDOW, answer.transcript.total)} messages.\n`);
+        return;
+    }
+    const sent = reply.sentAt === undefined ? "" : ` · sent ${stamp(reply.sentAt)}`;
+    process.stdout.write(`report of ${answer.agent.id} (${answer.agent.status}) · message #${reply.at}${sent}\n${reply.text}\n`);
+};
+
 const show = async (argv) => {
     const { flags, positional } = parseFlags(
         argv,
-        ["transcript", "last", "grep", "message", "no-diff", "json", "stored", "on"],
-        ["transcript", "no-diff", "json", "stored"],
+        ["transcript", "last", "grep", "message", "report", "no-diff", "json", "stored", "on"],
+        ["transcript", "no-diff", "json", "stored", "report"],
         { "-i": null },
     );
-    const handle = positional.join(" ").trim();
+    const handle = handleOf(positional.join(" ").trim());
     if (handle === "") {
         return die(`agents: show needs a conversation to look up\n\n${USAGE}`);
     }
     if (flags.message !== undefined && !/^\d+$/u.test(flags.message)) {
         return die("agents: --message takes a message's number, as --transcript prints it after #");
+    }
+    if (flags.report === true) {
+        return report(handle, flags);
     }
     // `--last`/`--grep` are what a transcript is for, so asking for either IS asking for one: a caller that
     // spelled the narrowing and forgot the switch meant the record, not the capsule again.
@@ -732,7 +788,7 @@ const show = async (argv) => {
 const bundle = async (argv) => {
     const usage = usageOf("bundle");
     const { flags, positional } = parseFlags(argv, ["out", "on"], [], {}, usage);
-    const handle = positional.join(" ").trim();
+    const handle = handleOf(positional.join(" ").trim());
     if (handle === "") {
         return die(`agents: bundle needs a conversation to look up\n\n${usage}`);
     }

@@ -1,5 +1,15 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { childVerification, childVerificationNote, forgetChild, noteChildWork, resetChildVerification } from "../child-verification.js";
+import {
+    childVerification,
+    childVerificationNote,
+    forgetChild,
+    noteChildWork,
+    resetChildVerification,
+    settledChildVerification,
+    stampChildVerification,
+} from "../child-verification.js";
+import { openSpawnedChild } from "../subagents.js";
+import { TURN_SHELL_EDITS } from "../../tools/agent-shell-edits.js";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 
 // One fleet's actors, which hold every record the registry under test files.
@@ -33,7 +43,10 @@ const shellResult = (id: string, text: string, status: "completed" | "failed" = 
     content: [{ type: "text", text }],
 });
 
-beforeEach(() => resetChildVerification(actors));
+beforeEach(() => {
+    resetChildVerification(actors);
+    actors.holdings(TURN_SHELL_EDITS).clear();
+});
 
 describe("what a child's frames prove", () => {
     test("edits with no check are unproven, and name the files", () => {
@@ -154,5 +167,51 @@ describe("what the parent is told", () => {
     // Deliberate: these ride the wire for callers that ask, but cost nothing in the parent's context.
     test.each(["verified", "no-code"] as const)("%s says nothing in the parent's context", (state) => {
         expect(childVerificationNote({ state, check: "pnpm test" })).toBeUndefined();
+    });
+});
+
+// The shinobi-society audit (2026-11-17): a child that edited only by `sed -i` read `no-code` to its parent, since its
+// ledger had no shell-edit scanner while its own turn's did.
+describe("a child's shell edits", () => {
+    const sedOnly = (child: string): void => {
+        noteChildWork(actors, shellCall("s1", "sed -i s/a/b/ src/parser.ts"), child);
+        noteChildWork(actors, shellResult("s1", "--- [exit 0, 0s]"), undefined);
+    };
+
+    test("a spawned child's own turn scanner attributes what its command wrote", async () => {
+        actors.holdings(TURN_SHELL_EDITS).hold("child-1", "child-1", async () => ["src/parser.ts"]);
+        sedOnly("child-1");
+        expect(await settledChildVerification(actors, "child-1")).toEqual({ state: "unproven", paths: ["src/parser.ts"] });
+    });
+
+    test("an in-process subagent is read through its parent's scanner, the tree it shares", async () => {
+        actors.holdings(TURN_SHELL_EDITS).hold("parent-1", "parent-1", async () => ["src/parser.ts"]);
+        openSpawnedChild({ conversationId: "parent-1", conversations: actors, subagentsDir: undefined }, { id: "toolu_1" });
+        sedOnly("toolu_1");
+        expect(await settledChildVerification(actors, "toolu_1")).toEqual({ state: "unproven", paths: ["src/parser.ts"] });
+    });
+
+    test("with no scanner filed, a shell command proves and edits nothing", async () => {
+        sedOnly("child-1");
+        expect(await settledChildVerification(actors, "child-1")).toEqual({ state: "no-code" });
+    });
+
+    test("the stamp taken as the child ends is taken again once the scan lands", async () => {
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        actors.holdings(TURN_SHELL_EDITS).hold("child-1", "child-1", async () => {
+            await gate;
+            return ["src/parser.ts"];
+        });
+        noteChildWork(actors, editCall("c1", "src/lexer.ts"), "child-1");
+        sedOnly("child-1");
+        const record: Parameters<typeof stampChildVerification>[1] = { id: "child-1" };
+        stampChildVerification(actors, record);
+        expect(record.verification).toEqual({ state: "unproven", paths: ["src/lexer.ts"] });
+        release();
+        await settledChildVerification(actors, "child-1");
+        expect(record.verification).toEqual({ state: "unproven", paths: ["src/lexer.ts", "src/parser.ts"] });
     });
 });

@@ -1,7 +1,7 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { filterRun } from "./agent-output-filter.mjs";
+import { filterRun, retainIn } from "./agent-output-filter.mjs";
 import { CACHE_MARKER } from "./cleaners.mjs";
 import { parseStatsFile, summarizeStats } from "./filter-stats.mjs";
 
@@ -116,4 +116,20 @@ test("new stages ledger their own savings and remain absent from holdout rows", 
     for (const sample of samples) {
         expect(summary.perCleaner.find((stage) => stage.id === sample.id)?.savedTokens).toBeGreaterThan(0);
     }
+});
+
+// One raw-output directory serves the whole sandbox: 30 files were minutes of a busy fleet's commands, and a footer's
+// path was gone before the agent followed it (the shinobi-society audit, 2026-11-17).
+test("raw-output retention keeps the newest 500 files, the one just written among them", () => {
+    const dir = tempDir();
+    for (let index = 0; index < 505; index += 1) {
+        writeFileSync(join(dir, `old-${index}.log`), "x");
+        utimesSync(join(dir, `old-${index}.log`), index + 1, index + 1);
+    }
+    expect(retainIn(dir, "new.log", [])("fresh")).toBe(join(dir, "new.log"));
+    const kept = readdirSync(dir);
+    expect(kept.length).toBe(500);
+    expect(kept).toContain("new.log");
+    expect(kept).not.toContain("old-5.log");
+    expect(kept).toContain("old-6.log");
 });

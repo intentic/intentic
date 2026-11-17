@@ -89,6 +89,23 @@ const DELIVERABLES =
     "of the change. Screenshots, logs, probe scripts and other evidence you make while working go in `/tmp`, or in " +
     `\`${statePath(WORKSPACE_ROOT, ".intentic/records/artifacts/")}/\` when the user should be able to open them, never in a repository.`;
 
+// What the sandbox does under a working turn, which a turn otherwise learns by losing work to it. The shinobi-society
+// audit (100 conversations, 2026-11-15..17): agents reran captures and rebuilt tool setups kept in /tmp after a restart
+// emptied it; 9 conversations hunted for edits the sandbox had checkpointed into a commit ("git status lists fewer files
+// than I changed"); 4 popped another conversation's stash, since every worktree shares the one stash; 25 went looking
+// for a built binary and ran other conversations' builds of different code; 5 lost a call to a missing numpy.
+const UNDERFOOT =
+    "This sandbox restarts now and then (an update, a crash): a restart empties `/tmp` and ends every terminal, " +
+    "background job and server, so keep what a later step or turn needs (a venv, a downloaded model, a tool you built) " +
+    `in \`${statePath(WORKSPACE_ROOT, ".intentic/local/cache/")}/<tool>/\`, which survives and lands nowhere. The sandbox ` +
+    "checkpoints your work as commits on your branch and rebases it onto main when main moves, so `git status` can " +
+    "list fewer files than you changed: `git diff $(git merge-base HEAD main)` is your whole change. Leave `git stash` " +
+    "alone: every conversation's checkout shares one stash, so a pop can bring back another conversation's work; save " +
+    "a patch (`git diff > /tmp/mine.patch`) instead. Build output belongs to the checkout that built it: never run or " +
+    `copy a binary from another conversation's checkout under \`${HISTORY_ROOT}/worktrees\`, which was built from ` +
+    "different code. Python here has no packages beyond the standard library, PyYAML and Pillow: run a script that " +
+    "needs more with `uv run --with <package> python …`.";
+
 // Where the image bakes the product's own guide (Dockerfile: seed-skills → /root/.claude/skills). Named by its file for
 // every runtime: the Claude Code loop loads it as the `intentic` skill, and every other loop reads the same file.
 const PRODUCT_GUIDE = "`/root/.claude/skills/intentic/SKILL.md`";
@@ -308,6 +325,7 @@ const ENTRIES: readonly GuidanceEntry[] = [
     },
     { id: "landing", text: LANDING },
     { id: "deliverables", text: DELIVERABLES },
+    { id: "underfoot", text: UNDERFOOT },
     {
         id: "search",
         // Measured on the ledger: an iq call led straight to the file the turn opened next about 60% of the time, an rg

@@ -1,6 +1,8 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { within } from "@intentic/base/async";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import type { Holding } from "../../conversations/actor/conversation-holdings.js";
 import { dirtyPathsAcross } from "../../git/changes/changes.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 
@@ -73,10 +75,29 @@ export const checkoutDirtyPaths = (root: string, now: () => number = Date.now): 
 // A scan that has not answered by then attributes nothing, so a stuck git never holds the turn's proof or its end.
 const SHELL_EDITS_BUDGET_MS = 10_000;
 
+type TurnShellEdits = (since: number) => Promise<readonly string[]>;
+
+// Each conversation's latest turn scanner, held so a parent's ledger over a child reads the same tree the child's own turn
+// does (child-verification.ts): a spawned child under its own id, an in-process one through its parent's. 2026-11-17, the
+// shinobi-society audit: a child's ledger had no scanner, so a child that edited only by shell (`sed -i`, a heredoc
+// rewrite) read `no-code` to its parent.
+export const TURN_SHELL_EDITS: Holding<TurnShellEdits> = { name: "turn shell edits" };
+
 // What each command of a turn wrote, as the verification ledger reads it (agent-verification.ts `ShellEdits`): the
 // checkout's dirty files changed since the command started, named as the agent names them (its root joined to the path).
-export const turnShellEdits = (localCwd: string, effectiveCwd: string): ((since: number) => Promise<readonly string[]>) => {
+// With `actors`, the scanner is filed under the turn's conversation, replacing its previous turn's.
+export const turnShellEdits = (
+    localCwd: string,
+    effectiveCwd: string,
+    actors?: { readonly conversations: Pick<ConversationActors, "holdings"> },
+    turn?: { readonly conversationId?: string | undefined },
+): TurnShellEdits => {
     const dirty = checkoutDirtyPaths(localCwd);
     const named: DirtyFiles = async () => (await dirty()).map((path) => ({ onDisk: join(localCwd, path), path: join(effectiveCwd, path) }));
-    return async (since) => (await within(changedSince(named, since), SHELL_EDITS_BUDGET_MS, [], { unref: true })).map((edit) => edit.path);
+    const scan: TurnShellEdits = async (since) =>
+        (await within(changedSince(named, since), SHELL_EDITS_BUDGET_MS, [], { unref: true })).map((edit) => edit.path);
+    if (actors !== undefined && turn?.conversationId !== undefined) {
+        actors.conversations.holdings(TURN_SHELL_EDITS).hold(turn.conversationId, turn.conversationId, scan);
+    }
+    return scan;
 };

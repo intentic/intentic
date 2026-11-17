@@ -3,7 +3,8 @@ import type { SubagentVerification } from "@intentic/sandbox-contract/schemas/te
 import type { ToolCallStatus } from "@intentic/sandbox-contract/events/requests";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Holding } from "../../conversations/actor/conversation-holdings.js";
-import { createFrameLedger, type FrameLedger, trackedCall } from "../verification/agent-verification.js";
+import { createFrameLedger, type FrameLedger, type ShellEdits, trackedCall } from "../verification/agent-verification.js";
+import { TURN_SHELL_EDITS } from "../tools/agent-shell-edits.js";
 import { ROSTER } from "../../conversations/actor/subagent-roster.js";
 
 // Whether a child's report is checked: fed from every provider's own tool_call/tool_call_update frames, not hooks, so
@@ -21,6 +22,14 @@ const PATHS_ON_THE_WIRE = 8;
 // A command is a line, not a script; long enough for a typical `pnpm test <path>` invocation.
 const CHECK_CHARS = 200;
 
+// What a child's command wrote, read off the tree its commands ran in: a spawned child's own checkout (filed under its
+// conversation id by its turn, which starts before its first frame arrives), else its parent's, which an in-process
+// subagent shares. None filed (a child on a runner, a suite) keeps the ledger without one, folding synchronously.
+const childShellEdits = (actors: Pick<ConversationActors, "holdings">, child: string, holder: string | undefined): ShellEdits | undefined => {
+    const scanners = actors.holdings(TURN_SHELL_EDITS);
+    return scanners.get(child) ?? (holder === undefined ? undefined : scanners.get(holder));
+};
+
 // Opened at the first tracked call, not on success, so undefined always means nothing was seen; an agent whose edits
 // were all refused still gets `no-code`, not silence.
 const ledgerOf = (actors: Pick<ConversationActors, "holdings">, child: string, holder: string | undefined): FrameLedger => {
@@ -29,7 +38,7 @@ const ledgerOf = (actors: Pick<ConversationActors, "holdings">, child: string, h
     if (existing !== undefined) {
         return existing;
     }
-    const fresh = createFrameLedger();
+    const fresh = createFrameLedger(childShellEdits(actors, child, holder));
     ledgers.hold(holder, child, fresh, child);
     return fresh;
 };
@@ -76,6 +85,26 @@ export const childVerification = (actors: Pick<ConversationActors, "holdings">, 
         ...(standing.paths.length > 0 ? { paths: standing.paths.slice(0, PATHS_ON_THE_WIRE) } : {}),
         ...(standing.check !== undefined ? { check: standing.check.slice(0, CHECK_CHARS) } : {}),
     };
+};
+
+/** The same, once every settled call is folded in: a shell scan can still be out when the child's last frame arrives. */
+export const settledChildVerification = async (actors: Pick<ConversationActors, "holdings">, child: string): Promise<SubagentVerification | undefined> => {
+    await actors.holdings(LEDGERS).get(child)?.settled();
+    return childVerification(actors, child);
+};
+
+/**
+ * Stamps a child's verdict on its record as it ends, then once more when a shell scan still out at that moment has folded
+ * in, unless the ledger was forgotten meanwhile.
+ */
+export const stampChildVerification = (actors: Pick<ConversationActors, "holdings">, record: { readonly id: string; verification?: SubagentVerification | undefined }): void => {
+    record.verification = childVerification(actors, record.id);
+    const ledger = actors.holdings(LEDGERS).get(record.id);
+    void ledger?.settled().then(() => {
+        if (actors.holdings(LEDGERS).get(record.id) === ledger) {
+            record.verification = childVerification(actors, record.id);
+        }
+    });
 };
 
 /** Goes when the record it belongs to does (subagents.ts sweeps on every list and write), so it costs nothing after. */

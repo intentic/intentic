@@ -2,6 +2,7 @@ import { extname } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract/events/requests";
 import { agentCommand, commandWords, shellScriptOf } from "../providers/agent-installs.js";
+import { pipelineExit } from "./pipeline-filters.js";
 
 // Ledger over the turn: which code files changed and whether a passing check followed the last edit. Edits and evidence
 // share one counter so order is exact; per-turn, in-memory only, and it never runs a command itself.
@@ -22,19 +23,17 @@ export type VerificationKind = "test" | "typecheck" | "lint" | "build";
 // footer (`--- [exit 0 (pipeline: 127 0 — …), …]`) answers with the earliest stage that failed, since that is the
 // check and the stage after it (`| tail`, `| grep`) only filtered what it printed. Without a footer, a line that is
 // nothing but a vendor's own exit note (Devin's "Exited with code 127", "Exit code: 1", "exit status 2") is read,
-// the last one winning. Undefined means the text says nothing about it.
+// the last one winning. Undefined means the text says nothing about it. Given the command, a grep or rg stage's 1 is
+// read as the filter matching nothing, not as a failure (pipeline-filters.ts).
 const FOOTER = /---\s\[exit\s(\d+)(?:\s\(pipeline:\s([\d\s]+?)\s—)?/g;
 const EXIT_LINE = /^[\s[(]*(?:command\s+|process\s+)?(?:exited\s+with\s+(?:exit\s+)?code|exit\s+code|exit\s+status)\s*:?\s*(\d+)[\s\])]*\.?\s*$/gim;
-// A stage the next one closed early (SIGPIPE, `| head`) did not fail.
-const SIGPIPE = 141;
 
-export const commandExitCode = (response: unknown): number | undefined => {
+export const commandExitCode = (response: unknown, command?: string): number | undefined => {
     const text = typeof response === "string" ? response : typeof response === "object" && response !== null ? JSON.stringify(response) : "";
     const footer = [...text.matchAll(FOOTER)].at(-1);
     if (footer !== undefined) {
         const stages = (footer[2] ?? "").trim().split(/\s+/).filter((stage) => stage !== "").map(Number);
-        const masked = stages.slice(0, -1).find((stage) => stage !== 0 && stage !== SIGPIPE);
-        return masked ?? Number(footer[1]);
+        return pipelineExit(stages, Number(footer[1]), command);
     }
     const said = [...text.matchAll(EXIT_LINE)].at(-1)?.[1];
     return said === undefined ? undefined : Number(said);
@@ -50,8 +49,13 @@ const NOT_STARTED = /^(?:[\w./-]*sh|env|xargs):\s*(?:line\s+\d+:\s*|\d+:\s*)?[^:
 
 // A settled command's outcome: an exit code the runtime reported as a number outranks one read from its text, which
 // outranks the call's own status (a suite that exited 1 can still show as a completed call).
-export const checkOutcome = (input: { readonly status: "completed" | "failed"; readonly text: string; readonly exitCode?: number | undefined }): CheckOutcome => {
-    const exit = input.exitCode ?? commandExitCode(input.text);
+export const checkOutcome = (input: {
+    readonly status: "completed" | "failed";
+    readonly text: string;
+    readonly exitCode?: number | undefined;
+    readonly command?: string | undefined;
+}): CheckOutcome => {
+    const exit = input.exitCode ?? commandExitCode(input.text, input.command);
     if (exit === 126 || exit === 127) {
         return "unstarted";
     }
@@ -222,23 +226,38 @@ export const classifyCommand = (segment: string): VerificationKind | undefined =
 // How deep shell wrappers are read; a script that wraps itself is not followed forever.
 const WRAPPER_DEPTH = 4;
 
+// What a command proves, and the part of it a card names as the check.
+interface CheckReading {
+    readonly kind: VerificationKind | undefined;
+    readonly name: string;
+}
+
+// A word as the shell would need it typed again: quoted when it holds anything the shell reads.
+const typed = (word: string): string => (/^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`);
+
 // A command proves the strongest thing any of its invocations proves: `pnpm lint && pnpm test` is a test run. A shell
 // wrapper (`bash -lc '…'`, `eval '…'`) proves what its script proves: Codex hands over every command that way, and read as
 // the word `bash` none of its checks ever counted. Split by the quote-aware tokenizer, so a quoted `|` splits nothing.
-const commandKind = (command: string, depth = 0): VerificationKind | undefined =>
-    strongest(
-        commandWords(agentCommand(command)).map((words) => {
-            const script = depth < WRAPPER_DEPTH ? shellScriptOf(words) : undefined;
-            return script === undefined ? classifyCommand(words.join(" ")) : commandKind(script, depth + 1);
-        }),
-    );
-
-// The command a card names as the check: the script inside a lone shell wrapper rather than the wrapper, so a Codex turn
-// reads "verified by `pnpm test`", not by `/bin/bash -lc 'pnpm test'`.
-const checkNameOf = (command: string, depth = 0): string => {
+// The name is the invocation that proved it, not the line around it: a lone command is named as written, the script
+// inside a lone wrapper by that script (a Codex turn reads "verified by `pnpm test`", not by `/bin/bash -lc 'pnpm
+// test'`), and in a line of several the ones of the winning kind, redirections and env prefixes dropped. 2026-11-17, the
+// shinobi-society audit: a card named a whole `cd … && cargo test … 2>&1 | tail` line, cut at 200 characters, where
+// the check was the one invocation in it.
+const readCheck = (command: string, depth = 0): CheckReading => {
     const invocations = commandWords(agentCommand(command));
-    const script = invocations.length === 1 && depth < WRAPPER_DEPTH ? shellScriptOf(invocations[0] ?? []) : undefined;
-    return script === undefined ? command.trim() : checkNameOf(script, depth + 1);
+    const parts = invocations.map((words): CheckReading => {
+        const script = depth < WRAPPER_DEPTH ? shellScriptOf(words) : undefined;
+        if (script !== undefined) {
+            return readCheck(script, depth + 1);
+        }
+        return { kind: classifyCommand(words.join(" ")), name: invocations.length === 1 ? command.trim() : words.map(typed).join(" ") };
+    });
+    const kind = strongest(parts.map((part) => part.kind));
+    if (kind === undefined) {
+        return { kind, name: command.trim() };
+    }
+    const named = parts.filter((part) => part.kind === kind).map((part) => part.name);
+    return { kind, name: [...new Set(named)].join(" && ") };
 };
 
 // What the checks after the last edit add up to, and the one that says so.
@@ -291,9 +310,9 @@ export const createVerificationLedger = (): VerificationLedger => {
             edits.push({ path, at: counter, prose: isProsePath(path) });
         },
         noteCommand: (command, outcome, detail) => {
-            const kind = commandKind(command);
+            const { kind, name } = readCheck(command);
             if (kind !== undefined) {
-                note(checkNameOf(command), kind, outcome, detail);
+                note(name, kind, outcome, detail);
             }
         },
         edited: () => [...new Set(edits.map((edit) => edit.path))],
@@ -422,7 +441,8 @@ export const createFrameLedger = (shellEdits?: ShellEdits, now: () => number = D
         }
         pending.delete(id);
         const text = (content ?? []).flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
-        fold(entry, status === "completed", () => checkOutcome({ status, text, exitCode }), text);
+        const command = entry.call.kind === "check" ? entry.call.command : undefined;
+        fold(entry, status === "completed", () => checkOutcome({ status, text, exitCode, command }), text);
     };
     return {
         ...ledger,

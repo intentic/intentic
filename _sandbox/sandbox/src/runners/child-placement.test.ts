@@ -60,6 +60,25 @@ describe("a child its parent placed", () => {
         expect(unknown.kind === "refused" && unknown.message).toContain(`"omen", "laptop" (offline)`);
     });
 
+    // The shinobi-society audit (2026-11-17): `on: "radarsu-omen"`, the device, was refused while its runner sat online.
+    it("finds a runner by the device it runs on, any case, and places it under the runner's own id", () => {
+        const onDevice: RunnerSummary = { ...omen, id: "omen-runner", host: "radarsu-omen" };
+        const gone: RunnerSummary = { ...asleep, id: "old-omen", host: "radarsu-omen" };
+        expect(placeChild(ask({ on: "Radarsu-Omen" }), [gone, onDevice], undefined)).toEqual({
+            kind: "runner",
+            runner: "omen-runner",
+            note: `Running on the runner "omen-runner" on Radarsu-Omen.`,
+        });
+        // An id wins over a device of the same name.
+        const named: RunnerSummary = { ...omen, id: "radarsu-omen" };
+        expect(placeChild(ask({ on: "radarsu-omen" }), [onDevice, named], undefined)).toMatchObject({ runner: "radarsu-omen" });
+        // A device whose only runner is offline is refused as that runner, and an unknown name lists each runner's device.
+        const offline = placeChild(ask({ on: "radarsu-omen" }), [gone], undefined);
+        expect(offline.kind === "refused" && offline.message).toContain(`The runner "old-omen" is offline`);
+        const unknown = placeChild(ask({ on: "radarsu-rog" }), [onDevice], undefined);
+        expect(unknown.kind === "refused" && unknown.message).toContain(`"omen-runner" (on radarsu-omen)`);
+    });
+
     // 2026-11-09: 46 of 114 spawns pinned "here", whole fan-outs after one refusal had offered it as the way through.
     it("never offers pinning this sandbox as the way out of a refusal", () => {
         for (const refused of [

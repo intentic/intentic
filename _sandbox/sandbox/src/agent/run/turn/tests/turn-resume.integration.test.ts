@@ -1172,6 +1172,27 @@ test("an entry whose attempt is already spent is dropped WITHOUT running: no boo
     expect(await services.turnJournal.list()).toEqual([]);
 });
 
+// 2026-11-17, the shinobi-society audit: a second restart twelve minutes after the first cut the same working re-run,
+// which then stood "its one re-run is already spent" until the owner typed Continue.
+test("a re-run cut after real progress earns another, up to the ceiling and no further", async () => {
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    const tools = ["t1", "t2", "t3"].map((id) => ({ id, name: "Bash", category: "execute" as const, status: "completed" as const }));
+    const rows: TranscriptRow[] = [
+        { role: "user", text: "finish the report" },
+        { role: "assistant", text: "Capturing.", tools },
+    ];
+    await services.turnJournal.recordTurn(journalled("rs-earned", { attempts: 1, run: { id: "run-earned", rows } }));
+    await services.turnJournal.recordTurn(journalled("rs-ceiling", { attempts: 3, run: { id: "run-ceiling", rows } }));
+    const ran: string[] = [];
+    const capture: TurnStarter["stream"] = async function* (input) {
+        ran.push(input.conversationId ?? "");
+        yield { kind: "done" };
+    };
+    await resumeInterruptedTurns(drivenBy(services, capture), BOOT_AT);
+    await waitFor(() => expect(ran).toEqual(["rs-earned"]), SETTLES);
+    expect((await services.turnJournal.list()).map((entry) => (entry.kind === "turn" ? entry.turn.conversationId : entry.conversationId))).not.toContain("rs-ceiling");
+});
+
 test("an entry older than the staleness cap is dropped: a sandbox off for the weekend must not wake mid-thought", async () => {
     const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     await services.turnJournal.recordTurn(journalled("rs-stale"));

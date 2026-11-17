@@ -2,7 +2,7 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { unstubbed } from "@intentic/testing";
-import { SETTLES, waitFor } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync, SETTLES, waitFor } from "@intentic/testing/bun";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Services } from "../../../composition.js";
 import { privacySliceFake } from "../../../privacy/privacy-slice.testing.js";
@@ -129,6 +129,8 @@ test("plans a sealed request on the runtime's own arm and answers with what its 
         effort: "low",
         systemPromptMode: "custom",
         systemPrompt: SEALED_SYSTEM_PROMPT,
+        // The runtime's own cap, a backstop just past the 20s deadline rather than its 30-minute turn default.
+        turnCapMs: 22_000,
     });
     // No conversation is made for it, whoever it is for: nothing in the request files under one.
     expect(Object.keys(context.base.spec)).not.toContain("conversationId");
@@ -273,6 +275,33 @@ test("the caller's cancel stops the loop, and what it threw is not dressed as th
         throw new Error("aborted");
     });
     await expect(runSealedRequest(services(adapter).fake, ask({ signal: caller.signal }))).rejects.toThrow(/^aborted$/);
+});
+
+// 2026-11-17, the shinobi-society audit: a Devin helper's loop heard its stop and kept waiting on a prompt that never
+// settled, so a 20s request ran to the runtime's 30-minute turn cap.
+test("a loop that ignores its stop is walked away from shortly after the deadline, which is what is said", async () => {
+    const { adapter } = arm(async function* () {
+        yield { kind: "session", sessionId: "s-1" };
+        await new Promise<never>(() => {});
+    });
+    jest.useFakeTimers();
+    try {
+        let outcome: string | undefined;
+        void runSealedRequest(services(adapter).fake, ask()).then(
+            () => {
+                outcome = "resolved";
+            },
+            (error: unknown) => {
+                outcome = error instanceof Error ? error.message : String(error);
+            },
+        );
+        await advanceTimersByTimeAsync(20_000);
+        expect(outcome).toBeUndefined();
+        await advanceTimersByTimeAsync(2_000);
+        expect(outcome).toBe("the model did not answer within 20s");
+    } finally {
+        jest.useRealTimers();
+    }
 });
 
 // Two Cursor accounts behind one arm that picks the first one the filed limits leave room on, as cursorAccountForTurn

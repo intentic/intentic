@@ -142,6 +142,20 @@ test("a stalled agent trips the inactivity watchdog: cancel, end the process no 
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
+// 2026-11-17, the shinobi-society audit: a Devin helper stopped at its 20s deadline ran to the 30-minute turn cap, since
+// session/cancel is only a notice and the phase waited for a prompt the agent never settled.
+test("a stop the agent never answers ends the turn after a short grace, with no timeout said", async () => {
+    const connection = fakeAcpConnection(fakeAcpAgentApp());
+    const agent = createAcpAgent(connectionsOf(connection), { ...TIMEOUTS, abortGraceMs: 50 });
+    const stop = new AbortController();
+    const turn = collect(agent, { ...request("deaf to a stop"), signal: stop.signal });
+    setTimeout(() => stop.abort(), 20);
+    // A hang bound, not a timing: without the grace the turn waits out its 60s watchdog.
+    const events = await turn;
+    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(events.at(-1)).toEqual({ kind: "done" });
+});
+
 // The process is every conversation's on this agent: one turn's stall must not take down another's turn on it.
 test("a stalled turn gives up its own session and leaves the process to another conversation's turn", async () => {
     const connection = fakeAcpConnection(fakeAcpAgentApp());

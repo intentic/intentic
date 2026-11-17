@@ -110,8 +110,10 @@ answer in the same `chat`. An answer saying the prompt was sent or may already h
 collect it with `chatgpt_read`. chatgpt.com must be allowed in read and act. One call at a time, never in parallel.
 
 **By hand, on another site or when the kit fails or is missing:**
-1. On ChatGPT, `open` `https://chatgpt.com/?temporary-chat=true`, then set that chat's "Personalized" menu to
-   "Unpersonalized": a temporary chat still reads their memory until you do. Never change their settings or model.
+1. On ChatGPT, open a new chat inside the sandbox's own project ("Intentic · <sandbox>", above), whose memory is the
+   project's alone. Not a temporary chat: apps are off there, so image generation can fail, and the owner asked
+   (2026-11-16) not to be steered into one. With no such project, ask the owner before using a regular chat, which
+   reads their memory. Never change their settings or model.
 2. `fill` the prompt, then `click` Send. Read what each action answered. "The page then moved to …" means it went;
    otherwise (a temporary chat often keeps its address) `snapshot` and look for your message before sending again,
    since a blind retry spends a second image. If `fill` says the editor did not take the text, do not send.

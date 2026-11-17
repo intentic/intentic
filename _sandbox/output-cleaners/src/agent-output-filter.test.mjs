@@ -56,6 +56,14 @@ describe("filterOutput", () => {
         expect(out).toContain("300 lines filtered to 81");
     });
 
+    // The shinobi-society audit (2026-11-17): the marker mid-output never said where the cut lines went.
+    it("points the elision marker at the retained output once there is one", () => {
+        const raw = `${Array.from({ length: 300 }, (_, i) => `line ${i}`).join("\n")}\n`;
+        const out = run(raw, { log: "/logs/raw-output/agent-abc-%1.log" });
+        expect(out).toContain("\n… 220 lines elided: retrieve-output /logs/raw-output/agent-abc-%1.log [pattern] prints them …\n");
+        expect(run(raw)).toContain("\n… 220 lines elided …\n");
+    });
+
     it("keeps failures whole up to a generous tail cap", () => {
         const raw = `${Array.from({ length: 600 }, (_, i) => `line ${i}`).join("\n")}\n`;
         const out = run(raw, { exit: "2" });
@@ -144,6 +152,22 @@ describe("filterOutput", () => {
         expect(run(raw, { exit: "1", pipeline: "1 1" })).toBe(raw);
         expect(maskedFailure("0", "1 141 0")).toBe("1 141 0");
         expect(maskedFailure("0", "garbage 0")).toBeUndefined();
+    });
+
+    // The shinobi-society audit: `cargo test | grep FAILED | head` passing was footed as an earlier stage that failed.
+    it("reads a grep or rg stage's 1 as a filter that matched nothing", () => {
+        expect(run("ok\n", { command: "cargo test 2>&1 | grep FAILED | head", pipeline: "0 1 0" })).toBe("ok\n");
+        expect(run("", { command: "pnpm test 2>&1 | rg FAIL", exit: "1", pipeline: "0 1" })).toBe(
+            "--- [exit 1 (pipeline: 0 1 — the filter matched nothing), 1s]\n",
+        );
+        expect(run("", { command: "pnpm test 2>&1 | grep FAIL", exit: "1", pipeline: "1 1" })).toBe(
+            "--- [exit 1 (pipeline: 1 1 — an earlier stage failed), 1s]\n",
+        );
+        expect(maskedFailure("0", "101 1 0", "cargo test | grep -c x | head")).toBe("101 1 0");
+        expect(maskedFailure("0", "1 0", "grep -n x a.txt | head")).toBe("1 0");
+        expect(maskedFailure("0", "0 1 0", "cargo test | sort | head")).toBe("0 1 0");
+        expect(maskedFailure("0", "0 1 0", "bash -lc 'cargo test | grep \"a|b\" | head'")).toBeUndefined();
+        expect(maskedFailure("0", "0 1 0", "cargo test | grep x | head; echo done")).toBe("0 1 0");
     });
 
     it("keeps the masked-failure line even when the guard hands back the raw capture", () => {

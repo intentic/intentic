@@ -50,11 +50,28 @@ const LEAVE_IT_OUT = "leave `on` out and it is placed where it can run";
 const CONTESTED_SLOTS = 2;
 
 const known = (runners: readonly RunnerSummary[]): string =>
-    runners.length === 0 ? "This sandbox has no runners." : `Its runners: ${runners.map((runner) => `"${runner.id}"${runner.online ? "" : " (offline)"}`).join(", ")}.`;
+    runners.length === 0
+        ? "This sandbox has no runners."
+        : `Its runners: ${runners.map((runner) => `"${runner.id}"${runner.host === undefined ? "" : ` (on ${runner.host})`}${runner.online ? "" : " (offline)"}`).join(", ")}.`;
+
+/**
+ * The runner `on` names: a runner's id, else the device it runs on (its `host`, any case), an online one first. A parent
+ * names the machine it knows: in the shinobi-society audit (2026-11-17) `on: "radarsu-omen"`, the device, was refused
+ * while that device's runner "omen-runner" sat online. Undefined when it names neither.
+ */
+const resolveRunner = (on: string, runners: readonly RunnerSummary[]): RunnerSummary | undefined => {
+    const byId = runners.find((entry) => entry.id === on);
+    if (byId !== undefined) {
+        return byId;
+    }
+    const wanted = on.toLowerCase();
+    const onHost = runners.filter((entry) => entry.host?.toLowerCase() === wanted);
+    return onHost.find((entry) => entry.online) ?? onHost[0];
+};
 
 // Why a named machine cannot take this child, or undefined when it can.
 const unmet = (ask: ChildPlacementAsk, runner: string, runners: readonly RunnerSummary[]): string | undefined => {
-    const summary = runners.find((entry) => entry.id === runner);
+    const summary = resolveRunner(runner, runners);
     if (summary === undefined) {
         return `There is no runner named "${runner}". ${known(runners)} Name one of them, or ${LEAVE_IT_OUT}.`;
     }
@@ -106,8 +123,14 @@ export const placeChild = (ask: ChildPlacementAsk, runners: readonly RunnerSumma
         return { kind: "here" };
     }
     if (ask.on !== undefined) {
-        const refusal = unmet(ask, ask.on, runners);
-        return refusal === undefined ? { kind: "runner", runner: ask.on, note: `Running on the runner "${ask.on}".` } : { kind: "refused", message: refusal };
+        // The resolved id from here on: it is what the dispatch, the book and the turn's placement name.
+        const runner = resolveRunner(ask.on, runners)?.id ?? ask.on;
+        const refusal = unmet(ask, runner, runners);
+        if (refusal !== undefined) {
+            return { kind: "refused", message: refusal };
+        }
+        const named = runner === ask.on ? `the runner "${runner}"` : `the runner "${runner}" on ${ask.on}`;
+        return { kind: "runner", runner, note: `Running on ${named}.` };
     }
     // Said only where a runner was there to be picked, so a fleetless sandbox's notes stay as they were.
     const anyOnline = runners.some((runner) => runner.online);
