@@ -2,7 +2,7 @@ import { extname } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract/events/requests";
 import { agentCommand, commandWords, shellScriptOf } from "../providers/agent-installs.js";
-import { pipelineExit } from "./pipeline-filters.js";
+import { bareExit, pipelineExit } from "./pipeline-filters.js";
 
 // Ledger over the turn: which code files changed and whether a passing check followed the last edit. Edits and evidence
 // share one counter so order is exact; per-turn, in-memory only, and it never runs a command itself.
@@ -36,7 +36,7 @@ export const commandExitCode = (response: unknown, command?: string): number | u
         return pipelineExit(stages, Number(footer[1]), command);
     }
     const said = [...text.matchAll(EXIT_LINE)].at(-1)?.[1];
-    return said === undefined ? undefined : Number(said);
+    return said === undefined ? undefined : bareExit(Number(said), command);
 };
 
 // How one check came out. `unstarted`: the shell never ran it (126 not executable, 127 not found), which proves
@@ -55,7 +55,7 @@ export const checkOutcome = (input: {
     readonly exitCode?: number | undefined;
     readonly command?: string | undefined;
 }): CheckOutcome => {
-    const exit = input.exitCode ?? commandExitCode(input.text, input.command);
+    const exit = input.exitCode === undefined ? commandExitCode(input.text, input.command) : bareExit(input.exitCode, input.command);
     if (exit === 126 || exit === 127) {
         return "unstarted";
     }

@@ -4,6 +4,7 @@ import {
     CiFixResponseSchema,
     CiForgetParamSchema,
     CiJobsResponseSchema,
+    CiMainResponseSchema,
     CiRunParamSchema,
     CiRunsResponseSchema,
 } from "../schemas/ci.js";
@@ -24,6 +25,18 @@ export const ciContract = {
                 "What the forges are reporting for every workspace repo that has a remote, served from a cache and filled in on demand. Repos whose notifications are not wired up say so.",
         })
         .output(CiRunsResponseSchema),
+    // The agent token reaches it (`agents ci`): what an agent meeting a failure asks before blaming itself or re-running
+    // main. Read from the CI store alone, never the forge, so any number of agents asking costs no API call.
+    main: procedure
+        .route({
+            method: "GET",
+            path: "/ci/main",
+            summary: "What main's CI is known to fail on now",
+            description:
+                "Each job failing on a workspace repository's main line, with the run and commit it last failed in, when the daemon read it, and the failing tests and errors its log named. Answered from the runs already heard, without asking the forge; a main line nothing is known of says so.",
+        })
+        .meta({ agent: true })
+        .output(CiMainResponseSchema),
     rerun: procedure
         .route({
             method: "POST",

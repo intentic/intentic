@@ -33,6 +33,15 @@ flowchart LR
   The sandbox puts every connected computer behind one `devices` server and routes each call here by its `device`
   argument, which never reaches this agent: the tools it lists are this one machine's. `run_command` also takes
   `timeout` as `timeoutMs`, in milliseconds, since agents reach for Bash's name.
+- (2026-11-17) **Files to and from the sandbox** ([`tools/copy/file-copy.ts`](src/device/tools/copy/file-copy.ts)): the sandbox's
+  `devices copy` carries a file, or a folder as one tar, to a path here or back off one, through `copyFile` on the
+  device link in 2 MiB chunks, up to 2 GiB a copy, never through the model. `read_file` and `write_file` carry text
+  alone, and agents had been moving tarballs with `docker cp` through `run_command`, which works only where their own
+  container runs here. Every chunk is held to the file tools' rules, asked again each time: the allowed folders both
+  ways, and "Create and change files" for a copy onto this machine. A copy lands beside its target as
+  `.<name>.<id>.intentic-part` and is renamed into place once its size and sha256 match; a taken path needs
+  `overwrite`, and a folder copied onto one that exists merges into it. A folder copied off is packed under
+  `~/.intentic/machine/outgoing` and deleted with the copy; one left idle 30 minutes is dropped.
 - What the agent has been shown of the screen is kept for the process's life
   ([`tools/view.ts`](src/device/tools/view.ts)): each screenshot is a frame with an id, shrunk to what a model reads
   whole, and a coordinate is read in the newest frame and mapped back to desktop pixels, so one naming an older frame

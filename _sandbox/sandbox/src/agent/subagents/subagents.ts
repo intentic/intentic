@@ -15,6 +15,7 @@ import { childVerificationNote, forgetChild, resetChildVerification, settledChil
 import { LIVE, ROSTER, subagentRunning } from "../../conversations/actor/subagent-roster.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../opt.js";
+import { isSubagentTask, notifiedStatus, resumedRecord, statusOf, type SubagentTaskMessage, TASKS, taskRecordOf } from "./subagent-tasks.js";
 
 // The registry of subagents the daemon can name, in-process and spawned alike: what the board's trays draw under the card
 // of the conversation that started each, what a delegation's card reads once its turn stops streaming, and what `wait`
@@ -298,54 +299,27 @@ const ending = (
     };
 };
 
-// task_started is the only message with a tool_use id, so only it opens a record; task_updated pairs back via TASKS.
-// Not every task is an agent: the stream also carries shell/monitor/workflow work, filtered by `isSubagentTask`.
-
-// The fields the daemon reads off the SDK's four task_* message shapes.
-export interface SubagentTaskMessage {
-    readonly subtype: string;
-    readonly task_id?: string;
-    readonly tool_use_id?: string;
-    readonly description?: string;
-    // The CLI's raw discriminant; an open string since the SDK adds values to it without notice.
-    readonly task_type?: string;
-    readonly subagent_type?: string;
-    readonly prompt?: string;
-    readonly skip_transcript?: boolean;
-    readonly status?: string;
-    readonly summary?: string;
-    readonly last_tool_name?: string;
-    readonly usage?: { readonly total_tokens?: number; readonly tool_uses?: number; readonly duration_ms?: number };
-    readonly patch?: { readonly status?: string; readonly end_time?: number; readonly error?: string; readonly is_backgrounded?: boolean };
-}
-
-// A task id to the record it opened, held by the turn's conversation; only task_started carries both.
-export const TASKS: Holding<string> = { name: "subagent tasks" };
-
-// True only when `subagent_type` is set or `task_type` is `local_agent`, deliberately a whitelist so an unknown future
-// type is left off. Adopted later anyway via SubagentStop's meta file if unlabelled.
-const isSubagentTask = (message: SubagentTaskMessage): boolean => message.subagent_type !== undefined || message.task_type === "local_agent";
-
-// SubagentStatusSchema's own vocabulary; an SDK status we don't recognize leaves the record's status unchanged.
-const STATUSES: ReadonlySet<string> = new Set<SubagentStatus>(["pending", "running", "completed", "failed", "killed", "paused"]);
-const statusOf = (value: string | undefined): SubagentStatus | undefined =>
-    value !== undefined && STATUSES.has(value) ? (value as SubagentStatus) : undefined;
-
-// Maps task_notification's own status words, not the task vocabulary, to ours; 'stopped' becomes `killed`.
-const NOTIFIED: Record<string, SubagentStatus> = { completed: "completed", failed: "failed", stopped: "killed" };
+// task_started is the only message with a tool_use id, so only it opens a record (or reopens one, a resumed helper:
+// subagent-tasks.ts resumedRecord); the others pair back via TASKS. Not every task is an agent: the stream also carries
+// shell/monitor/workflow work, filtered by `isSubagentTask`.
+export type { SubagentTaskMessage } from "./subagent-tasks.js";
 
 /** Folds one SDK task message into the registry; returns the frame it produced, if any. */
 export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessage): AgentEvent | undefined => {
     const actors = turn.conversations;
     const records = actors.holdings(ROSTER);
-    const tasks = actors.holdings(TASKS);
     if (message.subtype === "task_started") {
         const id = message.tool_use_id;
-        if (id === undefined || message.skip_transcript === true || !isSubagentTask(message) || records.has(id)) {
+        if (id === undefined || message.skip_transcript === true || !isSubagentTask(message)) {
             return undefined;
         }
+        // Another run of a helper the roster holds moves its record back to running; a run already under way, nothing.
+        const resumed = resumedRecord(actors, turn.conversationId, message);
+        if (resumed !== undefined) {
+            return patch(actors, resumed.id, { status: "running" });
+        }
         if (message.task_id !== undefined) {
-            tasks.hold(turn.conversationId, message.task_id, id);
+            actors.holdings(TASKS).hold(turn.conversationId, message.task_id, id);
         }
         return bornFrame(
             open(turn, id, "subagent", {
@@ -354,8 +328,8 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
             }),
         );
     }
+    const id = taskRecordOf(actors, message);
     if (message.subtype === "task_progress") {
-        const id = message.tool_use_id ?? (message.task_id !== undefined ? tasks.get(message.task_id) : undefined);
         return id === undefined
             ? undefined
             : patch(actors, id, {
@@ -366,7 +340,6 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
               });
     }
     if (message.subtype === "task_updated") {
-        const id = message.task_id !== undefined ? tasks.get(message.task_id) : undefined;
         const status = statusOf(message.patch?.status);
         return id === undefined
             ? undefined
@@ -377,7 +350,6 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
               });
     }
     if (message.subtype === "task_notification") {
-        const id = message.tool_use_id ?? (message.task_id !== undefined ? tasks.get(message.task_id) : undefined);
         const record = id !== undefined ? records.get(id) : undefined;
         // Weakest of the three endings; routed through `ending` so a report already delivered wins over it.
         return record === undefined
@@ -385,7 +357,7 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
             : patch(actors, record.id, {
                   ...ending(record, {
                       source: "notification",
-                      ...(message.status !== undefined && NOTIFIED[message.status] !== undefined ? { status: NOTIFIED[message.status] } : {}),
+                      ...opt("status", notifiedStatus(message.status)),
                       ...(message.summary !== undefined ? { summary: message.summary } : {}),
                   }),
                   ...(message.usage?.total_tokens !== undefined ? { tokens: message.usage.total_tokens } : {}),

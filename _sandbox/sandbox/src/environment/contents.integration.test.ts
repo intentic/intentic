@@ -164,6 +164,18 @@ test("a capability's fragment is attributed to the capability that pulled it in"
     expect(fromCapability.some((item) => "block" in item)).toBe(false);
 });
 
+// The compiler cache rides with Rust (rust-cache-pack.ts): nobody's decision, so no Remove and nothing to turn off.
+test("a recipe that installs Rust lists the Rust compiler cache as coming with it", async () => {
+    clearVersionCache();
+    const services = stubServices();
+    await writeWorkspaceFile(customPath(services), "# ---- rust ----\n# The desktop app's toolchain.\nRUN curl -fsSL https://sh.rustup.rs | sh -s -- -y\n");
+
+    const cache = (await readEnvironmentContents(services)).items.filter((item) => item.id === "base:rust-cache");
+    expect(cache).toMatchObject([{ name: "Rust cache", origin: "base", originLabel: "comes with the Rust toolchain" }]);
+    expect(cache[0]?.purpose).toContain("compiler cache");
+    expect(cache[0]).not.toHaveProperty("block");
+});
+
 test("the staples every sandbox ships with are listed, and only where the command answers", async () => {
     clearVersionCache();
     const { items } = await readEnvironmentContents(stubServices());

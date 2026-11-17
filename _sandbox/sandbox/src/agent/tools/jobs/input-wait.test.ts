@@ -1,4 +1,4 @@
-import { blockedDescriptor, INPUT_WAIT_MS, inputWaitOf, type RunSample, stillnessAfter } from "./input-wait.js";
+import { blockedDescriptor, blockedSet, INPUT_WAIT_MS, inputWaitOf, type RunSample, setDescriptors, stillnessAfter } from "./input-wait.js";
 
 // The two decisions the probe makes without the machine: which descriptor a blocked syscall names, and whether a run has
 // sat still long enough, reading its terminal, to be waiting on a person. input-wait.integration.test.ts runs it against
@@ -23,6 +23,37 @@ describe("the descriptor a blocked syscall waits on for input", () => {
         expect(blockedDescriptor("", "x64")).toBeUndefined();
         // An architecture with no table reads nothing rather than guessing.
         expect(blockedDescriptor("0 0x0 0x39689b90", "riscv64")).toBeUndefined();
+    });
+});
+
+describe("the set a blocked poll or select waits on", () => {
+    it("is where the pollfd array or the read set sits, and how many descriptors it holds", () => {
+        // As /proc/<pid>/syscall printed python 3.13's REPL on x86-64 (2026-11-17): poll, one entry, a 100 ms timeout.
+        expect(blockedSet("7 0x7eff12da0780 0x1 0x64 0x0 0x0 0x0 0x7ffebde4bb60 0x7eff12f0c3a7", "x64")).toEqual({ kind: "poll", address: 0x7eff12da0780, count: 1 });
+        expect(blockedSet("271 0x7ffc10 0x2 0x0 0x0 0x8", "x64")).toEqual({ kind: "poll", address: 0x7ffc10, count: 2 });
+        // select and pselect6 count first and point second.
+        expect(blockedSet("23 0x1 0x7ffd20 0x0 0x0 0x0", "x64")).toEqual({ kind: "select", address: 0x7ffd20, count: 1 });
+        expect(blockedSet("72 0x5 0xffffd1e0 0x0 0x0 0x0 0x0", "arm64")).toEqual({ kind: "select", address: 0xffffd1e0, count: 5 });
+        // No read set, an empty one, a read, an unknown architecture: nothing to look at.
+        expect(blockedSet("23 0x4 0x0 0x7ffd20 0x0 0x0", "x64")).toBeUndefined();
+        expect(blockedSet("7 0x7ffc10 0x0 0x64", "x64")).toBeUndefined();
+        expect(blockedSet("0 0x0 0x39689b90 0x400", "x64")).toBeUndefined();
+        expect(blockedSet("7 0x7ffc10 0x1 0x64", "riscv64")).toBeUndefined();
+        expect(blockedSet("running", "x64")).toBeUndefined();
+    });
+
+    it("waits for input on the descriptors asking for it: pollfds with POLLIN, select's set bits", () => {
+        const pollfds = Buffer.alloc(24);
+        pollfds.writeInt32LE(4, 0);
+        pollfds.writeInt16LE(0x1, 4);
+        // Writing only (POLLOUT) is not waiting for input; a negative descriptor is an entry poll skips.
+        pollfds.writeInt32LE(7, 8);
+        pollfds.writeInt16LE(0x4, 12);
+        pollfds.writeInt32LE(-1, 16);
+        pollfds.writeInt16LE(0x1, 20);
+        expect(setDescriptors({ kind: "poll", address: 1, count: 3 }, pollfds)).toEqual([4]);
+        // Descriptors 0 and 9 set; bits past the count are not the set's.
+        expect(setDescriptors({ kind: "select", address: 1, count: 10 }, Buffer.from([0b0000_0001, 0b1000_0010]))).toEqual([0, 9]);
     });
 });
 

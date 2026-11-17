@@ -8,6 +8,7 @@ import type { Config } from "../env.config.js";
 import { opt } from "../opt.js";
 import { splitBlocks, uniqueBlocks, withoutRepeats } from "./overlay-blocks.js";
 import { privacyPackFragments } from "./privacy-pack.js";
+import { rustCachePackFragments } from "./packs/rust-cache-pack.js";
 import { statePath } from "../state-paths.js";
 
 // THE TWO BUILDS A SANDBOX HOLDS: the one it runs, read off what the runner stamped on its container (runningBuild), and
@@ -107,19 +108,19 @@ const materialize = async (services: Services, content: string, fragments: reado
 // `ic` before a swap onto it (compose-overlay.ts), so the two can never compose differently.
 export const composedOverlay = async (services: Services): Promise<{ readonly content: string; readonly fragments: readonly string[] } | undefined> => {
     const capabilities = await services.capabilities.list();
-    const contributed = [
-        ...new Set([
-            ...(await Promise.all(capabilities.map((capability) => services.environmentSources.capabilityFragments(capability)))).flat(),
-            ...(await services.environmentSources.workspaceExtensionFragments()),
-            // Helper binaries a connected provider needs, for a base image that doesn't already bake them.
-            ...(await services.environmentSources.providerPackFragments()),
-            // The privacy shield's readers, while its policy asks for one.
-            ...(await privacyPackFragments(services)),
-        ]),
-    ].toSorted();
-    const fragments = services.config.sandbox.vm ? withoutRuntimeDirectives(contributed) : contributed;
     // Once per tool: a section an older release appended a repeat to builds that tool once, not once per copy.
     const custom = withoutRepeats(((await services.files.read(customPath(services))) ?? "").trim());
+    const sourced = [
+        ...(await Promise.all(capabilities.map((capability) => services.environmentSources.capabilityFragments(capability)))).flat(),
+        ...(await services.environmentSources.workspaceExtensionFragments()),
+        // Helper binaries a connected provider needs, for a base image that doesn't already bake them.
+        ...(await services.environmentSources.providerPackFragments()),
+        // The privacy shield's readers, while its policy asks for one.
+        ...(await privacyPackFragments(services)),
+    ];
+    // The Rust compiler cache, wherever any of the above or the custom section installs Rust (rust-cache-pack.ts).
+    const contributed = [...new Set([...sourced, ...(await rustCachePackFragments([...sourced, custom]))])].toSorted();
+    const fragments = services.config.sandbox.vm ? withoutRuntimeDirectives(contributed) : contributed;
     // The base this container was built from, so a rebuild is version-preserving rather than a silent rollback.
     const base = baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image);
     if (fragments.length === 0 && custom === "") {

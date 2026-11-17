@@ -315,9 +315,17 @@ export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-32}"
 # default, in the same time within noise. Children inherit it, the same as the pool.
 export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"
 
+# --max-semi-space-size: Node 24 let each isolate's young generation grow to 128 MiB here (two 64 MiB halves), and a
+# V8 flag is process-wide, so the daemon's worker threads and the iq engine (forked with these flags) each get one
+# too. 2026-11-17, the shinobi-society audit, measured on a daemon 4 hours up: its own young generation sat at
+# 109-128 MiB resident with about 36 MiB of it live, of about 960 MiB in all, and the workspace watcher's thread,
+# listing /work in isolation, held 162 MiB at 64 against 113 MiB at 16, in the same time. At 16 scavenges come more
+# often, and each still copies only what survives.
+semi_space_mb=16
+
 # netd owns every port and the tunnel, and supervises the daemon behind it: a daemon crash is restarted while the
 # browser's sockets stay open, and the daemon's own exit 0 (a stop, an idle machine) or 78 still ends the container.
 # exec, so netd takes this shell's place and the container's stop signal reaches it, which hands Node its graceful
 # shutdown. It is PID 1 itself only where nothing else is (the hosted runner's `init: false`); a local container's
 # PID 1 is docker's tini (`--init`), and a Fly machine's is Fly's own init, each forwarding the signal to netd.
-exec /opt/sandbox/netd/intentic-netd -- node --max-old-space-size="$heap_mb" --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js
+exec /opt/sandbox/netd/intentic-netd -- node --max-old-space-size="$heap_mb" --max-semi-space-size="$semi_space_mb" --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js

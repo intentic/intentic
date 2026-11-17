@@ -29,6 +29,7 @@ import {
     streakFixerFor,
     TURNS_PER_STREAK,
 } from "./main-fixer.js";
+import { mainKnown } from "./known/main-known.js";
 import type { FailedJob } from "./main-streak.js";
 import { ciProjects } from "./projects.js";
 import type { FetchFn } from "./providers.js";
@@ -868,4 +869,60 @@ test("each workflow keeps its own times, and a failure kept before they were tim
         // Failing since its newest pass.
         CI: { since: Date.parse(forge.runs[109].created_at), failedAt: Date.parse(recent), trigger: "push" },
     });
+});
+
+// 2026-11-17, the shinobi-society audit: agents re-ran main to tell whether a failure was theirs. `agents ci` answers from
+// what the fixer already read of each failed job (main-known.ts), and says so when nothing was heard.
+test("an agent asking what main fails on reads each job's run, commit and failing tests, and nothing heard reads as unknown", async () => {
+    const { services, fetchFn, forge, failRun } = await harness();
+    expect((await mainKnown(services)).branches).toEqual([{ repo: "web", state: "unread", jobs: [] }]);
+
+    forge.log = "src/ci/poller.test.ts:\nerror: expect(received).toBe(expected)\n(fail) polls once [3.00ms]";
+    await failRun(41);
+    const failing = await mainKnown(services);
+    expect(failing.branches).toEqual([
+        {
+            repo: "web",
+            branch: "main",
+            state: "failing",
+            since: expect.any(Number),
+            fixer: FIXER,
+            jobs: [
+                {
+                    workflow: "CI",
+                    job: "verify-core",
+                    runId: 41,
+                    sha: "sha41",
+                    readAt: expect.any(Number),
+                    errors: ["(fail) polls once — expect(received).toBe(expected)"],
+                },
+            ],
+        },
+    ]);
+    expect(failing.text).toContain("  CI / verify-core: run 41 at sha41, read ");
+    expect(failing.text).toContain("    - (fail) polls once — expect(received).toBe(expected)");
+
+    await runFinished(services, run(42, "success"), fetchFn);
+    await services.ciStore.recordConclusion("web", "main", "success", Date.now());
+    expect((await mainKnown(services)).branches).toEqual([
+        { repo: "web", branch: "main", state: "clear", jobs: [], lastRun: { status: "success", at: expect.any(Number) } },
+    ]);
+
+    // A failure kept before findings kept their own run borrows its workflow's newest failed run, and says what is missing.
+    await services.ciStore.failure("web", "main", () => ({
+        since: 1,
+        findings: [{ id: "c", source: "CI", text: "verify-core" }],
+        decisions: [],
+        firstRunId: 50,
+        runId: 50,
+        count: 1,
+        workflows: { CI: 50 },
+        spans: { CI: { since: 1, failedAt: 2 } },
+        heard: [],
+        turns: 0,
+        changed: false,
+    }));
+    const kept = await mainKnown(services);
+    expect(kept.branches[0]?.jobs).toEqual([{ workflow: "CI", job: "verify-core", runId: 50, readAt: 2 }]);
+    expect(kept.text).toContain("what its log named was not kept");
 });

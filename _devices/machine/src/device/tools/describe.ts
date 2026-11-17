@@ -2,6 +2,7 @@ import { arch, hostname, platform, release, type } from "node:os";
 import { execBounded } from "@intentic/base/process";
 import { homeDir } from "@intentic/local-agent";
 import {
+    DEVICE_FEATURE_FILE_COPY,
     DEVICE_FEATURE_KEYRING,
     DEVICE_FEATURE_LOOPBACK_CATCH,
     DEVICE_FEATURE_PROGRAMS,
@@ -110,14 +111,15 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         ...(links === undefined ? {} : { links }),
         // What this agent and the ic under it implement: the ic's asked of that ic rather than written down here, and
         // the agent's own (the loopback catch, landed work delivered into an attached folder, a `devices reach` tunnel to
-        // a host on this machine's network) always, since this build answers them. The keyring only while one is
-        // installed here and answers (keyring/feature.ts).
+        // a host on this machine's network, a file copied to or from a path) always, since this build answers them. The
+        // keyring only while one is installed here and answers (keyring/feature.ts).
         features: [
             ...features,
             DEVICE_FEATURE_LOOPBACK_CATCH,
             DEVICE_FEATURE_PROJECT_DELIVERY,
             DEVICE_FEATURE_PROGRAMS,
             DEVICE_FEATURE_REACH_NETWORK,
+            DEVICE_FEATURE_FILE_COPY,
             ...(keyring ? [DEVICE_FEATURE_KEYRING] : []),
         ],
     };

@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { sleep } from "@intentic/base/async";
 import { opt } from "../../../opt.js";
-import { type BackgroundJob, type Holders, jobCommandLine, jobFinished, jobHandle, jobOutputPath, OUTPUT_TAIL_BYTES } from "./background-jobs.js";
+import { type BackgroundJob, type Holders, jobCommandLine, jobFinished, jobHandle, jobOutputPath, JOBS, OUTPUT_TAIL_BYTES } from "./background-jobs.js";
 import { inputWaitAt } from "./input-wait-follow.js";
 import { MEMORY_KILL_FILE, OUTPUT_FILE, STATUS_FILE, STOP_REASON_FILE } from "./job-files.js";
 import { settleMemoryKills } from "./memory-kills.js";
@@ -102,8 +102,23 @@ const killedForMemory = async (job: BackgroundJob, code: number): Promise<string
     return undefined;
 };
 
+/* AN END HANDED OVER IS AN END TOLD (2026-11-17, the shinobi-society audit). Every reader of a finished job's report is
+   the agent's own call (`wait`, `stop`), so the end it carries has reached the model: the turn's ending then owes it no
+   wake. Until now only Claude Code's completion notice said so, and a job no CLI ever knew as a task (one the daemon runs
+   itself, daemon-jobs.ts, or any job under a runtime without those notices) woke its conversation a second time with an
+   end the agent had already read. */
+const told = (actors: Holders, job: BackgroundJob): void => {
+    const record = actors.holdings(JOBS).get(job.id);
+    if (record !== undefined) {
+        record.notice = "read";
+    }
+};
+
 export const jobReport = async (actors: Holders, job: BackgroundJob, now: number = Date.now(), procRoot = "/proc"): Promise<JobReport> => {
     const finished = jobFinished(job);
+    if (finished) {
+        told(actors, job);
+    }
     const status = finished ? (await tailOf(job, STATUS_FILE, 64)).trim() : "";
     const code = status === "" ? Number.NaN : Number(status);
     const killed = finished ? await killedForMemory(job, code) : undefined;

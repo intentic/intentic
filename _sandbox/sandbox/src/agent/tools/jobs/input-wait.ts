@@ -1,4 +1,4 @@
-import { lstat, readdir, readlink } from "node:fs/promises";
+import { type FileHandle, lstat, open, readdir, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import { pidsOf, procFile } from "../../../seams/session-processes.js";
 import { parseProcStat } from "../../../system/resources/proc-stat.js";
@@ -11,8 +11,9 @@ import { parseProcStat } from "../../../system/resources/proc-stat.js";
 // pipe hides the rest), so the question is answered from /proc instead:
 // - which syscall each process of the pane's session is blocked in, and on which descriptor (/proc/<pid>/syscall): a
 //   `read` on the pane's terminal is a prompt (python's input(), bash's read), and so is an event loop whose epoll set
-//   holds the terminal (/proc/<pid>/fdinfo/<epfd>: node's readline, which is npm's prompt). A socket read sleeps in the
-//   same kernel wait, so the descriptor, not the wait, is what decides;
+//   holds the terminal (/proc/<pid>/fdinfo/<epfd>: node's readline, which is npm's prompt), and a poll or select whose
+//   set holds it (read from /proc/<pid>/mem: python's REPL, which `python3 -` with no script opens). A socket read
+//   sleeps in the same kernel wait, so the descriptor, not the wait, is what decides;
 // - and whether anything moved since: CPU time, the set of processes, and the bytes the run wrote. A reader that has
 //   sat still past INPUT_WAIT_MS is waiting on a person.
 // A server that reads its terminal for shortcuts between requests (vite) is serving, not stuck, so a session holding a
@@ -84,8 +85,8 @@ const linkOf = (path: string): Promise<string> =>
 
 // The syscalls whose first argument is the descriptor being waited on for input, by architecture: the read family on
 // the descriptor itself, and the epoll waits on a set. Others are left out on purpose: a sleep's first argument is a
-// clock (CLOCK_REALTIME is 0, which reads as stdin), a socket read's is a socket, and poll's and select's are arrays and
-// counts, which /proc does not open up.
+// clock (CLOCK_REALTIME is 0, which reads as stdin), and a socket read's is a socket. poll's and select's are arrays in
+// the process's memory, read by `blockedSet` below.
 const INPUT_SYSCALLS = new Map<string, ReadonlySet<number>>([
     // read, pread64, readv, preadv, preadv2; epoll_wait, epoll_pwait, epoll_pwait2.
     ["x64", new Set([0, 17, 19, 295, 327, 232, 281, 441])],
@@ -110,6 +111,80 @@ export const blockedDescriptor = (syscall: string, arch: string = process.arch):
     return Number.isSafeInteger(fd) && fd < 1 << 20 ? fd : undefined;
 };
 
+// 2026-11-17, after the shinobi-society audit: `python3 -` with no script opens python's REPL, which waits in poll (3.13's
+// REPL, a 100 ms timeout with no CPU spent between wakes) or select (readline before it), never in a read. The probe
+// saw no reader, so the command sat until tmux-run's 110 s soft timeout instead of coming back as waiting for input.
+// poll and ppoll: the first argument points at the pollfd array and the second counts it. select and pselect6: the first
+// counts the descriptors and the second points at the read set (NULL for none).
+const POLL_SYSCALLS = new Map<string, ReadonlySet<number>>([
+    ["x64", new Set([7, 271])],
+    ["arm64", new Set([73])],
+]);
+const SELECT_SYSCALLS = new Map<string, ReadonlySet<number>>([
+    ["x64", new Set([23, 270])],
+    ["arm64", new Set([72])],
+]);
+
+// Most descriptors a poll or select set is read for: select's own FD_SETSIZE, and far past any prompt's poll.
+const MAX_SET = 1024;
+
+/** A poll's or select's descriptor set in the blocked process's memory: where it is and how many it holds. */
+export interface BlockedSet {
+    readonly kind: "poll" | "select";
+    readonly address: number;
+    readonly count: number;
+}
+
+/** The descriptor set a process is blocked polling or selecting on, from its /proc/<pid>/syscall line. */
+export const blockedSet = (syscall: string, arch: string = process.arch): BlockedSet | undefined => {
+    const [number, first, second] = syscall.trim().split(/\s+/u);
+    if (number === undefined || first === undefined || second === undefined || !/^\d+$/u.test(number) || ![first, second].every((arg) => /^0x[\da-f]+$/iu.test(arg))) {
+        return undefined;
+    }
+    const call = Number(number);
+    const kind = POLL_SYSCALLS.get(arch)?.has(call) === true ? "poll" : SELECT_SYSCALLS.get(arch)?.has(call) === true ? "select" : undefined;
+    if (kind === undefined) {
+        return undefined;
+    }
+    const [address, count] = (kind === "poll" ? [first, second] : [second, first]).map((arg) => Number.parseInt(arg, 16));
+    return address === undefined || count === undefined || address === 0 || count === 0 || !Number.isSafeInteger(address)
+        ? undefined
+        : { kind, address, count: Math.min(count, MAX_SET) };
+};
+
+// poll's events that ask for input: POLLIN, POLLPRI, POLLRDNORM.
+const POLL_INPUT = 0x1 | 0x2 | 0x40;
+
+/** The descriptors a set waits on for input, from its bytes: pollfd entries ({ int fd; short events; short revents }) or a select bitmap. */
+export const setDescriptors = (set: BlockedSet, bytes: Buffer): number[] => {
+    if (set.kind === "poll") {
+        return Array.from({ length: Math.floor(bytes.length / 8) }, (_, index) => index * 8).flatMap((at) =>
+            bytes.readInt32LE(at) >= 0 && (bytes.readInt16LE(at + 4) & POLL_INPUT) !== 0 ? [bytes.readInt32LE(at)] : [],
+        );
+    }
+    // fd_set is an array of longs, little-endian on both architectures read here: descriptor n is bit n % 8 of byte n / 8.
+    return Array.from({ length: Math.min(set.count, bytes.length * 8) }, (_, fd) => fd).filter((fd) => ((bytes[fd >> 3] ?? 0) & (1 << (fd & 7))) !== 0);
+};
+
+// The set's bytes from the process's memory, empty where /proc/<pid>/mem is refused (the same ptrace access the syscall
+// file needs) or the process moved on.
+const setBytes = async (procRoot: string, pid: number, set: BlockedSet): Promise<Buffer> => {
+    const length = set.kind === "poll" ? set.count * 8 : Math.ceil(set.count / 8);
+    let file: FileHandle | undefined;
+    try {
+        file = await open(join(procRoot, String(pid), "mem"), "r");
+        const bytes = Buffer.alloc(length);
+        const { bytesRead } = await file.read(bytes, 0, length, set.address);
+        return bytes.subarray(0, bytesRead);
+    } catch {
+        // allow(silent-catch): a refused or vanished read leaves the probe blind for this look, never broken; empty is "not reading".
+        return Buffer.alloc(0);
+    } finally {
+        // allow(silent-catch): closing a /proc handle whose process is gone has nothing to report.
+        await file?.close().catch(() => undefined);
+    }
+};
+
 // A /proc file only ptrace access may read (syscall, fdinfo), empty where it is refused: a kernel that keeps them from
 // this daemon leaves the probe blind, never broken.
 const guardedProcFile = (path: string): Promise<string> =>
@@ -118,8 +193,18 @@ const guardedProcFile = (path: string): Promise<string> =>
 
 // Whether `pid` is blocked reading `terminal`: on the terminal's own descriptor, or in an epoll set that holds it.
 const readsTerminal = async (procRoot: string, pid: number, terminal: string): Promise<boolean> => {
-    const fd = blockedDescriptor(await guardedProcFile(join(procRoot, String(pid), "syscall")));
+    const syscall = await guardedProcFile(join(procRoot, String(pid), "syscall"));
+    const fd = blockedDescriptor(syscall);
     if (fd === undefined) {
+        const set = blockedSet(syscall);
+        if (set === undefined) {
+            return false;
+        }
+        for (const watched of setDescriptors(set, await setBytes(procRoot, pid, set))) {
+            if ((await linkOf(join(procRoot, String(pid), "fd", String(watched)))) === terminal) {
+                return true;
+            }
+        }
         return false;
     }
     const target = await linkOf(join(procRoot, String(pid), "fd", String(fd)));

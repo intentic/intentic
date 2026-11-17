@@ -441,8 +441,12 @@ while [ ! -f "$d/status" ]; do
         printf -- '--- command still running in tmux window %s · output so far: %s\n' "$name" "$d/out"
         exit 0
     fi
+    # `release` beside the capture is the daemon asking for the call back now, the command running on: an OpenCode turn
+    # that stops waiting on a background shell hands its pane command to the sandbox as a job instead of letting the
+    # shell's removal TERM this wrapper, whose trap would take the pane down (src/runtimes/opencode/shell/opencode-shell.ts).
     if { [ "$soft" -ge 1 ] && [ "$((elapsed_cs - queued_cs))" -ge "$((soft * 100))" ]; } ||
-        { [ "$wall" -ge 1 ] && [ "$elapsed_cs" -ge "$((wall * 100))" ]; }; then
+        { [ "$wall" -ge 1 ] && [ "$elapsed_cs" -ge "$((wall * 100))" ]; } ||
+        { [ -z "$jobdir" ] && [ -f "$d/release" ]; }; then
         emit running
         [ -n "$queue_note" ] && printf '\n--- %s\n' "$queue_note"
         printf '\n--- command still running in tmux window %s · output so far: %s\n' "$name" "$d/out"

@@ -8,6 +8,7 @@ import { LoopbackCatchEventSchema, LoopbackCatchSchema } from "../schemas/loopba
 import { OkSchema } from "../schemas/shared.js";
 import { ProjectDeliveryResultSchema, ProjectDeliverySchema } from "../schemas/project-delivery.js";
 import { DialLoopbackSchema, StageArtifactResultSchema, StageArtifactSchema } from "../schemas/device-artifacts.js";
+import { CopyFileResultSchema, CopyFileSchema } from "../schemas/device-files.js";
 import {
     KeyringCaptureItemSchema,
     KeyringCaptureResultSchema,
@@ -66,6 +67,10 @@ export const deviceContract = {
     // Only the daemon calls it, for the agent's `devices push`, and only on an agent advertising `programs`; the machine
     // refuses every op unless "Run programs this sandbox sends" is on.
     stageArtifact: oc.input(StageArtifactSchema).output(StageArtifactResultSchema),
+    // A file or a folder copied to or from a path the agent names (schemas/device-files.ts), in chunks. Only the daemon
+    // calls it, for the agent's `devices copy`, and only on an agent advertising `file-copy`; the machine holds every op
+    // to its folders, and a copy onto it to "Create and change files" as well, as its file tools are.
+    copyFile: oc.input(CopyFileSchema).output(CopyFileResultSchema),
     // A connection to the sandbox side of a `devices reach` tunnel: the machine dials its own 127.0.0.1:<port> and, once
     // that answered, opens a WebSocket back to /system/hosts/tunnel with the ticket. Answers once the local port took
     // the connection, or throws (nothing listening there, the switch is off). Advertised with `programs`; the machine

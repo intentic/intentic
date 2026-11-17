@@ -151,6 +151,15 @@ flowchart LR
   (`save_media`, or a download its click started) under `.intentic/records/artifacts/chrome/` with a sanitized name, at
   most 50 MB; `POST /system/webext/file` hands one shelf file to the browser for `upload_file`, only for a one-time
   ticket the daemon adds to that call on its way to the browser, after checking the file's real path is on the shelf.
+- `chatgpt_image` on the owner's own browser does not hold the turn (`agent/tools/jobs/daemon/chatgpt-image-jobs.ts`,
+  2026-11-17): the MCP door makes the extension's call itself and files it as a background job the daemon runs in its
+  own process (`daemon-jobs.ts`), so the agent is answered within seconds with a job id that `wait` collects (the saved
+  path, or why no image came), the card lists, `stop` ends and a turn ended on it is woken by. A refusal that comes back
+  within 5 s is the call's own answer, with no job. Calls queue per browser (`job-lanes.ts`): two at once, one at a time
+  until one image has been made since boot (so two first calls do not both make the sandbox's ChatGPT project), and one
+  chat's calls one after another. The door also rewrites the tool's description in the listing, since the extension's
+  own describes one blocking call. A turn with no conversation has nobody to wake, so its call still waits for the
+  picture; a restart mid-image ends the job as lost, and the image may still land on the shelf.
 - The audit trail (`audit/`, `/history/audit/`): who changed a setting, a member, an area, a secret's gate or a policy,
   who signed in, what was exported or deleted, and with `settings.audit.recordReads` who opened what. One middleware
   records by contract route name (`audit/audit-http.ts`); another module calls `services.audit.record({ actor, action,
@@ -226,6 +235,16 @@ flowchart LR
   refuses to replace a run of the target that its conversation did not start unless it is passed `--replace`. The
   ports list names the conversation and job behind every agent's port (`agent/tools/jobs/port-owners.ts`), which
   `devices ports` prints and the desktop mirror reads to leave an agent's own server off the owner's localhost.
+- (2026-11-17) `devices copy <from> <to>` (`bin/devices`) copies a file or a folder between an agent's shell and a path
+  on one of the owner's computers, either way; one side is written `<device>:<path>`. The CLI reads and writes the
+  bytes in the shell's own view of `/work`, and `hosts/device-files.routes.ts` (`POST` and `GET
+  /devices/{name}/files`) relays them over the device link in 2 MiB `copyFile` chunks, so nothing passes through the
+  model. Like `devices push` it is held to the computers the conversation's turn mounts, and the computer holds each
+  chunk to its folders and, for a copy onto it, its "Create and change files" switch. A copy onto a computer probes
+  first, so a refusal arrives before any bytes are sent. A copy off one streams to the CLI, and the daemon checks it
+  against the computer's sha256 before it passes on the last piece. Each chunk waits up to two minutes, and packing or
+  unpacking a folder up to ten. (In the shinobi-society audit, agents moved a 12 MB tarball with `docker cp` through
+  rog's `run_command`.)
 - A device, desktop sync or a server joins with a command that carries a short code, never a token
   (`peers/redeem-codes.ts`). The code is 8 characters, single-use and expires in 10 minutes. The device's script spends
   it at the public `POST /system/redeem/<code>`, which is rate-limited, and gets back what the command used to carry.
@@ -290,6 +309,10 @@ flowchart LR
   the job IDs in its evidence, so completion and restart replay deliver only additional failures; a refused or busy
   start leaves the pending failures untouched. Continued attempts and retries that were turned away before running
   receive the current evidence too, rather than replaying an older prompt.
+  What the fixer read of each failed job (the run, its commit, when, and the error lines of its log excerpt) stays on
+  the job's finding, and `GET /ci/main` (`ci/known/main-known.ts`, printed by `agents ci`) serves it to agents from the CI
+  store alone, so an agent tells whether a failing test is main's without re-running main or asking the forge. A main
+  line nothing is known of reads `unread`, and a workspace wired to no CI says so.
 - The Pi capability uses its own RPC probe (`runtimes/pi/pi-probe.ts`), shared by the card's status and runtime
   health. A missing CLI stays pending so adding the card can save its image fragment before the install rebuild;
   an installed Pi with no configured models asks for sign-in. The probe sends no model prompt and creates no session.
@@ -978,10 +1001,24 @@ flowchart LR
   `.gradle/` and `.dart_tool/` beside the file that makes their tool build there; each only if git ignores it and
   tracks nothing in it. Removal runs `rm` in a child at the command class's niceness and best-effort IO 7
   (`workload/workload-class.ts`), paced between folders. The checkout itself stays; the next build regenerates what
-  went, and the Rust recipe's sccache (seed-skills/environment) makes that minutes rather than ten. `node_modules` and
+  went, and the rust-cache pack's sccache makes that minutes rather than ten. `node_modules` and
   `dist` are never touched, since in an isolated checkout they are overlay mount points. `leanRustBuilds` (off by
   default) puts `CARGO_PROFILE_DEV_DEBUG` and `CARGO_PROFILE_TEST_DEBUG=line-tables-only` in every turn's shell
   (`agent/run/harness/turn-env.ts`), which overrides a repository's own debug-info profile.
+- Every checkout's Rust builds share one compiler cache (2026-11-17, the shinobi-society audit). Wherever the overlay
+  installs a Rust toolchain and sets no `RUSTC_WRAPPER` of its own, the daemon composes the `rust-cache` pack in front of
+  the custom section (`environment/packs/rust-cache-pack.ts`, `image-packs/rust-cache.Dockerfile`): sccache 0.10.0, a
+  `rustc-cached` wrapper as `RUSTC_WRAPPER`, and `SCCACHE_DIR=/history/cache/sccache` capped at 30 GB, so it reaches
+  agent shells, tmux panes and subagents alike, survives restarts, and is counted by Settings → Storage as a build cache.
+  sccache keys a crate by sources, flags and toolchain rather than the target directory, so a new conversation's first
+  build takes every library crate some checkout already compiled; proc-macros, build scripts, binaries and the
+  workspace's incremental crates still compile. The wrapper starts one server per mount namespace, on
+  `/tmp/sccache-<namespace inode>.sock`: the server runs rustc with the paths it sees, and over the old recipe's one
+  TCP server a second isolated conversation's build failed ("extern location for itoa does not exist", its dependency
+  written into the first conversation's `target/`). It closes fd 9, queue-run's slot lock, so a server outliving its
+  build holds no build slot. Plain rustc where the cache is out of reach: no `/history` (an image build, a fenced turn)
+  or no sccache. Runners keep caches of their own. Memory admission still prices every Cargo build at `cargo-build`,
+  since a hit rate is unknown until the build runs.
 - `sharedCargoTargets` (off by default; a prototype, 2026-11-04, `conversations/worktrees/cargo-warm.ts`) makes an
   isolated checkout's Cargo `target/` an overlay like the dependency mirrors: its lower a frozen copy of the main
   checkout's last finished build of that workspace (`/history/cargo-warm/<workspace>/<created>-<lock>-<toolchain>/`),
@@ -1176,7 +1213,8 @@ other runtimes also bypass the daemon door. Claude’s callback still covers the
 
 Subagent `wait` bounds each child's report separately at 12,000 characters before serializing its
 answer, with a file handle for the full report. Its status, verification and landing fields stay
-structured. It accepts Claude's `agentId` as well as the spawning call's id. Explicit `targets` may mix
+structured. It accepts Claude's `agentId` as well as the spawning call's id. A helper resumed with `SendMessage` runs
+again under the same record, so `wait` blocks until the resumed run ends and returns its report. Explicit `targets` may mix
 child ids and background command ids; the answer includes children in `agents` and commands in `jobs`, returning early
 for trouble. Waits shorter than five seconds are clamped to five seconds. This bound also applies when general output
 cleaning is off. Device shell collection

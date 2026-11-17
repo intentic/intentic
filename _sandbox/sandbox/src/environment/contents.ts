@@ -9,6 +9,7 @@ import { blockCommands, blockProse, blockTools, detailOf, type OverlayBlock, pur
 import { listPacks } from "../image/packs.js";
 import { opt } from "../opt.js";
 import { privacyPackFragments } from "./privacy-pack.js";
+import { rustCachePackFragments } from "./packs/rust-cache-pack.js";
 import { probeAll, probeModules, probePackages } from "./version-probe.js";
 
 // What this sandbox has: composed from the same fragment sources composeEnvironment uses, for attribution, plus the
@@ -98,6 +99,11 @@ const capabilityCandidates = async (services: Services): Promise<Candidate[]> =>
     }
     for (const fragment of await privacyPackFragments(services)) {
         candidates.push({ block: named(fragment, "privacy"), origin: "capability", originLabel: "the privacy shield", source: "privacy" });
+    }
+    // Nobody's decision and nothing to turn off: it comes with a Rust toolchain, the way a staple comes with the image.
+    const custom = (await services.files.read(customPath(services))) ?? "";
+    for (const fragment of await rustCachePackFragments([...candidates.map((candidate) => candidate.block.body), custom])) {
+        candidates.push({ block: named(fragment, "rust-cache"), origin: "base", originLabel: "comes with the Rust toolchain" });
     }
     return candidates;
 };

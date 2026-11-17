@@ -6,7 +6,9 @@ import { LANDING_CHECKS_NOTE_HEADER, LANDING_CHECKS_NOTE_TITLE } from "../../ses
 // checks worth running are the ones scoped to what it changed, and CI checks what the owner pushes, with one fix agent on
 // whatever fails on main (ci/main-fixer.ts). Said with "may" to every runtime, since only an isolated turn of the Claude
 // Code loop meets those checks. Sent on the opening message and after a compaction, like every standing note
-// (turn-premise.ts); it names no failures, so nothing it says goes stale between turns.
+// (turn-premise.ts); it names no failures, so nothing it says goes stale between turns: it points at `agents ci`, which
+// reads main's failures when asked (ci/known/main-known.ts; 2026-11-17, the shinobi-society audit, where agents stashed their
+// work and re-ran main to tell whose a failure was).
 
 export const LANDING_CHECKS_NOTE: TurnNote = {
     title: LANDING_CHECKS_NOTE_TITLE,
@@ -15,6 +17,6 @@ export const LANDING_CHECKS_NOTE: TurnNote = {
         "",
         "Nothing holds your work back: you decide when it is done. When you finish in a checkout of your own, a repository you changed may run its own end-of-turn checks once, and what they find in your change is said back to you: fix what is yours, or say why not. Nothing else checks your work when you finish or after it lands. Run the checks that cover what you changed while you work (the tests for it, a typecheck scoped to it), never the whole repository's suite, nor a full typecheck that takes minutes and gigabytes (a Vue app's vue-tsc): this machine is shared, and CI runs those. Once the owner pushes, CI checks it, and one fix agent takes whatever fails on main.",
         "",
-        "A failure in code you did not touch may be main's own rather than yours: say so, and leave it unless your task is about it.",
+        "A failure in code you did not touch may be main's own rather than yours: say so, and leave it unless your task is about it. `agents ci` lists what main's CI is known to fail on now, failing tests by name: check a failure there instead of re-running main.",
     ].join("\n"),
 };

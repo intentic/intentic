@@ -11,6 +11,7 @@ import type { OrpcContext } from "../app-env.js";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
 import { ciFailureEvidence, jointEvidence, runOf, startCiFix, type WorkflowEvidence } from "./ci-fix.js";
 import { fixPressed, forgetFailure, mainFailures, streakFixerFor, streakRunsBeside } from "./main-fixer.js";
+import { mainKnown } from "./known/main-known.js";
 import { workflowOf } from "./main-streak.js";
 import { ciInputOf, createCiFailureLog } from "./logs/ci-failure-log.js";
 import { ownerSteps } from "./owner-steps.js";
@@ -153,6 +154,8 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
             const listed = await Promise.all(projects.map(listRuns));
             return { repos, runs: services.ciRuns.replace(listed.flat()), failures, ownerSteps: steps };
         }),
+        // From the CI store alone: an agent asking whether a failure is main's costs the forge nothing (main-known.ts).
+        main: i.main.handler(() => mainKnown(services)),
         rerun: i.rerun.handler(onRun("rerun")),
         cancel: i.cancel.handler(onRun("cancel")),
         dispatch: i.dispatch.handler(onRun("dispatch")),

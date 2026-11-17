@@ -9,7 +9,9 @@ import { type EventOf, type ToolEvent, toolCards } from "./opencode-frames.js";
 import {
     answerForm,
     BACKGROUND_WAIT_MS,
+    backgroundWaitOver,
     FOREGROUND_SHELL_MAX_MS,
+    HAND_BACK_MS,
     handover,
     heardBefore,
     noteCall,
@@ -242,6 +244,30 @@ describe("a turn whose own work ended", () => {
         noteExecution(progress, started("s1"), "s1");
 
         expect(progress).toMatchObject({ ownEnded: false, followUpUntil: undefined, backgroundUntil: undefined });
+    });
+
+    // 2026-11-17, the shinobi-society audit: the wait ran out and the shells were removed with the turn, silently.
+    test("whose wait on its background shells ran out asks their pane commands back, and stays a little to read what that wakes", () => {
+        jest.setSystemTime(START);
+        const clock = turnWatchdog(TIMEOUTS);
+        const progress = turnProgress();
+        progress.backgroundUntil = START;
+
+        expect(backgroundWaitOver(progress, clock, () => ["cargo build --release"], START)).toBe(false);
+        expect(progress).toMatchObject({ backgroundOver: true, backgroundUntil: undefined, followUpUntil: START + HAND_BACK_MS });
+        expect(clock.remaining(progress.followUpUntil)).toBe(HAND_BACK_MS);
+        // The wait is spent for the turn: a shell still running after the follow-up is not waited on again.
+        noteExecution(progress, started("s1"), "s1");
+        noteExecution(progress, succeeded("s1"), "s1");
+        expect(settling(progress, 1, clock, START + HAND_BACK_MS)).toBe("done");
+    });
+
+    test("whose wait ran out with nothing to ask back ends", () => {
+        const progress = turnProgress();
+        progress.backgroundUntil = START;
+
+        expect(backgroundWaitOver(progress, turnWatchdog(TIMEOUTS), () => [], START)).toBe(true);
+        expect(progress).toMatchObject({ backgroundOver: true, followUpUntil: undefined });
     });
 });
 

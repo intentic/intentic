@@ -9,6 +9,9 @@ import { WEBEXT_CLIENT_TIMEOUT_MS } from "../peers/webext-call-deadline.js";
 // a call is not left to die mid-wait with nothing said: wait_for, chatgpt_send and chatgpt_read are shortened to fit,
 // with a line saying so, and chatgpt_image, which cannot finish in that time, is refused before it starts, naming the way
 // that does work here (chatgpt_send, whose answer says when to collect a slow one with chatgpt_read).
+// 2026-11-17, the shinobi-society audit: a turn with a conversation never gets here with chatgpt_image any more. The door
+// answers it with a job id within seconds and makes its own call with no ceiling (agent/tools/jobs/daemon/chatgpt-image-jobs.ts),
+// so the refusal is left only for a turn with nobody to wake, whose call still waits for the picture.
 
 // What the browser needs past a wait to read the page and answer: the wait is cut this much short of the client's limit.
 const ANSWER_MARGIN_MS = 10_000;

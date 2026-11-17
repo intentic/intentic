@@ -59,6 +59,9 @@ export const keepJobLog = async (
 // What the forges' readers (providers.ts) hand back for a log they were refused, kept as the log so the digest says so.
 const UNAVAILABLE = "(log unavailable";
 
+/** Whether the forge served the job's log: not empty, nor the note kept for one it refused. */
+export const isReadLog = (log: string): boolean => log !== "" && !log.startsWith(UNAVAILABLE);
+
 /** A failed job's log as an earlier read kept it, or undefined. A finished job's log never changes (a re-run makes new
  *  jobs, with new ids), so a second read of one run (main's fix agent started on it, then a press; Continue; a retry)
  *  takes it from here instead of downloading it again: two seconds for a 4 MB log from GitHub. The note kept for a log
@@ -68,5 +71,5 @@ export const keptJobLog = async (
     job: { readonly repo: string; readonly runId: number; readonly jobId: number; readonly name: string },
 ): Promise<string | undefined> => {
     const log = await readFile(jobLogPath(root, job.repo, job.runId, job.jobId, job.name), "utf8").catch(undefinedIfMissing);
-    return log === undefined || log === "" || log.startsWith(UNAVAILABLE) ? undefined : log;
+    return log === undefined || !isReadLog(log) ? undefined : log;
 };

@@ -37,10 +37,27 @@ const lastPipelineOf = (command: string, depth = 0): PipelineStages => {
 const quietStatus = (status: number, index: number, pipeline: PipelineStages | undefined): boolean =>
     status === 0 || status === 141 || (status === 1 && pipeline?.filters.has(index) === true);
 
+// A pipeline's exit code given alone, with no per-stage statuses (Codex, ACP runtimes and Devin report one number; the
+// tmux footer has none when its status file was not written). No agent shell sets pipefail, so that number is the last
+// stage's: a 1 from a last stage that is a filter is the filter matching nothing, read as 0 like the statuses case.
+// 2026-11-17, after the shinobi-society audit: these runtimes still read `cargo test | grep FAILED` with no match as
+// a failed check. A command that turns pipefail on keeps its 1, which could then be any stage's.
+export const bareExit = (exit: number, command: string | undefined): number => {
+    if (exit !== 1 || command === undefined || /\bpipefail\b/.test(command)) {
+        return exit;
+    }
+    const read = lastPipelineOf(command);
+    return read.filters.has(read.stages - 1) ? 0 : exit;
+};
+
 // How a pipeline exited, from its per-stage statuses: the earliest stage before the last that failed (the check; what
 // follows only filtered its output), else the last stage's, read as 0 when it is a filter that matched nothing. The
-// command, when given, says which stages are filters; without it every non-zero status counts.
+// command, when given, says which stages are filters; without it every non-zero status counts. No statuses at all is
+// `bareExit`.
 export const pipelineExit = (statuses: readonly number[], exit: number, command: string | undefined): number => {
+    if (statuses.length === 0) {
+        return bareExit(exit, command);
+    }
     const read = command === undefined ? undefined : lastPipelineOf(command);
     const pipeline = read?.stages === statuses.length ? read : undefined;
     const failed = statuses.slice(0, -1).findIndex((status, index) => !quietStatus(status, index, pipeline));

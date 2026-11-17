@@ -17,11 +17,12 @@ import { opt } from "../opt.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import type { CiFailure } from "./ci-store.js";
 import { knownConversationIds, startCiFix, WHOLE_LOG } from "./ci-fix.js";
-import { digestOf, excerptOf, type JobExcerpt } from "./logs/failure-digest.js";
+import { digestOf, type JobExcerpt } from "./logs/failure-digest.js";
 import { ciLogsRoot, keepJobLog } from "./logs/job-logs.js";
 import { isMainLine } from "./main-line.js";
 import { orElse, setDown, tell, timedApart } from "./main-ends.js";
 import {
+    excerptOfJob,
     type FailedJob,
     findingOf,
     fixerOf,
@@ -353,9 +354,8 @@ const handOverRun = (services: Services, project: CiProject, branch: string, run
         }
     });
 
-// Parks a failed job for its run's handover, and starts the clock when it is the first parked since the last one. `logPath`
-// is where its whole log was kept for the agent, when it was.
-const park = (services: Services, project: CiProject, job: FailedJob, log: string, logPath: string | undefined, fetchFn: FetchFn): void => {
+// Parks a failed job, with what is kept of its log, for its run's handover, and starts the clock when it is the first.
+const park = (services: Services, project: CiProject, job: FailedJob, excerpt: JobExcerpt, fetchFn: FetchFn): void => {
     const key = batchKeyOf(project.repo, job.runId);
     const batch: Batch = batches.get(key) ?? {
         jobs: new Map(),
@@ -371,8 +371,7 @@ const park = (services: Services, project: CiProject, job: FailedJob, log: strin
     };
     // The clock must not keep a stopping daemon alive; a restart hands the run over from the forge's own word instead.
     batch.timer.unref?.();
-    const steps = job.steps ?? (job.step === undefined ? [] : [job.step]);
-    batch.jobs.set(job.jobId, { job, excerpt: excerptOf({ name: job.name, url: job.url, steps, log, logPath }) });
+    batch.jobs.set(job.jobId, { job, excerpt });
     batches.set(key, batch);
 };
 
@@ -420,7 +419,8 @@ export const jobFailed = async (services: Services, project: CiProject, heardJob
             "ci repair: the failed job's log could not be kept for its fix agent",
             { repo: project.repo, runId: job.runId, jobId: job.jobId },
         );
-        const streak = await services.ciStore.failure(project.repo, job.branch, (previous) => withJob(previous, job, Date.now()));
+        const { excerpt, named } = excerptOfJob(job, log, logPath);
+        const streak = await services.ciStore.failure(project.repo, job.branch, (previous) => withJob(previous, job, Date.now(), named));
         publishRuntimeChange("ci");
         if (streak === undefined || waitsForOwner(streak)) {
             return "code";
@@ -435,7 +435,7 @@ export const jobFailed = async (services: Services, project: CiProject, heardJob
             }
             return "code";
         }
-        park(services, project, job, log, logPath, fetchFn);
+        park(services, project, job, excerpt, fetchFn);
         return "code";
     });
 };
@@ -463,10 +463,7 @@ const failedStepsOf = async (services: Services, project: CiProject, run: Pipeli
         ciClientFor(project.account.provider, fetchFn).failedSteps(project, run.runId),
         [],
         "ci repair: the run's failed jobs could not be read",
-        {
-            repo: project.repo,
-            runId: run.runId,
-        },
+        { repo: project.repo, runId: run.runId },
     );
 
 // A passing run takes its workflow off the streak; the last one off ends it. A failure kept before workflows were told
@@ -747,9 +744,7 @@ export const resumeMainFixer = async (services: Services, fetchFn: FetchFn = fet
             ciClientFor(project.account.provider, fetchFn).listRuns(project, RUNS_LISTED),
             [],
             "ci repair: runs not listed at boot, main's failure waits for the next run",
-            {
-                repo,
-            },
+            { repo },
         );
         // Oldest first, as they happened.
         for (const run of runs.filter((candidate) => candidate.branch === branch && candidate.runId >= streak.firstRunId).toReversed()) {

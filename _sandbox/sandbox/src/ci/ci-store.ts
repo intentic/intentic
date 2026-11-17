@@ -35,6 +35,13 @@ const CiFindingSchema = z.object({
     // Whether it failed by running out of time, the last time it failed: GitHub reports that as a cancel
     // (forge/github-cancels.ts), GitLab as `job_execution_timeout`.
     timedOut: z.boolean().optional(),
+    // 2026-11-17, the shinobi-society audit: what the fixer read of the job when it last failed, kept so an agent asking
+    // whether a failure is main's (`agents ci`, main-known.ts) is answered without a forge call: the run and its commit,
+    // when it was read, and the error lines its log named (main-streak.ts keptErrors). Absent on a finding kept before.
+    runId: z.number().optional(),
+    sha: z.string().optional(),
+    readAt: z.number().optional(),
+    errors: z.array(z.string()).optional(),
 });
 export type CiFinding = z.infer<typeof CiFindingSchema>;
 
@@ -147,6 +154,8 @@ export interface CiStore {
     // Minted on first read, stable after; hook registrations and signature checks must agree across boots.
     readonly secret: () => Promise<string>;
     readonly lastConclusion: (repo: string, branch: string) => Promise<"success" | "failed" | undefined>;
+    // The same, with when it was heard: how fresh what `agents ci` says of a main line is (main-known.ts).
+    readonly conclusion: (repo: string, branch: string) => Promise<{ readonly status: "success" | "failed"; readonly at: number } | undefined>;
     readonly recordConclusion: (repo: string, branch: string, status: "success" | "failed", at: number) => Promise<void>;
     // Ids already announced for this repo, or undefined if never polled: "nothing new" vs "nothing known yet".
     readonly announcedRuns: (repo: string) => Promise<number[] | undefined>;
@@ -194,6 +203,7 @@ export const fileCiStore = (path: string): CiStore => {
     return {
         secret: async () => (await file.update(minted)).secret,
         lastConclusion: async (repo, branch) => (await file.read()).conclusions[keyOf(repo, branch)]?.status,
+        conclusion: async (repo, branch) => (await file.read()).conclusions[keyOf(repo, branch)],
         recordConclusion: async (repo, branch, status, now) => {
             await file.update((state) => {
                 const conclusions = { ...state.conclusions, [keyOf(repo, branch)]: { status, at: now } };

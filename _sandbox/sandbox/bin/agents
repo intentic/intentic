@@ -78,6 +78,11 @@ LOOK UP — reach for these instead of searching /history by hand
                                        stored, and the diagnostics about it (timeline, turns, log errors,
                                        restarts, the editor's reports). For looking into it from somewhere
                                        else; --out writes it to a file instead of printing it
+  agents ci [--json]                   what main's CI is known to fail on now: ask it BEFORE re-running main to
+                                       see whether a failure is yours. Each failing job with the run, commit and
+                                       time it was read, and the failing tests and errors its log named. From
+                                       the runs the daemon already heard, asking no forge; it says when nothing
+                                       is known (no CI wired, no run of main heard yet)
   ... --on <link>                      ls, find, show and bundle read a LINKED sandbox's conversations
                                        instead, when its owner shares records on the link (\`agents links\`
                                        says which do); \`diagnostics … --on <link>\` reads its logs
@@ -802,6 +807,14 @@ const bundle = async (argv) => {
     process.stdout.write(`Wrote ${answer.conversation}'s bundle (${Math.round(text.length / 1024)} KB) to ${flags.out}.\n`);
 };
 
+// What main's CI is known to fail on (ci/known/main-known.ts), in the daemon's words. 2026-11-17, the shinobi-society audit:
+// agents re-derived it by stashing their work and re-running main; the daemon had already read every failed job's log.
+const ci = async (argv) => {
+    const { flags } = parseFlags(argv, ["json"], ["json"], {}, usageOf("ci"));
+    const answer = await read("/ci/main");
+    process.stdout.write(flags.json === true ? `${JSON.stringify(answer, undefined, 2)}\n` : `${answer.text}\n`);
+};
+
 // What a child could be started on right now, and what still has allowance. The daemon renders the lines
 // (agent/subagents/spawn-catalog.ts) so the CLI, the MCP tool and the spawn refusal cannot drift apart; the
 // rows ride along on stdout as JSON for anything reading this in a pipe.
@@ -1173,13 +1186,14 @@ const [command, ...rest] = process.argv.slice(2);
 const main = async () => {
     // Before any verb runs, so `agents list --help` is the usage and not the list.
     if (rest.includes("--help") || rest.includes("-h")) {
-        process.stdout.write(`${command === "find" || command === "message" || command === "bundle" ? usageOf(command) : USAGE}\n`);
+        process.stdout.write(`${command === "find" || command === "message" || command === "bundle" || command === "ci" ? usageOf(command) : USAGE}\n`);
         return;
     }
     if (command === "show") return show(rest);
     if (command === "ls") return ls(rest);
     if (command === "find") return find(rest);
     if (command === "bundle") return bundle(rest);
+    if (command === "ci") return ci(rest);
     if (command === "providers") return providers(rest);
     if (command === "spawn") return spawn(rest);
     if (command === "delegate") return delegate(rest);

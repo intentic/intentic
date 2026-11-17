@@ -35,8 +35,8 @@ const QuerySchema = z.object({
 
 const refuse = (c: Context<AppEnv>, status: 400 | 403 | 404 | 409 | 502, error: string): Response => c.json({ error }, status);
 
-// The body cut into the machine's chunk size, whatever sizes the socket hands over.
-async function* chunksOf(body: ReadableStream<Uint8Array>, size: number): AsyncGenerator<Buffer> {
+// The body cut into the machine's chunk size, whatever sizes the socket hands over; `devices copy` cuts its own the same way.
+export async function* chunksOf(body: ReadableStream<Uint8Array>, size: number): AsyncGenerator<Buffer> {
     let pending: Buffer[] = [];
     let held = 0;
     for await (const piece of body) {

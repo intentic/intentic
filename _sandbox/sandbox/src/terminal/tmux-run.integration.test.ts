@@ -15,8 +15,9 @@ const TMUX_RUN = join(packageRoot(import.meta.url), "bin", "tmux-run");
 
 // Stub records argv to `calls`, answers pane-id/liveness/dead-pane queries, and (via nsenter) execs through so a hop
 // leaves both an nsenter and tmux line; `plantStatus` writes STATUS_BYTES as the status file.
-// PLANT_WAIT writes the daemon's input-wait marker beside the capture, as input-wait-follow.ts does for a pane at a prompt.
-const plantStatus = `for a in "$@"; do case "$a" in "bash "*/runner) p="\${a#bash }"; [ -n "\${STATUS_BYTES+x}" ] && printf '%s' "$STATUS_BYTES" > "\${p%/runner}/status"; [ -n "\${PLANT_WAIT+x}" ] && printf '%s\\n' "$PLANT_WAIT" > "\${p%/runner}/input-wait" ;; esac; done\n`;
+// PLANT_WAIT writes the daemon's input-wait marker beside the capture, as input-wait-follow.ts does for a pane at a prompt;
+// PLANT_RELEASE its release marker, as an OpenCode turn that stops waiting on a background shell does (opencode-shell.ts).
+const plantStatus = `for a in "$@"; do case "$a" in "bash "*/runner) p="\${a#bash }"; [ -n "\${STATUS_BYTES+x}" ] && printf '%s' "$STATUS_BYTES" > "\${p%/runner}/status"; [ -n "\${PLANT_WAIT+x}" ] && printf '%s\\n' "$PLANT_WAIT" > "\${p%/runner}/input-wait"; [ -n "\${PLANT_RELEASE+x}" ] && : > "\${p%/runner}/release" ;; esac; done\n`;
 
 const stubs = async (): Promise<{ dir: string; calls: () => Promise<string[]> }> => {
     const dir = await mkdtemp(join(tmpdir(), "tmux-run-"));
@@ -118,6 +119,30 @@ test("a command the daemon marks as waiting for input comes back at once, naming
     // Far under the 60 s soft timeout: the marker, not the clock, ended the wait.
     expect(Date.now() - started).toBeLessThan(30_000);
     expect(stdout).toContain("\n--- waiting for input: npm exec eslint src/a.vue (pid 4242)\n--- command still running in tmux window probe · output so far: ");
+});
+
+// 2026-11-17, the shinobi-society audit: an OpenCode shell its turn stopped waiting on was removed, and the TERM that sent
+// this wrapper took its pane down too. Asked back, it returns as at its soft timeout, the pane left running for the job.
+test("a command the daemon asks back comes back at once as still running, and its pane is left to run on", async () => {
+    const { dir, calls } = await stubs();
+    const { INTENTIC_TMUX_NS: _inherited, ...base } = process.env;
+    const started = Date.now();
+    const { stdout } = await execFileAsync("bash", [TMUX_RUN, "agent-release", "true", "probe"], {
+        env: {
+            ...base,
+            PATH: `${dir}:${process.env["PATH"] ?? ""}`,
+            INTENTIC_RUN_FILTER: "0",
+            INTENTIC_RUN_SOFT_TIMEOUT_S: "60",
+            PANE_ALIVE: "1",
+            PLANT_RELEASE: "1",
+        },
+    });
+    expect(Date.now() - started).toBeLessThan(30_000);
+    expect(stdout).toContain("\n--- command still running in tmux window probe · output so far: ");
+    expect(stdout).not.toContain("waiting for input");
+    // The run's own pane (%7, the stub's answer to new-window) is never taken down; the prune of dead windows (@3, the
+    // stub's list-panes answer) may run, and does wherever no turn owner is stamped first (CI).
+    expect((await calls()).some((call) => call.startsWith("tmux kill-window -t %7"))).toBe(false);
 });
 
 // 2026-10-16..10-26: 244 reads of the pane log this line used to name, many answered "No such file or directory": the

@@ -111,27 +111,21 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/root/.cargo/registry \
     curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
-# sccache: compiled crates kept across checkouts, so a target/ the sandbox removed rebuilds from cache.
-RUN set -eu; v=0.10.0; arch="$(uname -m)"; \
-    curl -fsSL "https://github.com/mozilla/sccache/releases/download/v$v/sccache-v$v-$arch-unknown-linux-musl.tar.gz" \
-        | tar -xz -C /usr/local/bin --strip-components=1 "sccache-v$v-$arch-unknown-linux-musl/sccache"; \
-    printf '%s\n' '#!/bin/sh' \
-        '# sccache where its cache can be written; plain rustc where it cannot (a fenced turn sees no /history).' \
-        'mkdir -p "$SCCACHE_DIR" 2>/dev/null && [ -w "$SCCACHE_DIR" ] && exec sccache "$@"' \
-        'exec "$@"' > /usr/local/bin/rustc-cached; \
-    chmod 755 /usr/local/bin/rustc-cached
-ENV RUSTC_WRAPPER=/usr/local/bin/rustc-cached \
-    SCCACHE_DIR=/history/cache/sccache \
-    SCCACHE_CACHE_SIZE=30G
 ```
 
-Every Rust recipe gets the sccache lines. The sandbox removes a settled checkout's `target/` (an hour after it lands,
-six hours after it goes quiet, at once when the disk is short), and without a compiler cache the next build there
-compiles every dependency again: ten minutes on a big workspace, where sccache makes it about one. Keep its cache on
-`/history`, which outlives a restart (`/tmp` does not), and capped (`SCCACHE_CACHE_SIZE`); Settings → Storage counts
-it as a build cache. Don't share one `CARGO_TARGET_DIR` between checkouts instead: Cargo locks a target directory per
-build and keys its fingerprints by path, so two conversations building at once block each other or rebuild each
-other's crates, and one removed checkout's output disappears from under the other.
+**Write no compiler-cache lines into a Rust recipe.** Wherever the overlay installs a Rust toolchain, the daemon
+composes the `rust-cache` pack in front of it by itself: sccache, a `rustc-cached` wrapper as `RUSTC_WRAPPER`, and one
+cache at `/history/cache/sccache` (30 GB cap) that every checkout's builds read and fill, so a new conversation's first
+build takes the dependencies other checkouts already compiled instead of compiling them again. It outlives a restart,
+and Settings → Storage counts it as a build cache. It caches library crates; proc-macros, build scripts, binaries and
+the workspace's own crates still compile in each checkout. A recipe that sets its own `RUSTC_WRAPPER` keeps it and gets
+no pack. A recipe written from this skill between 2026-11-03 and 2026-11-17 may still carry its old sccache lines,
+which start ONE server shared by every conversation; an isolated conversation sees its own checkout at `/work` and that server builds the checkout
+that started it, so builds there fail with "extern location for … does not exist". If you meet that, propose the same
+block without its sccache lines and the pack takes over after the rebuild. Don't share one `CARGO_TARGET_DIR` between
+checkouts either: Cargo locks a target directory per build and keys its fingerprints by path, so two conversations
+building at once block each other or rebuild each other's crates, and one removed checkout's output disappears from
+under the other.
 
 Example (anything built with cmake — the ccache mount is what makes a rebuild cheap):
 

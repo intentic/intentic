@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { cleanMcpResult } from "../guard/mcp-output.js";
 import { maskDeep, maskTargets } from "../agent/tools/agent-redaction.js";
 import { daemonEndpoint, createTurnMountRoute } from "../agent/tools/turn-mounts.routes.js";
+import { chatgptImagesInBackground, imageJobSeeds } from "../agent/tools/jobs/daemon/chatgpt-image-jobs.js";
 import { judgeIndependentCommand } from "../agent/tools/command-judge.js";
 import { workingNames } from "../bootstrap/working-now.js";
 import type { Services } from "../composition.js";
@@ -58,7 +59,11 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
                 daemon: daemonEndpoint,
                 device: hostRoutes.mcp,
                 devices: createDevicesEndpoint(hostDevicesDeps(services, hostRoutes.mcp)),
-                webext: webextRoutes.mcp,
+                // chatgpt_image answered with a job id at once, its picture collected with `wait` (chatgpt-image-jobs.ts).
+                webext: chatgptImagesInBackground(
+                    { seedOf: imageJobSeeds({ conversations: services.conversations, agents: services.agents, historyRoot: services.config.historyRoot }) },
+                    webextRoutes.mcp,
+                ),
                 phone: phoneRoutes.mcp,
                 tools: createExtensionToolsEndpoint(services),
                 extension: createExtensionMcpEndpoint(services),

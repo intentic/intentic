@@ -44,6 +44,28 @@ describe(`entrypoint memory sizing`, () => {
     });
 });
 
+/* The daemon's young generation (docker-entrypoint.test.ts says why): with the entrypoint's flags, a run whose objects
+   outlive a scavenge stays inside two 16 MiB halves, where Node's own default grew the same run to 64 MiB or more. */
+describe(`entrypoint young generation`, () => {
+    // A ring of objects each kept for one lap, so most survive a scavenge, which is what makes V8 grow the space.
+    const CHURN = `const ring = new Array(50000); for (let i = 0; i < 2e6; i++) ring[i % 50000] = { i, s: "x" + i };
+        process.stdout.write(String(require("v8").getHeapSpaceStatistics().find((s) => s.space_name === "new_space").space_size));`;
+    const youngBytes = (flags: readonly string[]): number => {
+        const ran = spawnSync("node", [...flags, "-e", CHURN], { encoding: "utf8" });
+        expect(ran.stderr).toBe("");
+        return Number(ran.stdout);
+    };
+
+    it(`keeps a churning heap's young generation within the ceiling it names`, () => {
+        const semiMb = Number(entrypoint.match(/^semi_space_mb=(\d+)$/mu)?.[1]);
+        const capped = youngBytes([`--max-old-space-size=3072`, `--max-semi-space-size=${String(semiMb)}`]);
+        expect(capped).toBeGreaterThan(0);
+        expect(capped).toBeLessThanOrEqual(2 * semiMb * 1024 ** 2);
+        // The flag is worth carrying only while Node's own ceiling is higher.
+        expect(youngBytes([`--max-old-space-size=3072`])).toBeGreaterThan(capped);
+    });
+});
+
 /* The cgroup section runs against a staged root, and against a staged mount table and namespace beside it: the root's
    cgroup2 mount as Docker made it (read-write when privileged, read-only otherwise) and this container's own cgroup. */
 const cgroupSetup = (): string => {

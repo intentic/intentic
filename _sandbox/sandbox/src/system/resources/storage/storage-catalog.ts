@@ -122,7 +122,7 @@ const PATH_RULES: readonly StoragePathRule[] = [
     { root: "history", prefix: "exports/", category: "exports", depth: 1 },
     { root: "history", prefix: "logs/", category: "logs", depth: 1 },
     { root: "history", prefix: "gits/", category: "repositories", depth: 1 },
-    // The Rust recipe's sccache (seed-skills/environment): compiled crates every checkout's build reuses.
+    // The rust-cache pack's sccache (image-packs/rust-cache.Dockerfile): compiled crates every checkout's build reuses.
     { root: "history", prefix: "cache/sccache/", category: "buildCaches", depth: 0 },
     // Turborepo drops its cache beside the git dirs it resolves a worktree's root through.
     { root: "history", prefix: "gits/.turbo/", category: "buildCaches", depth: 0 },

@@ -445,9 +445,25 @@ describe("reading how a command exited", () => {
         ["pnpm test | sort | head", "--- [exit 0 (pipeline: 0 1 0 — an earlier stage failed), 0s]", 1],
         // Statuses of another length are not the last pipeline's: no stage is known to be a filter.
         ["pnpm test | grep FAIL | head; echo done", "--- [exit 0 (pipeline: 0 1 0 — an earlier stage failed), 0s]", 1],
-        ["pnpm test 2>&1 | grep FAIL", "--- [exit 1, 0s]", 1],
+        // No statuses: with no pipefail the pipeline's 1 is its last stage's, the filter that matched nothing.
+        ["pnpm test 2>&1 | grep FAIL", "--- [exit 1, 0s]", 0],
+        ["cargo test 2>&1 | rg FAILED", "Exit code: 1", 0],
+        ["set -o pipefail; pnpm test 2>&1 | grep FAIL", "--- [exit 1, 0s]", 1],
+        ["grep -n TODO src/a.ts", "Exit code: 1", 1],
+        ["pnpm test 2>&1 | grep FAIL | sort", "Exit code: 1", 1],
+        ["pnpm test 2>&1 | grep FAIL", "Exit code: 2", 2],
     ] as const)("%s with %j exited %p", (command, text, code) => {
         expect(commandExitCode(text, command)).toBe(code);
+    });
+
+    // Runtimes that hand back one number and no per-stage statuses (Codex, ACP, Devin).
+    test.each([
+        [{ status: "failed", text: "", exitCode: 1, command: "cargo test 2>&1 | grep -E 'FAILED|panicked'" }, "passed"],
+        [{ status: "failed", text: "", exitCode: 1, command: "bash -lc 'pnpm test | grep FAIL'" }, "passed"],
+        [{ status: "failed", text: "", exitCode: 1, command: "cargo test" }, "failed"],
+        [{ status: "failed", text: "", exitCode: 101, command: "cargo test | grep FAILED" }, "failed"],
+    ] as const)("a bare exit code: %j is %s", (input, outcome) => {
+        expect(checkOutcome(input)).toBe(outcome);
     });
 
     test.each([

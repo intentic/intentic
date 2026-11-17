@@ -108,9 +108,14 @@ export type TurnQueue = ReturnType<typeof turnQueue>;
 export const FOLLOW_UP_MS = 5_000;
 
 // How long a turn whose own work has ended waits on a shell it left running in the background: a build or a test run it
-// means to read the end of. Past this the turn ends, and the shell with it (a dev server never ends on its own, and
-// would otherwise hold the turn silent until its cap and then fail it).
+// means to read the end of. Past this the turn stops waiting (a dev server never ends on its own, and would otherwise
+// hold the turn silent until its cap and then fail it): a shell's command running in the conversation's pane is asked
+// back as a sandbox job, and whatever is left ends with the turn (opencode-leftovers.ts says which, and why).
 export const BACKGROUND_WAIT_MS = 10 * 60_000;
+
+// How long a turn that asked its pane commands back waits for their shells to end, which bin/tmux-run makes them do
+// within a second; a shell that has not ended by then is stopped with the turn.
+export const HAND_BACK_MS = 15_000;
 
 // OpenCode's shell tool, and its own time limit on a foreground command when the call names none (2.0.26).
 const SHELL_TOOL = "shell";
@@ -145,6 +150,8 @@ export interface TurnProgress {
     followUpUntil: number | undefined;
     // Until when a turn waits on a shell it left in the background, once its own work ended.
     backgroundUntil: number | undefined;
+    // That wait ran out: the turn waits on its background shells no more, whatever execution follows.
+    backgroundOver: boolean;
     // Steers sent and not yet taken in by the session (by inbox id), those whose send has not answered yet, and those
     // the session took in before the send answered.
     readonly steers: Set<string>;
@@ -169,6 +176,7 @@ export const turnProgress = (): TurnProgress => ({
     ownEnded: false,
     followUpUntil: undefined,
     backgroundUntil: undefined,
+    backgroundOver: false,
     steers: new Set(),
     sending: 0,
     delivered: new Set(),
@@ -364,20 +372,38 @@ export const handover = (event: EventOf<"session.retry.scheduled">, clock: TurnW
 
 /**
  * What the turn waits on once its own work ended and nothing of its family runs: a steer on its way, a form on a card,
- * a shell left in the background (for BACKGROUND_WAIT_MS at most), or a background ending OpenCode is about to wake the
- * session with. `done` once nothing is left to wait on.
+ * a shell left in the background (for BACKGROUND_WAIT_MS at most, once a turn), or a background ending OpenCode is
+ * about to wake the session with. `done` once nothing is left to wait on.
  */
 export const settling = (progress: TurnProgress, shells: number, clock: TurnWatchdog, now = Date.now()): "done" | "wait" => {
     if (progress.steers.size > 0 || progress.sending > 0 || progress.forms > 0) {
         return "wait";
     }
-    if (shells > 0) {
+    if (shells > 0 && !progress.backgroundOver) {
         progress.backgroundUntil ??= now + BACKGROUND_WAIT_MS;
         progress.followUpUntil = progress.backgroundUntil;
         clock.extendPast(progress.backgroundUntil);
         return "wait";
     }
     return progress.followUpUntil === undefined ? "done" : "wait";
+};
+
+/**
+ * The turn's wait on its background shells ran out. 2026-11-17, the shinobi-society audit: the shells were then removed
+ * with the turn, silently, and an agent whose build died at ten minutes could only guess why. Now the pane commands they
+ * run are asked back once (`release`, shell/opencode-shell.ts): each shell ends with its command filed as a job, and
+ * OpenCode wakes the session with the note naming it, which the turn stays HAND_BACK_MS to read. True when nothing could
+ * be asked back, and the turn ends.
+ */
+export const backgroundWaitOver = (progress: TurnProgress, clock: TurnWatchdog, release: () => readonly string[], now = Date.now()): boolean => {
+    progress.backgroundUntil = undefined;
+    progress.backgroundOver = true;
+    if (release().length === 0) {
+        return true;
+    }
+    progress.followUpUntil = now + HAND_BACK_MS;
+    clock.extendPast(progress.followUpUntil);
+    return false;
 };
 
 // What a session's latest recorded message says about its last execution, where it says it ended.

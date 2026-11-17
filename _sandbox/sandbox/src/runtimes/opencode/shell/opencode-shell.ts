@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import { z } from "zod";
 import { followForeground, type ForegroundCall, NO_PROMPTS, PIPESTATUS_TRAP, settleForeground } from "../../../agent/tools/agent-terminals.js";
 import type { BackgroundJobSeed } from "../../../agent/tools/jobs/background-jobs.js";
 import { maskDeep, maskTargets, withheld } from "../../../agent/tools/agent-redaction.js";
+import { STATUS_FILE } from "../../../agent/tools/jobs/job-files.js";
 import { writeRunFile } from "../../../agent/tools/jobs/run-files.js";
 import { resolveCommandSecrets, type SecretAccess } from "../../../secrets/secret-access.js";
 import { opt } from "../../../opt.js";
@@ -34,7 +35,9 @@ import { SHELL_SCRIPT_NAME, shellScript } from "./opencode-shell-script.js";
 // - a pane command tmux-run returned still running (its soft timeout, or a prompt) is filed as a background job when the
 //   script says it is done, and the script prints the note naming the job's id to `wait` on after what the command
 //   printed, as a Claude Code turn's PostToolUse hook adds it (agent-terminals.ts settleForeground). 2026-11-02: 18 such
-//   returns in 8 OpenCode conversations told the agent only where the output was.
+//   returns in 8 OpenCode conversations told the agent only where the output was;
+// - a pane command a turn stops waiting on is asked back (`release`), so its shell ends and the command runs on as a job
+//   instead of dying with the shell (opencode-leftovers.ts).
 
 // What one shell call runs: refused with a sentence, or an argv, whether its output is masked on the way back, and the
 // pane call it went to, settled once the script says it is done.
@@ -48,6 +51,12 @@ export interface ShellRoute {
     // A pane call that returned, by the run id the door gave it: the note the agent reads after its output, where it came
     // back still running and was filed as a job.
     readonly settle: (pane: ForegroundCall, run: string) => string | undefined;
+    // Asks every pane command of this route still running back from its call now (bin/tmux-run's `release`), so the
+    // shell it runs in ends and the command runs on as a job, its note opening with `why`; answers the commands asked
+    // back. None where nothing could be filed as a job (no pane, no job seed).
+    readonly release: (why: string) => readonly string[];
+    // Whether a command still running when its call comes back is filed as a job: run in a pane, with a job seed.
+    readonly adopts: boolean;
 }
 
 // The pane a turn's commands run in: its tmux session, the agent session stamped on its processes, the environment names
@@ -108,36 +117,74 @@ const paneArgv = (pane: ShellPane, said: string, executed: string, runRoot: stri
     return { argv: [TMUX_RUN_BIN, ...forwardFlags(pane.forward), "-f", join(dir, "line"), pane.session], dir };
 };
 
-export const shellRouteOf = (options: ShellRouteOptions): ShellRoute => ({
-    prepare: async ({ command }) => {
-        const resolved = options.secrets === undefined ? { command } : await resolveCommandSecrets(command, options.secrets, "shell", "shell", options.runRoot ?? tmpdir());
-        if ("refusal" in resolved) {
-            return { refused: `Not run: ${resolved.refusal}` };
-        }
-        const masked = options.secrets !== undefined;
-        if (options.pane === undefined) {
-            return { argv: [REAL_BASH, "-c", resolved.command], masked };
-        }
-        const { argv, dir } = paneArgv(options.pane, command, resolved.command, options.runRoot ?? tmpdir());
-        options.surfaced?.();
-        // Followed for a prompt from the start, as a Claude Code turn's foreground call is, where a job could be filed.
-        const pane =
-            options.jobs === undefined
-                ? undefined
-                : followForeground({ dir, command, session: options.pane.session, description: undefined, startedAt: Date.now() }, options.pane.owner);
-        return { argv, masked, pane };
-    },
-    settle: (pane, run) => (options.jobs === undefined ? undefined : settleForeground(options.jobs, pane, run, undefined)),
-    // Read per call, so a credential stored mid-turn masks from the next stretch of output on.
-    mask: async (text) => {
-        if (options.secrets === undefined) {
-            return text;
-        }
-        const targets = maskTargets(await options.secrets.list());
-        // SAFETY: maskDeep maps a string to a string; it only walks into arrays and objects.
-        return targets.length === 0 ? text : (maskDeep(text, targets) as string);
-    },
-});
+// What bin/tmux-run returns on, the command running on, once the daemon writes it beside the capture.
+export const RELEASE_FILE = "release";
+
+// Asks one pane call back; false where its command already finished (or its dir is gone with it).
+const askBack = (call: ForegroundCall): boolean => {
+    if (existsSync(join(call.dir, STATUS_FILE))) {
+        return false;
+    }
+    try {
+        writeRunFile(call.dir, RELEASE_FILE, "");
+        return true;
+    } catch {
+        // allow(silent-catch): a dir tmux-run already removed is a command that finished, with nothing to ask back
+        return false;
+    }
+};
+
+export const shellRouteOf = (options: ShellRouteOptions): ShellRoute => {
+    // The pane calls not yet settled, each with why it was asked back, once it was.
+    const live = new Map<ForegroundCall, string | undefined>();
+    return {
+        adopts: options.pane !== undefined && options.jobs !== undefined,
+        prepare: async ({ command }) => {
+            const resolved = options.secrets === undefined ? { command } : await resolveCommandSecrets(command, options.secrets, "shell", "shell", options.runRoot ?? tmpdir());
+            if ("refusal" in resolved) {
+                return { refused: `Not run: ${resolved.refusal}` };
+            }
+            const masked = options.secrets !== undefined;
+            if (options.pane === undefined) {
+                return { argv: [REAL_BASH, "-c", resolved.command], masked };
+            }
+            const { argv, dir } = paneArgv(options.pane, command, resolved.command, options.runRoot ?? tmpdir());
+            options.surfaced?.();
+            // Followed for a prompt from the start, as a Claude Code turn's foreground call is, where a job could be filed.
+            const pane =
+                options.jobs === undefined
+                    ? undefined
+                    : followForeground({ dir, command, session: options.pane.session, description: undefined, startedAt: Date.now() }, options.pane.owner);
+            if (pane !== undefined) {
+                live.set(pane, undefined);
+            }
+            return { argv, masked, pane };
+        },
+        settle: (pane, run) => {
+            const why = live.get(pane);
+            live.delete(pane);
+            const note = options.jobs === undefined ? undefined : settleForeground(options.jobs, pane, run, undefined);
+            return note === undefined || why === undefined ? note : `${why} ${note}`;
+        },
+        release: (why) =>
+            [...live.entries()].flatMap(([call, asked]) => {
+                if (asked !== undefined || !askBack(call)) {
+                    return [];
+                }
+                live.set(call, why);
+                return [call.command];
+            }),
+        // Read per call, so a credential stored mid-turn masks from the next stretch of output on.
+        mask: async (text) => {
+            if (options.secrets === undefined) {
+                return text;
+            }
+            const targets = maskTargets(await options.secrets.list());
+            // SAFETY: maskDeep maps a string to a string; it only walks into arrays and objects.
+            return targets.length === 0 ? text : (maskDeep(text, targets) as string);
+        },
+    };
+};
 
 /**
  * The pane a turn's root session runs its commands in, its subagents' too; undefined where the session id names no tmux

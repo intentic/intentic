@@ -265,6 +265,48 @@ export const CiRunsResponseSchema = z.object({
         ),
 });
 export type CiRunsResponse = z.infer<typeof CiRunsResponseSchema>;
+// 2026-11-17, the shinobi-society audit: conversation after conversation spent calls finding out whether a test that
+// failed for it was its own or already failing on main (stashing its work, re-running main, comparing), while the daemon
+// had already read every failed main-line job's log. `GET /ci/main` (`agents ci`) answers from what it heard, asking no
+// forge: each job failing on a main line, the run and commit it last failed in, when that was read, and what its log
+// named. A main line nothing is known of says so, so silence never reads as a passing main.
+export const CiMainJobSchema = z.object({
+    workflow: z.string().describe("The workflow it is a job of, by the forge's name. `ci` on a forge that runs one pipeline per commit."),
+    job: z.string().describe("The job, by name."),
+    runId: z.number().optional().describe("The run it last failed in. Absent for a failure heard before the daemon kept it."),
+    sha: z.string().optional().describe("That run's commit, where the forge said."),
+    readAt: z.number().optional().describe("When the daemon read that failure, in milliseconds."),
+    errors: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "What its failed steps printed, one line each and bounded: failing tests by name (`(fail) …`, `test … FAILED`), type and lint errors, failed checks, and how a task ended (a signal's exit code, a heap run out). Empty when its log named nothing of the kind; absent when the log was not read.",
+        ),
+    timedOut: z.boolean().optional().describe("Whether it failed by running out of time. Absent when it did not."),
+});
+export type CiMainJob = z.infer<typeof CiMainJobSchema>;
+export const CiMainBranchSchema = z.object({
+    repo: z.string().describe("Which workspace repository."),
+    branch: z.string().optional().describe("Its main line. Absent when neither the forge nor the clone named a default branch and no run of one was heard."),
+    state: z
+        .enum(["failing", "clear", "unread"])
+        .describe(
+            "`failing`: the jobs below fail on it now. `clear`: a finished run of it was heard and no job of main's own code is known to fail. `unread`: no finished run of it has been heard, so nothing is known.",
+        ),
+    since: z.number().optional().describe("When its first job failed, on a failing one, in milliseconds."),
+    jobs: z.array(CiMainJobSchema).describe("The jobs failing on it now, in the order they began failing. Empty unless it is failing."),
+    lastRun: z
+        .object({ status: z.enum(["success", "failed"]), at: z.number() })
+        .optional()
+        .describe("The newest finished run of it the daemon heard, any workflow: how it ended and when it was heard. Absent when none was."),
+    fixer: z.string().optional().describe("The fix agent on its failure, when one is."),
+});
+export type CiMainBranch = z.infer<typeof CiMainBranchSchema>;
+export const CiMainResponseSchema = z.object({
+    text: z.string().describe("The whole answer in words, as `agents ci` prints it."),
+    branches: z.array(CiMainBranchSchema).describe("Each repository wired to CI, and any main line still failing in one no longer wired."),
+});
+export type CiMainResponse = z.infer<typeof CiMainResponseSchema>;
 // Re-resolves repo → project + token on every call, so a stale card can't act on a mapping the workspace no longer has.
 export const CiRunParamSchema = z.object({
     repo: z

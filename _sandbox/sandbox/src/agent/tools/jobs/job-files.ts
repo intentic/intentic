@@ -48,10 +48,22 @@ export const settleLostRuns = async (root: string = tmpdir(), procRoot = "/proc"
     return endRunnerless(unfinished, procRoot, "\n--- intentic: the sandbox restarted while this ran, and the command did not survive the restart\n");
 };
 
+/* RUNS THE DAEMON CARRIES ITSELF (2026-11-17, the shinobi-society audit). A job the daemon runs in its own process (a
+   ChatGPT image made in the owner's browser, daemon-jobs.ts) has no runner for /proc to find, and its end is written by
+   this process: while it is held here it is alive, and the runnerless sweep leaves it be. Held in memory only, so a
+   restart, which takes the work with it, finds it unheld at boot and writes it down as lost like any other run. */
+const DAEMON_HELD = new Set<string>();
+
+/** Marks a run in `dir` as carried by this daemon process; answers the release, called once its end is written. */
+export const holdDaemonRun = (dir: string): (() => void) => {
+    DAEMON_HELD.add(dir);
+    return () => void DAEMON_HELD.delete(dir);
+};
+
 // Writes the end of every run in `dirs` whose runner is gone, which no runner is left to publish; answers those dirs.
 const endRunnerless = async (dirs: readonly string[], procRoot: string, why: string): Promise<readonly string[]> => {
     const alive = await jobRunnerPids(dirs, procRoot);
-    const lost = dirs.filter((dir) => !alive.has(dir) && !existsSync(join(dir, STATUS_FILE)));
+    const lost = dirs.filter((dir) => !alive.has(dir) && !DAEMON_HELD.has(dir) && !existsSync(join(dir, STATUS_FILE)));
     for (const dir of lost) {
         const started = existsSync(join(dir, COMMAND_FILE)) || existsSync(join(dir, OUTPUT_FILE));
         try {

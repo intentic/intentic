@@ -72,6 +72,23 @@ test("says nothing of a child that failed for any reason but its provider's capa
     await parked;
 });
 
+// The parent already spawned a new child for the failed one's task: the failed one is no news, its replacement is live.
+test("says nothing of a failed child its parent has since replaced with a new spawn for the same task", async () => {
+    parentWith("sub-old", "sub-other");
+    settleChild(actors, "sub-old", { status: "failed", report: "", error: "limit", capacity: true });
+    settleChild(actors, "sub-other", { status: "failed", report: "", error: "limit", capacity: true });
+    // The respawn: a new id, named by the same task as sub-old (parentWith names each row by its id).
+    openSpawnedChild({ conversationId: "parent-1", conversations: actors, subagentsDir: undefined }, { id: "sub-new", description: "sub-old", provider: "claude" });
+    const parked = waitForSubagent(actors, "parent-1", { target: "sub-new", until: ["finished"], timeoutMs: 1_000 });
+    const turns = fakeTurns({ live: true });
+    noticer(turns)(back);
+    await waitFor(() => expect(turns.steers).toHaveLength(1));
+    expect(turns.steers[0]?.text).toContain("child `sub-other` on claude");
+    expect(turns.steers[0]?.text).not.toContain("sub-old");
+    settleSpawnedChild(actors, "sub-new", { status: "completed", report: "done" });
+    await parked;
+});
+
 test("names a failed child once per ending, however many accounts come back; a paused one each time", async () => {
     parentWith("sub-limit", "sub-paused", "sub-busy");
     settleChild(actors, "sub-limit", { status: "failed", report: "", error: "limit", capacity: true });

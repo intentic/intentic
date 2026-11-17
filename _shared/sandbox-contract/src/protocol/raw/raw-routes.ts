@@ -180,6 +180,11 @@ export const RAW_ROUTES = {
     // The `devices push` CLI: a program the agent built, carried to one of the owner's computers in chunks; held to the
     // devices the calling conversation's turn mounts, and refused by the machine itself unless "Run programs" is on.
     "POST /devices/{name}/artifacts": { agent: true, control: "never" },
+    // The `devices copy` CLI: a file or a folder carried to a path on one of the owner's computers, or back off it, in
+    // chunks (hosts/device-files.routes.ts); held to the same rule, and the machine holds each chunk to its folders and,
+    // onto it, its "Create and change files" switch.
+    "POST /devices/{name}/files": { agent: true, control: "never" },
+    "GET /devices/{name}/files": { agent: true, control: "never" },
     // The rest of the `devices` command, held to the same rule (hosts/device-door.routes.ts): the device's app_start for a
     // shell, and its loopback ports reached from the sandbox (hosts/device-tunnels.ts).
     "POST /devices/{name}/apps": { agent: true, control: "never" },

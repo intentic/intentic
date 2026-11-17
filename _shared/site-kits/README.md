@@ -36,5 +36,5 @@ account signed in on chatgpt.com).
 - [src/chatgpt/engine.ts](src/chatgpt/engine.ts) — the chat itself: gates, opening or reopening a chat, sending, the watch in rounds, remembering chats.
 - [src/chatgpt/site.ts](src/chatgpt/site.ts) — everything the kit assumes about ChatGPT's page: the first place to fix after a redesign.
 - [src/chatgpt/steps.ts](src/chatgpt/steps.ts) — the steps that run inside ChatGPT's page, one per call, on the helpers `page-hands.ts` installs.
-- [src/chatgpt/tools.ts](src/chatgpt/tools.ts) — the three tools' descriptions and inputs, the same for every host.
+- [src/chatgpt/tools.ts](src/chatgpt/tools.ts) — the three tools' descriptions and inputs, the same for every host. One exception: the sandbox's door to the person's Chrome runs `chatgpt_image` as a background job and lists it with its own description (`_sandbox/sandbox/src/agent/tools/jobs/daemon/chatgpt-image-jobs.ts`).
 - [src/chatgpt/fake-chatgpt.testing.ts](src/chatgpt/fake-chatgpt.testing.ts) — a stand-in ChatGPT page in jsdom, exported as `./chatgpt/testing` for both hosts' own suites.

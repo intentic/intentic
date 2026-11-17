@@ -71,7 +71,9 @@ export const devicesFull = (facts: Facts, { ids, self, slug, machines, onDemand 
         `${devicesBehind(facts, onDemand === true)}. ${which} When something has to happen out ` +
         `there, DO IT and report what came back, never write a command out for the owner to run on a machine you can ` +
         `reach: \`run_command\` takes a working directory and a deadline of up to ten minutes, ` +
-        `\`read_file\`/\`write_file\`/\`list_dir\` reach that machine's own tree, and \`list_sandboxes\`, ` +
+        `\`read_file\`/\`write_file\`/\`list_dir\` reach that machine's own tree, \`devices copy <from> <to>\` in your shell moves a ` +
+        `file or a folder between this sandbox and one of them either way without its bytes passing through you (one side ` +
+        `written \`${ids[0] ?? "<device>"}:<path>\`; never \`docker cp\`), and \`list_sandboxes\`, ` +
         `\`manage_sandbox\`, \`swap_sandbox\` and \`sandbox_logs\` act on this sandbox's own container; ` +
         `\`inspect_sandbox\` reads another sandbox's conversations and logs there, never \`docker exec\`. ` +
         `Two limits ride with it: anything that restarts, updates, rebuilds or removes THIS sandbox ends your ` +

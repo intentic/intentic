@@ -32,6 +32,7 @@ import { diffRawRoutes } from "./git/changes/diff-raw.routes.js";
 import { desktopSyncRawRoutes } from "./hosts/desktop-sync.routes.js";
 import { deviceArtifactRawRoutes } from "./hosts/device-artifacts.routes.js";
 import { deviceDoorRawRoutes } from "./hosts/device-door.routes.js";
+import { deviceFileRawRoutes } from "./hosts/device-files.routes.js";
 import { deviceRunRawRoutes } from "./hosts/runs/device-runs.routes.js";
 import { enrollRawRoutes } from "./inventory/enroll.routes.js";
 import { intakeRawRoutes } from "./issues/intake.routes.js";
@@ -88,6 +89,7 @@ export const appRawRoutes = (services: Services) =>
         desktopSyncRawRoutes(services),
         deviceArtifactRawRoutes(services),
         deviceDoorRawRoutes(services),
+        deviceFileRawRoutes(services),
         deviceRunRawRoutes(services),
         enrollRawRoutes(services),
         intakeRawRoutes(services),

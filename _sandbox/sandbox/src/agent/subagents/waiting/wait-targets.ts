@@ -2,7 +2,8 @@ import { sleep } from "@intentic/base/async";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { ROSTER } from "../../../conversations/actor/subagent-roster.js";
 import { backgroundJobOf } from "../../tools/jobs/background-jobs.js";
-import { pairLiveSubagents, type SubagentRecord, TASKS } from "../subagents.js";
+import { pairLiveSubagents, type SubagentRecord } from "../subagents.js";
+import { TASKS } from "../subagent-tasks.js";
 
 /* A WAIT ON AN AGENT ID HANDED BACK MOMENTS AGO (2026-11-17, the shinobi-society audit). Claude Code's Agent tool answers
    with the child's agentId, and the roster knows an in-process child by its tool call's id until its meta file is read

@@ -1,7 +1,10 @@
+import { oneLine } from "@intentic/base/one-line";
 import { fnvDigest } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { type CiMainFailure, MAIN_FAILURE_STALE_MS } from "@intentic/sandbox-contract/schemas/ci";
 import type { CiFailure, CiFinding } from "./ci-store.js";
 import { TIMEOUT_REASONS } from "./fleet/fleet-verdict.js";
+import { excerptOf, type JobExcerpt } from "./logs/failure-digest.js";
+import { isReadLog } from "./logs/job-logs.js";
 import { opt } from "../opt.js";
 
 /* MAIN'S STREAK, AS A RECORD. What main-fixer.ts keeps in the CI store about one failing main line, built up one failed
@@ -105,9 +108,26 @@ export const withFixPressed = (
     ],
 });
 
+// Error lines kept on a failing job, and the length each is cut to: enough to match a failing test by name against
+// main's (`agents ci`), bounded so a job printing hundreds costs the CI store a few kilobytes.
+const ERRORS_KEPT = 10;
+const ERROR_CHARS = 240;
+
+// What a job's excerpt names, as its finding keeps it: the errors its failed steps printed (failing tests by name among
+// them), then how its tasks ended, which explain a job that printed no error. Undefined when its log was not read.
+const keptErrors = (excerpt: Pick<JobExcerpt, "errors" | "ends"> | undefined): string[] | undefined =>
+    excerpt === undefined ? undefined : [...excerpt.errors, ...excerpt.ends].slice(0, ERRORS_KEPT).map((line) => oneLine(line, ERROR_CHARS));
+
+// What is kept of a failed job's log, read once: the fix agent's digest of it, and what its finding names for `agents ci`
+// (main-known.ts), which only a log the forge served has.
+export const excerptOfJob = (job: FailedJob, log: string, logPath: string | undefined): { readonly excerpt: JobExcerpt; readonly named?: JobExcerpt } => {
+    const excerpt = excerptOf({ name: job.name, url: job.url, steps: job.steps ?? (job.step === undefined ? [] : [job.step]), log, logPath });
+    return isReadLog(log) ? { excerpt, named: excerpt } : { excerpt };
+};
+
 // The streak after one more failed job: begun at it when there was none. What the banner shows moves now; the job is
-// heard only once it is handed over (withHeard).
-export const withJob = (current: CiFailure | undefined, job: FailedJob, now: number): CiFailure => {
+// heard only once it is handed over (withHeard). `excerpt` is what its log said, when it was read.
+export const withJob = (current: CiFailure | undefined, job: FailedJob, now: number, excerpt?: Pick<JobExcerpt, "errors" | "ends">): CiFailure => {
     const workflow = workflowOf(job.workflow);
     const streak: CiFailure = current ?? {
         since: now,
@@ -124,7 +144,19 @@ export const withJob = (current: CiFailure | undefined, job: FailedJob, now: num
     };
     const newest = streak.workflows[workflow];
     const timedOut = job.reason !== undefined && TIMEOUT_REASONS.has(job.reason);
-    const finding = { ...findingOf(workflow, job.name), ...opt("timedOut", timedOut ? true : undefined) };
+    const errors = keptErrors(excerpt);
+    const finding: CiFinding = {
+        ...findingOf(workflow, job.name),
+        ...opt("timedOut", timedOut ? true : undefined),
+        runId: job.runId,
+        ...opt("sha", job.sha),
+        readAt: now,
+        ...opt("errors", errors),
+    };
+    // What it last failed with replaces what was kept, unless an older run's news of it arrives after a newer run's; a
+    // second hearing of the same run whose log could not be read again keeps the errors the first read.
+    const updated = (owed: CiFinding): CiFinding =>
+        (owed.runId ?? 0) > job.runId ? owed : { ...finding, ...opt("errors", errors ?? (owed.runId === job.runId ? owed.errors : undefined)) };
     const span = streak.spans[workflow];
     // A workflow kept before workflows were timed apart was failing already, at most since the streak began.
     const since = span?.since ?? (newest === undefined ? now : streak.since);
@@ -135,9 +167,9 @@ export const withJob = (current: CiFailure | undefined, job: FailedJob, now: num
         count: streak.count + (newest === undefined || job.runId > newest ? 1 : 0),
         workflows: { ...streak.workflows, [workflow]: Math.max(newest ?? 0, job.runId) },
         spans: { ...streak.spans, [workflow]: { since, failedAt: now, ...opt("trigger", trigger) } },
-        // In place, so the jobs keep the order they began failing in; only whether it timed out moves.
+        // In place, so the jobs keep the order they began failing in; only what it last failed with moves.
         findings: streak.findings.some((owed) => owed.id === finding.id)
-            ? streak.findings.map((owed) => (owed.id === finding.id ? finding : owed))
+            ? streak.findings.map((owed) => (owed.id === finding.id ? updated(owed) : owed))
             : [...streak.findings, finding],
     };
 };

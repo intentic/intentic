@@ -30,6 +30,9 @@ import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createTurnRelay } from "../daemon-tools/turn-relay.js";
 import { createTurnTaint } from "../../guard/turn-taint.js";
+import { HANDED_BACK, stoppedNote, stoppedNotice } from "./shell/opencode-leftovers.js";
+import { BACKGROUND_WAIT_MS, FOLLOW_UP_MS } from "./opencode-turn.js";
+import type { ShellRoute } from "./shell/opencode-shell.js";
 
 // The OpenCode 2 turn: the adapter's events-to-frames mapping over a faked runner, and the runner's session setup, event
 // reading and cleanup over a faked shared server. Event shapes follow what opencode 2.0.26 sends.
@@ -841,6 +844,8 @@ interface FakeOptions {
     readonly unmount?: () => Promise<void>;
     // Runs as a prompt reaches the server, before the server takes it.
     readonly beforePrompt?: () => void;
+    // The command each background shell runs, by id, as the server reports a running one.
+    readonly shells?: Readonly<Record<string, string>>;
 }
 
 // One shared `opencode serve`: every call the turn makes, in order and with its input, and the one stream every lease
@@ -867,6 +872,7 @@ const fakeOpenCode = (options: FakeOptions = {}) => {
         interrupt: [] as Parameters<SessionApi["interrupt"]>[0][],
         remove: [] as Parameters<SessionApi["remove"]>[0][],
         removeShell: [] as Parameters<OpenCodeClient["shell"]["remove"]>[0][],
+        synthetic: [] as Parameters<SessionApi["synthetic"]>[0][],
         mount: [] as { readonly directory: string; readonly servers: readonly OpenCodeMcpServer[] }[],
         recorded: [] as string[][],
     };
@@ -962,6 +968,11 @@ const fakeOpenCode = (options: FakeOptions = {}) => {
                 calls.remove.push(input);
                 step("remove");
             },
+            synthetic: async (input) => {
+                calls.synthetic.push(input);
+                step("synthetic");
+                return unstubbed<Awaited<ReturnType<SessionApi["synthetic"]>>>("synthetic", {});
+            },
             instructions: unstubbed<SessionApi["instructions"]>("client.session.instructions", { entry }),
         }),
         // OpenCode's own slash commands offer nothing here; a turn that asks still reads the list.
@@ -973,6 +984,12 @@ const fakeOpenCode = (options: FakeOptions = {}) => {
             },
         }),
         shell: unstubbed<OpenCodeClient["shell"]>("client.shell", {
+            get: async ({ id, location }) => {
+                step("getShell");
+                const directory = location?.directory ?? WORKSPACE_ROOT;
+                const command = options.shells?.[id] ?? "pnpm dev";
+                return { location: { directory }, data: { id, status: "running", command, cwd: directory, shell: "bash", file: `${id}.out`, metadata: {}, time: { started: 0 } } };
+            },
             remove: async (input) => {
                 calls.removeShell.push(input);
                 step("removeShell");
@@ -1577,7 +1594,77 @@ test("stopping a turn that waits on a background shell ends it, and the shell is
     controller.abort();
     expect(await waiting).toEqual({ done: true, value: undefined });
     expect(fake.calls.removeShell).toEqual([{ id: "sh1", location: { directory: WORKSPACE_ROOT } }]);
-    expect(fake.log.slice(-6)).toEqual(["prompt", "interrupt", "unlisten", "removeShell", "unmount", "release"]);
+    // The model hears of it on its next turn, in its own session.
+    expect(fake.calls.synthetic).toEqual([{ sessionID: "s1", text: stoppedNote(["pnpm dev"], "cut", false), resume: false }]);
+    expect(fake.log.slice(-8)).toEqual(["prompt", "interrupt", "unlisten", "getShell", "removeShell", "synthetic", "unmount", "release"]);
+});
+
+// 2026-11-17, the shinobi-society audit: a turn's wait on its background shells ran out at ten minutes, the shells were
+// removed with it, silently, and the agent whose build died could only guess why.
+const waitedOn = (): Reply => [
+    started("s1"),
+    toolStarted("s1", "c1", "shell"),
+    toolCalled("s1", "c1", { command: "cargo build --release", background: true }),
+    toolProgress("s1", "c1", { shellID: "sh1" }),
+    toolSucceeded("s1", "c1", "Started in the background."),
+    succeeded("s1"),
+];
+
+// A route whose one pane command is asked back, as shell/opencode-shell.ts answers for a command still in its pane.
+const panedRoute = (released: string[], commands: readonly string[]): ShellRoute => ({
+    adopts: true,
+    prepare: async () => ({ refused: "not in this test" }),
+    mask: async (text) => text,
+    settle: () => undefined,
+    release: (why) => {
+        released.push(why);
+        return commands;
+    },
+});
+
+test("a turn whose wait on a background shell runs out asks its pane command back as a job, and reads what the shell's ending wakes", async () => {
+    jest.useFakeTimers();
+    const released: string[] = [];
+    const fake = fakeOpenCode({ replies: [waitedOn()], shells: { sh1: "cargo build --release" } });
+    const seen: OpenCodeTurnEvent[] = [];
+    let ended = false;
+    const turn = { ...runnerTurn, gate: unstubbed<CommandGuard>("gate", {}), shell: () => panedRoute(released, ["cargo build --release"]) };
+    const finished = drainInto(createOpenCodeRunner(fake.openCode)(turn), seen).finally(() => {
+        ended = true;
+    });
+
+    await advanceTimersByTimeAsync(BACKGROUND_WAIT_MS);
+    expect(released).toEqual([HANDED_BACK]);
+    expect(ended).toBe(false);
+    // tmux-run returned, the script printed the job's note, and OpenCode wakes the session with the shell's output.
+    const woken = [started("s1"), textDelta("s1", "It is background job j1 now; I will wait for it."), succeeded("s1")];
+    fake.emit(shellExited("sh1"), ...woken);
+    await advanceTimersByTimeAsync(FOLLOW_UP_MS);
+    await finished;
+
+    expect(seen.slice(-3)).toEqual(woken);
+    expect({ removed: fake.calls.removeShell, told: fake.calls.synthetic }).toEqual({ removed: [], told: [] });
+});
+
+test("a turn whose wait runs out on a shell nothing can ask back stops it, and says so to the person and to the model", async () => {
+    jest.useFakeTimers();
+    const fake = fakeOpenCode({ replies: [waitedOn()], shells: { sh1: "cargo build --release" } });
+    const said: string[] = [];
+    let ended = false;
+    const finished = drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, say: (text) => void said.push(text) })).finally(() => {
+        ended = true;
+    });
+
+    await advanceTimersByTimeAsync(BACKGROUND_WAIT_MS - 1);
+    expect(ended).toBe(false);
+    await advanceTimersByTimeAsync(1);
+    await finished;
+
+    expect(fake.calls.removeShell).toEqual([{ id: "sh1", location: { directory: WORKSPACE_ROOT } }]);
+    expect(said).toEqual([stoppedNotice(["cargo build --release"], "waited")]);
+    expect(said[0]).toContain("10 minutes");
+    expect(fake.calls.synthetic).toEqual([{ sessionID: "s1", text: stoppedNote(["cargo build --release"], "waited", false), resume: false }]);
+    expect(fake.calls.synthetic[0]?.text).toMatch(/^The sandbox stopped a background shell your previous turn left running: `cargo build --release`\. The turn had waited 10 minutes/u);
 });
 
 // ---------------------------------------------------------------------------------------------------------------------

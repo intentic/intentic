@@ -15,8 +15,8 @@ flowchart LR
 - The far end is the browser extension in [_devices/webext](../../_devices/webext), which connects out to the sandbox and enforces per-site grants through the browser's own permission prompts.
 - Both cards share [skills/chrome/SKILL.md](skills/chrome/SKILL.md), templated per connected browser; it tells the agent when to use this browser instead of the sandbox's.
   It also carries how to use the owner's own ChatGPT (`chatgpt_send` and `chatgpt_read`: its project, files, Deep
-  Research and agent mode) and how to generate images through a service the owner pays for (`chatgpt_image`, the
-  by-hand path, prompt craft, getting files in with `save_media`). The daemon renders only `SKILL.md` into the agent's skills, so
+  Research and agent mode) and how to generate images through a service the owner pays for (`chatgpt_image`, which
+  answers with a job id collected with `wait`, the by-hand path, prompt craft, getting files in with `save_media`). The daemon renders only `SKILL.md` into the agent's skills, so
   everything an agent must read lives in that one file; a sibling file would never reach it.
 
 ## Key files

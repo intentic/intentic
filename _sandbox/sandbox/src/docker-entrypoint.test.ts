@@ -69,3 +69,14 @@ describe(`entrypoint GPU libraries`, () => {
         expect(entrypoint.indexOf("exec /opt/sandbox/netd/intentic-netd")).toBeGreaterThan(strip);
     });
 });
+
+/* 2026-11-17, the shinobi-society audit: Node 24's young generation reached 128 MiB in the daemon and in each of its
+   worker threads; the entrypoint holds it to two 16 MiB halves (docker-entrypoint.integration.test.ts measures it). */
+describe(`entrypoint young generation`, () => {
+    it(`hands the daemon a semi-space ceiling of 16 MiB on its own command line, not in NODE_OPTIONS its children read`, () => {
+        const exec = entrypoint.slice(entrypoint.indexOf("exec /opt/sandbox/netd/intentic-netd"));
+        expect(entrypoint).toMatch(/^semi_space_mb=16$/mu);
+        expect(exec.split("\n")[0]).toContain(`node --max-old-space-size="$heap_mb" --max-semi-space-size="$semi_space_mb" `);
+        expect(entrypoint).not.toMatch(/NODE_OPTIONS=.*semi-space/u);
+    });
+});

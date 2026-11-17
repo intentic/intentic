@@ -141,7 +141,8 @@ flowchart LR
   `chatgpt_send` (one prompt in, ChatGPT's answer out: words, images saved into the sandbox, files attached from the
   artifacts shelf, Deep research or agent mode chosen from the composer's tools menu), `chatgpt_read` (a chat's latest
   answer, waited for, for a job that outlived the call that sent it) and `chatgpt_image` (the same engine, done only
-  when a picture comes). Each types the prompt into the composer the way a person's typing reaches a rich editor, sends
+  when a picture comes; the sandbox makes this call itself and hands the agent a job id instead of holding its turn,
+  so several can be in flight, each in a tab of its own, `_sandbox/sandbox/src/agent/tools/jobs/daemon/chatgpt-image-jobs.ts`). Each types the prompt into the composer the way a person's typing reaches a rich editor, sends
   it, waits up to 9 minutes, and saves pictures through `saveMediaFromTab` and long answers through `saveBytes`
   ([`tools/media.ts`](src/background/tools/media.ts)). It never presses ChatGPT's own confirmation buttons (an app
   searching outside the project, agent mode's sensitive step): the answer says ChatGPT is waiting on the person.

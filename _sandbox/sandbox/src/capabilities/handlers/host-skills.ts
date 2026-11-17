@@ -65,6 +65,13 @@ Then:
 | \`mcp__devices__inspect_sandbox\` | Read another sandbox's conversations, transcripts and diagnostics, read-only, through its own \`agents\` (ls, show, find, bundle) and \`diagnostics\` commands: \`{command: "agents", args: ["show", "<id>", "--transcript"]}\`. Use it instead of \`docker exec\` through \`run_command\`. |
 | \`mcp__devices__device_logs\` | This device's own records by name: machine.log (watchdog, keeper, restarts), machine-update.log, audit.jsonl of every tool call, ic's per-run logs; no name lists them. Use it instead of hunting paths with \`run_command\`. |
 
+**Files between the sandbox and this machine** move with \`devices copy\` in the sandbox shell, either way, a file or a
+whole folder, without the bytes passing through you: \`devices copy dist.zip \${id}:<folder or path here>\` puts one
+here, \`devices copy \${id}:<path here> <sandbox path>\` brings one back (a Windows path takes forward slashes,
+\`C:/Users/me/app.zip\`, or quoted backslashes). Up to 2048 MB a copy; a destination that is taken needs \`--overwrite\`. It is held to the folders this machine allows, and a copy onto it to 'Create and change
+files'. Never \`docker cp\` through \`run_command\` (it needs your container to be on this very machine and passes
+every guard by), and never a binary pasted through \`write_file\`.
+
 ## Rules that are not negotiable
 
 1. **Call \`describe\` first**, once, before your first command on this machine. It tells you the OS build, the

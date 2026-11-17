@@ -16,7 +16,10 @@ import { parentsWaitingOn } from "./waiting/subagent-waits.js";
    Only for children the news is about (2026-11-17, the shinobi-society audit, where five such notices each cut a
    parent's 1800 s wait short for children that had failed on a runner's workspace prep or were long replaced): one
    paused for a re-run, or one whose failure was that provider's capacity (child-records.ts CAPACITY_FAILED), and each
-   failed one once per ending, since a second account coming back is no news about it. */
+   failed one once per ending, since a second account coming back is no news about it. A failed child the parent has
+   since replaced is no news either: a later child of the same parent, started after it ended, for the same task (a
+   row is named by its spawn's task line, child-spec.ts taskLine). Nothing on the record links a respawn to the child it
+   replaces, so the task is the link. */
 
 export interface CapacityNoticeDeps {
     readonly conversations: Pick<ConversationActors, "holdings">;
@@ -35,6 +38,19 @@ const noticeOf = (event: AccountReopened, children: readonly string[]): string =
     `${children.length === 1 ? "is" : "are"} failed or paused: send ${children.length === 1 ? "it" : "them"} a follow-up, or ` +
     "cancel a booked re-run and spawn again, rather than waiting for the re-run's own time.";
 
+// Whether a later child of the same parent took over this failed one's task (see the note at the top).
+const replaced = (conversations: CapacityNoticeDeps["conversations"], record: SubagentRecord): boolean => {
+    const { endedAt, description } = record;
+    return (
+        endedAt !== undefined &&
+        description !== undefined &&
+        conversations
+            .holdings(ROSTER)
+            .of(record.conversationId)
+            .some((other) => other.id !== record.id && other.kind === "spawned" && other.startedAt >= endedAt && other.description === description)
+    );
+};
+
 /** Hears each account coming back and tells the parents waiting on it; one notice per account per ten minutes. */
 export const capacityNoticer = (deps: CapacityNoticeDeps): ((event: AccountReopened) => void) => {
     const said = new Map<string, number>();
@@ -48,7 +64,9 @@ export const capacityNoticer = (deps: CapacityNoticeDeps): ((event: AccountReope
             return;
         }
         const owed = (record: SubagentRecord): boolean =>
-            deps.conversations.holdings(CAPACITY_FAILED).get(record.id) === true && !told.has(`${record.id}\u0000${String(record.endedAt)}`);
+            deps.conversations.holdings(CAPACITY_FAILED).get(record.id) === true &&
+            !told.has(`${record.id}\u0000${String(record.endedAt)}`) &&
+            !replaced(deps.conversations, record);
         const waiting = parentsWaitingOn(deps.conversations, event.provider, owed);
         if (waiting.length === 0) {
             return;

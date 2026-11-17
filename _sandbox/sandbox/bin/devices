@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // The in-sandbox devices command: run a program this sandbox built on one of the owner's connected computers.
 //
+//   copy    copy a file or a folder to a path on the computer, or back off it into the sandbox
 //   push    carry a build (a file, or a whole folder) to the computer
 //   start   start a program there and keep it running (its app_start tool, for a shell)
 //   reach   open one of the computer's own loopback ports at the same port here, or a host its network reaches
@@ -13,14 +14,29 @@
 // isolated turn: the build that goes is the one this shell made. The daemon relays everything over the device link and
 // holds it to the computers this caller may act on: the ones this conversation's turn reaches, or, in a run the owner
 // started from the editor, the one computer that run was started for. The computer decides the rest: it refuses all of
-// it unless its "Run programs this sandbox sends" switch is on.
+// it unless its "Run programs this sandbox sends" switch is on, and a copy outside the folders it allows, or onto it with
+// "Create and change files" off.
 //
 // node:http rather than fetch: an upload streams from disk with back-pressure, and a 100 MB build over a tunnel takes
 // longer than undici's default timeouts like.
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, cpSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+    chmodSync,
+    copyFileSync,
+    cpSync,
+    createReadStream,
+    createWriteStream,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    renameSync,
+    rmSync,
+    statSync,
+} from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -35,7 +51,7 @@ const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
 const RUN_GRANT = process.env.INTENTIC_RUN_GRANT ?? "";
 const RUN_FILE = ".intentic/run.json";
 
-const USAGE = `devices — run a program built here on one of the owner's connected computers
+const USAGE = `devices — run a program built here on one of the owner's connected computers, or copy files to and from them
 
   devices run [<target>] [--device <device>] [--no-build] [--repo <dir>] [--attach | --detach] [--replace]
       Everything a repository's ${RUN_FILE} declares for <target> (the only one, when there is one): run its build
@@ -60,6 +76,17 @@ const USAGE = `devices — run a program built here on one of the owner's connec
       started, and close the ports the sandbox opened for it. The computer is the target's own unless --device names
       one; a run id this sandbox started is found by itself. --force skips asking it to close.
 
+  devices copy <from> <to> [--overwrite]
+      Copy a file or a whole folder between this sandbox and a computer, either way, without its bytes passing through
+      your context: one side is <device>:<path> on the computer (rog:C:/Users/me/Downloads/app.zip, z440:/home/me/data;
+      a Windows path takes forward slashes, or quote its backslashes from the shell), the other a path here. A
+      destination that is a folder that exists takes it inside, under its own name, as cp does; one that exists already
+      is refused unless --overwrite (a folder copied onto one merges into it: files of the same name are replaced,
+      nothing else is removed). Up to 2048 MB a copy, a file's executable bit kept. Paths on the computer are held to the folders it allows, and a copy onto it needs its "Create and change
+      files" switch. Use this rather than docker cp through run_command, which needs this sandbox's container on that
+      very computer and passes every guard by, or contents pasted through write_file. A copy of hundreds of MB can
+      outlast a shell's deadline: run it in the background and wait for it.
+
   devices push <device> <path> [--name <name>]
       Copy a file (an .exe, an installer) or a whole folder (a build with its DLLs) to <device>, the computer's name as
       its tools are mounted (mcp__<device>__…). It lands in that computer's runs folder, in a folder named for its
@@ -82,8 +109,8 @@ const USAGE = `devices — run a program built here on one of the owner's connec
   devices reach --list                             what is open
 
 Exit 0: done; the last line is what to use next. Exit 1: refused (the computer is offline, this caller may not act on
-it, its agent is too old, or "Run programs this sandbox sends" is off on its card), or the build failed: say so and
-carry on. Exit 2: misuse or a transport failure.`;
+it, its agent is too old, the path is outside its folders or taken, or the switch the work needs is off on its card), or
+the build failed: say so and carry on. Exit 2: misuse or a transport failure.`;
 
 const die = (message, code = 2) => {
     // Agents discard stderr, so a failure must survive on the stream they read.
@@ -264,6 +291,192 @@ const push = async (args) => {
     const pushed = await pushPath(device, resolve(source), options.name);
     say(pushedLine(device, pushed));
     say(`${pushed.kind === "tar" ? "Unpacked into" : "Saved as"}: ${pushed.path}`);
+};
+
+// THE `copy` VERB (2026-11-17, the shinobi-society audit): agents moved a 12 MB tarball with `docker exec … && docker cp …`
+// through run_command on rog, which works only where this sandbox's container runs on that very computer. The bytes go
+// through the daemon's /devices/{name}/files door (hosts/device-files.routes.ts) and the device link, never the model.
+
+// The contract's FILE_COPY_MAX_BYTES, said here so a copy too big for the computer is refused before it is packed or sent.
+const COPY_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+
+// `<device>:<path>`, the computer's side of a copy. A sandbox path never starts with a name and a colon (write
+// `./name:x` for one that does), and a single letter is a Windows drive, not a computer.
+const DEVICE_SIDE = /^([A-Za-z0-9][A-Za-z0-9._-]+):(.+)$/;
+const sideOf = (text) => {
+    const match = DEVICE_SIDE.exec(text);
+    return match === null ? undefined : { device: match[1], path: match[2] };
+};
+
+const megabytesOf = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+// A path's last segment on the computer, whichever separator it uses there.
+const lastSegment = (path) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
+
+// Removed however this process ends: `die` exits without unwinding a `finally`.
+const scratchOnExit = (path) => process.on("exit", () => rmSync(path, { recursive: true, force: true }));
+
+const copyOnto = async ({ device, path }, local, overwrite) => {
+    let stats;
+    try {
+        stats = statSync(local);
+    } catch {
+        die(`nothing at ${local}`);
+    }
+    if (!stats.isDirectory() && !stats.isFile()) {
+        die(`${local} is neither a file nor a folder`);
+    }
+    const kind = stats.isDirectory() ? "tar" : "file";
+    let file = local;
+    if (kind === "tar") {
+        // A folder travels as one tar, packed here and unpacked there; `tar` is on every computer the agent runs on.
+        const scratch = mkdtempSync(join(tmpdir(), "devices-copy-"));
+        scratchOnExit(scratch);
+        file = join(scratch, "folder.tar");
+        const packed = spawnSync("tar", ["-cf", file, "-C", local, "."], { encoding: "utf8" });
+        if (packed.status !== 0) {
+            die(`could not pack ${local}: ${packed.stderr.trim() || `tar exited ${packed.status}`}`);
+        }
+    }
+    const size = statSync(file).size;
+    if (size > COPY_MAX_BYTES) {
+        die(`${local} is ${megabytesOf(size)}, more than one copy carries (${megabytesOf(COPY_MAX_BYTES)}): split it, or move it with a command on the computer`, 1);
+    }
+    const sha256 = await hashOf(file);
+    const query = new URLSearchParams({ path, name: basename(local), kind, size: String(size), sha256 });
+    if (overwrite) {
+        query.set("overwrite", "1");
+    }
+    if (kind === "file" && (stats.mode & 0o111) !== 0) {
+        query.set("executable", "1");
+    }
+    const route = `${deviceRoute(device, "/files")}?${query}`;
+    // Asked first with nothing sent, so a refusal (a switch, a folder, a path taken) is read before the bytes go out.
+    await answered("POST", `${route}&probe=1`);
+    const copied = await answered("POST", route, { file });
+    say(`Copied ${megabytesOf(size)} to ${device} (sha256 ${sha256.slice(0, 12)}).`);
+    say(`${kind === "tar" ? "Folder" : "File"} on ${device}: ${copied.path}`);
+};
+
+// The copy's bytes into `part` as they stream, hashed and counted: { kind, size, executable, path, received, sha256 }.
+// A refusal before any byte is exit 1 with the computer's own words.
+const download = (route, part) =>
+    new Promise((done, fail) => {
+        const req = request({ host: "127.0.0.1", port: PORT, path: route, method: "GET" }, (response) => {
+            const status = response.statusCode ?? 502;
+            if (status < 200 || status >= 300) {
+                let raw = "";
+                response.on("data", (chunk) => {
+                    raw += chunk.toString();
+                });
+                response.on("end", () => die(refusalOf(raw), 1));
+                return;
+            }
+            const header = (name) => String(response.headers[`x-intentic-copy-${name}`] ?? "");
+            const hash = createHash("sha256");
+            const out = createWriteStream(part, { flags: "wx" });
+            out.on("error", (error) => die(`could not write ${part}: ${error.message}`));
+            let received = 0;
+            let settled = false;
+            // A stream cut short ends in `close` without `end`; the count against the announced size says so.
+            const settle = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                const path = decodeURIComponent(header("path"));
+                out.end(() => done({ kind: header("kind"), size: Number(header("size")), executable: header("executable") === "1", path, received, sha256: hash.digest("hex") }));
+            };
+            response.on("data", (chunk) => {
+                hash.update(chunk);
+                received += chunk.length;
+                if (!out.write(chunk)) {
+                    response.pause();
+                    out.once("drain", () => response.resume());
+                }
+            });
+            response.on("end", settle);
+            response.on("close", settle);
+            // allow(silent-catch): a cut stream is said by its count, after `close`
+            response.on("error", () => undefined);
+        });
+        req.on("error", fail);
+        req.setHeader("x-intentic-agent", token());
+        if (CONVERSATION !== "") {
+            req.setHeader("x-intentic-conversation", CONVERSATION);
+        }
+        if (RUN_GRANT !== "") {
+            req.setHeader("x-intentic-run-grant", RUN_GRANT);
+        }
+        req.end();
+    });
+
+// A folder unpacked aside and renamed into place whole, or into one that exists (with --overwrite).
+const unpackInto = (archive, target) => {
+    const into = existsSync(target) ? target : `${archive}.unpack`;
+    mkdirSync(into, { recursive: true });
+    if (into !== target) {
+        scratchOnExit(into);
+    }
+    const unpacked = spawnSync("tar", ["-xf", archive, "-C", into], { encoding: "utf8" });
+    if (unpacked.status !== 0) {
+        die(`could not unpack the folder from the computer: ${unpacked.stderr.trim() || `tar exited ${unpacked.status}`}`);
+    }
+    if (into !== target) {
+        renameSync(into, target);
+    }
+};
+
+const copyOff = async ({ device, path }, local, overwrite) => {
+    const target = existsSync(local) && statSync(local).isDirectory() ? join(local, lastSegment(path)) : local;
+    if (existsSync(target) && !overwrite) {
+        die(`${target} already exists: copy again with --overwrite to replace it`, 1);
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    const part = join(dirname(target), `.${basename(target)}.${process.pid}.devices-part`);
+    scratchOnExit(part);
+    const got = await download(`${deviceRoute(device, "/files")}?${new URLSearchParams({ path })}`, part).catch((error) =>
+        die(`the daemon could not be reached: ${error.message}`),
+    );
+    if (got.received !== got.size) {
+        die(
+            `the copy from ${device} was cut after ${got.received} of ${got.size} bytes: the computer stopped answering, refused part-way ` +
+                `(a switch turned off, a folder taken off its list) or the file changed while it was read. Copy again.`,
+            1,
+        );
+    }
+    const there = existsSync(target) ? statSync(target) : undefined;
+    if (got.kind === "tar") {
+        if (there !== undefined && !there.isDirectory()) {
+            die(`${target} is not a folder, so a folder cannot be copied into it`, 1);
+        }
+        unpackInto(part, target);
+    } else {
+        if (there?.isDirectory() === true) {
+            die(`${target} is a folder, so a file cannot replace it`, 1);
+        }
+        if (got.executable) {
+            chmodSync(part, statSync(part).mode | 0o111);
+        }
+        renameSync(part, target);
+    }
+    say(`Copied ${megabytesOf(got.size)} from ${device} (sha256 ${got.sha256.slice(0, 12)}).`);
+    say(`${got.kind === "tar" ? "Folder" : "File"} here: ${target}`);
+};
+
+const copy = async (args) => {
+    const { options, rest } = parse(args, { flags: ["--overwrite"] });
+    const [from, to] = rest;
+    if (from === undefined || to === undefined || rest.length > 2) {
+        die(`copy takes a source and a destination\n\n${USAGE}`);
+    }
+    const source = sideOf(from);
+    const destination = sideOf(to);
+    if ((source === undefined) === (destination === undefined)) {
+        die(`copy needs exactly one side on a computer, written <device>:<path> (rog:C:/Users/me/app.zip), and the other a path here`);
+    }
+    const overwrite = options.overwrite === true;
+    await (destination === undefined ? copyOff(source, resolve(to), overwrite) : copyOnto(destination, resolve(from), overwrite));
 };
 
 const startOn = async (device, body) => {
@@ -843,7 +1056,7 @@ if (verb === undefined || verb === "--help" || verb === "-h" || verb === "help")
     say(USAGE);
     process.exit(verb === undefined ? 2 : 0);
 }
-const verbs = { push, start, reach, run, stop, attach, ports };
+const verbs = { copy, cp: copy, push, start, reach, run, stop, attach, ports };
 if (verbs[verb] === undefined) {
     die(`unknown command "${verb}"\n\n${USAGE}`);
 }

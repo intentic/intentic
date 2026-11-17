@@ -45,6 +45,13 @@ export interface CheckOptions {
 
 export type RunCheck = (command: string, options: CheckOptions) => Promise<CheckResult>;
 
+// The arguments to `bash` that run a check. 2026-11-17, after the shinobi-society audit: a check that wrote its progress
+// with `> /dev/stderr` failed on "No such device or address", since Node hands a child its streams as a socket pair and
+// /dev/stdout and /dev/stderr cannot reopen a socket. The check now runs behind bash's own `| cat`, a real pipe they
+// can reopen, its two streams arriving as one in the order written; its status is still its own, not cat's.
+const PIPED = 'bash -lc "$1" 2>&1 | cat; exit "${PIPESTATUS[0]}"';
+const checkArgs = (command: string): readonly string[] => ["-c", PIPED, "watch-check", command];
+
 const tailOf = (stdout: string, stderr: string): string => `${stdout}${stderr === "" ? "" : `\n${stderr}`}`.trim().slice(-OUTPUT_TAIL);
 
 interface Spawned {
@@ -78,7 +85,7 @@ const plainCheck = async (command: string, options: CheckOptions): Promise<Check
     if (!(await exists(options.cwd))) {
         return { exitCode: undefined, output: "", broken: `the directory it runs in, ${options.cwd}, is gone` };
     }
-    const done = await run(["bash", "-lc", command], options);
+    const done = await run(["bash", ...checkArgs(command)], options);
     return done.failed === undefined
         ? { exitCode: done.code, output: tailOf(done.stdout, done.stderr) }
         : { exitCode: undefined, output: tailOf(done.stdout, done.stderr), broken: `the check could not start: ${done.failed}` };
@@ -86,7 +93,7 @@ const plainCheck = async (command: string, options: CheckOptions): Promise<Check
 
 // The anchor's own script with the check as its trailer; the inherited PWD names the daemon's tree, so it is unset.
 const namespacedCheck = async (command: string, options: CheckOptions, script: (trailer: string) => string, root: string): Promise<CheckResult> => {
-    const trailer = [`echo ${CHECK_READY}`, `cd ${shellQuote(root)}`, `exec env -u PWD -u OLDPWD bash -lc ${shellQuote(command)}`].join("\n");
+    const trailer = [`echo ${CHECK_READY}`, `cd ${shellQuote(root)}`, `exec env -u PWD -u OLDPWD bash ${checkArgs(command).map(shellQuote).join(" ")}`].join("\n");
     const done = await run(["unshare", "--mount", "--propagation", "private", "sh", "-c", script(trailer)], { cwd: "/", env: options.env });
     const marker = done.stdout.indexOf(`${CHECK_READY}\n`);
     if (done.failed !== undefined || marker === -1) {
@@ -124,7 +131,7 @@ const sandboxedCheck = async (command: string, options: CheckOptions, plan: Isol
         return { exitCode: undefined, output: "", broken: `its conversation's sandbox could not be built: ${errorMessage(error)}` };
     }
     try {
-        const entry = nsenterArgv(namespaceTargetOf(anchor), cwd ?? anchor.cwd, "bash", ["-lc", command]);
+        const entry = nsenterArgv(namespaceTargetOf(anchor), cwd ?? anchor.cwd, "bash", [...checkArgs(command)]);
         const env = { ...options.env };
         if (anchor.sandbox !== undefined) {
             Object.assign(env, sandboxEnv(anchor.sandbox));

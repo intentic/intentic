@@ -4,6 +4,8 @@ import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabiliti
 import type { DeviceFlowLine, DeviceSandboxFlow, DeviceSandboxOp } from "@intentic/sandbox-contract/schemas/devices";
 import type { HostCrashEvent, HostMemory } from "@intentic/sandbox-contract/schemas/hosts";
 import type { ProjectDelivery, ProjectDeliveryResult } from "@intentic/sandbox-contract/schemas/project-delivery";
+import type { CopyFile, CopyFileResult } from "@intentic/sandbox-contract/schemas/device-files";
+import type { StageArtifact, StageArtifactResult } from "@intentic/sandbox-contract/schemas/device-artifacts";
 import { implement, ORPCError } from "@orpc/server";
 import { audit } from "./audit.js";
 import { setEgress } from "./egress/set-egress.js";
@@ -13,6 +15,7 @@ import { catchLoopback } from "./loopback-catch.js";
 import { handleMcpMessage } from "./mcp.js";
 import { ScopeError } from "./policy.js";
 import { stageArtifact } from "./tools/programs/artifacts.js";
+import { copyFile } from "./tools/copy/file-copy.js";
 import { dialLoopback } from "./tools/programs/device-tunnel.js";
 import { hostFacts } from "./tools/describe.js";
 import { windowsMemory } from "../environments/windows-memory.js";
@@ -243,6 +246,38 @@ const deliverOverLink = async (runtime: HostRuntime, delivery: ProjectDelivery):
     }
 };
 
+// A program the sandbox built, carried in pieces into this sandbox's runs folder (tools/programs/artifacts.ts). Behind
+// "Run programs this sandbox sends", read per piece; only a commit is audited, since a build is fifty pieces.
+const stageOverLink = async (runtime: HostRuntime, input: StageArtifact): Promise<StageArtifactResult> => {
+    try {
+        const result = await stageArtifact(input, runtime.scopes(), runtime.sandboxUrl);
+        if (input.op === "commit" || (input.op === "have" && result.path !== undefined)) {
+            void audit({ tool: "stageArtifact", ok: true, detail: `${input.op} ${input.name} → ${result.path ?? ""}` });
+        }
+        return result;
+    } catch (error) {
+        void audit({ tool: "stageArtifact", ok: false, detail: `${input.op}: ${error instanceof ScopeError ? "refused" : "failed"}: ${errorMessage(error)}` });
+        throw new ORPCError(error instanceof ScopeError ? "FORBIDDEN" : "BAD_REQUEST", { message: errorMessage(error) });
+    }
+};
+
+// A FILE OR A FOLDER COPIED TO OR FROM A PATH THE SANDBOX NAMES (tools/copy/file-copy.ts, `devices copy`), a chunk per call.
+// Behind the file tools' own rules, read per chunk; audited where a copy opens and where it lands, and wherever one fails,
+// since a copy is a thousand pieces.
+const copyOverLink = async (runtime: HostRuntime, input: CopyFile): Promise<CopyFileResult> => {
+    try {
+        const result = await copyFile(input, runtime.scopes());
+        if (input.op === "put-commit" || input.op === "get-open") {
+            const what = input.op === "put-commit" ? "landed" : `read (${result.kind ?? "file"}, ${result.size ?? 0} bytes)`;
+            void audit({ tool: "copyFile", ok: true, detail: `${input.op} ${result.path ?? ""} ${what}` });
+        }
+        return result;
+    } catch (error) {
+        void audit({ tool: "copyFile", ok: false, detail: `${input.op}: ${error instanceof ScopeError ? "refused" : "failed"}: ${errorMessage(error)}` });
+        throw new ORPCError(error instanceof ScopeError ? "FORBIDDEN" : "BAD_REQUEST", { message: errorMessage(error) });
+    }
+};
+
 type DeviceImplementer = ReturnType<typeof implement<typeof tolerantDeviceContract>>;
 
 // The keyring on this computer, relayed (keyring/relay.ts). Behind no switch of the grant: the keyring answers to its
@@ -340,8 +375,6 @@ export const createHostRouter = (runtime: HostRuntime) => {
             catchLoopback(input, signal, (message) => runtime.log(`${runtime.sandboxUrl}: ${message}`)),
         ),
         deliverProject: os.deliverProject.handler(async ({ input }) => await deliverOverLink(runtime, input)),
-        // A program the sandbox built, carried in pieces into this sandbox's runs folder (tools/programs/artifacts.ts). Behind
-        // "Run programs this sandbox sends", read per piece; only a commit is audited, since a build is fifty pieces.
         // One connection of a `devices reach` tunnel: dial this machine's own port, or a host its network reaches, then back
         // to the sandbox (device-tunnel.ts).
         dialLoopback: os.dialLoopback.handler(async ({ input }) => {
@@ -353,21 +386,7 @@ export const createHostRouter = (runtime: HostRuntime) => {
         }),
         // The keyring on this computer, relayed (keyringProcedures below).
         ...keyringProcedures(os, keyring),
-        stageArtifact: os.stageArtifact.handler(async ({ input }) => {
-            try {
-                const result = await stageArtifact(input, runtime.scopes(), runtime.sandboxUrl);
-                if (input.op === "commit" || (input.op === "have" && result.path !== undefined)) {
-                    void audit({ tool: "stageArtifact", ok: true, detail: `${input.op} ${input.name} → ${result.path ?? ""}` });
-                }
-                return result;
-            } catch (error) {
-                void audit({
-                    tool: "stageArtifact",
-                    ok: false,
-                    detail: `${input.op}: ${error instanceof ScopeError ? "refused" : "failed"}: ${errorMessage(error)}`,
-                });
-                throw new ORPCError(error instanceof ScopeError ? "FORBIDDEN" : "BAD_REQUEST", { message: errorMessage(error) });
-            }
-        }),
+        stageArtifact: os.stageArtifact.handler(async ({ input }) => await stageOverLink(runtime, input)),
+        copyFile: os.copyFile.handler(async ({ input }) => await copyOverLink(runtime, input)),
     });
 };

@@ -192,6 +192,9 @@ export const DeviceFeatureSchema = z.enum([
     // (2026-11-11) The `move-prepare`, `move-out` and `move-in` ops: an agent that has them driving an ic that says
     // `sandbox-move` (`ic sandbox move-out` / `move-in`), so a sandbox can be carried to another of the owner's computers.
     "sandbox-move",
+    // (2026-11-17) `copyFile`: a file or a folder copied to or from a path the agent names (`devices copy`), held to the
+    // folders and the write switch the file tools are.
+    "file-copy",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -207,6 +210,7 @@ export const DEVICE_FEATURE_EGRESS: DeviceFeature = "egress";
 export const DEVICE_FEATURE_REACHABLE_WAYS_BACK: DeviceFeature = "reachable-ways-back";
 export const DEVICE_FEATURE_REACH_NETWORK: DeviceFeature = "reach-network";
 export const DEVICE_FEATURE_SANDBOX_MOVE: DeviceFeature = "sandbox-move";
+export const DEVICE_FEATURE_FILE_COPY: DeviceFeature = "file-copy";
 // What `ic features --json` answers (_sandbox/ic/src/features.rs, golden/ic-features.json): the optional ops that ic
 // implements, as strings, since a newer ic's word means nothing to an older agent.
 export const IcFeaturesAnswerSchema = z.object({ features: z.array(z.string()) });

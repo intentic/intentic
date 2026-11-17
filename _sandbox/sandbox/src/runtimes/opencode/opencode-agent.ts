@@ -35,8 +35,10 @@ import { errorDetail, executionErrorFrame, type FailureTarget, isModelInvalid } 
 import { mcpServersOf, mcpToolNameOf, openCodeMounts, type OpenCodeMounts } from "./opencode-mcp.js";
 import { openCodeSubagents } from "./opencode-subagents.js";
 import { commandIn, commandsAt } from "./opencode-commands.js";
+import { handBack, leaveTurn, noticeVia } from "./shell/opencode-leftovers.js";
 import {
     answerForm,
+    backgroundWaitOver,
     type DaemonItem,
     FOLLOW_UP_MS,
     handover,
@@ -108,6 +110,8 @@ export interface OpenCodeTurn {
     readonly shell?: (sessionId: string, push: (frame: AgentEvent) => void) => ShellRoute;
     // Who answers a form the session raises (OpenCode's `question` tool); absent cancels every form.
     readonly ask?: TurnAsk;
+    // A notice on the turn's own record, for the person: a background shell the turn stopped as it ended.
+    readonly say?: (text: string) => void;
     // The daemon's own servers' late half (turn-relay.ts): attached once this message's queue and watchdog exist, so a
     // card a door tool raises lands in the turn's stream, a call it runs holds the watchdog, and a script it runs is
     // checked against the turn's gate and marks its taint bit.
@@ -240,7 +244,10 @@ const pumpSteering = (turn: OpenCodeTurn, queue: TurnQueue): TurnSteering | unde
 interface Consumed {
     readonly turn: OpenCodeTurn;
     readonly reading: TurnReading;
+    readonly progress: TurnProgress;
     readonly family: ReturnType<typeof sessionFamily>;
+    // Asks the pane commands of the family's shells back as jobs (opencode-turn.ts backgroundWaitOver).
+    readonly handBack: () => readonly string[];
     readonly steering: TurnSteering | undefined;
     // Re-prompts on one of xAI's suggested models after a rejection naming them; undefined once spent or never offered.
     heal: ((suggestions: string[]) => Promise<void>) | undefined;
@@ -262,6 +269,13 @@ const finished = async (consumed: Consumed, progress: TurnProgress): Promise<boo
     }
     await consumed.steering.close();
     return !consumed.reading.queue.waiting();
+};
+
+// The follow-up wait passed with nothing new: a turn that was waiting on its background shells has waited its longest
+// (opencode-turn.ts backgroundWaitOver); any other looks again at whether it is done.
+const settled = async (consumed: Consumed, progress: TurnProgress): Promise<boolean> => {
+    progress.followUpUntil = undefined;
+    return progress.backgroundUntil === undefined ? finished(consumed, progress) : backgroundWaitOver(progress, consumed.reading.clock, consumed.handBack);
 };
 
 // What an expired watchdog means for the turn, coded as every loop's is (turn-watchdog.ts expiredFrame).
@@ -317,7 +331,7 @@ async function* consumeTurn(consumed: Consumed): AsyncGenerator<OpenCodeTurnEven
     const { turn, reading } = consumed;
     const { sessionId, queue, clock } = reading;
     const label = openCodeBackendLabel(turn.provider ?? OPENCODE_XAI_PROVIDER);
-    const progress = turnProgress();
+    const { progress } = consumed;
     for (;;) {
         const item = await queue.next(clock, progress.followUpUntil);
         if (item === EXPIRED) {
@@ -332,8 +346,7 @@ async function* consumeTurn(consumed: Consumed): AsyncGenerator<OpenCodeTurnEven
             return;
         }
         if (item === SETTLED) {
-            progress.followUpUntil = undefined;
-            if (progress.backgroundUntil !== undefined || (await finished(consumed, progress))) {
+            if (await settled(consumed, progress)) {
                 return;
             }
             continue;
@@ -513,6 +526,8 @@ async function* runOpenCodeTurn(
 ): AsyncGenerator<OpenCodeTurnEvent> {
     const c = lease.client;
     let family: ReturnType<typeof sessionFamily> | undefined;
+    let route: ShellRoute | undefined;
+    const progress = turnProgress();
     let stopListening = (): void => {};
     let detachRelay = (): void => {};
     let unmount = async (): Promise<void> => {};
@@ -541,7 +556,9 @@ async function* runOpenCodeTurn(
         }
         const clock = turnWatchdog(withTurnCap(timeouts, turn.capMs));
         detachRelay = attachRelay(turn, queue, clock);
-        const own = sessionFamily(sessionId, judgeOf(turn, sessionId, queue, clock), openCode.judges);
+        const judge = judgeOf(turn, sessionId, queue, clock);
+        route = judge?.shell;
+        const own = sessionFamily(sessionId, judge, openCode.judges);
         family = own;
         // Listening starts before the prompt, so none of the session's events is missed; the stream itself is the
         // server's, open since it booted.
@@ -570,7 +587,9 @@ async function* runOpenCodeTurn(
         yield* consumeTurn({
             turn,
             reading: { client: c, sessionId, queue, clock, ask: turn.ask, members: own.members, signal: turn.signal },
+            progress,
             family: own,
+            handBack: () => handBack(route),
             steering,
             heal: healOf(openCode, c, provider, sessionId, prompt),
             outsideName: mcpToolNameOf(mounts),
@@ -581,7 +600,7 @@ async function* runOpenCodeTurn(
         stopListening();
         detachRelay();
         await stopping;
-        await cleanUp(c, turn, family);
+        await leaveTurn(c, turn, family, { waited: progress.backgroundOver, route });
         await unmount();
         // allow(silent-catch): a session that could not be deleted holds one answered request and nothing to resume
         await (sealedSession === undefined ? undefined : c.session.remove({ sessionID: sealedSession }).catch(() => {}));
@@ -627,18 +646,6 @@ const healOf = (
               await prompt();
           }
         : undefined;
-
-// What a turn leaves running behind it, taken back: its shells and its judges.
-const cleanUp = async (c: OpenCodeClient, turn: OpenCodeTurn, family: ReturnType<typeof sessionFamily> | undefined): Promise<void> => {
-    // A background shell outliving its turn would wake the session with nobody judging what it does next.
-    await Promise.all(
-        [...(family?.shells() ?? [])].map((id) =>
-            // allow(silent-catch): a shell that already ended has nothing left to stop
-            c.shell.remove({ id, location: { directory: turn.cwd } }).catch(() => {}),
-        ),
-    );
-    family?.release();
-};
 
 export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTimeouts = DEFAULT_TURN_TIMEOUTS): OpenCodeRunner =>
     async function* (turn) {
@@ -952,6 +959,7 @@ const openCodeTurnOf =
             ...opt("persona", personaLimitsOf(request.policy)),
             ...opt("shell", sealed ? undefined : base.shell),
             ...opt("ask", sealed ? undefined : askVia(request)),
+            ...opt("say", noticeVia(request.hooks.backgroundJobs)),
             ...opt("steering", channel?.steering),
             ...opt(
                 "closeSteering",

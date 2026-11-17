@@ -28,6 +28,11 @@ test("reports the check's own exit code and what it printed", async () => {
     expect(await plain("echo done", { cwd: scratch, env: {} })).toEqual({ exitCode: 0, output: "done" });
 });
 
+// 2026-11-17, after the shinobi-society audit: `> /dev/stderr` failed on "No such device or address" behind Node's socket pair.
+test("a check may write to /dev/stdout and /dev/stderr, and its status is its own", async () => {
+    expect(await plain("echo out > /dev/stdout; echo err > /dev/stderr; exit 4", { cwd: scratch, env: {} })).toEqual({ exitCode: 4, output: "out\nerr" });
+});
+
 test("runs in the directory it was armed in, with the credentials it was armed with", async () => {
     const result = await plain('printf "%s %s" "$(pwd)" "$TOKEN_CI"', { cwd: scratch, env: { TOKEN_CI: "tok" } });
     expect(result).toEqual({ exitCode: 0, output: `${scratch} tok` });

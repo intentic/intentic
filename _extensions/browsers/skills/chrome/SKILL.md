@@ -100,14 +100,21 @@ the sandbox has no key for. Every image spends their plan's allowance. A local m
 is unattended and leaves their account alone, so prefer those when the result is good enough. Before the first image,
 say how many you mean to make and where.
 
-**ChatGPT: `chatgpt_image`, one call per image.** It sends the prompt in a chat in the sandbox's own ChatGPT project
-(see below), waits (several minutes is normal), saves the image into the sandbox, and answers with the `chat`, the
-saved paths and whatever ChatGPT wrote. Pass that `chat` to the next call for the same style and world. Leave
-`personalized` off unless they ask: their memory and past chats steer the image (one person's game keyframe came back
-as a pastiche of a series they had chatted about). Read the text it answers with: a refusal means rewrite the prompt,
-never resend it as it was; a usage limit means stop and tell them when it resets; a question from ChatGPT gets a short
-answer in the same `chat`. An answer saying the prompt was sent or may already have gone means never send it again:
-collect it with `chatgpt_read`. chatgpt.com must be allowed in read and act. One call at a time, never in parallel.
+**ChatGPT: `chatgpt_image`, one call per image, collected with `wait`.** The call answers within seconds with a job
+id, and nothing waits on it: ChatGPT makes the image in a chat in the sandbox's own ChatGPT project (see below), in a
+tab of your own window, and several minutes is normal. Collect it with the `wait` tool on the `subagents` server,
+target the job id (`targets` for a set): it answers with the saved paths, the `chat` and whatever ChatGPT wrote, or a
+failed job with why no image came. Or end your turn: each job's end wakes the conversation. Never poll with
+`chatgpt_read` or `wait_for` while a job runs. For a set, start the images back to back: two run at once in this
+browser and the rest queue by themselves. For the same style and world, wait for the first and pass its `chat` to the
+next ones, which run one after another. Leave `personalized` off unless they ask: their memory and past chats steer the
+image (one person's game keyframe came back as a pastiche of a series they had chatted about). Read the words each job
+ends with: a refusal means rewrite the prompt, never resend it as it was; a usage limit means stop and tell them when
+it resets; a question from ChatGPT gets a short answer in the same `chat`. A prompt whose job is running, or whose end
+says it was sent or may already have gone, is never sent again: collect a slow one with `chatgpt_read`. A refusal
+that needs no wait (chatgpt.com not allowed in read and act, the browser asleep) comes back as the call's own answer,
+with no job. The `browser` server's `chatgpt_image` (a sandbox account's ChatGPT) still holds the call until the image
+is made, one at a time.
 
 **By hand, on another site or when the kit fails or is missing:**
 1. On ChatGPT, open a new chat inside the sandbox's own project ("Intentic · <sandbox>", above), whose memory is the

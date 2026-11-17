@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +16,7 @@ import { jobRunnerPids } from "./job-processes.js";
 // held open, so it never forwards an end of input to the program waiting on it.
 
 const terminal = requires(existsSync("/usr/bin/script"), "util-linux script at /usr/bin/script");
+const python = requires(spawnSync("python3", ["--version"]).status === 0, "python3 on PATH");
 
 const dirs: string[] = [];
 const children: ReturnType<typeof spawn>[] = [];
@@ -85,6 +86,23 @@ describe("a run reading its terminal", () => {
     test.skipIf(!terminal.runs)(terminal.title("node's readline, which is how npm asks, is found through the epoll set that holds the terminal"), async () => {
         const run = await onTerminal(`node -e 'require("readline").createInterface({ input: process.stdin, output: process.stdout }).question("Ok to proceed? (y) ", () => {})'`);
         expect((await readerOf(run))?.program).toMatch(/^node -e /u);
+    });
+
+    // 2026-11-17, after the shinobi-society audit: `python3 -` with no script opened the REPL, which waits in poll, and sat
+    // until tmux-run's 110 s soft timeout.
+    test.skipIf(!terminal.runs || !python.runs)(python.title("python's REPL, which waits in a poll, is found through the poll set that holds the terminal"), async () => {
+        const run = await onTerminal("python3 -");
+        expect((await readerOf(run))?.program).toBe("python3 -");
+    });
+
+    test.skipIf(!terminal.runs || !python.runs)(python.title("a select on stdin is found reading the terminal"), async () => {
+        const run = await onTerminal(`python3 -c 'import select, sys; select.select([sys.stdin], [], [])'`);
+        expect((await readerOf(run))?.program).toMatch(/^python3 -c /u);
+    });
+
+    test.skipIf(!terminal.runs || !python.runs)(python.title("a poll on a socket is not reading the terminal"), async () => {
+        const run = await onTerminal(`python3 -c 'import select, socket; a, b = socket.socketpair(); p = select.poll(); p.register(a, select.POLLIN); p.poll()'`);
+        expect(await readerOf(run, 2_500)).toBeUndefined();
     });
 
     test.skipIf(!terminal.runs)(terminal.title("a sleep is not reading anything"), async () => {
