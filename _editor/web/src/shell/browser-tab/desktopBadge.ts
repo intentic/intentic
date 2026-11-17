@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { announceDesktopBadge, type DesktopBadge, type DesktopBadgeMark, desktopNotices } from "../../app/environments/desktopNotices";
-import { cropOf, drawableLogo, drawPng, iconKey, iconSvg, overlaySvg } from "./tabIcon";
+import { cropOf, drawableLogo, drawPng, iconKey, iconSvg, monogramOf, overlaySvg } from "./tabIcon";
 import type { TabMark } from "./tabSignal";
 
 // The tab's mark on the desktop app's own icon (desktop-app badge.rs): the tray's icon, the overlay on the Windows
@@ -40,9 +40,9 @@ let drawing = 0;
 let shown: string | undefined;
 
 /**
- * Puts the mark on the desktop app's icon, or takes it off, over the open sandbox's logo where it has one; the window's
- * own icon (its taskbar button) becomes that logo, unmarked, and the button the open sandbox's own. A badge already up
- * costs nothing.
+ * Puts the mark on the desktop app's icon, or takes it off, over the open sandbox's logo (or, without one, its letter);
+ * the window's own icon (its taskbar button) becomes that picture, unmarked, and the button the open sandbox's own. A
+ * badge already up costs nothing.
  */
 export const showDesktopBadge = (mark: TabMark | undefined, logo?: string, sandbox?: DesktopBadge[`sandbox`]): void => {
     // Nothing to draw for in a browser, or in an app that takes no badge.
@@ -50,6 +50,9 @@ export const showDesktopBadge = (mark: TabMark | undefined, logo?: string, sandb
         return;
     }
     const own = drawableLogo(logo);
+    // A sandbox without a logo is its letter here, as on the rail's tile, rather than the app's lotus: its taskbar
+    // button is its own (badge.rs), and the lotus there read as a different sandbox from the "R" on the rail.
+    const letter = own === undefined ? monogramOf(sandbox?.name) : undefined;
     const tooltip = badgeTooltip(mark);
     // The tooltip carries the count past nine, which the drawing does not.
     const key = `${iconKey(mark) ?? `none`}|${tooltip ?? ``}|${own ?? ``}|${sandbox?.id ?? ``}|${sandbox?.name ?? ``}`;
@@ -61,16 +64,17 @@ export const showDesktopBadge = (mark: TabMark | undefined, logo?: string, sandb
     const turn = drawing;
     const kind: DesktopBadgeMark = mark?.kind ?? `none`;
     const count = mark?.kind === `asks` ? mark.count : 0;
-    if (mark === undefined && own === undefined) {
+    const pictured = own !== undefined || letter !== undefined;
+    if (mark === undefined && !pictured) {
         announceDesktopBadge({ mark: kind, count, sandbox });
         return;
     }
     void cropOf(own)
         .then((crop) =>
             Promise.all([
-                mark === undefined && own === undefined ? undefined : drawPng(iconSvg(mark, own, crop), traySize()),
+                mark === undefined && !pictured ? undefined : drawPng(iconSvg(mark, own, crop, letter), traySize()),
                 mark === undefined ? undefined : drawPng(overlaySvg(mark), OVERLAY_SIZE),
-                own === undefined ? undefined : drawPng(iconSvg(undefined, own, crop), WINDOW_SIZE),
+                pictured ? drawPng(iconSvg(undefined, own, crop, letter), WINDOW_SIZE) : undefined,
             ]),
         )
         .then(([icon, overlay, window]) => {

@@ -36,7 +36,7 @@ export interface DesktopBadge {
     readonly icon?: string;
     /** The mark alone, in the same encoding: the overlay on the Windows taskbar's button. */
     readonly overlay?: string;
-    /** The open sandbox's logo, unmarked, in the same encoding: the window's icon. None keeps the app's own. */
+    /** The open sandbox's logo (or its letter), unmarked, in the same encoding: the window's icon. None keeps the app's own. */
     readonly window?: string;
     /**
      * The open sandbox, which the window's taskbar button belongs to on Windows: a pin made from it carries the

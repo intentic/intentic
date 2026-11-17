@@ -1,5 +1,5 @@
 import { logoStyleImage } from "../../features/sandbox/overview/logo/presets";
-import { iconKey, iconSvg, overlaySvg, visibleSquare } from "./tabIcon";
+import { iconKey, iconSvg, monogramOf, overlaySvg, visibleSquare } from "./tabIcon";
 
 describe(`the tab's icon`, () => {
     it(`writes the count in the disc while one digit holds it`, () => {
@@ -88,6 +88,35 @@ describe(`the tab's icon over the sandbox's logo`, () => {
     it(`keeps the lotus for a logo that is not an inline picture, and escapes one that is`, () => {
         expect(iconSvg(undefined, `https://example.com/logo.png`)).toContain(`<path d="M16 9.5`);
         expect(iconSvg(undefined, `data:image/svg+xml,<svg a="b"/>`)).toContain(`href="data:image/svg+xml,&lt;svg a=&quot;b&quot;/>"`);
+    });
+});
+
+describe(`the icon of a sandbox without a logo`, () => {
+    it(`is the name's first letter, as the rail's tile draws it`, () => {
+        expect(monogramOf(`radarsu`)).toBe(`R`);
+        expect(monogramOf(`  my box`)).toBe(`M`);
+        expect(monogramOf(`   `)).toBeUndefined();
+        expect(monogramOf(undefined)).toBeUndefined();
+    });
+
+    it(`draws the letter on a plate in the lotus's place`, () => {
+        const svg = iconSvg(undefined, undefined, undefined, `R`);
+        expect(svg).toMatch(/<rect [^>]*rx="7"/);
+        expect(svg).toMatch(/<text[^>]*>R<\/text>/);
+        expect(svg).not.toContain(`<path d="M16 9.5`);
+    });
+
+    it(`keeps a logo over the letter, and the mark's disc cuts only its ring`, () => {
+        expect(iconSvg(undefined, `data:image/webp;base64,AAAA`, undefined, `R`)).not.toMatch(/>R<\/text>/);
+        const svg = iconSvg({ kind: `done` }, undefined, undefined, `R`);
+        expect(svg).toMatch(/>R<\/text>/);
+        // The lotus's corner cut, which starts at the disc's centre; the plate's own rect starts at 1.
+        expect(svg).not.toContain(`<rect x="23"`);
+    });
+
+    it(`greys the letter for offline, and escapes it`, () => {
+        expect(iconSvg({ kind: `offline` }, undefined, undefined, `R`)).toMatch(/fill="#8f8a84">R<\/text>/);
+        expect(iconSvg(undefined, undefined, undefined, `<`)).toContain(`>&lt;</text>`);
     });
 });
 

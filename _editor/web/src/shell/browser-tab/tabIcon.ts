@@ -67,6 +67,22 @@ const imageArt = (logo: string, offline: boolean, crop: LogoCrop | undefined): s
     return `${offline ? GREY : ``}${image}`;
 };
 
+/** A logoless sandbox's letter, as the rail draws it (ui SandboxLogo.vue): the name's first character, upper-cased. */
+export const monogramOf = (name: string | undefined): string | undefined => {
+    const [initial] = (name ?? ``).trim();
+    return initial === undefined ? undefined : initial.toUpperCase();
+};
+
+// The letter on a plate, as on the rail's tile. A bare letter would disappear on whichever taskbar matches its colour,
+// so the plate is a warm dark that stands out on a light bar, and its lighter edge keeps it visible on a dark one.
+const MONOGRAM_PLATE = `#3a332c`;
+const MONOGRAM_EDGE = `#6b6157`;
+const MONOGRAM_LETTER = `#f4efe8`;
+
+const monogramArt = (letter: string, offline: boolean): string =>
+    `<rect x="1" y="1" width="30" height="30" rx="7" fill="${MONOGRAM_PLATE}" stroke="${MONOGRAM_EDGE}" stroke-width="1.5"/>` +
+    `<text x="16" y="22.6" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Roboto,Arial,Helvetica,sans-serif" font-size="19" font-weight="600" fill="${offline ? LOTUS_OFFLINE : MONOGRAM_LETTER}">${attribute(letter)}</text>`;
+
 const picture = (logo: string, offline: boolean, crop: LogoCrop | undefined): string => {
     const preset = readLogoStyle(logo);
     return preset === undefined ? imageArt(logo, offline, crop) : presetArt(preset, offline);
@@ -146,15 +162,21 @@ const discOf = (mark: TabMark): Disc | undefined => {
     }
 };
 
-/** The tab's icon: the logo (or the lotus) with the mark's disc, if any. Neither leaves the page's own icon, never drawn. */
-export const iconSvg = (mark: TabMark | undefined, logo?: string, crop?: LogoCrop): string => {
+/**
+ * The tab's icon: the logo with the mark's disc, if any. A sandbox without a logo gets its letter where one is given
+ * (the desktop app's icon, which stands for the sandbox), and the lotus otherwise. With neither a mark nor a logo the
+ * tab keeps the page's own icon and this is never called for it.
+ */
+export const iconSvg = (mark: TabMark | undefined, logo?: string, crop?: LogoCrop, letter?: string): string => {
     const disc = mark === undefined ? undefined : discOf(mark);
     const offline = mark?.kind === `offline`;
     const own = drawableLogo(logo);
-    const art = own === undefined ? lotus(offline ? LOTUS_OFFLINE : LOTUS) : picture(own, offline, crop);
+    const lotusArt = own === undefined && letter === undefined;
+    const art =
+        own !== undefined ? picture(own, offline, crop) : letter !== undefined ? monogramArt(letter, offline) : lotus(offline ? LOTUS_OFFLINE : LOTUS);
     // Under the lotus, the quadrant above and right of the disc goes too: only the outer petal's tip reaches there,
-    // and past the ring it would float as a speck. A logo fills its square, so there it is only the ring.
-    const corner = disc === undefined || own !== undefined ? `` : `<rect x="${disc.at}" width="${32 - disc.at}" height="${disc.at}" fill="#000"/>`;
+    // and past the ring it would float as a speck. A logo or a letter's plate fills its square, so there it is only the ring.
+    const corner = disc === undefined || !lotusArt ? `` : `<rect x="${disc.at}" width="${32 - disc.at}" height="${disc.at}" fill="#000"/>`;
     const body =
         disc === undefined
             ? art
