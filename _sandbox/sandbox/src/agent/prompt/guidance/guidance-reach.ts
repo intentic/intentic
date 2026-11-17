@@ -131,25 +131,20 @@ export const browserFull = (facts: GuidanceFacts): string => {
     const anonymous = facts.anonymousBrowser !== false;
     const web = anonymous
         ? `You have a real browser, \`web\`: ${toolsOf(facts, "web", ["browser_navigate", "browser_take_screenshot"])} and the rest.` +
-          `${loadedWith(facts, "it", "+browser")} Use it to read pages that need JavaScript, to check a docs site, and to LOOK at ` +
-          `web UI you have changed rather than reasoning about it from the source alone. `
+          `${loadedWith(facts, "it", "+browser")} Use it for pages that need JavaScript and to LOOK at web UI you changed. `
         : ``;
     const accounts = facts.browserAccounts
         ? ` ${anonymous ? "That browser holds no identity. " : ""}To act as one of this sandbox's signed-in accounts, use the ` +
-          `\`browser\` server: ${toolName(facts, "browser", "browser_navigate")} and the rest take an \`account\` argument and ` +
-          `drive that account's own persisted, signed-in profile.` +
-          `${facts.runtime.deferredTools ? " Its tools are deferred: load them with ToolSearch `+mcp__browser__`, and the `accounts` tools with ToolSearch `+accounts`." : ""} ` +
-          `${toolName(facts, "accounts", "roster")} names the accounts you may use, and the rest of the \`accounts\` tools type ` +
-          `stored credentials, fetch e-mail codes and hand a stuck page to the owner. A site one of those accounts is on is ` +
-          `ALWAYS driven there, with its \`account\`: ${anonymous ? "in `web` it shows a login wall that says nothing about the account, and " : ""}` +
-          `the owner's own browser is not for it either. A login page in the \`browser\` server itself means the session ` +
-          `expired: ${toolName(facts, "accounts", "request_help")}, never another browser.`
+          `\`browser\` server: ${toolName(facts, "browser", "browser_navigate")} and the rest take an \`account\` argument` +
+          `${facts.runtime.deferredTools ? " (load them with ToolSearch `+mcp__browser__`, and the `accounts` tools with ToolSearch `+accounts`)" : ""}, ` +
+          `and ${toolName(facts, "accounts", "roster")} names the accounts. A site one of those accounts is on is ALWAYS ` +
+          `driven there${anonymous ? " (in `web` it shows a login wall that says nothing about the account)" : ""}, never in ` +
+          `the owner's own browser; a login page in the \`browser\` server means the session expired: ` +
+          `${toolName(facts, "accounts", "request_help")}.`
         : ``;
     return (
-        `${web}Screenshots land in ${facts.browserOutputDir ?? ""} whatever you name them, never in the repo ` +
-        `you are working in; the result tells you the path, so read it back from there. Clicks and navigations time ` +
-        `themselves out and come back as errors, but \`browser_evaluate\` awaits whatever the page hands it: give any ` +
-        `in-page wait a deadline of its own rather than looping until a condition you are debugging comes true.${accounts}`
+        `${web}Screenshots land in ${facts.browserOutputDir ?? ""}. \`browser_evaluate\` waits as long as the page does, ` +
+        `so give an in-page wait its own deadline.${accounts}`
     );
 };
 

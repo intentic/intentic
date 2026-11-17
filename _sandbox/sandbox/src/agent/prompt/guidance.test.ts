@@ -76,13 +76,10 @@ test("the block carries the rules nothing else in the prompt carries", () => {
     expect(text).toContain("`public/`");
     expect(text).toContain("`refs/`");
     expect(text).toContain("mcp__watch__start");
-    // What the sandbox does under a turn (the shinobi-society audit, 2026-11-17): restarts empty /tmp, checkpoints and
-    // rebases move the branch, one stash serves every checkout, and another checkout's build is of different code.
-    expect(text).toContain("a restart empties `/tmp`");
-    expect(text).toContain("/work/.intentic/local/cache/<tool>/");
-    expect(text).toContain("`git diff $(git merge-base HEAD main)`");
+    // One stash serves every checkout, so a pop can bring back another conversation's work (the shinobi-society audit,
+    // 2026-11-17); the audit's other facts are the intentic skill's paths reference, not every turn's prompt.
     expect(text).toContain("Leave `git stash` alone");
-    expect(text).toContain("`uv run --with <package> python …`");
+    expect(text).not.toContain("a restart empties `/tmp`");
 });
 
 // The paragraphs a short form once dropped as "the base prompt already says it" are the ones whose absence cost the

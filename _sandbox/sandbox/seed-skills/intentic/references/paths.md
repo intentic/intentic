@@ -33,3 +33,31 @@
 /history/logs/                       the daemon's logs (diagnostics.md lists each file)
 /history/conversations/<id>/         each conversation's record (transcript.jsonl.zst: read with `zstd -dc`)
 ```
+
+## Where things live
+
+Never walk the filesystem from `/`, `/history` or the home directory: `/history/worktrees` holds every conversation's
+checkout with its own node_modules. What you cannot place has a known home:
+
+- a skill: through your skill tool; its files are in `/root/.claude/skills/<name>/` (built in) or the workspace's
+  `.agents/skills/<name>/`
+- a program: `command -v <name>`
+- SDKs and models baked into the image: `/opt/<name>` (`ls /opt`); agent runtimes: `/history/engines/<name>`
+- a dependency's source: the project's `node_modules/<package>` (pnpm: `node_modules/.pnpm/`),
+  `~/.cargo/registry/src/*/<crate>-<version>/`, or the path `python3 -c 'import m; print(m.__file__)'` prints
+- another conversation's files: the worktree `agents show <handle>` names
+
+## What runs under a turn
+
+- **Restarts.** The sandbox restarts now and then (an update, a crash). A restart empties `/tmp` and ends every
+  terminal, background job and server, so keep what a later step or turn needs (a venv, a downloaded model, a tool you
+  built) in `/work/.intentic/local/cache/<tool>/`, which survives and lands nowhere.
+- **Checkpoints.** The sandbox commits your work on your branch and rebases it onto main when main moves, so
+  `git status` can list fewer files than you changed: `git diff $(git merge-base HEAD main)` is your whole change.
+- **Stash.** Every conversation's checkout shares one `git stash`; save a patch (`git diff > /tmp/mine.patch`) instead.
+- **Builds.** Build output belongs to the checkout that built it: never run or copy a binary from another
+  conversation's checkout under `/history/worktrees`, which was built from different code. Where `RUSTC_WRAPPER` is
+  set, every checkout's cargo shares one compiler cache (`/history/cache/sccache`), so a first build recompiles mainly
+  the workspace's own crates.
+- **Python** has only the standard library, PyYAML and Pillow: run a script that needs more with
+  `uv run --with <package> python …`.

@@ -33,7 +33,6 @@ import { worktreeRedirectHooks } from "../../../conversations/worktrees/worktree
 import { browserSessionHooks } from "../../../browser/sessions/browser-session-hooks.js";
 import { depsNoticeHooks } from "../../tools/notices/agent-deps.js";
 import { searchNoticeHooks } from "../../verification/agent-search.js";
-import { contextBudgetHooks } from "../../verification/context-cost-notice.js";
 import { editDiagnosticsHooks } from "../../verification/agent-diagnostics.js";
 import { createShellEditTracker } from "../../tools/agent-shell-edits.js";
 import { EDIT_TOOL_NAMES } from "../../../rules/edit-tools.js";
@@ -570,9 +569,8 @@ const baseOptions = (
                 request.spec.isolation !== undefined && request.spec.isolation.anchor === undefined
                     ? namedHooks("worktree-redirect", worktreeRedirectHooks(request.spec.isolation.plan))
                     : {},
-                // One-time advisories: rg vs grep and an empty result (never rewritten, the regex dialects disagree), and
-                // what a call costs once the context crosses 350k and 650k tokens.
-                namedHooks("search-notice", searchNoticeHooks(request.tools.iqAvailable === true)), namedHooks("context-budget", contextBudgetHooks()),
+                // One-time advisories: rg vs grep and an empty result (never rewritten, the regex dialects disagree).
+                namedHooks("search-notice", searchNoticeHooks(request.tools.iqAvailable === true)),
                 // Registers a watchable session the moment a browser call launches Chromium; the MCP owns its lifecycle.
                 request.tools.browserPorts !== undefined
                     ? namedHooks("browser-sessions", browserSessionHooks(

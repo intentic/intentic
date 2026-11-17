@@ -86,7 +86,8 @@ with no restart (`references/instructions-and-settings.md`).
 | a setting changed on a connected one (a device switch, a Docker option) or a refused credential replaced | `capabilities request <connection> --set key=value --why …`, or `--reconnect`: the card shows the change, and the owner applies it with one press |
 | a tool, toolchain or system package that survives a rebuild | `environment` skill: `environment propose <tool>` puts the overlay steps on a card the owner approves |
 | an account, folder or shelf of tools this conversation's persona or area withholds | `grants request capability\|folder\|shelf <what> --why "…"`; it reaches the conversation from its next turn |
-| to know what this conversation is still waiting on people for | `needs`; answers arrive by themselves, so never poll and never ask twice |
+| to know what this conversation is still waiting on people for | `needs`; answers arrive by themselves, so never poll and never ask twice. Every asking command (`capabilities request`, `secrets ask`/`want`/`request`, `environment propose`, `grants request`) exits 0 when usable now, 1 when refused (carry on without it and say what it would have enabled), 2 for no verdict (read its stdout and fix the command), 3 while still waiting (carry on with what does not need it) |
+| another conversation in this workspace: what it was asked, where it got to, its branch, worktree or record | `agents show <handle>` (its id, branch, an id prefix, its session id, or words from its title), `agents ls` (`--owner <who>`), `agents find '<text>'` for who said a phrase, `--transcript` for the messages; never a search of `/history` by hand. `agents message <handle> '<text>'` reaches it even idle, read as a peer's words, so ask rather than direct and report what the command says happened (steered, a turn opened, queued); `agents resume <handle>` runs a held or ended turn again (`--provider`/`--model` moves it off a spent model); `agents --help` |
 | a repo they can start, run and preview from the sidebar or Browsers | `panels` skill: `.intentic/run.json` targets that run in the sandbox or on their computers, what Start finds without one, and an `operator/` web app for a panel |
 | a model on their GPU, or a model server they already run | a model endpoint, never a model built into this image: `references/personas-and-models.md` |
 | to pay an x402 endpoint | `wallet` skill; the owner approves each payment outside their auto-approve band |
@@ -120,7 +121,8 @@ with no restart (`references/instructions-and-settings.md`).
 `/work` is the workspace (your worktree, in an isolated turn); `/work/refs/` the reference shelf (read, never edit);
 `/work/public/` the outbox (public on the internet); `/work/.intentic/config/` the daemon's tracked configuration;
 `/opt/sandbox/package.json` the daemon's version (`0.0.0`: an unreleased build); `/history/logs/` its logs, read
-through the diagnostics tools. Every other path, and what each config file holds: `references/paths.md`.
+through the diagnostics tools. Every other path, what each config file holds, where a skill, SDK or dependency's
+source lives, and what a restart or a checkpoint does under a turn: `references/paths.md`.
 
 ## The editor
 

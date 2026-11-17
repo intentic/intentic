@@ -89,25 +89,13 @@ const DELIVERABLES =
     "of the change. Screenshots, logs, probe scripts and other evidence you make while working go in `/tmp`, or in " +
     `\`${statePath(WORKSPACE_ROOT, ".intentic/records/artifacts/")}/\` when the user should be able to open them, never in a repository.`;
 
-// What the sandbox does under a working turn, which a turn otherwise learns by losing work to it. The shinobi-society
-// audit (100 conversations, 2026-11-15..17): agents reran captures and rebuilt tool setups kept in /tmp after a restart
-// emptied it; 9 conversations hunted for edits the sandbox had checkpointed into a commit ("git status lists fewer files
-// than I changed"); 4 popped another conversation's stash, since every worktree shares the one stash; 25 went looking
-// for a built binary and ran other conversations' builds of different code; 5 lost a call to a missing numpy. What IS
-// shared is said too (2026-11-17): the rust-cache pack's compiler cache, so a first build is not a reason to borrow.
+// The one fact about what runs under a turn that can cost another conversation its work: 4 conversations in the
+// shinobi-society audit (2026-11-15..17) popped another's stash. The rest of that audit's facts (restarts empty /tmp,
+// checkpoints move the branch, other checkouts' binaries, the shared Rust cache, Python's packages) are the intentic
+// skill's paths reference, read when a turn meets one, not told to every turn.
 const UNDERFOOT =
-    "This sandbox restarts now and then (an update, a crash): a restart empties `/tmp` and ends every terminal, " +
-    "background job and server, so keep what a later step or turn needs (a venv, a downloaded model, a tool you built) " +
-    `in \`${statePath(WORKSPACE_ROOT, ".intentic/local/cache/")}/<tool>/\`, which survives and lands nowhere. The sandbox ` +
-    "checkpoints your work as commits on your branch and rebases it onto main when main moves, so `git status` can " +
-    "list fewer files than you changed: `git diff $(git merge-base HEAD main)` is your whole change. Leave `git stash` " +
-    "alone: every conversation's checkout shares one stash, so a pop can bring back another conversation's work; save " +
-    "a patch (`git diff > /tmp/mine.patch`) instead. Build output belongs to the checkout that built it: never run or " +
-    `copy a binary from another conversation's checkout under \`${HISTORY_ROOT}/worktrees\`, which was built from ` +
-    "different code; build in your own. Where `RUSTC_WRAPPER` is set, compiled Rust dependencies are already shared: " +
-    `every checkout's cargo reads and fills one compiler cache (\`${HISTORY_ROOT}/cache/sccache\`), so a first build ` +
-    "recompiles mainly the workspace's own crates. Python here has no packages beyond the standard library, PyYAML " +
-    "and Pillow: run a script that needs more with `uv run --with <package> python …`.";
+    "Leave `git stash` alone: every conversation's checkout shares one stash, so a pop can bring back another " +
+    "conversation's work; save a patch instead.";
 
 // Where the image bakes the product's own guide (Dockerfile: seed-skills → /root/.claude/skills). Named by its file for
 // every runtime: the Claude Code loop loads it as the `intentic` skill, and every other loop reads the same file.
@@ -153,7 +141,9 @@ const nightText = (facts: EntryFacts): string => {
 };
 
 // How a turn waits: on a background command and the `keep`/`wait` tools where its shell has them, on the daemon's
-// `watch` and `subagents` servers wherever they are mounted, and never on `sleep`. Both tools are named in full: "the
+// `watch` and `subagents` servers wherever they are mounted, and never on `sleep`. Kept to the rules (2026-11-17): the
+// why (a sleep bills the turn) and the tools' own details (which ids `stop` takes) are their descriptions' and the
+// notes a job's result carries, not every turn's prompt. The tools are named in full: "the
 // `wait` tool" sent 21 turns to ToolSearch for `select:wait`, a name nothing answers to (to 2026-10-26). A loop whose
 // shell files a long command as a job (RuntimeFacts.shellJobs) is told it gets an id to wait on; one that does not is
 // told nothing about background commands: until 2026-11-02 every such loop was told to `wait` on one it had no id for.
@@ -164,38 +154,24 @@ const waitingText = (facts: EntryFacts): string => {
     const stop = toolName(facts, "subagents", "stop");
     if (facts.runtime.backgroundShell) {
         return (
-            "Never idle in the shell. A command that will outlive a few seconds takes `run_in_background: true`, and you " +
-            "collect its output later, the harness re-invokes you when it exits. To wait on something OUTSIDE this sandbox " +
-            `(a CI run, a deploy, a remote queue) arm ${watch ?? "a watch"} with a cheap check command and end your turn; it ` +
-            "wakes this conversation when the check passes. `sleep N` in a Bash command is not a way to wait: it bills the " +
-            "wait to the turn and costs a model round-trip per poll, and a sleep sized to land just under the tool timeout " +
-            `is the most expensive way this harness can do nothing. If you already started work here, wait on it with ${wait} ` +
-            "(a background command by the ID its Bash call returned, a subagent by its id) rather than " +
-            `re-reading its log on a timer, and end a background command early with ${stop}, which takes either ID a job ` +
-            "is named by (TaskStop knows only the one its Bash call returned). Do not detach a process yourself (setsid, nohup, `&` with disown): once this " +
-            "conversation stops, whatever it left running outside run_in_background is reclaimed. A server you start for the " +
-            `person keeps running after your turn only when you pass its ID to ${keep} with a reason, then give ` +
-            "them its address; one you reached and did not keep is stopped with your turn, whatever your reply says."
+            "Never wait with `sleep N`. Run a long command with `run_in_background: true` and collect it with " +
+            `${wait} (a subagent too), or end it early with ${stop}; for something outside this sandbox (a CI run, a ` +
+            `deploy) arm ${watch ?? "a watch"} and end your turn. Do not detach processes yourself (setsid, nohup, \`&\`): ` +
+            `they are reclaimed when the conversation stops. A server you start for the person survives your turn only ` +
+            `through ${keep}; give them its address.`
         );
     }
     return [
-        "Never idle in the shell: `sleep N` in a command is not a way to wait. It bills the wait to the turn and costs a " +
-            "model round-trip per poll.",
-        watch === undefined
-            ? undefined
-            : `To wait on something OUTSIDE this sandbox (a CI run, a deploy, a remote queue) arm ${watch} with a cheap ` +
-              "check command and end your turn; it wakes this conversation when the check passes.",
+        "Never wait with `sleep N`.",
+        watch === undefined ? undefined : `For something outside this sandbox (a CI run, a deploy) arm ${watch} and end your turn.`,
         facts.subagents === false
             ? undefined
             : facts.runtime.shellJobs
-              ? `A command still running when the sandbox hands it back (after about two minutes, or at once if it sits at a prompt) ` +
-                "keeps running as a background job, and its result names the job's id: wait on it with " +
-                `${wait} (target that id), which returns with its exit code and output tail when it ends, or end it early with ${stop}. ` +
-                "Never re-read its output file on a timer and never run it again beside the live one. A subagent you started is " +
-                `waited on with ${wait} the same way.`
+              ? "A command still running when the sandbox hands it back keeps running as a background job, and its result " +
+                `names the job's id: wait on it with ${wait} (target that id), or end it early with ${stop}. A subagent ` +
+                `you started is waited on with ${wait} the same way.`
               : `A subagent you started is waited on with ${wait}, never by re-reading its log on a timer.`,
-        "Do not detach a process yourself (setsid, nohup, `&` with disown): once this conversation stops, whatever it left " +
-            "running is reclaimed.",
+        "Do not detach processes yourself (setsid, nohup, `&`): they are reclaimed when the conversation stops.",
     ]
         .filter((sentence) => sentence !== undefined)
         .join(" ");
@@ -251,21 +227,12 @@ const ENTRIES: readonly GuidanceEntry[] = [
         id: "pages",
         // Only where the owner left the page tools on; off, nothing names them.
         when: ({ pages }) => pages === true,
+        // The how (media on disk, theme, real numbers only) is the page tools' own descriptions (2026-11-17).
         text: (facts) =>
-            "When a chart, a table, a diagram, a comparison of options or a mock-up would say more than prose, show it with " +
-            `${toolName(facts, "ui", "show_page")}: a self-contained HTML page drawn inline in the chat, in the chat's own theme. Do not wait ` +
-            "to be asked. Use the lightest form that carries it: a Markdown table for a few rows, a ```mermaid block for a " +
-            "small static diagram (the chat draws both), a page for data you plot, many rows, a layout to look at, or " +
-            "anything to interact with. A video or audio file you made plays on a page at full quality: name it on disk in " +
-            '<video src="/abs/path/take1.mp4" controls> (or <audio>), and the reader plays, seeks and compares takes. Render ' +
-            "it inside the workspace or your own checkout (.intentic/records/artifacts/ suits), not /tmp, which a page " +
-            "cannot stream from; never re-encode it into the page or copy it to their computer to show it. When the " +
-            "answer you need is easier to " +
-            "give on a page than by picking an option " +
-            `(choosing among mock-ups, tuning values, a short form), ask with ${toolName(facts, "ui", "ask_page")}, which waits for what the ` +
-            "page sends back. Keep pages to what the reader acts on: no filler, no decoration. Numbers are ones you read, " +
-            "never ones you made up; a mock-up's sample content is labelled as sample. Prose stays the default for anything " +
-            "a few sentences say as well, and a single fact, a one-step action or a small edit needs no visual at all.",
+            "When a chart, a table, a diagram or a mock-up would say more than prose, show it with " +
+            `${toolName(facts, "ui", "show_page")} without waiting to be asked, and ask with ${toolName(facts, "ui", "ask_page")} when a page ` +
+            "answers better than a list of options. A few rows or a small diagram need only a Markdown table or a ```mermaid " +
+            "block; prose stays the default.",
     },
     {
         id: "unwatched",
@@ -302,15 +269,8 @@ const ENTRIES: readonly GuidanceEntry[] = [
     { id: "batching", text: BATCHING_GUIDANCE },
     { id: "waiting", text: waitingText },
     { id: "context-reuse", text: CONTEXT_REUSE_GUIDANCE },
-    // Three quarters of edits went through the shell (`python3 - <<EOF`, `sed -i`) in the week audited 2026-11-15: an
-    // edit tool's call names the file and its change, which a reviewer and the chat can read; a heredoc buries both.
-    {
-        id: "edits",
-        text:
-            "Change a file with your file-edit tool, not a `python3 - <<EOF` rewrite, `sed -i` or a heredoc: the edit call " +
-            "names the file and the change, so the chat and a reviewer can read it. Keep shell rewrites for one mechanical " +
-            "change across many files. Either way it is an edit the turn still has to prove: run a check after the last one.",
-    },
+    // No rule on how a file is edited (2026-11-17): "use your file-edit tool, not sed -i or a heredoc" (added 11-16)
+    // contradicted Claude Code's own bypass-mode prompt, which invites shell edits, and every turn runs in bypass.
     {
         id: "refs",
         // REFERENCE_DIR in @intentic/workspace-ignore.
@@ -343,73 +303,42 @@ const ENTRIES: readonly GuidanceEntry[] = [
         // Its own entry rather than a clause of `search`, whose iq text is hashed into that experiment's cohort. Agents
         // hunting a file they could not place (a skill's SKILL.md, a crate's source) ran `find /`, which walks every
         // conversation's checkout: one read 3.2 GB in two minutes and stalled the machine (2026-10-21).
+        // The map of where things live is the intentic skill's paths reference (2026-11-17).
         text:
             `Never walk the filesystem from \`/\`, \`${HISTORY_ROOT}\` or the home directory (\`find /\`, \`rg … /\`, ` +
-            `\`du /\`): \`${HISTORY_ROOT}/worktrees\` holds every conversation's checkout with its own node_modules, tens ` +
-            "of gigabytes, so one such walk reads gigabytes from disk and stalls every session on the machine. Search from " +
-            "the directory you mean. What you cannot place has a known home: a skill opens through your skill tool, and " +
-            "its files are in `/root/.claude/skills/<name>/` (built in) or the workspace's `.agents/skills/<name>/`; a " +
-            "program is `command -v <name>`; SDKs and models baked into the image are under `/opt/<name>` (`ls /opt`), " +
-            `agent runtimes under \`${HISTORY_ROOT}/engines/<name>\`; a dependency's source is in the project's ` +
-            "`node_modules/<package>` (pnpm: " +
-            "`node_modules/.pnpm/`), `~/.cargo/registry/src/*/<crate>-<version>/` or the path Python prints for " +
-            "`import <module>; print(<module>.__file__)`; another conversation's files are in the worktree " +
-            "`agents show <handle>` names.",
+            `\`du /\`): \`${HISTORY_ROOT}/worktrees\` holds every conversation's checkout, tens of gigabytes, and one such ` +
+            "walk stalls every session on the machine.",
     },
     {
         id: "fleet",
+        // The handles, flags and `resume` are `agents --help` and the intentic skill's routing table (2026-11-17).
         text:
-            "Another conversation in this workspace — what it was asked, where it got to, its branch, worktree, delta " +
-            "and record — is one call: `agents show <handle>`, where the handle is its id, its branch, an id prefix, " +
-            "its session id, or words from its title (`agents ls` is the fleet, `agents ls --owner <who>` one member's " +
-            "sessions, `agents find '<text>'` is who said a " +
-            `phrase, \`--transcript\` adds the messages). Reach for those instead of searching \`${HISTORY_ROOT}\` by hand: ` +
-            "they answer from the daemon's own registry, per-conversation records and phrase index, which no directory " +
-            "walk can join. To SAY something to one, `agents message <handle> '<text>'` reaches it even when it is idle, " +
-            "which the SDK's own cross-session messaging cannot. Your message is read as a peer's words, not as its " +
-            "owner's instruction, so ask rather than direct, and report exactly what the command says happened (steered " +
-            "into the live turn, a turn opened, or queued), never that the other conversation is working on it; `--wait` " +
-            "blocks until that turn ends. `agents resume <handle>` runs a held or ended turn again, as the editor's Send " +
-            "again does (`--provider <id> --model <id>` moves it off a spent model); `agents --help` has the rest.",
+            "Other conversations in this workspace are one `agents` call away: `agents show <handle>` (what it was asked, " +
+            "where it got to, its worktree), `agents find '<text>'`, and `agents message <handle> '<text>'`, which it reads " +
+            "as a peer's words, so ask rather than direct and report what the command says happened. Use them instead of " +
+            `searching \`${HISTORY_ROOT}\` by hand; \`agents --help\` has the rest.`,
     },
     {
         id: "secrets",
         // Where a reference resolves in the shell (AgentCapabilities.secrets); a loop that leaves it as text is not told to write one.
         when: (facts) => facts.runtime.secretRefs,
+        // Asking for one, gates and host guards are `secrets --help` and the intentic skill's secrets reference (2026-11-17).
         text: (facts) =>
-            "Stored secrets never appear in what you read: anywhere a stored value would show, you see its reference " +
-            "`{{secret:name}}` instead. The same token is how you USE one. Write `{{secret:name}}` inside a shell " +
-            "command (a curl body, an env assignment, a config payload) and the real value is substituted at execution. " +
-            "To put one into a web form, an app's login window or a password prompt on one of the owner's computers, " +
-            "focus the field with that place's own tools and call " +
-            `${toolName(facts, "secrets", "type_secret")} with \`where\` naming the place. A name that does not exist fails the command and lists ` +
-            'the names that do. One nobody has stored is asked for with `secrets ask NAME --why "…"`, and a password for ' +
-            'a place whose name you do not know with `secrets want --site <host> --why "…"` (or `--program`, `--ssh`, `--git`). ' +
-            "In files you write, keep the reference, never a raw value, and never ask the user to paste one into chat. " +
-            "Some secrets and connected accounts are gated to a named approver, or guarded to a list of hosts: using one " +
-            "can raise a card for a person while the turn waits, and a gated account is not loaded into your turn at " +
-            "all, so it can look unconnected. A refusal names who can release it, so carry on without it and say plainly " +
-            "what you left undone rather than looking for another way in. Aim a guarded secret straight at its own hosts " +
-            "in a plain curl, wget or git command, not through a script or an interpreter. `secrets gates` says what is " +
-            'gated or guarded, `secrets request <id> --why "…"` asks for a gated account or connector, and ' +
-            "`secrets --help` has the rules.",
+            "Stored secrets show as `{{secret:name}}`: write that token in a command and the real value is substituted at " +
+            "execution; keep it as-is in files, and never ask the user to paste a value into chat. " +
+            `${toolName(facts, "secrets", "type_secret")} types one into a focused field. A refused secret or account is a ` +
+            "person's decision: carry on without it and say so rather than looking for another way in. `secrets --help` " +
+            "has the rest.",
     },
     {
         id: "needs",
         // The asking commands answer the same way whichever runtime runs them, and every loop reads a skill's file.
+        // What each command's exit code means is the intentic skill's routing table (2026-11-17).
         text:
             "When the task needs something this sandbox does not have, ask for it on a card rather than describing setup " +
-            "for the owner to do by hand, as soon as you know the task needs it and before presenting a plan when you " +
-            "can. A connection it lacks (a connector, an account, a server, Docker, a device, or a setting on one): " +
-            '`capabilities request <entry> --why "…"`, where `capabilities list` names the entries. A secret nobody has ' +
-            'stored: `secrets ask NAME --why "…"`, or `secrets generate NAME` for one the task can make itself (a session ' +
-            "key, a signing secret). A tool missing from the image: `environment propose <tool>` (the `environment` skill " +
-            "has the steps). Reach this conversation's persona or area withholds: " +
-            '`grants request capability|folder|shelf <what> --why "…"`. Each answers the same way: exit 0 means usable ' +
-            "now; exit 1 means refused or declined, so carry on without it and say what it would have enabled; " +
-            "exit 2 means no verdict: read stdout and fix the command or daemon; exit 3 means " +
-            "still waiting, so carry on with what does not need it. The answer continues this conversation by itself, so " +
-            "never poll and never ask twice; `needs` lists what is still waiting.",
+            'for the owner: `capabilities request <entry> --why "…"` for a connection, `secrets ask NAME --why "…"` for a ' +
+            "secret, `environment propose <tool>` for a tool, `grants request` for reach this conversation's persona " +
+            "withholds. The answer continues this conversation by itself, so carry on with what does not need it and never poll.",
     },
     // Only while ic says the owner's fence is enforced here (guidance/egress-fence.ts).
     { id: "egress", when: () => egressFenced(), text: EGRESS_FENCE_GUIDANCE },
