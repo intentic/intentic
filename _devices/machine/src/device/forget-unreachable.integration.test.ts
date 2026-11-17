@@ -20,8 +20,8 @@ const scopes: DeviceScopes = { shell: "off", write: "off", screen: "off", contro
 
 const link = (url: string) => ({ sandboxUrl: url, id: `device-for-${url}`, token: `token-for-${url}`, scopes });
 
-// One outage old enough to be gone, at the threshold the dial loop itself draws.
-const gone = (since: number) => ({ state: "connecting", outage: { failures: LONG_OUTAGE_ATTEMPTS, since } }) as const;
+// A link the platform has said is to a sandbox that no longer exists: its gone mark, as the agent stamps it.
+const gone = (since: number) => ({ state: "connecting", goneSince: since }) as const;
 
 beforeAll(async () => {
     home = await mkdtemp(join(tmpdir(), "intentic-machine-forget-"));
@@ -74,8 +74,9 @@ test("only the links that stopped answering go, and the running agent is left to
     await config.stampLinkStates({
         "https://open.example": { state: "open" },
         "https://gone.example": gone(1_700_000_000_000),
-        // One attempt short of the threshold: a sandbox that is restarting, not one that is gone.
-        "https://blipping.example": { state: "connecting", outage: { failures: LONG_OUTAGE_ATTEMPTS - 1, since: 1_700_000_000_000 } },
+        // (2026-11-17) Another sandbox down for hours, past the dial loop's long-outage rung: this drop is offered on every
+        // sandbox's page, and it used to take this one too, so its card read "the device is offline" until paired again.
+        "https://blipping.example": { state: "connecting", outage: { failures: LONG_OUTAGE_ATTEMPTS * 10, since: 1_700_000_000_000 } },
     });
     const { ui, said } = recordingUi();
 

@@ -8,6 +8,7 @@ import { LOG_ROTATE_BYTES } from "./detached.js";
 import { type CliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub } from "./launcher.js";
 import type { Log } from "./home.js";
 import { enableLinger } from "./linger.js";
+import { ensureUserManager, systemdUserAvailable } from "./user-manager.js";
 
 // Login autostart per OS, every mechanism supervising what it starts and none needing elevation or a password: a
 // per-user logon task through the launcher stub on Windows (the Run key as fallback), a systemd user unit on Linux
@@ -538,19 +539,6 @@ export const beforeSignIn = (spec: AutostartSpec, launcher: CliLauncher): Before
     };
 };
 
-// States meaning a user manager exists (degraded/starting count too); some Linux setups have none.
-const SYSTEMD_LIVE_STATES = new Set(["running", "degraded", "starting", "maintenance", "stopping", "initializing"]);
-
-const systemdUserAvailable = (): boolean => {
-    const result = runTool("systemctl", ["--user", "is-system-running"]);
-    if (result.spawnError !== undefined) {
-        return false; // no systemctl on PATH
-    }
-    // Non-zero exit is normal for "degraded"; the printed state decides, not the exit status. One that did not answer
-    // printed nothing, which is no live state either.
-    return SYSTEMD_LIVE_STATES.has(result.stdout.text.trim());
-};
-
 // A systemd unit argument: double quotes with C escapes, the quoting systemd's own command-line parser reads.
 const systemdQuoted = (value: string): string => `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 
@@ -737,7 +725,8 @@ const linuxAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): A
     },
     present: async () => existsSync(systemdUnitPath(spec)) || existsSync(linuxDesktopPath(spec)),
     register: async ({ repair = false } = {}) => {
-        if (systemdUserAvailable()) {
+        // A machine systemd booted gets a user manager where its login started none (user-manager.ts).
+        if (await ensureUserManager(spec)) {
             const unit = systemdUnitPath(spec);
             const wanted = systemdUserUnit(spec, launcher);
             if (repair && entryCurrent(await currentEntry(unit), wanted, launchLine("ExecStart="))) {

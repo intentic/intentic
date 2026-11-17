@@ -1,5 +1,5 @@
 import type { DeviceConfig } from "@intentic/sandbox-contract/schemas/capabilities";
-import { HOST_NATIVE_ENVIRONMENT, parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
+import { DEVICE_AWAY_DETAIL, HOST_NATIVE_ENVIRONMENT, parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
 import { revokeSyncEnrollmentsOf } from "../../peers/desktop-sync.js";
 import type { CapabilityCtx } from "../capability.js";
 import { HOST_TOOLS_NOTE, hostToolsNote } from "./host-skills.js";
@@ -14,7 +14,8 @@ const DEVICE: PeerHandlerSpec<DeviceConfig> = {
     // What the machine's native side said of itself at its last connect: on Intentic OS the skill says so too.
     noteFor: (ctx, id) => hostToolsNote(ctx.hostHub.state(id).facts),
     pairHint: "click Connect and run the one-liner on that device",
-    awayHint: "the device is offline",
+    // The editor reads this one as offline rather than as a setup to finish, so it is the contract's word.
+    awayHint: DEVICE_AWAY_DETAIL,
     added: (id) => `Added "${id}". Run the one-time command its entry is offering on that device, the agent can work on it from the next turn.`,
     store: (ctx) => ctx.hosts,
     hub: (ctx) => ctx.hostHub,

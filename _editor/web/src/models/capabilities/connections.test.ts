@@ -1,6 +1,7 @@
 import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
 import type { CapabilitySummary, CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabilities";
-import { awaitingLogin, browserGrants, connectionFacts, connectionState, hostPresence, rebuildStep, vpnFacts } from "./connections";
+import { DEVICE_AWAY_DETAIL } from "@intentic/sandbox-contract/schemas/hosts";
+import { awaitingLogin, browserGrants, connectionFacts, connectionState, hostPresence, machineAway, rebuildStep, vpnFacts } from "./connections";
 
 // Reader's question is whether they still have something to do, not the daemon's state word, and for two kinds
 // status alone isn't the truest answer. Both listing surfaces read through here, so an account can't be "needs
@@ -61,10 +62,23 @@ test(`reads a PC answering only through a distro as partly connected, and one an
         `its Windows side is offline; WSL archlinux, ubuntu still answer`,
     );
     expect(connectionState(`device`, instance({ state: `active` }), pc(true, [`wsl:archlinux`, false])).label).toBe(`online`);
-    // Nothing of it answers: as before.
-    expect(connectionState(`device`, away, pc(false, [`wsl:archlinux`, false])).label).toBe(`needs setup`);
+    // Nothing of it answers: a paired machine is offline, as below.
+    expect(connectionState(`device`, away, pc(false, [`wsl:archlinux`, false])).label).toBe(`offline`);
     // A card the owner switched off stays off, whatever is still connected.
     expect(connectionState(`device`, instance({ state: `inactive` }), pc(false, [`wsl:archlinux`, true])).label).toBe(`off`);
+});
+
+// (2026-11-17) z440 and inwin read "needs setup" with a Connect beside them while their sandbox had only restarted: the
+// daemon stores a paired machine holding no socket as pending, with its away detail. That is offline, which waits on the
+// machine, and only a machine never paired still needs the setup.
+test(`reads a paired machine that is not connected as offline, and only an unpaired one as needing setup`, () => {
+    const away = instance({ state: `pending`, detail: DEVICE_AWAY_DETAIL });
+    expect(machineAway(away)).toBe(true);
+    expect(connectionState(`device`, away, pc(false))).toMatchObject({ label: `offline`, tone: `neutral` });
+    expect(connectionState(`device`, away, hostPresence(undefined)).label).toBe(`offline`);
+    const unpaired = instance({ state: `pending`, detail: `click Connect and run the one-liner on that device` });
+    expect(machineAway(unpaired)).toBe(false);
+    expect(connectionState(`device`, unpaired, pc(false)).label).toBe(`needs setup`);
 });
 
 // Rank is the same judgement as the wording: a list that mostly works still opens on the part that doesn't.

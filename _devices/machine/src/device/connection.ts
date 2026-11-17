@@ -37,6 +37,15 @@ export const GONE_PROBE_AFTER_ATTEMPTS = 6;
 // Bounded like any request the agent makes: the edge answers its own errors at once.
 const PROBE_TIMEOUT_MS = 10_000;
 
+/* A LINK'S LONG OUTAGE RESTS A MINUTE, not the dial's quarter of an hour (2026-11-17). That rest was for links to
+   sandboxes that no longer exist, which the edge probe above now stops dialling altogether. What is left on the ladder
+   past twenty failures (about eight minutes) is a sandbox that still exists and is down for now (restarting, updating,
+   asleep, on a computer that is off), and the moment it is back is when its agent wants this machine. With the quarter
+   hour, a sandbox back at 19:25 had rog again at once and omen and z440 not until 19:34 and later: each machine's link
+   rested on its own clock, and the card read "the device is offline" for whichever had just missed it. A dial is one
+   request the edge answers at once, so a minute of rest costs nothing a machine notices. */
+export const DEVICE_LONG_OUTAGE_MS = 60_000;
+
 // The edge's word on a sandbox's address, by a plain GET of `/health`: true only for its final verdict. Every other
 // answer, a network error included, says nothing.
 export const probeEdge = async (sandboxUrl: string, fetchImpl: typeof fetch = fetch): Promise<boolean> => {
@@ -232,6 +241,7 @@ export const connect = (
             handler.upgrade(ws);
         },
         backoff: createBackoff(PEER_LINK_BACKOFF),
+        longOutageMs: DEVICE_LONG_OUTAGE_MS,
         /* The deadline that makes a dead link NOTICEABLE, and on this door it is the one that matters most. */
         silenceMs: peerLinkSilenceMs(HOST_HEARTBEAT_MS),
         log: linkLog,

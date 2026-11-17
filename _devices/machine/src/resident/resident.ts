@@ -12,7 +12,7 @@ import { startAutoBackup } from "../device/sandbox-rounds/auto-backup.js";
 import { startAutoPrepare } from "../device/sandbox-rounds/auto-prepare.js";
 import { startEngineDiskWatch } from "../device/sandbox-rounds/engine-disk.js";
 import { type HostLink, LINK_STAMP_MS, type LinkReading, linkStatePath, readLinks, stampLinkStates } from "../device/config.js";
-import { connect, reachedOverLoopback } from "../device/connection.js";
+import { connect, type MarkedLink, reachedOverLoopback } from "../device/connection.js";
 import { hostedSlugs, keeperOn, startKeeper } from "../device/sandbox-rounds/keeper.js";
 import { startProbationWatch } from "../device/sandbox-rounds/probation-watch.js";
 import { startEgressFollower } from "../device/egress/follower.js";
@@ -230,8 +230,8 @@ export const reconcileLinks = (
 };
 
 // Every link to a sandbox the keeper has just learnt is starting again (woken from sleep, by it or by somebody else) is
-// dialled now rather than when its ladder next comes round, which after a long sleep is a quarter of an hour away
-// (peer-dial's retryNow, sandbox-rounds/sleep.ts).
+// dialled now rather than when its ladder next comes round, which after a long sleep is up to a minute and a half away
+// (peer-dial's retryNow, sandbox-rounds/sleep.ts; device/connection.ts DEVICE_LONG_OUTAGE_MS).
 export const redialSandbox = (connections: ReadonlyMap<string, Connection>, slug: string): void => {
     for (const [url, held] of connections) {
         if (pairingSlugs(url).includes(slug)) {
@@ -240,14 +240,27 @@ export const redialSandbox = (connections: ReadonlyMap<string, Connection>, slug
     }
 };
 
-const reading = (peer: PeerLink): LinkReading => {
+// The socket's own state, and the platform's word that its sandbox is gone as device.json holds it now: the link's
+// connection writes that mark into the file (connection.ts), and only the file read this tick has it, not the link the
+// connection was dialled with.
+export const linkReading = (peer: Pick<PeerLink, "state" | "outage">, held: HostLink | undefined): LinkReading => {
     const outage = peer.outage();
-    return { state: peer.state(), ...(outage === undefined ? {} : { outage }) };
+    // SAFETY: a link device.json holds is a HostLink with, at most, the gone mark its connection wrote beside it.
+    const goneSince = (held as MarkedLink | undefined)?.goneSince;
+    let said: LinkReading = { state: peer.state() };
+    if (outage !== undefined) {
+        said = { ...said, outage };
+    }
+    if (goneSince !== undefined) {
+        said = { ...said, goneSince };
+    }
+    return said;
 };
 
-const stampLinks = async (connections: ReadonlyMap<string, Connection>): Promise<void> => {
+const stampLinks = async (connections: ReadonlyMap<string, Connection>, links: readonly HostLink[] | undefined): Promise<void> => {
     if (connections.size > 0) {
-        await stampLinkStates(Object.fromEntries([...connections].map(([url, held]) => [url, reading(held.peer)] as const)));
+        const held = new Map((links ?? []).map((link) => [link.sandboxUrl, link]));
+        await stampLinkStates(Object.fromEntries([...connections].map(([url, { peer }]) => [url, linkReading(peer, held.get(url))] as const)));
     }
 };
 
@@ -306,7 +319,7 @@ const SUPERVISED_ROUND_DELAY_MS = 30 * 60_000;
 const sessionRounds = (supervised: boolean, connections: ReadonlyMap<string, Connection>, lease: PidRecord, log: Log): { stop: () => void }[] => {
     const watch = startProbationWatch(log, { sweeps: true });
     const keeper = startKeeper(log, {
-        links: () => [...connections].map(([url, held]) => ({ url, reading: reading(held.peer) })),
+        links: () => [...connections].map(([url, held]) => ({ url, reading: linkReading(held.peer, held.link) })),
         loopback: reachedOverLoopback,
         watching: watch.running,
         poke: (slug) => redialSandbox(connections, slug),
@@ -424,7 +437,7 @@ const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void>
     }
     // Not awaited: one `os.freemem()` on a tick with memory to spare, and a drop that is due runs beside the loop.
     runtime.cacheDrop?.tick();
-    await stampLinks(runtime.connections);
+    await stampLinks(runtime.connections, now?.links);
     await stampAlive();
 };
 

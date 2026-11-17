@@ -213,8 +213,9 @@ const forgetUnreachable = (): DeviceAgentFix => ({
     op: `forget-unreachable`,
 });
 
-// Links this machine keeps dialling into nothing: sandboxes deleted or recreated at another address, which its agent
-// will re-dial for as long as the machine runs. Counted from the machine's own live reading, so it clears itself when
+// Links this machine holds to sandboxes deleted or recreated at another address: since 2026-11-17 only those the
+// platform has said no longer exist, never a sibling that is merely down, since this strip is on every sandbox's page and
+// its button used to take this machine away from them. Counted from the machine's own live reading, so it clears itself when
 // the agent comes back holding fewer links, and it is raised only where the button can travel — a machine with a gap
 // cannot hear the drop, and its gap is the sentence above this one.
 const linksConcern = (device: Device, readAt: number): DeviceConcern | undefined => {

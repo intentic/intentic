@@ -8,7 +8,7 @@ import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capab
 import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
-import { type ConnectionState, rebuildStep, signsInByHand } from "../../../models/capabilities/connections";
+import { type ConnectionState, machineAway, rebuildStep, signsInByHand } from "../../../models/capabilities/connections";
 import { connectedLinks } from "../../../models/capabilities/credentialGuide";
 import { type HubRowView, saveLabel } from "../../../models/hub/connectionHub";
 import { useT } from "@intentic/ui/i18n";
@@ -44,7 +44,11 @@ const isHost = computed(() => props.entry.kind === `device`);
 const isBrowser = computed(() => props.entry.kind === `webext`);
 const isPhone = computed(() => props.entry.kind === `phone`);
 const pairs = computed(() => isHost.value || isBrowser.value || isPhone.value);
-const paired = computed(() => Boolean(props.host?.lastSeen ?? props.browser?.lastSeen ?? props.phone?.lastSeen));
+// The roster's lastSeen starts over when the sandbox restarts, so a machine the daemon still holds paired (its away
+// detail) counts too: its row offers Reconnect, not the first Connect.
+const paired = computed(
+    () => Boolean(props.host?.lastSeen ?? props.browser?.lastSeen ?? props.phone?.lastSeen) || (isHost.value && machineAway(props.instance)),
+);
 
 // A browser capability connects via a live login window; once signed in, the same window is how the user acts in it.
 const signsIn = computed(() => signsInByHand(props.entry.kind));

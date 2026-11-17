@@ -5,7 +5,7 @@ import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { parseJsonOr } from "@intentic/base/json";
 import { writeSecretFile } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
-import { LONG_OUTAGE_ATTEMPTS, type PeerLinkState, type PeerOutage } from "@intentic/sandbox-contract/peer-dial";
+import type { PeerLinkState, PeerOutage } from "@intentic/sandbox-contract/peer-dial";
 import { baseDir } from "../config.js";
 
 // Device state lives at ~/.intentic/machine/device.json and audit.jsonl; permissions come from writeSecretFile.
@@ -20,11 +20,13 @@ export const linkStatePath = join(baseDir, "links.tick");
 export const LINK_STAMP_MS = 5_000;
 export const LINK_STAMP_STALE_MS = LINK_STAMP_MS * 4;
 
-// One link as the processes that are not the agent see it: what its socket is doing, and — only while something is
-// wrong — how long it has been wrong for. `status` renders the first; the capability card counts the second.
+// One link as the processes that are not the agent see it: what its socket is doing, — only while something is wrong —
+// how long it has been wrong for, and since when the platform has said its sandbox no longer exists (the link's
+// `goneSince` in device.json, connection.ts). `status` renders the first; the capability card counts the last.
 export interface LinkReading {
     readonly state: PeerLinkState;
     readonly outage?: PeerOutage;
+    readonly goneSince?: number;
 }
 
 interface LinkStateStamp {
@@ -52,12 +54,18 @@ export const readLinkStates = async (now = Date.now()): Promise<Readonly<Record<
     return stamped === undefined || now - stamped.at > LINK_STAMP_STALE_MS ? undefined : stamped.links;
 };
 
-// Which links have been failing long enough to be treated as gone, at the same threshold the dial loop uses to stop
-// reading silence as a restart — one line, drawn once, so the count the card shows and the set the drop removes can
-// never disagree. Read from a stamp only: with no live reading there is no evidence, and the callers of this delete.
-export const unreachableIn = (stamped: Readonly<Record<string, LinkReading>>): readonly { url: string; outage: PeerOutage }[] =>
+/* WHICH LINKS ARE GONE: only those whose sandbox the platform has said no longer exists (2026-11-17), one line drawn
+   once, so the count the card shows and the set the drop removes can never disagree. Read from a stamp only: with no
+   live reading there is no evidence, and the callers of this delete.
+   It used to be any link that had failed twenty dials in a row, the dial loop's long-outage rung, which is about eight
+   minutes: a sandbox restarting for an update, asleep, or on a laptop that was shut. The drop is offered on every
+   sandbox's Devices page, so one sandbox's button took this machine away from another that was merely down, and that
+   one's card read "the device is offline" until somebody paired it again. Meanwhile a link the platform had said was
+   gone held no outage at all after a restart (it asks the edge rather than dialling), so the button never counted the
+   links it was for. Silence proves nothing, as for folder sync (sync/gone.ts): the edge's final verdict does. */
+export const unreachableIn = (stamped: Readonly<Record<string, LinkReading>>): readonly { url: string; since: number }[] =>
     Object.entries(stamped).flatMap(([url, reading]) =>
-        reading.outage !== undefined && reading.outage.failures >= LONG_OUTAGE_ATTEMPTS ? [{ url, outage: reading.outage }] : [],
+        reading.goneSince !== undefined && reading.state !== "open" ? [{ url, since: reading.goneSince }] : [],
     );
 
 // One sandbox this device answers to. Scopes are a cache, not the source of truth: the sandbox pushes them on every

@@ -1,6 +1,6 @@
 import { capabilityEffects } from "@intentic/capability-catalog";
 import type { CapabilityKind, CapabilityState, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import { environmentName, type HostSummary, machinePresence, type MachinePresence } from "@intentic/sandbox-contract/schemas/hosts";
+import { DEVICE_AWAY_DETAIL, environmentName, type HostSummary, machinePresence, type MachinePresence } from "@intentic/sandbox-contract/schemas/hosts";
 import type { NetdiskLink } from "@intentic/sandbox-contract/schemas/netdisk";
 import type { PhoneFacts } from "@intentic/sandbox-contract/schemas/phone";
 import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
@@ -158,8 +158,14 @@ export const connectionState = (kind: CapabilityKind, instance: CapabilitySummar
     if (kind === `device` && lent && presence?.kind === `partly`) {
         return partlyConnected(presence.awake);
     }
-    if (kind === `device` && instance.status.state === `active`) {
+    if (kind === `device` && (instance.status.state === `active` || machineAway(instance))) {
         return offline();
     }
     return connectionStates()[instance.status.state];
 };
+
+// A paired machine holding no socket: the daemon stores it as pending, with the contract's away detail, since the agent
+// cannot use it; to its owner it is offline, not unfinished. Read as "needs setup", with a Connect beside it, a machine
+// whose sandbox had restarted invited a fresh pairing that nothing needed (2026-11-17).
+export const machineAway = (instance: CapabilitySummary): boolean =>
+    instance.status.state === `pending` && instance.status.detail === DEVICE_AWAY_DETAIL;

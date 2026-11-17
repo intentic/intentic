@@ -189,16 +189,21 @@ test("a stamp inside its window is the answer; past it, the agent that wrote it 
 
 // The count on the capability card and the set the drop deletes are the same function, so a link can never be shown as
 // gone and then survive the button that says it is.
-test("a link counts as gone only once it has failed as often as the dial loop's own long-outage rung", () => {
+// (2026-11-17) Only the platform's word makes a link gone: a sibling sandbox down for hours (restarting, asleep, on a
+// laptop that is shut) is still this machine's, however many dials it has failed.
+test("a link counts as gone only once the platform has said its sandbox no longer exists, never for its failed dials", () => {
     const at = 1_700_000_000_000;
     const states = {
         "https://open.example": { state: "open" },
-        // One attempt short: still inside "the sandbox is restarting", which is the whole point of the threshold.
-        "https://blipping.example": { state: "connecting", outage: { failures: LONG_OUTAGE_ATTEMPTS - 1, since: at } },
-        "https://gone.example": { state: "connecting", outage: { failures: LONG_OUTAGE_ATTEMPTS, since: at } },
+        // Down for hours, past the dial loop's long-outage rung many times over: a sandbox that is down, not gone.
+        "https://down.example": { state: "connecting", outage: { failures: LONG_OUTAGE_ATTEMPTS * 10, since: at } },
+        // Marked gone by the edge's final verdict; after a restart it asks the edge instead of dialling, so no outage.
+        "https://gone.example": { state: "connecting", goneSince: at + 5 },
+        // Marked, and then it answered: the mark is about to be cleared, and an open socket is never gone.
+        "https://back.example": { state: "open", goneSince: at },
     } as const;
 
-    expect(config.unreachableIn(states).map((entry) => entry.url)).toEqual(["https://gone.example"]);
+    expect(config.unreachableIn(states)).toEqual([{ url: "https://gone.example", since: at + 5 }]);
     expect(config.unreachableIn({})).toEqual([]);
 });
 

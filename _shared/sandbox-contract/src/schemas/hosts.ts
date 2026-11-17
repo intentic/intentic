@@ -76,9 +76,11 @@ export const DeviceFactsSchema = z.object({
     wsl: WslEnvironmentSchema.optional(),
     // Windows only: the distros `wsl -l -q` lists, the names `run_command`'s `in: "wsl:<name>"` accepts.
     wslDistros: z.array(z.string()).optional(),
-    // What this machine's agent is holding links to, and how much of it is answering nothing. COUNTS AND AN AGE ONLY:
-    // the rest are other sandboxes' addresses, and a sandbox has no business learning its siblings'. Absent from an
-    // agent older than this field, which is why "none unreachable" is not the same value as "did not say".
+    // What this machine's agent is holding links to, and how many of them are to sandboxes the platform has said no
+    // longer exist (since 2026-11-17; before, any link that had failed twenty dials, a sandbox merely down included).
+    // COUNTS AND AN AGE ONLY: the rest are other sandboxes' addresses, and a sandbox has no business learning its
+    // siblings'. Absent from an agent older than this field, which is why "none unreachable" is not the same value as
+    // "did not say".
     links: z.object({ total: z.number(), unreachable: z.number(), unreachableSince: z.number().optional() }).optional(),
     // Which of the optional ops this agent AND the `ic` it drives implement (DeviceFeatureSchema), for a page to offer
     // only what works and for the daemon to refuse an op before sending it. Strings on the wire, so a newer agent's
@@ -248,6 +250,12 @@ export const windowsPathOf = (distro: string, linuxPath: string): string => `\\\
 // distro on it hold their own agent — mutagen has to watch the filesystem it syncs, and a distro's login shell is its
 // own — but the owner connected a computer, not a shell, so the grant, the row and the tools are the machine's.
 export const HOST_NATIVE_ENVIRONMENT = "native";
+
+// What a device card's status says of a machine that is paired and holds no socket right now (the device handler's
+// `awayHint`, beside a `pending` state). Shared so the editor can read it as offline, which waits on the machine, rather
+// than as a setup to finish, which a fresh pairing would: a machine whose sandbox had restarted read "needs setup" with a
+// Connect button beside it (2026-11-17).
+export const DEVICE_AWAY_DETAIL = "the device is offline";
 
 // Which environment a machine is describing when it connects: the distro by the name WSL registered (what `wsl -l -q`
 // prints and `in: "wsl:<name>"` takes), or the metal. Facts arrive at connect and no scope withholds them, so this is

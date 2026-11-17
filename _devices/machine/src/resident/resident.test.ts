@@ -1,6 +1,7 @@
 import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import type { HostLink } from "../device/config.js";
-import { type KeptCheck, reconcileLinks, redialSandbox, stillKeeping } from "./resident.js";
+import type { MarkedLink } from "../device/connection.js";
+import { type KeptCheck, linkReading, reconcileLinks, redialSandbox, stillKeeping } from "./resident.js";
 
 const link = (url: string, token = `token-for-${url}`): HostLink => ({
     sandboxUrl: url,
@@ -33,6 +34,24 @@ const dialer = () => {
         },
     };
 };
+
+// The stamp carries the platform's gone mark from device.json as read this tick: the connection writes that mark into the
+// file, so only the file has it, never the link the connection was dialled with.
+describe("linkReading", () => {
+    const peer = { state: () => "connecting" as const, outage: () => ({ failures: 30, since: 5 }) };
+
+    it("says the socket's state and outage, and the gone mark only where device.json holds one", () => {
+        expect(linkReading(peer, link("https://down.example"))).toEqual({ state: "connecting", outage: { failures: 30, since: 5 } });
+        const marked: MarkedLink = { ...link("https://gone.example"), goneSince: 7 };
+        expect(linkReading(peer, marked)).toEqual({
+            state: "connecting",
+            outage: { failures: 30, since: 5 },
+            goneSince: 7,
+        });
+        // A link the file no longer lists (or a tick whose read failed) has nothing to say about it.
+        expect(linkReading({ state: () => "open", outage: () => undefined }, undefined)).toEqual({ state: "open" });
+    });
+});
 
 // Setup, uninstall and a revocation all change the link list under a running agent; none of them may restart it.
 describe("reconcileLinks", () => {

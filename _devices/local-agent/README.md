@@ -43,6 +43,15 @@ flowchart LR
 - (2026-10-18) A systemd registration turns lingering on (`loginctl enable-linger`), and writes `linger-enabled` beside
   the agent's log only when that changed it from off to on ([`src/linger.ts`](src/linger.ts)). An agent's purge turns
   lingering off only where that marker is (`lingerOn`, `disableLinger`), so lingering the user had already stays on.
+- (2026-11-17) A registration that finds no user manager on a machine systemd booted starts one: it turns lingering on
+  and points the process at `/run/user/<uid>` where nothing set `XDG_RUNTIME_DIR`
+  ([`src/user-manager.ts`](src/user-manager.ts)), then writes the systemd unit as anywhere else. A shell that
+  pam_systemd did not open (`su -l` inside an ssh login, sudo, cron) has neither, and the XDG entry it got instead is
+  read only by a desktop session: a headless server set up as root that way restarted and stayed unreachable until
+  somebody ran the setup again. The XDG entry is still the fallback where systemd did not boot the machine, lingering
+  is refused, or no manager comes within ten seconds. `loginctl enable-linger` and `disable-linger` name the process's
+  own user (`lingerArgs`): left to itself loginctl acts for the user of the caller's session, which under `su -l` is
+  the ssh user, not root.
 - Every supervisor restarts an agent that exits non-zero or is killed by a signal: the systemd unit's
   `Restart=on-failure`, the LaunchAgent's `KeepAlive { SuccessfulExit = false }`, and the logon task's restart on
   failure plus its five-minute repetition. That is what an agent's own hang watchdog relies on when it kills itself.

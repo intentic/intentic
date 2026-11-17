@@ -1,11 +1,20 @@
 import { HOST_HEARTBEAT_MS } from "@intentic/sandbox-contract/protocol/doors/host-protocol";
-import { PEER_LINK_BACKOFF, peerLinkSilenceMs } from "@intentic/sandbox-contract/peer-dial";
+import { LONG_OUTAGE_ATTEMPTS, PEER_LINK_BACKOFF, peerLinkSilenceMs } from "@intentic/sandbox-contract/peer-dial";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { unstubbed } from "@intentic/testing";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { DaemonBase } from "../daemon-base.js";
 import type { HostLink } from "./config.js";
-import { connect, type Dial, GONE_PROBE_AFTER_ATTEMPTS, goneLinkStep, type LinkGoneStore, probeEdge, probesFirst } from "./connection.js";
+import {
+    connect,
+    DEVICE_LONG_OUTAGE_MS,
+    type Dial,
+    GONE_PROBE_AFTER_ATTEMPTS,
+    goneLinkStep,
+    type LinkGoneStore,
+    probeEdge,
+    probesFirst,
+} from "./connection.js";
 import { GONE_RETIRE_MS } from "../sync/gone.js";
 import type { Indicator } from "./indicator.js";
 
@@ -165,6 +174,32 @@ test(`asks again on every reconnect, so a container that went away falls back to
     expect(asked).toEqual([PUBLIC, PUBLIC]);
     expect(sockets[0]?.url).toBe(LOCAL_SOCKET);
     expect(sockets[1]?.url).toBe(PUBLIC_SOCKET);
+
+    connection.stop();
+    await connection.done;
+});
+
+// (2026-11-17) A sandbox down for more than twenty dials and then back had one machine at once and the others a quarter of
+// an hour later, each on its own rest. A machine's link rests a minute past that run, not peer-dial's quarter hour.
+test(`a link past twenty failed dials tries again within a minute and a half, not a quarter of an hour`, async () => {
+    jest.useFakeTimers();
+    const { dial, sockets } = dialing([]);
+    // A sandbox that still exists, so the edge never says it is gone and the link stays on its ladder.
+    const connection = connect(link, `1.0.0`, quiet, { ...dial, gone: async () => false });
+
+    for (let attempt = 1; attempt <= LONG_OUTAGE_ATTEMPTS; attempt += 1) {
+        // one dial after another, as the loop makes them
+        await waitFor(() => expect(sockets).toHaveLength(attempt));
+        sockets[attempt - 1]?.drops(1006);
+        if (attempt < LONG_OUTAGE_ATTEMPTS) {
+            // ditto
+            await advanceTimersByTimeAsync(31_000);
+        }
+    }
+    expect(DEVICE_LONG_OUTAGE_MS).toBe(60_000);
+    // The rest plus the ladder's own draw, which tops out at its 30 s cap.
+    await advanceTimersByTimeAsync(DEVICE_LONG_OUTAGE_MS + PEER_LINK_BACKOFF.capMs + 1_000);
+    await waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS + 1));
 
     connection.stop();
     await connection.done;

@@ -603,6 +603,12 @@ in `device.json` (matched by address and token, so connecting the sandbox again 
 asked again every hour and dials at once when the sandbox answers; seven days on it is forgotten, as a revoked (1008)
 link is.
 
+(2026-11-17) A link that has failed twenty dials in a row rests **a minute** between tries (`DEVICE_LONG_OUTAGE_MS`),
+plus the ladder's own draw of up to 30 s, not peer-dial's default quarter of an hour. A sandbox that no longer exists
+is stopped by the probe above, so what is left on the ladder is one that is down for now, and its machines are wanted
+the moment it is back: with the quarter hour, sandbox `a29b15760ba3` came back at 19:25 and had rog at once while omen
+and z440 waited for their next try, each on its own clock, and its cards read "the device is offline" meanwhile.
+
 ### What folder sync owns
 
 (2026-10-05) Several things folder sync makes are shared with somebody else: a Mutagen daemon with the owner's own
@@ -903,8 +909,8 @@ The keeper now puts an unneeded sandbox to sleep and wakes it when somebody open
   The desktop app on the same computer runs the same command the moment its workspace page has asked
   (`--source app`, the app's `sandbox_wakes.rs`), so a sandbox opened there need not wait for this round.
 - **The link comes back with it** (2026-10-19). A sleep leaves this agent's link to the sandbox on its dial ladder,
-  which after twenty failures rests a quarter of an hour between tries: on rog a sandbox woken at 16:48 had its device
-  tools back at 17:12. Each start is acted on as ic prints it, and every link naming the slug is dialled at once and put
+  which after twenty failures rested a quarter of an hour between tries (a minute since 2026-11-17): on rog a sandbox
+  woken at 16:48 had its device tools back at 17:12. Each start is acted on as ic prints it, and every link naming the slug is dialled at once and put
   back on the ladder's first rung (peer-dial's `retryNow`); so is a sandbox somebody else woke, once ic counts nothing
   asleep or the keeper's next listing shows it running.
 - **The setting** is this environment's `sandboxSleepMinutes` in `machine.json`: absent means 30, `0` means never. Set

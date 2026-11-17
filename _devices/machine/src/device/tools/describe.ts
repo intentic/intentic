@@ -73,7 +73,7 @@ export const linkFacts = (stamped: Readonly<Record<string, LinkReading>> | undef
         return undefined;
     }
     const gone = unreachableIn(stamped);
-    const since = gone.map(({ outage }) => outage.since);
+    const since = gone.map((link) => link.since);
     return {
         total: Object.keys(stamped).length,
         unreachable: gone.length,

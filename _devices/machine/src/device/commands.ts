@@ -219,11 +219,11 @@ export const deviceUninstall = async (
     return dropped.length === 0 ? "Nothing was connected. Removed any leftovers." : `Disconnected from ${urls}.`;
 };
 
-// Drops the links this device has been dialling into silence for long enough that "the sandbox is restarting" has
-// stopped being a reading of it — a recreated or deleted sandbox, whose address nothing will ever answer again.
-// Evidence only: the set comes from the resident agent's own live stamp, so a device whose agent is not running drops
-// NOTHING rather than guessing from a config it cannot check against a socket. The link carrying the request that
-// triggered this is answering by definition, so it is never in the set.
+// Drops the links to sandboxes the platform has said no longer exist (a deleted or recreated one), and never one that is
+// only down: any sandbox's Devices page offers this, so a sibling restarting or asleep must keep this machine
+// (config.ts `unreachableIn`). Evidence only: the set comes from the resident agent's own live stamp, so a device whose
+// agent is not running drops NOTHING rather than guessing from a config it cannot check against a socket. The link
+// carrying the request that triggered this is answering by definition, so it is never in the set.
 const forgetUnreachable = buildCommand({
     docs: { brief: "Forget the sandboxes this device has stopped being able to reach (a deleted or recreated one)" },
     parameters: {},

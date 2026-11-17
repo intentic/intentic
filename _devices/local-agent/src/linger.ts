@@ -32,10 +32,15 @@ export const lingerOn = (user: string | undefined = userName()): boolean | undef
 
 const LOGINCTL_TIMEOUT_MS = 30_000;
 
+/* NAMED, NOT IMPLIED (2026-11-17). Without a user, loginctl acts for the user of the CALLER'S SESSION, which is not this
+   process's user in a shell `su -l` opened inside somebody's ssh login: on z440, `enable-linger` run as root turned
+   lingering on for the ssh user, and root's manager never came. The process's own user is named whenever it has one. */
+export const lingerArgs = (verb: "enable-linger" | "disable-linger", user: string | undefined): string[] => (user === undefined ? [verb] : [verb, user]);
+
 /** Turns lingering on, and records it as the agent's doing only when it was off until now. Best-effort, as before. */
 export const enableLinger = async (spec: Pick<AutostartSpec, "logPath">): Promise<void> => {
     const before = lingerOn();
-    runBoundedSync("loginctl", ["enable-linger"], { timeoutMs: LOGINCTL_TIMEOUT_MS, output: "ignore" });
+    runBoundedSync("loginctl", lingerArgs("enable-linger", userName()), { timeoutMs: LOGINCTL_TIMEOUT_MS, output: "ignore" });
     if (before === false && lingerOn() === true) {
         const marker = lingerMarkerPath(spec);
         await mkdir(dirname(marker), { recursive: true, mode: 0o700 });
@@ -45,7 +50,7 @@ export const enableLinger = async (spec: Pick<AutostartSpec, "logPath">): Promis
 
 /** Turns lingering off; answers what loginctl said when it did not. */
 export const disableLinger = (): string | undefined => {
-    const result = runBoundedSync("loginctl", ["disable-linger"], { timeoutMs: LOGINCTL_TIMEOUT_MS, output: "pipe" });
+    const result = runBoundedSync("loginctl", lingerArgs("disable-linger", userName()), { timeoutMs: LOGINCTL_TIMEOUT_MS, output: "pipe" });
     if (result.spawnError !== undefined) {
         return result.spawnError.message;
     }

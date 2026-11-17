@@ -6,21 +6,22 @@ import { icOverrides } from "./ic-binary.js";
 // What a sandbox is told about the links this machine holds to OTHER sandboxes. Counts and an age, never addresses:
 // they belong to the same owner but not to the sandbox asking, and the count is all its card needs to offer the drop.
 const down = (failures: number, since: number): LinkReading => ({ state: "connecting", outage: { failures, since } });
+const gone = (goneSince: number): LinkReading => ({ state: "connecting", goneSince });
 
-test("reports how many links are held and how many have stopped being reachable, and nothing else", () => {
+test("reports how many links are held and how many are to sandboxes that no longer exist, and nothing else", () => {
     expect(
         linkFacts({
             "https://a.example": { state: "open" },
-            "https://b.example": down(LONG_OUTAGE_ATTEMPTS, 1_700_000_500_000),
-            "https://c.example": down(LONG_OUTAGE_ATTEMPTS + 900, 1_700_000_000_000),
+            "https://b.example": gone(1_700_000_500_000),
+            "https://c.example": gone(1_700_000_000_000),
         }),
     ).toEqual({ total: 3, unreachable: 2, unreachableSince: 1_700_000_000_000 });
 });
 
-// The same line the dial loop draws to stop treating silence as a restart: below it, a sandbox is restarting and
-// nobody should be offered a button that throws its link away.
-test("a link that has only just stopped answering is not yet unreachable", () => {
-    expect(linkFacts({ "https://a.example": down(LONG_OUTAGE_ATTEMPTS - 1, 1_700_000_000_000) })).toEqual({ total: 1, unreachable: 0 });
+// (2026-11-17) Every sandbox's Devices page offers to drop what this counts, so a sibling that is only down (restarting,
+// asleep, on a computer that is off) must never be counted, however long it has failed.
+test("a link that is only down is never unreachable, however many dials it has failed", () => {
+    expect(linkFacts({ "https://a.example": down(LONG_OUTAGE_ATTEMPTS * 50, 1_700_000_000_000) })).toEqual({ total: 1, unreachable: 0 });
 });
 
 // Not the same fact as "none unreachable": an agent that has not stamped yet, or is too old to, has said nothing,
