@@ -304,6 +304,15 @@ export const RAW_ROUTES = {
     "POST /system/links/{id}": { control: "never" },
     "DELETE /system/links/{id}": { control: "never" },
     "POST /system/links/{id}/requests/{request}": { control: "never" },
+    // Account-level report routing: another sandbox on the owner's account reporting a problem about a project this one
+    // claims. Checked in the handler against a pass the platform signed (policy/sandbox-pass.ts); it only ever records
+    // into the issues inbox, and wakes an agent only as the inbox's own escalation rule says.
+    "POST /account/report": { auth: "door", control: "never" },
+    // The sending side, for the `projects` command on the agent's PATH: report a problem to whichever sandbox claims a
+    // project (delivered now or kept in the outbox), what is still waiting, and the projects this sandbox claims.
+    "POST /account/outbox": { agent: true, control: "never" },
+    "GET /account/outbox": { agent: true, control: "never" },
+    "GET /account/projects": { agent: true, control: "never" },
     // The link doors, called by the asking sandbox's daemon: each checks the link token itself (x-intentic-link) and
     // reaches only the conversations that link opened, which is the whole of a link's reach.
     "GET /link": { auth: "door", control: "never" },

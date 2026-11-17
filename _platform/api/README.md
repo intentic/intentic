@@ -354,6 +354,7 @@ flowchart LR
 | `src/invite` | Emailed invitations to share a sandbox |
 | `src/me` | The caller's profile, their look and reading preferences kept with the account (`/me/preferences`), and the GDPR data export |
 | `src/tokens` | Account-level API tokens |
+| `src/projects` | Account-level report routing: which of an owner's sandboxes claims which project (`/rpc` `projects.*`, owner only), and the directory a sandbox asks (`/projects/resolve`, connect token) for the claiming sandbox's address and a signed pass. A notary, never a mailbox: report content goes daemon to daemon |
 | `src/push-relay` | Push relay for native installs: APNs for the iPhone app, FCM for the Android editor and Intentic Device apps, never carrying a notification's words to Android |
 | `src/trial` | Free-trial model API, OpenAI-compatible, on the platform's credential. Metered per model call (`TRIAL_DAILY_MESSAGES`, default 12 a day); a turn the daemon opens with a call left may finish on up to `TRIAL_GRACE_STEPS` more (default 25 a day, `POST /trial/turn`) |
 | `src/wallet` | Agent wallet: payments signed by a custody provider under per-member caps |

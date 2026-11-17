@@ -16,6 +16,7 @@ const SettingsTokens = lazySection(`SettingsTokens`, () => import("./SettingsTok
 const OrgConsole = lazySection(`OrgConsole`, () => import("../organisations/OrgConsole.vue"));
 const SettingsVoice = lazySection(`SettingsVoice`, () => import("./SettingsVoice.vue"));
 const SettingsData = lazySection(`SettingsData`, () => import("./SettingsData.vue"));
+const SettingsProjects = lazySection(`SettingsProjects`, () => import("./SettingsProjects.vue"));
 
 // The same, by the slug the index names each under: what the hub fetches ahead and warms. The template's chain is what
 // draws them.
@@ -29,6 +30,7 @@ const SECTIONS = {
     tokens: SettingsTokens,
     voice: SettingsVoice,
     data: SettingsData,
+    projects: SettingsProjects,
 } satisfies Record<SettingsSlug | SettingsPartSlug, Component>;
 </script>
 
@@ -150,6 +152,7 @@ useSectionWarmup(() => sections.value.flatMap((section) => pageOf(section.slug))
                 <SettingsNotifications v-else-if="slug === `notifications`" />
                 <SettingsKeybindings v-else-if="slug === `keybindings`" />
                 <SettingsTokens v-else-if="slug === `tokens`" />
+                <SettingsProjects v-else-if="slug === `projects`" />
                 <OrgConsole v-else-if="slug === `organisation`" />
                 <section v-for="part in partsOf(slug)" :id="part.slug" :key="part.slug" class="scroll-mt-4">
                     <SettingsVoice v-if="part.slug === `voice`" />

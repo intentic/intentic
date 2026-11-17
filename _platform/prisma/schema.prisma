@@ -48,6 +48,7 @@ model User {
     wallets          Wallet[]
     pushDevices      PushDevice[]
     apiTokens        ApiToken[]
+    projectClaims    ProjectClaim[]
 
     @@map("user")
 }
@@ -323,6 +324,8 @@ model Sandbox {
     // null for one running on a computer the owner owns.
     hosted             HostedMachine?
     members            SandboxMember[]
+    // The projects this sandbox answers for on its owner's account (ProjectClaim below).
+    projectClaims      ProjectClaim[]
     // The organisation whose policy this sandbox is held to (Organisation below); null is a personal sandbox, which
     // is every sandbox until an admin of an organisation who owns it binds it. Set null if the organisation goes, so
     // its sandboxes fall back to personal rather than vanishing with it.
@@ -1060,4 +1063,23 @@ model EdgeCertificate {
     issuedAt    DateTime @default(now())
 
     @@map("edge_certificate")
+}
+
+// Which of the owner's sandboxes answers for a project: the directory behind account-level report routing (api
+// projects/). A project is a repository id as sandbox-contract project-id.ts normalizes it (`github.com/acme/app`).
+// One sandbox per project per account, so a report has exactly one place to go; claiming it elsewhere moves it.
+// Written only by the signed-in owner (oRPC projects.claim); a daemon reads it through the ingress `projectResolve`.
+// Goes with its sandbox (a trashed sandbox's row is deleted) and with its owner.
+model ProjectClaim {
+    id        String   @id @default(cuid())
+    ownerId   String
+    owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+    sandboxId String
+    sandbox   Sandbox  @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
+    project   String
+    createdAt DateTime @default(now())
+
+    @@unique([ownerId, project])
+    @@index([sandboxId])
+    @@map("project_claim")
 }

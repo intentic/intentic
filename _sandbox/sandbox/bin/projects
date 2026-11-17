@@ -1,0 +1,176 @@
+#!/usr/bin/env node
+// The in-sandbox projects command: account-level report routing from the agent's shell. Report a problem you saw about
+// a project to whichever sandbox on the owner's account claims it (the daemon's issues/account-outbox.ts): delivered
+// now, or kept and retried while that sandbox is asleep or offline. It lands in that sandbox's issues inbox, grouped
+// with every other report of the same problem, and wakes its agent only by the inbox's own rule.
+
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { call, die, parseArgs, refusalOf } from "./needs-cli.mjs";
+
+const COMMAND = "projects";
+
+const USAGE = `projects — report problems to the sandbox on your account that owns a project
+
+  projects                       the projects THIS sandbox answers for (reports about them land here)
+  projects report <project> --title "…" [--detail "…"] [--url <where>] [--release <sha>] [--stack-file <path>]
+                                 report a problem to whichever sandbox claims <project> (github.com/owner/repo, or any
+                                 remote URL of it). Same problem twice is one issue over there with a count.
+  projects outbox                reports still waiting for their sandbox to come back, and why
+  projects suggest               the projects this workspace's repos could claim, from their git remotes
+
+A report is delivered now or kept and retried for a week; you need not retry it yourself. It wakes nobody over there
+until it is new or recurs past the inbox's threshold. Report what the owning project must fix (an API answering 500,
+a broken release, wrong docs), not your own task's progress.`;
+
+const out = (line) => process.stdout.write(`${line}\n`);
+
+const getJson = async (path) => {
+    const { status, text } = await call(COMMAND, "GET", path);
+    if (status !== 200) {
+        return die(COMMAND, refusalOf(text));
+    }
+    return JSON.parse(text);
+};
+
+const mine = async () => {
+    const { projects } = await getJson("/account/projects");
+    if (projects.length === 0) {
+        out("This sandbox claims no project, so no other sandbox can report to it.");
+        out("The owner claims one in the app (Settings ▸ Projects); `projects suggest` lists this workspace's candidates.");
+        return;
+    }
+    out("Reports about these projects land in this sandbox's issues inbox:");
+    for (const project of projects) {
+        out(`  ${project}`);
+    }
+};
+
+const report = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["title", "detail", "url", "release", "stack-file"] });
+    const [project] = rest;
+    if (project === undefined || flags.title === undefined || flags.title.trim() === "") {
+        return die(COMMAND, `report needs a project and --title\n\n${USAGE}`);
+    }
+    const stack = flags["stack-file"] === undefined ? undefined : readFileSync(flags["stack-file"], "utf8").slice(0, 20_000);
+    const problem = {
+        kind: stack === undefined ? "detection" : "crash",
+        message: flags.title.trim().slice(0, 1000),
+        ...(flags.detail === undefined ? {} : { description: flags.detail.slice(0, 5000) }),
+        ...(flags.url === undefined ? {} : { url: flags.url.slice(0, 2000) }),
+        ...(flags.release === undefined ? {} : { release: flags.release.slice(0, 200) }),
+        ...(stack === undefined ? {} : { stack }),
+    };
+    const { status, text } = await call(COMMAND, "POST", "/account/outbox", JSON.stringify({ project, report: problem }));
+    if (status !== 200) {
+        return die(COMMAND, refusalOf(text));
+    }
+    const outcome = JSON.parse(text);
+    if (outcome.state === "delivered") {
+        out(`Delivered to ${outcome.to}, filed there as issue ${outcome.id}.`);
+        return;
+    }
+    if (outcome.state === "queued") {
+        out(`Kept for later (×${outcome.times}): ${outcome.reason}. It is retried by itself for a week; do not resend it.`);
+        return;
+    }
+    out(`Not sent: ${outcome.reason}`);
+    process.exit(1);
+};
+
+const outbox = async () => {
+    const { waiting } = await getJson("/account/outbox");
+    if (waiting.length === 0) {
+        out("Nothing is waiting: every report this sandbox made has been delivered.");
+        return;
+    }
+    for (const entry of waiting) {
+        const next = new Date(entry.nextAt).toISOString();
+        out(`${entry.project}  ×${entry.times}  ${entry.title}`);
+        out(`    next try ${next}${entry.lastError === undefined ? "" : ` — ${entry.lastError}`}`);
+    }
+};
+
+// A remote here is the credential broker's loopback address, whose payload names the real upstream (the daemon's
+// account-outbox.ts projectOfRemote reads it the same way).
+const unbrokered = (remote) => {
+    const match = /^https?:\/\/(?:127\.0\.0\.1|localhost):\d+\/([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+\/(.+)$/.exec(remote.trim());
+    if (match === null) {
+        return remote;
+    }
+    try {
+        const { u } = JSON.parse(Buffer.from(match[1], "base64url").toString("utf8"));
+        return typeof u === "string" ? `${u.replace(/\/+$/, "")}/${match[2]}` : remote;
+    } catch {
+        // allow(silent-catch): an address that is not the broker's keeps its own spelling.
+        return remote;
+    }
+};
+
+// Remotes of the workspace's repos, normalized the way the platform keys claims (github.com/owner/repo).
+const suggest = () => {
+    const root = process.env.INTENTIC_WORKSPACE ?? "/work";
+    let listing = "";
+    try {
+        listing = execFileSync("git", ["-C", root, "submodule", "foreach", "--quiet", "--recursive", "git remote get-url origin || true"], { encoding: "utf8" });
+    } catch {
+        // allow(silent-catch): a workspace that is no repository has no submodules to ask; its own remote is tried below.
+    }
+    const remotes = new Set(listing.split("\n").filter(Boolean));
+    const dirs = execFileSync("find", [root, "-maxdepth", "3", "-name", ".git", "-not", "-path", "*/node_modules/*", "-not", "-path", `${root}/refs/*`], {
+        encoding: "utf8",
+    })
+        .split("\n")
+        .filter(Boolean)
+        .map((dotGit) => dotGit.replace(/\/\.git$/, ""));
+    for (const dir of dirs) {
+        try {
+            remotes.add(execFileSync("git", ["-C", dir, "remote", "get-url", "origin"], { encoding: "utf8" }).trim());
+        } catch {
+            // allow(silent-catch): a repo with no origin has no project id to suggest.
+        }
+    }
+    const projects = [...remotes]
+        .map(unbrokered)
+        .map((remote) =>
+            remote
+                .trim()
+                .replace(/^[^@/\s]+@([^:/\s]+):/, "$1/")
+                .replace(/^[a-z+]+:\/\/([^@/]*@)?/i, "")
+                .replace(/\.git$/i, "")
+                .replace(/\/+$/, "")
+                .toLowerCase(),
+        )
+        .filter((project) => /^[a-z0-9.-]+\.[a-z]{2,}(\/[a-z0-9._~-]+)+$/.test(project));
+    if (projects.length === 0) {
+        out("No repo in this workspace has a remote to claim.");
+        return;
+    }
+    out("Projects this workspace's repos could claim (the owner claims one in the app, Settings ▸ Projects):");
+    for (const project of [...new Set(projects)].sort()) {
+        out(`  ${project}`);
+    }
+};
+
+const main = async () => {
+    const [verb, ...args] = process.argv.slice(2);
+    if (verb === "--help" || verb === "-h" || verb === "help") {
+        out(USAGE);
+        return;
+    }
+    if (verb === undefined) {
+        return mine();
+    }
+    if (verb === "report") {
+        return report(args);
+    }
+    if (verb === "outbox") {
+        return outbox();
+    }
+    if (verb === "suggest") {
+        return suggest();
+    }
+    die(COMMAND, `unknown command "${verb}"\n\n${USAGE}`);
+};
+
+main().catch((error) => die(COMMAND, error?.message ?? String(error)));

@@ -13,9 +13,9 @@ const parts = (planOffered: boolean, phone?: boolean, noSandbox = false): readon
     settingsSections(planOffered, phone, noSandbox).flatMap((section) => (section.within ?? []).map((part) => `${section.slug}#${part.slug}`));
 
 it(`offers every section on a desktop where a plan is sold, account first, then preferences, then a developer's tools`, () => {
-    expect(slugs(true)).toEqual([`profile`, `billing`, `organisation`, `data`, `appearance`, `notifications`, `keybindings`, `tokens`]);
+    expect(slugs(true)).toEqual([`profile`, `billing`, `organisation`, `data`, `projects`, `appearance`, `notifications`, `keybindings`, `tokens`]);
     expect(settingsGroups(settingsSections(true, false, false)).map((group) => [group.key, group.sections.map((section) => section.slug)])).toEqual([
-        [`account`, [`profile`, `billing`, `organisation`, `data`]],
+        [`account`, [`profile`, `billing`, `organisation`, `data`, `projects`]],
         [`preferences`, [`appearance`, `notifications`, `keybindings`]],
         [`developer`, [`tokens`]],
     ]);
@@ -26,24 +26,24 @@ it(`draws the wake word under Notifications and gives privacy its own page`, () 
 });
 
 it(`leaves billing out where no plan is sold`, () => {
-    expect(slugs(false)).toEqual([`profile`, `organisation`, `data`, `appearance`, `notifications`, `keybindings`, `tokens`]);
+    expect(slugs(false)).toEqual([`profile`, `organisation`, `data`, `projects`, `appearance`, `notifications`, `keybindings`, `tokens`]);
 });
 
 it(`leaves keybindings and the wake word out of a phone's index, and Notifications its own name there`, () => {
-    expect(slugs(true, true)).toEqual([`profile`, `billing`, `organisation`, `data`, `appearance`, `notifications`, `tokens`]);
+    expect(slugs(true, true)).toEqual([`profile`, `billing`, `organisation`, `data`, `projects`, `appearance`, `notifications`, `tokens`]);
     expect(parts(true, true)).toEqual([]);
     const desktop = settingsSections(true, false, false).find((section) => section.slug === `notifications`);
     const phone = settingsSections(true, true, false).find((section) => section.slug === `notifications`);
     expect(desktop?.label).not.toBe(phone?.label);
 });
 
-it(`leaves notifications and the wake word out of a window with no sandbox to push them or hear it`, () => {
+it(`leaves notifications, the wake word and project claims out of a window with no sandbox to push them or hear it`, () => {
     expect(slugs(true, false, true)).toEqual([`profile`, `billing`, `organisation`, `data`, `appearance`, `keybindings`, `tokens`]);
     expect(parts(true, false, true)).toEqual([]);
 });
 
 it(`asks the window itself whether it has a sandbox when not told`, () => {
-    expect(settingsSections(false).map((section) => section.slug)).toEqual([`profile`, `organisation`, `data`, `appearance`, `notifications`, `keybindings`, `tokens`]);
+    expect(settingsSections(false).map((section) => section.slug)).toEqual([`profile`, `organisation`, `data`, `projects`, `appearance`, `notifications`, `keybindings`, `tokens`]);
 });
 
 // A reader who does not write code is not shown the developer's tools in the index; a developer's index is unchanged.
@@ -51,7 +51,7 @@ it(`leaves the tokens out of a non-coder's index, and their heading with them, b
     // An organisation's console is an office administrator's, not a developer's, so it stays; so does the wake word, and
     // so do the keyboard shortcuts, which every keyboard user reads.
     const plain = settingsSections(true, false, false, true);
-    expect(plain.map((section) => section.slug)).toEqual([`profile`, `billing`, `organisation`, `data`, `appearance`, `notifications`, `keybindings`]);
+    expect(plain.map((section) => section.slug)).toEqual([`profile`, `billing`, `organisation`, `data`, `projects`, `appearance`, `notifications`, `keybindings`]);
     expect(settingsGroups(plain).map((group) => group.key)).toEqual([`account`, `preferences`]);
     expect(settingsSections(true, false, false).map((section) => section.slug)).toContain(`tokens`);
 });

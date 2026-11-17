@@ -100,6 +100,12 @@ sandboxes, never yours: say what you would have run there, and why.
   **delegate** shelf, as `spawn` does; a turn started by outside content may not hand work on. The people this
   conversation works for must have been given the link card.
 
+## Reporting a problem is not a task
+
+To tell the sandbox that owns a project about something you saw there, use `projects report <project> --title "…"`, not a
+link. It needs no link, starts no turn over there, and folds repeats into one issue in that sandbox's inbox; that
+sandbox's own rule decides when it wakes an agent. A link is for work that needs what only that sandbox has.
+
 ## When there is no link
 
 There is no `mcp__<name>__delegate` in your tools, and `agents links` says so. Linking two sandboxes is the owner's, on a

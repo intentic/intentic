@@ -515,3 +515,23 @@ export const OrgPolicyFetchBodySchema = z.object({
 export type OrgPolicyFetchBody = z.input<typeof OrgPolicyFetchBodySchema>;
 export const OrgPolicyAnswerSchema = z.object({ policy: OrgPolicySchema.nullable() });
 export type OrgPolicyAnswer = z.infer<typeof OrgPolicyAnswerSchema>;
+
+/* Account-level report routing: who on this account owns a project, and the claims a sandbox holds (projects.ts). */
+
+// `POST /projects/resolve`: the sending sandbox (its connect token) asks which sandbox on the same account claims a
+// project. The answer is that sandbox's address and a pass the platform signed (sandbox-contract policy/sandbox-pass.ts).
+export const ProjectResolveBodySchema = z.object({ project: z.string().min(1).max(200) });
+export type ProjectResolveBody = z.infer<typeof ProjectResolveBodySchema>;
+export const ProjectResolvedSchema = z.object({
+    project: z.string(),
+    sandboxId: z.string().regex(SANDBOX_ID),
+    name: z.string(),
+    address: HttpsUrlSchema,
+    pass: z.string().min(1),
+    expiresAt: z.string(),
+});
+export type ProjectResolved = z.infer<typeof ProjectResolvedSchema>;
+
+// `POST /projects/mine`: the projects the calling sandbox claims, for its own CLI and inbox.
+export const ProjectClaimsSchema = z.object({ projects: z.array(z.string()) });
+export type ProjectClaims = z.infer<typeof ProjectClaimsSchema>;

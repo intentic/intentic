@@ -59,6 +59,7 @@ import { memberCommitIdentityDocument } from "../git/attribution/commit-attribut
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { connectionHubDocument } from "../hub/hub-store.js";
+import { outboxDocument } from "../issues/account-outbox.js";
 import { issuesDocument } from "../issues/issues-store.js";
 import { inboundLinksDocument } from "../links/inbound-links.js";
 import { linkedChildrenDocument } from "../links/linked-children-store.js";
@@ -185,10 +186,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     composerDraftsDocument,
     projectDeliveriesDocument,
     conversationRecordDocument,
+    definitionDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
-    definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
     runtimeInstallsDocument,
@@ -201,6 +202,7 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     hookRequestsDocument,
     hostSetupSeededDocument,
     connectionHubDocument,
+    outboxDocument,
     issuesDocument,
     inboundLinksDocument,
     linkedChildrenDocument,
@@ -235,10 +237,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     runnerIdentityDocument,
     safetyLogDocument,
     autostartDocument,
+    credentialGatesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
-    credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,

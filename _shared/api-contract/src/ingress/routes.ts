@@ -23,6 +23,9 @@ import {
     HostWakesAnswerSchema,
     HostWakesAskSchema,
     IngressOkSchema,
+    ProjectClaimsSchema,
+    ProjectResolveBodySchema,
+    ProjectResolvedSchema,
     LocalDnsAnswerSchema,
     LocalDnsBodySchema,
     LocalDnsConfirmBodySchema,
@@ -194,6 +197,26 @@ export const PLATFORM_INGRESS = {
         answer: "json",
         input: WalletSignBodySchema,
         output: WalletSignatureSchema,
+    },
+
+    // Account-level report routing: which sandbox on this account owns a project (with a pass to report to it), and the
+    // projects the calling sandbox claims itself. The connect token is the only word on who is asking.
+    projectResolve: {
+        method: "POST",
+        path: "/projects/resolve",
+        auth: "connect",
+        body: "json",
+        answer: "json",
+        input: ProjectResolveBodySchema,
+        output: ProjectResolvedSchema,
+    },
+    projectsMine: {
+        method: "POST",
+        path: "/projects/mine",
+        auth: "connect",
+        body: "json",
+        answer: "json",
+        output: ProjectClaimsSchema,
     },
 
     // Connect Google: an access token for a card signed in through the platform's own OAuth client.

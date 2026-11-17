@@ -11370,7 +11370,8 @@
             "tokens": "Tokeny API",
             "voice": "Głos",
             "organisation": "Organizacja",
-            "notificationsVoice": "Powiadomienia i głos"
+            "notificationsVoice": "Powiadomienia i głos",
+            "projects": "Projekty"
         },
         "group": {
             "account": "Konto",
@@ -11634,6 +11635,16 @@
             "startPrivate": "Zaczynaj moje rozmowy jako prywatne",
             "startPrivateHint": "W {sandbox}. Nową rozmowę można jeszcze udostępnić przed pierwszą wiadomością.",
             "saveFailed": "Nie udało się zapisać."
+        },
+        "settingsProjects": {
+            "failed": "Nie udało się zmienić projektu",
+            "reportsLandIn": "Zgłoszenia o nim trafiają do {sandbox}",
+            "release": "Zwolnij",
+            "whatClaimsAre": "Wskaż, która piaskownica odpowiada za który projekt. Każda inna piaskownica na Twoim koncie może wtedy zgłosić poleceniem `projects report` problem, który zauważyła w tym projekcie; trafi on do skrzynki zgłoszeń tej piaskownicy, zgrupowany z każdym zgłoszeniem tego samego problemu. Projekt to jego repozytorium, np. github.com/acme/app.",
+            "project": "Projekt",
+            "projectPlaceholder": "github.com/owner/repo",
+            "sandbox": "Piaskownica",
+            "claim": "Przypisz"
         }
     },
     "setup": {

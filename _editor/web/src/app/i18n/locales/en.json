@@ -11973,7 +11973,8 @@
             "tokens": "API tokens",
             "voice": "Voice",
             "organisation": "Organisation",
-            "notificationsVoice": "Notifications & voice"
+            "notificationsVoice": "Notifications & voice",
+            "projects": "Projects"
         },
         "group": {
             "account": "Account",
@@ -12237,6 +12238,16 @@
             "startPrivate": "Start my conversations private",
             "startPrivateHint": "In {sandbox}. A new conversation can still be shared before its first message.",
             "saveFailed": "Couldn't save that."
+        },
+        "settingsProjects": {
+            "failed": "The project could not be changed",
+            "reportsLandIn": "Reports about it land in {sandbox}",
+            "release": "Release",
+            "whatClaimsAre": "Name the sandbox that answers for each project. Any other sandbox on your account can then report a problem it saw about that project with `projects report`, and it lands in that sandbox's issues inbox, grouped with every report of the same problem. A project is its repository, e.g. github.com/acme/app.",
+            "project": "Project",
+            "projectPlaceholder": "github.com/owner/repo",
+            "sandbox": "Sandbox",
+            "claim": "Claim"
         }
     },
     "setup": {

@@ -83,6 +83,58 @@ export const IssueRunSchema = z.object({
 });
 export type IssueRun = z.infer<typeof IssueRunSchema>;
 
+// Who reported it, when the reporter was another sandbox on the owner's account (account-level report routing). Read
+// from the platform-signed pass, except `conversationId`, which the sending daemon names for its own conversation.
+export const IssueSenderSchema = z.object({
+    sandboxId: z.string().max(40).describe("The reporting sandbox's id."),
+    sandboxName: z.string().max(120).describe("Its name on your account."),
+    project: z.string().max(200).describe("The project it reported about, as this sandbox claims it."),
+    conversationId: z.string().max(120).optional().describe("The conversation over there that reported it."),
+});
+export type IssueSender = z.infer<typeof IssueSenderSchema>;
+
+// POSTed to /account/report by another of the owner's sandboxes, under a pass (sandbox-contract policy/sandbox-pass.ts).
+// Only what groups: an agent's problem is a `detection` (or a `crash` with a stack), never an ungrouped `report`, so five
+// sandboxes seeing one broken thing fold into one issue. `times` carries repeats the sender folded while it could not
+// deliver.
+export const AccountProblemSchema = IssueReportSchema.extend({ kind: z.enum(["crash", "detection"]) });
+export type AccountProblem = z.infer<typeof AccountProblemSchema>;
+export const AccountReportSchema = z.object({
+    report: AccountProblemSchema,
+    conversationId: z.string().max(120).optional(),
+    times: z.number().int().min(1).max(10_000).optional(),
+});
+export type AccountReport = z.infer<typeof AccountReportSchema>;
+
+// The sending side, over loopback from the `projects report` command: a problem for whichever sandbox on the owner's
+// account claims `project`, and what came of it (delivered now, waiting in the outbox, or refused for good).
+export const AccountSendSchema = z.object({
+    project: z.string().min(1).max(300),
+    report: AccountProblemSchema,
+});
+export type AccountSend = z.infer<typeof AccountSendSchema>;
+export const AccountSendOutcomeSchema = z.discriminatedUnion("state", [
+    z.object({ state: z.literal("delivered"), to: z.string(), id: z.string() }),
+    z.object({ state: z.literal("queued"), to: z.string().optional(), reason: z.string(), times: z.number() }),
+    z.object({ state: z.literal("refused"), reason: z.string() }),
+]);
+export type AccountSendOutcome = z.infer<typeof AccountSendOutcomeSchema>;
+export const AccountOutboxSchema = z.object({
+    waiting: z.array(
+        z.object({
+            id: z.string(),
+            project: z.string(),
+            title: z.string(),
+            times: z.number(),
+            firstAt: z.number(),
+            nextAt: z.number(),
+            lastError: z.string().optional(),
+        }),
+    ),
+});
+export type AccountOutbox = z.infer<typeof AccountOutboxSchema>;
+export const AccountProjectsSchema = z.object({ projects: z.array(z.string()) });
+
 // One group; the id is the fingerprint and the filename, never in the body, so a body cannot disagree with its own
 // grouping.
 export const IssueSchema = z.object({
@@ -106,6 +158,8 @@ export const IssueSchema = z.object({
     // Stored, since a restart can't derive it from a count and timestamp.
     firedAt: z.number().optional().describe("What the count stood at the last time this woke an agent."),
     runs: z.array(IssueRunSchema).max(20).optional().describe("The turns started for it."),
+    // Set only by the daemon, from a pass the platform signed: never a field a reporter can type.
+    sender: IssueSenderSchema.optional().describe("The sandbox on your account that reported the latest one, when another sandbox did."),
 });
 export type Issue = z.infer<typeof IssueSchema>;
 

@@ -1,5 +1,5 @@
 import { keyedLock } from "@intentic/base/async";
-import { type Issue, type IssueReport, IssueSchema, type IssueStatus, type IssueSummary } from "@intentic/sandbox-contract/schemas/issues";
+import { type Issue, type IssueReport, IssueSchema, type IssueSender, type IssueStatus, type IssueSummary } from "@intentic/sandbox-contract/schemas/issues";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDirectory } from "../store/open-document.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
@@ -24,6 +24,10 @@ export interface RecordInput {
     readonly automationId: string;
     readonly report: IssueReport;
     readonly origin?: string;
+    // Another sandbox on the owner's account, read from its pass (account.routes.ts); never from a report's own fields.
+    readonly sender?: IssueSender;
+    // Arrivals this one stands for: a sending sandbox folds repeats while it cannot deliver. Absent means one.
+    readonly times?: number;
     readonly now: number;
     // Passed in, not read here, so the store stays a store: what a recurrence is worth is the route's policy.
     readonly escalateAfter: number;
@@ -54,7 +58,7 @@ const MAX_RUNS = 20;
 
 // A fingerprint nobody has seen before; title and culprit are derived only here, so two arrivals of one crash never end
 // up under two names.
-const freshIssue = ({ automationId, report, origin, now }: RecordInput): Issue => {
+const freshIssue = ({ automationId, report, origin, sender, times, now }: RecordInput): Issue => {
     const culprit = culpritOf(report.stack);
     return {
         kind: report.kind,
@@ -62,9 +66,10 @@ const freshIssue = ({ automationId, report, origin, now }: RecordInput): Issue =
         ...(culprit !== undefined ? { culprit } : {}),
         automationId,
         ...(origin !== undefined ? { origin } : {}),
+        ...(sender !== undefined ? { sender } : {}),
         firstSeen: now,
         lastSeen: now,
-        count: 1,
+        count: times ?? 1,
         status: "open",
         statusAt: now,
         ...(report.release !== undefined ? { release: report.release } : {}),
@@ -75,18 +80,23 @@ const freshIssue = ({ automationId, report, origin, now }: RecordInput): Issue =
 // A resolved issue that recurs reopens with a clean escalation slate (firedAt dropped), waking at once instead of
 // waiting to grow again; ignored is left untouched. The sample is replaced with the latest, since that's what a fix has
 // to reproduce now.
-const folded = (existing: Issue, report: IssueReport, now: number): Issue => {
+const folded = (existing: Issue, { report, sender, times, now }: RecordInput): Issue => {
     const returned = existing.status === "resolved";
     const { firedAt, ...rest } = existing;
-    return {
-        ...rest,
-        lastSeen: now,
-        count: existing.count + 1,
-        ...(returned ? { status: "open" as const, statusAt: now } : {}),
-        ...(report.release !== undefined ? { release: report.release } : {}),
-        sample: report,
-        ...(returned || firedAt === undefined ? {} : { firedAt }),
-    };
+    const next: Issue = { ...rest, lastSeen: now, count: existing.count + (times ?? 1), sample: report };
+    if (returned) {
+        next.status = "open";
+        next.statusAt = now;
+    } else if (firedAt !== undefined) {
+        next.firedAt = firedAt;
+    }
+    if (report.release !== undefined) {
+        next.release = report.release;
+    }
+    if (sender !== undefined) {
+        next.sender = sender;
+    }
+    return next;
 };
 
 export const fileIssuesStore = (dir: string): IssuesStore => {
@@ -161,7 +171,7 @@ export const fileIssuesStore = (dir: string): IssuesStore => {
                     return { issue, fresh: true, escalated: false };
                 }
                 const { id: _id, ...body } = existing;
-                const next = folded(body, input.report, input.now);
+                const next = folded(body, input);
                 // A resolved issue recurring escalates at once, rather than waiting ten more counts for a fix that
                 // didn't hold.
                 const returned = body.status === "resolved";

@@ -261,6 +261,29 @@ export const walletContract = {
     setPolicy: oc.route({ method: "POST", path: "/wallet/policy" }).input(WalletPolicySchema).output(WalletPolicySchema),
 };
 
+/* PROJECT CLAIMS: which of the owner's sandboxes answers for a project, the directory behind account-level report
+ * routing (ingress `projectResolve`). Written only by the signed-in owner: a daemon may propose a claim, never make one. */
+export const ProjectClaimSchema = z.object({
+    project: z.string(),
+    sandboxId: z.string(),
+    sandboxName: z.string(),
+    createdAt: z.string(),
+});
+export type ProjectClaim = z.infer<typeof ProjectClaimSchema>;
+export const ProjectClaimListSchema = z.object({ claims: z.array(ProjectClaimSchema) });
+export const projectsContract = {
+    list: oc.route({ method: "GET", path: "/projects" }).output(ProjectClaimListSchema),
+    // Claims a project for one of the owner's sandboxes; a project another of their sandboxes held moves here.
+    claim: oc
+        .route({ method: "POST", path: "/projects/claim" })
+        .input(z.object({ sandboxId: z.string().min(1), project: z.string().min(1).max(200) }))
+        .output(ProjectClaimListSchema),
+    release: oc
+        .route({ method: "POST", path: "/projects/release" })
+        .input(z.object({ project: z.string().min(1).max(200) }))
+        .output(ProjectClaimListSchema),
+};
+
 /* THE PUSH RELAY. */
 export const pushRelayContract = {
     register: oc.route({ method: "POST", path: "/push/register" }).input(PushDeviceInputSchema).output(PushDeviceGrantSchema),
@@ -350,6 +373,7 @@ export const apiContract = {
     hostedPlan: hostedPlanContract,
     push: pushRelayContract,
     wallet: walletContract,
+    projects: projectsContract,
     admin: adminContract,
     org: orgContract,
     googleConnect: googleConnectContract,

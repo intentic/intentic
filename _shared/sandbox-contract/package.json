@@ -239,6 +239,28 @@
                 "default": "./dist/policy/identity-assertion.js"
             }
         },
+        "./sandbox-pass": {
+            "types": "./dist/protocol/doors/sandbox-pass.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/doors/sandbox-pass.ts",
+                "default": "./dist/protocol/doors/sandbox-pass.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/doors/sandbox-pass.ts",
+                "default": "./dist/protocol/doors/sandbox-pass.js"
+            }
+        },
+        "./project-id": {
+            "types": "./dist/ids/project-id.d.ts",
+            "import": {
+                "@intentic/src": "./src/ids/project-id.ts",
+                "default": "./dist/ids/project-id.js"
+            },
+            "require": {
+                "@intentic/src": "./src/ids/project-id.ts",
+                "default": "./dist/ids/project-id.js"
+            }
+        },
         "./keyring-seal": {
             "types": "./dist/policy/keyring-seal.d.ts",
             "import": {

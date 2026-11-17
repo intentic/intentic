@@ -11973,7 +11973,8 @@
             "tokens": "API-Tokens",
             "voice": "Stimme",
             "organisation": "Organisation",
-            "notificationsVoice": "Benachrichtigungen & Stimme"
+            "notificationsVoice": "Benachrichtigungen & Stimme",
+            "projects": "Projekte"
         },
         "group": {
             "account": "Konto",
@@ -12237,6 +12238,16 @@
             "startPrivate": "Meine Unterhaltungen privat beginnen",
             "startPrivateHint": "In {sandbox}. Eine neue Unterhaltung lässt sich vor ihrer ersten Nachricht noch teilen.",
             "saveFailed": "Konnte das nicht speichern."
+        },
+        "settingsProjects": {
+            "failed": "Das Projekt konnte nicht geändert werden",
+            "reportsLandIn": "Meldungen dazu landen in {sandbox}",
+            "release": "Freigeben",
+            "whatClaimsAre": "Lege fest, welche Sandbox für welches Projekt zuständig ist. Jede andere Sandbox in deinem Konto kann dann mit `projects report` ein Problem melden, das sie bei diesem Projekt gesehen hat; es landet im Issue-Posteingang dieser Sandbox, zusammengefasst mit jeder Meldung desselben Problems. Ein Projekt ist sein Repository, z. B. github.com/acme/app.",
+            "project": "Projekt",
+            "projectPlaceholder": "github.com/owner/repo",
+            "sandbox": "Sandbox",
+            "claim": "Zuweisen"
         }
     },
     "setup": {

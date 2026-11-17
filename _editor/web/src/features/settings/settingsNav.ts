@@ -83,6 +83,8 @@ const SETTINGS_SECTIONS = [
     { slug: `organisation`, icon: `users`, group: `account` },
     // Collection preferences and account data belong together, away from the default Profile page.
     { slug: `data`, icon: `shield`, group: `account` },
+    // Which of the account's sandboxes answers for which project (account-level report routing, api projects/).
+    { slug: `projects`, icon: `folder`, group: `account`, sandbox: true },
     { slug: `appearance`, icon: `palette`, group: `preferences` },
     // What a sandbox's daemon pushes to this device (usePushNotifications.ts), and, below it, whether this device
     // listens for the agent's name (chat/wake): its own microphone, heard by the sandbox's model. What this device says

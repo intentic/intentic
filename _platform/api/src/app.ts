@@ -41,6 +41,7 @@ import { hostedPlanHttpRoutes } from "./sandbox/hosted/plan/hosted-plan.routes.j
 import { fleetHttpRoutes } from "./fleet/fleet.routes.js";
 import { orgPolicyHttpRoutes } from "./org/org-policy-http.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
+import { projectsHttpRoutes } from "./projects/projects.routes.js";
 import { googleConnectHttpRoutes } from "./google-connect/google-connect.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
 import { repairRoutes } from "./repair/repair.routes.js";
@@ -572,15 +573,15 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
     // The hosted plan's one non-browser route, Stripe's webhook; off (404s) unless its Stripe keys are set.
     app.route(`/hosted-plan`, hostedPlanHttpRoutes({ config, prisma }));
 
-    // Sandbox doors that spend a platform-held key: the wallet (caps re-checked, never trusted from a box), Connect Google.
+    // Sandbox doors that spend a platform-held key: the wallet (caps re-checked), Connect Google, report passes (projects/).
     app.route(`/wallet`, walletHttpRoutes({ config, prisma }));
     app.route(`/google-connect`, googleConnectHttpRoutes({ config, prisma }));
+    app.route(`/projects`, projectsHttpRoutes({ config, prisma }));
 
     // The provisioning door: an account-scoped API token rather than a session; rows and claims only, never a hosted machine.
     app.route(`/fleet`, fleetHttpRoutes({ config, prisma }));
 
-    // A development lane: admin READS replayed against another deployment, so a local panel can show its figures; off
-    // (404s) unless ADMIN_UPSTREAM_URL and ADMIN_UPSTREAM_COOKIE are both set.
+    // A development lane: admin READS replayed against another deployment for a local panel; 404s unless both ADMIN_UPSTREAM_* are set.
     app.route(`/upstream`, adminUpstreamRoutes({ config, prisma, auth }));
 
     // A request that waits on a machine keeps its connection however long the wait (MACHINE_CHANGE_PATHS above).

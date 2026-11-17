@@ -29,6 +29,11 @@ export const wakeBrief = (issue: IssueSummary, why: "new" | "recurring" | "asked
         ...factsOf(issue),
         untrusted: untrustedOf(issue.sample),
     };
+    if (issue.sender !== undefined) {
+        // Which of the owner's sandboxes reported it, as the platform signed it: a fact, outside `untrusted`. What that
+        // sandbox's agent wrote is still under `untrusted`, like any report.
+        Object.assign(brief, { reportedBy: issue.sender });
+    }
     return { payload: trimmed(brief), title: titleFor(issue, why) };
 };
 
@@ -82,6 +87,13 @@ const trimmed = (brief: { untrusted: { stack?: string; breadcrumbs?: unknown[] }
 // The card's title, the only thing telling two wakes of one automation apart on the board (the prompt is always
 // identical). The count rides along for a recurrence, since "×214" vs "×2" is judged straight off the board.
 const titleFor = (issue: IssueSummary, why: "new" | "recurring" | "asked"): string => {
-    const lead = issue.kind === "report" ? "Reported" : why === "recurring" ? `Crash ×${issue.count}` : "Crash";
+    const lead =
+        issue.sender !== undefined
+            ? `From ${issue.sender.sandboxName}${why === "recurring" ? ` ×${issue.count}` : ""}`
+            : issue.kind === "report"
+              ? "Reported"
+              : why === "recurring"
+                ? `Crash ×${issue.count}`
+                : "Crash";
     return `${lead}: ${issue.title}`.slice(0, TITLE_MAX);
 };

@@ -81,7 +81,7 @@ export const INTAKE_DOOR: PublicDoorSpec<IssuesConfig> = {
 // Whether the trigger wants to be woken for this event: eventType narrows to a kind, channelId to an origin, absent
 // meaning all. A keyless client has no origin, so a trigger narrowed to one site never wakes for it, an app is not a
 // site.
-const wakeWanted = (automation: AutomationRecord, kind: string, origin: string | undefined): boolean => {
+export const wakeWanted = (automation: AutomationRecord, kind: string, origin: string | undefined): boolean => {
     if (automation.trigger.kind !== "listener") {
         return false;
     }

@@ -74,6 +74,14 @@ import {
     LinkWriteAnswerSchema,
     LinkWriteSchema,
 } from "../../schemas/links.js";
+import {
+    AccountOutboxSchema,
+    AccountProjectsSchema,
+    AccountReportSchema,
+    AccountSendOutcomeSchema,
+    AccountSendSchema,
+    IssueAcceptedSchema,
+} from "../../schemas/issues.js";
 import { UploadManifestSchema, UploadSkipSchema } from "../../schemas/workspace/workspace-upload.js";
 import {
     ArrivalAbandonedSchema,
@@ -185,6 +193,11 @@ export const RAW_JSON_ROUTES = {
     "POST /system/links/{id}": { input: InboundLinkTermsUpdateSchema, output: InboundLinkSummarySchema },
     "DELETE /system/links/{id}": { output: OkSchema },
     "POST /system/links/{id}/requests/{request}": { input: LinkRequestDecisionSchema, output: InboundLinkSummarySchema },
+    // Another sandbox on the owner's account reporting a problem about a project this one claims (schemas/issues.ts).
+    "POST /account/report": { input: AccountReportSchema, output: IssueAcceptedSchema },
+    "POST /account/outbox": { input: AccountSendSchema, output: AccountSendOutcomeSchema },
+    "GET /account/outbox": { output: AccountOutboxSchema },
+    "GET /account/projects": { output: AccountProjectsSchema },
     // The link doors, as the asking sandbox's daemon reads them. A status takes `?after=<version>&wait=<seconds>` to
     // be held until it moves past that version.
     "GET /link": { output: LinkHelloSchema },

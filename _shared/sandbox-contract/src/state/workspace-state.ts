@@ -220,6 +220,15 @@ const STATE_FILES = [
         why: "Declared by the intentic.issues extension's contributes.files, `issues` is its query key, not core's.",
         portability: "carry",
     },
+    // Reports this sandbox could not yet deliver to the sandbox on its account that claims their project (daemon's
+    // issues/account-outbox.ts), one file per problem, retried until they land or a week passes. `carry`: undelivered
+    // reports are the workspace's, and a moved sandbox should still send them.
+    {
+        path: ".intentic/records/outbox/",
+        invalidates: [],
+        why: "No view shows it yet; the `projects outbox` command reads it through the daemon.",
+        portability: "carry",
+    },
     // Maintenance ledger and probe evidence (daemon's chores-store), rendered by intentic.maintenance. `carry`:
     // point-in-time evidence about this workspace.
     {

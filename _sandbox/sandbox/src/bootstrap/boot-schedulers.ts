@@ -20,6 +20,7 @@ import { passwordWakeOf } from "../needs/password-wake.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
+import { startAccountOutbox } from "../issues/account-outbox.js";
 import { fixerSettled, resumeMainFixer } from "../ci/main-fixer.js";
 import { ownerStepSettled } from "../ci/owner-steps.js";
 import { createCiPoller } from "../ci/poller.js";
@@ -256,6 +257,8 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     if (role.container) {
         shutdown.push(inBackground("needs", () => services.needs.start()));
         shutdown.push(inBackground("gpu-watch", () => startGpuWatch(services, logger)));
+        // Reports another sandbox on the account could not take yet, retried until they land (issues/account-outbox.ts).
+        shutdown.push(startAccountOutbox(services));
     }
 
     // Stop clears timers only; the watch journal survives for the next boot to restore. What a turn left running is
