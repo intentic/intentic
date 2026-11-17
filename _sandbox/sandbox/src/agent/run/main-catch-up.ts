@@ -76,7 +76,7 @@ const mainMovedNotice = (conflicts: readonly StopConflict[], sent: string): Agen
     };
 };
 
-// What this module adds to the loop's hook set (claude-code-runner.ts mergeHooks): one PostToolUse matcher, or nothing.
+// What this module adds to the loop's hook set (hook-timing.ts mergeHooks): one PostToolUse matcher, or nothing.
 export interface CatchUpHooks {
     readonly PostToolUse?: HookCallbackMatcher[];
 }

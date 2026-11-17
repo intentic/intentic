@@ -1,4 +1,5 @@
-import { namedHooks, timedHooks } from "../hook-timing.js";
+import { mergeHooks, namedHooks, timedHooks } from "../hook-timing.js";
+import { withheldTools } from "./withheld-tools.js";
 import type {
     CanUseTool,
     EffortLevel,
@@ -341,27 +342,6 @@ const resumeOptions = (spec: HarnessRequest["spec"]): Pick<Options, "resume" | "
 const sessionTitle = (request: HarnessRequest): Pick<Options, "title"> =>
     request.spec.sessionId === undefined ? opt("title", storedPromptTitle(request.spec.prompt)) : {};
 
-// Concatenates hook matchers per event instead of spreading, so two producers of the same event (e.g. PreToolUse:Bash)
-// both fire.
-export const mergeHooks = (...sets: Partial<Record<HookEvent, HookCallbackMatcher[]>>[]): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
-    const merged: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
-    for (const set of sets) {
-        for (const [event, matchers] of Object.entries(set) as [HookEvent, HookCallbackMatcher[]][]) {
-            merged[event] = [...(merged[event] ?? []), ...matchers];
-        }
-    }
-    return merged;
-};
-
-// True only for a non-empty rulebook, so an absent or empty one wires no hook and costs nothing.
-
-// CLI scheduling tools are dead here (the process dies at turn end); automations and the watch tools replace them.
-const CLI_SCHEDULER_TOOLS = ["ScheduleWakeup", "CronCreate", "CronDelete", "CronList"];
-
-// Tools removed from the model: scheduler tools always, and the caller's own list. Plan and question tools stay on an
-// unattended turn: their cards wait for the owner like every other.
-const disallowedToolsOf = (request: HarnessRequest): string[] => [...CLI_SCHEDULER_TOOLS, ...(request.policy.disallowedTools ?? [])];
-
 // The SDK writes every MCP server onto the CLI's argv as one inline JSON document. `/proc/<pid>/cmdline` is readable by
 // anything running as this user, the agent's own Bash tool included, so that argv is both a credential leak (bearer
 // headers, pair tokens) and a kill surface: `pkill -f` on any string inside it matches EVERY live agent's CLI at once.
@@ -609,7 +589,7 @@ const baseOptions = (
             request.tools.plugins?.map((path) => ({ type: "local" as const, path })),
         ),
         ...reasoningOptions(request),
-        ...opt("disallowedTools", disallowedToolsOf(request)),
+        ...opt("disallowedTools", withheldTools(request.policy.disallowedTools)),
     };
 };
 

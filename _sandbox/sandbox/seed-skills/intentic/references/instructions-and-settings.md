@@ -64,9 +64,9 @@ skills folder themselves). The map lists every area of the project with its size
 
 `toolSearch` (on by default) keeps the descriptions of connected tools (browsers, devices, accounts, phones) out of
 every request until the agent looks one up with ToolSearch; the tools it uses every turn stay loaded. It applies to
-Claude models on the Claude Code loop, shielded or not. `toolSearchHoldout` (half by default) is the share of
-conversations that load every tool up front instead, so the saving is measured: Sandbox ▸ Agent ▸ Tools shows the
-prompt size per request on both sides.
+Claude models on the Claude Code loop, shielded or not. `toolSearchHoldout` (none by default) is the share of
+conversations that load every tool up front instead, so the saving can be measured again: Sandbox ▸ Agent ▸ Tools
+shows the prompt size per request on both sides. Held-out conversations open at roughly twice the prompt size.
 
 `stableSystemPrompt` (on by default) keeps the instructions identical between turns of a conversation. The paragraphs
 whose condition moves between turns (whether anyone is watching, which of the owner's computers, browsers and phones

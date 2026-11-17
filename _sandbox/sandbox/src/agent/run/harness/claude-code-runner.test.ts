@@ -9,7 +9,8 @@ import { type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-con
 import { stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, type HarnessRequest, pinnedRouting, runAgent } from "./claude-code-runner.js";
+import { mcpConfigOffArgv, type OauthRecoveryOptions, type HarnessRequest, pinnedRouting, runAgent } from "./claude-code-runner.js";
+import { mergeHooks } from "../hook-timing.js";
 import type { AgentQuery, QueryFn } from "./claude-code-stream.js";
 import { SteeringQueue } from "../../checkpoints/agent-steering.js";
 import { noteSubagentTask, resetSubagents } from "../../subagents/subagents.js";

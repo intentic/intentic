@@ -37,6 +37,22 @@ export const namedHooks = <S extends HookSet>(name: string, set: S): S => {
     return set;
 };
 
+/** A turn's hooks as the SDK takes them: each event's matchers, in the order they fire. */
+export type TurnHookList = Partial<Record<HookEvent, HookCallbackMatcher[]>>;
+
+// Concatenates hook matchers per event instead of spreading, so two producers of the same event (e.g. PreToolUse:Bash)
+// both fire.
+export const mergeHooks = (...sets: TurnHookList[]) => {
+    const merged: TurnHookList = {};
+    for (const set of sets) {
+        // SAFETY: Object.entries widens keys to string; every key of a TurnHookList is a HookEvent.
+        for (const [event, matchers] of Object.entries(set) as [HookEvent, HookCallbackMatcher[]][]) {
+            merged[event] = [...(merged[event] ?? []), ...matchers];
+        }
+    }
+    return merged;
+};
+
 /** One callback known by `name`, for a set whose callbacks do different work (agent-diagnostics.ts). */
 export const namedHook = (name: string, hook: HookCallback): HookCallback => {
     hookNames.set(hook, name);
@@ -69,6 +85,7 @@ export const timedHooks = (
         return hooks;
     }
     const wrapped: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
+    // SAFETY: Object.entries widens keys to string; every key of the hooks record is a HookEvent.
     for (const [event, matchers] of Object.entries(hooks) as [HookEvent, HookCallbackMatcher[]][]) {
         wrapped[event] = matchers.map((matcher, at) => ({
             ...matcher,
