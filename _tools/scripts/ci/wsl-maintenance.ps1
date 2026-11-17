@@ -25,7 +25,10 @@ param(
     [string]$JanitorFlag = '/var/lib/intentic-ci/compact-requested',
     [string]$JanitorUnit = 'intentic-ci-janitor.service',
     [switch]$NoCompact,
-    [switch]$NoSparse
+    [switch]$NoSparse,
+    # Where each run looks for a newer copy of this script; empty turns it off. The installed copy is one somebody
+    # copied by hand, and omen ran a month-old one on 2026-11-17, without the release, volume and swap sweeps.
+    [string]$SelfUpdateUrl = 'https://raw.githubusercontent.com/intentic/intentic/main/_tools/scripts/ci/wsl-maintenance.ps1'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -587,6 +590,42 @@ function Start-Janitor {
     }
 }
 
+# ---- self-update ------------------------------------------------------------------------------
+
+# main's copy replaces this one when it differs and parses, keeping this one beside it as .bak-<date>, and the run
+# starts over as main's. A run that cannot fetch it runs as installed. Elevated, so it can write the admin-only folder.
+function Update-Self {
+    if (-not $SelfUpdateUrl -or $env:WSL_MAINTENANCE_SELF_UPDATED) { return $false }
+    $self = $PSCommandPath
+    $candidate = "$self.new"
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $SelfUpdateUrl -OutFile $candidate -UseBasicParsing -TimeoutSec 60
+    }
+    catch { Write-Log "self-update: cannot fetch ${SelfUpdateUrl}: $($_.Exception.Message)" 'WARN'; return $false }
+    $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($candidate, [ref]$null, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) {
+        Write-Log "self-update: main's copy does not parse ($($parseErrors[0].Message)); keeping this one" 'WARN'
+        Remove-Item -LiteralPath $candidate -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+    if ((Get-FileHash -LiteralPath $candidate).Hash -eq (Get-FileHash -LiteralPath $self).Hash) {
+        Remove-Item -LiteralPath $candidate -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+    Copy-Item -LiteralPath $self "$self.bak-$(Get-Date -Format yyyyMMdd)" -Force
+    Move-Item -LiteralPath $candidate $self -Force
+    Write-Log "self-update: installed main's copy from $SelfUpdateUrl"
+    return $true
+}
+
+if (Update-Self) {
+    $env:WSL_MAINTENANCE_SELF_UPDATED = '1'
+    & $PSCommandPath @PSBoundParameters
+    exit 0
+}
+
 # ---- main -------------------------------------------------------------------------------------
 
 # One instance at a time; a stale lock older than 3h is assumed dead. The CI fleet task reads
@@ -625,7 +664,8 @@ try {
     Invoke-Trim $disks
     $disks = @(Get-Disks)
     $free = Get-FreeGB
-    if ($Mode -ne 'guard' -or $low) { foreach ($d in $disks) { Write-Log ('disk ' + (Format-Disk $d)) } }
+    # Every pass, the guard too: an hourly line per disk is what tells which one a swing of C: came from.
+    foreach ($d in $disks) { Write-Log ('disk ' + (Format-Disk $d)) }
 
     # A request only matters for a disk that is not sparse: on a sparse one the trim above was it.
     $requests = @(Get-CompactRequests)

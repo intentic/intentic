@@ -11,6 +11,10 @@ STATE_DIR=${JANITOR_STATE_DIR:-/var/lib/intentic-ci}
 DRY_RUN=${JANITOR_DRY_RUN:-0}
 # Per-runner pnpm store (actions-work-N/.pnpm-store): removed above this size.
 WORKSPACE_STORE_CAP_GB=${JANITOR_WORKSPACE_STORE_CAP_GB:-6}
+# A runner's checkout (<work>/<repo>/<repo>/.git): repacked once it holds more than this many packs. actions/checkout
+# sets gc.auto=0 and every shallow fetch adds a pack, so nothing else ever repacks: omen's worker checkouts held
+# 520-540 packs and 3-7 GB of .git each on 2026-11-17, and 570 MB each after `git gc --prune=now` (about 20 s).
+GIT_PACKS_MAX=${JANITOR_GIT_PACKS_MAX:-50}
 # /ci-cache/*-target: removed above this size, or when nothing in it was written for TARGET_STALE_DAYS.
 TARGET_CAP_GB=${JANITOR_TARGET_CAP_GB:-20}
 TARGET_STALE_DAYS=${JANITOR_TARGET_STALE_DAYS:-14}
@@ -39,6 +43,9 @@ BUILDKIT_KEEP_GB=${JANITOR_BUILDKIT_KEEP_GB:-25}
 # sparse VHDX the space is back on Windows as soon as it is trimmed, and the task only drops the request; on one
 # that is not sparse, freed blocks come back only with a compaction, which needs WSL shut down.
 COMPACT_REQUEST_GB=${JANITOR_COMPACT_REQUEST_GB:-40}
+# Where each pass looks for a newer janitor; empty turns it off. The installed copy is whatever setup-wsl-fleet.ps1
+# or setup-linux-runner.sh wrote the day someone last ran them, and nothing refreshed it after that.
+SELF_UPDATE_URL=${JANITOR_SELF_UPDATE_URL-https://raw.githubusercontent.com/intentic/intentic/main/_tools/scripts/ci/fleet-janitor.sh}
 
 GB=$((1024 * 1024 * 1024))
 TRASH="$STATE_DIR/trash"
@@ -55,6 +62,19 @@ human_to_bytes() {
         printf "%d", n * m }'
 }
 gb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / (1024 * 1024 * 1024) }'; }
+
+# main's copy replaces this one when it differs and parses, and the pass starts over as main's. Replaced by a rename,
+# so the bash reading this file keeps its old inode. A pass that cannot fetch it runs as installed.
+if [ -n "$SELF_UPDATE_URL" ] && [ "$DRY_RUN" != 1 ] && [ -z "${JANITOR_SELF_UPDATED:-}" ] && command -v curl >/dev/null; then
+    self=$(readlink -f -- "$0")
+    candidate=$(mktemp "$self.XXXXXX")
+    if curl -fsSL --max-time 60 -o "$candidate" "$SELF_UPDATE_URL" && [ "$(head -c 2 "$candidate")" = '#!' ] \
+        && bash -n "$candidate" && ! cmp -s "$candidate" "$self" && chmod 755 "$candidate" && mv -f -- "$candidate" "$self"; then
+        log "updated $self from $SELF_UPDATE_URL"
+        JANITOR_SELF_UPDATED=1 exec "$self" "$@"
+    fi
+    rm -f -- "$candidate"
+fi
 
 # The runner directories whose Runner.Worker is alive, i.e. that are executing a job right now.
 busy_runners() {
@@ -166,6 +186,30 @@ for runner in $RUNNERS_GLOB; do
             remove "$store" "over the ${WORKSPACE_STORE_CAP_GB} GB cap for a per-runner pnpm store"
         fi
     fi
+    # The checkout's packs. The runner's service is stopped for the repack, so no job's fetch can race the prune;
+    # GitHub hands a job queued meanwhile to another runner. As the owner of .git: some are root's (a job container's).
+    unit=$(cat "$runner/.service" 2>/dev/null)
+    for gitdir in "$work"/*/*/.git; do
+        [ -d "$gitdir/objects/pack" ] && [ -n "$unit" ] || continue
+        packs=$(find "$gitdir/objects/pack" -maxdepth 1 -name '*.pack' 2>/dev/null | wc -l)
+        [ "$packs" -gt "$GIT_PACKS_MAX" ] || continue
+        runner_busy "$runner" && break
+        repo=${gitdir%/.git}
+        size=$(bytes_of "$gitdir")
+        if [ "$DRY_RUN" = 1 ]; then
+            log "would repack $repo ($packs packs, $(gb "${size:-0}") GB of .git)"
+            continue
+        fi
+        systemctl stop "$unit" || continue
+        owner=$(stat -c %U "$gitdir")
+        runuser -u "$owner" -- git -c safe.directory='*' -c gc.auto=0 -C "$repo" gc --prune=now --quiet >/dev/null 2>&1
+        rc=$?
+        runuser -u "$owner" -- git -c safe.directory='*' -C "$repo" fsck --connectivity-only --no-progress >/dev/null 2>&1 || rc="$rc, fsck FAILED"
+        systemctl start "$unit" || log "could not start $unit again"
+        after=$(bytes_of "$gitdir")
+        [ "${size:-0}" -gt "${after:-0}" ] && freed=$((freed + size - after))
+        log "repacked $repo: $packs packs, $(gb "${size:-0}") -> $(gb "${after:-0}") GB of .git (gc rc $rc)"
+    done
 done
 
 # -- turbo: by age, safe while jobs run (a reader keeps an unlinked file open) ---------------------------------------
