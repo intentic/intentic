@@ -395,7 +395,7 @@ const modelsText = (models: readonly SpawnableModel[], now: number, named: numbe
 // and ten against "84% left" in 2026-10-20 after this sentence said so: the arithmetic is the sandbox's now, and the
 // sentence says what it does with it.
 const SHARED_POOL =
-    "Each figure is one account's, and subagents started together spend together. The sandbox places each subagent on the account left with the most room after it, and one the accounts cannot carry through their windows waits as pending and starts by itself when room is back: spawn what the work needs, and read the budget line for how many start at once.";
+    "Each figure is one account's, and subagents started together spend together. The sandbox places each subagent on the account whose allowance renews first among those that can carry it, and one the accounts cannot carry through their windows waits as pending and starts by itself when room is back: spawn what the work needs, and read the budget line for how many start at once.";
 
 /** Every unmetered model named rather than counted, for `agents providers --all`. */
 export interface CatalogTextOptions {

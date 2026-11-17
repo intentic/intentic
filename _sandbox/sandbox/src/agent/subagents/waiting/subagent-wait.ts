@@ -398,7 +398,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               "figure is one account's, and subagents started together spend together, so the sandbox does the " +
                               "arithmetic: each provider with metered accounts carries a budget line saying how many more children of " +
                               "its usual model fit through their windows now. Spawn what the work needs: each child is placed on the " +
-                              "account left with the most room after it, and one the accounts cannot carry waits as pending and starts " +
+                              "account whose allowance renews first among those that can carry it, and one the accounts cannot carry waits as pending and starts " +
                               "by itself as running ones end or a window reopens.",
                           {},
                           async () => {

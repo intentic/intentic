@@ -134,7 +134,7 @@ test("an account's own limit refusal holds it spent after another account is ref
     expect(await allowanceWall(services, "claude", "roomy")).toBeUndefined();
     expect(await pick(services)).toBe("roomy");
     // Without its own refusal on file, the same reading is at the line: no room, but not proven spent.
-    expect(await serviceability(deps({ accounts, usage: { spent: atTheLine } }), "claude", "spent")).toEqual({ kind: "ready", room: 0 });
+    expect(await serviceability(deps({ accounts, usage: { spent: atTheLine } }), "claude", "spent")).toEqual({ kind: "ready", room: 0, renewsAt: reopensAt });
 });
 
 test("a routed provider is judged from the translator's credentials, its bench included", async () => {

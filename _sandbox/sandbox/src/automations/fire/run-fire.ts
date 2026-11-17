@@ -433,7 +433,7 @@ export const runFire = async (
         let failure: string | undefined;
         let refusal: WakeRefusal | undefined;
         let runtimeSessionId: string | undefined;
-        // Account rides only if every rung agrees on provider, meaningless elsewhere; else best-headroom wins.
+        // Account rides only if every rung agrees on provider, meaningless elsewhere; else the sandbox's pick decides.
         const account =
             automation.account !== undefined && (automation.models ?? []).every((rung) => rung.provider === pin.provider) ? automation.account : undefined;
         // A thread's session resumes only on the runtime and account that minted it, judged on the rung this fire resolved to

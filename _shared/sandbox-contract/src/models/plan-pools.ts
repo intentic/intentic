@@ -109,6 +109,21 @@ const holdingPools = (full: readonly UsageWindow[], open: readonly UsageWindow[]
     return open.length === 0 ? full : [];
 };
 
+/* WHEN AN ACCOUNT'S ALLOWANCE RENEWS, which is what a pick between accounts with room weighs first (preferredAccount).
+   What is left of a pool when it resets is gone: on 2026-11-17, with Claude's Ultra plan metering no five-hour window,
+   the pick kept every turn on the account with the most weekly room, resetting six days out, while another account's
+   40% reset unspent ten hours later. The pool that decides is the longest the turn spends, since a shorter one refills
+   within the day whichever account is picked; among several of that length (Claude's weekly pool beside its weekly Opus
+   slice), the first to reset. Undefined where those publish no reset, or no pool names its length and none resets. */
+export const renewalOf = (windows: readonly UsageWindow[]): number | undefined => {
+    const periods = windows.map((window) => windowPeriod(window)?.seconds);
+    const known = periods.filter((seconds) => seconds !== undefined);
+    const longest = known.length === 0 ? undefined : Math.max(...known);
+    const deciding = longest === undefined ? windows : windows.filter((_, index) => periods[index] === longest);
+    const resets = deciding.flatMap((window) => (window.resetsAt === undefined ? [] : [window.resetsAt]));
+    return resets.length === 0 ? undefined : Math.min(...resets);
+};
+
 /**
  * What a reading says, at the contract's one spent line, never whether the account can serve: that is `serviceStates`,
  * which first lays every standing refusal on the reading (judgedReading). A provider that rounds its percentages (Claude
@@ -129,7 +144,9 @@ export const readingHeadroom = (usage: AccountUsage | undefined, model?: ModelRe
     const open = windows.filter((window) => !provenFull(window));
     const holding = holdingPools(full, open, model);
     if (holding.length === 0) {
-        return { kind: "ready", room: Math.max(0, SPENT_UTILIZATION - Math.max(...open.map((window) => window.utilization))) };
+        const room = Math.max(0, SPENT_UTILIZATION - Math.max(...open.map((window) => window.utilization)));
+        const renewsAt = renewalOf(open);
+        return renewsAt === undefined ? { kind: "ready", room } : { kind: "ready", room, renewsAt };
     }
     const sliced = model === undefined && !holding.some((window) => window.gates === "all");
     // Every per-model slice this reading names is full, but it names none for some models the account serves: whether
@@ -361,20 +378,43 @@ const ranksAbove = (next: RankedAccount, best: RankedAccount): boolean => {
     if ((next.flapping === true) !== (best.flapping === true)) {
         return best.flapping === true;
     }
-    return next.state.kind === "ready" && best.state.kind === "ready" && next.state.room > best.state.room;
+    return next.state.kind === "ready" && best.state.kind === "ready" && readyAbove(next.state, best.state);
+};
+
+/** Room at or below this, in points of the fullest pool, is an account nearly out: it ranks after every one with more. */
+export const NEARLY_OUT_ROOM = 10;
+
+/* BETWEEN TWO ACCOUNTS WITH ROOM, THE ONE WHOSE ALLOWANCE RENEWS FIRST (renewalOf), unless it is nearly out. Points left
+   in a pool at its reset are lost, so spending the pool that resets first wastes the least of what the plans pay for,
+   and the later one is still there when the first has renewed. Most room decides only between accounts renewing at the
+   same moment, between accounts no reset is known for, and among accounts nearly out, where room is what keeps the next
+   turn from being refused. This reads no load: the daemon's own Claude pick (budget-planner.ts pickAccount) orders the
+   same way among the accounts its projection says carry the turn with what already runs on them. */
+const readyAbove = (next: AccountState & { kind: "ready" }, best: AccountState & { kind: "ready" }): boolean => {
+    const nextOpen = next.room > NEARLY_OUT_ROOM;
+    if (nextOpen !== best.room > NEARLY_OUT_ROOM) {
+        return nextOpen;
+    }
+    const nextRenews = next.renewsAt ?? Number.POSITIVE_INFINITY;
+    const bestRenews = best.renewsAt ?? Number.POSITIVE_INFINITY;
+    if (nextOpen && nextRenews !== bestRenews) {
+        return nextRenews < bestRenews;
+    }
+    return next.room > best.room;
 };
 
 /**
- * The account an unnamed turn runs on: ready by most room, then unmeasured, then at the line, then spent, blocked only
- * when that is all there is; within each, a flapping account after the steady ones. Ties keep the caller's order.
+ * The account an unnamed turn runs on: ready, then unmeasured, then at the line, then spent, blocked only when that is
+ * all there is; within each, a flapping account after the steady ones; among ready ones, the first to renew of those not
+ * nearly out, then the most room (readyAbove). Ties keep the caller's order.
  */
 export const preferredAccount = <T extends RankedAccount>(entries: readonly T[]): T | undefined =>
     entries.reduce<T | undefined>((best, next) => (best === undefined || ranksAbove(next, best) ? next : best), undefined);
 
 /**
- * The roomiest account with proven room, or none: what a move off a refused account may land on. Ties keep the caller's
- * order. An account at the line is left out: a move there could be refused in turn, and two such accounts would hand the
- * turn back and forth.
+ * The best account with proven room, by the same order, or none: what a move off a refused account may land on. Ties keep
+ * the caller's order. An account at the line is left out: a move there could be refused in turn, and two such accounts
+ * would hand the turn back and forth.
  */
-export const roomiestAccount = <T extends RankedAccount>(entries: readonly T[]): T | undefined =>
+export const bestWithRoom = <T extends RankedAccount>(entries: readonly T[]): T | undefined =>
     preferredAccount(entries.filter((entry) => entry.state.kind === "ready" && entry.state.room > 0));

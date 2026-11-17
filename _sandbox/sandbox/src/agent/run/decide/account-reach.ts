@@ -50,7 +50,8 @@ interface NamedRow {
 }
 
 // The account a turn left to the sandbox runs on among the ones it may use: the provider's own rule, which for every
-// provider reads the same verdicts (ready by most room, then unmeasured, then spent), and ties keep the provider's order.
+// provider reads the same verdicts (ready, the first to renew unless nearly out, then unmeasured, then spent), and ties
+// keep the provider's order.
 const pickAmong = (allowed: readonly NamedRow[]): NamedRow | undefined => preferredAccount(allowed) ?? allowed[0];
 
 const listed = (rows: readonly NamedRow[]): string => rows.map((row) => `"${row.label}"`).join(", ");

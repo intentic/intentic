@@ -397,9 +397,9 @@ export const AutomationSchema = z.object({
             "Which models this automation may run on, best first. Required when it starts a new agent, and nothing is chosen for you: work that fires while nobody is watching spends a real allowance, so it names the models it spends rather than inheriting one. Tried in order, so a spent account does not silently stop the job. Not needed to continue a conversation, which runs on its own model, or to only notify.",
         ),
     // Absent means the daemon's pick: the account its conversation runs on for a continuing thread (moved off one that
-    // can no longer serve), else the one that can serve with the most room. Named, it is a pin, run whatever its state,
-    // so a refused account says so rather than being swapped; pinning matters more here than for a chat, since nobody
-    // is watching to notice a stuck one.
+    // can no longer serve), else the sandbox's pick among those that can serve (the first to renew unless nearly out).
+    // Named, it is a pin, run whatever its state, so a refused account says so rather than being swapped; pinning
+    // matters more here than for a chat, since nobody is watching to notice a stuck one.
     account: z.string().optional().describe("Which account pays for it."),
     // Absent means the wake reaches no logged-in account at all, the strictest default here, since nobody is at the
     // composer when it fires. Posture only: what the wake may reach is `runAs`'s (docs/architecture/access.md).

@@ -44,7 +44,7 @@ export const budgetHeldWords = (claim: Extract<BudgetClaim, { readonly go: false
     const accounts = claim.projections.map(standingWords).join(`; `);
     return (
         `it waits for room: no ${lane.provider} account carries one more ${lane.model} child through its allowance windows right now (${accounts}). ` +
-        `It starts by itself, on the account with most room, when one of the running ones ends, a reading shows room again, or the window that holds it reopens`
+        `It starts by itself, on the account renewing first of those that can carry it, when one of the running ones ends, a reading shows room again, or the window that holds it reopens`
     );
 };
 
@@ -57,7 +57,7 @@ export const budgetPlacedWords = (claim: Extract<BudgetClaim, { readonly go: tru
     if (claim.short === true) {
         return `It started on ${standingWords(projection)} although no account carries it through its windows: nothing else of yours runs on that provider, so it goes rather than wait on an estimate. Expect it to be stopped when the window empties.`;
     }
-    return claim.account === undefined ? undefined : `Placed on ${standingWords(projection)}, the account left with the most room after it.`;
+    return claim.account === undefined ? undefined : `Placed on ${standingWords(projection)}, the account whose allowance renews first of those that carry it.`;
 };
 
 /** The provider's budget for children of a model, as the spawn listing says it. */

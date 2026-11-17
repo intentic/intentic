@@ -129,8 +129,9 @@ export const namedServiceabilities = async (
 
 /* WHERE A TURN NAMING NO ACCOUNT RUNS, for every runtime that holds its accounts' credentials and so can be pointed at
    one: Claude (harness-credentials.ts), Cursor (cursor-usage.ts, on the same rule over its refusals alone), Devin, the
-   minted keys (Meta, Z.ai) and a vendor CLI's sign-ins (Grok Build, Kimi CLI). One rule, preferredAccount: room, then
-   unmeasured, then at the line, then spent. A routed subscription is the translator's to balance and is never placed
+   minted keys (Meta, Z.ai) and a vendor CLI's sign-ins (Grok Build, Kimi CLI). One rule, preferredAccount: room (the
+   first to renew unless nearly out), then unmeasured, then at the line, then spent; Claude asks the fan-out planner first
+   (harness-credentials.ts unnamedClaude), which orders its accounts the same way with their load counted. A routed subscription is the translator's to balance and is never placed
    here. Devin, the minted keys and the CLIs each took their first connected account instead, so a spent first account
    took every turn while the others sat idle (Devin, 2026-10-28 and 10-29). */
 

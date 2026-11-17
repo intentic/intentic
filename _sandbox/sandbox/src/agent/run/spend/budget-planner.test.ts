@@ -103,6 +103,22 @@ describe("the fan-out planner", () => {
         expect(await pickAccount(deps(), { provider: "claude", model: "claude-opus-5-5", readings: READINGS, refused: "artur" })).toBe("radarsu");
     });
 
+    // 2026-11-17: Claude's Ultra plan meters only weekly windows. One account had 70 points left renewing in six days,
+    // the other 40 renewing in ten hours; the most-room pick spent the first and let the second's reset unspent.
+    it("places a child and a turn naming no account on the allowance that renews first, steady accounts before flapping ones", async () => {
+        const weekly = (account: string, used: number, resetH: number, at: number): ServiceFacts => ({
+            account,
+            usage: { windows: [{ kind: "seven_day", utilization: used, resetsAt: Math.floor(at / 1000) + resetH * 3_600, gates: "all", rounded: true }], measuredAt: at },
+        });
+        const ultra = (at: number) => [weekly("later", 30, 144, at), weekly("sooner", 60, 10, at)];
+        const claim = await claimBudget(deps(), { provider: "claude", model: "claude-opus-5-5", readings: ultra(NOW), childId: "sub-u", childrenRunning: 0 }, () => NOW);
+        expect(claim).toMatchObject({ go: true, account: "sooner" });
+        // pickAccount reads the clock itself.
+        expect(await pickAccount(deps(), { provider: "claude", model: "claude-opus-5-5", readings: ultra(Date.now()), refused: undefined })).toBe("sooner");
+        const flapping: PlannerDeps = { ...deps(), providerRefusals: { ...deps().providerRefusals, flapping: async () => new Set(["sooner"]) } };
+        expect(await pickAccount(flapping, { provider: "claude", model: "claude-opus-5-5", readings: ultra(Date.now()), refused: undefined })).toBe("later");
+    });
+
     // 2026-11-08: Google meters Claude and GPT apart from Gemini, and each pool ran out under its own load. A Gemini child
     // is priced by the Gemini pool's run-out, never by how fast the Claude pool went.
     it("prices a window by its own pool's last run-out, never another pool's of the same provider", async () => {

@@ -13,9 +13,9 @@ import { ACCOUNTS_ALL, accountReachAllows } from "../../secrets/credential-reach
 // Picks by the one move rule (account-moves.ts moveDestination): a revoked, seatless, benched, refused or spent account
 // is never a move's destination, however idle its meter looks, and an unmeasured one only where the provider publishes
 // no allowance to measure (Devin's refused turns were held with two unrefused accounts beside them until 2026-10-29).
-// Among Claude's ready accounts, the one the fan-out planner projects left with the most room once this turn and what
-// already runs there are on it (ten children once moved together onto the account reading most room and emptied it in
-// thirty minutes, 2026-10-20); the roomiest by its reading where the planner cannot say.
+// Among Claude's ready accounts, the one the fan-out planner places it on once this turn and what already runs there are
+// counted (budget.ts choose: the first to renew of those that carry it; ten children once moved together onto the account
+// reading most room and emptied it in thirty minutes, 2026-10-20); the best by its reading where the planner cannot say.
 // `allows` narrows the destinations to the accounts the people the conversation works for may use (account-reach.ts):
 // a move onto any other would only be refused when it fires.
 export const siblingWithRoom = async (
@@ -37,19 +37,31 @@ export const siblingWithRoom = async (
     );
     const destination = moveDestination(accounts, reportsPlanLimits(params.provider))?.id;
     // The planner projects Claude's children alone (budget-planner.ts).
-    const planned = model === undefined || params.provider !== "claude" ? undefined : await plannedSibling(services, model.id, params.refused);
+    const planned = model === undefined || params.provider !== "claude" ? undefined : await plannedClaudeAccount(services, model.id, { refused: params.refused });
     return planned !== undefined && accounts.some((account) => account.id === planned) ? planned : destination;
 };
 
-// The planner's pick, where this caller's services carry what it projects from.
-const plannedSibling = async (services: ServiceabilityDeps & Partial<PlannerDeps>, model: string, refused: string | undefined): Promise<string | undefined> => {
+/**
+ * The planner's pick among Claude's accounts (budget-planner.ts pickAccount), where `services` carry what it projects
+ * from: never `refused`, and only among `among` where given. Undefined where it cannot say (no account ready with room,
+ * an unreadable record), which leaves the caller's own rule to answer.
+ */
+export const plannedClaudeAccount = async (
+    services: ServiceabilityDeps & Partial<PlannerDeps>,
+    model: string,
+    narrow: { readonly refused?: string | undefined; readonly among?: readonly string[] | undefined },
+): Promise<string | undefined> => {
     const { burnRates, runOuts, sandboxSettings, providerRefusals } = services;
     if (burnRates === undefined || runOuts === undefined || sandboxSettings === undefined) {
         return undefined;
     }
-    const readings = await accountFactsOf(services, "claude");
-    // allow(silent-catch): the planner is advice for which ready account to move to; the roomiest by reading still answers.
-    return pickAccount({ burnRates, runOuts, sandboxSettings, providerRefusals }, { provider: "claude", model, readings, refused }).catch(() => undefined);
+    const { refused, among } = narrow;
+    return (
+        accountFactsOf(services, "claude")
+            .then((facts) => pickAccount({ burnRates, runOuts, sandboxSettings, providerRefusals }, { provider: "claude", model, readings: facts.filter((reading) => among?.includes(reading.account) ?? true), refused }))
+            // allow(silent-catch): the planner is advice for which ready account a turn goes on; the caller's rule still answers.
+            .catch(() => undefined)
+    );
 };
 
 // Where a held turn moves to, decided once at the failure; undefined means no policy applies or no account has room.

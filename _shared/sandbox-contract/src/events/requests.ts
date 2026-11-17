@@ -68,7 +68,7 @@ export const ChildRunSchema = z.object({
     account: z
         .string()
         .optional()
-        .describe("Which of that provider's connected accounts pays for it. Absent is whichever has the most room when it starts."),
+        .describe("Which of that provider's connected accounts pays for it. Absent is the sandbox's pick when it starts: the one whose allowance renews first among those not nearly out, then the most room."),
     effort: z.string().optional().describe("How hard it thinks, where the model offers a choice. Absent is the model's own default."),
     thinking: z.boolean().optional().describe("Whether it reasons before it answers, where the model offers the choice."),
     fast: z.boolean().optional().describe("Whether it asks for the faster rate, at the higher price."),

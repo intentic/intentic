@@ -13,7 +13,9 @@ import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/provider
 
 /* ONE RULE FOR EVERY PROVIDER WHOSE ACCOUNTS A PERSON CAN PICK. Each runtime that holds its accounts' own credentials
    (Claude, Cursor, Devin, the minted keys, a vendor CLI's sign-ins) places a turn naming none by the daemon's one rule
-   (serviceability.ts unnamedAccount, preferredAccount): room, then unmeasured, then spent. A routed subscription is the
+   (serviceability.ts unnamedAccount, preferredAccount): room (the allowance that renews first, unless nearly out), then
+   unmeasured, then spent. Claude's daemon pick also counts what already runs on each account (harness-credentials.ts
+   unnamedClaude), which this cannot see: while children crowd the account renewing first, the turn may go on the next. A routed subscription is the
    translator's to balance, and the picker lists it read-only, never through here. Before 2026-10-29 only Claude and
    Cursor read that way here, so the composer read a spent first Devin account as where the turn ran, called the send
    blocked, and a press past that reading named the spent account (composerSend.ts nameBlockedAccount): the turn was

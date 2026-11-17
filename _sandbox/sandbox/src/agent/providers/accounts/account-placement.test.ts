@@ -4,7 +4,7 @@ import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { PROMPT_CACHE_1H_MS, PROMPT_CACHE_5M_MS } from "../../run/turn/prompt-cache.js";
 import { claudeReading } from "../claude/claude-usage.testing.js";
-import { cacheCold, type ColdTurn, NEAR_SPENT, offSpentAccount, placeCold, REPLACE_GAP } from "./account-placement.js";
+import { cacheCold, type ColdTurn, NEAR_SPENT, offSpentAccount, placeCold, RENEW_GAP_HOURS, REPLACE_GAP } from "./account-placement.js";
 import type { BlockedAccountDeps } from "./blocked-account.js";
 
 // Where a conversation runs once its cache has gone cold: kept where it is unless another account has clearly more room
@@ -49,6 +49,32 @@ test("a small difference in room is not worth a move", async () => {
 test("an account nearly out moves for any gain", async () => {
     const nearlyOut = 100 - NEAR_SPENT;
     expect(await placeCold(deps({ home: reading(nearlyOut), spare: reading(nearlyOut - 5) }), cold)).toMatchObject({ kind: "move", to: "spare" });
+});
+
+// 2026-11-17: on Claude's Ultra plan, which meters only weekly pools, conversations sat on the account with the most room,
+// renewing six days out, while another account's 40% reset unspent ten hours later.
+describe("a cold conversation and when the allowances renew", () => {
+    // The reading is judged on the real clock, so its resets are set from it.
+    const NOW = Date.now();
+    const S = Math.floor(NOW / 1000);
+    const weekly = (utilization: number, renewsInHours: number): AccountUsage => claudeReading({ seven_day: { utilization, resetsAt: S + renewsInHours * 3_600 } }, NOW);
+
+    test("moves onto an account renewing clearly sooner, even with less room, and says when each renews", async () => {
+        expect(await placeCold(deps({ home: weekly(30, 144), spare: weekly(60, 10) }), cold, NOW)).toMatchObject({
+            kind: "move",
+            to: "spare",
+            reason: `"spare" had 40% left, renewing in 10 hours, and "home" renewing in 6 days; the cache had gone cold, so moving cost nothing`,
+        });
+    });
+
+    test("never moves toward an account renewing later, however much more room it has", async () => {
+        expect(await placeCold(deps({ home: weekly(70, 10), spare: weekly(0, 144) }), cold, NOW)).toEqual({ kind: "keep" });
+    });
+
+    test("weighs room only between accounts renewing within the gap of each other, and never onto one nearly out", async () => {
+        expect(await placeCold(deps({ home: weekly(70, 30), spare: weekly(70 - REPLACE_GAP, 30 + RENEW_GAP_HOURS - 1) }), cold, NOW)).toMatchObject({ kind: "move", to: "spare" });
+        expect(await placeCold(deps({ home: weekly(30, 144), spare: weekly(100 - NEAR_SPENT, 10) }), cold, NOW)).toEqual({ kind: "keep" });
+    });
 });
 
 test("a warm cache, a pinned account, a named one and none on file all stay where routing points", async () => {

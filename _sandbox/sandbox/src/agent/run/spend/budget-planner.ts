@@ -22,6 +22,9 @@ import { turnRate } from "./token-meter.js";
    routed provider balances its own credentials (the translator), so its ready accounts are judged as one pool, and a
    child is only admitted or held.
 
+   Among the accounts that carry a child, it goes on the one whose allowance renews first (budget.ts choose), steady
+   accounts before flapping ones; a turn naming no account is placed the same way (pickAccount, harness-credentials.ts).
+
    Claims are made one at a time per provider: a fan-out of ten spawns in a few seconds, and each must see the ones
    before it, or ten reads of the same figure send ten children to the same account, which is the failure this is for. */
 
@@ -143,6 +146,7 @@ const budgetWindow = (deps: Pick<PlannerDeps, "burnRates">, input: { provider: s
         leftPoints: reopened ? 100 : Math.max(0, 100 - window.utilization),
         ...opt("resetsInHours", reopened ? (period === undefined ? undefined : period.seconds / 3_600) : resetsInHours),
         tokensPerPoint: learned ?? PRIOR_TOKENS_PER_AGENT_HOUR / pointsPerAgentHour,
+        ...opt("periodHours", period === undefined ? undefined : period.seconds / 3_600),
     };
 };
 
@@ -157,12 +161,16 @@ export interface PlanAccounts {
 
 const planAccounts = async (deps: PlannerDeps, input: PlanInput, now: number = Date.now()): Promise<PlanAccounts> => {
     await deps.burnRates.ready();
-    const [refusals, runOuts, settings] = await Promise.all([
+    const [refusals, runOuts, settings, flapping] = await Promise.all([
         // allow(silent-catch): an unreadable refusal file leaves the readings to speak alone, as in the listing.
         deps.providerRefusals.onFile().catch((): Record<string, readonly ProviderRefusal[]> => ({})),
         // allow(silent-catch): an unreadable run-out record only costs the planner a prior; the generic one stands.
         deps.runOuts.read().catch((): RunOuts => ({})),
         deps.sandboxSettings.get(),
+        // allow(silent-catch): an unreadable entitlement history costs the placement its flapping order, never the placement.
+        Promise.resolve()
+            .then(() => deps.providerRefusals.flapping(input.provider))
+            .catch((): ReadonlySet<string> => new Set()),
     ]);
     const model = { id: input.model };
     const states = serviceStates(input.readings, refusals[input.provider], model, now);
@@ -183,6 +191,7 @@ const planAccounts = async (deps: PlannerDeps, input: PlanInput, now: number = D
                 windows: gatingWindows(reading.usage, model).map((window) => budgetWindow(deps, { provider: input.provider, account: reading.account, runOuts }, window, now)),
                 loadTokensPerHour: here.tokensPerHour,
                 agents: here.agents,
+                ...opt("flapping", flapping.has(reading.account) ? true : undefined),
             };
         });
         return { accounts, placed, child, reserve };
@@ -283,7 +292,11 @@ export const forecastBudget = async (deps: PlannerDeps, input: PlanInput, now: n
     return { plan, projections, more: capacity(plan.accounts, plan.child, plan.reserve) };
 };
 
-/** The account a turn moved off a spent one should land on: the one that carries it best, never `refused`. */
+/**
+ * Where a Claude turn the planner places should run: the account renewing first of those that carry it with what already
+ * runs on them (budget.ts choose), else the one that holds out longest; never `refused`. Asked for a turn moved off a spent
+ * account (sibling-account.ts) and for a turn naming none (harness-credentials.ts). Undefined where nothing is placed.
+ */
 export const pickAccount = async (deps: PlannerDeps, input: PlanInput & { readonly refused: string | undefined }): Promise<string | undefined> => {
     const plan = await planAccounts(deps, { ...input, readings: input.readings.filter((reading) => reading.account !== input.refused) });
     if (!plan.placed) {

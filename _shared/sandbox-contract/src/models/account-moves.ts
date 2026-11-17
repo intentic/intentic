@@ -1,5 +1,5 @@
 import type { AccountState } from "../schemas/providers/plan-limits.js";
-import { preferredAccount, roomiestAccount } from "./plan-pools.js";
+import { bestWithRoom, preferredAccount } from "./plan-pools.js";
 
 /* WHERE A TURN GOES OFF AN ACCOUNT THAT CANNOT SERVE IT, for every provider whose accounts a turn can name. Read by the
    daemon's limit move (sibling-account.ts) and its move off a blocked account (blocked-account.ts), and by the editor's
@@ -27,14 +27,14 @@ interface MovableAccount {
 const refused = (state: AccountState): boolean => state.kind === "spent" || state.kind === "blocked";
 
 /**
- * The account a turn moves to among `others` (the account it leaves already left out). That is the roomiest with proven
- * room, else the steadiest unmeasured one where `readable` is false (the provider publishes no allowance) or every
+ * The account a turn moves to among `others` (the account it leaves already left out). That is the best with proven room
+ * (plan-pools.ts bestWithRoom: the first to renew unless nearly out, then the most room), else the steadiest unmeasured one where `readable` is false (the provider publishes no allowance) or every
  * account with a reading is refused. Ties keep the caller's order. Undefined: nowhere to go.
  */
 export const moveDestination = <T extends MovableAccount>(others: readonly T[], readable: boolean): T | undefined => {
-    const roomiest = roomiestAccount(others);
-    if (roomiest !== undefined) {
-        return roomiest;
+    const withRoom = bestWithRoom(others);
+    if (withRoom !== undefined) {
+        return withRoom;
     }
     const open = !readable || others.every((entry) => entry.state.kind === "unknown" || refused(entry.state));
     return open ? preferredAccount(others.filter((entry) => entry.state.kind === "unknown")) : undefined;

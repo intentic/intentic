@@ -1,7 +1,14 @@
 /* Pure account-capacity projection: usable = points left - owner reserve; burn includes running agents plus the proposed child.
  * horizon = min(window reset, expected child duration); every spent window must satisfy burn * horizon <= usable.
  * Resets refill windows, so capacity only needs to last until reset. Estimates that do not fit cause waiting, not refusal.
- * budget-planner still lets one child go where none of the parent's kind is running. */
+ * budget-planner still lets one child go where none of the parent's kind is running.
+ *
+ * Among the accounts that carry it, a child goes on the one whose allowance renews first (`choose`): what is left of a
+ * pool at its reset is lost, so the pool that resets first is the one to spend, and the fit above already keeps it from
+ * being emptied under the child. The longest window decides, since a shorter one refills within the day wherever the child
+ * goes (plan-pools.ts renewalOf, the same rule every pick reads). On 2026-11-17, with Claude's Ultra plan metering only
+ * weekly windows, picking by most room kept the work on an account renewing six days out while another's 40% reset
+ * unspent ten hours later. Margin decides between accounts renewing at the same moment, as it did before for all. */
 
 /** One window an account's model spends, as a projection reads it. */
 export interface BudgetWindow {
@@ -14,6 +21,8 @@ export interface BudgetWindow {
     readonly resetsInHours?: number | undefined;
     // What one point costs in meter units: learned for the account, or the planner's prior.
     readonly tokensPerPoint: number;
+    // How long the window runs, where its key or name says (plan-pools.ts windowPeriod): which window is the longest.
+    readonly periodHours?: number | undefined;
 }
 
 export interface BudgetAccount {
@@ -24,6 +33,8 @@ export interface BudgetAccount {
     readonly loadTokensPerHour: number;
     // How many turns that is, for the words.
     readonly agents: number;
+    // Its organisation keeps switching it off (plan-pools.ts flappingAccounts): placed after every steady account.
+    readonly flapping?: boolean | undefined;
 }
 
 /** What one more child is expected to cost: its model's pace, and how long it is expected to run. */
@@ -77,12 +88,31 @@ export const project = (account: BudgetAccount, child: ChildCost, reserve: numbe
     };
 };
 
-/** The account a child should go on: of those that carry it, the one left with the most room; undefined when none does. */
+/** Hours until the account's longest window reopens (the first of several that long); undefined where none says. */
+export const renewsInHours = (account: BudgetAccount): number | undefined => {
+    const known = account.windows.flatMap((window) => (window.periodHours === undefined ? [] : [window.periodHours]));
+    const longest = known.length === 0 ? undefined : Math.max(...known);
+    const deciding = longest === undefined ? account.windows : account.windows.filter((window) => window.periodHours === longest);
+    const hours = deciding.flatMap((window) => (window.resetsInHours === undefined ? [] : [window.resetsInHours]));
+    return hours.length === 0 ? undefined : Math.min(...hours);
+};
+
+// Steady before flapping, then the allowance that renews first, then the most room left after the child.
+const placesBefore = (next: Projection, best: Projection): boolean => {
+    if ((next.account.flapping === true) !== (best.account.flapping === true)) {
+        return best.account.flapping === true;
+    }
+    const nextRenews = renewsInHours(next.account) ?? Number.POSITIVE_INFINITY;
+    const bestRenews = renewsInHours(best.account) ?? Number.POSITIVE_INFINITY;
+    return nextRenews === bestRenews ? next.margin > best.margin : nextRenews < bestRenews;
+};
+
+/** The account a child should go on: of those that carry it, the one renewing first (placesBefore); undefined when none does. */
 export const choose = (accounts: readonly BudgetAccount[], child: ChildCost, reserve: number): Projection | undefined =>
     accounts
         .map((account) => project(account, child, reserve))
         .filter((projection) => projection.fits)
-        .reduce<Projection | undefined>((best, next) => (best === undefined || next.margin > best.margin ? next : best), undefined);
+        .reduce<Projection | undefined>((best, next) => (best === undefined || placesBefore(next, best) ? next : best), undefined);
 
 /** The account that holds out longest if a child goes anyway: what the one start nothing may hold back is placed on. */
 export const leastShort = (accounts: readonly BudgetAccount[], child: ChildCost, reserve: number): Projection | undefined =>
@@ -94,7 +124,7 @@ export const leastShort = (accounts: readonly BudgetAccount[], child: ChildCost,
 // that measures nothing.
 const MOST_COUNTED = 50;
 
-/** How many more children like this one the accounts carry between them, each placed where the last left most room. */
+/** How many more children like this one the accounts carry between them, each placed where `choose` puts the next. */
 export const capacity = (accounts: readonly BudgetAccount[], child: ChildCost, reserve: number): number => {
     let loaded = [...accounts];
     let count = 0;

@@ -198,6 +198,36 @@ test("an unnamed turn skips the account whose organization has refused it", asyn
     expect(result.ok && result.credentials.account).toBe("working");
 });
 
+// 2026-11-17: on Claude's Ultra plan, which meters only weekly windows, an unnamed turn went on the account with the most
+// weekly room, renewing six days out, while another's 40% reset unspent ten hours later. It goes where the planner places
+// it: the first to renew of the accounts that carry it, with what already runs there counted.
+test("an unnamed turn runs on the account whose allowance renews first", async () => {
+    const S = Math.floor(Date.now() / 1000);
+    const base = twoAccounts(undefined);
+    const sandbox = services({
+        claudeStore: base.claudeStore,
+        claudeSeats: base.claudeSeats,
+        providerRefusals: base.providerRefusals,
+        accountUsage: {
+            ...base.accountUsage,
+            read: async () => ({
+                refused: { measuredAt: Date.now(), windows: [{ kind: "seven_day", utilization: 30, resetsAt: S + 144 * 3_600, gates: "all" }] },
+                working: { measuredAt: Date.now(), windows: [{ kind: "seven_day", utilization: 60, resetsAt: S + 10 * 3_600, gates: "all" }] },
+            }),
+        },
+        burnRates: {
+            ready: async () => {},
+            tokensPerPoint: () => 9_300_000,
+            modelPace: () => ({ tokensPerHour: 9_000_000, childHours: 1.5 }),
+            reading: async () => {},
+            turnEnded: async () => {},
+        },
+        runOuts: { read: async () => ({}), record: async () => {} },
+    });
+    const result = await resolveHarnessCredentials(sandbox, { agent: "claude", model: "claude-opus-5-5" });
+    expect(result.ok && result.credentials.account).toBe("working");
+});
+
 // The refusal store keeps only one refusal per provider, so a later spent-allowance refusal on any account overwrites
 // the entitlement one — but the durable seat record, not that hint, is what actually benches an account.
 test("a benched seat stays benched after the provider's last refusal is some other account's", async () => {

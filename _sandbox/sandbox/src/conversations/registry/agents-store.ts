@@ -128,7 +128,7 @@ const ProfileSchema = z.object({
     account: z.string().optional(),
     // The account a person picked for this conversation (switch-account.ts), and when: it stands only while `account` is
     // still that one (pinnedAccount), so any move elsewhere lifts it without every writer having to. A pinned account is
-    // kept while the cache is cold, where an unpinned one is re-placed on the account with the most room; either one is
+    // kept while the cache is cold, where an unpinned one is re-placed on the account the sandbox's pick prefers; either one is
     // moved off when it can no longer serve (account-placement.ts). Added 2026-10-28, optional: no row before it was pinned.
     accountPin: z.object({ account: z.string(), at: z.number() }).optional(),
     // The persona the last turn ran as: the turn's own, never carried from the one before, since the daemon runs each turn

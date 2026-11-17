@@ -136,7 +136,7 @@ const loopWord = (pin: ModelPin): string | undefined => {
 };
 
 // An account id only means something beside its own provider, so it can only be pinned while every rung agrees on one;
-// crossing providers clears it, falling back to the connected account with the most headroom, same as the scheduler.
+// crossing providers clears it, falling back to the sandbox's own pick among the connected accounts, same as the scheduler.
 const accountPinnable = computed(() => new Set(form.models.map((pin) => pin.provider)).size <= 1);
 
 // A function ref, not one shared element, since the picker anchors to whichever row opened it (popover or sheet; the

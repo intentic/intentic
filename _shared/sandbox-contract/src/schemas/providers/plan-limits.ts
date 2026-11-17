@@ -97,7 +97,13 @@ export const AccountStateSchema = z.discriminatedUnion("kind", [
         room: z
             .number()
             .describe(
-                "How much of the fullest pool that gates the turn is left, in percent (0 up to 100). Pickers take the most room. 0 is a rounded pool read at 100: at the line, tried after an unmeasured account, never a limit move's destination.",
+                "How much of the fullest pool that gates the turn is left, in percent (0 up to 100). 0 is a rounded pool read at 100: at the line, tried after an unmeasured account, never a limit move's destination. An account nearly out (plan-pools.ts NEARLY_OUT_ROOM) ranks after every one with more.",
+            ),
+        renewsAt: z
+            .number()
+            .optional()
+            .describe(
+                "When the longest pool that gates the turn resets, in epoch seconds: the moment what is left of it goes unspent for good. Pickers take the account that renews soonest among those not nearly out, then the most room. Absent where no such pool publishes a reset.",
             ),
     }),
     z.object({

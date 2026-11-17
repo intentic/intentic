@@ -13,7 +13,9 @@ import {
     refusalVerdict,
     refusedInstant,
     refusedPoolReset,
-    roomiestAccount,
+    bestWithRoom,
+    NEARLY_OUT_ROOM,
+    renewalOf,
     scopedWindow,
     uncoveredModels,
     serviceState,
@@ -179,8 +181,8 @@ test("spent is the contract's one line: 99.5% still has room, 100% is spent unti
 test("a pool read at 100 in whole percents is at the line with no room, until a refusal proves it empty", () => {
     const week = window({ kind: "seven_day", utilization: 100, resetsAt: 900, rounded: true });
     const atLine = usage(window({ kind: "five_hour", utilization: 75, rounded: true }), week);
-    expect(readingHeadroom(atLine)).toEqual({ kind: "ready", room: 0 });
-    expect(readingHeadroom(atLine, { id: "claude-opus-5-5" })).toEqual({ kind: "ready", room: 0 });
+    expect(readingHeadroom(atLine)).toEqual({ kind: "ready", room: 0, renewsAt: 900 });
+    expect(readingHeadroom(atLine, { id: "claude-opus-5-5" })).toEqual({ kind: "ready", room: 0, renewsAt: 900 });
     // A precise 100 is still spent.
     expect(readingHeadroom(usage(window({ kind: "seven_day", utilization: 100, resetsAt: 900 })))).toEqual({ kind: "spent", reopensAt: 900 });
     // The provider refused it: spent until the pool reopens, and a reading still at the line does not answer that.
@@ -349,7 +351,7 @@ test("a spent allowance with no instant named is stamped with its pool's reset, 
     const lapsed = at(500, window({ kind: "five_hour", utilization: 0, lapsedAt: reset }), window({ kind: "seven_day", utilization: 40, resetsAt: 900 }));
     expect(refusedPoolReset(spent, [{ account: "a", usage: lapsed }])).toBe(900);
     expect(refusalVerdict(filed, [{ account: "a", usage: lapsed }], reset * 1000)).toBe("answered");
-    expect(serviceStates([{ account: "a", usage: lapsed }], [filed], undefined, reset * 1000).get("a")).toEqual({ kind: "ready", room: 60 });
+    expect(serviceStates([{ account: "a", usage: lapsed }], [filed], undefined, reset * 1000).get("a")).toEqual({ kind: "ready", room: 60, renewsAt: 900 });
 });
 
 // 2026-10-21: Claude refused at 5h 98% and weekly 97% (rounded) with no time named, so the refusal was stamped with the
@@ -378,7 +380,7 @@ test("a stamped reset ends a refusal only where no reading since it says the poo
     expect(serviceStates([{ account: "a", usage: weeklyFull }], [stamped], undefined, now).get("a")).toEqual(unstampedVerdict);
     expect(fleetCapacity([{ account: "a", usage: weeklyFull }], [stamped], undefined, now)).toMatchObject({ kind: "spent", reopensAt: weeklyReset });
     // Nothing read since the stamp: it ends there. Read with room since: over.
-    expect(serviceStates([{ account: "a", usage: refusedIn }], [stamped], undefined, now).get("a")).toEqual({ kind: "ready", room: 2 });
+    expect(serviceStates([{ account: "a", usage: refusedIn }], [stamped], undefined, now).get("a")).toEqual({ kind: "ready", room: 2, renewsAt: weeklyReset });
     const roomSince = at((fiveHourReset + 600) * 1000, window({ kind: "five_hour", utilization: 4, resetsAt: fiveHourReset + 18_000 }), window({ kind: "seven_day", utilization: 60, resetsAt: weeklyReset }));
     expect(refusalVerdict(stamped, [{ account: "a", usage: roomSince }], now)).toBe("answered");
 });
@@ -436,9 +438,9 @@ test("each account answers to the newest refusal on file that still stands over 
         b: { kind: "blocked", fix: "reconnect", reason: "no." },
     });
     // Only the provider's last one: the first account is back at the line, no room but not proven spent.
-    expect(serviceStates(accounts, [elsewhere], undefined, 9_999).get("a")).toEqual({ kind: "ready", room: 0 });
+    expect(serviceStates(accounts, [elsewhere], undefined, 9_999).get("a")).toEqual({ kind: "ready", room: 0, renewsAt: 20 });
     // Past the instant the provider named, its refusal is over and the reading speaks alone.
-    expect(serviceStates(accounts, [elsewhere, own], undefined, 20_000).get("a")).toEqual({ kind: "ready", room: 0 });
+    expect(serviceStates(accounts, [elsewhere, own], undefined, 20_000).get("a")).toEqual({ kind: "ready", room: 0, renewsAt: 20 });
     // A newer refusal on the same account outranks the older one.
     const revoked = refusal({ kind: "auth", account: "a", at: 6_000 });
     expect(serviceStates(accounts, [own, revoked], undefined, 9_999).get("a")).toEqual({ kind: "blocked", fix: "reconnect", reason: "no." });
@@ -491,14 +493,14 @@ test("refusals naming their accounts hold a 31-account Google fleet steady acros
         expect(fleetCapacity(accounts, refused, flash, reread)).toMatchObject({ kind: "serving", serving: 2, accounts: 31 });
         const states = serviceStates(accounts, refused, opus, reread);
         expect(states.get("tried-0")).toEqual({ kind: "spent", reopensAt: opusBack, pool: "Claude and GPT models" });
-        expect(states.get("svichita09")).toEqual({ kind: "ready", room: 100 });
+        expect(states.get("svichita09")).toEqual({ kind: "ready", room: 100, renewsAt: opusBack });
     }
     // The same refusal filed under no account is answered on each account by its own reading alone: the account with
     // room frees itself, never one whose reading since says nothing.
     const nameless = refusal({ kind: "limit", at: refusedAt, model: "claude-opus-4-6-thinking", resetsAt: opusBack });
     const onlyOneRead = fleet(refusedAt - 30_000).map((facts) => (facts.account === "svichita09" ? { ...facts, usage: pools(reread, 0, 19.42) } : facts));
     const states = serviceStates([...onlyOneRead, { account: "unread" }], [nameless], opus, reread);
-    expect(states.get("svichita09")).toEqual({ kind: "ready", room: 100 });
+    expect(states.get("svichita09")).toEqual({ kind: "ready", room: 100, renewsAt: opusBack });
     expect(states.get("unread")).toMatchObject({ kind: "spent", reopensAt: opusBack });
 });
 
@@ -528,8 +530,43 @@ test("an unnamed turn takes the most room, then an unmeasured account, then a sp
     expect(preferredAccount([entry("seatless", blocked), entry("spent", { kind: "spent" })])?.id).toBe("spent");
     expect(preferredAccount([entry("seatless", blocked), entry("other", blocked)])?.id).toBe("seatless");
     expect(preferredAccount([entry("first", { kind: "ready", room: 60 }), entry("second", { kind: "ready", room: 60 })])?.id).toBe("first");
-    expect(roomiestAccount([entry("seatless", blocked), entry("unread", { kind: "unknown" })])).toBeUndefined();
-    expect(roomiestAccount([entry("low", { kind: "ready", room: 5 }), entry("high", { kind: "ready", room: 60 })])?.id).toBe("high");
+    expect(bestWithRoom([entry("seatless", blocked), entry("unread", { kind: "unknown" })])).toBeUndefined();
+    expect(bestWithRoom([entry("low", { kind: "ready", room: 5 }), entry("high", { kind: "ready", room: 60 })])?.id).toBe("high");
+});
+
+/* 2026-11-17: Claude's Ultra plan meters no five-hour window. One account had 70 weekly points left renewing in six days,
+   the other 40 renewing in ten hours, and the most-room pick spent the first while the second's reset unspent. */
+test("between accounts with room, the one whose allowance renews first wins, unless it is nearly out", () => {
+    const entry = (id: string, state: AccountState) => ({ id, state });
+    const now = 1_800_000_000;
+    const later = entry("later", { kind: "ready", room: 70, renewsAt: now + 144 * 3_600 });
+    const sooner = entry("sooner", { kind: "ready", room: 40, renewsAt: now + 10 * 3_600 });
+    expect(preferredAccount([later, sooner])?.id).toBe("sooner");
+    expect(bestWithRoom([later, sooner])?.id).toBe("sooner");
+    // Nearly out, it ranks after every account with more, however soon it renews; among those, room decides.
+    const nearlyOut = entry("nearly-out", { kind: "ready", room: NEARLY_OUT_ROOM, renewsAt: now + 3_600 });
+    expect(preferredAccount([nearlyOut, later])?.id).toBe("later");
+    expect(preferredAccount([nearlyOut, entry("lower", { kind: "ready", room: 4, renewsAt: now })])?.id).toBe("nearly-out");
+    // A reset nobody published never outranks a known one; between two unknown, room decides as before.
+    expect(preferredAccount([entry("unknown", { kind: "ready", room: 90 }), sooner])?.id).toBe("sooner");
+    expect(preferredAccount([entry("a", { kind: "ready", room: 50 }), entry("b", { kind: "ready", room: 60 })])?.id).toBe("b");
+    // The same moment: room decides.
+    expect(preferredAccount([sooner, entry("roomier", { kind: "ready", room: 80, renewsAt: now + 10 * 3_600 })])?.id).toBe("roomier");
+});
+
+test("an allowance renews when the longest pool the turn spends resets, never when a five-hour one does", () => {
+    const now = 1_800_000_000;
+    const weekly = (utilization: number, resetsAt: number): UsageWindow => ({ kind: "seven_day", utilization, resetsAt, gates: "all" });
+    const fiveHour: UsageWindow = { kind: "five_hour", utilization: 90, resetsAt: now + 3_600, gates: "all" };
+    expect(renewalOf([fiveHour, weekly(40, now + 20 * 3_600)])).toBe(now + 20 * 3_600);
+    // Two weekly pools (the whole plan's and Opus's slice): the first of them to reset.
+    expect(renewalOf([weekly(40, now + 50 * 3_600), { ...weekly(10, now + 30 * 3_600), kind: "seven_day_opus", gates: { models: ["opus"] } }])).toBe(now + 30 * 3_600);
+    // The weekly pool has lapsed (its reset passed, nothing re-read it): what renews is unknown, not the five-hour reset.
+    expect(renewalOf([fiveHour, { kind: "seven_day", utilization: 0, gates: "all", lapsedAt: now }])).toBeUndefined();
+    // No pool names its length: the first to reset decides.
+    expect(renewalOf([{ kind: "pool:a", utilization: 10, resetsAt: now + 7_200, gates: "all" }, { kind: "pool:b", utilization: 10, resetsAt: now + 3_600, gates: "all" }])).toBe(now + 3_600);
+    // The verdict carries it, read off the pools still open.
+    expect(readingHeadroom({ windows: [fiveHour, weekly(40, now + 20 * 3_600)], measuredAt: now * 1000 })).toEqual({ kind: "ready", room: 10, renewsAt: now + 20 * 3_600 });
 });
 
 test("an account at the line is tried after an unmeasured one and before a spent one, and never a move's destination", () => {
@@ -539,8 +576,8 @@ test("an account at the line is tried after an unmeasured one and before a spent
     expect(preferredAccount([entry("line", atLine), entry("unread", { kind: "unknown" })])?.id).toBe("unread");
     expect(preferredAccount([entry("spent", { kind: "spent" }), entry("line", atLine)])?.id).toBe("line");
     // A move lands only on proven room: two accounts at the line would otherwise hand a refused turn back and forth.
-    expect(roomiestAccount([entry("line", atLine), entry("spent", { kind: "spent" })])).toBeUndefined();
-    expect(roomiestAccount([entry("line", atLine), entry("low", { kind: "ready", room: 2 })])?.id).toBe("low");
+    expect(bestWithRoom([entry("line", atLine), entry("spent", { kind: "spent" })])).toBeUndefined();
+    expect(bestWithRoom([entry("line", atLine), entry("low", { kind: "ready", room: 2 })])?.id).toBe("low");
 });
 
 // The 2026-10-27/28 account: switched off, served for an evening (most room on its reading), switched off again.
@@ -548,9 +585,9 @@ test("an account its organisation keeps switching off goes behind every steady o
     const entry = (id: string, state: AccountState, flapping?: boolean) => ({ id, state, flapping });
     const flapping = entry("flapping", { kind: "ready", room: 90 }, true);
     expect(preferredAccount([flapping, entry("steady", { kind: "ready", room: 5 })])?.id).toBe("steady");
-    expect(roomiestAccount([flapping, entry("steady", { kind: "ready", room: 5 }, false)])?.id).toBe("steady");
+    expect(bestWithRoom([flapping, entry("steady", { kind: "ready", room: 5 }, false)])?.id).toBe("steady");
     expect(preferredAccount([flapping, entry("unread", { kind: "unknown" }), entry("line", { kind: "ready", room: 0 })])?.id).toBe("flapping");
-    expect(roomiestAccount([flapping, entry("line", { kind: "ready", room: 0 })])?.id).toBe("flapping");
+    expect(bestWithRoom([flapping, entry("line", { kind: "ready", room: 0 })])?.id).toBe("flapping");
     // Among flapping accounts, room decides again.
     expect(preferredAccount([flapping, entry("roomier", { kind: "ready", room: 95 }, true)])?.id).toBe("roomier");
     expect(preferredAccount([entry("off", { kind: "unknown" }, true), entry("on", { kind: "unknown" })])?.id).toBe("on");
@@ -588,8 +625,8 @@ test("an account whose only named pools are full, with models no pool covers, is
 test("a reading contradicted by an answered turn holds that model's full pools at the line, not spent", () => {
     const full = usage(window({ kind: "google:gemini-weekly", utilization: 100, resetsAt: 9_000, gates: { models: ["gemini"] } }));
     const contradicted: AccountUsage = { ...full, contradicted: { at: 1, model: "gemini-3.8-flash-high" } };
-    expect(readingHeadroom(contradicted, { id: "gemini-3.8-flash-high" })).toEqual({ kind: "ready", room: 0 });
-    expect(readingHeadroom(contradicted)).toEqual({ kind: "ready", room: 0 });
+    expect(readingHeadroom(contradicted, { id: "gemini-3.8-flash-high" })).toEqual({ kind: "ready", room: 0, renewsAt: 9_000 });
+    expect(readingHeadroom(contradicted)).toEqual({ kind: "ready", room: 0, renewsAt: 9_000 });
     // Another family's pool is not what the turn proved anything about.
     const other: AccountUsage = { ...full, contradicted: { at: 1, model: "claude-opus-4-6-thinking" } };
     expect(readingHeadroom(other, { id: "gemini-3.8-flash-high" })).toEqual({ kind: "spent", reopensAt: 9_000 });
@@ -645,7 +682,7 @@ test("a refusal's instant is judged against the pools a reading since publishes:
     const renewed = codex(Math.floor(now / 1000) + 6 * DAY);
     expect(refusedInstant(sol, renewed)).toBe("renewed");
     expect(refusalVerdict(sol, [{ account: "a", usage: renewed }], now)).toBe("answered");
-    expect(serviceStates([{ account: "a", usage: renewed }], [sol], { id: "gpt-6.1-sol" }, now).get("a")).toEqual({ kind: "ready", room: 64 });
+    expect(serviceStates([{ account: "a", usage: renewed }], [sol], { id: "gpt-6.1-sol" }, now).get("a")).toEqual({ kind: "ready", room: 64, renewsAt: Math.floor(now / 1000) + 6 * DAY });
     // Renewed but already spent again: still held, by the window itself.
     expect(refusedInstant(sol, codex(Math.floor(now / 1000) + 6 * DAY, 100))).toBe("unpublished");
 
@@ -655,8 +692,8 @@ test("a refusal's instant is judged against the pools a reading since publishes:
     expect(refusedInstant(sol, unnamed)).toBe("unpublished");
     expect(refusalVerdict(sol, [{ account: "a", usage: unnamed }], now)).toBe("standing");
     expect(serviceState({ account: "a", usage: unnamed }, [sol], { id: "gpt-6.1-sol" }, now)).toEqual({ kind: "spent", reopensAt: instant, pool: "GPT 6.1 Sol" });
-    expect(serviceState({ account: "a", usage: unnamed }, [sol], { id: "gpt-6-luna" }, now)).toEqual({ kind: "ready", room: 64 });
-    expect(serviceState({ account: "a", usage: unnamed }, [sol], undefined, now)).toEqual({ kind: "ready", room: 64 });
+    expect(serviceState({ account: "a", usage: unnamed }, [sol], { id: "gpt-6-luna" }, now)).toEqual({ kind: "ready", room: 64, renewsAt: Math.floor(filed / 1000) + 5 * DAY });
+    expect(serviceState({ account: "a", usage: unnamed }, [sol], undefined, now)).toEqual({ kind: "ready", room: 64, renewsAt: Math.floor(filed / 1000) + 5 * DAY });
 
     // Nothing read since the refusal, or a pool with no reset to judge by: the instant outranks, on the pool the model spends.
     expect(refusedInstant(sol, { ...unnamed, measuredAt: filed - 1 })).toBe("unjudged");

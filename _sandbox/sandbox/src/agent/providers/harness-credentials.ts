@@ -4,8 +4,9 @@ import type { FleetCapacity, ModelRef } from "@intentic/sandbox-contract/models/
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { ensureFreshToken, replaceRejectedToken } from "./claude/claude-credentials.js";
 import type { Services } from "../../composition.js";
-import { unnamedAccount } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
+import { unnamedAccount } from "../../usage/serviceability/serviceability.js";
+import { plannedClaudeAccount } from "../models/sibling-account.js";
 import { goneAccountMessage, resolveRoute, type RouteResult } from "./routes/model-routes.js";
 import type { HarnessCredential } from "./agent-request.js";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
@@ -135,6 +136,7 @@ export { routedModel } from "./routes/model-routes.js";
 export type HarnessCredentialDeps = Pick<
     Services,
     | "accountUsage"
+    | "burnRates"
     | "capabilities"
     | "claudeSeats"
     | "claudeStore"
@@ -149,6 +151,8 @@ export type HarnessCredentialDeps = Pick<
     | "providerCatalogs"
     | "providerRefusals"
     | "runnerParent"
+    | "runOuts"
+    | "sandboxSettings"
     | "translatorGateway"
     | "trial"
     | "wakeLocalModel"
@@ -167,6 +171,23 @@ const pickModel = async (services: Pick<Services, "providerCatalogs">, model: st
         () => undefined,
     );
     return fallback === undefined ? undefined : { id: fallback };
+};
+
+/* WHERE A CLAUDE TURN NAMING NO ACCOUNT RUNS (a conversation's first turn, a one-off, an automation naming none): where
+   the fan-out planner would place it with what already runs on each account counted (budget-planner.ts pickAccount: the
+   first to renew of the accounts that carry it, steady ones first), else the sandbox's one rule over the verdicts alone
+   (serviceability.ts unnamedAccount), which is also what every window drawing where a turn would run reads
+   (plan-pools.ts preferredAccount). The two order accounts alike; only the planner sees the load, so while children
+   crowd the account renewing first, the turn goes on the next one where a window still names the first. */
+const unnamedClaude = async <T extends { readonly id: string }>(services: HarnessCredentialDeps, connected: readonly T[], model: string | undefined): Promise<T | undefined> => {
+    if (connected.length > 1 && model !== undefined) {
+        const planned = await plannedClaudeAccount(services, model, { among: connected.map((account) => account.id) });
+        const found = connected.find((account) => account.id === planned);
+        if (found !== undefined) {
+            return found;
+        }
+    }
+    return unnamedAccount(services, "claude", connected, model);
 };
 
 // A route the harness can take, as the credentials it carries: the URL and bearer (Anthropic Messages, so the base with
@@ -239,9 +260,7 @@ export const resolveHarnessCredentials = async (
     if (unnamed && connected.length > 1) {
         await services.headroom.refresh({ scope: { providers: ["claude"] }, withinMs: PICK_REFRESH_WAIT_MS });
     }
-    // The sandbox's one rule for a turn naming no account (serviceability.ts unnamedAccount), which every window that
-    // draws where a turn would run reads too (plan-pools.ts preferredAccount over the published facts).
-    const accountId = input.account ?? (await unnamedAccount(services, "claude", connected, (await pickModel(services, input.model))?.id))?.id;
+    const accountId = input.account ?? (await unnamedClaude(services, connected, (await pickModel(services, input.model))?.id))?.id;
     // A refresh failure joins the other refusals rather than throwing past the caller.
     let oauthToken: string | undefined;
     if (accountId !== undefined) {
