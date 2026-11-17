@@ -41,14 +41,34 @@ if ! timeout 20 docker version >/dev/null 2>&1; then
 fi
 
 # -- every pass: nothing a running job can still be using ---------------------------------------------------------
-# A stopped container belongs to no running step; an unused network has no container. Untagged images and build
+# A stopped CI container belongs to no running step; an unused network has no container. Untagged images and build
 # cache are NOT safe while a job runs on the containerd image store (z440's): an image being pulled is untagged
 # until its last blob lands, and the pass that pruned them at 2026-11-05 17:52:26 EST took a pull's lease and the
 # ingest file under it, failing release 1.398.1's core smoke ("failed commit on ref ... rename .../ingest/...: no
 # such file or directory"). They go with the full pass below; dockerd's own builder gc (daemon.json) still caps the
 # default builder's cache meanwhile.
-run docker container prune -f --filter until=24h
-run docker network prune -f --filter until=24h
+#
+# Only what CI leaves behind. A container of a compose project (a Komodo stack, the platform) or an Intentic sandbox or
+# runner (dev.intentic.kind) is a deployment, stopped or asleep, never CI's. `container prune --filter until=24h` took
+# any stopped container created a day ago, and the volume prune below then took its named volumes in the same pass:
+# on z440 a Komodo-run sandbox the keeper had put to sleep (2026-11-12, 1.3 GB) and the auto-translate stack's data
+# after a reboot (2026-11-17, 9.7 GB). Same rule as wsl-maintenance.ps1 on omen. Listed here rather than passed as two
+# `label!=` filters to `container prune`: with several, docker skips a container only if it carries all of them.
+prune_stopped_containers() {
+    local cutoff id created proj kind ids=()
+    cutoff=$(( $(date +%s) - 24 * 3600 ))
+    while IFS=$'\t' read -r id created proj kind; do
+        [ -n "$id" ] || continue
+        { [ -z "$proj" ] && [ -z "$kind" ]; } || continue
+        # CreatedAt reads "2026-11-17 10:27:39 -0500 EST"; one that does not parse counts as young and stays.
+        [ "$(date -d "${created% *}" +%s 2>/dev/null || echo "$cutoff")" -lt "$cutoff" ] || continue
+        ids+=("$id")
+    done < <(docker container ls -a --no-trunc --filter status=exited --filter status=created --filter status=dead \
+        --format '{{.ID}}\t{{.CreatedAt}}\t{{.Label "com.docker.compose.project"}}\t{{.Label "dev.intentic.kind"}}')
+    if [ "${#ids[@]}" -gt 0 ]; then run docker container rm "${ids[@]}"; fi
+}
+prune_stopped_containers
+run docker network prune -f --filter until=24h --filter 'label!=com.docker.compose.project'
 
 for runner in $RUNNERS_GLOB; do
     [ -d "$runner/_diag" ] || continue
@@ -90,9 +110,11 @@ else
     else
         run docker image prune -af --filter until="$IMAGE_AGE"
     fi
-    # -a: named volumes too (compose projects, testcontainers). A volume any container still references, running
-    # or stopped, is never unused; the intentic-cache builder's state is kept that way.
-    run docker volume prune -af
+    # Anonymous volumes, and of the named ones only what testcontainers made. Never -a over everything: a named
+    # volume is unreferenced whenever its stack's container is gone, and it holds that deployment's data (a sandbox's
+    # intentic-* volumes, a compose project's). The intentic-cache builder's state is named, and kept either way.
+    run docker volume prune -f
+    run docker volume prune -af --filter label=org.testcontainers=true
     [ "$DRY_RUN" = 1 ] || touch "$STAMP"
     if [ "$mode" = pressure ] && [ "$(used_percent)" -ge "$PRESSURE_PERCENT" ]; then
         log "still $(used_percent)% used after pruning docker; starting the janitor for /ci-cache"
