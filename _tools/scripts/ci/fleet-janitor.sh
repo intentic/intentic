@@ -63,13 +63,15 @@ human_to_bytes() {
 }
 gb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / (1024 * 1024 * 1024) }'; }
 
-# main's copy replaces this one when it differs and parses, and the pass starts over as main's. Replaced by a rename,
-# so the bash reading this file keeps its old inode. A pass that cannot fetch it runs as installed.
+# main's copy replaces this one when it differs, parses and can still update itself (one without this block would
+# strand the host on it), and the pass starts over as main's. Replaced by a rename, so the bash reading this file keeps
+# its old inode. A pass that cannot fetch it runs as installed.
 if [ -n "$SELF_UPDATE_URL" ] && [ "$DRY_RUN" != 1 ] && [ -z "${JANITOR_SELF_UPDATED:-}" ] && command -v curl >/dev/null; then
     self=$(readlink -f -- "$0")
     candidate=$(mktemp "$self.XXXXXX")
     if curl -fsSL --max-time 60 -o "$candidate" "$SELF_UPDATE_URL" && [ "$(head -c 2 "$candidate")" = '#!' ] \
-        && bash -n "$candidate" && ! cmp -s "$candidate" "$self" && chmod 755 "$candidate" && mv -f -- "$candidate" "$self"; then
+        && bash -n "$candidate" && grep -q "^SELF_UPDATE_URL=" "$candidate" \
+        && ! cmp -s "$candidate" "$self" && chmod 755 "$candidate" && mv -f -- "$candidate" "$self"; then
         log "updated $self from $SELF_UPDATE_URL"
         JANITOR_SELF_UPDATED=1 exec "$self" "$@"
     fi

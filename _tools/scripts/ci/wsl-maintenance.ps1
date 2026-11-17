@@ -592,8 +592,9 @@ function Start-Janitor {
 
 # ---- self-update ------------------------------------------------------------------------------
 
-# main's copy replaces this one when it differs and parses, keeping this one beside it as .bak-<date>, and the run
-# starts over as main's. A run that cannot fetch it runs as installed. Elevated, so it can write the admin-only folder.
+# main's copy replaces this one when it differs, parses and can still update itself (one without this function would
+# strand the host on it), keeping this one beside it as .bak-<date>, and the run starts over as main's. A run that
+# cannot fetch it runs as installed. Elevated, so it can write the admin-only folder.
 function Update-Self {
     if (-not $SelfUpdateUrl -or $env:WSL_MAINTENANCE_SELF_UPDATED) { return $false }
     $self = $PSCommandPath
@@ -610,7 +611,9 @@ function Update-Self {
         Remove-Item -LiteralPath $candidate -Force -ErrorAction SilentlyContinue
         return $false
     }
-    if ((Get-FileHash -LiteralPath $candidate).Hash -eq (Get-FileHash -LiteralPath $self).Hash) {
+    $same = (Get-FileHash -LiteralPath $candidate).Hash -eq (Get-FileHash -LiteralPath $self).Hash
+    if ($same -or -not (Select-String -LiteralPath $candidate -Pattern '^function Update-Self' -Quiet)) {
+        if (-not $same) { Write-Log "self-update: main's copy cannot update itself; keeping this one" }
         Remove-Item -LiteralPath $candidate -Force -ErrorAction SilentlyContinue
         return $false
     }
