@@ -6,7 +6,7 @@ import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "./providerAccounts";
 import { requirementWords, runsWords } from "./providerWords";
-import { acpProviders, endpointProviders, endpointsLoaded, nativeReady, trialStatus } from "./providerCatalog";
+import { acpProviders, endpointProviders, endpointsLoaded, isLocalModelProvider, nativeReady, trialStatus } from "./providerCatalog";
 import { offeredLoops, selectedLoop } from "./offeredLoops";
 import { providerWithheld } from "./aiReach";
 
@@ -86,8 +86,14 @@ export const providerReadyOn = (provider: AgentProvider, harness: AgentHarness):
 // new conversation is born on and the watcher that repoints an open one, so a chat is never born on a provider it
 // would be moved off a beat later — that beat was the "connect a model" state flashing over a usable chat.
 // Runnable, not merely connected: a chat born on a provider the person may not spend would only be refused at its send.
+// A vendor's API key, or any model server not on this machine, is something connected too, and the picker already
+// retires the trial once one runs (modelPickerState.ts `retiresTrial`), so it comes before the trial: with only the
+// trial on the ladder, a reader who added a Gemini key after the day's trial was spent had every new chat born on the
+// spent trial (session replay, 2026-11-16). A local model stays off it, as it never retires the trial either.
 export const firstReadyProvider = (): AgentProvider | undefined =>
-    NATIVE_PROVIDERS.find((provider) => providerRunnable(provider)) ?? (providerRunnable(TRIAL_PROVIDER) ? TRIAL_PROVIDER : undefined);
+    NATIVE_PROVIDERS.find((provider) => providerRunnable(provider)) ??
+    endpointProviders.value.map((endpoint) => endpoint.id).find((id) => !isTrialProvider(id) && !isLocalModelProvider(id) && providerRunnable(id)) ??
+    (providerRunnable(TRIAL_PROVIDER) ? TRIAL_PROVIDER : undefined);
 
 const anyProvider = (answers: (provider: AgentProvider) => boolean): boolean =>
     NATIVE_PROVIDERS.some(answers) || endpointProviders.value.some((endpoint) => answers(endpoint.id)) || acpProviders.value.some((agent) => answers(agent.id));

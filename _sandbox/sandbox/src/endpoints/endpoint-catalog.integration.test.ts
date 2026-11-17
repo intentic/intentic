@@ -35,6 +35,18 @@ test("a plain id stands as it is, and a published display name still wins", asyn
     expect(catalog.models.map((model) => model.label)).toEqual(["Llama-3-8B", "Qwen3 Coder", "gpt-4o-mini"]);
 });
 
+test("a vendor's image, video, music and grounded-answer models are left out, its chat models kept", async () => {
+    const catalog = await catalogOf([
+        { id: "models/gemini-3-pro-preview" },
+        { id: "models/imagen-4.0-generate-001" },
+        { id: "models/veo-3.0-generate-001" },
+        { id: "models/lyria-realtime-exp" },
+        { id: "models/aqa" },
+        { id: "models/gemini-embedding-001" },
+    ]);
+    expect(catalog.models.map((model) => model.id)).toEqual(["models/gemini-3-pro-preview"]);
+});
+
 // Refuse turns that exceed the server's advertised capacity.
 
 test("llama.cpp's served window is read off /props and stands for every row that server lists", async () => {

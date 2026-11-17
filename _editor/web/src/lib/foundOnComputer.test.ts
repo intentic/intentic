@@ -24,10 +24,15 @@ beforeEach(() => {
     localStorage.clear();
 });
 
-test("a new sandbox, once open, lands on Sandbox ▸ Models with what was found, else on Home", () => {
+test("a new sandbox, once open, lands inside it: on its Sandbox ▸ Models with what was found, else on its board", () => {
+    expect(landingAfterSetup(`box-1`, [`claude`, `codex`])).toBe(insidePath(`box-1`, page.sandboxSettings(`models`, { query: { found: `claude,codex` } })));
+    expect(landingAfterSetup(`box-1`, [])).toBe(insidePath(`box-1`, page.agents()));
+});
+
+test("with no sandbox to go into, the landing is the reader's own: Sandbox ▸ Models where they are, else Home", () => {
     activeSandboxId.value = `box-1`;
-    expect(landingAfterSetup([`claude`, `codex`])).toBe(insidePath(`box-1`, page.sandboxSettings(`models`, { query: { found: `claude,codex` } })));
-    expect(landingAfterSetup([])).toBe(`/home`);
+    expect(landingAfterSetup(undefined, [`claude`])).toBe(insidePath(`box-1`, page.sandboxSettings(`models`, { query: { found: `claude` } })));
+    expect(landingAfterSetup(undefined, [])).toBe(`/home`);
 });
 
 test("the list survives the sign-in detour: kept on the way to a new sandbox, taken once at the landing", () => {

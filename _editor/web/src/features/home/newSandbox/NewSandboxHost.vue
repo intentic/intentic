@@ -49,11 +49,11 @@ const end = (): void => {
 // What the desktop app found signed in on this computer, named by the address that asked: offered once it is open.
 const found = route.query[FOUND_QUERY];
 
-// Home's own chat again, where the new sandbox is selected (opened) or the one the reader had is (dismissed); Sandbox ▸
-// Models instead for an opened one when the app found AI tools signed in here.
+// Opened: into the new sandbox, on its own first screen, or on its Sandbox ▸ Models when the app found AI tools signed in
+// here (landingAfterSetup). Dismissed: Home's own chat again, where the one the reader had is selected.
 const leave = async (opened: boolean): Promise<void> => {
     if (watching.value) {
-        await router.replace(opened ? landingAfterSetup(foundAfterSetup(found)) : HOME_PATH);
+        await router.replace(opened ? landingAfterSetup(here.add.created.value?.id, foundAfterSetup(found)) : HOME_PATH);
     }
     end();
 };

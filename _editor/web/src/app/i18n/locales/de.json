@@ -4440,6 +4440,8 @@
             "unavailable": "Nicht verfügbar",
             "nothingConnected": "Noch nichts verbunden. Verbinden Sie ein Modell, um zu starten",
             "notSharedFold": "Nicht mit dir geteilte Modelle",
+            "connectMore": "Weitere Modelle verbinden",
+            "connectNamed": "{provider} verbinden",
             "nothingShared": "Keines der KI-Konten dieser Sandbox ist mit dir geteilt."
         },
         "modelPickerState": {

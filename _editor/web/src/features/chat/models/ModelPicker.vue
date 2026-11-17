@@ -3,12 +3,13 @@ import { browserOwnsClick, SearchBar, SectionHeader, useDevice, useListNavigatio
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { providerLabel, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
     accessBadge,
     accessKnown,
     accessStateFor,
     anyProviderReady,
+    hasSignIn,
     nothingShared,
     providerReady,
     providerRunnable,
@@ -19,13 +20,16 @@ import { formatReset } from "../../../models/providers/usageStatus";
 import { providerWithheld, spentModels } from "../../../models/providers/aiReach";
 import { badgeMeta } from "./catalog";
 import { shortModelLabel } from "../../../models/providers/shortModelLabel";
-import { type CatalogLoadState, providerModelsState } from "../../../models/providers/providerCatalog";
+import { type CatalogLoadState, providerDisplayLabel, providerModelsState } from "../../../models/providers/providerCatalog";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
+import { useRole } from "../../../client/sandbox/useRole";
 import {
     customEntryFor,
     filterEntries,
     foldUnconnected,
     isOlderEntry,
     newerThanEntry,
+    normalize,
     type PickerEntry,
     type PickerLane,
     lanesOf,
@@ -40,6 +44,7 @@ import { refreshConnections } from "../../../models/conversations/accounts/useCh
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import PickerFoldRow from "./PickerFoldRow.vue";
 import PickerConnectFirst from "./PickerConnectFirst.vue";
+import PickerConnectMore from "./PickerConnectMore.vue";
 import PickerNothingShared from "./PickerNothingShared.vue";
 import PickerRail from "./PickerRail.vue";
 import { useNow } from "@intentic/ui/async";
@@ -260,6 +265,33 @@ const isLocked = (entry: PickerEntry): boolean => !isLead(entry) && !providerRea
 // Nothing in this sandbox can run: every row is locked, so the way to unlock them leads the list (PickerConnectFirst).
 // Not when something is connected and none of it is the reader's: connecting is not their way on (PickerNothingShared).
 const nothingConnected = computed(() => accessKnown.value && !anyProviderReady() && !nothingYours.value);
+
+// Connecting is Full access's, and that of someone given AI accounts of their own (ChatAccountPanel.vue says why).
+const { canShip } = useRole();
+const { holds } = useAccess();
+const mayConnect = computed(() => canShip.value || holds(`ownAccounts`));
+// The provider a search names that nothing of is connected yet ("gemini", "google"): its sign-in is what the reader is
+// looking for, whether or not its catalog had a row to match.
+const namedUnconnected = computed<AgentProvider | undefined>(() => {
+    const tokens = query.value
+        .split(/\s+/)
+        .map(normalize)
+        .filter((token) => token.length > 0);
+    if (tokens.length === 0) {
+        return undefined;
+    }
+    return offered.value.find(
+        (candidate) =>
+            hasSignIn(candidate) &&
+            !providerReady(candidate) &&
+            !providerWithheld(candidate) &&
+            tokens.some((token) => normalize(`${providerLabel(candidate)} ${providerDisplayLabel(candidate)} ${candidate}`).includes(token)),
+    );
+});
+// The way to connect more, at the foot of the list: the lanes nothing can run yet are folded out of it, so without this
+// row the picker never said where more models come from. Not where PickerConnectFirst already leads, nor for a reader
+// connecting cannot help (PickerNothingShared).
+const connectMore = computed(() => accessKnown.value && mayConnect.value && !nothingYours.value && (searching.value || !nothingConnected.value));
 
 // Deep link to Sandbox ▸ Models, opened on this provider's lane with its sign-in already starting. A real link, not a
 // button click, so hover shows the destination and Ctrl/Cmd-click opens it in another tab.
@@ -539,6 +571,7 @@ onMounted(() => {
                         {{ t(`chat.modelPicker.searchAllProviders`) }}
                     </button>
                 </div>
+                <PickerConnectMore v-if="connectMore" :provider="namedUnconnected" @navigate="closeOnPlainClick" />
             </div>
         </div>
 

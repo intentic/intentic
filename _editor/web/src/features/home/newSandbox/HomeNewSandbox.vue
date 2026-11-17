@@ -1,6 +1,6 @@
 <!-- THE NEW SANDBOX'S PAGE, in the chat's place on Home while its tile is selected (newSandbox.ts says why the run is
      here and its form is a dialog): the app's install, a machine's steps or a machine of ours starting, then the sandbox's
-     first start, after which its home conversation takes the page. Shown only once the press went somewhere; a press
+     first start, after which the reader is taken into the sandbox (lib/foundOnComputer.ts). Shown only once the press went somewhere; a press
      refused after that (a machine of ours that would not start) is the dialog's again, with the reason. A setup left
      unfinished, being finished, has no dialog to go back to: its page stands from the press, saying why a code was
      refused when one was. The run is the host's (NewSandboxHost.vue), so another tile pressed meanwhile leaves it going. -->

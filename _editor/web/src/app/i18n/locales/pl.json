@@ -4440,6 +4440,8 @@
             "olderThan": "starsza wersja, {newer} jest nowszy",
             "nothingConnected": "Nic nie jest jeszcze podłączone. Podłącz model, by zacząć",
             "notSharedFold": "Modele nieudostępnione Tobie",
+            "connectMore": "Podłącz więcej modeli",
+            "connectNamed": "Podłącz {provider}",
             "nothingShared": "Żadne z kont AI tego sandboxa nie jest Ci udostępnione."
         },
         "modelPickerState": {

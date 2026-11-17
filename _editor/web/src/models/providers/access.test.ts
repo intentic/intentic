@@ -78,6 +78,23 @@ it(`falls to a connected account first, and to the trial only as the floor under
     expect(firstReadyProvider()).toBe(`claude`);
 });
 
+// A Gemini key added after the day's trial was spent left every new chat on the spent trial: a key is something the
+// reader connected, so it outranks the trial, and a model run on this machine does not.
+it(`ranks a vendor's API key above the trial and a local model below it`, () => {
+    endpointProviders.value = [
+        { id: OLLAMA, label: `Ollama`, kind: `localmodel` },
+        { id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` },
+    ];
+    trialStatus.value = { available: true, allowance: 12, used: 12, remaining: 0, health: `healthy` };
+    expect(firstReadyProvider()).toBeUndefined();
+
+    endpointProviders.value = [...endpointProviders.value, { id: `endpoint/gemini`, label: `Gemini`, kind: `endpoint` }];
+    expect(firstReadyProvider()).toBe(`endpoint/gemini`);
+
+    trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
+    expect(firstReadyProvider()).toBe(`endpoint/gemini`);
+});
+
 // One reading of the day's allowance for every surface (the empty pane's offer, the trial strip, the spent row): the
 // boundary is half the allowance, by value.
 it(`reads the trial's day as one phase: fresh up to half spent, low past it, spent at nothing left`, () => {

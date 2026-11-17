@@ -15,9 +15,11 @@ import type { AddSandboxHere } from "../../setup/add/useAddSandboxHere";
 // with a dialog over it asking for a name and where it runs (NewSandboxDialog.vue). Create closes it and leaves the
 // reader on the chat they were in, with a tile at the end of the sandboxes wearing the rail's spinning mark: the sandbox
 // it will be. Pressing the tile shows the run's progress in the chat's place (HomeNewSandbox.vue), and any other tile
-// takes the reader back. Once it is ready, a reader watching lands on its home conversation, and one who is elsewhere
-// finds the tile marked ready instead of being pulled off what they are doing. A first sandbox has no chat to go back
-// to, so its reader is left on the progress.
+// takes the reader back. Once it is ready, a reader watching is taken into it, onto its own first screen (the board,
+// where its getting-started steps are), and one who is elsewhere finds the tile marked ready instead of being pulled
+// off what they are doing. A first sandbox has no chat to go back to, so its reader is left on the progress, and then
+// inside: left on Home's master view after Create, a first-run reader took it for a page about every sandbox
+// (2026-11-16).
 //
 // (2026-10-26, the owner's) The first cut put the form in the chat's place too, behind a dashed tile already selected;
 // the form is a dialog again so the press is one step over whatever was on screen, and nothing moves until it is made.
@@ -93,7 +95,7 @@ export interface NewSandboxRun {
     readonly resume: (row: SandboxSummary, asked?: `hosted`) => Promise<void>;
     /** The same press again after it failed: a code the platform would not give, or a run on a machine that stopped. */
     readonly retry: () => void;
-    /** Its first start is on screen: the page gives way to its home conversation. */
+    /** Its first start is on screen: the page gives way to the sandbox itself (landingAfterSetup). */
     readonly opened: () => void;
     /** Put away: a form never pressed, a refusal, or a run that failed and was let go. */
     readonly dismiss: () => void;

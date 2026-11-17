@@ -1,6 +1,6 @@
 import { Latest, pollFor } from "@intentic/base/async";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
@@ -10,7 +10,8 @@ import { loopDoors, providerLabel } from "@intentic/sandbox-contract/models/agen
 import { type NativeProvider, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import type { SignInCatcher } from "@intentic/sandbox-contract/schemas/loopback-catch";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { hasSignIn } from "../../providers/access";
+import { hasSignIn, providerReady } from "../../providers/access";
+import { keysBeside } from "../../providers/providerCatalog";
 import { active } from "../tabs/useChat-tabs";
 import { loadProviderModels } from "../accounts/useChat-catalog";
 import {
@@ -63,14 +64,36 @@ const handOff = (tab: SignInTab | undefined, url: string, code: string, still: (
 // The last sign-in that ended without connecting anything, and the sentence saying why: what the chat's strip and the
 // connect view show until the reader tries again or dismisses it. Without it a sign-in that expired, was refused or
 // never started simply vanished, and the reader was left with a tile that looked picked and nothing else.
-export const signInFailure = sandboxRef<{ readonly provider: AgentProvider; readonly message: string } | undefined>(() => undefined);
+// `connectedBefore` is whether the provider could already run when it failed (a second account that did not land).
+export const signInFailure = sandboxRef<{ readonly provider: AgentProvider; readonly message: string; readonly connectedBefore?: boolean } | undefined>(
+    () => undefined,
+);
+
+// Whether a provider can run by any credential filed under it: its own accounts, or a vendor's API key on its card.
+const connectedAtAll = (provider: AgentProvider): boolean => providerReady(provider) || keysBeside(provider).some((key) => providerReady(key.id));
 
 // Ends an attempt as failed: `error` for the surfaces that read the store's one error line, the record for the ones that
 // say which provider it was.
 const failSignIn = (provider: AgentProvider, message: string): void => {
     error.value = message;
-    signInFailure.value = { provider, message };
+    signInFailure.value = { provider, message, connectedBefore: connectedAtAll(provider) };
 };
+
+// A failure says a provider did not connect. Once it has connected another way (the API key on the same card, a sign-in
+// finished in another window), the failure no longer says anything true and goes by itself. Kept, it stood over a chat
+// and a card that could both run, and its Try again sent a reader back through the sign-in that had failed, for half an
+// hour (session replay, 2026-11-16). A provider that could already run when it failed keeps its failure until dismissed.
+watch(
+    () => {
+        const failure = signInFailure.value;
+        return failure !== undefined && failure.connectedBefore !== true && connectedAtAll(failure.provider);
+    },
+    (connected) => {
+        if (connected) {
+            signInFailure.value = undefined;
+        }
+    },
+);
 
 export const dismissSignInFailure = (): void => {
     signInFailure.value = undefined;

@@ -801,7 +801,7 @@ describe(`one sign-in at a time`, () => {
         });
 
         await chat.startConnect();
-        expect(chat.signInFailure.value).toEqual({ provider: `cursor`, message: daemonMessage });
+        expect(chat.signInFailure.value).toEqual({ provider: `cursor`, message: daemonMessage, connectedBefore: false });
         expect(chat.liveSignIn.value).toBeUndefined();
 
         await chat.connectTranslator(`kimi`);
@@ -823,6 +823,25 @@ describe(`one sign-in at a time`, () => {
         await chat.connectTranslator(`gemini`);
 
         expect(chat.translatorConnectFlow.value).toBeUndefined();
+        expect(chat.signInFailure.value?.provider).toBe(`gemini`);
+    });
+
+    // The reported shape: Google's sign-in failed, the reader added a Gemini key on the same card, and "Google didn't
+    // connect · Try again" stayed over a chat and a card that could both run, sending them back through the failed sign-in.
+    it(`lets a failure go once its provider connects another way, and keeps one that failed while already connected`, async () => {
+        const chat = useChat();
+        daemonAnswers((procedure) => (procedure === `translator.connect` ? Promise.reject(new Error(`sandbox offline`)) : undefined));
+        await chat.connectTranslator(`gemini`);
+        expect(chat.signInFailure.value?.provider).toBe(`gemini`);
+
+        // The daemon files a vendor's key under the sign-in it is the alternative to.
+        endpointProviders.value = [{ id: `endpoint/gemini`, label: `Gemini`, kind: `endpoint`, beside: `gemini` }];
+        await nextTick();
+        expect(chat.signInFailure.value).toBeUndefined();
+
+        // A second sign-in that fails while the key already runs is news about that sign-in: it stays until dismissed.
+        await chat.connectTranslator(`gemini`);
+        await nextTick();
         expect(chat.signInFailure.value?.provider).toBe(`gemini`);
     });
 

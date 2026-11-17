@@ -27,7 +27,10 @@ const MODELS_TTL_MS = 60_000;
 const DISCOVERY_TIMEOUT_MS = 10_000;
 
 // Non-chat rows to exclude from the picker, same filter and reason as the Kimi catalog: a chat turn against them fails.
-const isChatModel = (model: Model): boolean => !/(embedding|embed|whisper|tts|audio|rerank|moderation|image-generation)/i.test(model.id);
+// Google's key lists its image, video, music and grounded-answer models beside the chat ones (imagen, veo, lyria, aqa):
+// a first Gemini key read as 46 rows, a reader opened the picker on them and closed it (session replay, 2026-11-16).
+const isChatModel = (model: Model): boolean =>
+    !/(embedding|embed|whisper|tts|audio|rerank|moderation|image-generation|imagen|veo-|lyria|(?:^|\/)aqa$)/i.test(model.id);
 
 // Both protocols answer GET {base}/v1/models the same; a display_name gets a named row, otherwise label-only.
 const ModelsResponseSchema = z.object({

@@ -4440,6 +4440,8 @@
             "unavailable": "Indisponible",
             "nothingConnected": "Rien n'est encore connecté. Connectez un modèle pour commencer",
             "notSharedFold": "Modèles non partagés avec vous",
+            "connectMore": "Connecter d'autres modèles",
+            "connectNamed": "Connecter {provider}",
             "nothingShared": "Aucun des comptes d'IA de ce sandbox n'est partagé avec vous."
         },
         "modelPickerState": {

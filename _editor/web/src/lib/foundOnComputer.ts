@@ -3,8 +3,8 @@ import { type NativeProvider, nativeProvidersIn } from "@intentic/sandbox-contra
 import type { LocationQuery, LocationQueryValue, RouteLocationRaw } from "vue-router";
 import { z } from "zod";
 import { modelsPath } from "./routes/modelsPath";
-import { HOME_PATH } from "./routes/firstScreens";
-import { toTop } from "./routes/links";
+import { HOME_PATH, sandboxLanding } from "./routes/firstScreens";
+import { page, toInside, toTop } from "./routes/links";
 
 // THE AI TOOLS ALREADY SIGNED IN ON THIS COMPUTER, as the desktop app found them. The app opens the new sandbox as
 // `/home?add=sandbox&found=claude,codex` (provider ids, comma-separated; an older app's `/setup?found=…` lands there,
@@ -137,8 +137,17 @@ export const foundAfterSetup = (value: QueryValue, now: number = Date.now()): Na
 };
 
 /**
- * Where a new sandbox, once open, leaves its reader: Sandbox ▸ Models with what was found, else Home, the first screen, with
- * the new sandbox selected and its home conversation ready for a first message (lib/routes/firstScreens.ts).
+ * Where a new sandbox, once open, leaves its reader: inside it, on Sandbox ▸ Models with what was found, else on its own
+ * first screen (lib/routes/firstScreens.ts `sandboxLanding`). Not Home: a first-run reader left on the master view after
+ * Create read it as a page about every sandbox, took eight minutes to find Open, and met its getting-started steps
+ * (the board, Models) only once inside (session replay, 2026-11-16). Its maker owns it, so it is never a guest's landing.
+ * With no sandbox named there is nothing to go into, and Home it is.
  */
-export const landingAfterSetup = (found: readonly NativeProvider[]): RouteLocationRaw =>
-    found.length > 0 ? modelsPath({ [FOUND_QUERY]: found.join(`,`) }) : HOME_PATH;
+export const landingAfterSetup = (sandbox: string | undefined, found: readonly NativeProvider[]): RouteLocationRaw => {
+    if (sandbox === undefined) {
+        return found.length > 0 ? modelsPath({ [FOUND_QUERY]: found.join(`,`) }) : HOME_PATH;
+    }
+    return found.length > 0
+        ? toInside(sandbox, page.sandboxSettings(`models`, { query: { [FOUND_QUERY]: found.join(`,`) } }))
+        : sandboxLanding(sandbox, { isGuest: false, homeOnly: false });
+};
