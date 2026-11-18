@@ -1,6 +1,6 @@
 // A local asset catalogue, independent of the application's role renderer.
 const manifest = await fetch("./manifest.json").then((response) => {
-    if (!response.ok) throw new Error(`Could not load avatar manifest: ${response.status}`);
+    if (!response.ok) {throw new Error(`Could not load avatar manifest: ${response.status}`);}
     return response.json();
 });
 const svgNamespace = "http://www.w3.org/2000/svg";
@@ -10,7 +10,7 @@ let selectedAccessory = manifest.accessories[0];
 
 function svgElement(name, attributes = {}) {
     const element = document.createElementNS(svgNamespace, name);
-    for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value));
+    for (const [key, value] of Object.entries(attributes)) {element.setAttribute(key, String(value));}
     return element;
 }
 
@@ -33,7 +33,7 @@ function avatar(color, accessory, size) {
         const [x, y, width, height] = placement;
         const viewport = svgElement("svg", { x, y, width, height, viewBox: asset.sourceRect.join(" "), preserveAspectRatio: "xMidYMid meet", overflow: "hidden" });
         const image = svgElement("image", { href: asset.src, width: asset.sourceSize[0], height: asset.sourceSize[1] });
-        if (asset.tint) image.setAttribute("filter", `url(#${id})`);
+        if (asset.tint) {image.setAttribute("filter", `url(#${id})`);}
         viewport.append(image);
         svg.append(viewport);
     }
@@ -53,7 +53,7 @@ function update() {
     document.querySelector("#color").value = selectedColor;
     document.querySelector("#hex").textContent = selectedColor.toUpperCase();
     document.querySelector("#accessory").value = selectedAccessory.id;
-    for (const swatch of document.querySelectorAll(".swatch")) swatch.setAttribute("aria-pressed", String(swatch.dataset.color.toLowerCase() === selectedColor.toLowerCase()));
+    for (const swatch of document.querySelectorAll(".swatch")) {swatch.setAttribute("aria-pressed", String(swatch.dataset.color.toLowerCase() === selectedColor.toLowerCase()));}
     document.querySelector("#library").replaceChildren(...manifest.accessories.map((accessory) => {
         const button = document.createElement("button");
         button.className = "card";

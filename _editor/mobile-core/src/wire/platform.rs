@@ -251,6 +251,9 @@ impl SandboxSummary {
     /// The account's tier here, under either of its names; a row naming neither reads as the least that still sees the
     /// sandbox, a viewer.
     pub fn tier(&self) -> MemberTier {
-        self.tier.clone().or_else(|| self.role.clone()).unwrap_or(MemberTier::Viewer)
+        self.tier
+            .clone()
+            .or_else(|| self.role.clone())
+            .unwrap_or(MemberTier::Viewer)
     }
 }
