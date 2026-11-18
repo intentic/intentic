@@ -12,7 +12,7 @@
             "GET /automations/catalog",
             "GET /automations/senders/*",
             "GET /agents",
-            "GET /roles",
+            "GET /personas",
             "GET /access/services",
             "GET /access/profiles",
             "GET /settings",

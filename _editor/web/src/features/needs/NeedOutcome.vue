@@ -31,7 +31,7 @@ const connected = computed(() => (met.value && subject.value.kind === `capabilit
 // person pressed anything on the card.
 const byAgent = computed(() => (met.value && need.byAgent === true ? need.outcome : undefined));
 const role = computed(() =>
-    met.value && subject.value.kind === `grant` && subject.value.scope === `role` ? subject.value.role : undefined,
+    met.value && subject.value.kind === `grant` && subject.value.scope === `persona` ? subject.value.role : undefined,
 );
 const unheard = computed(() => unheardLine(need));
 const facts = computed(
