@@ -10,11 +10,6 @@ export const sealSamples: GroupSamples<`seal`> = ({ fleet }) => ({
     set: { id: fleet.REVIEW_AGENT_ID, private: false },
     ask: { id: fleet.REVIEW_AGENT_ID },
     answer: { id: fleet.REVIEW_AGENT_ID, email: `max@acme.dev`, answer: `decline` },
-    prepareOpen: { id: fleet.REVIEW_AGENT_ID, reason: `The smoke checks the door opens and closes.` },
-    open: {
-        id: fleet.REVIEW_AGENT_ID,
-        document: `{}`,
-        assertion: { id: `pk_demo_macbook`, rawId: `pk_demo_macbook`, type: `public-key`, response: { clientDataJSON: `e30`, authenticatorData: `AA`, signature: `AA` } },
-    },
+    open: { id: fleet.REVIEW_AGENT_ID, reason: `The smoke checks the door opens and closes.` },
     approveOpen: { id: fleet.REVIEW_AGENT_ID, open: `open-none`, agree: false },
 });

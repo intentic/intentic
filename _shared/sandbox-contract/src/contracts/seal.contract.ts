@@ -5,13 +5,11 @@ import {
     SealApproveSchema,
     SealHouseSchema,
     SealIdSchema,
-    SealOpenCeremonySchema,
-    SealOpenPrepareSchema,
+    SealOpenRequestSchema,
     SealSetDefaultSchema,
     SealSetHouseSchema,
     SealSetSchema,
 } from "../schemas/seal.js";
-import { SealOpenProofSchema } from "../schemas/seal-proof.js";
 
 // PRIVATE CONVERSATIONS (schemas/seal.ts). Every route here is a person's: none is open to the agent token, a panel or a
 // control token, so no agent ever makes, reads past or opens a seal, the owner's own agents included. Each route
@@ -79,29 +77,16 @@ export const sealContract = {
         .meta({ floor: "viewer", guest: true })
         .input(SealAnswerSchema)
         .output(AgentSummarySchema),
-    // The document is prepared here rather than in the browser so its nonce and expiry are the daemon's, and the reason
-    // the author is shown is exactly the one that was signed.
-    prepareOpen: procedure
-        .route({
-            method: "POST",
-            path: "/seal/{id}/open/prepare",
-            summary: "Prepare to open a private conversation without asking",
-            description:
-                "For the sandbox owner alone: writes the document their passkey signs to open a private conversation without asking its author, with the reason they gave. Nothing opens yet.",
-        })
-        .meta({ floor: "owner" })
-        .input(SealOpenPrepareSchema)
-        .output(SealOpenCeremonySchema),
     open: procedure
         .route({
             method: "POST",
             path: "/seal/{id}/open",
             summary: "Open a private conversation without asking",
             description:
-                "For the sandbox owner alone, with their passkey over the reason: lets them read a private conversation for a day without its author's yes. It is read-only, its author is told at once, and the reason stays on the conversation for good. Where an organisation asks for two people, it waits for a second person with Full access to agree.",
+                "For the sandbox owner alone, with a written reason: lets them read a private conversation for a day without its author's yes. It is read-only, its author is told at once, and the reason stays on the conversation for good. Where an organisation asks for two people, it waits for a second person with Full access to agree.",
         })
         .meta({ floor: "owner" })
-        .input(SealOpenProofSchema)
+        .input(SealOpenRequestSchema)
         .output(AgentSummarySchema),
     approveOpen: procedure
         .route({

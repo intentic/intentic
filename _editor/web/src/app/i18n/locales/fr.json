@@ -5258,8 +5258,6 @@
             "footnote": "Ce qui est intégré est partagé. La conversation, non. Ses sous-agents et ses revues sont privés aussi.",
             "saveFailed": "Impossible de changer qui la lit.",
             "open": {
-                "noPasskey": "Ouvrir une conversation sans demander nécessite votre clé d’accès, et vous n’en avez pas encore ajouté.",
-                "addPasskey": "En ajouter une dans Accès ▸ Connexion",
                 "failed": "Impossible de l’ouvrir.",
                 "reason": "Motif",
                 "reasonPlaceholder": "Pourquoi vous devez la lire. {name} le lira.",
@@ -5269,7 +5267,7 @@
                 "isTold": "Est prévenu tout de suite",
                 "forGood": "Le motif reste sur la conversation pour de bon, et personne ne peut le retirer. Vous pouvez lire. Vous ne pouvez ni écrire, ni la poursuivre, ni intégrer en tant que {name}.",
                 "twoPerson": "Une deuxième personne avec un accès complet doit accepter avant l’ouverture.",
-                "confirm": "Confirmer avec la clé d’accès"
+                "confirm": "Ouvrir en lecture seule"
             },
             "openings": {
                 "opened": "{name} l’a ouverte sans demander · {at}",

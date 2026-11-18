@@ -90,7 +90,7 @@ const landStrip = computed(() =>
                 </span>
                 <!-- The one step this page asks for, until the owner unfolds the other door: then that form's confirm is the step. -->
                 <Button v-else :tier="opening ? `boring` : `accent`" :loading="busy" :disabled="busy" @click="ask">{{ t(`chat.seal.gate.ask`, { name }) }}</Button>
-                <!-- The owner's quiet door, which only unfolds: nothing is sent until the passkey confirms it. -->
+                <!-- The owner's quiet door, which only unfolds: nothing is sent until its Open press. -->
                 <Button v-if="seal?.canOpen === true && !opening" tier="quiet" @click="opening = true">{{ t(`chat.seal.gate.openWithout`) }}</Button>
                 <SealOpenForm v-if="seal?.canOpen === true && opening" :conversation-id="conversationId" :author="name" @cancel="opening = false" />
             </template>

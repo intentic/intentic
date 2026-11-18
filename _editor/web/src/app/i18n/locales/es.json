@@ -5258,8 +5258,6 @@
             "footnote": "Lo que se integra es compartido. La conversación no. Sus subagentes y revisiones también son privados.",
             "saveFailed": "No se pudo cambiar quién lo lee.",
             "open": {
-                "noPasskey": "Abrir una conversación sin preguntar requiere tu llave de acceso, y aún no has añadido ninguna.",
-                "addPasskey": "Añade una en Acceso ▸ Inicio de sesión",
                 "failed": "No se pudo abrir.",
                 "reason": "Motivo",
                 "reasonPlaceholder": "Por qué necesitas leerla. {name} lo leerá.",
@@ -5269,7 +5267,7 @@
                 "isTold": "Recibe aviso ahora",
                 "forGood": "El motivo queda en la conversación para siempre y nadie puede quitarlo. Puedes leer. No puedes escribir, continuarla ni integrar como {name}.",
                 "twoPerson": "Una segunda persona con acceso total debe aceptar antes de que se abra.",
-                "confirm": "Confirmar con llave de acceso"
+                "confirm": "Abrir en solo lectura"
             },
             "openings": {
                 "opened": "{name} la abrió sin preguntar · {at}",

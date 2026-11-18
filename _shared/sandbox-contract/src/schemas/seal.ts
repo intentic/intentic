@@ -4,8 +4,8 @@
 // event: whose it is, which lane it stands in, and its diff once there is work to land. Never its title.
 //
 // The owner reads a sealed conversation the way anyone else does, by asking its author. The one other door is opening it
-// without asking: the sandbox owner alone (never Full access, never an agent), with a written reason and the owner's
-// passkey over it, read-only for a day, told to the author at once and recorded on the conversation for good.
+// without asking: the sandbox owner alone (never Full access, never an agent), with a written reason, read-only for a
+// day, told to the author at once and recorded on the conversation for good.
 import { z } from "zod";
 
 // ---- The house rule ----
@@ -139,37 +139,12 @@ export const SealAnswerSchema = SealIdSchema.extend({
 });
 export type SealAnswer = z.infer<typeof SealAnswerSchema>;
 
-// What the owner's passkey signs to open a conversation without asking. The challenge is the sha256 of this document's
-// text exactly as `SealOpenProof.document` carries it, so the daemon checks the same bytes it parses.
-export const SealOpenDocumentSchema = z.strictObject({
-    v: z.literal(1),
-    purpose: z.literal("intentic-conversation-open"),
-    conversationId: z.string().min(1),
-    reason: z.string().min(SEAL_REASON_MIN).max(SEAL_REASON_MAX),
-    nonce: z.string().min(16).max(64),
-    expiresAt: z.number().int().positive(),
-});
-export type SealOpenDocument = z.infer<typeof SealOpenDocumentSchema>;
-export const SEAL_PROOF_MAX_AGE_MS = 5 * 60_000;
-
-export const SealOpenPrepareSchema = SealIdSchema.extend({ reason: z.string().trim().min(SEAL_REASON_MIN).max(SEAL_REASON_MAX) });
-
-// The signed document travels as `SealOpenProofSchema` (seal-proof.ts), apart from this file so the summary schema that
-// reads this one does not import the passkey shapes, which sit behind the event frames that import the summary.
-
-// What the editor needs to run the ceremony: the document text to hash, the relying party and the owner's credentials.
-export const SealOpenCeremonySchema = z.object({
-    document: z.string().min(1).max(4096),
-    rpId: z.string().min(1),
-    credentials: z.array(z.object({ id: z.string(), transports: z.array(z.string()).optional() })),
-});
-export type SealOpenCeremony = z.infer<typeof SealOpenCeremonySchema>;
+// The owner's opening without asking: which conversation, and the reason its author reads.
+export const SealOpenRequestSchema = SealIdSchema.extend({ reason: z.string().trim().min(SEAL_REASON_MIN).max(SEAL_REASON_MAX) });
+export type SealOpenRequest = z.infer<typeof SealOpenRequestSchema>;
 
 export const SealApproveSchema = SealIdSchema.extend({
     open: z.string().min(1).describe("Which opening."),
     agree: z.boolean(),
 });
 export type SealApprove = z.infer<typeof SealApproveSchema>;
-
-/** The document's text as it is signed and sent. */
-export const sealOpenDocumentText = (document: SealOpenDocument): string => JSON.stringify(document);

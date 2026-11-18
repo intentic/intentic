@@ -5258,8 +5258,6 @@
             "footnote": "What lands is shared. The conversation isn't. Its subagents and reviews are private too.",
             "saveFailed": "Couldn't change who reads this.",
             "open": {
-                "noPasskey": "Opening a conversation without asking needs your passkey, and you haven't added one.",
-                "addPasskey": "Add one under Access ▸ Sign-in",
                 "failed": "Couldn't open it.",
                 "reason": "Reason",
                 "reasonPlaceholder": "Why you need to read it. {name} reads this.",
@@ -5269,7 +5267,7 @@
                 "isTold": "Is told now",
                 "forGood": "The reason stays on the conversation for good, and nobody can remove it. You can read. You can't write, continue it or land as {name}.",
                 "twoPerson": "A second person with Full access must agree before it opens.",
-                "confirm": "Confirm with passkey"
+                "confirm": "Open read-only"
             },
             "openings": {
                 "opened": "{name} opened this without asking · {at}",

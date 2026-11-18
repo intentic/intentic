@@ -1,9 +1,6 @@
 import type { SealAnswer } from "@intentic/sandbox-contract/schemas/seal";
-import { t } from "@intentic/ui/i18n";
 import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { assertPasskey } from "../../../client/session/passkeySignIn";
 import { optimistic } from "../useAgents-provisional";
-import { challengeOf } from "../../sandbox/devices/egressFlow";
 
 // THE WRITES ON ONE PRIVATE CONVERSATION (sandbox-contract seal.contract.ts). Each answers the conversation's summary as
 // it now stands for the caller, which replaces the board's entry (useAgents-provisional.optimistic), so the card, the
@@ -29,31 +26,8 @@ export const answerAsk = (id: string, email: string, answer: SealAnswer[`answer`
 export const answerOpening = (id: string, open: string, agree: boolean): Promise<void> =>
     optimistic(id, {}, () => sandboxRpc.seal.approveOpen({ id, open, agree }));
 
-/** The owner has no passkey to sign with: said as the way on (Access ▸ Sign-in), not as a failure. */
-export class NoPasskeyError extends Error {
-    constructor() {
-        super(t(`chat.seal.open.noPasskey`));
-    }
-}
-
 /**
- * OPENS IT WITHOUT ASKING, the sandbox owner's one door past a seal: the daemon writes the document (its nonce, its expiry,
- * the reason exactly as the author will read it), the owner's passkey signs the sha256 of that text as the network fence's
- * changes are signed (egressFlow.changeToSign), and the signature goes back with the same text. Throws NoPasskeyError
- * when the owner has none, the ceremony's own error when it is cancelled, and the daemon's refusal otherwise.
+ * OPENS IT WITHOUT ASKING, the sandbox owner's one door past a seal: read-only for a day, its author told at once, and the
+ * reason kept on the conversation for good. Throws the daemon's refusal.
  */
-export const openWithoutAsking = async (id: string, reason: string): Promise<void> => {
-    const ceremony = await sandboxRpc.seal.prepareOpen({ id, reason });
-    if (ceremony.credentials.length === 0) {
-        throw new NoPasskeyError();
-    }
-    const assertion = await assertPasskey({
-        rpId: ceremony.rpId,
-        challenge: await challengeOf(ceremony.document),
-        timeout: 120_000,
-        userVerification: `required`,
-        allowCredentials: ceremony.credentials.map((credential) => ({ type: `public-key`, id: credential.id, transports: credential.transports })),
-        available: true,
-    });
-    await optimistic(id, {}, () => sandboxRpc.seal.open({ id, document: ceremony.document, assertion }));
-};
+export const openWithoutAsking = (id: string, reason: string): Promise<void> => optimistic(id, {}, () => sandboxRpc.seal.open({ id, reason }));

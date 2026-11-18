@@ -5258,8 +5258,6 @@
             "footnote": "To, co zostanie wdrożone, jest wspólne. Rozmowa nie. Jej podagenci i przeglądy też są prywatne.",
             "saveFailed": "Nie udało się zmienić, kto to czyta.",
             "open": {
-                "noPasskey": "Otwarcie rozmowy bez pytania wymaga twojego klucza dostępu, a nie dodano jeszcze żadnego.",
-                "addPasskey": "Dodaj go w Dostęp ▸ Logowanie",
                 "failed": "Nie udało się jej otworzyć.",
                 "reason": "Powód",
                 "reasonPlaceholder": "Dlaczego musisz ją przeczytać. {name} to przeczyta.",
@@ -5269,7 +5267,7 @@
                 "isTold": "Dowie się od razu",
                 "forGood": "Powód zostaje przy rozmowie na zawsze i nikt nie może go usunąć. Możesz czytać. Nie możesz pisać, kontynuować jej ani wdrażać jako {name}.",
                 "twoPerson": "Zanim się otworzy, musi się zgodzić druga osoba z pełnym dostępem.",
-                "confirm": "Potwierdź kluczem dostępu"
+                "confirm": "Otwórz tylko do odczytu"
             },
             "openings": {
                 "opened": "{name} otwiera to bez pytania · {at}",

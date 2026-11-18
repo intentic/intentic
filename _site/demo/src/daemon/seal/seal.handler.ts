@@ -1,9 +1,8 @@
 import { refuse } from "@intentic/contract-serve";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { SEAL_OPEN_HOURS, type Seal, type SealOpen, sealOpenDocumentText, SealOpenDocumentSchema } from "@intentic/sandbox-contract/schemas/seal";
+import { SEAL_OPEN_HOURS, type Seal, type SealOpen } from "@intentic/sandbox-contract/schemas/seal";
 import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { demoTier } from "../../mode";
-import { passkeysList } from "../account/passkeys";
 import { agentAnswer, boardAgents, broadcastRoster, roster } from "../board/roster";
 import type { Doors } from "../doors";
 import {
@@ -23,7 +22,7 @@ import {
 // PRIVATE CONVERSATIONS' ROUTES (sandbox-contract seal.contract.ts), answered as the daemon answers them for the demo's one
 // person: each write changes the seal it keeps (sealWorld.ts), the board goes out again, and the conversation comes back
 // framed for her. Who may do what is the daemon's rule: a reader changes a seal and answers who asks, anyone else asks,
-// the owner alone opens one without asking (with a passkey, which the demo takes at its word as it does a sign-in's), and
+// the owner alone opens one without asking (with a written reason), and
 // someone with Full access who is not the opener agrees to an opening that waits on them.
 
 const answered = (id: string): AgentSummary => {
@@ -103,34 +102,14 @@ export const sealDoors = {
         seals.set(id, next);
         return answered(id);
     },
-    prepareOpen: ({ id, reason }) => {
-        known(id);
-        if (demoTier !== `owner` || !sealedFromCaller(id)) {
-            return refuse(`Only the sandbox's owner opens a private conversation without asking.`);
-        }
-        const document = sealOpenDocumentText({
-            v: 1,
-            purpose: `intentic-conversation-open`,
-            conversationId: id,
-            reason,
-            nonce: crypto.randomUUID(),
-            expiresAt: Date.now() + 5 * 60_000,
-        });
-        const credentials = passkeysList().passkeys.map((passkey) => ({ id: passkey.id }));
-        return { document, rpId: window.location.hostname, credentials };
-    },
-    open: ({ id, document, assertion }) => {
+    open: ({ id, reason }) => {
         known(id);
         const seal = sealOf(id);
-        const signed = SealOpenDocumentSchema.safeParse(JSON.parse(document));
-        if (demoTier !== `owner` || seal === undefined || !signed.success || signed.data.conversationId !== id) {
-            return refuse(`That is not a signed opening of this conversation.`);
-        }
-        if (!passkeysList().passkeys.some((passkey) => passkey.id === assertion.id)) {
-            return refuse(`That passkey is not one of this sandbox's.`);
+        if (demoTier !== `owner` || seal === undefined || !sealedFromCaller(id)) {
+            return refuse(`Only the sandbox's owner opens a private conversation without asking.`);
         }
         const at = Date.now();
-        const open = { ...caller(), id: `open-${at.toString(36)}`, at, until: at + SEAL_OPEN_HOURS * 3_600_000, reason: signed.data.reason };
+        const open = { ...caller(), id: `open-${at.toString(36)}`, at, until: at + SEAL_OPEN_HOURS * 3_600_000, reason };
         seals.set(id, { ...seal, opens: [...(seal.opens ?? []), houseTwoPerson() ? { ...open, pending: true as const } : open] });
         return answered(id);
     },

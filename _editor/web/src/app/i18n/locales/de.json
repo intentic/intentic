@@ -5258,8 +5258,6 @@
             "footnote": "Was übernommen wird, ist geteilt. Die Unterhaltung nicht. Ihre Subagenten und Reviews sind ebenfalls privat.",
             "saveFailed": "Konnte nicht ändern, wer das liest.",
             "open": {
-                "noPasskey": "Eine Unterhaltung ohne Nachfrage zu öffnen braucht deinen Passkey, und du hast noch keinen hinzugefügt.",
-                "addPasskey": "Unter Zugriff ▸ Anmeldung hinzufügen",
                 "failed": "Konnte sie nicht öffnen.",
                 "reason": "Grund",
                 "reasonPlaceholder": "Warum du sie lesen musst. {name} liest das.",
@@ -5269,7 +5267,7 @@
                 "isTold": "Erfährt es sofort",
                 "forGood": "Der Grund bleibt dauerhaft an der Unterhaltung, und niemand kann ihn entfernen. Du kannst lesen. Du kannst nicht schreiben, sie fortsetzen oder als {name} übernehmen.",
                 "twoPerson": "Eine zweite Person mit Vollzugriff muss zustimmen, bevor sie sich öffnet.",
-                "confirm": "Mit Passkey bestätigen"
+                "confirm": "Schreibgeschützt öffnen"
             },
             "openings": {
                 "opened": "{name} hat das ohne Nachfrage geöffnet · {at}",
