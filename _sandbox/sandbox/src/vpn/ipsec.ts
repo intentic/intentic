@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { pollUntil } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
@@ -66,9 +67,45 @@ charon {
 }
 `;
 
+// An identity no strongSwan file can hold: a line break ends the entry in both files, and ipsec.secrets cuts its ID
+// list at the first " : ", quoted or not (stroke_cred.c load_secrets).
+const writableId = (field: string, value: string): string => {
+    if (/[\r\n]/.test(value) || value.includes(" : ")) {
+        throw new Error(`The ${field} "${value}" can't be written into strongSwan's configuration: it contains a line break or " : ".`);
+    }
+    return value;
+};
+
+// One ipsec.conf value. Bare where the lexer reads it as one token (no quote, #, = or whitespace; a backslash is literal
+// there, so a DOMAIN\user identity stays as typed), else double-quoted, where backslash escapes ARE honoured (lexer.l).
+const confValue = (value: string): string => (/^[^"#=\s]+$/.test(value) ? value : `"${value.replace(/[\\"]/g, "\\$&")}"`);
+
+// One identity in ipsec.secrets, which has NO escapes: a quoted value runs to the next quote of the same kind
+// (lexparser.c extract_value). So it goes bare when it is a plain token, else inside whichever quote it doesn't contain.
+// JSON-style escaping here once turned DOMAIN\user into DOMAIN\\user, a different identity that no XAuth lookup found.
+const secretsId = (field: string, value: string): string => {
+    writableId(field, value);
+    if (/^[^\s"'#]+$/.test(value)) {
+        return value;
+    }
+    if (!value.includes('"')) {
+        return `"${value}"`;
+    }
+    if (!value.includes("'")) {
+        return `'${value}'`;
+    }
+    throw new Error(`The ${field} "${value}" contains both kinds of quote, which strongSwan's ipsec.secrets has no way to write.`);
+};
+
+// One secret in ipsec.secrets, as `0s` + base64: the one form strongSwan reads byte for byte whatever the secret holds
+// (quotes, backslashes, spaces, a leading 0x), since quoted secrets have no escapes either (stroke_cred.c
+// extract_secret).
+const secretValue = (value: string): string => `0s${Buffer.from(value, "utf8").toString("base64")}`;
+
 // The conn stanza for one connection; pure, so the generated config is unit-testable.
 export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
-    const xauth = raw.username !== undefined && raw.password !== undefined;
+    // The XAuth identity, only when both halves of the sign-in are there.
+    const xauth = raw.password === undefined ? undefined : raw.username;
     const lines = [
         `# Written by the intentic sandbox daemon for the "${id}" vpn capability: do not edit by hand.`,
         `conn ${connName(id)}`,
@@ -76,18 +113,18 @@ export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
         ...(raw.ikeVersion === "1" && raw.aggressive === "on" ? ["    aggressive=yes"] : []),
         `    ike=${ikeProposals(raw)}`,
         `    esp=${espProposals(raw)}`,
-        `    right=${raw.server}`,
-        `    rightid=${raw.remoteId ?? "%any"}`,
+        `    right=${confValue(writableId("gateway", raw.server))}`,
+        `    rightid=${raw.remoteId === undefined ? "%any" : confValue(writableId("remote ID", raw.remoteId))}`,
         // Not a fixed 0.0.0.0/0: a FortiGate accepts the catch-all then drops whatever it has no route for, taking the
         // sandbox's own internet down with the tunnel.
         `    rightsubnet=${routedNetworks(raw)}`,
         `    left=%defaultroute`,
-        ...(raw.localId === undefined ? [] : [`    leftid=${raw.localId}`]),
+        ...(raw.localId === undefined ? [] : [`    leftid=${confValue(writableId("local ID", raw.localId))}`]),
         // `%config` takes the virtual IP from the gateway's mode config.
         `    leftsourceip=%config`,
         `    leftauth=psk`,
         `    rightauth=psk`,
-        ...(xauth ? [`    leftauth2=xauth`, `    xauth_identity=${raw.username}`] : []),
+        ...(xauth === undefined ? [] : [`    leftauth2=xauth`, `    xauth_identity=${confValue(writableId("XAuth username", xauth))}`]),
         // Loaded, not dialled; connecting stays a separate explicit operation.
         `    auto=add`,
         `    dpdaction=restart`,
@@ -98,11 +135,13 @@ export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
 };
 
 // The ipsec.secrets entries for one connection, kept apart from the conn file so only the credential half needs 0600.
+// Each identity is written exactly as its ipsec.conf counterpart parses, since charon finds a secret by comparing the two.
 export const ipsecSecretsConfig = (raw: IpsecVpnConfig): string => {
-    const psk = `${raw.localId ?? "%any"} ${raw.server} : PSK ${JSON.stringify(raw.presharedKey)}`;
+    const local = raw.localId === undefined ? "%any" : secretsId("local ID", raw.localId);
+    const psk = `${local} ${secretsId("gateway", raw.server)} : PSK ${secretValue(raw.presharedKey)}`;
     const xauth =
         raw.username !== undefined && raw.password !== undefined
-            ? `${JSON.stringify(raw.username)} : XAUTH ${JSON.stringify(raw.password)}`
+            ? `${secretsId("XAuth username", raw.username)} : XAUTH ${secretValue(raw.password)}`
             : undefined;
     return `${[psk, xauth].filter((line) => line !== undefined).join("\n")}\n`;
 };
@@ -123,6 +162,22 @@ include ${IPSEC_INCLUDE_DIR}/*.secrets
 // charon answers `ipsec status` only while it is running; starting it is idempotent.
 const ensureCharon = async (): Promise<void> => {
     await exec("ipsec", ["start"]).catch(() => undefined);
+};
+
+// The IKE daemon `ipsec start` launches, from strongswan-charon. Debian's starter only recommends it, so `ipsec` can be
+// on PATH with nothing for it to start: `ipsec start` then fails, and every dial waited out the load timeout instead.
+const CHARON_PATH = "/usr/lib/ipsec/charon";
+
+// Both halves of the stroke stack must be there: the `ipsec` front end and the daemon it starts.
+const ipsecMissing = async (): Promise<string | undefined> => {
+    if (await toolMissing("ipsec", ["--version"])) {
+        return "strongSwan (ipsec)";
+    }
+    const charon = await access(CHARON_PATH, constants.X_OK).then(
+        () => true,
+        () => false,
+    );
+    return charon ? undefined : `strongSwan's IKE daemon (${CHARON_PATH})`;
 };
 
 // Whether charon has loaded a connection, distinct from it being up: loaded appears as `<name>:` with no bracket; live
@@ -224,7 +279,7 @@ export const ipsecDriver: VpnDriver = {
         await exec("ipsec", ["rereadall"]).catch(() => undefined);
         await exec("ipsec", ["reload"]).catch(() => undefined);
     },
-    missingTool: async () => ((await toolMissing("ipsec", ["--version"])) ? "strongswan (ipsec)" : undefined),
+    missingTool: ipsecMissing,
     async *connect(id, raw) {
         const ipsec = config(raw);
         const conn = connName(id);
@@ -286,7 +341,7 @@ export const ipsecDriver: VpnDriver = {
         }
     },
     probe: async (id): Promise<VpnProbe> => {
-        if (await toolMissing("ipsec", ["--version"])) {
+        if ((await ipsecMissing()) !== undefined) {
             return { state: "unavailable" };
         }
         const conn = connName(id);

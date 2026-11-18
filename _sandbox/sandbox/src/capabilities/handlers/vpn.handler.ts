@@ -13,14 +13,18 @@ const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocol
 # WireGuard: wg-quick and the resolvconf its DNS= handling shells out to.
 # FortiGate SSL-VPN: openconnect with its vpnc routing script. openconnect routes over tun rather than spawning
 #   pppd, so it needs no /dev/ppp, which is why it, not openfortivpn, is the client here.
-# IPsec: strongSwan, plus BOTH charon plugin sets. libcharon-extauth-plugins is the one that matters and is
-#   easy to miss: xauth-generic lives there, not in libcharon-extra-plugins (which ships only xauth-eap and
-#   xauth-pam, neither of which can answer a gateway's XAuth challenge with a username and password). Without
-#   it an XAuth tunnel negotiates phase 1 and then fails with no mention of the missing plugin.
+# IPsec: strongSwan's \`ipsec\` front end and the charon daemon it starts, named outright. Since trixie
+#   (strongSwan 6) the \`strongswan\` metapackage resolves to charon-systemd + swanctl, which ships no
+#   \`ipsec\` at all, and strongswan-starter only RECOMMENDS strongswan-charon, which --no-install-recommends
+#   skips. Plus BOTH charon plugin sets. libcharon-extauth-plugins is the one that matters and is easy to miss:
+#   xauth-generic lives there, not in libcharon-extra-plugins (which ships only xauth-eap and xauth-pam,
+#   neither of which can answer a gateway's XAuth challenge with a username and password). Without it an
+#   XAuth tunnel negotiates phase 1 and then fails with no mention of the missing plugin.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\
     apt-get update && apt-get install -y --no-install-recommends \\
-        wireguard-tools openresolv openconnect vpnc-scripts strongswan libcharon-extra-plugins libcharon-extauth-plugins`;
+        wireguard-tools openresolv openconnect vpnc-scripts \\
+        strongswan-starter strongswan-charon libcharon-extra-plugins libcharon-extauth-plugins`;
 
 // Agent drives VPNs through the `vpn` CLI, never the clients directly, so agent and UI state can't drift apart.
 const VPN_SKILL = `---

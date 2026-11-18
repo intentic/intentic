@@ -118,7 +118,12 @@ test("fragment carries every client and both runtime directives, once, in two se
     const [tools, privileges] = blocks as [string, string];
     expect(tools).toContain("wireguard-tools");
     expect(tools).toContain("openconnect");
-    expect(tools).toContain("strongswan");
+    // The ipsec driver runs `ipsec` and the charon it starts. On trixie the `strongswan` metapackage carries neither
+    // (charon-systemd + swanctl), and the starter only recommends charon, which --no-install-recommends skips: a rebuild
+    // then installed strongSwan and the tunnel still read "needs a rebuild" (2026-11-18).
+    expect(tools).toMatch(/\bstrongswan-starter\b/);
+    expect(tools).toMatch(/\bstrongswan-charon\b/);
+    expect(tools).toMatch(/\blibcharon-extauth-plugins\b/);
     // Clients block asks for nothing privileged; privileges block installs nothing.
     expect(tools).not.toContain("intentic:runtime");
     expect(privileges).not.toContain("apt-get");

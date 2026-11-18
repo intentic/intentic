@@ -63,16 +63,50 @@ test("omits the XAuth stanza for a PSK-only tunnel", () => {
     expect(conf).toContain("leftauth=psk");
 });
 
-test("writes both secrets in strongSwan's ipsec.secrets format, quoted", () => {
+// What strongSwan reads back out of a `0s` secret: its base64, decoded.
+const secretOf = (secrets: string, type: "PSK" | "XAUTH"): string => {
+    const encoded = new RegExp(` : ${type} 0s(\\S+)$`, "m").exec(secrets)?.[1];
+    return Buffer.from(encoded ?? "", "base64").toString("utf8");
+};
+
+test("writes both secrets in strongSwan's ipsec.secrets format", () => {
     const secrets = ipsecSecretsConfig(systemEg);
-    expect(secrets).toContain(`extNET systemeg.float-zone.com : PSK "group-secret"`);
-    expect(secrets).toContain(`"someone" : XAUTH "user-secret"`);
+    expect(secrets).toContain(`extNET systemeg.float-zone.com : PSK 0s`);
+    expect(secrets).toContain(`someone : XAUTH 0s`);
+    expect(secretOf(secrets, "PSK")).toBe("group-secret");
+    expect(secretOf(secrets, "XAUTH")).toBe("user-secret");
 });
 
-test("quotes a secret containing characters that would otherwise break the file", () => {
-    // A PSK with a quote or a space is legal; unquoted it would truncate or mis-parse the entry.
-    const secrets = ipsecSecretsConfig({ ...systemEg, presharedKey: 'has "quotes" and spaces' });
-    expect(secrets).toContain(String.raw`PSK "has \"quotes\" and spaces"`);
+test("a secret survives byte for byte whatever it contains", () => {
+    // ipsec.secrets has no escapes: `"has \"quotes\""` reads as `has \`, and an unquoted 0x… reads as hex. Base64 is
+    // the one form charon takes literally.
+    const awkward = String.raw`has "quotes", a \backslash, 'single' ones # and 0xdead`;
+    const secrets = ipsecSecretsConfig({ ...systemEg, presharedKey: awkward, password: awkward });
+    expect(secretOf(secrets, "PSK")).toBe(awkward);
+    expect(secretOf(secrets, "XAUTH")).toBe(awkward);
+});
+
+test("a DOMAIN\\user XAuth identity is written the same way in both files", () => {
+    // charon finds the XAuth secret by comparing the two; JSON-escaping the secrets side doubled the backslash, and the
+    // gateway's XAuth challenge then found no password (2026-11-18, a FortiClient import).
+    const domainUser = { ...systemEg, username: String.raw`systemeg.internal\artur.kurowski` };
+    expect(ipsecConnConfig("x", domainUser)).toContain(String.raw`xauth_identity=systemeg.internal\artur.kurowski`);
+    expect(ipsecSecretsConfig(domainUser)).toContain(String.raw`systemeg.internal\artur.kurowski : XAUTH 0s`);
+});
+
+test("an identity with spaces is quoted in each file the way that file reads quotes", () => {
+    const spaced = { ...systemEg, username: String.raw`Jane "JD" Doe\x` };
+    // ipsec.conf honours backslash escapes inside double quotes.
+    expect(ipsecConnConfig("x", spaced)).toContain(String.raw`xauth_identity="Jane \"JD\" Doe\\x"`);
+    // ipsec.secrets honours none, so the value goes inside the quote it does not contain.
+    expect(ipsecSecretsConfig(spaced)).toContain(String.raw`'Jane "JD" Doe\x' : XAUTH 0s`);
+    expect(ipsecSecretsConfig({ ...systemEg, localId: "my office" })).toContain(`"my office" systemeg.float-zone.com : PSK 0s`);
+});
+
+test("an identity neither strongSwan file can hold is refused by name, not written broken", () => {
+    expect(() => ipsecSecretsConfig({ ...systemEg, username: `both " and '` })).toThrow(/XAuth username/);
+    expect(() => ipsecSecretsConfig({ ...systemEg, localId: "a : b" })).toThrow(/local ID/);
+    expect(() => ipsecConnConfig("x", { ...systemEg, username: "two\nlines" })).toThrow(/XAuth username/);
 });
 
 test("a PSK-only tunnel writes no XAUTH line", () => {
