@@ -103,9 +103,13 @@ export const askListAhead = (): void => {
 const SANDBOX_LIST_HASH = hashKey(SANDBOX_LIST_KEY);
 // allow(module-state): the account's sandbox list, which a switch chooses from
 const sandboxes = ref<SandboxSummary[]>([]);
+// allow(module-state): whether the list has answered at all, so an empty one can be told from one still on its way
+const listAnswered = ref(false);
 queryClient.getQueryCache().subscribe((event) => {
     if (event.query.queryHash === SANDBOX_LIST_HASH) {
-        sandboxes.value = queryClient.getQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY) ?? [];
+        const rows = queryClient.getQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY);
+        sandboxes.value = rows ?? [];
+        listAnswered.value = rows !== undefined;
     }
 });
 // The list an address names a sandbox among (lib/routes/links.ts): by its name and the tail of its id.
@@ -392,6 +396,7 @@ const remove = async (id: string): Promise<LeaveOutcome | undefined> => {
 export function useSandbox() {
     return {
         sandboxes,
+        listAnswered,
         activeSandboxId,
         active,
         daemonUrl,

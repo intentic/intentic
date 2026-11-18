@@ -4,6 +4,7 @@ import { computed, type ComputedRef, onMounted, type Ref, ref } from "vue";
 import { type Router, useRouter } from "vue-router";
 import { localFace } from "../../../app/environments/local";
 import { localHost } from "../../../app/environments/localHost";
+import { heldLocalRoster, readLocalRoster, resetLocalRoster } from "./localRoster";
 import { useAccount } from "../../../client/auth/useAccount";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { ADD_SANDBOX_PATH, LOCAL_ADD_SANDBOX_PATH } from "../../../models/sandbox/addSandbox";
@@ -64,18 +65,18 @@ export interface FolderPlace {
 }
 
 // ONE COPY PER WINDOW of what the parts at the rail's top read together (the logo, the cluster under it, the rail
-// unrolled onto every sandbox): the workspace's order, and the one errand under way.
-// allow(module-state): the local window's one copy of the workspace's order of its sandboxes
-const arranged = ref<readonly string[]>([]);
+// unrolled onto every sandbox): the workspace's order, off the app's record (localRoster.ts, read before the window
+// mounts), and the one errand under way.
+const arranged = computed<readonly string[]>(() => heldLocalRoster.value?.sandboxes.map((entry) => entry.id) ?? []);
 // allow(module-state): the local window's one errand at a time (a sandbox opened, the sign-in)
 const busy = ref<string | undefined>(undefined);
 // allow(module-state): when the account's sandboxes were last asked for, so parts mounting together ask once
 let askedAt = Number.NEGATIVE_INFINITY;
 const ASK_AGAIN_MS = 2_000;
 
-const readArranged = async (): Promise<void> => {
+const readRoster = async (): Promise<void> => {
     try {
-        arranged.value = (await localHost().roster()).sandboxes.map((entry) => entry.id);
+        await readLocalRoster();
     } catch (error) {
         console.warn(`[local] the workspace's order of the sandboxes could not be read:`, error);
     }
@@ -84,7 +85,7 @@ const readArranged = async (): Promise<void> => {
 /** Forgets when the list was last asked for: a test's window starts with none asked. */
 export const resetFolderPlace = (): void => {
     askedAt = Number.NEGATIVE_INFINITY;
-    arranged.value = [];
+    resetLocalRoster();
     busy.value = undefined;
 };
 
@@ -127,7 +128,7 @@ export const useFolderPlace = (): FolderPlace => {
             }
             askedAt = now;
             void sandbox.refresh();
-            void readArranged();
+            void readRoster();
         });
     }
 

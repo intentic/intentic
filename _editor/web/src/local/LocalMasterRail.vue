@@ -5,7 +5,11 @@
      account's sandboxes in the order the workspace last told the app, then Add sandbox. A press on This computer folds the
      rail back onto it, as a press on the selected sandbox's tile does there; a press on a sandbox opens the workspace on
      it through the app, as Alt+1…9 do, since this window reaches no sandbox's daemon. Its menu opens one or its settings.
-     The sections went into the bookmark at the rail's foot (LocalSectionPicker.vue). -->
+     The sections went into the bookmark at the rail's foot (LocalSectionPicker.vue).
+     Until the platform's list answers, the tiles are the app's own record of what the workspace last listed
+     (features/sandbox/gates/localRoster.ts, read before the window mounts): the first press on This computer from the workspace
+     builds this window and swaps it in as soon as its bar is up, and the rail came up bare until 2026-11-18, every
+     sandbox the workspace's rail had just shown gone and back a moment later. -->
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic/api-contract";
 import { ContextMenu, SandboxLogo, type TooltipValue, ui } from "@intentic/ui";
@@ -18,6 +22,9 @@ import { rowPlacement } from "../features/sandbox/overview/useSandboxPlacement";
 import { useFolderPlace } from "../features/sandbox/gates/switcherPlace";
 import { answerNote } from "../features/sandbox/gates/switcherRows";
 import { answerOf, sleepingOn } from "../client/sandbox/wake/sandboxAnswer";
+import type { LocalSandbox } from "../app/environments/localHost";
+import { heldLocalRoster } from "../features/sandbox/gates/localRoster";
+import { placementOfKind } from "../features/sandbox/overview/placement";
 import { localRailUnrolled } from "../models/home/masterRail";
 import { arrangedSandboxes } from "../models/home/sandboxOrder";
 import { sandboxHubPath } from "../models/sandbox/sandboxNav";
@@ -26,7 +33,15 @@ const t = useT();
 const sandbox = useSandbox();
 // Mounted at each unrolling, so the account's sandboxes are asked for again each time (switcherPlace.ts).
 const place = useFolderPlace();
-const boxes = computed(() => arrangedSandboxes(sandbox.sandboxes.value, place.arranged.value));
+
+// A tile as this rail draws it, from a row of the platform's list or, before that has answered, of the app's record.
+interface RailBox {
+    readonly id: string;
+    readonly name: string;
+    readonly image: string | null;
+    /** Where it runs, whose it is when not the reader's, and whether it sleeps: what the tooltip says under the name. */
+    readonly note: string;
+}
 
 const fold = (): void => {
     localRailUnrolled.value = false;
@@ -45,14 +60,38 @@ const noteOf = (box: SandboxSummary): string => {
         .filter((part) => part !== undefined)
         .join(` · `);
 };
+// The app's record says less: where it runs by kind alone, and whether it is somebody else's.
+const recordedNote = (entry: LocalSandbox): string => {
+    const where = placementOfKind(entry.place);
+    return entry.shared && where.kind !== `shared` ? `${where.label} · ${t(`shared.shared`).toLocaleLowerCase()}` : where.label;
+};
 
-const openBox = (box: SandboxSummary): void => void place.openFromFolder(box.id);
-const openSettings = (box: SandboxSummary): void => void place.openSettingsFromFolder(box.id, sandboxHubPath(box.role === `guest`));
+const boxes = computed<readonly RailBox[]>(() => {
+    const recorded = heldLocalRoster.value?.sandboxes ?? [];
+    if (!sandbox.listAnswered.value && recorded.length > 0) {
+        return recorded.map((entry) => ({ id: entry.id, name: entry.name, image: entry.image ?? null, note: recordedNote(entry) }));
+    }
+    // A logo the record already drew stays that picture when the list lands, rather than loading again from its address.
+    const thumbnails = new Map(recorded.map((entry) => [entry.id, entry.image]));
+    return arrangedSandboxes(sandbox.sandboxes.value, place.arranged.value).map((box) => ({
+        id: box.id,
+        name: box.name,
+        image: box.image === null || box.image === undefined ? null : (thumbnails.get(box.id) ?? box.image),
+        note: noteOf(box),
+    }));
+});
+
+const openBox = (box: RailBox): void => void place.openFromFolder(box.id);
+// Its settings in the hub this reader may open, known by the platform's row; a guest's is found out there otherwise.
+const openSettings = (box: RailBox): void => {
+    const guest = sandbox.sandboxes.value.find((row) => row.id === box.id)?.role === `guest`;
+    void place.openSettingsFromFolder(box.id, sandboxHubPath(guest));
+};
 
 // A tile's own menu, beside the rail at the tile's height, as Home's tiles open theirs: open it, or its settings. Never
 // a reorder: this window can only wear the workspace's order, with no way to hand one back.
 const tileMenu = ref<{ show: (event: Event) => void }>();
-const menuBox = ref<SandboxSummary>();
+const menuBox = ref<RailBox>();
 const tileMenuItems = computed<MenuItem[]>(() => {
     const box = menuBox.value;
     return box === undefined
@@ -62,7 +101,7 @@ const tileMenuItems = computed<MenuItem[]>(() => {
               { label: t(`shared.settings`), command: () => openSettings(box) },
           ];
 });
-const openTileMenu = (event: MouseEvent, box: SandboxSummary): void => {
+const openTileMenu = (event: MouseEvent, box: RailBox): void => {
     event.preventDefault();
     menuBox.value = box;
     const tile = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
@@ -97,13 +136,13 @@ const addTip = computed<TooltipValue>(() =>
             :data-rail-key="`sandbox:${box.id}`"
             data-rail-into="sandboxes"
             class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex shrink-0 items-center justify-center rounded-lg"
-            :aria-label="`${box.name} · ${noteOf(box)}`"
-            v-tooltip.right="{ title: box.name, note: noteOf(box) }"
+            :aria-label="`${box.name} · ${box.note}`"
+            v-tooltip.right="{ title: box.name, note: box.note }"
             @click="openBox(box)"
             @contextmenu="openTileMenu($event, box)"
         >
             <span class="icon-rail-picture pointer-events-none flex items-center justify-center overflow-hidden rounded-md">
-                <SandboxLogo :image="box.image ?? null" :name="box.name" class="pointer-events-none rounded-md" />
+                <SandboxLogo :image="box.image" :name="box.name" class="pointer-events-none rounded-md" />
             </span>
         </button>
         <button

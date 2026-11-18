@@ -22,6 +22,8 @@ import { dropTranscriptStore } from "./models/conversations/transcript/transcrip
 import { describeError, installClientDiagnostics, reportAutomaticReloads, reportClient, sendClientDiagnosticsWith } from "./app/clientDiagnostics";
 import { postClientDiagnostics } from "./client/sandbox/clientReport";
 import { localFace } from "./app/environments/local";
+import { localRosterAtStart } from "./features/sandbox/gates/localRoster";
+import { sleep } from "@intentic/base/async";
 import { installDesktopFullscreen, installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
 import { installAppOffer } from "./workbench/commands/appInstall";
 import { installComposingEnterGuard, installModEnterSubmit } from "@intentic/ui/keys";
@@ -94,6 +96,12 @@ if (returning) {
     // allow(silent-catch): as above.
     loadContract().catch(() => undefined);
 }
+
+// A window on a folder of this computer draws the account's sandboxes on its rail from the app's own record until the
+// platform's list lands (features/sandbox/gates/localRoster.ts): asked now, beside the start below, and waited on just before
+// the mount so the first paint already has them.
+const localRoster = localFace() === undefined ? undefined : localRosterAtStart();
+const LOCAL_ROSTER_WAIT_MS = 300;
 
 await purgeIfMarked();
 dropOutdatedMirrors(dropTranscriptStore);
@@ -217,6 +225,10 @@ app.use(VueQueryPlugin, { queryClient });
 installUi(app);
 // Every lazy chunk goes through `loadChunk`; this catches the preload Vite fails for one that doesn't.
 installChunkRecovery();
+// The app's record answers in a few milliseconds; one that does not within LOCAL_ROSTER_WAIT_MS is drawn when it does.
+if (localRoster !== undefined) {
+    await Promise.race([localRoster, sleep(LOCAL_ROSTER_WAIT_MS)]);
+}
 app.mount("#app");
 markBoot(`mount`);
 // The worker that keeps this editor openable while app.intentic.dev is down (public/sw.js), registered once loaded.
