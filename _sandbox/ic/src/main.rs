@@ -772,7 +772,7 @@ enum SandboxCommand {
         yes: bool,
     },
     /// Remove what updates left behind: images and records of sandboxes that are gone, superseded and dangling
-    /// builds, build cache no build has used in a week, stale backups, and the trash past its window. The only
+    /// builds, build cache no build has used in a week or past 40 GB, stale backups, and the trash past its window. The only
     /// volumes it deletes are those of sandboxes removed longer ago than their recovery window
     Tidy {
         /// Say what would be removed and remove nothing

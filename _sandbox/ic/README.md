@@ -334,8 +334,8 @@ flowchart LR
   `{side, env, at, snapshot, scope}`), and its worker container is named per side (`intentic-backup-<slug>-<side>`)
   (2026-10-05: one shared name let each side's `rm -f` kill the other's backup mid-run).
 - `ic sandbox tidy` removes what updates leave behind (images and records of sandboxes that are gone, superseded
-  environment builds and the ones a rebuild left dangling, build cache no build has used in a week, the trash past its
-  window) and names volumes and networks that belong to no sandbox (all four families,
+  environment builds and the ones a rebuild left dangling, build cache no build has used in a week and then the least
+  recently used past 40 GB of it, the trash past its window) and names volumes and networks that belong to no sandbox (all four families,
   `intentic-{workspace,history,docker,dind-docker}-<slug>`, and the network; never a runner's). Unattended (`--auto`,
   or no terminal: the machine agent's daily round) it moves a set nothing claims (no container, no record here, no
   trash entry, not labelled by another side) into the trash, which

@@ -983,8 +983,9 @@ flowchart LR
   before it prunes), stale git locks and temp packs at boot and hourly with no git running,
   `gc --prune=2.weeks.ago` daily while idle, parked `refs/agent/*` of conversations archived over 90 days ago daily, with their
   `refs/intentic/carried` and `refs/intentic/dropped` markers (`conversations/land/parked-ref-retention.ts`), `/history/trash` past 14 days hourly, checkouts and overlays no
-  conversation owns daily (`conversations/worktrees/orphan-checkouts.ts`), and the agents' dockerd's stopped
-  containers and dangling images daily when it already runs (`capabilities/handlers/docker-prune.ts`).
+  conversation owns daily (`conversations/worktrees/orphan-checkouts.ts`), every pnpm store the Storage card lists daily,
+  never while pnpm runs (`system/resources/storage/package-stores-chore.ts`), and the agents' dockerd's stopped
+  containers, dangling images and build cache past 5 GB daily when it already runs (`capabilities/handlers/docker-prune.ts`).
 - Held conversations (`ready`, `error`, `interrupted`, `conflict`) release their checkout and overlay after
   `heldCheckoutDays` quiet days (7 by default, zero disables), on the hourly archive pass. Work is committed first;
   the branch and board card stay, review and land read the refs, and the next turn restores the checkout. Watches,

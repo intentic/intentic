@@ -322,6 +322,10 @@
             ]
         }
     },
+    /* Local cache entries go after two weeks, at the start of the next run; turbo's default keeps every one forever. Measured
+       2026-11-18: the dev checkout's .turbo held 12.35 GB, 9.84 GB of it older than 14 days; the main checkout's 3.74 GB was
+       all older. The same 14 days CI's pnpm-setup action already ages its shared TURBO_CACHE_DIR by. */
+    "cacheMaxAge": "14d",
     /* Remote caching stays inert until all three Turbo credentials are set. */
     "remoteCache": {
         "enabled": true

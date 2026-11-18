@@ -15,7 +15,8 @@ use crate::ui;
 use crate::util::{bail, Result};
 
 /* Reclaim unused images/builds/pins under sandbox locks; never directly delete volumes. Archive stale/report-only records for 90 days.
- * Prune build cache no build has used in a week (engine-wide, so under no lock: BuildKit keeps what a build holds).
+ * Prune build cache no build has used in a week, then the least recently used above a cap (engine-wide, so under no
+ * lock: BuildKit keeps what a build holds).
  * Unclaimed volumes enter removal trash in unattended runs, retaining the seven-day undo window.
  * Remove backups only for sandboxes gone 30 days or already backed up by their current side; never remove a live sandbox's only copy. */
 
@@ -55,6 +56,15 @@ const BACKUP_CLOCK_MARGIN_MS: u64 = 60 * 60 * 1000;
 /// ours. Nothing else took it before the disk ran short (engine/disk.rs): rog held 39.45 GB, all of it reclaimable
 /// (2026-11).
 const BUILD_CACHE_UNUSED_HOURS: u64 = 7 * 24;
+
+/// The most build cache no image shares that tidy leaves once the week's rule has run, least recently used going first
+/// above it, as the CI hosts keep theirs (_tools/scripts/ci/linux-host-prune.sh). The week alone bounds nothing on an
+/// engine that builds daily: every overlay rebuild onto a new base writes a fresh chain of the recipe's steps, and on rog
+/// (2026-11-18) a dev sandbox's Android/Flutter environment rebuilt four times in five days left 85.81 GB of private,
+/// reclaimable cache, every record used within the week, so the week's prune took 0 B of it. BuildKit counts only the
+/// records no image shares toward the cap and removes them one at a time, oldest use first, so the newest build and the
+/// cache mounts it used stay warm; at this cap that day's prune would take 45.8 GB.
+const BUILD_CACHE_MAX_BYTES: u64 = 40_000_000_000;
 
 /// The longest the build cache read or prune may take, so a builder that does not answer cannot hold the daily round.
 const BUILD_CACHE_LIMIT: Duration = Duration::from_secs(600);
@@ -467,8 +477,8 @@ pub fn run(dry_run: bool, as_json: bool, auto: bool) -> Result<()> {
     /* OVERLAY BUILDS LEFT DANGLING: a rebuild retags, and the build before it keeps only its label. */
     tally.dangling = dangling_builds(dry_run);
 
-    /* BUILD CACHE no build has used in a week: after the images, whose removal can leave cache that backed them
-     * private, and so prunable. */
+    /* BUILD CACHE no build has used in a week, then the least recently used above the cap: after the images, whose
+     * removal can leave cache that backed them private, and so prunable. */
     tally.build_cache = build_cache(dry_run);
 
     /* RECORDS. */
@@ -626,28 +636,68 @@ fn dangling_builds(dry_run: bool) -> usize {
  * records), and `docker system df` names all reclaimable cache whatever its age, of the engine's builder only, and walks
  * every volume first. So it reads every record (`docker buildx du --verbose`) and adds up those the prune would take by
  * the prune's own rule ([`stale_cache_bytes`]). Docker says "last used" in whole days between two days and two weeks, so
- * a bound of whole days is read exactly, to within the half hour it rounds by. */
+ * a bound of whole days is read exactly, to within the half hour it rounds by.
+ *
+ * Then the cap ([`BUILD_CACHE_MAX_BYTES`]): a second prune, `--max-used-space`, takes the least recently used of what is
+ * left until what no image shares is under it, and a dry run adds what that would take by BuildKit's own rule
+ * ([`over_cap_bytes`]). A docker too old for the flag keeps what the week's prune took. */
 fn build_cache(dry_run: bool) -> BuildCache {
+    if dry_run {
+        return match cache_step(&["buildx", "du", "--verbose"]) {
+            Ok(stdout) => BuildCache::Reclaimed(
+                stale_cache_bytes(&stdout, BUILD_CACHE_UNUSED_HOURS)
+                    + over_cap_bytes(&stdout, BUILD_CACHE_UNUSED_HOURS, BUILD_CACHE_MAX_BYTES),
+            ),
+            Err(why) => BuildCache::Skipped(why),
+        };
+    }
     let until = format!("until={BUILD_CACHE_UNUSED_HOURS}h");
-    let args: Vec<&str> = if dry_run {
-        vec!["buildx", "du", "--verbose"]
-    } else {
-        vec!["builder", "prune", "--force", "--filter", &until]
+    let week = match cache_step(&["builder", "prune", "--force", "--filter", &until]) {
+        Ok(stdout) => crate::engine::prune_reclaimed(&stdout).unwrap_or(0),
+        Err(why) => return BuildCache::Skipped(why),
     };
-    match docker::capture_bounded(&args, BUILD_CACHE_LIMIT) {
-        Ok(ran) if ran.timed_out => BuildCache::Skipped(format!(
+    let cap = BUILD_CACHE_MAX_BYTES.to_string();
+    let capped = cache_step(&["builder", "prune", "--force", "--max-used-space", &cap])
+        .map(|stdout| crate::engine::prune_reclaimed(&stdout).unwrap_or(0))
+        .unwrap_or(0);
+    BuildCache::Reclaimed(week + capped)
+}
+
+/// One bounded docker call of the build cache step: its stdout, or why it gave none.
+fn cache_step(args: &[&str]) -> std::result::Result<String, String> {
+    match docker::capture_bounded(args, BUILD_CACHE_LIMIT) {
+        Ok(ran) if ran.timed_out => Err(format!(
             "docker {} did not finish within {} minutes",
             args[..2].join(" "),
             BUILD_CACHE_LIMIT.as_secs() / 60
         )),
-        Ok(ran) if ran.code == Some(0) => BuildCache::Reclaimed(if dry_run {
-            stale_cache_bytes(&ran.stdout, BUILD_CACHE_UNUSED_HOURS)
-        } else {
-            crate::engine::prune_reclaimed(&ran.stdout).unwrap_or(0)
-        }),
-        Ok(ran) => BuildCache::Skipped(cache_refusal(&ran.stderr)),
-        Err(crate::util::Fail(why)) => BuildCache::Skipped(why),
+        Ok(ran) if ran.code == Some(0) => Ok(ran.stdout),
+        Ok(ran) => Err(cache_refusal(&ran.stderr)),
+        Err(crate::util::Fail(why)) => Err(why),
     }
+}
+
+/// Whether a record is one a prune without --all may take: no build holds it (reclaimable), no image shares it, and it
+/// is not a frontend's or internal. Pure.
+fn prunable(record: &HashMap<&str, &str>) -> bool {
+    record.get("Reclaimable") == Some(&"true")
+        && record.get("Shared") != Some(&"true")
+        && !matches!(record.get("Type").copied(), Some("frontend" | "internal"))
+}
+
+/// Whether the week's prune takes a prunable record: last used at least `hours` ago, or never. Pure.
+fn unused_for(record: &HashMap<&str, &str>, hours: u64) -> bool {
+    record
+        .get("Last used")
+        .is_none_or(|said| last_used_hours(said).is_some_and(|ago| ago >= hours))
+}
+
+/// A record's size as du says it. Pure.
+fn record_bytes(record: &HashMap<&str, &str>) -> u64 {
+    record
+        .get("Size")
+        .and_then(|size| crate::uninstall::parse_docker_size(size.trim_end_matches('*')))
+        .unwrap_or(0)
 }
 
 /// The bytes `docker builder prune --filter until=<hours>h` would take, read off `docker buildx du --verbose`: each
@@ -655,6 +705,53 @@ fn build_cache(dry_run: bool) -> BuildCache {
 /// internal record), and last used at least `hours` ago, or never (BuildKit prunes those too). A record whose "last used"
 /// reads as nothing docker says counts as recent: the estimate errs low. Pure.
 fn stale_cache_bytes(verbose: &str, hours: u64) -> u64 {
+    cache_records(verbose)
+        .iter()
+        .filter(|record| prunable(record) && unused_for(record, hours))
+        .map(record_bytes)
+        .sum()
+}
+
+/// The bytes `docker builder prune --max-used-space <cap>` would take after the week's prune, by BuildKit's rule
+/// (cache/manager.go `prune`): every record no image shares counts toward the cap, held or not, and the prunable ones go
+/// one at a time, the least recently used first, until the count is under it. A record whose "last used" reads as
+/// nothing docker says goes last. Pure.
+fn over_cap_bytes(verbose: &str, hours: u64, cap: u64) -> u64 {
+    let records = cache_records(verbose);
+    let left: Vec<&HashMap<&str, &str>> = records
+        .iter()
+        .filter(|record| {
+            record.get("Shared") != Some(&"true")
+                && !(prunable(record) && unused_for(record, hours))
+        })
+        .collect();
+    let mut counted: u64 = left.iter().map(|record| record_bytes(record)).sum();
+    let mut oldest_first: Vec<(u64, u64)> = left
+        .iter()
+        .filter(|record| prunable(record))
+        .map(|record| {
+            let ago = record
+                .get("Last used")
+                .and_then(|said| last_used_hours(said))
+                .unwrap_or(0);
+            (ago, record_bytes(record))
+        })
+        .collect();
+    oldest_first.sort_by_key(|&(ago, _)| std::cmp::Reverse(ago));
+    let mut taken = 0;
+    for (_, bytes) in oldest_first {
+        if counted < cap {
+            break;
+        }
+        counted -= bytes;
+        taken += bytes;
+    }
+    taken
+}
+
+/// Every record `docker buildx du --verbose` lists, field by field. The totals du ends with fold into the last record
+/// without overriding it, and none of them reads `true`, so they make no record prunable or shared. Pure.
+fn cache_records(verbose: &str) -> Vec<HashMap<&str, &str>> {
     let mut records: Vec<HashMap<&str, &str>> = Vec::new();
     for line in verbose.lines() {
         // A field starts its line; an indented one is a record's parent, or a description's later lines.
@@ -674,18 +771,6 @@ fn stale_cache_bytes(verbose: &str, hours: u64) -> u64 {
         }
     }
     records
-        .iter()
-        .filter(|record| {
-            record.get("Reclaimable") == Some(&"true")
-                && record.get("Shared") != Some(&"true")
-                && !matches!(record.get("Type").copied(), Some("frontend" | "internal"))
-                && record
-                    .get("Last used")
-                    .is_none_or(|said| last_used_hours(said).is_some_and(|ago| ago >= hours))
-        })
-        .filter_map(|record| record.get("Size"))
-        .filter_map(|size| crate::uninstall::parse_docker_size(size.trim_end_matches('*')))
-        .sum()
 }
 
 /// The fewest hours a "last used" docker says (`3 weeks ago`, `About an hour ago`) can mean. Docker's humane durations
@@ -733,14 +818,15 @@ fn build_cache_row(cache: &BuildCache, dry_run: bool) -> Option<(ui::Tone, Strin
         BuildCache::Reclaimed(bytes) => Some((
             ui::Tone::Ok,
             format!(
-                "{} {} no build has used in {} days",
+                "{} {} no build has used in {} days, or past {} least recently used first",
                 if dry_run {
                     "would remove about"
                 } else {
                     "removed"
                 },
                 crate::util::human_bytes(*bytes),
-                BUILD_CACHE_UNUSED_HOURS / 24
+                BUILD_CACHE_UNUSED_HOURS / 24,
+                crate::util::human_bytes(BUILD_CACHE_MAX_BYTES)
             ),
         )),
         BuildCache::Skipped(why) => Some((
@@ -864,8 +950,8 @@ fn report(tally: &Tally, dry_run: bool, purged: &[String]) -> Value {
         "danglingBuilds": tally.dangling,
         // In a dry run, `bytes` is what the prune would take.
         "buildCache": match &tally.build_cache {
-            BuildCache::Reclaimed(bytes) => json!({ "bytes": bytes, "unusedForHours": BUILD_CACHE_UNUSED_HOURS }),
-            BuildCache::Skipped(why) => json!({ "bytes": 0, "unusedForHours": BUILD_CACHE_UNUSED_HOURS, "skipped": why }),
+            BuildCache::Reclaimed(bytes) => json!({ "bytes": bytes, "unusedForHours": BUILD_CACHE_UNUSED_HOURS, "keptBytes": BUILD_CACHE_MAX_BYTES }),
+            BuildCache::Skipped(why) => json!({ "bytes": 0, "unusedForHours": BUILD_CACHE_UNUSED_HOURS, "keptBytes": BUILD_CACHE_MAX_BYTES, "skipped": why }),
         },
         "records": tally.records,
         "recordsPruned": tally.records_pruned,
@@ -1314,6 +1400,35 @@ Total:\t\t14.9GB";
     }
 
     #[test]
+    fn the_cap_takes_the_least_recently_used_of_what_the_week_left_until_the_private_cache_is_under_it(
+    ) {
+        // Left by the week's rule and shared with no image: recent (2GB, 15 hours), six-days (3GB), old-frontend (40MB),
+        // in-use (5GB, held) and unreadable-age (7GB), 17.04GB counted toward the cap. Only the prunable ones go, oldest
+        // use first: six-days, then recent, and the unreadable age last; the held one and the frontend's never.
+        assert_eq!(
+            over_cap_bytes(DU_VERBOSE, BUILD_CACHE_UNUSED_HOURS, 100_000_000_000),
+            0,
+            "under the cap nothing goes"
+        );
+        assert_eq!(
+            over_cap_bytes(DU_VERBOSE, BUILD_CACHE_UNUSED_HOURS, 15_000_000_000),
+            3_000_000_000,
+            "six days alone brings 17.04GB under 15GB"
+        );
+        assert_eq!(
+            over_cap_bytes(DU_VERBOSE, BUILD_CACHE_UNUSED_HOURS, 13_000_000_000),
+            3_000_000_000 + 2_000_000_000,
+            "then the one used 15 hours ago"
+        );
+        assert_eq!(
+            over_cap_bytes(DU_VERBOSE, BUILD_CACHE_UNUSED_HOURS, 1),
+            3_000_000_000 + 2_000_000_000 + 7_000_000_000,
+            "never what a build holds or a frontend's"
+        );
+        assert_eq!(over_cap_bytes("", BUILD_CACHE_UNUSED_HOURS, 1), 0);
+    }
+
+    #[test]
     fn a_last_used_is_read_as_the_fewest_hours_it_can_mean() {
         for (said, hours) in [
             ("Less than a second ago", Some(0)),
@@ -1360,14 +1475,15 @@ Total:\t\t14.9GB";
             build_cache_row(&BuildCache::Reclaimed(29_280_000_000), false),
             Some((
                 ui::Tone::Ok,
-                "removed 29.3 GB no build has used in 7 days".to_string()
+                "removed 29.3 GB no build has used in 7 days, or past 40.0 GB least recently used first".to_string()
             ))
         );
         assert_eq!(
             build_cache_row(&BuildCache::Reclaimed(29_280_000_000), true),
             Some((
                 ui::Tone::Ok,
-                "would remove about 29.3 GB no build has used in 7 days".to_string()
+                "would remove about 29.3 GB no build has used in 7 days, or past 40.0 GB least recently used first"
+                    .to_string()
             ))
         );
         let missing = BuildCache::Skipped("docker buildx is not installed".to_string());
@@ -1398,7 +1514,7 @@ Total:\t\t14.9GB";
         let answer = report(&tally, false, &[]);
         assert_eq!(
             answer["buildCache"],
-            json!({ "bytes": 1_500_000_000u64, "unusedForHours": 168 })
+            json!({ "bytes": 1_500_000_000u64, "unusedForHours": 168, "keptBytes": 40_000_000_000u64 })
         );
         tally.build_cache = BuildCache::Skipped("docker gave no reason".to_string());
         let answer = report(&tally, true, &[]);

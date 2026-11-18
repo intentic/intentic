@@ -19,6 +19,7 @@ import { clearStaleGitLocks, staleGitLocksChore } from "../git/ops/stale-git-loc
 import { logsRoot, pruneLogFiles } from "../logs/log-files.js";
 import { type Chore, DAY_MS, HOUR_MS, startChoreClock } from "../system/chore-clock.js";
 import { trashSweepChore } from "../system/resources/storage/trash-sweep.js";
+import { packageStoresChore } from "../system/resources/storage/package-stores-chore.js";
 import { busySessions, coldSessionsChore } from "../sessions/cold-sessions.js";
 import { sharedClaudeStore } from "../sessions/session-store.js";
 import { listedSessionIds } from "../sessions/sessions.js";
@@ -30,7 +31,7 @@ import { mainIncrementalRelief } from "../conversations/worktrees/build-outputs/
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { diskLow } from "../push/notifications.js";
 import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-session.js";
-import { sweepAgedState } from "../workspace/watch/state-janitor.js";
+import { pruneStore, sweepAgedState } from "../workspace/watch/state-janitor.js";
 import type { BootPhase } from "./boot-phase.js";
 import { OPERATORS } from "../push/push-audience.js";
 import { worktreeOf } from "../conversations/registry/agents-store.js";
@@ -192,6 +193,12 @@ const choresOf = (phase: BootPhase): Chore[] => {
                       logger,
                   }),
                   trashSweepChore({ historyRoot: config.historyRoot, units: services.conversationUnits, transcripts: services.transcripts, logger }),
+                  // Every pnpm store the Storage card lists, through its own clean: never while an install runs.
+                  packageStoresChore({
+                      roots: () => resolveStorageRoots(services.workspace.root, config.historyRoot),
+                      prune: (storeDir) => pruneStore(storeDir, logger),
+                      logger,
+                  }),
                   // Claude sessions nobody touched in a week, compressed in place; every reader thaws one first.
                   coldSessionsChore({
                       store: sharedClaudeStore(services.workspace.root),

@@ -9,10 +9,11 @@ test("a prune runs only while no turn does and the agents' dockerd is running", 
     expect(shouldPruneDocker(0, false)).toBe(false);
 });
 
-test("stopped containers past a day and dangling images past three days, never a tagged image, volume or network", () => {
+test("stopped containers past a day, dangling images past three days and build cache past 5 GB, never a tagged image, volume or network", () => {
     expect(DOCKER_PRUNES).toEqual([
         { what: "containers", args: ["container", "prune", "--force", "--filter", "until=24h"] },
         { what: "images", args: ["image", "prune", "--force", "--filter", "until=72h"] },
+        { what: "build cache", args: ["builder", "prune", "--force", "--max-used-space", "5GB"] },
     ]);
     for (const { args } of DOCKER_PRUNES) {
         expect(args).not.toContain("--all");
@@ -24,10 +25,12 @@ test("stopped containers past a day and dangling images past three days, never a
 test("what docker reclaimed is read off its own summary line", () => {
     expect(reclaimedSpace("Deleted Images:\ndeleted: sha256:4f2e\n\nTotal reclaimed space: 1.204GB\n")).toBe("1.204GB");
     expect(reclaimedSpace("Total reclaimed space: 0B")).toBe("0B");
+    // buildx's prune of the build cache ends on a table's total instead.
+    expect(reclaimedSpace("ID\tRECLAIMABLE\tSIZE\tLAST ACCESSED\nq3x\ttrue\t1.2GB\t2 weeks ago\nTotal:\t9.05GB\n")).toBe("9.05GB");
     expect(reclaimedSpace("")).toBeUndefined();
 });
 
-test("the chore is held by a live turn or a stopped engine, and prunes both through the agents' own engine", async () => {
+test("the chore is held by a live turn or a stopped engine, and prunes all three through the agents' own engine", async () => {
     let live: string[] = ["calm-vale-gbmd"];
     let running = true;
     const asked: string[] = [];
@@ -62,8 +65,12 @@ test("the chore is held by a live turn or a stopped engine, and prunes both thro
     expect(new Set(asked)).toEqual(new Set([DOCKER_PANEL_KEY]));
 
     await chore.run();
-    expect(calls.map((call) => call.args[0])).toEqual(["container", "image"]);
+    expect(calls.map((call) => call.args[0])).toEqual(["container", "image", "builder"]);
     expect(calls.every((call) => call.env["DOCKER_HOST"] === AGENTS_DOCKER_HOST)).toBe(true);
-    // One prune failing does not keep the other from running, and each says what it did.
-    expect(logged).toEqual([{ what: "containers", reclaimed: "12.5MB" }, expect.objectContaining({ what: "images" })]);
+    // One prune failing does not keep the others from running, and each says what it did.
+    expect(logged).toEqual([
+        { what: "containers", reclaimed: "12.5MB" },
+        expect.objectContaining({ what: "images" }),
+        { what: "build cache", reclaimed: "12.5MB" },
+    ]);
 });

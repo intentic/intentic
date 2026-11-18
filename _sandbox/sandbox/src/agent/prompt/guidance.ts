@@ -274,11 +274,16 @@ const ENTRIES: readonly GuidanceEntry[] = [
     {
         id: "refs",
         // REFERENCE_DIR in @intentic/workspace-ignore.
+        // Blobless clones (2026-11-18): this sandbox's shelf held 31 GB in 74 full clones, 24.8 GB of it history no study
+        // reads. Measured against four of them that day, `--filter=blob:none` kept 11% of the history bytes (openclaw
+        // 10.2 GB to 0.78 GB) while `git log`, `git log -- <path>` and every tree stay local; an old revision's file
+        // contents come from the remote when first asked for. `--depth 1` kept 4% but leaves no history to study.
         text:
             "The workspace's top-level `refs/` directory is a reference shelf, NOT part of the project: read it when a " +
             "task points there, never edit it or treat its contents as workspace code, and clone an external codebase " +
-            "you are asked to study into it rather than the workspace root. It is left out of workspace views, default " +
-            "search, dependency setup and sync on purpose.",
+            "you are asked to study into it rather than the workspace root, with `git clone --filter=blob:none` (full " +
+            "history to browse, a tenth of a full clone's disk). It is left out of workspace views, default search, " +
+            "dependency setup and sync on purpose.",
     },
     {
         id: "public",

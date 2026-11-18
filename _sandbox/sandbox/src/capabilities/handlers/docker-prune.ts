@@ -8,8 +8,16 @@ import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
 // every stopped container an agent left and every image a rebuild replaced stays in its data root (13 GB on one
 // sandbox). Daily, while no turn runs and only while the dockerd this daemon started (or adopted at boot) is running,
 // stopped containers older than a day and dangling images older than three days are pruned, as docker's own prune
-// decides; a tagged image is never touched (no `--all`), nor a volume, a network or the build cache. Never starts
-// dockerd to prune: an engine that is not running holds nothing that grows.
+// decides; a tagged image is never touched (no `--all`), nor a volume or a network. Never starts dockerd to prune: an
+// engine that is not running holds nothing that grows.
+//
+// BUILD CACHE KEPT UNDER 5 GB (2026-11-18), least recently used first, as the CI hosts' prune keeps theirs
+// (_tools/scripts/ci/linux-host-prune.sh). BuildKit counts only what no image shares toward the cap and removes one
+// record at a time, oldest use first, until it is under, so the newest builds stay warm; without `--all` it never takes a
+// frontend or internal record. Measured on the intentic sandbox's engine that day: 14.92 GB of build cache, 10.69 GB of
+// it reclaimable and 9.05 GB unshared and unused for 7 to 30 days, which nothing had ever removed. The week rule ic's
+// tidy keeps for the host engine (`--filter until=168h`) took 0 B of it; an unfiltered prune took 10.65 GB, and every
+// tagged image still ran.
 
 // The engine the docker capability starts (`dockerd` with no `-H`, docker.handler.ts) listens here. Named rather than
 // inherited, so an agent's DOCKER_HOST or docker context can never point a prune at some other engine.
@@ -18,18 +26,21 @@ export const AGENTS_DOCKER_HOST = "unix:///var/run/docker.sock";
 // A prune walks every container or image; generous, and still bounded.
 const PRUNE_TIMEOUT_MS = 10 * 60_000;
 
-export const DOCKER_PRUNES: readonly { readonly what: "containers" | "images"; readonly args: readonly string[] }[] = [
+export const DOCKER_PRUNES: readonly { readonly what: "containers" | "images" | "build cache"; readonly args: readonly string[] }[] = [
     { what: "containers", args: ["container", "prune", "--force", "--filter", "until=24h"] },
     // Dangling only: without `--all` an image some tag still names is never a candidate.
     { what: "images", args: ["image", "prune", "--force", "--filter", "until=72h"] },
+    // Least recently used first, down to 5 GB of what no image shares; without `--all` a record an image shares stays.
+    { what: "build cache", args: ["builder", "prune", "--force", "--max-used-space", "5GB"] },
 ];
 
 // Whether now is a time to prune: no turn mid-flight (a prune contends with an agent's own docker work), and the
 // agents' dockerd running under this daemon.
 export const shouldPruneDocker = (liveTurns: number, dockerdRunning: boolean): boolean => liveTurns === 0 && dockerdRunning;
 
-// docker's own summary line, `Total reclaimed space: 1.2GB`, as it says it; undefined when it printed none.
-export const reclaimedSpace = (stdout: string): string | undefined => /^Total reclaimed space:\s*(\S.*?)\s*$/mu.exec(stdout)?.[1];
+// docker's own summary line as it says it: `Total reclaimed space: 1.2GB` from a container or image prune, `Total:\t1.2GB`
+// from buildx's prune of the build cache; undefined when it printed none.
+export const reclaimedSpace = (stdout: string): string | undefined => /^Total(?: reclaimed space)?:\s*(\S.*?)\s*$/mu.exec(stdout)?.[1];
 
 export interface DockerPruneDeps {
     // services.processes: whether the dockerd session (DOCKER_PANEL_KEY) is running, started or adopted at boot.
