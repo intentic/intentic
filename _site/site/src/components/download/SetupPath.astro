@@ -1,0 +1,152 @@
+---
+import Corners from "../Corners.astro";
+import { BRAND, glyph, mark, type GlyphName } from "./glyphs";
+
+/* FROM DOWNLOAD TO WORKSPACE, as the four things that happen in order. It sits beside the download button on purpose:
+   setup changes a PC more than an installer usually does, so what it costs is drawn before anybody presses.
+   Figures: _sandbox/ic/src/prepare/plan.rs. */
+
+interface Step {
+    glyph: GlyphName;
+    title: string;
+    sub: string;
+}
+
+const steps: Step[] = [
+    { glyph: "download", title: "Install the app", sub: "Windows or Linux, from below" },
+    { glyph: "signIn", title: "Sign in", sub: "Google, or a code sent to your email" },
+    { glyph: "play", title: "Press Run on this computer", sub: "The app installs intentic's container engine" },
+];
+---
+
+<div class="frame relative p-6 sm:p-8">
+    <Corners set="diag" />
+    <ol class="setup" aria-label="What happens after you download">
+        {
+            steps.map((step, at) => (
+                <li class="setup-step">
+                    <span class="setup-node" set:html={glyph(step.glyph, "h-[1.15rem] w-[1.15rem]")} />
+                    <div class="min-w-0 pb-7">
+                        <p class="flex items-baseline gap-2.5 font-mark text-[1.0625rem] leading-snug text-content">
+                            <span class="text-xs text-gold tabular-nums">{at + 1}</span>
+                            {step.title}
+                        </p>
+                        <p class="mt-0.5 pl-[1.15rem] text-sm text-muted">{step.sub}</p>
+                        {
+                            at === steps.length - 1 && (
+                                <div class="mt-3 pl-[1.15rem]" data-engine-disclosure>
+                                    <ul class="flex flex-wrap gap-2" aria-label="What the first setup takes">
+                                        <li class="setup-cost">
+                                            <span set:html={glyph("disk", "h-4 w-4")} />
+                                            <span>
+                                                <strong class="font-semibold text-content">1.9 GB</strong> download
+                                            </span>
+                                        </li>
+                                        <li class="setup-cost">
+                                            <span set:html={glyph("clock", "h-4 w-4")} />
+                                            <span>
+                                                about <strong class="font-semibold text-content">15 min</strong>
+                                            </span>
+                                        </li>
+                                    </ul>
+                                    <p class="mt-3 flex gap-2.5 text-xs leading-relaxed text-subtle">
+                                        <span class="mark docker-blue" set:html={mark(BRAND.docker, "h-4 w-4")} />
+                                        <span>
+                                            <strong class="font-medium text-muted">Docker Desktop here?</strong> Its sandboxes move to the new engine. Each
+                                            pauses while its files copy, and Docker Desktop keeps its copy for 7 days.
+                                        </span>
+                                    </p>
+                                </div>
+                            )
+                        }
+                    </div>
+                </li>
+            ))
+        }
+        <li class="setup-step setup-done">
+            <span class="setup-node" set:html={glyph("check", "h-[1.15rem] w-[1.15rem]")} />
+            <div class="min-w-0">
+                <p class="font-mark text-[1.0625rem] leading-snug text-content">Your workspace opens</p>
+                <p class="mt-0.5 text-sm text-muted">The sandbox runs on this computer</p>
+            </div>
+        </li>
+    </ol>
+</div>
+
+<style>
+    /* Each step is a node and its words; the rail runs from one node down to the next behind the words' column. */
+    .setup-step {
+        position: relative;
+        display: grid;
+        grid-template-columns: 2.75rem minmax(0, 1fr);
+        column-gap: 1.1rem;
+    }
+    .setup-step:not(:last-child)::before {
+        content: "";
+        position: absolute;
+        top: 2.6rem;
+        bottom: 0.15rem;
+        left: calc(1.375rem - 0.5px);
+        width: 1px;
+        background: var(--color-line-strong);
+    }
+    /* The leg that takes the time: from pressing Run to the workspace. Ember, and dashed, because it is a wait. */
+    .setup-step:nth-last-child(2)::before {
+        width: 0;
+        background: none;
+        border-left: 1px dashed var(--role-ember-line-strong);
+    }
+
+    /* THE NODE IS THE HOUSE LOZENGE, a square stood on its point, with the glyph upright inside it. */
+    .setup-node {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        color: var(--color-gold);
+    }
+    .setup-node::before {
+        content: "";
+        position: absolute;
+        inset: 0.42rem;
+        transform: rotate(45deg);
+        border: 1px solid var(--color-line-strong);
+        background: var(--role-frame-fill);
+    }
+    .setup-node :global(svg) {
+        position: relative;
+    }
+    .setup-done .setup-node {
+        color: var(--color-primary-400);
+    }
+    .setup-done .setup-node::before {
+        border-color: var(--role-ember-line-strong);
+        background: var(--wash-ember);
+        box-shadow: var(--role-ember-glow);
+    }
+
+    /* The two costs, as figures a reader can take in without reading the sentence around them. */
+    .setup-cost {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.3rem 0.65rem;
+        font-size: 0.8125rem;
+        color: var(--color-muted);
+        border: 1px solid var(--role-ember-line);
+        background: var(--role-decision-fill);
+    }
+    .setup-cost :global(svg) {
+        display: block;
+        color: var(--color-primary-400);
+    }
+
+    /* Docker's own blue: the whale is a brand fact, so it keeps its colour, a step deeper on paper. */
+    .docker-blue {
+        color: #1d63ed;
+    }
+    :global(html[data-variant="desk"]) .docker-blue {
+        color: #1d4fbf;
+    }
+</style>

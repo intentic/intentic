@@ -1,161 +1,213 @@
 ---
 import { latestRelease } from "@intentic/astro-integrations";
-import { APP_URL } from "@intentic/site-content/site";
+import { APP_URL, DEMO_PATH } from "@intentic/site-content/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
+import ExternalIcon from "../components/ExternalIcon.astro";
+import PlatformTiles from "../components/download/PlatformTiles.astro";
+import SameSandbox from "../components/download/SameSandbox.astro";
+import SetupPath from "../components/download/SetupPath.astro";
+import { glyph, type GlyphName } from "../components/download/glyphs";
 import { desktopPlatforms } from "../lib/desktop-downloads";
 import { formatReleaseDate } from "../lib/release";
 
-/* THE DOWNLOAD PAGE: the answer to the one objection the quickstart raises. */
+/* THE DOWNLOAD PAGE: the answer to the one objection the quickstart raises. Read top to bottom it is: what you get,
+   what setup will do (beside the button, before anybody presses), which file, what the app does after, that it is the
+   same sandbox as the command, and the ways out for someone who will not install anything. */
 
 const release = await latestRelease();
 
-/* Name, link and glyph come from the shared table, so this page and the hero's button can never drift into pointing at different files. */
-const downloads = [
-    {
-        ...desktopPlatforms.windows,
-        note: "Windows 10 and 11, 64-bit",
-        label: "Download for Windows",
-        sub: ".exe installer · installs for your user, no admin rights",
-    },
-    {
-        ...desktopPlatforms.linux,
-        note: "64-bit, glibc 2.39 or newer: Ubuntu 24.04, Debian 13, Fedora 40 and later",
-        label: "Download AppImage",
-        sub: "AppImage · chmod +x and run",
-    },
-];
-
-const alternatives = [
-    { label: ".deb", href: "/desktop/deb", note: "Ubuntu 24.04+, Debian 13+" },
-    { label: ".rpm", href: "/desktop/rpm", note: "Fedora 40+, RHEL, AlmaLinux and Rocky 10+, openSUSE Tumbleweed and Leap 16" },
-];
+// The hero's button, narrowed by the page's script to the reader's system. Without a match it scrolls to the tiles.
+const heroTargets = {
+    windows: { href: desktopPlatforms.windows.href, label: `Download for ${desktopPlatforms.windows.name}` },
+    linux: { href: desktopPlatforms.linux.href, label: `Download for ${desktopPlatforms.linux.name}` },
+    macos: { href: `${APP_URL}/setup?machine=mine`, label: "Get the macOS command" },
+};
 
 // What the app does that a browser cannot. Each one is a place the browser has to hand out a command today.
-const does = [
+const does: { glyph: GlyphName; title: string; body: string }[] = [
+    { glyph: "cube", title: "Sets it all up", body: "Container engine, sandbox and private connection, then your workspace." },
+    { glyph: "update", title: "Updates in one click", body: "Sandbox updates run on this computer. A button, not a command." },
+    { glyph: "power", title: "Back after a reboot", body: "The sandbox restarts with the engine. Start, stop or read logs from the tray." },
+];
+
+const keeps: { glyph: GlyphName; title: string; body: string; link?: { href: string; label: string } }[] = [
+    { glyph: "keep", title: "Uninstalling keeps your sandbox", body: "Files and history stay in Docker until you remove them." },
     {
-        title: "Installs and starts your sandbox",
-        body: "The app installs its own container engine if needed, starts the sandbox and its private connection, then opens your workspace.",
+        glyph: "shield",
+        title: "The app updates itself",
+        body: "Every update promises what it keeps.",
+        link: { href: "/docs/updates/", label: "Read the promises" },
     },
-    {
-        title: "Updates it with a button",
-        body: "Updates must run on the same computer as the sandbox. The app handles them with a click instead of a terminal command.",
-    },
-    {
-        title: "Starts again after a reboot",
-        body: "The sandbox restarts with Docker. Use the tray app to start it, stop it or read its logs.",
-    },
+];
+
+const exits: { glyph: GlyphName; title: string; body: string; href: string }[] = [
+    { glyph: "cloud", title: "Use it in your browser", body: "A hosted workspace. Nothing to install.", href: APP_URL },
+    { glyph: "eye", title: "Look around first", body: "The real app on a sample workspace.", href: DEMO_PATH },
+    { glyph: "compare", title: "Compare where it runs", body: "This computer, or a machine we host.", href: "/where-it-runs/" },
 ];
 ---
 
 <BaseLayout breadcrumbs={[{ name: "Download", path: "/download/" }]}>
     <Nav />
     <main class="flex-1">
-        <section class="below-bar mx-auto max-w-5xl px-6 pb-16">
-            <h1 class="display text-4xl font-semibold max-sm:text-3xl">Run intentic without a terminal</h1>
-            <p class="mt-4 max-w-copy text-lg text-muted">
-                Install the desktop app, sign in and click <strong class="text-content">Run on this computer</strong>. The app sets up the same
-                sandbox you can run from the command line.
-            </p>
-
-            {/* Said before the download, because setup changes the PC more than an installer usually does. Figures: _sandbox/ic/src/prepare/plan.rs. */}
-            <p class="mt-4 max-w-copy text-sm text-muted" data-engine-disclosure>
-                <strong class="font-medium text-content">What setup does to this PC.</strong> The app installs intentic's own container engine:
-                about 1.9 GB to download and about 15 minutes. If Docker Desktop is already on the PC, your existing sandboxes move to the new
-                engine. Each one stops while its files are copied, and Docker Desktop keeps its copy for 7 days. Rather not? Use a{" "}
-                <a href={APP_URL} class="text-link hover:underline">hosted workspace in your browser</a> instead.
-            </p>
-
-            <div class="mt-10 grid gap-4 sm:grid-cols-2">
-                {
-                    downloads.map((download) => (
-                        <a
-                            href={download.href}
-                            class="group flex flex-col gap-3 border border-line bg-surface p-6 transition-colors hover:border-primary-600/50"
-                        >
-                            <span class="flex items-center gap-3">
-                                <svg viewBox="0 0 24 24" class="h-6 w-6 fill-current text-muted" aria-hidden="true">
-                                    <path d={download.icon} />
-                                </svg>
-                                <span class="text-lg font-semibold text-content">{download.name}</span>
-                            </span>
-                            <span class="text-sm font-medium text-link group-hover:underline">{download.label}</span>
-                            <span class="text-xs text-subtle">{download.sub}</span>
-                            <span class="mt-auto pt-2 text-xs text-subtle">{download.note}</span>
-                        </a>
-                    ))
-                }
-            </div>
-
-            {/* Keep the link before punctuation so formatting cannot add a visible gap. */}
-            {
-                release !== null && (
-                    <p class="mt-4 max-w-copy text-xs text-subtle" data-release-label data-built-version={release.version}>
-                        Version <strong class="font-medium text-muted" data-release-version>{release.version}</strong>, released{" "}
-                        <span data-release-date>{formatReleaseDate(release.date)}</span>. Each download is named for its version, so you can
-                        always tell which build you have.{" "}
-                        <a href={release.notes} target="_blank" rel="noopener" class="text-link hover:underline" data-release-notes>
-                            What's new
-                        </a>
+        <section class="below-bar mx-auto max-w-6xl px-6 pb-14">
+            <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-16">
+                <div>
+                    <h1 class="display text-5xl max-sm:text-[2.35rem]">Run intentic without a terminal</h1>
+                    <p class="mt-5 max-w-copy text-lg leading-relaxed text-muted">
+                        Install the app, sign in and press <strong class="font-medium text-content">Run on this computer</strong>. It sets up the
+                        same sandbox as the command line.
                     </p>
-                )
-            }
 
-            <p class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-subtle">
-                <span>Other Linux packages:</span>
-                {
-                    alternatives.map((alternative) => (
-                        <a href={alternative.href} class="text-link hover:underline">
-                            {alternative.label} <span class="text-subtle">({alternative.note})</span>
+                    <div class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-4">
+                        <a href="#platforms" class="btn btn-primary" data-hero-cta data-targets={JSON.stringify(heroTargets)}>
+                            <span set:html={glyph("download", "btn-icon")} />
+                            <span data-hero-label>Choose your download</span>
                         </a>
-                    ))
-                }
-            </p>
-            <p class="mt-2 max-w-copy text-xs text-subtle">
-                No macOS build yet. On a Mac, use the <a href="/docs/quickstart/" class="text-link hover:underline">one-line install</a>. It
-                does exactly the same thing.
-            </p>
-            {/* The floor is declared in the desktop app's tauri.conf.json and enforced by verify-desktop-bundle.sh; move the two together. */}
-            <p class="mt-2 max-w-copy text-xs text-subtle">
-                Every Linux download, the AppImage included, needs glibc 2.39 or newer, so Ubuntu 22.04, Debian 12 and RHEL 9 cannot run
-                it. The one-line install works there too.
-            </p>
-            {/* The setup link follows downloads for readers who still need to choose a machine. */}
-            <p class="mt-2 max-w-copy text-xs text-subtle">
-                The app is for running the sandbox on <strong class="text-muted">this</strong> computer. It can also run on a machine we
-                host: <a href="/where-it-runs/" class="text-link hover:underline">compare the two</a>.
-            </p>
-        </section>
+                        <a href="#platforms" class="text-sm text-link hover:underline">All platforms</a>
+                    </div>
 
-        <section class="mx-auto max-w-5xl px-6 pb-16">
-            <div class="grid gap-6 sm:grid-cols-3">
-                {
-                    does.map((item) => (
-                        <div class="flex flex-col gap-2">
-                            <h2 class="text-base font-semibold text-content">{item.title}</h2>
-                            <p class="text-sm text-muted">{item.body}</p>
-                        </div>
-                    ))
-                }
+                    {/* Keep the link before punctuation so formatting cannot add a visible gap. */}
+                    {
+                        release !== null && (
+                            <p
+                                class="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-subtle"
+                                data-release-label
+                                data-built-version={release.version}
+                            >
+                                {/* Two groups, so a narrow column breaks between what the build is and what to do about it. */}
+                                <span class="inline-flex flex-wrap items-center gap-x-4 gap-y-1">
+                                    <span class="inline-flex items-center gap-1.5">
+                                        <span set:html={glyph("tag", "h-3.5 w-3.5 text-gold")} />
+                                        Version <strong class="font-medium text-muted" data-release-version>{release.version}</strong>
+                                    </span>
+                                    <span>
+                                        Released <span data-release-date>{formatReleaseDate(release.date)}</span>
+                                    </span>
+                                </span>
+                                <span class="inline-flex flex-wrap items-center gap-x-4 gap-y-1">
+                                    <a href={release.notes} target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-link hover:underline" data-release-notes>
+                                        What's new
+                                        <ExternalIcon />
+                                    </a>
+                                    <a href="/about/#verify" class="inline-flex items-center gap-1.5 text-link hover:underline">
+                                        <span set:html={glyph("shield", "h-3.5 w-3.5")} />
+                                        Verify the download
+                                    </a>
+                                </span>
+                            </p>
+                        )
+                    }
+                </div>
+
+                <SetupPath />
             </div>
         </section>
 
-<!-- Said plainly rather than buried: someone who is weighing an .exe against a shell command deserves to know they are the same thing. -->
-        <section class="mx-auto max-w-5xl px-6 pb-24">
-            <div class="border border-line bg-surface p-6">
-                <h2 class="text-lg font-semibold text-content">The app runs the standard setup for you</h2>
-                {/* Two columns keep the card's paragraphs at a readable measure. */}
-                <div class="mt-3 grid gap-x-10 gap-y-3 sm:grid-cols-2">
-                    <p class="max-w-copy text-sm text-muted">
-                        The app runs the same script as the <a href="/docs/quickstart/" class="text-link hover:underline">one-line install</a>.
-                        It creates the same Docker containers and private connection. You can still sign in at{" "}
-                        <a href={APP_URL} class="text-link hover:underline">app.intentic.dev</a> from any device to reach the same sandbox.
-                    </p>
-                    <p class="max-w-copy text-sm text-muted">
-                        The app updates itself. Removing the app does not delete your sandbox, files or history; they stay in Docker until you
-                        remove them. Read <a href="/docs/updates/" class="text-link hover:underline">what every update promises to preserve</a>.
-                    </p>
+        <section id="platforms" class="mx-auto max-w-6xl px-6 pb-20" aria-labelledby="platforms-heading">
+            <h2 id="platforms-heading" class="sr-only">Downloads</h2>
+            <PlatformTiles />
+        </section>
+
+        {/* The reader's system lights its tile and names the hero's button. Inline, right after both, so neither repaints late. */}
+        <script is:inline>
+            (() => {
+                // userAgentData.platform where it exists ("Windows", "Linux", "macOS", "Android"), the user-agent string where
+                // it does not. Phones and ChromeOS get neither build, and an iPhone's user agent also says "Mac OS X".
+                const hint = navigator.userAgentData?.platform || navigator.userAgent;
+                const key = /Android|CrOS|iPhone|iPad/i.test(hint)
+                    ? null
+                    : /Win/i.test(hint)
+                      ? "windows"
+                      : /Mac/i.test(hint)
+                        ? "macos"
+                        : /Linux|X11/i.test(hint)
+                          ? "linux"
+                          : null;
+                if (!key) {
+                    return;
+                }
+                document.querySelector(`[data-platform="${key}"]`)?.setAttribute("data-here", "");
+                const cta = document.querySelector("[data-hero-cta]");
+                const target = cta && JSON.parse(cta.dataset.targets || "{}")[key];
+                if (target) {
+                    cta.href = target.href;
+                    cta.querySelector("[data-hero-label]").textContent = target.label;
+                }
+            })();
+        </script>
+
+        <section class="band-rule border-t">
+            <div class="mx-auto max-w-6xl px-6 py-16 lg:py-20">
+                <h2 class="display text-2xl sm:text-3xl">After setup, the app runs it</h2>
+                {/* One strip, three cells: the three things a browser would otherwise hand you a command for. */}
+                <ul class="strip mt-8 grid sm:grid-cols-3">
+                    {
+                        does.map((item) => (
+                            <li class="flex items-start gap-5 p-6 sm:block sm:p-8">
+                                <span class="niche" set:html={glyph(item.glyph, "h-6 w-6")} />
+                                <div>
+                                    <h3 class="text-lg text-content sm:mt-5">{item.title}</h3>
+                                    <p class="mt-1.5 max-w-[32ch] text-sm leading-relaxed text-muted">{item.body}</p>
+                                </div>
+                            </li>
+                        ))
+                    }
+                </ul>
+            </div>
+        </section>
+
+        <section class="band-rule border-t">
+            <div class="mx-auto max-w-6xl px-6 py-16 lg:py-20">
+                <h2 class="display text-2xl sm:text-3xl">Same sandbox, either way</h2>
+                <p class="mt-2 max-w-copy text-sm text-muted">The app runs the one-line install's own script for you.</p>
+                <div class="mt-10">
+                    <SameSandbox />
+                </div>
+                <ul class="mt-12 grid gap-6 sm:grid-cols-2">
+                    {
+                        keeps.map((item) => (
+                            <li class="flex gap-4">
+                                <span class="niche niche-sm" set:html={glyph(item.glyph, "h-5 w-5")} />
+                                <div>
+                                    <p class="font-mark text-base text-content">{item.title}</p>
+                                    <p class="mt-0.5 text-sm text-muted">
+                                        {item.body}
+                                        {item.link && (
+                                            <>
+                                                {" "}
+                                                <a href={item.link.href} class="text-link hover:underline">
+                                                    {item.link.label}
+                                                </a>
+                                            </>
+                                        )}
+                                    </p>
+                                </div>
+                            </li>
+                        ))
+                    }
+                </ul>
+            </div>
+        </section>
+
+        <section class="band-rule border-t">
+            <div class="mx-auto max-w-6xl px-6 pt-16 pb-24 lg:pt-20">
+                <h2 class="display text-2xl sm:text-3xl">Not installing on this computer?</h2>
+                <div class="mt-8 grid gap-4 md:grid-cols-3">
+                    {
+                        exits.map((exit) => (
+                            <a href={exit.href} class="exit card group flex items-center gap-4 p-5 no-underline">
+                                <span class="niche niche-sm" set:html={glyph(exit.glyph, "h-5 w-5")} />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block font-mark text-base text-content">{exit.title}</span>
+                                    <span class="block text-sm text-muted">{exit.body}</span>
+                                </span>
+                                <span class="exit-arrow" set:html={glyph("arrow", "h-4 w-4")} />
+                            </a>
+                        ))
+                    }
                 </div>
             </div>
         </section>
@@ -191,3 +243,57 @@ const does = [
             });
     }
 </script>
+
+<style>
+    /* A glyph set in a carved square: the same niche the menu sets its glyphs in, at content scale. */
+    .niche {
+        display: grid;
+        place-items: center;
+        width: 3.25rem;
+        height: 3.25rem;
+        flex: none;
+        color: var(--color-gold);
+        border: 1px solid var(--color-line-strong);
+        background: var(--role-frame-fill);
+    }
+    .niche :global(svg) {
+        display: block;
+    }
+    .niche-sm {
+        width: 2.75rem;
+        height: 2.75rem;
+        border-color: var(--color-line);
+    }
+
+    .strip {
+        border: 1px solid var(--color-line);
+        background: var(--wash-panel);
+    }
+    .strip > li + li {
+        border-top: 1px solid var(--color-line);
+    }
+    @media (min-width: 40rem) {
+        .strip > li + li {
+            border-top: 0;
+            border-left: 1px solid var(--color-line);
+        }
+    }
+
+    .exit-arrow {
+        flex: none;
+        color: var(--color-subtle);
+        transition:
+            color 0.2s ease,
+            transform 0.2s ease;
+    }
+    .exit:hover .exit-arrow,
+    .exit:focus-visible .exit-arrow {
+        color: var(--color-link);
+        transform: translateX(3px);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .exit-arrow {
+            transition: none;
+        }
+    }
+</style>

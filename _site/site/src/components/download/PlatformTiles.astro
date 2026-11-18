@@ -1,0 +1,215 @@
+---
+import { APP_URL } from "@intentic/site-content/site";
+import { desktopPlatforms } from "../../lib/desktop-downloads";
+import { BRAND, glyph, mark } from "./glyphs";
+
+/* ONE TILE PER SYSTEM, each answering "is this mine, will it run, which file". The reader's own system is lit by the
+   page's script (data-here); without it every tile reads the same. Names and links come from the shared table, so this
+   page and the bar's button never point at different files. */
+
+// The glibc floor is declared in the desktop app's tauri.conf.json and enforced by verify-desktop-bundle.sh; move the
+// three together.
+const distros = [
+    { name: "Ubuntu", from: "24.04", path: BRAND.ubuntu },
+    { name: "Debian", from: "13", path: BRAND.debian },
+    { name: "Fedora", from: "40", path: BRAND.fedora },
+];
+
+const packages = [
+    { label: ".deb", href: "/desktop/deb", title: "Debian package: Ubuntu 24.04+, Debian 13+" },
+    { label: ".rpm", href: "/desktop/rpm", title: "RPM package: Fedora 40+, RHEL, AlmaLinux and Rocky 10+, openSUSE Tumbleweed and Leap 16" },
+];
+
+// The Mac path is the one-line install, and that line carries a setup code only the setup screen can hand out.
+const macSetup = `${APP_URL}/setup?machine=mine`;
+---
+
+<div class="grid gap-5 lg:grid-cols-3">
+    <article class="tile" data-platform="windows" aria-labelledby="tile-windows">
+        <span class="tile-here">This computer</span>
+        <header class="flex items-center gap-4">
+            <span class="tile-logo" set:html={mark(desktopPlatforms.windows.icon, "h-8 w-8")} />
+            <div>
+                <h3 id="tile-windows" class="text-xl text-content">{desktopPlatforms.windows.name}</h3>
+                <p class="text-sm text-subtle">10 and 11, 64-bit</p>
+            </div>
+        </header>
+        <ul class="tile-body flex flex-col gap-2.5 text-sm text-muted">
+            <li class="flex items-center gap-2.5"><span set:html={glyph("check", "h-4 w-4 shrink-0 text-success")} />One .exe installer</li>
+            <li class="flex items-center gap-2.5"><span set:html={glyph("check", "h-4 w-4 shrink-0 text-success")} />Installs for your user, no admin rights</li>
+        </ul>
+        <a href={desktopPlatforms.windows.href} class="btn btn-secondary w-full" data-tile-cta>
+            <span set:html={glyph("download", "btn-icon")} />
+            Download .exe
+        </a>
+    </article>
+
+    <article class="tile" data-platform="linux" aria-labelledby="tile-linux">
+        <span class="tile-here">This computer</span>
+        <header class="flex items-center gap-4">
+            <span class="tile-logo" set:html={mark(desktopPlatforms.linux.icon, "h-8 w-8")} />
+            <div>
+                <h3 id="tile-linux" class="text-xl text-content">{desktopPlatforms.linux.name}</h3>
+                <p class="text-sm text-subtle">x86-64, glibc 2.39 or newer</p>
+            </div>
+        </header>
+        <div class="tile-body">
+            <ul class="grid grid-cols-3 gap-1.5" aria-label="Runs on">
+                {
+                    distros.map((distro) => (
+                        <li class="distro">
+                            <span set:html={mark(distro.path, "h-[1.1rem] w-[1.1rem]")} />
+                            <span class="min-w-0 leading-tight">
+                                <span class="block text-2xs text-subtle">{distro.name}</span>
+                                <span class="block text-sm font-medium text-content tabular-nums">{distro.from}+</span>
+                            </span>
+                        </li>
+                    ))
+                }
+            </ul>
+            <p class="mt-3.5 flex gap-2.5 text-xs leading-relaxed text-subtle">
+                <span class="mark" set:html={glyph("caution", "h-4 w-4 text-warning")} />
+                <span>
+                    Ubuntu 22.04, Debian 12 or RHEL 9? Use the <a href="/docs/quickstart/" class="text-link hover:underline">one-line install</a>.
+                </span>
+            </p>
+        </div>
+        <div class="flex gap-2">
+            <a href={desktopPlatforms.linux.href} class="btn btn-secondary flex-1" aria-label="Download the AppImage" data-tile-cta>
+                <span set:html={glyph("download", "btn-icon")} />
+                AppImage
+            </a>
+            {
+                packages.map((item) => (
+                    <a href={item.href} class="btn btn-secondary px-4" title={item.title}>
+                        {item.label}
+                    </a>
+                ))
+            }
+        </div>
+    </article>
+
+    <article class="tile" data-platform="macos" aria-labelledby="tile-macos">
+        <span class="tile-here">This computer</span>
+        <header class="flex items-center gap-4">
+            <span class="tile-logo" set:html={mark(BRAND.apple, "h-8 w-8")} />
+            <div>
+                <h3 id="tile-macos" class="text-xl text-content">macOS</h3>
+                <p class="text-sm text-subtle">No app yet, one command instead</p>
+            </div>
+        </header>
+        <div class="tile-body">
+            {/* A picture of the line, not the line: the real one carries the reader's own setup code. */}
+            <div class="term" aria-hidden="true">
+                <span class="text-subtle select-none">$</span> curl -fsSL intentic.dev/connect | sh
+            </div>
+            <p class="mt-3.5 flex items-center gap-2.5 text-sm text-muted">
+                <span set:html={glyph("check", "h-4 w-4 shrink-0 text-success")} />The same sandbox the app sets up
+            </p>
+        </div>
+        <a href={macSetup} class="btn btn-secondary w-full">
+            <span set:html={glyph("terminal", "btn-icon")} />
+            Get the command
+        </a>
+    </article>
+</div>
+
+<style>
+    .tile {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        padding: 1.6rem;
+        border: 1px solid var(--color-line);
+        background: var(--wash-panel);
+        transition:
+            border-color 0.25s ease,
+            box-shadow 0.25s ease;
+    }
+    .tile:hover {
+        border-color: var(--color-line-strong);
+    }
+    /* The words grow; the button stays on the tile's floor, so the three buttons share one line. */
+    .tile-body {
+        flex: 1;
+        padding: 1.4rem 0 1.6rem;
+    }
+    .tile-logo {
+        display: grid;
+        place-items: center;
+        width: 3.5rem;
+        height: 3.5rem;
+        flex: none;
+        color: var(--color-content);
+        border: 1px solid var(--color-line);
+        background: var(--role-frame-fill);
+    }
+    .tile-logo :global(svg) {
+        display: block;
+    }
+
+    /* THE READER'S OWN SYSTEM: the frame's bright rule, the ember halo the site's live figures wear, and its name. */
+    .tile-here {
+        position: absolute;
+        top: -0.7rem;
+        right: 1.2rem;
+        display: none;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.15rem 0.6rem;
+        font-size: var(--text-2xs);
+        line-height: var(--text-2xs--line-height);
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: 0.04em;
+        color: var(--color-primary-300);
+        border: 1px solid var(--role-ember-line-strong);
+        background: var(--color-canvas);
+    }
+    .tile-here::before {
+        content: "";
+        width: 0.4rem;
+        height: 0.4rem;
+        transform: rotate(45deg);
+        background: var(--color-primary-500);
+    }
+    .tile[data-here] {
+        border-color: var(--role-ember-line-strong);
+        background: var(--wash-ember);
+        box-shadow: var(--role-ember-glow);
+    }
+    .tile[data-here] .tile-here {
+        display: inline-flex;
+    }
+    .tile[data-here] .tile-logo {
+        border-color: var(--role-ember-line);
+    }
+
+    /* A cell per distribution: its mark, its name, and the oldest release the build runs on. */
+    .distro {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.5rem 0.6rem;
+        border: 1px solid var(--color-line);
+        background: var(--role-frame-fill);
+    }
+    .distro :global(svg) {
+        display: block;
+        flex: none;
+        color: var(--color-content);
+        opacity: 0.8;
+    }
+
+    .term {
+        overflow: hidden;
+        padding: 0.7rem 0.8rem;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        letter-spacing: -0.01em;
+        color: var(--color-content);
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        border: 1px solid var(--color-line);
+        background: var(--role-code-fill);
+    }
+</style>
