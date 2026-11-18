@@ -54,12 +54,10 @@ export interface TurnPremise {
     readonly briefing: TurnBriefing;
     // Each experiment's arm for this conversation; undefined where it is not measuring (armOf).
     readonly arms: {
-        readonly search: boolean | undefined;
         readonly map: boolean | undefined;
         readonly toolSearch: boolean | undefined;
         readonly stablePrompt: boolean | undefined;
     };
-    readonly iqSearchEnabled: boolean;
     // Whether the CLI defers connected tools' schemas behind its tool search; undefined leaves the CLI's own rule, on a
     // turn the switch does not reach.
     readonly toolSearch: boolean | undefined;
@@ -68,7 +66,7 @@ export interface TurnPremise {
     readonly stablePrompt: boolean | undefined;
     // Workspace-relative: the card's own folder, else the one the conversation latched at its first turn.
     readonly startIn: string | undefined;
-    readonly send: { readonly map: boolean; readonly landingChecks: boolean; readonly iqTeaching: boolean };
+    readonly send: { readonly map: boolean; readonly landingChecks: boolean };
 }
 
 // Whether the conversation gets the map at all. A child another conversation spawned does not: it opens on a brief its
@@ -101,10 +99,6 @@ const landingChecksDue = (input: AgentTurn, entry: ConversationEntry | undefined
 // beta. A translator or minted endpoint wears Anthropic's wire over a vendor that may not.
 const toolSearchReaches = (runtime: TurnRuntime): boolean => runtime.provider === "claude" && runtime.capabilities.runtime === "claude-code";
 
-// The Claude Code loop loads the teaching as a plugin; every other runtime is sent it once, then carried by its session.
-const iqTeachingDue = (runtime: TurnRuntime, enabled: boolean): boolean =>
-    runtime.capabilities.runtime !== "claude-code" && enabled && runtime.conversationTurns === 0;
-
 export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRuntime): TurnPremise => {
     const { settings, entry } = facts;
     // The fence goes through the area manifest every turn, not frozen at birth, so editing an area moves its conversations.
@@ -122,8 +116,6 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
         facts.ceiling,
     );
     const briefing = briefingOf(persona.persona);
-    const search = armOf(EXPERIMENTS.iqSearch, settings, input.conversationId);
-    const iqSearchEnabled = search ?? EXPERIMENTS.iqSearch.on(settings);
     // A conversation the map never reaches is out of the experiment, not in its control group.
     const sendsMap = mapped(briefing, entry);
     const map = sendsMap ? armOf(EXPERIMENTS.workspaceMap, settings, input.conversationId) : undefined;
@@ -136,19 +128,16 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
         persona,
         briefing,
         arms: {
-            search,
             map,
             toolSearch: toolSearchArm,
             stablePrompt: stableArm,
         },
-        iqSearchEnabled,
         toolSearch: reaches ? (toolSearchArm ?? EXPERIMENTS.toolSearch.on(settings)) : undefined,
         stablePrompt: loop ? (stableArm ?? EXPERIMENTS.stablePrompt.on(settings)) : undefined,
         startIn: persona.workspace?.startIn ?? entry?.identity.startIn ?? input.startIn,
         send: {
             map: sendsMap && mapDue(settings, map, input, runtime.conversationTurns),
             landingChecks: briefing.sends("checks") && landingChecksDue(input, entry, runtime.conversationTurns),
-            iqTeaching: iqTeachingDue(runtime, iqSearchEnabled),
         },
     };
 };

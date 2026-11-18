@@ -54,7 +54,6 @@ export const demoMetrics = (now: number, roster: readonly AgentSummary[]): Sandb
             agentRuntime: { processes: running.length + 2, rssBytes: Math.round(1.9 * GIB) },
             browser: { processes: 24, rssBytes: Math.round(1.3 * GIB) },
             languageServer: { processes: 3, rssBytes: Math.round(0.9 * GIB) },
-            searchEngine: { processes: 1, rssBytes: Math.round(0.45 * GIB) },
             terminal: { processes: 14, rssBytes: 96 * MIB },
             git: { processes: 2, rssBytes: 40 * MIB },
             other: { processes: 30, rssBytes: Math.round(0.6 * GIB) },

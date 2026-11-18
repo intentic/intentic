@@ -2,7 +2,7 @@ import { assessReport, digestOf, ledgerKey } from "@intentic/sandbox-contract/ch
 import type { ChoreLedgerEntry, ChoresReport, ProbeResult } from "@intentic/sandbox-contract/schemas/maintenance";
 
 // Evidence `GET /chores` returns for acme-shop, plus its ledger. The route answers only with measurements (probes,
-// package facts, hotspots); the app turns them into verdicts. Numbers are chosen so due, snoozed, clear, unavailable
+// package facts, the repo's shape); the app turns them into verdicts. Numbers are chosen so due, snoozed, clear, unavailable
 // and not-applicable each have one example.
 
 // Supported Node LTS, so the runtime chore reads `clear`.
@@ -159,19 +159,11 @@ const webRepo = (now: number) => ({
             // React + Tailwind here (root manifest, not empty `packages`) is what turns on the four front-end chores.
             deps: [`react`, `react-dom`, `react-router`, `tailwindcss`, `vite`, `image-resize`, `esbuild`],
         },
-        hotspots: [
-            { path: `src/pricing/CheckoutPanel.tsx`, commits: 34, adds: 812, dels: 396, complexity: 41, score: 0.94, latestMs: now - 90_000 },
-            { path: `src/pricing/PricingPage.tsx`, commits: 21, adds: 540, dels: 210, complexity: 18, score: 0.61, latestMs: now - 3 * DAY },
-            { path: `src/lib/api.ts`, commits: 12, adds: 190, dels: 84, complexity: 11, score: 0.38, latestMs: now - 6 * DAY },
-            { path: `tests/signup.spec.ts`, commits: 9, adds: 260, dels: 180, complexity: 8, score: 0.29, latestMs: now - 2 * DAY },
-        ],
-        // CheckoutPanel appears in both rankings: high churn and heavily imported, the shape this chore flags.
-        keyModules: [
-            { path: `src/pricing/CheckoutPanel.tsx`, exports: 6 },
-            { path: `src/lib/api.ts`, exports: 4 },
-        ],
-        totals: { files: 41, symbols: 318, complexity: 96, hotspots: 4 },
-        indexed: true,
+        // Retired with iq: a current daemon sends them empty, zero and false (schemas/maintenance.ts).
+        hotspots: [],
+        keyModules: [],
+        totals: { files: 41, symbols: 0, complexity: 0, hotspots: 0 },
+        indexed: false,
     },
 });
 
@@ -233,14 +225,11 @@ const apiRepo = (now: number) => ({
             packageManifest: true,
             deps: [`fastify`, `pino`, `zod`, `drizzle-orm`],
         },
-        hotspots: [
-            { path: `src/routes/checkout.ts`, commits: 16, adds: 380, dels: 120, complexity: 14, score: 0.52, latestMs: now - 4 * 3_600_000 },
-            { path: `src/db/schema.ts`, commits: 11, adds: 210, dels: 60, complexity: 9, score: 0.31, latestMs: now - DAY },
-        ],
-        keyModules: [{ path: `src/db/migrations.ts`, exports: 3 }],
-        // Below the cross-cutting-patterns floor (25 indexed files): that survey reads `not applicable`.
-        totals: { files: 18, symbols: 142, complexity: 38, hotspots: 2 },
-        indexed: true,
+        hotspots: [],
+        keyModules: [],
+        // Below the cross-cutting-patterns floor (25 code files): that survey reads `not applicable`.
+        totals: { files: 18, symbols: 0, complexity: 0, hotspots: 0 },
+        indexed: false,
     },
 });
 

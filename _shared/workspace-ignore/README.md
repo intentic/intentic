@@ -8,7 +8,7 @@ flowchart LR
     denylist["Built-in denylist<br/>node_modules, dist, caches"] --> scope
     reserved["refs/ · public/<br/>agent worktrees · browser profiles"] --> scope
     scope --> tree["File tree<br/>daemon + web"]
-    scope --> search["Search<br/>iq-engine · fileq"]
+    scope --> search["Search<br/>text-search · fileq"]
 ```
 
 - Ignored means "not part of the tracked project". Ignored directories stay listed and lazy-load, so nothing is hidden and this is not a security boundary.

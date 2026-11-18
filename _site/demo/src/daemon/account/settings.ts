@@ -31,10 +31,8 @@ export const DEMO_SETTINGS: SandboxHandlerOutput<`settings`, `get`> = {
         "acceptance-run": `high`,
         "extension-review": `setup-1`,
     },
-    // The two measured mechanisms are on with a holdout running, since their readout is the only place the
-    // measurement block is drawn and an off switch hides it entirely.
-    iqSearch: true,
-    iqSearchHoldout: 0.1,
+    // The measured mechanisms are on with a holdout running, since their readout is the only place the measurement
+    // block is drawn and an off switch hides it entirely.
     workspaceMap: true,
     workspaceMapHoldout: 0.1,
     toolSearch: true,
@@ -150,16 +148,6 @@ export const DEMO_SAVINGS: SavingsReport = {
         gaps: [
             { command: `pnpm -C web build`, commands: 14, tokens: 41_200 },
             { command: `docker compose logs api`, commands: 6, tokens: 28_900 },
-        ],
-    },
-    // The search teaching, in the state most of the block's surface has to draw: both arms past the threshold, the
-    // margin measured, the effect still inside it. The second metric is the same subject read a second way.
-    search: {
-        minTurns: 60,
-        sampleUnit: `conversations`,
-        metrics: [
-            { metric: `searchCalls`, on: { turns: 356, mean: 2.4 }, off: { turns: 111, mean: 2.6 }, marginPct: 19.5, controlTurnsNeeded: 312 },
-            { metric: `openingSearches`, on: { turns: 356, mean: 1.1 }, off: { turns: 111, mean: 1.2 }, marginPct: 24.1 },
         ],
     },
     // The map has resolved on its headline and not on its second reading, so both verdict states are on screen at once.

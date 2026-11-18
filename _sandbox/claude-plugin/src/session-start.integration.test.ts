@@ -38,10 +38,9 @@ const project = (): string => {
     return root;
 };
 
-// PATH without iq, so the iq switch has nothing to teach.
-const baseEnv = (data: string, root: string): Record<string, string> => ({ CLAUDE_PLUGIN_DATA: data, CLAUDE_PROJECT_DIR: root, PATH: tempDir() });
+const baseEnv = (data: string, root: string): Record<string, string> => ({ CLAUDE_PLUGIN_DATA: data, CLAUDE_PROJECT_DIR: root });
 
-type Answer = { systemMessage?: string; hookSpecificOutput: { additionalContext?: string } } | undefined;
+type Answer = { hookSpecificOutput: { additionalContext?: string } } | undefined;
 
 test("a new session is told the map, and its arms are recorded for the stats", () => {
     const root = project();
@@ -68,13 +67,16 @@ test("a held-out session is told nothing it was drawn out of, and says so in its
     expect(row?.arms).toMatchObject({ map: false });
 });
 
-test("a mechanism with nothing to give is not measured: no iq installed", () => {
+test("a mechanism with nothing to give is not measured: no areas to map", () => {
     const root = project();
     const data = tempDir();
     sessionStart({ session_id: "s-6", source: "startup", cwd: root }, { ...baseEnv(data, root), CLAUDE_PLUGIN_OPTION_HOLDOUT: "0.5" });
-    const [row] = readSessions(data);
-    // The map had areas to show, so it is measured on whichever arm this id drew; iq had nothing.
-    expect(Object.keys(row?.arms ?? {})).toEqual(["map"]);
+    const empty = tempDir();
+    const answer = sessionStart({ session_id: "s-8", source: "startup", cwd: empty }, { ...baseEnv(data, empty), CLAUDE_PLUGIN_OPTION_HOLDOUT: "0.5" });
+    expect(answer).toBeUndefined();
+    // The project with areas is measured on whichever arm its id drew; the empty one had nothing to withhold.
+    const arms = Object.fromEntries(readSessions(data).map((row) => [row.session, Object.keys(row.arms)]));
+    expect(arms).toEqual({ "s-6": ["map"], "s-8": [] });
 });
 
 test("a resumed session is not told again or counted again; a compacted one is told again but not counted", () => {
@@ -101,15 +103,4 @@ test("every Bash command of the session learns where the project is and whether 
     writeFileSync(envFile, "");
     sessionStart({ session_id: "s-3", source: "startup", cwd: root }, { ...baseEnv(data, root), CLAUDE_ENV_FILE: envFile, CLAUDE_PLUGIN_OPTION_FILEQ: "false" });
     expect(readFileSync(envFile, "utf8")).toBe(`export INTENTIC_PROJECT_DIR='${root}'\nexport INTENTIC_FILEQ=0\n`);
-});
-
-test("iq switched on without iq installed is said once a day, and teaches nothing", () => {
-    const root = project();
-    const data = tempDir();
-    const env = { ...baseEnv(data, root), CLAUDE_PLUGIN_OPTION_HOLDOUT: "0" };
-    const first = sessionStart({ session_id: "s-4", source: "startup", cwd: root }, env) as Answer;
-    expect(first?.systemMessage).toContain("the `iq` CLI is not installed");
-    expect(first?.hookSpecificOutput.additionalContext).not.toContain("iq workspace search");
-    const second = sessionStart({ session_id: "s-5", source: "startup", cwd: root }, env) as Answer;
-    expect(second?.systemMessage).toBeUndefined();
 });

@@ -84,9 +84,9 @@ export const IGNORES = [
     // conflicts that two-way-safe will never settle — and while they stand, that pairing propagates nothing at all.
     ".image-out",
     // A REPOSITORY's own `.intentic/` travels (its `checks.json` is committed), but these two folders under it are the
-    // machine's own: iq's index (`.intentic/local/cache/iq`, a live SQLite database with its `-wal` and `-shm`) and
-    // its older `.intentic/cache/iq`. Each end that runs iq writes its own, so carried across they are create-vs-create
-    // conflicts that two-way-safe will never settle, measured on a dogfooding machine as a stuck `index.db-shm`.
+    // machine's own: `.intentic/local` (caches, logs, runtime and temporary files) and the older `.intentic/cache`.
+    // Each end writes its own, so carried across they are create-vs-create conflicts that two-way-safe will never
+    // settle, measured on a dogfooding machine as a stuck `index.db-shm` of a search index that has since been removed.
     // `**/` is Mutagen's (doublestar) spelling for "at any depth, the root included"; a path without it is anchored.
     `**/${STATE_DIR}/cache`,
     `**/${STATE_DIR}/local`,

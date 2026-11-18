@@ -115,14 +115,6 @@ jobs:
           path: .cache/intentic-e2e
           key: intentic-e2e-whisper
       - run: mkdir -p "$HOME/.cache" "$GITHUB_WORKSPACE/.cache/intentic-e2e" && ln -sfn "$GITHUB_WORKSPACE/.cache/intentic-e2e" "$HOME/.cache/intentic-e2e"
-      # The iq models the image bakes (~57 MB from HuggingFace), on the key ci.yml's images job uses, so the
-      # fetch happens once per change of the fetch script rather than once a night.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            .image-out/iq-models
-            .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
       # Build this checkout's sandbox before the suite: published latest can freeze behind failed main gates and describe older contracts.
       # Build in a workflow step because cold browser layers can exceed beforeAll's budget; the harness then replays the same cached layers.
       # ci.yml's smoke-image.sh separately proves the published architecture images boot before moving tags.

@@ -1,13 +1,13 @@
 # base
 
-Runtime primitives that every tier, from the daemon to the browser, must run identically: when-expressions, disposal, async schedulers, untrusted-content tags, size and token formatting, fuzzy path scoring, the stopwords every full-text query drops, and the file, SQLite, worker-thread, whisper and git-runner plumbing the Node tiers share.
+Runtime primitives that every tier, from the daemon to the browser, must run identically: when-expressions, disposal, async schedulers, untrusted-content tags, size and token formatting, fuzzy path scoring, and the file, SQLite, worker-thread, whisper and git-runner plumbing the Node tiers share.
 
 ```mermaid
 flowchart LR
     manifest["Extension manifests<br/>when strings"] --> base(["base"])
     base -->|"when · fuzzy"| web["Web app<br/>and extension host"]
     base -->|"outside-text · plain-text · lifecycle"| daemon["Sandbox daemon<br/>fileq · webq"]
-    base -->|"fuzzy · sqlite · stopwords"| iq["iq engine<br/>and session recall"]
+    base -->|"fuzzy"| search["File-name search<br/>text-search"]
     base -->|"fs · sqlite · worker-calls"| node["Node tiers<br/>daemon, devices, Discord"]
     base -->|"async · errors · format · dag"| rest["Every tier<br/>devices, deploy, extensions"]
     base -->|"held"| daemon
@@ -116,8 +116,7 @@ flowchart LR
   since a checked Content-Length is not a ceiling on a chunked answer.
 - `text/one-line.ts` is outside text as one bounded line: whitespace flattened, control and format characters (ESC,
   BEL, bidi overrides) removed, cut at a character boundary with the `…` inside the limit.
-- `sqlite.ts` has two doors. A cache store holds the `SqliteDb` seam, whose `transaction` is a plain BEGIN that does
-  not nest. A store holding a `DatabaseSync` opens it with `openSqlite` (WAL, a busy timeout, foreign keys) and
+- `sqlite.ts`: a store holding a `DatabaseSync` opens it with `openSqlite` (WAL, a busy timeout, foreign keys) and
   groups writes with `immediateTransaction`, which takes the write lock at BEGIN and joins a transaction already open.
 - `workers/worker-calls.ts` is a call-and-answer channel to a worker thread, spawned on first call and again after a
   crash, and `workerPool` spreads independent calls over a few of them.

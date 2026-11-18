@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ManifestProblem } from "./manifest-problems.js";
 import { nearestKey, objectParse, unknownKeyProblems } from "./unknown-keys.js";
 
-const SETTINGS = [`stableSystemPrompt`, `skills`, `hashlineEdits`, `iqSearch`, `iqSearchHoldout`, `systemPromptMode`];
+const SETTINGS = [`stableSystemPrompt`, `skills`, `hashlineEdits`, `toolSearch`, `toolSearchHoldout`, `systemPromptMode`];
 
 test("nearestKey finds a close match for a typo", () => {
     expect(nearestKey(`hashlineEdit`, SETTINGS)).toBe(`hashlineEdits`);
@@ -11,7 +11,7 @@ test("nearestKey finds a close match for a typo", () => {
 
 test("nearestKey prefers the closer key when two are near", () => {
     expect(nearestKey(`hashlineEdi`, [`hashlineEdits`, `outputHoldout`])).toBe(`hashlineEdits`);
-    expect(nearestKey(`iqSearchHoldou`, [`iqSearchHoldout`, `outputHoldout`])).toBe(`iqSearchHoldout`);
+    expect(nearestKey(`toolSearchHoldou`, [`toolSearchHoldout`, `outputHoldout`])).toBe(`toolSearchHoldout`);
 });
 
 test("unknownKeyProblems is empty for a clean object", () => {

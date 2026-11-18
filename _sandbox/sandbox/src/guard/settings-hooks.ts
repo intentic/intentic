@@ -16,7 +16,7 @@ import { homeDir } from "../system/home-dir.js";
  * settings' `enabledPlugins` and `extraKnownMarketplaces` are in it too, since they make Claude Code install and load
  * plugins of its own. What a script reads without being named is outside.
  *
- * Exempt, decided 2026-10-04: only the plugins baked into the image (iq, webq, the extensions under EXTENSIONS_DIR, and
+ * Exempt, decided 2026-10-04: only the plugins baked into the image (webq, the extensions under EXTENSIONS_DIR, and
  * the managed policy plugin, which managed settings load and so never reaches this scan). Nothing in /work can change
  * them, and the image is what the owner runs. Git-installed extensions and plugin
  * connections are pinned to a commit the owner chose, but their checkouts sit under /work/.intentic, which every turn

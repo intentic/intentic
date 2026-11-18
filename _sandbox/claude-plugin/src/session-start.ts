@@ -1,18 +1,12 @@
 import { appendFileSync } from "node:fs";
-import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
 import { readOptions, saveOptions, type Options } from "./features.js";
 import { dataDir, type Env, type HookInput, projectDir, runHook } from "./hook-io.js";
-import { claimIfDue, onPath, pluginFile, projectSlug, startDetached } from "./runtime.js";
 import { armsOf, type Mechanism, measuredArms, recordSession, sends, type SessionRow } from "./sessions.js";
 
-// SessionStart: what a session is told as it opens (the project map and the iq teaching), which
-// arm it drew for each, and the background work a session starts (iq's transcript ingest). The same notes the sandbox
+// SessionStart: what a session is told as it opens (the project map) and which arm it drew. The same note the sandbox
 // composes into its turns, from the same code, delivered as this hook's additional context.
-
-// A notice about the setup (iq missing) is said once a day, not on every session.
-const NOTICE_EVERY_MS = 24 * 60 * 60_000;
 
 // A new conversation (a launch or a /clear) opens with the context and is measured; a compaction keeps the session but
 // loses what rode in, so it is told again without being counted twice; a resume or a fork already carries them.
@@ -22,45 +16,23 @@ const COUNTED_ON = new Set(["startup", "clear"]);
 interface Composed {
     readonly context: string[];
     readonly row: Pick<SessionRow, "arms" | "sent">;
-    readonly notices: string[];
 }
 
-const compose = (options: Options, input: HookInput, project: string, arms: SessionRow["arms"], data: string, env: Env): Composed => {
+const compose = (options: Options, input: HookInput, project: string, arms: SessionRow["arms"]): Composed => {
     const context: string[] = [];
-    const notices: string[] = [];
-    const notice = (id: string, text: string): void => {
-        if (claimIfDue(join(data, "notices", `${id}.stamp`), NOTICE_EVERY_MS)) {
-            notices.push(text);
-        }
-    };
-    const iq = options.iq && onPath("iq", env);
-    const sent: { map?: number; iq?: boolean } = {};
+    const sent: { map?: number } = {};
     // What each measured mechanism had to give, worked out on both arms, so a control session is only counted as one
     // when there was something to withhold from it.
     const offered: { [K in Mechanism]?: boolean } = {};
     if (options.project_map) {
-        const note = workspaceMapNote({ root: project, cwd: input.cwd ?? project, exactPaths: iq ? "`iq files` or Read" : "Glob or Read" });
+        const note = workspaceMapNote({ root: project, cwd: input.cwd ?? project, exactPaths: "Glob or Read" });
         offered.map = note !== undefined;
         if (note !== undefined && sends(options, arms, "map")) {
             context.push(note);
             sent.map = note.length;
         }
     }
-    if (options.iq) {
-        if (iq) {
-            const nudge = pluginFile(["generated", "iq-nudge.txt"], env);
-            offered.iq = nudge !== undefined;
-            if (nudge !== undefined && sends(options, arms, "iq")) {
-                context.push(`## iq workspace search\n\n${nudge.trim()}`);
-                sent.iq = true;
-            }
-            // iq's session recall reads Claude Code's own transcripts; ingest keeps its index current.
-            startDetached("iq", ["sessions", "ingest"], { cwd: project, log: join(data, "iq", `${projectSlug(project)}.ingest.log`), env });
-        } else {
-            notice("iq-missing", "intentic: iq search is on but the `iq` CLI is not installed (`npm i -g @intentic/iq`), so nothing was taught.");
-        }
-    }
-    return { context, row: { arms: measuredArms(arms, offered), sent }, notices };
+    return { context, row: { arms: measuredArms(arms, offered), sent } };
 };
 
 // Values for every Bash command this session runs: where the project is (the bundled fileq keys its cache by it) and
@@ -93,7 +65,7 @@ export const sessionStart = (input: HookInput, env: Env = process.env): object |
     if (!TOLD_ON.has(source)) {
         return undefined;
     }
-    const { context, row, notices } = compose(options, input, project, armsOf(options, input.session_id), data, env);
+    const { context, row } = compose(options, input, project, armsOf(options, input.session_id));
     const session = input.session_id;
     if (COUNTED_ON.has(source) && session !== undefined) {
         record("the session", () =>
@@ -106,13 +78,10 @@ export const sessionStart = (input: HookInput, env: Env = process.env): object |
             }),
         );
     }
-    if (context.length === 0 && notices.length === 0) {
+    if (context.length === 0) {
         return undefined;
     }
-    return {
-        ...(notices.length === 0 ? {} : { systemMessage: notices.join("\n") }),
-        hookSpecificOutput: { hookEventName: "SessionStart", ...(context.length === 0 ? {} : { additionalContext: context.join("\n\n") }) },
-    };
+    return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: context.join("\n\n") } };
 };
 
 if (process.argv[1]?.endsWith("session-start.mjs")) {

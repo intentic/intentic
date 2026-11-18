@@ -7,7 +7,7 @@ import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
-import { claudeCodeRuntime, GUIDANCE_TITLE, guidanceBlock, type SearchTool } from "./guidance.js";
+import { claudeCodeRuntime, GUIDANCE_TITLE, guidanceBlock } from "./guidance.js";
 import { ANONYMOUS_BROWSER_SERVER } from "../../browser/tools/browser-servers.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
 import type { TurnPolicy, TurnSpec, TurnTools } from "../providers/agent-request.js";
@@ -48,8 +48,6 @@ export interface TurnPromptInput {
     // type, so the prompt keeps no dependency on the decision that produced it — and so the decision can keep naming
     // its titles from here without the two importing each other.
     readonly trim?: PromptTrim;
-    // Which tool the guidance names for finding code; absent is `rg`.
-    readonly search?: SearchTool;
 }
 
 // The prompt-side pieces a small window takes, as booleans rather than a tier: this module applies a decision, it does
@@ -180,8 +178,6 @@ export interface SdkSystemPromptInput {
     // What the model's window will not pay for; carried this far so the composed prompt and the disclosed one shed the
     // same pieces.
     readonly trim?: PromptTrim;
-    // Which tool the guidance names for finding code; absent is `rg`.
-    readonly search?: SearchTool;
     // The volatile guidance (who is watching, what of the owner's is online) rides the turn's message, not this block.
     readonly stable?: boolean;
     // Whether connected tools' schemas wait behind ToolSearch this turn (TurnPolicy.toolSearch); absent reads as deferred.
@@ -191,7 +187,7 @@ export interface SdkSystemPromptInput {
 // The turn fields the composed prompt reads, in the groups the request holds them in, so both readers — the adapter that
 // sends the prompt and the disclosure that shows it (prompt-disclosure.ts) — map a request one way.
 export interface PromptRequest {
-    readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "search" | "stablePrompt">;
+    readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "stablePrompt">;
     readonly policy: Pick<TurnPolicy, "unattended" | "night" | "toolSearch">;
     readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "browserPorts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones" | "fleetPressure" | "pages">;
 }
@@ -225,7 +221,6 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
     ownPhones: tools.ownPhones,
     ...opt("fleetPressure", tools.fleetPressure),
     ...(spec.contextTrim === undefined ? {} : { trim: spec.contextTrim }),
-    ...(spec.search === undefined ? {} : { search: spec.search }),
     stable: spec.stablePrompt === true,
     // Only an explicit `true` turns the CLI's tool search on: a routed provider on this loop (undefined) runs without it.
     deferredTools: policy.toolSearch === true,
@@ -236,7 +231,6 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
 export const harnessGuidance = ({
     append,
     trim,
-    search = "rg",
     unattended,
     night,
     browserOutputDir,
@@ -273,7 +267,6 @@ export const harnessGuidance = ({
                       ownPhones,
                       ...opt("fleetPressure", fleetPressure),
                   },
-                  search,
                   stable,
               ),
           ]),

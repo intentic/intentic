@@ -12,7 +12,7 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
         stableSystemPrompt: false,
         skills: [],
         hashlineEdits: false,
-        iqSearch: true,
+        workspaceMap: true,
         outputCleaners: "-cap",
         outputHoldout: 0.1,
     };
@@ -26,7 +26,7 @@ test("no field is required: a workspace that has never written settings parses",
 });
 
 test("a key of the wrong type is still a parse failure: tolerance is for absence, not for garbage", () => {
-    expect(SandboxSettingsSchema.safeParse({ iqSearch: "yes" }).success).toBe(false);
+    expect(SandboxSettingsSchema.safeParse({ workspaceMap: "yes" }).success).toBe(false);
     expect(SandboxSettingsSchema.safeParse({ outputHoldout: 4 }).success).toBe(false);
     expect(SandboxSettingsSchema.safeParse({ systemPrompt: "x".repeat(20001) }).success).toBe(false);
 });

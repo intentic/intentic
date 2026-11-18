@@ -9,8 +9,8 @@ ports live in [`_sandbox/output-cleaners`](../../_sandbox/output-cleaners).
 ## Status, 2026-09-29
 
 Built as one plugin rather than two. [`_sandbox/claude-plugin`](../../_sandbox/claude-plugin) is the `intentic`
-plugin: the `trim` port below, plus the project map, field notes, the iq teaching, fileq and a
-`/intentic:stats` report, each behind a `/config` switch. Its README says what it does and how it measures.
+plugin: the `trim` port below, plus the project map, field notes, fileq and a `/intentic:stats` report, each
+behind a `/config` switch. Its README says what it does and how it measures.
 
 - The cleaners moved out of `_sandbox/sandbox/bin/` into their own package,
   [`_sandbox/output-cleaners`](../../_sandbox/output-cleaners). The sandbox image copies the same files it copied
@@ -26,17 +26,17 @@ plugin: the `trim` port below, plus the project map, field notes, the iq teachin
   `npm-publish.yml` as its trusted publisher, and they close `PUB` in `_tools/scripts/lib/packages.sh`, so every
   release publishes them. A real `claude` 2.1.284 installed `intentic@intentic` from the published package and ran
   its hooks.
+- iq was removed on 2026-11-18, with its standalone plugin and the `intentic` plugin's iq teaching. A randomized
+  test found it made no measurable difference to agents, and it cost memory, disk and latency.
 
 Still to do: submit the plugin to the community list. The sections below are the plan as it was written before the
 build.
 
 ## What already exists (more than expected)
 
-- **The `iq` plugin is built.** [`_search/iq/plugin/`](../../_search/iq/plugin): manifest, the iq skill, a
-  SessionStart nudge + background transcript ingest, a UserPromptSubmit session-recall matcher. The repo root
-  is already a Claude Code **marketplace** ([`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json))
-  listing it, and the iq README documents `/plugin marketplace add intentic/intentic`. The binary is on npm
-  (`@intentic/iq`, currently 1.176.x).
+- **The repo root is already a Claude Code marketplace** ([`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json)).
+  When this was written it listed a standalone `iq` plugin (the iq skill, a SessionStart nudge and background
+  transcript ingest, a UserPromptSubmit session-recall matcher), removed with iq on 2026-11-18.
 - **The output cleaner is plugin-shaped by accident.** The whole pipeline is dependency-free `.mjs` on node
   builtins only: [`cleaners.mjs`](../../_sandbox/output-cleaners/src/cleaners.mjs) (692 lines, the registry),
   [`agent-output-filter.mjs`](../../_sandbox/output-cleaners/src/agent-output-filter.mjs) (189 lines, exports
@@ -45,18 +45,15 @@ build.
   PreToolUse rewrite threads env). Claude Code's hook API now supports exactly the missing piece:
   a PostToolUse hook may **replace a tool's output** (`updatedToolOutput`) before the model sees it.
 
-## Plugin 1: `iq` (finish, don't build)
+## Plugin 1: `iq` (dropped)
 
-Remaining work is release hygiene, not code:
+The plan here was release hygiene for the standalone `iq` plugin: version the manifest, validate it, submit it.
+iq was removed on 2026-11-18, plugin included, so none of it applies.
 
-1. Version the manifest (it says `0.0.0`) and adopt a bump rule: marketplace users only update on a bump.
-2. `claude plugin validate _search/iq/plugin` clean (the community review pipeline runs the same check).
-3. Submit via the Console form (`platform.claude.com/plugins/submit`) → `anthropics/claude-plugins-community`;
-   approved plugins are pinned to a commit SHA and CI re-pins on push.
-4. README: the install is two steps (binary from npm + plugin from marketplace), keep leading with that,
-   since the plugin deliberately ships the *teaching*, not the binary.
-
-Estimate: an afternoon, mostly the submission round-trip.
+What still holds for any plugin submitted: marketplace users only update on a version bump, `claude plugin
+validate` must be clean (the community review pipeline runs the same check), and submission goes through the
+Console form (`platform.claude.com/plugins/submit`) → `anthropics/claude-plugins-community`, where approved
+plugins are pinned to a commit SHA and CI re-pins on push.
 
 ## Plugin 2: `trim` (the port)
 
@@ -101,9 +98,9 @@ original: any error → emit nothing, Claude Code keeps the raw output. The foot
 plugin must be self-contained: the three scripts **move into the plugin dir**, which becomes their single
 source. The sandbox consumes them from there (image copy paths in the Dockerfile, `tmux-run`'s default
 filter command, test imports: all mechanical). No copies, no build step; the sandbox and an external user
-run byte-identical cleaners, same as the iq plugin already does for the skill. Proposed home:
+run byte-identical cleaners. Proposed home:
 `_sandbox/sandbox/plugin/` (the sandbox package stays the owner and the benchmark harness stays where the
-corpus is), listed in the root `marketplace.json` beside iq. It landed as its own package instead, `_sandbox/claude-plugin`.
+corpus is), listed in the root `marketplace.json`. It landed as its own package instead, `_sandbox/claude-plugin`.
 
 **Explicitly out of v1:**
 
@@ -116,6 +113,5 @@ the cleaner's own history says the corpus, not the fixtures, is where the surpri
 
 ## Sequence
 
-1. iq plugin: version + validate + submit (unblocks the discoverability story immediately).
-2. `trim` v1: adapter build, moves, dogfood, submit.
-3. Phase 2 (separate decision): `trim-savings` polish, cross-promo between the two plugin READMEs.
+1. `trim` v1: adapter build, moves, dogfood, submit.
+2. Phase 2 (separate decision): `trim-savings` polish.

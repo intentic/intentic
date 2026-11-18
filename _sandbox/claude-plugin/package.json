@@ -1,7 +1,7 @@
 {
     "name": "@intentic/claude-plugin",
     "version": "0.0.0",
-    "description": "The intentic Claude Code plugin: trimmed Bash output, a project map at session start, iq search and fileq teaching, and a /intentic:stats report of what each saved",
+    "description": "The intentic Claude Code plugin: trimmed Bash output, a project map at session start, fileq teaching, and a /intentic:stats report of what each saved",
     "license": "MIT",
     "type": "module",
     "repository": {
@@ -49,7 +49,6 @@
         "@intentic/agent-context": "workspace:*",
         "@intentic/base": "workspace:*",
         "@intentic/fileq": "workspace:*",
-        "@intentic/iq": "workspace:*",
         "@intentic/output-cleaners": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",

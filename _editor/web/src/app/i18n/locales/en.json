@@ -6483,14 +6483,9 @@
         },
         "agentCodeSearch": {
             "codeSearch": "Code search",
-            "iqCodeSearch": "iq code search",
             "ofConversationsOpenWithout": "of conversations start without the map",
-            "ofConversationsRunWithout": "of conversations run without iq",
             "projectMap": "Project map",
             "provideProjectStructureOverview": "Provide project structure overview to new conversations.",
-            "useIqSearchCli": "Use iq search CLI instead of grep/find/glob.",
-            "withIq": "With iq",
-            "iqUptake": "Searches that went through iq: {on} with it, {off} without.",
             "withMap": "With map"
         },
         "agentCommandOutput": {
@@ -8237,10 +8232,8 @@
                 "failedCalls": "Failed tool calls per turn",
                 "openedWithListing": "First turns that listed directories",
                 "openingPrompt": "Prompt tokens per request",
-                "openingSearches": "Searches before opening a file",
                 "openingWrite": "Prompt written again per follow-up",
-                "outputReached": "Output reaching the agent",
-                "searchCalls": "Searches per turn"
+                "outputReached": "Output reaching the agent"
             },
             "more": "{pct}% more",
             "moreWouldSettle": {
@@ -8261,9 +8254,7 @@
                 "failedCalls": "About {count} fewer failed calls so far.",
                 "openedWithListing": "About {count} fewer first turns listed directories so far.",
                 "openingPrompt": "About {count} fewer prompt tokens so far.",
-                "openingSearches": "About {count} fewer searches so far.",
-                "openingWrite": "About {count} fewer prompt tokens written again so far.",
-                "searchCalls": "About {count} fewer searches so far."
+                "openingWrite": "About {count} fewer prompt tokens written again so far."
             },
             "tooEarly": "Too early to tell",
             "without": "Without"
@@ -10514,7 +10505,7 @@
                 "label": "Pipeline fixes"
             },
             "refactorRun": {
-                "blurb": "The agent started from a hotspot or key module on a repository's Health tab.",
+                "blurb": "Kept so settings saved before the Health tab was removed still read; nothing starts a refactor run now.",
                 "label": "Refactors"
             },
             "safetyJudge": {
@@ -10584,7 +10575,7 @@
         "agentDocumentSearch": {
             "group": "Documents",
             "title": "Search inside documents",
-            "description": "Keeps the text of PDFs, Word, spreadsheets and presentations ready in the background, so rg and iq find it, cited by page."
+            "description": "Keeps the text of PDFs, Word, spreadsheets and presentations ready in the background, so rg finds it, cited by page."
         },
         "agentChatPages": {
             "group": "Pages in chat",
@@ -11271,7 +11262,7 @@
             "agentSkills": "skill, playbook, recipe, slash command, how-to",
             "agentMemory": "remember, memory file, notes, facts, preferences",
             "agentMemoryImport": "chatgpt, claude, import memory, migrate, transfer, copy memory",
-            "agentCodeSearch": "grep, ripgrep, search code, codebase, index, find in files, project map",
+            "agentCodeSearch": "search code, codebase, project map, project structure, overview",
             "agentDocumentSearch": "pdf, word, docx, excel, xlsx, spreadsheet, powerpoint, files",
             "agentRepoChecks": "lint, linter, typecheck, tests, hooks, verify, end of turn checks",
             "agentCommandOutput": "tokens, truncate, logs, compress, noise, shorten output",
@@ -11386,13 +11377,10 @@
             "inTheChat": "In the chat",
             "tokens": "Tokens",
             "codeSearch": {
-                "label": "How code search works",
-                "title": "Finding the right file in fewer steps",
-                "experience": "The agent gets to the code it needs sooner, so answers start sooner and wander less.",
-                "tokens": "Fewer searches and file reads per turn. The map is sent once and then read back from the cache on every later turn, like the rest of the conversation; a small share of conversations runs without it, so the saving is measured rather than assumed.",
-                "without": "Without iq",
-                "with": "With iq",
-                "rightFile": "right file",
+                "label": "How the project map works",
+                "title": "Knowing the project's layout from the first message",
+                "experience": "The agent starts out knowing what is where, so it reaches the code it needs sooner and wanders less.",
+                "tokens": "Fewer directory listings and tool calls before the right file. The map is sent once and then read back from the cache on every later turn, like the rest of the conversation; a small share of conversations runs without it, so the saving is measured rather than assumed.",
                 "ridesAlong": "What each turn sends",
                 "turn": "Turn {turn}",
                 "instructions": "Instructions",
@@ -12908,7 +12896,6 @@
     },
     "views": {
         "coreViews": {
-            "health": "Health",
             "ui": "UI"
         },
         "extensionDocument": {
@@ -13089,38 +13076,6 @@
             "copyRepoPath": "Copy Path in Repo",
             "copyRepoPaths": "Copy {count} Paths in Repo"
         },
-        "codebaseHealth": {
-            "actionLegend": "Starts an agent on the refactor each row's figures call for",
-            "branchPoints": "Branch points",
-            "commits": "Commits from",
-            "commits2": "Commits",
-            "couldntRead": "Couldn't read codebase health",
-            "exports": "{exports} exports",
-            "file": "File",
-            "filesBothChurnBranching": "files with both churn and branching",
-            "functionsTypesClasses": "functions, types, classes",
-            "hotspots": "Hotspots",
-            "hotspotsLead": "Files that change often and branch heavily. Neither alone is a warning: a busy config file is trivial, and a tangled file nobody touches costs nothing.",
-            "indexStillBuildingFigures": "The index is still building: these figures cover only what has been read so far.",
-            "indexedIgnoringBuildOutput": "indexed, ignoring build output",
-            "keyModules": "Key modules",
-            "noFileHereBoth": "No file here has both commits and branch points: a repository with no history yet, or one holding only markup and config, ranks nothing.",
-            "noReportYet": "No report yet.",
-            "nothingInRepositoryExports": "Nothing in this repository exports a symbol the index reads.",
-            "perFile": "{files} per file",
-            "rankedByPagerankOver": "Ranked by PageRank over the import graph: what the rest of this repository leans on, which is rarely what the file tree puts first.",
-            "readingIndex": "Reading the index…",
-            "recompute": "Recompute",
-            "refactor": "Refactor {name}",
-            "refactorAction": "{action}: {name}",
-            "refreshCodebaseHealth": "Refresh codebase health",
-            "repository": "Repository",
-            "risk": "Risk",
-            "riskNote": "Commits × branch points",
-            "shownOf": "Top {count} of {hotspots}",
-            "suggested": "Suggested",
-            "symbols": "Symbols"
-        },
         "compareDiffView": {
             "couldNotLoadVersions": "Could not load both versions of this document.",
             "showTextInstead": "Show the text instead"
@@ -13241,7 +13196,6 @@
             "nothingHere": "Nothing here.",
             "nothingMatchesIn": "Nothing matches \"{trim}\" in {here}.",
             "searchText": "Search text",
-            "smartSearch": "Smart search",
             "toolingHidden": "{count} tooling file hidden | {count} tooling files hidden",
             "groupFiles": "Group files by",
             "byKind": "Kind",
@@ -13400,13 +13354,6 @@
             "writing": "Writing",
             "draftNote": "Showing the agent's draft"
         },
-        "healthCodebaseHealth": {
-            "all": "All",
-            "allHistory": "All history",
-            "days30": "30 days",
-            "days7": "7 days",
-            "days90": "90 days"
-        },
         "historyPanel": {
             "autoCapture": "Auto capture",
             "beforeGoingBack": "Before going back",
@@ -13483,18 +13430,6 @@
         },
         "pushBadge": {
             "sendingCommits": "Sending commits"
-        },
-        "refactorAsk": {
-            "decompose": "Split by seams",
-            "months": "{count} month | {count} months",
-            "narrow": "Narrow surface",
-            "simplify": "Flatten branching",
-            "split": "Split by responsibility",
-            "stabilize": "Separate contract",
-            "startsAgent": "Starts an agent",
-            "tests": "Split tests",
-            "untouched": "Untouched",
-            "years": "{count} year | {count} years"
         },
         "reviewPanel": {
             "abort": "Abort",
@@ -13705,7 +13640,6 @@
             "closeSplit": "Close Split",
             "closeTab": "Close Tab",
             "closeTabsToRight": "Close Tabs to the Right",
-            "codebaseHealth": "Codebase health",
             "collapseAll": "Collapse all",
             "collapseAllFolders": "Collapse all folders",
             "commaSeparated": "Comma-separated",
@@ -13721,7 +13655,6 @@
             "landingNow": "{landing}…",
             "nextTab": "Next Tab",
             "nobody": "Nobody",
-            "openCodebaseHealthWorkspace": "Open codebase health of the workspace root",
             "runWorkspace": "Run workspace",
             "openTabToSide": "Open Tab to the Side",
             "previousTab": "Previous Tab",
@@ -13729,17 +13662,14 @@
             "refreshFiles": "Refresh Files",
             "reopenClosedTab": "Reopen Closed Tab",
             "scopeNameHint": "File names",
-            "scopeSmartHint": "By meaning",
             "scopeTextHint": "Exact text",
             "showExplorer": "Show explorer",
-            "smart": "Smart",
             "tabsStayOpen": "Tabs stay open",
             "search": "Search…",
             "searchIgnoredFiles": "Search ignored files",
             "searchInFiles2": "Search in Files…",
             "show": "Show {restorePoints}",
             "showChanges": "Show Changes",
-            "showCodebaseHealth": "Show Codebase Health",
             "showHome": "Show home",
             "showHome2": "Show Home",
             "showFiles": "Show Files",
@@ -13959,11 +13889,9 @@
             "doubleClickToKeep": "Double-click to keep",
             "file": "File",
             "folder": "Folder",
-            "health": "Codebase health",
             "management": "Management panel",
             "path": "Path",
             "preview": "Preview",
-            "repo": "Repo",
             "closeTab": "Close {title}"
         },
         "outgoingWork": {

@@ -9,7 +9,7 @@ flowchart LR
     daemon --> agents["Agents<br/>one worktree each"]
     extensions["Extensions"] --- daemon
     devices["Your devices"] -->|"dial in"| daemon
-    agents --> search["Code search<br/>iq"]
+    agents --> search["Code tools<br/>lsp"]
     site["Website · demo"] -.-> editor
 ```
 

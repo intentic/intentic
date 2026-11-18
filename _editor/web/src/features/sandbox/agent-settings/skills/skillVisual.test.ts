@@ -70,7 +70,7 @@ it(`draws an extension's skills as the extension itself is drawn`, () => {
 it(`falls back to the name when there is no owner to ask`, () => {
     // The baked tools and the reader's own skills: nothing owns them, so the words are all there is.
     expect(skillVisual(skill(`lsp`, `builtin`), sources()).icon).toBe(`code`);
-    expect(skillVisual(skill(`iq`, `builtin`, `Code search`), sources()).icon).toBe(`search`);
+    expect(skillVisual(skill(`approvals`, `builtin`), sources()).icon).toBe(`check-square`);
     // A word, not the whole name: nobody spells these the same way twice.
     expect(skillVisual(skill(`figma-export`, `own`), sources()).logo).toBe(`figma`);
 });

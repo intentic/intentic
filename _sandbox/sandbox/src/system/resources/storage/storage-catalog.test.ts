@@ -57,12 +57,12 @@ describe("classifyStoragePath", () => {
             category: "modelWeights",
             unit: true,
         });
-        expect(classifyStoragePath("workspace", ".intentic/local/cache/iq/segments/0001")).toMatchObject({
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/freshness/derived/0001")).toMatchObject({
             category: "indexes",
-            item: ".intentic/local/cache/iq",
+            item: ".intentic/local/cache/freshness",
         });
         // The daemon's own files beside its folders, SQLite sidecars included, stay its indexes.
-        expect(classifyStoragePath("workspace", ".intentic/local/cache/iq-vectors.db-wal").category).toBe("indexes");
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/code-counts.db-wal").category).toBe("indexes");
         expect(classifyStoragePath("workspace", ".intentic/local/cache/code-counts.db").category).toBe("indexes");
         expect(classifyStoragePath("workspace", ".intentic/local/cache/extensions/prawo/acts.json").category).toBe("indexes");
     });
@@ -76,7 +76,7 @@ describe("classifyStoragePath", () => {
         });
         expect(classifyStoragePath("workspace", ".intentic/local/cache/motion")).toMatchObject({ category: "toolCaches", unit: true });
         // A name that merely starts like the daemon's is not the daemon's.
-        expect(classifyStoragePath("workspace", ".intentic/local/cache/iqtool/data").category).toBe("toolCaches");
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/freshness-tool/data").category).toBe("toolCaches");
         expect(removalOf("toolCaches")).toEqual({ unit: "entry", keepRecentMs: 24 * 60 * 60 * 1000 });
     });
 

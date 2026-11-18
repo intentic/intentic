@@ -27,17 +27,14 @@ import { handPicked } from "../turn/holds/spent-door.js";
 import { endpointIdOf, isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
 import { endpointConfigOf } from "../../../endpoints/local-model.js";
 import { routingFor } from "../../../conversations/registry/routing.js";
-import { type IqSearchTeaching, iqSearchInstruction } from "../../prompt/iq-search-instruction.js";
 import { type DeclaredWindow, servedEndpointModel, windowOf } from "../../prompt/window/context-budget.js";
 import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
 import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
 import { pinnedAccount } from "../../../conversations/registry/agents-store.js";
 import type { RoutedTurn, TurnInput } from "../../../seams/turn-starter.js";
-import { retrieveTurnContext, type TurnContextOutcome } from "../turn/turn-context.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import type { PrivacyRefusal } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import { opt } from "../../../opt.js";
-import { EXPERIMENTS } from "./experiments.js";
 import { type ConversationEntry, notesDue, type TurnPremise, type TurnRuntime, premiseOf, turnRuntime } from "./turn-premise.js";
 import { skillsUnseen, type TurnSkillCatalog, turnSkillCatalog } from "./turn-skills.js";
 import { runtimeRoute } from "../../../privacy/privacy-trust.js";
@@ -85,8 +82,6 @@ export interface AdmittedTurnFacts {
     readonly fresh?: FreshFacts;
     // A home conversation's policy (conversations/home/home-policy.ts), on the turns that owe it; absent for any other.
     readonly homeNote?: TurnNote;
-    // Undefined when retrieval was never attempted, which is a different fact from a lookup that skipped.
-    readonly turnContext: TurnContextOutcome | undefined;
     readonly gates: readonly CredentialGate[];
     // The releases this conversation held for those gates when they were read.
     readonly releases: CredentialGrants;
@@ -94,7 +89,6 @@ export interface AdmittedTurnFacts {
     readonly reach: ConversationReach;
     // The most its tools may be, from the same principals; the premise caps the persona with it (turn-premise.ts).
     readonly ceiling: ToolCeiling | undefined;
-    readonly iqTeaching: IqSearchTeaching | undefined;
     // The card's own PROMPT.md, read only for a card whose prompt mode is `custom`.
     readonly personaPrompt: string | undefined;
     // The owner's standing instructions, from the root down to the start folder.
@@ -119,7 +113,6 @@ const manifests = (
     context: TurnContext,
     entry: ConversationEntry | undefined,
     runtime: TurnRuntime,
-    settings: SandboxSettings,
 ) => {
     const { capabilities, conversationTurns } = runtime;
     // A home's session opened fresh (home-rollover.ts), seeded from the record rather than resumed: the notes its old
@@ -150,10 +143,6 @@ const manifests = (
         services.perf.track("turn.plan.context", {}, () => contextNoteIfDue(services, input, entry, conversationTurns, homeFresh)),
         // Every turn, never cached: a check the owner switched off this morning must not keep running.
         services.perf.track("turn.plan.repo-checks", {}, () => repoCheckRules(services)),
-        // Beside the rest rather than ahead of it, on its own deadline: a turn must not wait on an optimisation.
-        services.config.iqTurnContext && EXPERIMENTS.turnContext.on(settings)
-            ? services.perf.track("turn.plan.turn-context", {}, () => retrieveTurnContext({ iq: services.iq, logger: services.logger }, input.prompt))
-            : Promise.resolve(undefined),
         // After the checkout is composed, which is what says whether a fresh session was cut from its origin's work.
         entry?.identity.fresh === undefined
             ? Promise.resolve(undefined)
@@ -185,15 +174,6 @@ const releasesOf = (grants: CredentialGrants, gates: readonly CredentialGate[], 
     }
     return held;
 };
-
-// Loaded to be sent, or only to stamp its cohort on a measured conversation's turns that are not sent it.
-const iqTeachingFor = (deps: Pick<Services, "config" | "logger">, premise: TurnPremise): Promise<IqSearchTeaching | undefined> =>
-    deps.config.iqPluginDir !== "" && (premise.arms.search !== undefined || premise.send.iqTeaching)
-        ? iqSearchInstruction(deps.config.iqPluginDir).catch((error: unknown) => {
-              deps.logger.warn({ err: error }, "iq search: could not load the cross-harness instruction");
-              return undefined;
-          })
-        : Promise.resolve(undefined);
 
 // The start folder as the daemon reaches it. One the escape guard refuses maps nothing and reads rules from the root.
 const treeReads = (context: TurnContext, premise: TurnPremise): Pick<AdmittedTurnFacts, "memoryNote" | "mapNote"> => {
@@ -321,7 +301,6 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "cursorStore"
     | "dependencies"
     | "endpointModels"
-    | "iq"
     | "logger"
     | "resources"
     | "perf"
@@ -377,13 +356,12 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     ]);
     const declared = windowOf(served);
     const helperOnly = served?.row.helperOnly;
-    const [installed, setup, personas, areas, skillCatalog, contextNote, repoChecks, turnContext, fresh, homeNote] = await manifests(
+    const [installed, setup, personas, areas, skillCatalog, contextNote, repoChecks, fresh, homeNote] = await manifests(
         services,
         input,
         context,
         entry,
         runtime,
-        settings,
     );
     // The stored releases are in before they are copied, so a yes from before a restart reaches this turn. The reach
     // names this turn's person beside the conversation's own: begin records them, and this must not lean on its order.
@@ -397,7 +375,6 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     // A conversation's own grants (personas/conversation-grants.ts) widen its persona from the turn after they are given.
     const grant = input.conversationId === undefined ? undefined : await services.conversationGrants.of(input.conversationId);
     const premise = premiseOf({ entry, settings, personas, areas, grant, ceiling }, input, runtime);
-    const iqTeaching = await iqTeachingFor(services, premise);
     // What checks the work, on the turns that owe it to a card that did not drop it (turn-premise.ts).
     const landingChecksNote = premise.send.landingChecks ? LANDING_CHECKS_NOTE : undefined;
     const card = premise.persona.persona;
@@ -421,12 +398,10 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         contextNote,
         ...opt("fresh", fresh),
         ...opt("homeNote", homeNote),
-        turnContext,
         gates,
         releases: releasesOf(services.credentialGrants, gates, input.conversationId),
         reach,
         ceiling,
-        iqTeaching,
         personaPrompt,
         landingChecksNote,
         ...treeReads(context, premise),

@@ -1,4 +1,4 @@
-// The process contract an agent-facing CLI keeps, for the three that keep the same one (iq, fileq, webq).
+// The process contract an agent-facing CLI keeps, for the two that keep the same one (fileq, webq).
 // The reader is an agent, not a terminal: it pipes into `head`, it redirects stderr away, and it cannot tell a
 // crash from a tool that found nothing — so every rule below exists to stop silence from reading as zero results.
 import type { Application, CommandContext, StricliProcess } from "@stricli/core";

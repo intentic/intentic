@@ -13,7 +13,7 @@ const init = (over: Partial<InitMessage> = {}): InitMessage =>
         model: "claude-opus-5-5",
         tools: ["Bash", "Read"],
         mcp_servers: [{ name: "ui", status: "connected" }],
-        skills: ["iq"],
+        skills: ["lsp"],
         plugins: [],
         output_style: "default",
         ...over,

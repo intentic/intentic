@@ -30,7 +30,7 @@ profile:
   hardlinks every wheel out of the one uv cache, so five venvs with torch hold torch once, and one Hugging Face cache
   holds a model once for every tool that loads it. Put a tool's own install and venv in its own
   `.intentic/local/cache/<tool>/`: Settings → Storage lists each such folder and can clean it.
-- **First-party CLIs**: `intentic`, `iq`, `lsp`.
+- **First-party CLIs**: `intentic`, `lsp`.
 - **Search & data** (ripgrep, `jq`, `yq` (YAML, for shell pipelines) in Python just `import yaml`),
   sqlite3, xmllint, file, tree.
 - **Network**: curl, wget, rsync, openssh, ss/ip, netstat/ifconfig, lsof, fuser, ping, traceroute, dig/host,
@@ -41,7 +41,7 @@ profile:
 The heavier features are FEATURE PACKS that ride the image profile: the standard sandbox image also bakes
 **Chromium with browser tools** (`mcp__web__browser_navigate`, `mcp__web__browser_take_screenshot`, …: load
 them with ToolSearch; never install a browser yourself), a dormant Docker Engine, the provider CLIs
-(`codex`, `opencode`, `cli-proxy-api`) and semantic `iq ask`. On a minimal (core) image each arrives through
+(`codex`, `opencode`, `cli-proxy-api`). On a minimal (core) image each arrives through
 its capability's own fragment on an owner rebuild: never propose an overlay for those; enabling the
 capability composes it automatically. A few packs ride no profile and no capability because few sandboxes need
 them: `office` (LibreOffice and poppler, what `fileq render` draws documents with, ~335 MB). Ask for one by name

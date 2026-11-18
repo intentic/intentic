@@ -1,9 +1,9 @@
-// Measures the context mechanisms (the search teaching, the project map) off rows of
-// turns rather than asserting their value: each mechanism holds a share of conversations out as a control, and this
-// compares the two arms. The teaching applies every turn, so a conversation's sample averages over its turns; the map
-// applies once, so its sample is the opening turn alone. A delta is shown only once both arms reach MIN_ARM_TURNS and the
-// margin excludes zero; otherwise the reading reports arm sizes with no claim. The sandbox daemon reads its usage ledger
-// through this and the Claude Code plugin its session transcripts, so the two reports are one arithmetic.
+// Measures the context mechanisms (the project map, tool search, the stable prompt, cold trim) off rows of turns rather
+// than asserting their value: each mechanism holds a share of conversations out as a control, and this compares the two
+// arms. A mechanism that applies every turn averages a conversation's turns into one sample; the map applies once, so
+// its sample is the opening turn alone. A delta is shown only once both arms reach MIN_ARM_TURNS and the margin excludes
+// zero; otherwise the reading reports arm sizes with no claim. The sandbox daemon reads its usage ledger through this
+// and the Claude Code plugin its session transcripts, so the two reports are one arithmetic.
 
 // Turns per arm before a delta is reported; where the normal approximation behind the margin starts to hold.
 export const MIN_ARM_TURNS = 30;
@@ -12,16 +12,12 @@ export const MIN_ARM_TURNS = 30;
 const Z_95 = 1.96;
 
 // What a turn is judged on, as the savings contract spells each reading:
-// searchCalls: searches a turn ran (the search teaching).
-// openingSearches: same, narrowed to before the turn first touched a file.
 // openedWithListing: whether a turn listed directories to orient itself, as a share of turns (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
 // failedCalls: tool calls that ended in error (the price tool search, the stable prompt and cold trim could charge).
 // openingPrompt: tokens the turn's first request sent, which every later call of the turn reads again (tool search).
 // openingWrite: tokens a follow-up turn's first request wrote to the cache rather than read from it (the stable prompt).
 export type MetricName =
-    | "searchCalls"
-    | "openingSearches"
     | "openedWithListing"
     | "callsBeforeTarget"
     | "failedCalls"
@@ -37,8 +33,6 @@ export interface MeasuredTurn {
     readonly conversationId?: string | undefined;
     readonly at: number;
     readonly turnIndex?: number | undefined;
-    readonly searchCalls?: number | undefined;
-    readonly openingSearches?: number | undefined;
     readonly openingListings?: number | undefined;
     readonly callsBeforeTarget?: number | undefined;
     readonly failedCalls?: number | undefined;
@@ -104,9 +98,6 @@ const round1 = (value: number): number => Math.round(value * 10) / 10;
 // A share to a tenth of a percent.
 const round3 = (value: number): number => Math.round(value * 1000) / 1000;
 
-// Rounded to a tenth: an arm delta is a fraction of one call.
-const SEARCH_CALLS: Metric = { name: "searchCalls", of: (turn) => turn.searchCalls, round: round1 };
-const OPENING_SEARCHES: Metric = { name: "openingSearches", of: (turn) => turn.openingSearches, round: round1 };
 // The map's two readings: what it stops the turn doing, and whether it got there sooner. The first as a share of opening
 // turns that listed at all, not a mean count: most list nothing and a few list three times, so the count's mean read
 // "0.4 against 0.3", a figure nobody counts in, where the share reads "27% of first turns against 22%".
@@ -222,8 +213,6 @@ const openingTurn = (turns: readonly MeasuredTurn[], metric: Metric): number | u
 };
 
 export const MECHANISMS = {
-    // The search teaching rides every turn, so every turn is evidence.
-    search: { metrics: [SEARCH_CALLS, OPENING_SEARCHES], sampleUnit: "conversations", sample: meanOfTurns },
     // The map is sent once and judged on the turn it was sent to; `callsBeforeTarget` exists only on turns that edited.
     map: { metrics: [OPENED_WITH_LISTING, CALLS_BEFORE_TARGET], sampleUnit: "opening turns", sample: openingTurn },
     // Deferred schemas leave every request of the session, so every turn is evidence; failed calls are the price it

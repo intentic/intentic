@@ -1,6 +1,5 @@
 // maintenance: the standing evidence a chore is decided from
 import { z } from "zod";
-import { WorkspaceHotspotSchema, WorkspaceKeyModuleSchema } from "./codebase-health.js";
 // The daemon serves facts, never a verdict: which chore is due is computed by shared code
 // (`@intentic/sandbox-contract/chores`) so the tile and panel can't disagree. Split by cost: probes (subprocesses,
 // cached with a TTL) vs signals (cheap, recomputed per request).
@@ -246,24 +245,33 @@ export const ChoreShapeSchema = z.object({
         ),
 });
 export type ChoreShape = z.infer<typeof ChoreShapeSchema>;
+// A file iq once ranked as churning and tangled; kept only as the shape of the retired `hotspots` field.
+const RetiredHotspotSchema = z.object({
+    path: z.string(),
+    commits: z.number(),
+    adds: z.number(),
+    dels: z.number(),
+    complexity: z.number(),
+    score: z.number(),
+    latestMs: z.number(),
+});
 export const ChoreSignalsSchema = z.object({
     packages: z.array(ChorePackageSchema).describe("Each package in the repository, as its own manifest declares it."),
     shape: ChoreShapeSchema.describe("What the repository is made of, which decides whether a given chore is even a sensible question to ask of it."),
-    hotspots: z
-        .array(WorkspaceHotspotSchema)
-        .describe(
-            "Files that change often and are complicated at once, capped tight: a chore only asks whether something has entered the top of the ranking.",
-        ),
-    keyModules: z.array(WorkspaceKeyModuleSchema).describe("The parts the rest of the code leans on most, capped the same way."),
+    // Retired with iq (2026-11-18), which ranked them: always empty, zeros and false now, nothing reads them, and they stay
+    // so a Maintenance extension built before then still parses the report. `totals.files` is still counted: older
+    // builds gate the cross-cutting-patterns survey on it.
+    hotspots: z.array(RetiredHotspotSchema).describe("Retired: always empty."),
+    keyModules: z.array(z.object({ path: z.string(), exports: z.number() })).describe("Retired: always empty."),
     totals: z
         .object({
-            files: z.number().describe("Files counted."),
-            symbols: z.number().describe("Named things they export."),
-            complexity: z.number().describe("Branch points added up."),
-            hotspots: z.number().describe("How many files qualify as hotspots at all."),
+            files: z.number().describe("Code files in the repository: source, not data, configuration or prose."),
+            symbols: z.number().describe("Retired: always zero."),
+            complexity: z.number().describe("Retired: always zero."),
+            hotspots: z.number().describe("Retired: always zero."),
         })
         .describe("The repository in numbers."),
-    indexed: z.boolean().describe("Whether the index these rankings came from is finished. Nothing should act on a half-built one."),
+    indexed: z.boolean().describe("Retired: always false, so a build that still ranks hotspots never acts on these."),
 });
 export type ChoreSignals = z.infer<typeof ChoreSignalsSchema>;
 // `clean` is the important value: without it, a false-positive finding restarts the same turn forever.

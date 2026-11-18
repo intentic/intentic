@@ -3,7 +3,6 @@ import { isInside } from "@intentic/base/contained";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { HEALTH_LIMIT } from "@intentic/sandbox-contract/schemas/codebase-health";
 import { MAX_REF_CANDIDATES } from "@intentic/sandbox-contract/text/path-refs";
 import { previewUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { workspaceContract } from "@intentic/sandbox-contract/contracts/workspace.contract";
@@ -22,7 +21,7 @@ import { readModules } from "./deps/modules.js";
 import { readWorkspaceManifests } from "./deps/package-graph.js";
 import { readPackageModules } from "./deps/package-modules.js";
 import { readUsedPackageGraph } from "./deps/package-usage.js";
-import { discoverRepos, isValidRepoId, isValidRepoName, ROOT_REPO } from "./layout/repo-discovery.js";
+import { discoverRepos, isValidRepoName, ROOT_REPO } from "./layout/repo-discovery.js";
 import { resolveReference } from "./files/resolve-reference.js";
 import { createCheckoutOverlays, NO_OVERLAY, overlaidView } from "./files/checkout-overlay.js";
 import { type IsolatedAgent, isIsolated, type RepoRecord } from "../conversations/registry/agents-store.js";
@@ -52,22 +51,16 @@ import { callerEditFence } from "../areas/area-scope.js";
 import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 import { publicAddressOf } from "../env.config.js";
 
-// Every shared-tree file a glob matches, from the resident index's in-memory sweep: what a reference is searched with.
+// Every shared-tree file a glob matches, listed by the search box's own file search (a ripgrep walk, 25 to 40 ms over
+// /work on 2026-11-18): what a reference is searched with.
 const sharedGlob =
     (services: Services, signal: AbortSignal | undefined) =>
     async (glob: string): Promise<readonly string[]> => {
-        const outcome = await services.iq.run(
-            {
-                verb: "files",
-                query: glob,
-                scope: {},
-                render: { budget: 400, limit: MAX_REF_CANDIDATES },
-                options: { globExact: true },
-                echo: `files "${glob}" --exact`,
-            },
+        const found = await services.textSearch.files(
+            { root: services.workspace.root, query: glob, ignored: false, paths: undefined, globs: [], notGlobs: [], limit: MAX_REF_CANDIDATES },
             signal,
         );
-        return outcome.result.groups.map((group) => group.path);
+        return found.groups.map((group) => group.path);
     };
 
 // A conversation's whole change list per repo, since it branched: what its checkout holds that the index cannot see.
@@ -187,16 +180,16 @@ export const createWorkspaceRoutes = (services: Services) => {
             return services.derived.derive(services.workspace.root, await derivedRel(input.path));
         }),
         // Resolves which workspace file a named reference means (chat prose, terminal output, a tool chip); wires
-        // resolveReference to the workspace's guards, to iq's in-memory glob, and to the conversation's own changes.
+        // resolveReference to the workspace's guards, to the file search, and to the conversation's own changes.
         resolve: i.resolve.handler(async ({ input, signal, context }) => {
             refuseUnseenAgent(context, input.agent);
             // The fence applies to the ANSWER, not the question: the input is a fragment somebody wrote, and matching
             // it against the tree is exactly how a fenced caller would learn a path outside their folders exists.
             const fence = await fenceFor(context);
             const checkout = await workspaceRootFor(scope, input);
-            // The index knows the shared tree alone: what the conversation created, renamed or deleted comes from its own
-            // change list, or its new files would never resolve and its renamed ones would answer by their old names. A
-            // branch has no such list: its checkout answers for a name as written, the shared index for a partial one.
+            // The file search lists the shared tree alone: what the conversation created, renamed or deleted comes from its
+            // own change list, or its new files would never resolve and its renamed ones would answer by their old names.
+            // A branch has no such list: its checkout answers for a name as written, the shared tree for a partial one.
             const entry = input.agent === undefined ? undefined : services.agents.entry(input.agent);
             const overlay = checkout === services.workspace.root || entry === undefined || !isIsolated(entry) ? NO_OVERLAY : await overlays.of(entry);
             const resolved = await resolveReference(
@@ -207,24 +200,6 @@ export const createWorkspaceRoutes = (services: Services) => {
             // Unresolvable, not refused: to a fenced reader a file outside their folders simply is not in the
             // workspace, and a refusal here would confirm that it is.
             return fencedResolve(fence, resolved);
-        }),
-        // One repo's churn x complexity, index stats and import graph, keyed like the management panel and git-history
-        // graph. An undiscovered repo is NOT_FOUND, not zeros reading as healthy.
-        health: i.health.handler(async ({ input, context }) => {
-            if (input.repo !== "root" && !isValidRepoId(input.repo)) {
-                throw new ORPCError("BAD_REQUEST", { message: "invalid repo" });
-            }
-            // A repo's report is churn and complexity per file: the whole of it, for every path inside.
-            refuseFenced(await fenceFor(context), input.repo === "root" ? "" : input.repo);
-            if (input.repo !== "root" && !(await discoverRepos(services.workspace.root)).includes(input.repo)) {
-                throw new ORPCError("NOT_FOUND", { message: `no repo named "${input.repo}"` });
-            }
-            const report = await services.iq.health({
-                scope: { repo: input.repo === "root" ? "" : input.repo },
-                ...(input.since !== undefined ? { since: input.since } : {}),
-                limit: input.limit ?? HEALTH_LIMIT,
-            });
-            return { repo: input.repo, ...report };
         }),
         // Read-only classification of the workspace into coarse buckets, over the same filtered tree the file view
         // uses. Mutates nothing; the browser applies moves via `move`.

@@ -1,27 +1,39 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CodebaseHealth, HealthRequest } from "@intentic/iq-engine";
+import type { WorkspaceSearchResult } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { recordingLogger } from "../harness/route-fakes.testing.js";
 import { sharedChoreSignals } from "./chore-signals.js";
+import type { FileQuery } from "../workspace/text-search.js";
 import { useCheckoutFeed } from "../git/feed/checkout-feed.js";
 
 // The rail badge and the panel list at once. A reading of a repo is shared only with a caller that asked before it
 // began, so whatever either is shown was read after it asked; one begun earlier is waited out and read again.
 
-// The iq half held open per call until the test lets it go, counting the readings each repo got.
-const heldIq = () => {
+// A file count of the readings so far, as a search result.
+const counted = (files: number): WorkspaceSearchResult => ({
+    mode: "files",
+    total: files,
+    files,
+    shown: 0,
+    groups: [],
+    freshness: { state: "fresh" },
+    truncated: files > 0,
+});
+
+// The file-count half held open per call until the test lets it go, counting the readings each repo got.
+const heldCount = () => {
     const begun: string[] = [];
     const releases: (() => void)[] = [];
-    const health = async ({ scope }: HealthRequest): Promise<CodebaseHealth> => {
-        begun.push(scope.repo ?? "");
+    const files = async ({ paths }: FileQuery): Promise<WorkspaceSearchResult> => {
+        begun.push(paths?.[0] ?? "");
         await new Promise<void>((resolve) => releases.push(resolve));
-        return { hotspots: [], modules: [], totals: { files: begun.length, symbols: 0, complexity: 0, hotspots: 0 }, freshness: { state: "fresh" } };
+        return counted(begun.length);
     };
-    const services = unstubbed<Pick<Services, "iq" | "workspace" | "logger">>("services", {
-        iq: unstubbed<Services["iq"]>("iq", { health }),
+    const services = unstubbed<Pick<Services, "textSearch" | "workspace" | "logger">>("services", {
+        textSearch: unstubbed<Services["textSearch"]>("textSearch", { files }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "chores-shared-")) }),
     });
     return { services, begun, release: () => releases.shift()?.() };
@@ -34,7 +46,7 @@ afterEach(() => useCheckoutFeed(undefined));
 test("unchanged checkout generations retain completed evidence and a write refreshes it", async () => {
     let generation = 1;
     useCheckoutFeed({ generation: async () => generation });
-    const { services, begun, release } = heldIq();
+    const { services, begun, release } = heldCount();
     const shared = sharedChoreSignals(services);
     const first = shared.of("a", shared.asked());
     await settle();
@@ -51,7 +63,7 @@ test("unchanged checkout generations retain completed evidence and a write refre
 });
 
 test("a reading begun after a caller asked is shared with it, and one begun before is read again once it is done", async () => {
-    const { services, begun, release } = heldIq();
+    const { services, begun, release } = heldCount();
     const shared = sharedChoreSignals(services);
 
     const badge = shared.asked();
@@ -81,7 +93,7 @@ test("a reading begun after a caller asked is shared with it, and one begun befo
 });
 
 test("everyone who asked while a reading was under way shares the one that follows it", async () => {
-    const { services, begun, release } = heldIq();
+    const { services, begun, release } = heldCount();
     const shared = sharedChoreSignals(services);
     const under = shared.of("a", shared.asked());
     await settle();
@@ -101,9 +113,9 @@ test("everyone who asked while a reading was under way shares the one that follo
     expect(begun).toEqual(["a", "a", "a"]);
 });
 
-// The engine's history read failing (Oct 28-Nov 6: a `git log` past its deadline, 137 times) costs the list that repo's
-// rankings, never the list: the files are still read, nothing acts on the empty rankings, and the next ask tries again.
-test("a failing code-health read lists the repo without rankings, and is not kept", async () => {
+// A count that fails costs the list that repo's size, never the list: the manifests are still read, and the next ask
+// tries again.
+test("a failing file count lists the repo without a size, and is not kept", async () => {
     useCheckoutFeed({ generation: async () => 1 });
     const root = mkdtempSync(join(tmpdir(), "chores-degraded-"));
     writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { vue: "^3.0.0" } }));
@@ -111,13 +123,13 @@ test("a failing code-health read lists the repo without rankings, and is not kep
     mkdirSync(join(root, "libs/one"), { recursive: true });
     writeFileSync(join(root, "libs/one/package.json"), JSON.stringify({ name: "@x/one", dependencies: { zod: "^4.0.0" } }));
     let asked = 0;
-    const health = async (): Promise<CodebaseHealth> => {
+    const files = async (): Promise<WorkspaceSearchResult> => {
         asked += 1;
-        throw new Error("iq: git log in intentic took longer than 30s and was stopped");
+        throw new Error("ripgrep could not list the files: permission denied");
     };
     const { lines, logger } = recordingLogger();
-    const services = unstubbed<Pick<Services, "iq" | "workspace" | "logger">>("services", {
-        iq: unstubbed<Services["iq"]>("iq", { health }),
+    const services = unstubbed<Pick<Services, "textSearch" | "workspace" | "logger">>("services", {
+        textSearch: unstubbed<Services["textSearch"]>("textSearch", { files }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger,
     });
@@ -130,7 +142,7 @@ test("a failing code-health read lists the repo without rankings, and is not kep
     expect(reading.totals).toEqual({ files: 0, symbols: 0, complexity: 0, hotspots: 0 });
     expect(reading.indexed).toBe(false);
     expect(lines.filter((line) => line["level"] === "warn").map((line) => line["message"])).toEqual([
-        "chores: code health unavailable, listing without rankings",
+        "chores: could not count the repo's code files, listing without a size",
     ]);
 
     await shared.of("", shared.asked());

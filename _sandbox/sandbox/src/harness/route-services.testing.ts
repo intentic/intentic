@@ -53,7 +53,7 @@ import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { webextSliceFake } from "../webext/webext-slice.testing.js";
 import { phonesSliceFake } from "../phones/phone-slice.testing.js";
 import { depsSliceFake } from "../workspace/deps/deps-slice.testing.js";
-import { type WorkspaceFakeOverrides, workspaceSliceFake } from "../workspace/workspace-slice.testing.js";
+import { workspaceSliceFake } from "../workspace/workspace-slice.testing.js";
 import { fakeHistory } from "./route-fakes.testing.js";
 import { memoryAreasStore, memoryPersonasStore, memorySshKeyStore } from "./route-stores.testing.js";
 import type { SliceFakeContext } from "./slice-fake.testing.js";
@@ -70,7 +70,7 @@ export type WideSeamOverrides = AuthFakeOverrides &
     GitFakeOverrides &
     ProvidersFakeOverrides &
     ClaudeFakeOverrides &
-    WorkspaceFakeOverrides & { readonly sandboxSettings?: Partial<Services["sandboxSettings"]> | undefined };
+    { readonly sandboxSettings?: Partial<Services["sandboxSettings"]> | undefined };
 export type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> & WideSeamOverrides;
 
 // An audit trail that keeps what is recorded in memory and lists nothing back.
@@ -145,7 +145,7 @@ interface ComposedServices {
 }
 
 export const services = (overrides: ServiceOverrides = {}): Services => {
-    const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, iq, ...rest } = overrides;
+    const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, ...rest } = overrides;
     // Filled once the literal below is: every slice fake that answers through the finished services reads it per call.
     const composed: ComposedServices = {};
     const context: SliceFakeContext = {
@@ -187,7 +187,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         ...sessionsSliceFake(context),
         ...webextSliceFake(),
         ...phonesSliceFake(),
-        ...workspaceSliceFake({ iq }),
+        ...workspaceSliceFake(),
         ...claudeSliceFake({ claudeStore }),
         ...codexSliceFake(),
         ...cursorSliceFake(),

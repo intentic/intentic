@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { createResidentEngine, type ResidentEngine } from "@intentic/iq-engine";
+import { findFiles } from "@intentic/text-search";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { createLogger } from "../../logger.js";
 import { createPerfTracker } from "../../system/resources/perf.js";
@@ -15,7 +15,7 @@ import { workspacePaths } from "../workspace.js";
 import { createCheckoutOverlays, NO_OVERLAY, overlaidView, overlayOf } from "./checkout-overlay.js";
 import { resolveReference } from "./resolve-reference.js";
 
-// A conversation's references against real git and the real resident index: the index sweeps the shared tree alone, so
+// A conversation's references against real git and the real file search: the search lists the shared tree alone, so
 // only the conversation's own change list can say what its checkout created or renamed. No stub stands in for either.
 
 const exec = promisify(execFile);
@@ -25,11 +25,7 @@ const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot:
 const perf = createPerfTracker(logger);
 
 const tempDirs: string[] = [];
-const engines: ResidentEngine[] = [];
 afterEach(async () => {
-    for (const engine of engines.splice(0)) {
-        await engine.close();
-    }
     for (const dir of tempDirs.splice(0)) {
         await rm(dir, { recursive: true, force: true });
     }
@@ -58,10 +54,8 @@ const setup = async (files: readonly string[]): Promise<{ work: string; worktree
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 
-// What workspace.resolve answers for c1: its checkout over the shared tree, the shared tree searched by a real index.
+// What workspace.resolve answers for c1: its checkout over the shared tree, the shared tree listed by the real file search.
 const resolverFor = (work: string, worktrees: AgentWorktrees, conversation: ConversationWorktree) => {
-    const iq = createResidentEngine({ root: work });
-    engines.push(iq);
     const overlays = createCheckoutOverlays({ changesOf: (entry, composed) => agentRepoChanges(worktrees, entry, composed, "cumulative"), logger });
     return async (reference: string) =>
         resolveReference(
@@ -71,22 +65,12 @@ const resolverFor = (work: string, worktrees: AgentWorktrees, conversation: Conv
                 checkout: conversation.cwd,
                 shared: work,
                 overlay: await overlays.of(isolatedAgent(conversation.repos)),
-                matching: async (glob) => {
-                    const outcome = await iq.run({
-                        verb: "files",
-                        query: glob,
-                        scope: {},
-                        render: { budget: 400, limit: 10 },
-                        options: { globExact: true },
-                        echo: `files "${glob}" --exact`,
-                    });
-                    return outcome.result.groups.map((group) => group.path);
-                },
+                matching: async (glob) => (await findFiles({ root: work, query: glob, limit: 10 })).groups.map((group) => group.path),
             }),
         );
 };
 
-test("a file the conversation created resolves from the short path its agent writes, though the shared index never saw it", async () => {
+test("a file the conversation created resolves from the short path its agent writes, though the shared tree's listing never holds it", async () => {
     const { work, worktrees, conversation } = await setup(["_os/os-image/disk.sh"]);
     await write(conversation.cwd, "_os/os-image/installer/bib-config.toml");
     const resolve = resolverFor(work, worktrees, conversation);
@@ -108,7 +92,7 @@ test("a file the conversation renamed opens where it went, not as the stale copy
     const moved = { path: "_os/installer/bib-config.toml", renamedFrom: "_os/installer/config.toml" };
     expect(await resolve("_os/installer/config.toml")).toEqual(moved);
     expect(await resolve("installer/config.toml")).toEqual(moved);
-    // An untouched file still answers from the shared index, as before.
+    // An untouched file still answers from the shared tree, as before.
     expect(await resolve("src/app.ts")).toEqual({ path: "src/app.ts" });
 });
 
@@ -130,7 +114,7 @@ describe("overlaidView on real folders", () => {
         tempDirs.push(shared, checkout);
     });
 
-    test("answers for the conversation's own files, which the shared index has never seen", async () => {
+    test("answers for the conversation's own files, which the shared tree does not hold", async () => {
         await write(checkout, "intentic/_os/README.md");
         const view = overlaidView({
             checkout,

@@ -22,15 +22,14 @@ test("get returns the defaults when the file is absent", async () => {
 });
 
 // A sandbox that never wrote the file is a new one (an older one had it written at boot, earlier-defaults-step.ts).
-test("a sandbox with no manifest runs with iq search and the project map on", async () => {
+test("a sandbox with no manifest runs with the project map on", async () => {
     const { store } = tempStore();
-    const settings = await store.get();
-    expect([settings.iqSearch, settings.workspaceMap]).toEqual([true, true]);
+    expect((await store.get()).workspaceMap).toBe(true);
 });
 
 test("set then get round-trips the full settings object", async () => {
     const { store } = tempStore();
-    const enabled: SandboxSettings = { ...DEFAULTS, iqSearch: false, hashlineEdits: true, agentRetentionDays: 0 };
+    const enabled: SandboxSettings = { ...DEFAULTS, workspaceMap: false, hashlineEdits: true, agentRetentionDays: 0 };
     await store.set(enabled);
     expect(await store.get()).toEqual(enabled);
     await store.set(DEFAULTS);
@@ -42,7 +41,7 @@ test("a corrupt or schema-invalid manifest reads as the defaults rather than thr
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, "{ not valid json");
     expect(await store.get()).toEqual(DEFAULTS);
-    await writeFile(path, JSON.stringify({ iqSearch: "yes" }));
+    await writeFile(path, JSON.stringify({ workspaceMap: "yes" }));
     expect(await store.get()).toEqual(DEFAULTS);
 });
 
@@ -50,7 +49,7 @@ test("a corrupt or schema-invalid manifest reads as the defaults rather than thr
 test("set refuses to write over a file this build could not read, and leaves the bytes alone", async () => {
     const { store, path } = tempStore();
     await mkdir(dirname(path), { recursive: true });
-    for (const bytes of ["{ not valid json", JSON.stringify({ iqSearch: "yes" })]) {
+    for (const bytes of ["{ not valid json", JSON.stringify({ workspaceMap: "yes" })]) {
         await writeFile(path, bytes);
         await expect(store.set(DEFAULTS)).rejects.toBeInstanceOf(ManifestUnreadableError);
         expect(await readFile(path, "utf8")).toBe(bytes);
@@ -62,26 +61,26 @@ test("load says when the defaults stand in for a file this build could not read"
     const { store, path } = tempStore();
     expect(await store.load()).toEqual({ settings: DEFAULTS, unreadable: false });
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify({ iqSearch: "yes" }));
+    await writeFile(path, JSON.stringify({ workspaceMap: "yes" }));
     expect(await store.load()).toEqual({ settings: DEFAULTS, unreadable: true });
 });
 
 // A manifest written before a flag existed is missing that key, which the schema fills with the flag's own
-// default, so the owner's OTHER picks survive the upgrade instead of the whole object being discarded. The two flags
-// whose default turned on (2026-11-04) are the exception: a file that names one keeps it, one that names neither keeps
-// the old default.
+// default, so the owner's OTHER picks survive the upgrade instead of the whole object being discarded. The flag whose
+// default turned on (2026-11-04) is the exception: a file that names it keeps it, one that does not keeps the old
+// default.
 test("an older manifest missing a flag keeps its picks and defaults the new one", async () => {
     const { store, path } = tempStore();
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify({ iqSearch: true, hashlineEdits: true }));
-    expect(await store.get()).toEqual({ ...DEFAULTS, iqSearch: true, hashlineEdits: true, workspaceMap: false });
+    await writeFile(path, JSON.stringify({ hashlineEdits: true }));
+    expect(await store.get()).toEqual({ ...DEFAULTS, hashlineEdits: true, workspaceMap: false });
 });
 
-test("a manifest from before iq search and the project map turned on keeps both off", async () => {
+test("a manifest from before the project map turned on keeps it off", async () => {
     const { store, path } = tempStore();
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify({ agentRetentionDays: 7 }));
-    expect(await store.get()).toEqual({ ...DEFAULTS, agentRetentionDays: 7, iqSearch: false, workspaceMap: false });
+    expect(await store.get()).toEqual({ ...DEFAULTS, agentRetentionDays: 7, workspaceMap: false });
 });
 
 // What acts by a setting re-reads on its write rather than on its next beat (the resume pass's answers, 2026-10-20).
@@ -89,11 +88,11 @@ test("a write is heard once it is down, and not after the listener leaves", asyn
     const { store } = tempStore();
     const read: SandboxSettings[] = [];
     const unhear = store.onSet(() => void store.get().then((settings) => read.push(settings)));
-    await store.set({ ...DEFAULTS, iqSearch: false });
+    await store.set({ ...DEFAULTS, workspaceMap: false });
     unhear();
     await store.set(DEFAULTS);
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(read.map((settings) => settings.iqSearch)).toEqual([false]);
+    expect(read.map((settings) => settings.workspaceMap)).toEqual([false]);
 });
 
 // A hands-off sandbox owns its land, version and back-up rules (sandbox-mode.ts): every read hands them back standing,

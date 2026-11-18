@@ -142,7 +142,9 @@ export const MODEL_ROLES = [
     {
         id: "refactor-run",
         label: "Refactors",
-        blurb: "The agent started from a hotspot or key module on a repository's Health tab.",
+        // Started from the Health tab, removed with iq (2026-11-18). The id stays: every saved roleSetups names it, and a
+        // newer editor reads an older daemon's settings with this enum.
+        blurb: "Kept so settings saved before the Health tab was removed still read; nothing starts a refactor run now.",
         kind: "run",
         icon: "hammer",
         setup: "high",

@@ -1,13 +1,10 @@
-import { join } from "node:path";
-import { repoRoot } from "@intentic/constants/node";
 import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { conversationAfter } from "../../../conversations/registry/agents-store.testing.js";
-import { testConfig } from "../../../env.config.testing.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { base, budgetOn, context, memoryReading, servicesWith, turn } from "../turn/turn-plan.testing.js";
 import { type AdmittedTurnFacts, gatherTurnFacts, type TurnFacts } from "./turn-facts.js";
@@ -22,9 +19,6 @@ const admitted = (facts: TurnFacts): AdmittedTurnFacts => {
     }
     return facts;
 };
-
-const settingsOf = (settings: SandboxSettings): Services["sandboxSettings"] =>
-    unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings });
 
 const conversationAt = (turns: number): Services["agents"] => unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(turns) });
 
@@ -142,39 +136,6 @@ test.each([
         ],
     ],
     [
-        "a turn behind the retrieval flag with iq search on",
-        { agent: "claude" },
-        context,
-        { config: { ...testConfig, iqTurnContext: true }, sandboxSettings: settingsOf(SandboxSettingsSchema.parse({ iqSearch: true })) },
-        [
-            "turn.plan.settings",
-            "turn.plan.window",
-            "turn.plan.privacy",
-            "turn.plan.capabilities",
-            "turn.plan.personas",
-            "turn.plan.areas",
-            "turn.plan.context",
-            "turn.plan.repo-checks",
-            "turn.plan.turn-context",
-        ],
-    ],
-    [
-        "the retrieval flag with iq search off",
-        { agent: "claude" },
-        context,
-        { config: { ...testConfig, iqTurnContext: true }, sandboxSettings: settingsOf(SandboxSettingsSchema.parse({ iqSearch: false })) },
-        [
-            "turn.plan.settings",
-            "turn.plan.window",
-            "turn.plan.privacy",
-            "turn.plan.capabilities",
-            "turn.plan.personas",
-            "turn.plan.areas",
-            "turn.plan.context",
-            "turn.plan.repo-checks",
-        ],
-    ],
-    [
         "a card that drops the checks note, which is never read for it",
         { agent: "claude", actsAs: "quiet" },
         context,
@@ -237,25 +198,6 @@ test("an approval policy that cannot be read withholds nothing, and says so", as
 
     expect(facts.gates).toEqual([]);
     expect(warned).toEqual(["credential gates: the approval policy could not be read, no capability is withheld this turn"]);
-});
-
-const IQ_PLUGIN_DIR = join(repoRoot(import.meta.url), "_search/iq/plugin");
-
-// Read for a turn that is sent it, and for a measured conversation's turns that only stamp its cohort.
-test.each([
-    ["native Codex's opening turn, which is sent it", "codex", 0, true],
-    ["the Claude Code loop, which loads the plugin instead", "claude", 0, false],
-    ["the Claude Code loop in a measured conversation, which stamps its cohort", "claude", 0.5, true],
-] as const)("the iq teaching is read for %s", async (_case, agent, holdout, read) => {
-    const services = servicesWith({
-        config: { ...testConfig, iqPluginDir: IQ_PLUGIN_DIR },
-        sandboxSettings: settingsOf(SandboxSettingsSchema.parse({ iqSearch: true, iqSearchHoldout: holdout })),
-        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
-    });
-
-    const facts = admitted(await gatherTurnFacts(services, turn({ agent, conversationId: "c-iq" }), context));
-
-    expect(facts.iqTeaching).toEqual(read ? { note: expect.stringContaining("## iq workspace search"), cohort: expect.any(String) } : undefined);
 });
 
 // Said on the opening message and again after a compaction summarizes it away (turn-premise.ts), as every standing note

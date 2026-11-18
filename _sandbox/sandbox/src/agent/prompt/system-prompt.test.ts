@@ -51,7 +51,7 @@ const otherAppend = (capabilities: typeof CODEX, facts: Partial<Parameters<typeo
     withRuntimeGuidance(
         { prompt: "", cwd: "/w", ...turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "" }) },
         capabilities,
-        guidanceBlock({ ...OTHER_FACTS, runtime: otherRuntime(capabilities.secrets), ...facts }, "rg"),
+        guidanceBlock({ ...OTHER_FACTS, runtime: otherRuntime(capabilities.secrets), ...facts }),
         undefined,
     ).systemAppend ?? "";
 
@@ -116,7 +116,7 @@ const OTHER_FACTS = {
 };
 
 test("a runtime with a system seam carries the guidance ahead of its append, and one without carries it on the opening message", () => {
-    const guidance = guidanceBlock(OTHER_FACTS, "rg");
+    const guidance = guidanceBlock(OTHER_FACTS);
     const appended = withRuntimeGuidance({ prompt: "go", cwd: "/w", systemAppend: "## Who" }, CODEX, guidance, undefined);
     expect(appended.systemAppend).toBe(`${guidance}\n\n## Who`);
     const persona = { title: PERSONA_NOTE_TITLE, text: "## Who" };
@@ -127,7 +127,7 @@ test("a runtime with a system seam carries the guidance ahead of its append, and
 });
 
 test("the Claude Code loop, a custom prompt and a window too small for it take no placed guidance", () => {
-    const guidance = guidanceBlock(OTHER_FACTS, "rg");
+    const guidance = guidanceBlock(OTHER_FACTS);
     const spec = { prompt: "go", cwd: "/w", systemAppend: "x" };
     expect(withRuntimeGuidance(spec, CLAUDE, guidance, undefined)).toBe(spec);
     expect(withRuntimeGuidance({ ...spec, systemPromptMode: "custom" }, CODEX, guidance, undefined).systemAppend).toBe("x");
@@ -302,7 +302,7 @@ test("the loop's own composition is the base, the guidance block, then the appen
         hostDevices: undefined,
         ownBrowsers: undefined,
     };
-    expect(composed).toBe(`${INTENTIC}\n\n${guidanceBlock(mounted, "rg")}\n\nextra`);
+    expect(composed).toBe(`${INTENTIC}\n\n${guidanceBlock(mounted)}\n\nextra`);
 });
 
 test("custom reaches the SDK as the bare text, with no guidance at all", async () => {
@@ -372,16 +372,6 @@ test("the search-binary steer travels to every runtime, like the other image fac
     expect(otherAppend(CODEX)).toContain("`rg` (ripgrep)");
     const claude = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, append: undefined })) as string;
     expect(claude).toContain("`rg` (ripgrep)");
-});
-
-// iqSearch is a switch (on for new sandboxes, off for older ones) with a holdout arm; naming it here unconditionally would jump that gate and
-// spoil the holdout.
-test("the always-on prompt never advertises iq: its plugin is gated and under measurement", async () => {
-    const intentic = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, append: undefined })) as string;
-    const claude = (await systemPromptOf({ ...BASE, mode: "claude", custom: undefined, append: undefined })) as { append: string };
-    for (const text of [intentic, claude.append]) {
-        expect(text).not.toMatch(/\biq\b/);
-    }
 });
 
 // Names the situation (orienting) rather than restating the batching rule.

@@ -1,6 +1,5 @@
 import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/stream-of.js";
-import { WorkspaceHealthQuerySchema, WorkspaceHealthSchema } from "../schemas/codebase-health.js";
 import { WorkspaceModulesSchema } from "../schemas/git/git.js";
 import { OkSchema } from "../schemas/shared.js";
 import {
@@ -194,14 +193,14 @@ export const workspaceContract = {
         .meta({ guest: true })
         .input(WorkspaceResolveQuerySchema)
         .output(WorkspaceResolveSchema),
-    // `mode` narrows the search to one kind; default fuses text, structure, meaning and history in one pass.
+    // `mode` picks text (the default) or file names; both are ripgrep walks of the tree as it is on disk.
     search: procedure
         .route({
             method: "GET",
             path: "/workspace/search",
             summary: "Search the code",
             description:
-                "Ranked results across the whole workspace, grouped, each carrying why it matched and how fresh it is. Left alone it blends plain text, structure, meaning and history in one pass; narrow it to a single kind of search when you already know which you want. Long result sets resume from the cursor it hands back.",
+                "Matching lines across the whole workspace grouped by file, or with the files mode the files whose names match, best first. Both read the tree as it is on disk, with no index in between. Long result sets resume from the cursor it hands back.",
         })
         .meta({ guest: true, control: "editor" })
         .input(WorkspaceSearchQuerySchema)
@@ -219,17 +218,6 @@ export const workspaceContract = {
         .meta({ floor: "viewer", guest: true, stream: true, control: "editor" })
         .input(WorkspaceSearchQuerySchema)
         .output(streamOf(WorkspaceSearchFrameSchema)),
-    // Per-file churn × complexity, index totals, top modules; scoped to a repo, not the whole /work drop.
-    health: procedure
-        .route({
-            method: "GET",
-            path: "/workspace/health",
-            summary: "A repo's shape in numbers",
-            description:
-                "Where one repo's risk sits: the files that change often and are complicated at once, what the index holds, and which modules the rest of the code leans on most. Scoped to a repo, because a codebase is a repo rather than the whole drop.",
-        })
-        .input(WorkspaceHealthQuerySchema)
-        .output(WorkspaceHealthSchema),
     // Deterministic, no-LLM classification into coarse buckets; read-only, applied only via the move route.
     classify: procedure
         .route({

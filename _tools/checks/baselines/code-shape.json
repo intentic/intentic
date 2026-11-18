@@ -545,12 +545,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/workspace/home/HomeView.vue": 689,
-    "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue": 1080,
-    "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue#<anonymous>#lines": {
-        "count": 129,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/features/workspace/page/WorkspaceMobile.vue": 745,
+    "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue": 950,
+    "_editor/web/src/features/workspace/page/WorkspaceMobile.vue": 754,
     "_editor/web/src/features/workspace/viewers/FileViewer.vue": {
         "count": 869,
         "why": "standing when the check arrived (2026-10-16)"
@@ -970,10 +966,6 @@
         "count": 30,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/claude-plugin/src/session-start.ts#compose#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/fileq/src/lib/check/check-pptx.ts": {
         "count": 678,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1015,7 +1007,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/output-cleaners/src/cleaners.mjs": {
-        "count": 735,
+        "count": 719,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/privacy-detect/src/contact.ts#isPhone#cyclomatic": {
@@ -1223,19 +1215,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts": {
-        "count": 1069,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts#baseOptions#cyclomatic": {
-        "count": 21,
+        "count": 1058,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts#baseOptions#lines": {
-        "count": 141,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts#permissionGate#lines": {
-        "count": 109,
+        "count": 140,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts#runAgent.<anonymous>#cognitive": {
@@ -1244,14 +1228,6 @@
     },
     "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts#runAgent#lines": {
         "count": 188,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/agent/run/harness/harness-servers.ts#release#cognitive": {
-        "count": 35,
-        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
-    },
-    "_sandbox/sandbox/src/agent/run/placement/worktree-placement.ts#worktreePlacement#lines": {
-        "count": 135,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/harness/claude-code-stream.ts": {
@@ -1268,6 +1244,14 @@
     },
     "_sandbox/sandbox/src/agent/run/harness/claude-code-stream.ts#onStreamEvent#cyclomatic": {
         "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/harness/harness-servers.ts#release#cognitive": {
+        "count": 35,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/agent/run/placement/worktree-placement.ts#worktreePlacement#lines": {
+        "count": 135,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1025,
@@ -1427,10 +1411,6 @@
         "count": 139,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/automations/scheduler.ts": {
-        "count": 1174,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/automations/fire/run-fire.ts#runFire#cognitive": {
         "count": 79,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1441,6 +1421,10 @@
     },
     "_sandbox/sandbox/src/automations/fire/run-fire.ts#runFire#lines": {
         "count": 273,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/automations/scheduler.ts": {
+        "count": 1174,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/watch/watch-condition.ts#checkCondition#cognitive": {
@@ -1575,10 +1559,6 @@
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/chores/chore-signals.ts#findFiles#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/ci/ci.routes.ts#createCiRoutes#lines": {
         "count": 121,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1644,9 +1624,9 @@
         "count": 115,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/composition.ts": 912,
+    "_sandbox/sandbox/src/composition.ts": 906,
     "_sandbox/sandbox/src/composition.ts#createServices#lines": {
-        "count": 273,
+        "count": 271,
         "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
     },
     "_sandbox/sandbox/src/conversations/actor/conversation-actors.ts#createConversationActors#lines": {
@@ -1715,11 +1695,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/worktrees/worktrees.ts": {
-        "count": 849,
+        "count": 826,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/worktrees/worktrees.ts#createAgentWorktrees#lines": {
-        "count": 688,
+        "count": 656,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/definition/apply-definition.ts#applyDefinitionItems#cognitive": {
@@ -1743,7 +1723,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/derived/shadow-keeper.ts#createShadowKeeper#lines": {
-        "count": 273,
+        "count": 261,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/derived/shadow-keeper.ts#walk#cognitive": {
@@ -1767,7 +1747,7 @@
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/environment/contents.ts#readEnvironmentContents#cognitive": {
-        "count": 30,
+        "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/environment/environment.routes.ts#createEnvironmentRoutes#lines": {
@@ -2179,7 +2159,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/privacy/ner.ts#loadRecognizer#lines": {
-        "count": 118,
+        "count": 115,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/privacy/privacy-shield.ts#createPrivacyShield#lines": {
@@ -2781,7 +2761,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workspace/workspace.routes.ts#createWorkspaceRoutes#lines": {
-        "count": 456,
+        "count": 398,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/scaffold/src/deploy-config.ts#parseLine#cyclomatic": {
@@ -2836,274 +2816,6 @@
         "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_search/iq-bench/src/agents/analyze.ts#analyzeEvents#cognitive": {
-        "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-bench/src/agents/analyze.ts#toolEvents#cognitive": {
-        "count": 28,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-bench/src/agents/claude.ts#parseClaudeStream#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-bench/src/agents/codex.ts#parseCodexStream#cognitive": {
-        "count": 28,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-bench/src/agents/codex.ts#parseCodexStream#cyclomatic": {
-        "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-bench/src/agents/run.ts#agents#cognitive": {
-        "count": 41,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-bench/src/agents/run.ts#agents#cyclomatic": {
-        "count": 30,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-bench/src/report.ts#renderAgentsReport#cognitive": {
-        "count": 32,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-bench/src/report.ts#renderAgentsReport#cyclomatic": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-bench/src/retrieval.ts#runConfig#cognitive": {
-        "count": 26,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/engines/catalog.ts#entryMatch#cognitive": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/engines/catalog.ts#parseCatalog#lines": {
-        "count": 123,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/engines/catalog.ts#value#cognitive": {
-        "count": 46,
-        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
-    },
-    "_search/iq-engine/src/engines/lexical.ts#onLine#cognitive": {
-        "count": 23,
-        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
-    },
-    "_search/iq-engine/src/engines/lexical.ts#rgSearch#lines": {
-        "count": 129,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/engines/routes.ts#compileRoute#cognitive": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/engines/routes.ts#literal#cognitive": {
-        "count": 52,
-        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
-    },
-    "_search/iq-engine/src/engines/routes.ts#routeTable#cognitive": {
-        "count": 107,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/engines/routes.ts#routeTable#cyclomatic": {
-        "count": 71,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/engines/routes.ts#routeTable#lines": {
-        "count": 249,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/host/client.ts#createEngineClient#lines": {
-        "count": 258,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/index.ts#createEngine#lines": {
-        "count": 131,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/index.ts#createResidentEngine#lines": {
-        "count": 192,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/indexer/chunker.ts#chunkFile#cognitive": {
-        "count": 32,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/indexer/chunker.ts#chunkFile#cyclomatic": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/indexer/indexer.ts#revalidate#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/indexer/symbols.ts#extractSymbols#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/plan/fuse.ts#fuse#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/render/text.ts#renderText#cognitive": {
-        "count": 64,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/render/text.ts#renderText#cyclomatic": {
-        "count": 44,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/render/text.ts#renderText#lines": {
-        "count": 142,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/dispatch.ts": {
-        "count": 1069,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/dispatch.ts#dispatch#cognitive": {
-        "count": 61,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/dispatch.ts#dispatch#cyclomatic": {
-        "count": 50,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/dispatch.ts#dispatch#lines": {
-        "count": 121,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/dispatch.ts#naturalPlan#cognitive": {
-        "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/dispatch.ts#runVerb#cognitive": {
-        "count": 134,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/dispatch.ts#runVerb#cyclomatic": {
-        "count": 91,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/dispatch.ts#runVerb#lines": {
-        "count": 343,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/route.ts#routeAnswer#cognitive": {
-        "count": 58,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/route.ts#routeAnswer#cyclomatic": {
-        "count": 35,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/route.ts#routeAnswer#lines": {
-        "count": 143,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verify/check.ts#verifyReferences#cognitive": {
-        "count": 48,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verify/check.ts#verifyReferences#cyclomatic": {
-        "count": 26,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verify/check.ts#verifyReferences#lines": {
-        "count": 107,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verify/extract.ts#extractReferences.<anonymous>#cognitive": {
-        "count": 46,
-        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
-    },
-    "_search/iq-engine/src/verify/extract.ts#extractReferences.<anonymous>#cyclomatic": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verify/lookup.ts#indexLookup#lines": {
-        "count": 163,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verify/lookup.ts#resolvePath#cognitive": {
-        "count": 24,
-        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
-    },
-    "_search/iq-engine/src/workspace/scan.ts#walk.<anonymous>#cognitive": {
-        "count": 25,
-        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
-    },
-    "_search/iq/src/commands/sessions/sessions.routes.ts#func#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/lib/flags.ts#echoOf#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/lib/flags.ts#echoOf#cyclomatic": {
-        "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/lib/run.ts#parseMultiLine#cognitive": {
-        "count": 58,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/lib/run.ts#parseMultiLine#cyclomatic": {
-        "count": 46,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/lib/run.ts#runMulti#cognitive": {
-        "count": 28,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/lib/run.ts#tokenize#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/fork/fork-point.ts#selectForkPoint#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/fork/fork-point.ts#selectForkPoint#cyclomatic": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/fork/fork.ts#materializeFork#cognitive": {
-        "count": 43,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/fork/fork.ts#materializeFork#cyclomatic": {
-        "count": 29,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/fork/fork.ts#materializeFork#lines": {
-        "count": 105,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/ingest/ingest.ts#ingest#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/ingest/ingest.ts#parseDelta#cognitive": {
-        "count": 29,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/ingest/ingest.ts#parseDelta#cyclomatic": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/transcript/lines.ts#fileTouchesOf#cognitive": {
-        "count": 26,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/transcript/lines.ts#fileTouchesOf#cyclomatic": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_shared/api-contract/src/schemas.ts": {
         "count": 656,
         "why": "standing when the check arrived (2026-10-16)"
@@ -3153,7 +2865,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/chores/chores.ts": {
-        "count": 1105,
+        "count": 1045,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/chores/probes.ts": {
@@ -3203,7 +2915,7 @@
     },
     "_shared/sandbox-contract/src/schemas/settings.ts": 764,
     "_shared/sandbox-contract/src/state/workspace-state.ts": {
-        "count": 809,
+        "count": 807,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/text/transcript-fold.ts": {

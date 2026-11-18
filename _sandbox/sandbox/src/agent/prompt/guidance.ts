@@ -35,45 +35,29 @@ export { CLAUDE_CODE_RUNTIME, claudeCodeRuntime, type GuidanceFacts, otherRuntim
 export const GUIDANCE_TITLE = "Working in this sandbox";
 export const GUIDANCE_HEADER = `## ${GUIDANCE_TITLE}`;
 
-// Which tool the turn is told to find code with: `iq` when the conversation has the iq teaching (decide/experiments.ts),
-// `rg` for its holdout and wherever iq is off. One line, never both teachings unreconciled: the system prompt outranks
-// the teaching's own note, so a prompt that said `rg` alone won the argument on every search that followed.
-export type SearchTool = "iq" | "rg";
-
-// What an entry reads: the turn's facts and the search tool it is taught.
-type EntryFacts = GuidanceFacts & { readonly search: SearchTool };
-
 interface GuidanceEntry {
     readonly id: string;
     // Holds the entry to the turns it is true of; absent is every turn.
     readonly when?: (facts: GuidanceFacts) => boolean;
-    readonly text: string | ((facts: EntryFacts) => string);
+    readonly text: string | ((facts: GuidanceFacts) => string);
     // An entry whose condition moves between two turns of one conversation (who is watching, which of the owner's
     // machines is online): under a stable prompt it leaves the system block for the turn's own message.
     readonly volatile?: true;
 }
 
-// What the `search` entry says for each tool, as data: the iq teaching's cohort hashes the iq half
-// (iq-search-instruction.ts), since it is part of what that experiment's arm is told.
-// Documents ride both arms: the shadow keeper and its ripgrep config (derived/search-env.ts) make them searchable
-// whichever tool finds code, and the variable is how a turn can tell the setting is on.
-const documentSearch = (ranker: string): string =>
+// Documents are searchable through the shadow keeper and its ripgrep config (derived/search-env.ts), and the variable is
+// how a turn can tell the setting is on.
+const DOCUMENT_SEARCH =
     " When `$RIPGREP_CONFIG_PATH` is set, documents (pdf, docx, xlsx, pptx, odt, epub…) are searchable too: `rg` in the " +
-    `shell prints a hit as \`docs/terms.pdf:345:[p. 12] …\` (\`[p. N]\` is the page)${ranker}, and an answer drawn ` +
-    "from one cites file and page.";
+    "shell prints a hit as `docs/terms.pdf:345:[p. 12] …` (`[p. N]` is the page), and an answer drawn from one cites file " +
+    "and page.";
 
-export const SEARCH_GUIDANCE: Record<SearchTool, string> = {
-    iq:
-        `Find code with \`iq "<question>"\`: it ranks the workspace by what you mean and names the line to open, so use ` +
-        `it whenever you are looking for where something lives or how it works. Use \`rg\` (ripgrep) once you hold the ` +
-        `exact string, and to list or count every occurrence of it; never \`grep -r\`, which walks node_modules. Reach ` +
-        `for \`grep\` only to filter text you already have in hand (a log, a command's output).${documentSearch(", iq ranks them by meaning")}`,
-    rg:
-        `Search code with \`rg\` (ripgrep), which is installed: it is ~30× faster than \`grep -r\` on this tree and ` +
-        `returns about a third of the bytes for the same hits, because it skips node_modules, dist and binaries ` +
-        `without being told to. Reach for \`grep\` only to filter text you already have in hand (a log, a command's ` +
-        `output), never to walk the repository.${documentSearch("")}`,
-};
+// What the `search` entry says.
+const SEARCH_GUIDANCE =
+    `Search code with \`rg\` (ripgrep), which is installed: it is ~30× faster than \`grep -r\` on this tree and ` +
+    `returns about a third of the bytes for the same hits, because it skips node_modules, dist and binaries ` +
+    `without being told to. Reach for \`grep\` only to filter text you already have in hand (a log, a command's ` +
+    `output), never to walk the repository.${DOCUMENT_SEARCH}`;
 
 const LANDING = "The owner lands uncommitted work; commit only when asked.";
 
@@ -102,7 +86,7 @@ const UNDERFOOT =
 const PRODUCT_GUIDE = "`/root/.claude/skills/intentic/SKILL.md`";
 
 // The question card: the loop's own where it has one, the `ui` server's everywhere else.
-const askText = (facts: EntryFacts): string => {
+const askText = (facts: GuidanceFacts): string => {
     const card = facts.runtime.nativeAsk ? "the AskUserQuestion tool" : toolName(facts, "ui", "ask");
     const ask =
         `When a decision is genuinely the user's to make (an ambiguous requirement, a fork between real alternatives, a missing preference you cannot infer from the code), ask with ${card}. ` +
@@ -117,7 +101,7 @@ const askText = (facts: EntryFacts): string => {
 // decides rather than asks; a question it asks anyway is answered the same way by the card registry (parked-cards.ts).
 // A plan only where the loop has plan mode: under `decide` one it chose is approved for the owner, under `defer` it
 // waits for the morning like the rest.
-const nightText = (facts: EntryFacts): string => {
+const nightText = (facts: GuidanceFacts): string => {
     const until = facts.night?.until ?? "morning";
     const asleep =
         `It is the owner's night: their night hours run until ${until} on the sandbox's clock, and nobody is at the editor, ` +
@@ -147,7 +131,7 @@ const nightText = (facts: EntryFacts): string => {
 // `wait` tool" sent 21 turns to ToolSearch for `select:wait`, a name nothing answers to (to 2026-10-26). A loop whose
 // shell files a long command as a job (RuntimeFacts.shellJobs) is told it gets an id to wait on; one that does not is
 // told nothing about background commands: until 2026-11-02 every such loop was told to `wait` on one it had no id for.
-const waitingText = (facts: EntryFacts): string => {
+const waitingText = (facts: GuidanceFacts): string => {
     const watch = facts.watch !== false ? toolName(facts, "watch", "start") : undefined;
     const wait = toolName(facts, "subagents", "wait");
     const keep = toolName(facts, "subagents", "keep");
@@ -181,7 +165,7 @@ const hasDevices = ({ hostDevices }: GuidanceFacts): boolean => hostDevices !== 
 
 // Said only while this sandbox is full and a runner is calm, so it costs nothing on a quiet fleet. Named machines, since
 // "a runner" tells a model nothing it can weigh; the spawn sentence only where the turn holds the spawn tool.
-const fleetFull = (facts: EntryFacts): string => {
+const fleetFull = (facts: GuidanceFacts): string => {
     const roomy = facts.fleetPressure?.roomy ?? [];
     const machines = roomy.length === 1 ? `${roomy[0]} has` : `${roomy.slice(0, -1).join(", ")} and ${roomy.at(-1)} have`;
     const spawn =
@@ -299,13 +283,13 @@ const ENTRIES: readonly GuidanceEntry[] = [
     { id: "underfoot", text: UNDERFOOT },
     {
         id: "search",
-        // Measured on the ledger: an iq call led straight to the file the turn opened next about 60% of the time, an rg
-        // call about 23%, so iq is named for finding and rg kept for the exact string a turn already holds.
-        text: ({ search }) => SEARCH_GUIDANCE[search],
+        // iq was named here for finding code until 2026-11-18: a held-out half told rg instead spent no more and searched
+        // no more, so rg is the one tool named.
+        text: SEARCH_GUIDANCE,
     },
     {
         id: "walks",
-        // Its own entry rather than a clause of `search`, whose iq text is hashed into that experiment's cohort. Agents
+        // Its own entry rather than a clause of `search`. Agents
         // hunting a file they could not place (a skill's SKILL.md, a crate's source) ran `find /`, which walks every
         // conversation's checkout: one read 3.2 GB in two minutes and stalled the machine (2026-10-21).
         // The map of where things live is the intentic skill's paths reference (2026-11-17).
@@ -374,17 +358,17 @@ const ENTRIES: readonly GuidanceEntry[] = [
     { id: "fleet", volatile: true, when: ({ fleetPressure }) => fleetPressure !== undefined, text: fleetFull },
 ];
 
-const textOf = (entry: GuidanceEntry, facts: GuidanceFacts, search: SearchTool): string | undefined => {
+const textOf = (entry: GuidanceEntry, facts: GuidanceFacts): string | undefined => {
     if (entry.when?.(facts) === false) {
         return undefined;
     }
-    return typeof entry.text === "string" ? entry.text : entry.text({ ...facts, search });
+    return typeof entry.text === "string" ? entry.text : entry.text(facts);
 };
 
 // The guidance block under its heading, for whichever runtime's facts. `stable` leaves the volatile entries out: they
 // ride the turn's message instead (surroundingsNote), so the block reads the same on every turn of a conversation.
-export const guidanceBlock = (facts: GuidanceFacts, search: SearchTool, stable = false): string =>
-    [GUIDANCE_HEADER, ...ENTRIES.flatMap((entry) => (stable && entry.volatile === true ? [] : (textOf(entry, facts, search) ?? [])))].join("\n\n");
+export const guidanceBlock = (facts: GuidanceFacts, stable = false): string =>
+    [GUIDANCE_HEADER, ...ENTRIES.flatMap((entry) => (stable && entry.volatile === true ? [] : (textOf(entry, facts) ?? [])))].join("\n\n");
 
 /* THE VOLATILE ENTRIES AS A NOTE ON THE TURN'S OWN MESSAGE.
 
@@ -410,6 +394,6 @@ export type SurroundingsFacts = Pick<GuidanceFacts, "runtime" | "unattended" | "
 // The note's text for these facts, under its heading; undefined when no volatile entry applies.
 export const surroundingsText = (facts: SurroundingsFacts): string | undefined => {
     const full: GuidanceFacts = { ...facts, browserOutputDir: undefined, browserAccounts: false, desktop: false, diagnostics: false, terminal: false };
-    const paragraphs = ENTRIES.filter((entry) => entry.volatile === true).flatMap((entry) => textOf(entry, full, "rg") ?? []);
+    const paragraphs = ENTRIES.filter((entry) => entry.volatile === true).flatMap((entry) => textOf(entry, full) ?? []);
     return paragraphs.length === 0 ? undefined : [SURROUNDINGS_HEADER, ...paragraphs].join("\n\n");
 };

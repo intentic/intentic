@@ -67,8 +67,8 @@ interrupt → review every change before it is merged.
 The claim is literal, not a metaphor, and that is what makes it defensible: the sandbox is a real
 daemon on the user's machine and the browser holds nothing a run depends on: closing every window
 loses nothing. The shared-surfaces construction is the supporting mechanism: you and the agent drive
-the *same* surfaces (one `tmux` server behind your terminals and its shell commands; one `iq` index
-behind `/workspace/search` and its Bash calls; one tree, where each agent works on its own git
+the *same* surfaces (one `tmux` server behind your terminals and its shell commands; ripgrep over
+the same files behind `/workspace/search` and its Bash calls; one tree, where each agent works on its own git
 worktree and lands its delta into your Changes panel for review), so a window opened anywhere shows
 the run as it actually is, not a replay of it.
 

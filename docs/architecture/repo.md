@@ -25,11 +25,10 @@ sequenceDiagram
     participant E as Editor
     participant D as Daemon
     participant A as Agent runtime
-    participant S as iq
     O->>E: sends a message
     E->>D: POST /agent
     D->>A: starts the turn in its worktree
-    A->>S: finds the right files
+    A->>A: reads the code it needs
     A->>D: edits, each one checked
     D->>D: lands onto the main tree
     D-->>E: events, diff, proof
@@ -51,7 +50,7 @@ flowchart TB
     end
     subgraph box["A sandbox container, on the owner's machine or hosted"]
         daemon(["Daemon"])
-        tools["iq · fileq · webq<br/>intentic CLI"]
+        tools["lsp · fileq · webq<br/>intentic CLI"]
     end
     devices["Owner's computers<br/>and browser"]
     servers["Owner's servers"]

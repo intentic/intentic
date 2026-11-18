@@ -6,7 +6,6 @@ import { SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { REPO_SYNC_NOTE_TITLE } from "../../workspace/layout/sync-repos.js";
 import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/workspace-setup.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";
-import { IQ_SEARCH_INSTRUCTION_TITLE } from "./iq-search-instruction.js";
 import { LITERAL_SLASH_NOTE, WORKTREE_NOTE_TITLE } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { SPAWN_NOTE_TITLE, LANDING_CHECKS_NOTE_TITLE, MEMORY_NOTE_TITLE, CONTEXT_NOTE_TITLE } from "../../sessions/vocabulary/prompt-envelope.js";
@@ -20,7 +19,8 @@ export const BRIEFING_NOTE_TITLES: Record<TurnBriefingNoteId, readonly string[]>
     map: [WORKSPACE_MAP_NOTE_TITLE],
     context: [CONTEXT_NOTE_TITLE],
     skills: [SKILL_CATALOG_NOTE_TITLE],
-    search: [IQ_SEARCH_INSTRUCTION_TITLE],
+    // The iq teaching note, removed with iq (2026-11-18); a saved card may still name it.
+    search: [],
     delegation: [SPAWN_NOTE_TITLE],
     checks: [LANDING_CHECKS_NOTE_TITLE],
     // One switch over two notices: missing and behind are the same question asked of a workspace in two states.

@@ -2,14 +2,13 @@ import { z } from "zod";
 // Shared by /workspace/search and the web client. Groups rank by relevance, best first; each hit carries match tags and
 // the char spans in `text`, for highlighting without a re-find.
 export const WorkspaceSearchQuerySchema = z.object({
-    query: z.string().min(2).max(512).describe("What to look for. Plain words, a pattern, a symbol name, or a question."),
-    // Search verbs only; anchor/git verbs are CLI-only. Natural language needs none, `q` classifies it.
+    query: z.string().min(2).max(512).describe("What to look for: plain words or a pattern, or for file names letters of the name or a glob."),
+    // `q` was the iq engine's blended search, removed with iq (2026-11-18). An editor from before then still sends it, so
+    // it is accepted and answered as the text search it now is.
     mode: z
-        .enum(["q", "find", "files", "def", "refs", "sym", "ast"])
+        .enum(["find", "files", "q"])
         .optional()
-        .describe(
-            "Narrow the search to one kind: plain text, filenames, definitions, references, symbols, or code structure. Leave it out to blend them, which also answers a question asked in words.",
-        ),
+        .describe("What to search: the text in files (find, the default) or file names (files). q is an older name for find."),
     includeIgnored: z.stringbool().optional().describe("Search inside installed packages and other ignored folders too."),
     // One subtree, root-relative, no trailing slash: the caller's own scope (a UI narrowed to one project) rather than a
     // pattern. Unlike `include` it is a prefix, so it composes with whatever globs the user typed.
@@ -38,6 +37,8 @@ export type WorkspaceSearchQuery = z.infer<typeof WorkspaceSearchQuerySchema>;
 // The query's verb enum.
 export type WorkspaceSearchMode = NonNullable<z.infer<typeof WorkspaceSearchQuerySchema>["mode"]>;
 export const WorkspaceSearchTagSchema = z.object({
+    // Only text and path are written now; the rest came from the iq engine, removed 2026-11-18, and stay so an editor can
+    // still read an answer from a daemon older than that.
     kind: z
         .enum(["def", "text", "sem", "bm25", "rerank", "path", "import", "call", "type", "write", "fuzzy", "heuristic"])
         .describe(
@@ -79,8 +80,8 @@ export const WorkspaceSearchGroupSchema = z.object({
         .describe("This file had more matches than are kept per file, so the count is a floor. Say fifty-plus rather than fifty."),
 });
 export type WorkspaceSearchGroup = z.infer<typeof WorkspaceSearchGroupSchema>;
-// building means the index is still filling (progress 0..1); stale means revalidation was skipped. ageMs is time since
-// the index last matched disk.
+// Always fresh now that every search reads the disk as it is; building (progress 0..1) and stale came from the iq engine's
+// index, removed 2026-11-18, and are read from daemons older than that.
 export const WorkspaceSearchFreshnessSchema = z.object({
     state: z.enum(["fresh", "building", "stale"]).describe("Whether the index matches what is on disk, is still filling, or has fallen behind."),
     ageMs: z.number().optional().describe("How long since it last matched the disk, in milliseconds."),
@@ -101,7 +102,7 @@ export const WorkspaceSearchResultSchema = z.object({
     files: z.number().describe("Files the query matched in total."),
     shown: z.number().describe("How many of those lines are on this page."),
     groups: z.array(WorkspaceSearchGroupSchema).describe("The results, grouped by file, best first."),
-    freshness: WorkspaceSearchFreshnessSchema.describe("Whether the index behind the answer is up to date."),
+    freshness: WorkspaceSearchFreshnessSchema.describe("Whether the answer is up to date with the disk. Every search now reads the disk itself, so it is."),
     truncated: z.boolean().describe("This page is not all of it. Use the cursor."),
     // A floor: some file had more matches than kept per file. Distinct from truncated, which is about the page.
     partial: z
@@ -111,25 +112,11 @@ export const WorkspaceSearchResultSchema = z.object({
             "At least one file had more matches than are kept per file, so the total is a floor. Different from the page being truncated: a complete page can still count partially.",
         ),
     cursor: z.string().optional().describe("Pass this back as `after` to get the next page."),
-    hint: z.string().optional().describe("A suggestion for getting a better answer out of this query."),
-    // What the engine did unasked: a pattern rerun as literal, escapes rewritten, or a filter matching nothing.
+    // What the search did unasked: a pattern rerun as literal, or escapes rewritten.
     note: z
         .string()
         .optional()
-        .describe(
-            "What the engine did that you did not ask for: a pattern rerun as plain text because it was not valid, escapes rewritten, a language filter that matched nothing.",
-        ),
-    // Code-graph neighbors of the top hits: definition anchors and each one's strongest caller.
-    related: z.array(z.string()).optional().describe("Places next door to the best results: where each is defined, and whatever calls it most."),
-    // Ranked path:line anchors that placed but weren't shown, best first; the answer often sits at rank 5-13.
-    candidates: z
-        .array(z.string())
-        .optional()
-        .describe(
-            "Ranked places that scored but did not make the page, best first. The answer often sits at rank five to thirteen, so this saves paging through to find out.",
-        ),
-    // Retrieval stages disabled for this run, for benchmarking; absent means the full pipeline ran.
-    features: z.array(z.string()).optional().describe("Which stages of the search were switched off for this run. Absent means all of them ran."),
+        .describe("What the search did that you did not ask for: a pattern rerun as plain text because it was not valid, or escapes rewritten."),
 });
 export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
 // What /workspace/search/stream sends: the files a text search has found so far, as it finds them, then its answer.

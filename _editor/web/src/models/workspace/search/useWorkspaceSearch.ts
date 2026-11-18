@@ -12,19 +12,17 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { WORKSPACE_SEARCH } from "../../../lib/queryKeys";
 
 // Search over /work via the sandbox daemon (workspace.search). Two scopes, two verbs:
-// text → iq's `find` (ripgrep): one literal/regex pattern, phrase-matched, case-insensitive unless Aa.
-// smart → iq's `q` (BM25 + embeddings + rerank): the query is a question, scored by word, can match without
-// containing any of them.
-// files → iq's `files`: fuzzy over paths only, the quick-open fallback (useFuzzyFiles).
+// text → the daemon's `find` (ripgrep): one literal/regex pattern, phrase-matched, case-insensitive unless Aa.
+// files → the daemon's `files`: fuzzy over paths only, the quick-open fallback (useFuzzyFiles).
 // An `include` field carries VSCode's files-to-include glob straight to the daemon for either scope. Results are
 // grouped by file, paginated (`loadMore`), debounced, abort-cancelled, and keep previous data on screen mid-refinement.
 // A text search's first page streams (streamedSearch.ts): the files found so far show while the daemon is still reading
 // the tree, and the finished page replaces them.
 // Every search is confined to the open project, when one is (app/projectScope.ts), so the counts and the pages describe
 // the same body of files the tree beside them lists.
-export type SearchScope = "text" | "smart" | "files";
+export type SearchScope = "text" | "files";
 
-const VERB: Record<SearchScope, NonNullable<WorkspaceSearchMode>> = { text: `find`, smart: `q`, files: `files` };
+const VERB: Record<SearchScope, NonNullable<WorkspaceSearchMode>> = { text: `find`, files: `files` };
 
 // Shared by every search box on the page, so the one answer that says the stream route is missing holds for them all.
 const firstTextPage = firstTextPages({
@@ -45,7 +43,7 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
 
     // The daemon rejects queries under 2 chars (contract's min length); short input just disables the query.
     const enabled = computed(() => reachable.value && active.value && debounced.value.length >= 2);
-    // Only `text` reads the match switches, `smart` has no pattern to apply them to.
+    // Only `text` reads the match switches, `files` has no pattern to apply them to.
     const input = computed(() => {
         const search: ProcedureInput<`workspace.search`> = { query: debounced.value, mode: VERB[scope.value] };
         // The open project narrows this the way it narrows the tree beside it (app/projectScope.ts): a hit the reader
@@ -57,7 +55,7 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         if (includeIgnored.value) {
             search.includeIgnored = `true`;
         }
-        // Files to ask, in VSCode's glob grammar; scopes both text and smart search equally.
+        // Files to ask, in VSCode's glob grammar; scopes both text and file search equally.
         if (debouncedInclude.value !== ``) {
             search.include = debouncedInclude.value;
         }

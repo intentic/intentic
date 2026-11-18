@@ -11,9 +11,8 @@ export const sizeLabel = (bytes: number): string => {
     return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${SIZE_UNITS[index]}`;
 };
 
-// ~4 chars/token, no tokenizer: every budget in the product (iq's render budgets, fileq/webq's caps, the daemon's
-// savings report, its context and handoff budgets, the privacy gateway's result clearing) is the same estimate, rounded
-// up, so they agree. cleaner-bench.mjs keeps its own copy, build-step-free.
+// ~4 chars/token, no tokenizer: every budget in the product (fileq/webq's caps, the daemon's savings report, its
+// context and handoff budgets, the privacy gateway's result clearing) is the same estimate, rounded up, so they agree. cleaner-bench.mjs keeps its own copy, build-step-free.
 export const CHARS_PER_TOKEN = 4;
 export const tokensOfChars = (chars: number): number => Math.ceil(chars / CHARS_PER_TOKEN);
 export const estimateTokens = (text: string): number => tokensOfChars(text.length);

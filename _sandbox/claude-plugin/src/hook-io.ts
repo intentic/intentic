@@ -16,7 +16,6 @@ export interface HookInput {
     readonly cwd?: string;
     readonly hook_event_name?: string;
     readonly source?: string;
-    readonly prompt?: string;
     readonly tool_name?: string;
     readonly tool_input?: Record<string, unknown>;
     readonly tool_response?: unknown;
@@ -38,22 +37,18 @@ export const parseHookInput = (text: string): HookInput | undefined => {
     return typeof value === "object" && value !== null ? (value as HookInput) : undefined;
 };
 
-// What a handler answers: a JSON reply, text passed through as another program printed it, or nothing.
-export type HookAnswer = object | string | undefined;
+// What a handler answers: a JSON reply, or nothing.
+type HookAnswer = object | undefined;
 
-// Runs one hook: the handler's answer, when it has one, is the whole of stdout. The raw payload rides along for a handler
-// that hands it on to another hook program (iq's own matcher).
-export const runHook = async (handle: (input: HookInput, raw: string) => Promise<HookAnswer> | HookAnswer): Promise<void> => {
+// Runs one hook: the handler's answer, when it has one, is the whole of stdout.
+export const runHook = async (handle: (input: HookInput) => Promise<HookAnswer> | HookAnswer): Promise<void> => {
     try {
-        const raw = await readStdin();
-        const input = parseHookInput(raw);
+        const input = parseHookInput(await readStdin());
         if (input === undefined) {
             return;
         }
-        const answer = await handle(input, raw);
-        if (typeof answer === "string") {
-            process.stdout.write(answer);
-        } else if (answer !== undefined) {
+        const answer = await handle(input);
+        if (answer !== undefined) {
             process.stdout.write(`${JSON.stringify(answer)}\n`);
         }
     } catch (error) {

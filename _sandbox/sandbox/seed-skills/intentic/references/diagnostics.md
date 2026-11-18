@@ -46,7 +46,7 @@ log lines around a moment you already know, which a window reaching back from no
   p50/p90/p99/max per op and subject.
 - Out of memory, a killed process, a stalling event loop → `mcp__diagnostics__resources` with a field:
   `system.cgroup.event_oom_kill`, `processes.byRole.toolchain.rssBytes` (also browser, agentRuntime, localModel,
-  container, searchEngine, terminal, languageServer, git, extension), `window.eventLoop.delayP99Ms`,
+  container, terminal, languageServer, git, extension), `window.eventLoop.delayP99Ms`,
   `daemon.memory.rssBytes`, `system.pressure.memory.some`, `system.loadAverage`. A path naming an object or a list
   (`processes.top`) answers with its newest value.
 - Output a command printed that the filter elided → its footer names the exact command:

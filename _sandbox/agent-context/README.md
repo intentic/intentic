@@ -47,15 +47,8 @@ flowchart LR
   Cold session trimming compares opening prompt tokens and failed calls on eligible follow-ups, grouped by conversation.
 - `claude-transcript` reads a Claude Code session, subagents included, into the same turns and calls, so the
   sandbox's benches and the plugin's report count identically. Which user line a person wrote (a prompt, a slash
-  command, or a compaction summary, an interruption, a harness line) is `@intentic/iq/transcript`'s `promptOf`, the
-  classification iq's session recall reads too, so the two readers cannot disagree on where a turn starts.
-  - 2026-10-06: `iq sessions` keeps its own line reader of the same files (`_search/iq/src/recall/transcript/lines.ts`)
-    rather than this one. `iq` is published to npm and this package is not, so `iq` cannot depend on it, and the two
-    share only the test for "a person sent this prompt": this one reads turns of tool calls, that one per-line fields
-    (uuid chains to fork at, file touches from three line kinds, titles). They also disagree on that test: a compaction
-    summary starts a turn there but not here, a slash command's `<command-…>` echo starts one here but not there, and
-    an image-only prompt starts one here only. Making either the other's reader changes what one of them counts, so it
-    waits on deciding which answer is right.
+  command, or a compaction summary, an interruption, a harness line) is `transcript-lines`' `promptOf`; a turn starts
+  at a typed prompt or a slash command, including a prompt that carried only images.
 - `guidance` holds the working-guidance paragraphs that hold outside the sandbox; the daemon's guidance registry
   takes them word for word.
 
@@ -65,6 +58,7 @@ flowchart LR
 - [src/turn-metrics.ts](src/turn-metrics.ts) — the per-turn call ledger every reading is taken from.
 - [src/arm-stats.ts](src/arm-stats.ts) — which readings judge which mechanism, and the two-arm arithmetic.
 - [src/claude-transcript.ts](src/claude-transcript.ts) — Claude Code session files as turns of tool calls.
+- [src/transcript-lines.ts](src/transcript-lines.ts) — which user line of a transcript a person wrote.
 - [src/tool-calls.ts](src/tool-calls.ts) — display names, tool kinds, and the search, listing and file-work predicates.
 
 ## Commands

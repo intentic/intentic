@@ -24,8 +24,8 @@ const { queryClient } = await import(`../../../../lib/queryPersistence`);
 const { default: AgentCodeSearch } = await import(`./AgentCodeSearch.vue`);
 
 const DEFAULTS: SandboxSettings = SandboxSettingsSchema.parse({});
-// A sandbox from before both switches turned on for new ones (2026-11-04): each starts off, so a click turns it on.
-const OLDER = { ...DEFAULTS, iqSearch: false, workspaceMap: false };
+// A sandbox from before the map turned on for new ones (2026-11-04): it starts off, so a click turns it on.
+const OLDER = { ...DEFAULTS, workspaceMap: false };
 
 let app: App | undefined;
 const mount = (): HTMLElement => {
@@ -85,11 +85,11 @@ test(`a save that lands keeps the switch on and says nothing`, async () => {
         return { ok: true };
     });
     const el = mount();
-    await waitFor(() => expect(switchBeside(el, `iq code search`).disabled).toBe(false));
+    await waitFor(() => expect(switchBeside(el, `Project map`).disabled).toBe(false));
 
-    switchBeside(el, `iq code search`).click();
+    switchBeside(el, `Project map`).click();
 
     await waitFor(() => expect(set).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(switchBeside(el, `iq code search`).getAttribute(`aria-checked`)).toBe(`true`));
+    await waitFor(() => expect(switchBeside(el, `Project map`).getAttribute(`aria-checked`)).toBe(`true`));
     expect(el.textContent).not.toContain(`Couldn't save`);
 });

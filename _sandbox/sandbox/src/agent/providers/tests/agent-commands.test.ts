@@ -18,7 +18,7 @@ const publish = (): void => {
     recordCommands("claude", [
         { name: "compact", description: "Compact the context" },
         { name: "review", description: "Review a PR", hint: "<pr>" },
-        { name: "iq:iq", description: "Workspace code search" },
+        { name: "webq:webq", description: "Web pages as markdown" },
     ]);
 };
 
@@ -26,7 +26,7 @@ test("a published name runs as a command: with arguments, and with a colon in th
     publish();
     expect(isUnknownSlashCommand("claude", "/compact")).toBe(false);
     expect(isUnknownSlashCommand("claude", "/review 4821 please")).toBe(false);
-    expect(isUnknownSlashCommand("claude", "/iq:iq where is the parser")).toBe(false);
+    expect(isUnknownSlashCommand("claude", "/webq:webq read the parser docs")).toBe(false);
 });
 
 // The failure this exists for: prose whose first word is one of this product's own slash-prefixed nouns. The
@@ -71,7 +71,7 @@ test("a published command is named by the prompt it opens; prose, a typo and an 
     publish();
     expect(publishedCommandOf("claude", "/compact")).toBe("compact");
     expect(publishedCommandOf("claude", "  /review 4821 please")).toBe("review");
-    expect(publishedCommandOf("claude", "/iq:iq where is the parser")).toBe("iq:iq");
+    expect(publishedCommandOf("claude", "/webq:webq read the parser docs")).toBe("webq:webq");
     expect(publishedCommandOf("claude", "/compct")).toBeUndefined();
     expect(publishedCommandOf("claude", "/etc/hosts is stale")).toBeUndefined();
     expect(publishedCommandOf("claude", "/")).toBeUndefined();
@@ -84,7 +84,7 @@ test("a probed list names commands before any turn, and never makes the guard ca
     recordProbedCommands("claude", [{ name: "code-review", description: "Review the diff" }]);
     expect(publishedCommandOf("claude", "/code-review high")).toBe("code-review");
     expect(commandsOf("claude")).toEqual([{ name: "code-review", description: "Review the diff" }]);
-    expect(isUnknownSlashCommand("claude", "/iq:iq where is the parser")).toBe(false);
+    expect(isUnknownSlashCommand("claude", "/webq:webq read the parser docs")).toBe(false);
     // A turn's own list takes over whole.
     publish();
     expect(publishedCommandOf("claude", "/code-review high")).toBeUndefined();

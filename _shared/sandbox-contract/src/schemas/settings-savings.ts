@@ -31,8 +31,6 @@ export type InputSavings = z.infer<typeof InputSavingsSchema>;
 export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() });
 // One metric's reading of a turn-level experiment (the two arms, plus the arithmetic over them). `metric` says what
 // `mean`/`deltaPct` count:
-// searchCalls: searches a turn ran (the search teaching).
-// openingSearches: same, narrowed to before the turn first touched a file.
 // openedWithListing: whether a turn listed directories to orient itself, as a share of turns (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
 // failedCalls: tool calls that ended in error (the price tool search, the stable prompt and cold trim could charge).
@@ -43,7 +41,7 @@ export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() }
 // Never cost: each mechanism moves one small part of a turn's work, inside the noise of the rest. The prompt's size is
 // the exception that proves it: it is the part every call pays again, so it is read directly rather than through cost.
 export const TurnMetricReadingSchema = z.object({
-    metric: z.enum(["searchCalls", "openingSearches", "openedWithListing", "callsBeforeTarget", "failedCalls", "openingPrompt", "openingWrite"]),
+    metric: z.enum(["openedWithListing", "callsBeforeTarget", "failedCalls", "openingPrompt", "openingWrite"]),
     on: SavingsArmSchema,
     off: SavingsArmSchema,
     // Additional control turns to reach a fixed target resolution, not today's delta (which inherits noise and always
@@ -82,16 +80,11 @@ export const TurnExperimentSchema = z.object({
     previous: z
         .object({ from: z.number(), to: z.number(), cohort: z.string().optional(), metrics: z.array(TurnMetricReadingSchema) })
         .optional(),
-    // Whether the treatment was taken up at all, which no reading above can tell: the share, 0 to 1, of each group's
-    // searches that ran iq, pooled over the turns of this cohort that recorded it. `turns` is the treated group's count;
-    // absent until it reaches `minTurns`. The search teaching only.
-    uptake: z.object({ on: z.number(), off: z.number(), turns: z.number() }).optional(),
 });
 export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
 export const SavingsReportSchema = z.object({
     input: InputSavingsSchema,
-    search: TurnExperimentSchema.optional(),
-    // Same absence rule as `search`: not measured, never zero.
+    // Each absent when not measured, never zero. `search`, the iq teaching's reading, went with iq (2026-11-18).
     map: TurnExperimentSchema.optional(),
     toolSearch: TurnExperimentSchema.optional(),
     stablePrompt: TurnExperimentSchema.optional(),

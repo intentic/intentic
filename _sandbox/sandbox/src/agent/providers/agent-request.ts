@@ -24,7 +24,6 @@ import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
-import type { SearchTool } from "../prompt/guidance.js";
 import type { PromptTrim } from "../prompt/system-prompt.js";
 import type { ChildSupervisor } from "../subagents/children.js";
 import type { ChildResultDoor } from "../subagents/child-records.js";
@@ -95,8 +94,6 @@ export interface TurnSpec {
     // What the model's declared window would not pay for, already applied to the prompt fields above, so the adapter
     // sheds the same guidance the planner did and the disclosure shows the prompt that was actually sent.
     readonly contextTrim?: PromptTrim;
-    // Which tool that guidance tells the turn to find code with; absent is `rg`, the one every image carries.
-    readonly search?: SearchTool;
     // The guidance that moves between turns (who is watching, which of the owner's machines are online) rides the
     // message as a note sent when it changed, so the system block stays the same for the whole session.
     readonly stablePrompt?: boolean;
@@ -187,8 +184,6 @@ export interface TurnTools {
     // `mcp__<server>__<tool>`: OpenCode's per-conversation prefix (runtimes/opencode/opencode-mcp.ts). Set by the arm that
     // knows it, read by the guidance that names those tools (agent/prompt/guidance/runtime-guidance.ts).
     readonly mcpToolPrefix?: string;
-    // Whether the iq plugin is actually loaded, so the empty-search notice can name it only where it's real.
-    readonly iqAvailable?: boolean;
     // The connected devices this turn carries servers for, and which of them runs this sandbox: what the prompt needs
     // to say "run it there yourself".
     readonly hostDevices?: HostDeviceReach | undefined;

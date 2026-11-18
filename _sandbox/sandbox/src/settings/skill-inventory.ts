@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
-import type { SandboxSettings, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
+import type { SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import { type AgentMount, agentMounts } from "../agent/run/harness/agent-mounts.js";
 import type { Services } from "../composition.js";
 import { accountGroupOf } from "../capabilities/account-skills.js";
@@ -21,7 +21,6 @@ import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir, ownSkillOn
 // Features writing a skill outside the settings gate; a missing entry here just lists as `dropped`.
 const FEATURE_SKILLS: Record<string, string> = {
     approvals: "Approvals",
-    iq: "Code search",
 };
 
 // Owner labels for a loaded skill the sandbox wrote that nothing above claims: one a release retired (it goes at the next
@@ -64,8 +63,8 @@ const capabilityFor = (capabilities: readonly Capability[], name: string): Capab
     capabilities.find((capability) => capability.kind === "browser" && accountGroupOf(capability.config).name === name);
 
 // What a turn wearing any card may mount, from the call the turn itself makes; the list and the reader resolve ids by it.
-const listedMounts = (services: Services, settings: SandboxSettings, capabilities: readonly Capability[], personas: readonly Persona[]) =>
-    agentMounts(services, { iqLoaded: settings.iqSearch, capabilities, personas, extensions: undefined });
+const listedMounts = (services: Services, capabilities: readonly Capability[], personas: readonly Persona[]) =>
+    agentMounts(services, { capabilities, personas, extensions: undefined });
 
 // Where the SDK's loader finds a mounted plugin's skills.
 const skillsDirOf = (mount: AgentMount): string => join(mount.pluginDir, "skills");
@@ -90,7 +89,7 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
         services.capabilities.list(),
         services.personas.list(),
     ]);
-    const mounts = await listedMounts(services, settings, capabilities, personas);
+    const mounts = await listedMounts(services, capabilities, personas);
     const read = (path: string): Promise<string | undefined> => services.files.read(path);
     const enabled = (name: string): boolean => settings.skills.includes(name);
     const rows: SkillSummary[] = [];
@@ -158,8 +157,8 @@ export const readSkillText = async (services: Services, id: string): Promise<{ r
         return skill === undefined ? undefined : { name, text: skillDocument(skill.name, skill.description, skill.body) };
     }
     if (name !== undefined && owner !== undefined && (scope === "builtin" || scope === "plugin" || scope === "extension")) {
-        const [settings, capabilities] = await Promise.all([services.sandboxSettings.get(), services.capabilities.list()]);
-        const mount = (await listedMounts(services, settings, capabilities, [])).find((entry) => entry.origin === scope && entry.id === owner);
+        const capabilities = await services.capabilities.list();
+        const mount = (await listedMounts(services, capabilities, [])).find((entry) => entry.origin === scope && entry.id === owner);
         if (mount === undefined) {
             return undefined;
         }

@@ -6,7 +6,7 @@ import type { EntityRecognizer } from "./masker.js";
 
 // The local name model behind `names: "model"`: a Polish named-entity model (HerBERT fine-tuned for personal data, from
 // the `privacy` image pack) that finds the names a dictionary misses, a rare surname, a foreign one, a name in an odd
-// inflection. It runs on this machine, offline, like iq's embedder; without the pack the dictionary is all there is.
+// inflection. It runs on this machine, offline; without the pack the dictionary is all there is.
 //
 // The pipeline transformers.js ships drops character offsets, so the text is split into words here and each word is
 // tokenized on its own: a word's label is its first piece's, and a run of person-labelled words is one span with exact

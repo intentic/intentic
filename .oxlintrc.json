@@ -450,7 +450,6 @@
                 "_tools/e2e/**",
                 "_tools/localhost-https/**",
                 "_tools/dev-public/**",
-                "_search/iq-bench/**",
                 "_sandbox/gate/**",
                 "_sandbox/gate-action/**",
                 "_deploy/cli/**",

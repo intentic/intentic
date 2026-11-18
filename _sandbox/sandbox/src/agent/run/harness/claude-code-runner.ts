@@ -550,7 +550,7 @@ const baseOptions = (
                     ? namedHooks("worktree-redirect", worktreeRedirectHooks(request.spec.isolation.plan))
                     : {},
                 // One-time advisories: rg vs grep and an empty result (never rewritten, the regex dialects disagree).
-                namedHooks("search-notice", searchNoticeHooks(request.tools.iqAvailable === true)),
+                namedHooks("search-notice", searchNoticeHooks()),
                 // Registers a watchable session the moment a browser call launches Chromium; the MCP owns its lifecycle.
                 request.tools.browserPorts !== undefined
                     ? namedHooks("browser-sessions", browserSessionHooks(

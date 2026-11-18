@@ -71,8 +71,8 @@ export const isAgentWorktreePath = (path: string): boolean => {
     return segments.some((segment, i) => segment === AGENT_WORKTREE_SEGMENTS[0] && segments[i + 1] === AGENT_WORKTREE_SEGMENTS[1]);
 };
 
-// Prune globs for a content scanner, derived from the same branches isIgnored tests so the two can't drift. An
-// optimization, never the authority: it may only prune what the sweep would discard anyway.
+// Prune globs for a content scanner (text-search's walk, a device folder's rg), derived from the same branches
+// isIgnored tests so the two can't drift: they prune only what isIgnored rejects.
 export const scannerPruneGlobs = (includeIgnored: boolean): string[] =>
     includeIgnored
         ? [`!**/${GIT_DIR}`]

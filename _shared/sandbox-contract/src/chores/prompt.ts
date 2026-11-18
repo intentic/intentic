@@ -2,7 +2,7 @@
 // subject — what is being worked on.
 // why — the measurement's numbers, quoted exactly, then what they mean.
 // goal — a direction to move in, not a prescribed design.
-// done — falsifiable; checkable via `iq` in the agent's own worktree.
+// done — falsifiable; checkable in the agent's own worktree.
 // Invariants sit between goal and done: constraints on how, restated in full each time.
 
 export interface Ask {
@@ -34,8 +34,3 @@ export const CHORE_INVARIANTS =
 export const REPORT_INVARIANTS =
     `Change nothing. This is a survey: the output is your findings, cited file:line, and a recommendation the owner ` +
     `can act on or dismiss. Where you would propose an edit, describe it and where it would go instead of making it.`;
-
-// Constraints for a one-file refactor turn; scope covers whatever it splits into, not just this one file.
-export const REFACTOR_INVARIANTS =
-    `Read it first. Behaviour stays identical. Changes affect only this file, whatever it splits into, and the ` +
-    `importers that must follow. Leave no re-export shims behind.`;

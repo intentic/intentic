@@ -26,13 +26,13 @@ test("toolCategoryOf categorizes builtin names case-insensitively", () => {
     expect(toolCategoryOf("mystery")).toBe("other");
 });
 
-// Category alone can't answer whether a call searched: this workspace's search tool is a CLI (`iq q ...`), which
-// categorizes as `execute`.
+// Category alone can't answer whether a call searched: a search CLI (`rg -n ...`) arrives as Bash, which categorizes as
+// `execute`.
 test("isSearchCall counts the CLI searches the category misses, and leaves shell plumbing alone", () => {
     expect(isSearchCall({ category: "search", target: "createServer" })).toBe(true);
-    expect(isSearchCall({ category: "execute", target: `iq q "where is the floor enforced"` })).toBe(true);
+    expect(isSearchCall({ category: "execute", target: `rg -n "where the floor is enforced"` })).toBe(true);
     // Past a `cd`, and past a path: the statement that matters is rarely the first word of the command.
-    expect(isSearchCall({ category: "execute", target: `cd /work/intentic && iq def createIgnoreScope` })).toBe(true);
+    expect(isSearchCall({ category: "execute", target: `cd /work/intentic && fd ignore-scope` })).toBe(true);
     expect(isSearchCall({ category: "execute", target: `/usr/bin/rg -n "TODO" src` })).toBe(true);
     expect(isSearchCall({ category: "execute", target: `RG_FLAGS=x grep -rn needle .` })).toBe(true);
     // A command that greps its OWN output is shell plumbing, not the model looking for code.

@@ -201,10 +201,6 @@ minimumReleaseAgeExclude:
   - "@cursor/sdk@1.4.0"
 
 allowBuilds:
-  "@ast-grep/lang-go": true
-  "@ast-grep/lang-java": true
-  "@ast-grep/lang-python": true
-  "@ast-grep/lang-rust": true
   # The workspace watcher's native backend. Its `install` script only builds from source; the platform binding
   # ships as a prebuilt optional dependency (@parcel/watcher-linux-x64-glibc and friends), so skipping the
   # script still yields a working native watcher — verified by loading it with scripts disabled.
@@ -335,11 +331,6 @@ catalog:
   "@xterm/addon-webgl": 0.19.0
   "@xterm/headless": 6.0.0
   "@xterm/xterm": 6.0.0
-  "@ast-grep/napi": 0.51.0
-  "@ast-grep/lang-python": 0.0.6
-  "@ast-grep/lang-go": 0.0.6
-  "@ast-grep/lang-rust": 0.0.7
-  "@ast-grep/lang-java": 0.0.7
   asn1js: 4.0.0
   astro: 7.3.5
   # The WhatsApp gateway's protocol library. Its `latest` tag is a release candidate — 7.0.0 has been in rc for
@@ -430,9 +421,6 @@ catalog:
   shiki: 4.5.0
   # TOML for the sandbox-definition surface (sandbox.toml): a strict 1.0 parser with no coercion surprises.
   smol-toml: 1.9.0
-  # The vector index behind iq's semantic tier. Ships as prebuilt loadable extensions, one optional dependency
-  # per platform (linux/darwin x64+arm64, windows x64) and no build script, so nothing is compiled on install.
-  sqlite-vec: 0.1.9
   ssh2: 1.17.0
   tailwind-merge: 3.7.0
   # The kit's variant recipes (_editor/ui/src/lib): variants, compound rules and slots over twMerge, which it

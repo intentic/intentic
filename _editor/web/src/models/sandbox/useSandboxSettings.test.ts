@@ -62,9 +62,9 @@ test("a save paints into the cache before the daemon answers, so the control nev
     const { save, settings } = mounted(() => useSandboxSettings());
     await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 
-    save.mutate({ ...DEFAULTS, iqSearch: true });
+    save.mutate({ ...DEFAULTS, workspaceMap: !DEFAULTS.workspaceMap });
 
-    await waitFor(() => expect(settings.value?.iqSearch).toBe(true));
+    await waitFor(() => expect(settings.value?.workspaceMap).toBe(!DEFAULTS.workspaceMap));
     expect(save.isPending.value).toBe(true);
 });
 
@@ -74,16 +74,16 @@ test("a field the daemon strips is NAMED, not just snapped back", async () => {
     let reads = 0;
     get.mockImplementation(async () => {
         reads += 1;
-        return reads === 1 ? DEFAULTS : SandboxSettingsSchema.parse({ ...DEFAULTS, iqSearchHoldout: undefined });
+        return reads === 1 ? DEFAULTS : SandboxSettingsSchema.parse({ ...DEFAULTS, workspaceMapHoldout: undefined });
     });
     set.mockResolvedValue({ ok: true });
     const { save, settings, dropped } = mounted(() => useSandboxSettings());
     await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 
-    save.mutate({ ...DEFAULTS, iqSearchHoldout: 0.1 });
+    save.mutate({ ...DEFAULTS, workspaceMapHoldout: 0.1 });
 
-    await waitFor(() => expect(settings.value?.iqSearchHoldout).toBe(0));
-    await waitFor(() => expect(dropped.value).toContain(`iqSearchHoldout`));
+    await waitFor(() => expect(settings.value?.workspaceMapHoldout).toBe(0));
+    await waitFor(() => expect(dropped.value).toContain(`workspaceMapHoldout`));
 });
 
 test("a rejected save rolls back, so a switch never claims a setting the sandbox refused", async () => {
@@ -92,11 +92,11 @@ test("a rejected save rolls back, so a switch never claims a setting the sandbox
     const { save, settings } = mounted(() => useSandboxSettings());
     await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 
-    save.mutate({ ...DEFAULTS, iqSearch: true });
+    save.mutate({ ...DEFAULTS, workspaceMap: !DEFAULTS.workspaceMap });
 
     // Asserted on the rendered value, not mutation status, since onSettled's invalidate keeps it pending until the
     // refetch (which never lands here).
-    await waitFor(() => expect(settings.value?.iqSearch).toBe(true));
+    await waitFor(() => expect(settings.value?.workspaceMap).toBe(!DEFAULTS.workspaceMap));
     await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 });
 
@@ -128,9 +128,9 @@ test("patch sends the whole settings object with just the named fields changed",
     const { patch, settings } = mounted(() => useSandboxSettings());
     await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 
-    patch({ iqSearch: true, hashlineEdits: true });
+    patch({ workspaceMap: !DEFAULTS.workspaceMap, hashlineEdits: true });
 
-    await waitFor(() => expect(set).toHaveBeenLastCalledWith({ ...DEFAULTS, iqSearch: true, hashlineEdits: true }));
+    await waitFor(() => expect(set).toHaveBeenLastCalledWith({ ...DEFAULTS, workspaceMap: !DEFAULTS.workspaceMap, hashlineEdits: true }));
 });
 
 test("patch writes nothing before the settings have loaded", async () => {
@@ -138,7 +138,7 @@ test("patch writes nothing before the settings have loaded", async () => {
     const { patch, settings } = mounted(() => useSandboxSettings());
     expect(settings.value).toBeUndefined();
 
-    patch({ iqSearch: true });
+    patch({ workspaceMap: !DEFAULTS.workspaceMap });
 
     expect(set).toHaveBeenCalledTimes(0);
 });

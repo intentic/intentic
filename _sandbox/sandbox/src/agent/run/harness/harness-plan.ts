@@ -66,11 +66,10 @@ const harnessReads = (deps: HarnessPlanDeps, input: RoutedAgentTurn, context: Tu
 
 // The last planning I/O, run together rather than chained: the plugin dirs the Skills list also derives from, and the
 // turn's MCP mounts (the browsers filtered to this persona's accounts, each call bound to its account's persisted profile).
-const harnessMounts = (deps: HarnessPlanDeps, input: RoutedAgentTurn, granted: readonly Capability[], persona: TurnPersona, iqLoaded: boolean) =>
+const harnessMounts = (deps: HarnessPlanDeps, input: RoutedAgentTurn, granted: readonly Capability[], persona: TurnPersona) =>
     Promise.all([
         deps.perf.track("turn.plan.extensions", {}, () =>
             agentMounts(deps, {
-                iqLoaded,
                 capabilities: granted,
                 personas: persona.persona === undefined ? [] : [persona.persona],
                 extensions: persona.powers.extensions,
@@ -234,9 +233,7 @@ export const planHarnessTurn = async (
     const pressure = await fleetPressure(deps).catch(() => undefined);
     // Resolved by planTurn and already applied to `granted`; the open, attended fallback is only for the bench.
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
-    // Resolved once and read twice (the plugin list and `iqAvailable`), so the notice and the load can't disagree.
-    const iqLoaded = deps.config.iqPluginDir !== "" && (context.iqSearchEnabled ?? settings.iqSearch);
-    const [mounts, mounted] = await harnessMounts(deps, input, granted, persona, iqLoaded);
+    const [mounts, mounted] = await harnessMounts(deps, input, granted, persona);
     const { browser, tools: remote } = mounted;
     const plugins = mounts.map((mount) => mount.pluginDir);
     const secrets = turnSecretAccess(deps, input, context.base.signal);
@@ -253,7 +250,6 @@ export const planHarnessTurn = async (
         ownBrowsers,
         ownPhones,
         ...opt("fleetPressure", pressure),
-        iqAvailable: iqLoaded,
         ...harnessAccounts(deps, input, context, granted),
         ...shellTools(deps, settings),
         outputLogsDir: join(deps.config.historyRoot, "logs"),

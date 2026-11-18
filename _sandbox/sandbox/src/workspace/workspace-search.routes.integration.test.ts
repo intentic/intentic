@@ -1,23 +1,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { WorkspaceSearchFrame } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
-import { unstubbed } from "@intentic/testing";
 import { createApp } from "../app.js";
-import type { Services } from "../composition.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { tempWorkspace } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 
-// The search box's text search over the daemon's HTTP surface, against a real temp workspace and a real rg: answered
-// without the iq engine, paged out of one kept answer, and streamed.
-
-// An engine that fails any ask: a text search that reached it would be a text search still waiting on its child.
-const noEngine = (): Services["iq"] =>
-    unstubbed<Services["iq"]>("iq", {
-        run: async () => {
-            throw new Error("a text search asked the iq engine");
-        },
-    });
+// The search box's searches over the daemon's HTTP surface, against a real temp workspace and a real rg: text paged out
+// of one kept answer and streamed, file names ranked.
 
 const workspaceWith = async (files: Readonly<Record<string, string>>) => {
     const workspace = tempWorkspace([]);
@@ -37,9 +27,9 @@ const FILES = {
     "node_modules/pkg/index.js": "needle installed\n",
 };
 
-test("a text search reads the tree with rg and never asks the engine; ignored files stay out unless asked for", async () => {
+test("a text search reads the tree with rg; ignored files stay out unless asked for", async () => {
     const workspace = await workspaceWith(FILES);
-    const client = clientFor(createApp(services({ workspace, iq: noEngine() })));
+    const client = clientFor(createApp(services({ workspace })));
     const result = await client.workspace.search({ query: "needle", mode: "find", literal: "true" });
     expect(result.groups.map((group) => group.path)).toEqual(["a/one.ts", "b/two.ts", "c/three.md"]);
     expect(result).toMatchObject({ mode: "find", total: 4, files: 3, shown: 4, truncated: false, freshness: { state: "fresh" } });
@@ -51,7 +41,7 @@ test("a text search reads the tree with rg and never asks the engine; ignored fi
 
 test("the folder and the include box narrow a text search", async () => {
     const workspace = await workspaceWith(FILES);
-    const client = clientFor(createApp(services({ workspace, iq: noEngine() })));
+    const client = clientFor(createApp(services({ workspace })));
     const inB = await client.workspace.search({ query: "needle", mode: "find", dir: "./b/" });
     expect(inB.groups.map((group) => group.path)).toEqual(["b/two.ts"]);
     const typed = await client.workspace.search({ query: "needle", mode: "find", include: "*.ts, !b" });
@@ -60,7 +50,7 @@ test("the folder and the include box narrow a text search", async () => {
 
 test("Load more is a slice of the answer the first page came from, not a second scan", async () => {
     const workspace = await workspaceWith(FILES);
-    const client = clientFor(createApp(services({ workspace, iq: noEngine() })));
+    const client = clientFor(createApp(services({ workspace })));
     const first = await client.workspace.search({ query: "needle", mode: "find", limit: 2 });
     expect(first.groups.map((group) => group.path)).toEqual(["a/one.ts", "b/two.ts"]);
     expect(first.truncated).toBe(true);
@@ -79,7 +69,7 @@ test("Load more is a slice of the answer the first page came from, not a second 
 
 test("a pattern rg cannot read runs as plain text and says so", async () => {
     const workspace = await workspaceWith({ "a/x.ts": "call(needle\n" });
-    const client = clientFor(createApp(services({ workspace, iq: noEngine() })));
+    const client = clientFor(createApp(services({ workspace })));
     const result = await client.workspace.search({ query: "call(needle", mode: "find" });
     expect(result.groups.map((group) => group.path)).toEqual(["a/x.ts"]);
     expect(result.note).toContain("ran as literal text");
@@ -95,7 +85,7 @@ const framesOf = async (iterator: AsyncIterable<WorkspaceSearchFrame>): Promise<
 
 test("the stream sends files as they are found, then the same first page the search route answers", async () => {
     const workspace = await workspaceWith(FILES);
-    const client = clientFor(createApp(services({ workspace, iq: noEngine() })));
+    const client = clientFor(createApp(services({ workspace })));
     const frames = await framesOf(await client.workspace.searchStream({ query: "needle", mode: "find", limit: 2 }));
     const done = frames.at(-1);
     expect(done?.kind).toBe("done");
@@ -116,6 +106,31 @@ test("the stream sends files as they are found, then the same first page the sea
 
 test("only a text search streams", async () => {
     const workspace = await workspaceWith(FILES);
-    const client = clientFor(createApp(services({ workspace, iq: noEngine() })));
-    expect(await errorCode(framesOf(await client.workspace.searchStream({ query: "needle", mode: "q" })))).toBe("BAD_REQUEST");
+    const client = clientFor(createApp(services({ workspace })));
+    expect(await errorCode(framesOf(await client.workspace.searchStream({ query: "needle", mode: "files" })))).toBe("BAD_REQUEST");
+});
+
+// `q` was the iq engine's blended search; an editor from before its removal still sends it.
+test("an older editor's q, or no mode at all, is answered as the text search", async () => {
+    const workspace = await workspaceWith(FILES);
+    const client = clientFor(createApp(services({ workspace })));
+    const text = await client.workspace.search({ query: "needle", mode: "find", literal: "true" });
+    for (const asked of [await client.workspace.search({ query: "needle", mode: "q", literal: "true" }), await client.workspace.search({ query: "needle", literal: "true" })]) {
+        expect(asked.groups).toEqual(text.groups);
+        expect(asked.mode).toBe("find");
+    }
+});
+
+test("a file-name search ranks paths as quick-open does, globs match as patterns, and ignored files wait to be asked for", async () => {
+    const workspace = await workspaceWith(FILES);
+    const client = clientFor(createApp(services({ workspace })));
+    const named = await client.workspace.search({ query: "two", mode: "files" });
+    expect(named).toMatchObject({ mode: "files", files: 1, shown: 1, truncated: false });
+    expect(named.groups).toEqual([{ path: "b/two.ts", score: expect.any(Number), hits: [] }]);
+    const globbed = await client.workspace.search({ query: "*.ts", mode: "files" });
+    expect(globbed.groups.map((group) => group.path)).toEqual(["a/one.ts", "b/two.ts"]);
+    const wide = await client.workspace.search({ query: "index", mode: "files", includeIgnored: "true" });
+    expect(wide.groups.map((group) => group.path)).toEqual(["node_modules/pkg/index.js"]);
+    const capped = await client.workspace.search({ query: "ts", mode: "files", limit: 1 });
+    expect(capped).toMatchObject({ shown: 1, truncated: true });
 });

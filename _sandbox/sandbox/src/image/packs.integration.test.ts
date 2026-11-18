@@ -26,14 +26,12 @@ test("profiles name real packs, and placement/overlayability inference matches e
             expect(profile, `no profile may bake the ${closed} pack: its licence grants no redistribution`).not.toContain(closed);
         }
     }
-    for (const name of ["semantic", "messaging", "speech"]) {
+    for (const name of ["messaging", "speech"]) {
         expect(byName.get(name)?.overlayable, `${name} is bake-only (COPYs from the trees context)`).toBe(false);
     }
-    // messaging copies per-commit deploy trees; semantic and speech copy static layer roots, which splice above them.
+    // messaging copies per-commit deploy trees; speech copies a static layer root, which splices above them.
     expect(byName.get("messaging")?.postTrees, "messaging must splice below the tree COPYs").toBe(true);
-    for (const name of ["semantic", "speech"]) {
-        expect(byName.get(name)?.postTrees, `${name} copies a static layer root and must splice above the tree COPYs`).toBe(false);
-    }
+    expect(byName.get("speech")?.postTrees, "speech copies a static layer root and must splice above the tree COPYs").toBe(false);
     // Privileges belong to capability handlers, not packs; rebuild executors grep for the runtime-directive token.
     for (const pack of packs) {
         expect(pack.content.includes("intentic:" + "runtime"), `${pack.name} must not carry the runtime-directive token`).toBe(false);
@@ -56,7 +54,7 @@ test("packFragment answers by base stamp: absent → content, current → nothin
 test("bake-only and unknown packs compose no overlay fragment", async () => {
     const stamps = mkdtempSync(join(tmpdir(), "packs-"));
     expect(await packFragment("messaging", stamps)).toBeUndefined();
-    expect(await packFragment("semantic", stamps)).toBeUndefined();
+    expect(await packFragment("speech", stamps)).toBeUndefined();
     expect(await packFragment("no-such-pack", stamps)).toBeUndefined();
 });
 
@@ -138,7 +136,6 @@ test("compose-image-dockerfile.mjs stamps the hashes this module computes, in th
     // Static layer roots sit below the first per-commit layer (the CLI tree), so a classic-store pull keeps them too.
     const cliCopy = composed.indexOf("COPY --from=trees cli /opt/intentic-cli");
     expect(cliCopy).toBeGreaterThan(-1);
-    expect(composed.indexOf("# ---- pack: semantic ----")).toBeLessThan(cliCopy);
     expect(composed.indexOf("# ---- pack: speech ----")).toBeLessThan(cliCopy);
     expect(composed.indexOf("COPY --link --from=trees layers/sandbox-deps/ /")).toBeLessThan(cliCopy);
     expect(composed.indexOf("COPY --link --from=trees layers/starter/ /")).toBeLessThan(cliCopy);

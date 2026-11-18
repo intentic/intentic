@@ -63,7 +63,7 @@ describe("fast path: a shadow whose recorded stat is the file's", () => {
         expect(shadow).toMatch(/^source_mtime: \d+\.\d{9}$/m);
         const { out, slow } = pre("./docs/terms.pdf");
         expect(slow).toBe(false);
-        // The shell's marks are exactly the TypeScript ones iq indexes with.
+        // The shell's marks are exactly the TypeScript ones (@intentic/base/shadow-text).
         expect(out).toBe(markPages(sidecarBody(shadow)));
         expect(out).toContain("[p. 2] Each wniosek must be filed in writing today");
         expect(out.split("\n")[0]).toBe("[p. 1] ## Page 1");

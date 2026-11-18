@@ -230,16 +230,10 @@ COPY --link --from=trees layers/pnpm-metadata/ /
 # replacement) and cannot run a file. A project-local tsx still wins — node_modules/.bin precedes /usr/local/bin.
 RUN printf '%s\n' '#!/bin/sh' 'exec node "$@"' > /usr/local/bin/tsx \
     && chmod +x /usr/local/bin/tsx
-# The embedding model behind `iq ask` is the `semantic` feature pack (fetched into /opt/iq-models, where
-# IQ_MODEL_DIR below points); absent — the core profile — iq degrades to lexical, never fetches at runtime.
-# The iq Claude Code plugin (skill + SessionStart nudge) — the single source that teaches every agent to prefer
-# iq over grep/find/Glob. Baked here and always loaded via IQ_PLUGIN_DIR (agent.routes.ts prepends it to the SDK
-# `plugins` option), so iq is the default in the sandbox exactly as external users get it from the marketplace.
-# Copied from the build context (the npm package ships only dist/ — the plugin lives beside it in the source tree).
-COPY _search/iq/plugin /opt/iq-plugin
 # The webq Claude Code plugin (skill only) — teaches every agent when to reach for webq over WebFetch. Always
-# loaded via WEBQ_PLUGIN_DIR (turn-plan.ts), ungated: unlike iq there is no default-tool to displace and no
-# experiment to run, the CLI is simply on PATH and the skill says when it helps.
+# loaded via WEBQ_PLUGIN_DIR (turn-plan.ts), ungated: there is no default tool to displace and no experiment to run,
+# the CLI is simply on PATH and the skill says when it helps. Copied from the build context (the npm package ships
+# only dist/; the plugin lives beside it in the source tree).
 COPY _sandbox/webq/plugin /opt/webq-plugin
 # Claude Code's managed settings, which load whatever a turn's settingSources say, and the policy mod they run first
 # (_sandbox/sandbox/claude-policy/plugins/intentic-guard). Without it a mod someone installs (Claude Code 2.1.287+)
@@ -258,7 +252,6 @@ COPY --from=trees netd /opt/sandbox/netd
 # fileq supplies Git textconv and rg document search; daemon diff routes use --no-textconv and render derived sides separately.
 # memory-room shares the daemon's admission formula and fails open when the daemon or CLI is unavailable.
 RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
-        /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
         /opt/sandbox/node_modules/@intentic/webq/dist/cli.js \
         /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js \
         /opt/sandbox/node_modules/@intentic/fileq/bin/fileq-rg-pre \
@@ -266,7 +259,6 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
         /opt/sandbox/node_modules/@intentic/constants/src/memory-room.mjs \
         /opt/sandbox/dist/logs/pane-log-clean.js \
     && ln -s /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js /usr/local/bin/lsp \
-    && ln -s /opt/sandbox/node_modules/@intentic/iq/dist/cli.js /usr/local/bin/iq \
     && ln -s /opt/sandbox/node_modules/@intentic/webq/dist/cli.js /usr/local/bin/webq \
     && ln -s /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js /usr/local/bin/fileq \
     && ln -s /opt/sandbox/node_modules/@intentic/fileq/bin/fileq-rg-pre /usr/local/bin/fileq-rg-pre \
@@ -409,7 +401,7 @@ COPY --chmod=755 _sandbox/sandbox/docker-entrypoint.sh /usr/local/bin/docker-ent
 WORKDIR /work
 # LANG: without a UTF-8 locale zsh's line editor counts BYTES as columns, so bira's multibyte prompt glyphs
 # (╰─, ↵) desync the cursor and corrupt the prompt after any non-zero exit status. C.utf8 is glibc-built-in.
-ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-models IQ_PLUGIN_DIR=/opt/iq-plugin WEBQ_PLUGIN_DIR=/opt/webq-plugin EXTENSIONS_DIR=/opt/extensions
+ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 WEBQ_PLUGIN_DIR=/opt/webq-plugin EXTENSIONS_DIR=/opt/extensions
 # Agent CLIs choose their command interpreter from SHELL; Claude Code also has its own override. Their generated
 # commands use Bash semantics (field splitting, unmatched globs, arrays). Keep those semantics explicit, including
 # nested `$SHELL -c` calls. The terminal remains interactive zsh through tmux's default-command above; changing a few

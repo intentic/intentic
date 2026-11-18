@@ -2,17 +2,16 @@ import { computed, ref } from "vue";
 import { useSearchOptions } from "../../../models/workspace/search/useSearchOptions";
 import { type SearchScope, useWorkspaceSearch } from "../../../models/workspace/search/useWorkspaceSearch";
 
-// Explorer search box as state, shared by desktop and mobile (only the chrome differs). Three scopes:
+// Explorer search box as state, shared by desktop and mobile (only the chrome differs). Two scopes:
 // name → filters the loaded tree client-side, instantly.
 // text → literal or regex pattern, case-insensitive unless Aa; marks every occurrence.
-// smart → iq's fused retrieval, scoring query words against the index to surface the file that answers them.
-// Text/smart search the daemon and swap the tree for a match list; `options` (text's switches) persist across
-// both explorers and must be shown wherever they apply.
+// Text searches the daemon and swaps the tree for a match list; `options` (text's switches) persist across both
+// explorers and must be shown wherever they apply.
 export const useExplorerSearch = () => {
     const filter = ref(``);
     const scope = ref<"name" | SearchScope>(`name`);
     const contentMode = computed(() => scope.value !== `name`);
-    const contentScope = computed<SearchScope>(() => (scope.value === `smart` ? `smart` : `text`));
+    const contentScope = computed<SearchScope>(() => `text`);
 
     return {
         filter,
@@ -22,7 +21,7 @@ export const useExplorerSearch = () => {
         textMode: computed(() => scope.value === `text`),
         options: useSearchOptions(),
         results: useWorkspaceSearch(filter, contentScope, contentMode),
-        // Clears both the query and the scope: a cleared query left in Smart would search again on the next keystroke.
+        // Clears both the query and the scope: a cleared query left in Text would search again on the next keystroke.
         clear: (): void => {
             filter.value = ``;
             scope.value = `name`;

@@ -197,7 +197,7 @@ Questions go to [Discord](https://discord.gg/3veuzYp32T), bugs to [Issues](https
 | [_platform](_platform) | The hosted plane: sign-in, sandbox registry, tunnels, database |
 | [_extensions](_extensions) | Bundled extensions: agents, connectors, automations, viewers |
 | [_shared](_shared) | Contracts and SDKs more than one part is written against |
-| [_search](_search) | `iq` and `lsp`: how agents find code |
+| [_search](_search) | `lsp` for agents, and the editor search box's ripgrep searches |
 | [_devices](_devices) | What runs on your own machines: device agent, browser extension |
 | [_site](_site) | intentic.dev and the interactive demo |
 | [_tools](_tools) | Shared config, checks, test harnesses, maintainer scripts |

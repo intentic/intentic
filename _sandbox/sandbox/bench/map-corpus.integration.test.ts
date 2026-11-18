@@ -92,7 +92,7 @@ test("the compact form reads back too: its rows, its also-line names, and the pr
     const note = [
         "## Map of this project",
         "",
-        "You are here: `shop/billing`, in `shop`. This is its layout, so do not `ls` or `tree` the root to orient yourself; use `iq files` or Read for exact paths.",
+        "You are here: `shop/billing`, in `shop`. This is its layout, so do not `ls` or `tree` the root to orient yourself; use `rg --files` or Read for exact paths.",
         "",
         "web/features  The editor the user works in",
         "billing       Takes the payments  ← you are here",

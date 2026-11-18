@@ -7,7 +7,7 @@ import MeasurementPanel from "./MeasurementPanel.vue";
 import { tableOf } from "./experimentReadings";
 
 const SETTLED: TurnExperiment = {
-    metrics: [{ metric: `searchCalls`, on: { turns: 133, mean: 3.2 }, off: { turns: 40, mean: 6.4 }, deltaPct: -50, marginPct: 10 }],
+    metrics: [{ metric: `callsBeforeTarget`, on: { turns: 133, mean: 3.2 }, off: { turns: 40, mean: 6.4 }, deltaPct: -50, marginPct: 10 }],
     minTurns: 30,
 };
 

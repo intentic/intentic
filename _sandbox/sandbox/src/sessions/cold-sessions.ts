@@ -16,12 +16,7 @@ import { type ColdFile, forgetWantedBefore, freezeSession, wantedAt } from "./se
    running, queued, held or armed on, that the history list does not show, that no reader in this process asked for
    within the week and that no process holds open, has those files compressed in place (session-freeze.ts), and every
    reader thaws a session back before it opens it. Only the shared store: a fenced conversation's own store and a jail
-   store are left plain. Anything in doubt is left plain; the next pass looks again.
-
-   One reader is outside the daemon: iq's session recall (`iq sessions`) indexes `~/.claude/projects/<workspace slug>/`
-   itself, the folder (`-work`) that holds nearly all the cold bytes, and used to delete every session whose plain file
-   was gone. Since 2026-11-12 it reads `.jsonl.zst` too (`_search/iq/src/recall/ingest/ingest.ts`, `fork.ts`), which is
-   what let this be scheduled (bootstrap/boot-chores.ts). */
+   store are left plain. Anything in doubt is left plain; the next pass looks again. */
 
 // A session's files must all be this old, by mtime, before they are compressed; see the shinobi numbers above.
 export const COLD_SESSION_MS = 7 * DAY_MS;

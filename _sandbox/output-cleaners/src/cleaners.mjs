@@ -516,8 +516,8 @@ const redactLine = (line, values) => {
 };
 
 // Allow-list if any token lacks `-` ("git,pnpm" = only those), else default-minus ("-git" = all except);
-// empty/undefined = all on. Unlike iq's parseFeatures, unknown tokens are ignored rather than thrown, so a typo'd
-// setting can't break a tool result.
+// empty/undefined = all on. Unknown tokens are ignored rather than thrown, so a typo'd setting can't break a tool
+// result.
 export const parseCleaners = (spec) => {
     if (spec === undefined || spec.trim() === "") {
         return new Set(CLEANERS);

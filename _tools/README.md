@@ -19,7 +19,7 @@ itself depends on a package outside `_shared/` and `_tools/` loses that standing
 
 | Package | Role |
 | --- | --- |
-| [agent-cli](agent-cli) | Process contract and budgeted output shared by `iq`, `fileq` and `webq` |
+| [agent-cli](agent-cli) | Process contract and budgeted output shared by `fileq` and `webq` |
 | [base](base) | Runtime primitives every tier shares: when-expressions, disposal, async schedulers |
 | [checks](checks) | The repository's invariant checks, run per edit, land, push and CI |
 | [ci-base](ci-base) | The image every CI job runs in |

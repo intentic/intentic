@@ -16,7 +16,6 @@ import { reconcileBakedSkills, switchOwnSkill, writeOwnSkill } from "./skills.js
 
 // The image's own plugin dirs; none by default, as on a bare dev run.
 interface BakedPlugins {
-    readonly iqPluginDir: string;
     readonly webqPluginDir: string;
 }
 
@@ -28,7 +27,7 @@ const stubServices = (
     capabilities: readonly Capability[],
     settings: SandboxSettings,
     personas: readonly Persona[] = [],
-    baked: BakedPlugins = { iqPluginDir: "", webqPluginDir: "" },
+    baked: BakedPlugins = { webqPluginDir: "" },
 ): Services =>
     unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
@@ -221,12 +220,11 @@ test("every id the list mints reads back the right skill", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const plugin: Capability = { id: "my-pack", kind: "plugin", config: { url: "https://example.com/pack.git" } };
     const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
-    const baked = { iqPluginDir: join(root, "iq-plugin"), webqPluginDir: join(root, "webq-plugin") };
-    const services = stubServices(root, [plugin], SandboxSettingsSchema.parse({ iqSearch: true }), [studio], baked);
+    const baked = { webqPluginDir: join(root, "webq-plugin") };
+    const services = stubServices(root, [plugin], SandboxSettingsSchema.parse({}), [studio], baked);
     await writeOwnSkill(services, { name: "notes", description: "Use it.", body: "Stored body." });
     await writeSkill(join(root, ".intentic", "records", "plugins", "my-pack", "skills"), "review", "Use when reviewing.", "Plugin body.");
     await writePersonaSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
-    await writeSkill(join(baked.iqPluginDir, "skills"), "iq", "Workspace code search.", "Search body.");
     await writeSkill(join(baked.webqPluginDir, "skills"), "webq", "Web pages as markdown.", "Web body.");
 
     for (const row of await skillInventory(services)) {
@@ -240,26 +238,18 @@ test("every id the list mints reads back the right skill", async () => {
     // A kit skill's id carries the persona id; its row shows the label instead, which is not a key.
     expect((await readSkillText(services, "persona:studio:voice"))?.text).toContain("Kit body.");
     // A plugin the image ships reads from its own dir, never from a loaded or stored skill of the same name.
-    expect((await readSkillText(services, "builtin:iq:iq"))?.text).toContain("Search body.");
     expect((await readSkillText(services, "builtin:webq:webq"))?.text).toContain("Web body.");
 });
 
-// A turn loads the image's webq plugin always and its iq plugin while iq search is on; neither has a switch on this list.
-test("the image's iq and webq plugins list their skills, iq only while its setting is on", async () => {
+// A turn loads the image's webq plugin always; it has no switch on this list.
+test("the image's webq plugin lists its skills", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
-    const baked = { iqPluginDir: join(root, "iq-plugin"), webqPluginDir: join(root, "webq-plugin") };
-    await writeSkill(join(baked.iqPluginDir, "skills"), "iq", "Workspace code search.");
+    const baked = { webqPluginDir: join(root, "webq-plugin") };
     await writeSkill(join(baked.webqPluginDir, "skills"), "webq", "Web pages as markdown.");
     const fixed = { origin: "builtin", enabled: true, switchable: false, editable: false, removable: false } as const;
 
-    const off = await skillInventory(stubServices(root, [], { ...settingsWith([]), iqSearch: false }, [], baked));
-    expect(off.filter((row) => row.id.includes(":"))).toEqual([
-        { id: "builtin:webq:webq", name: "webq", description: "Web pages as markdown.", owner: "Web pages", ...fixed },
-    ]);
-
-    const on = await skillInventory(stubServices(root, [], SandboxSettingsSchema.parse({ iqSearch: true }), [], baked));
-    expect(on.filter((row) => row.id.includes(":"))).toEqual([
-        { id: "builtin:iq:iq", name: "iq", description: "Workspace code search.", owner: "Code search", ...fixed },
+    const listed = await skillInventory(stubServices(root, [], settingsWith([]), [], baked));
+    expect(listed.filter((row) => row.id.includes(":"))).toEqual([
         { id: "builtin:webq:webq", name: "webq", description: "Web pages as markdown.", owner: "Web pages", ...fixed },
     ]);
 });

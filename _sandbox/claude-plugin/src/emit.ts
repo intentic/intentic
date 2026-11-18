@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { fileqSkillText, outputStyle, portableIqNudge, statsSkill } from "./generated.js";
+import { fileqSkillText, outputStyle, statsSkill } from "./generated.js";
 import { manifest } from "./manifest.js";
 
 // The build's writer (build.mjs bundles this and runs it): generated/ from the texts other packages own, and the
@@ -12,20 +12,17 @@ const write = (path: string, text: string): void => {
     writeFileSync(path, text);
 };
 
-// iq's teaching is the iq plugin's own files, and fileq's NOTICE is fileq's; resolved through the package so a move
-// there fails the build here.
+// fileq's NOTICE is fileq's own file, resolved through the package so a move there fails the build here.
 const packageFile = (specifier: string): string => readFileSync(createRequire(join(process.cwd(), "package.json")).resolve(specifier), "utf8");
 
 export const emit = (root: string): void => {
     const generated = join(root, "generated");
     rmSync(generated, { recursive: true, force: true });
     write(join(generated, "skills", "fileq", "SKILL.md"), fileqSkillText());
-    write(join(generated, "skills", "iq", "SKILL.md"), packageFile("@intentic/iq/skill"));
     // fileq's skill and bundled code carry rules adapted from SurfSense under Apache-2.0, whose notice travels with them.
     write(join(generated, "fileq-NOTICE"), packageFile("@intentic/fileq/NOTICE"));
     write(join(generated, "skills", "stats", "SKILL.md"), statsSkill());
     write(join(generated, "output-styles", "intentic.md"), outputStyle());
-    write(join(generated, "iq-nudge.txt"), portableIqNudge(packageFile("@intentic/iq/nudge")));
     const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string };
     write(join(root, ".claude-plugin", "plugin.json"), `${JSON.stringify(manifest(version), undefined, 4)}\n`);
 };

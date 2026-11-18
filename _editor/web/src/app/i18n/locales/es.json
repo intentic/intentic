@@ -6483,14 +6483,9 @@
         },
         "agentCodeSearch": {
             "codeSearch": "Búsqueda de código",
-            "iqCodeSearch": "Búsqueda de código iq",
             "ofConversationsOpenWithout": "de las conversaciones empiezan sin el mapa",
-            "ofConversationsRunWithout": "de las conversaciones funcionan sin iq",
             "projectMap": "Mapa del proyecto",
             "provideProjectStructureOverview": "Dar a las conversaciones nuevas una visión general de la estructura del proyecto.",
-            "useIqSearchCli": "Usar la CLI de búsqueda iq en vez de grep/find/glob.",
-            "withIq": "Con iq",
-            "iqUptake": "Búsquedas que pasaron por iq: {on} con él, {off} sin él.",
             "withMap": "Con mapa"
         },
         "agentCommandOutput": {
@@ -8237,10 +8232,8 @@
                 "failedCalls": "Llamadas a herramientas fallidas por turno",
                 "openedWithListing": "Primeros turnos que listaron directorios",
                 "openingPrompt": "Tokens de prompt por solicitud",
-                "openingSearches": "Búsquedas antes de abrir un archivo",
                 "openingWrite": "Prompt reescrito en cada seguimiento",
-                "outputReached": "Salida que llega al agente",
-                "searchCalls": "Búsquedas por turno"
+                "outputReached": "Salida que llega al agente"
             },
             "more": "{pct} % más",
             "moreWouldSettle": {
@@ -8261,9 +8254,7 @@
                 "failedCalls": "Unas {count} llamadas fallidas menos hasta ahora.",
                 "openedWithListing": "Unos {count} primeros turnos menos listaron directorios hasta ahora.",
                 "openingPrompt": "Unos {count} tokens de prompt menos hasta ahora.",
-                "openingSearches": "Unas {count} búsquedas menos hasta ahora.",
-                "openingWrite": "Unos {count} tokens de prompt menos reescritos hasta ahora.",
-                "searchCalls": "Unas {count} búsquedas menos hasta ahora."
+                "openingWrite": "Unos {count} tokens de prompt menos reescritos hasta ahora."
             },
             "tooEarly": "Aún es pronto",
             "without": "Sin"
@@ -10514,7 +10505,7 @@
                 "label": "Reparaciones de pipelines"
             },
             "refactorRun": {
-                "blurb": "El agente iniciado desde un punto crítico o módulo clave de la pestaña Salud de un repositorio.",
+                "blurb": "Se conserva para que la configuración guardada antes de quitar la pestaña Salud se siga leyendo; ya nada inicia una refactorización.",
                 "label": "Refactorizaciones"
             },
             "safetyJudge": {
@@ -10584,7 +10575,7 @@
         "agentDocumentSearch": {
             "group": "Documentos",
             "title": "Buscar dentro de documentos",
-            "description": "Mantiene listo en segundo plano el texto de PDF, Word, hojas de cálculo y presentaciones, para que rg e iq lo encuentren, citado por página."
+            "description": "Mantiene listo en segundo plano el texto de PDF, Word, hojas de cálculo y presentaciones, para que rg lo encuentre, citado por página."
         },
         "agentChatPages": {
             "group": "Páginas en el chat",
@@ -11271,7 +11262,7 @@
             "agentSkills": "habilidad, guía, receta, comando de barra, playbook",
             "agentMemory": "recordar, memoria, archivo de memoria, notas, preferencias",
             "agentMemoryImport": "chatgpt, claude, importar memoria, migrar, transferir, copiar memoria",
-            "agentCodeSearch": "grep, ripgrep, buscar código, base de código, índice, buscar en archivos, mapa del proyecto",
+            "agentCodeSearch": "buscar código, base de código, mapa del proyecto, estructura del proyecto, visión general",
             "agentDocumentSearch": "pdf, word, docx, excel, xlsx, hoja de cálculo, powerpoint, archivos",
             "agentRepoChecks": "lint, linter, comprobación de tipos, typecheck, pruebas, tests, hooks, verificar",
             "agentCommandOutput": "tokens, recortar, registros, logs, comprimir, ruido, acortar salida",
@@ -11386,13 +11377,10 @@
             "inTheChat": "En el chat",
             "tokens": "Tokens",
             "codeSearch": {
-                "label": "Cómo funciona la búsqueda de código",
-                "title": "Encontrar el archivo correcto en menos pasos",
-                "experience": "El agente llega antes al código que necesita, así que las respuestas empiezan antes y divagan menos.",
-                "tokens": "Menos búsquedas y lecturas de archivos por turno. El mapa se envía una vez y luego se lee de la caché en cada turno posterior, como el resto de la conversación; una pequeña parte de las conversaciones se ejecuta sin él, así que el ahorro se mide en lugar de suponerse.",
-                "without": "Sin iq",
-                "with": "Con iq",
-                "rightFile": "archivo correcto",
+                "label": "Cómo funciona el mapa del proyecto",
+                "title": "Conocer la estructura del proyecto desde el primer mensaje",
+                "experience": "El agente sabe desde el principio qué hay en cada sitio, así que llega antes al código que necesita y divaga menos.",
+                "tokens": "Menos listados de directorios y llamadas a herramientas antes del archivo correcto. El mapa se envía una vez y luego se lee de la caché en cada turno posterior, como el resto de la conversación; una pequeña parte de las conversaciones se ejecuta sin él, así que el ahorro se mide en lugar de suponerse.",
                 "ridesAlong": "Lo que envía cada turno",
                 "turn": "Turno {turn}",
                 "instructions": "Instrucciones",
@@ -12908,7 +12896,6 @@
     },
     "views": {
         "coreViews": {
-            "health": "Salud",
             "ui": "Interfaz"
         },
         "extensionDocument": {
@@ -13089,38 +13076,6 @@
             "copyRepoPath": "Copiar ruta en el repositorio",
             "copyRepoPaths": "Copiar {count} rutas en el repositorio"
         },
-        "codebaseHealth": {
-            "actionLegend": "Inicia un agente con la refactorización que piden las cifras de cada fila",
-            "branchPoints": "Puntos de ramificación",
-            "commits": "Commits desde",
-            "commits2": "Commits",
-            "couldntRead": "No se pudo leer la salud del código",
-            "exports": "{exports} exportaciones",
-            "file": "Archivo",
-            "filesBothChurnBranching": "archivos con mucho cambio y mucha ramificación",
-            "functionsTypesClasses": "funciones, tipos, clases",
-            "hotspots": "Puntos calientes",
-            "hotspotsLead": "Archivos que cambian a menudo y se ramifican mucho. Ninguno de los dos por sí solo es una alarma: un archivo de configuración muy editado es trivial, y un archivo enredado que nadie toca no cuesta nada.",
-            "indexStillBuildingFigures": "El índice todavía se está construyendo: estas cifras cubren solo lo leído hasta ahora.",
-            "indexedIgnoringBuildOutput": "indexados, sin contar la salida de compilación",
-            "keyModules": "Módulos clave",
-            "noFileHereBoth": "Ningún archivo de aquí tiene a la vez commits y puntos de ramificación: un repositorio sin historial todavía, o uno que solo guarda marcado y configuración, no clasifica nada.",
-            "noReportYet": "Todavía no hay informe.",
-            "nothingInRepositoryExports": "Nada de este repositorio exporta un símbolo que el índice lea.",
-            "perFile": "{files} por archivo",
-            "rankedByPagerankOver": "Clasificado por PageRank sobre el grafo de imports: aquello en lo que se apoya el resto del repositorio, que rara vez es lo que el árbol de archivos pone primero.",
-            "readingIndex": "Leyendo el índice…",
-            "recompute": "Recalcular",
-            "refactor": "Refactorizar {name}",
-            "refactorAction": "{action}: {name}",
-            "refreshCodebaseHealth": "Actualizar la salud de la base de código",
-            "repository": "Repositorio",
-            "risk": "Riesgo",
-            "riskNote": "Commits × puntos de ramificación",
-            "shownOf": "Top {count} de {hotspots}",
-            "suggested": "Sugerencia",
-            "symbols": "Símbolos"
-        },
         "compareDiffView": {
             "couldNotLoadVersions": "No se pudieron cargar las dos versiones de este documento.",
             "showTextInstead": "Mostrar el texto en su lugar"
@@ -13241,7 +13196,6 @@
             "nothingHere": "Aquí no hay nada.",
             "nothingMatchesIn": "Nada coincide con «{trim}» en {here}.",
             "searchText": "Buscar texto",
-            "smartSearch": "Búsqueda inteligente",
             "toolingHidden": "{count} archivo de herramientas oculto | {count} archivos de herramientas ocultos",
             "groupFiles": "Agrupar archivos por",
             "byKind": "Tipo",
@@ -13400,13 +13354,6 @@
             "writing": "Escribiendo",
             "draftNote": "Borrador del agente"
         },
-        "healthCodebaseHealth": {
-            "all": "Todo",
-            "allHistory": "Todo el historial",
-            "days30": "30 días",
-            "days7": "7 días",
-            "days90": "90 días"
-        },
         "historyPanel": {
             "autoCapture": "Captura automática",
             "beforeGoingBack": "Antes de volver atrás",
@@ -13483,18 +13430,6 @@
         },
         "pushBadge": {
             "sendingCommits": "Enviando commits"
-        },
-        "refactorAsk": {
-            "decompose": "Dividir por costuras",
-            "months": "{count} mes | {count} meses",
-            "narrow": "Reducir la superficie",
-            "simplify": "Aplanar ramas",
-            "split": "Dividir por responsabilidad",
-            "stabilize": "Separar el contrato",
-            "startsAgent": "Inicia un agente",
-            "tests": "Dividir tests",
-            "untouched": "Sin tocar",
-            "years": "{count} año | {count} años"
         },
         "reviewPanel": {
             "abort": "Abortar",
@@ -13705,7 +13640,6 @@
             "closeSplit": "Cerrar la división",
             "closeTab": "Cerrar la pestaña",
             "closeTabsToRight": "Cerrar las pestañas de la derecha",
-            "codebaseHealth": "Salud del código",
             "collapseAll": "Contraer todo",
             "collapseAllFolders": "Plegar todas las carpetas",
             "commaSeparated": "Separados por comas",
@@ -13721,7 +13655,6 @@
             "landingNow": "{landing}…",
             "nextTab": "Pestaña siguiente",
             "nobody": "Nadie",
-            "openCodebaseHealthWorkspace": "Abrir la salud de la base de código de la raíz del espacio de trabajo",
             "runWorkspace": "Ejecutar raíz",
             "openTabToSide": "Abrir la pestaña al lado",
             "previousTab": "Pestaña anterior",
@@ -13729,17 +13662,14 @@
             "refreshFiles": "Actualizar los archivos",
             "reopenClosedTab": "Reabrir la pestaña cerrada",
             "scopeNameHint": "Nombres de archivo",
-            "scopeSmartHint": "Por significado",
             "scopeTextHint": "Texto exacto",
             "showExplorer": "Mostrar explorador",
-            "smart": "Inteligente",
             "tabsStayOpen": "Las pestañas siguen abiertas",
             "search": "Buscar…",
             "searchIgnoredFiles": "Buscar en los archivos ignorados",
             "searchInFiles2": "Buscar en los archivos…",
             "show": "Mostrar {restorePoints}",
             "showChanges": "Mostrar los cambios",
-            "showCodebaseHealth": "Mostrar la salud de la base de código",
             "showHome": "Mostrar el escritorio",
             "showHome2": "Mostrar el escritorio",
             "showFiles": "Mostrar los archivos",
@@ -13959,11 +13889,9 @@
             "doubleClickToKeep": "Doble clic para fijar",
             "file": "Archivo",
             "folder": "Carpeta",
-            "health": "Salud del código",
             "management": "Panel de gestión",
             "path": "Ruta",
             "preview": "Vista previa",
-            "repo": "Repo",
             "closeTab": "Cerrar {title}"
         },
         "outgoingWork": {

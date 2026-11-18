@@ -1,7 +1,7 @@
 // Aggregates agent-output-filter's telemetry (filter-stats.jsonl) into the savings report: the one implementation, read by
 // the sandbox daemon's savings route, the cleaner bench and the Claude Code plugin's stats command alike. Row shape:
 // { rawBytes, emittedBytes, matched: string[], heldOut: boolean, command, stageBytes: { [id]: bytesRemoved } }; tokens
-// are ~4 chars/token, matching iq-engine's estimateTokens.
+// are ~4 chars/token, matching @intentic/base/format's estimateTokens.
 
 const sum = (rows, key) => rows.reduce((total, row) => total + (row[key] ?? 0), 0);
 const tokens = (bytes) => Math.round(bytes / 4);

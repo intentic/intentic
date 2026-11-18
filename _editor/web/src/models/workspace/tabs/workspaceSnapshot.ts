@@ -55,7 +55,6 @@ const named = z.string().min(1);
 const StoredTabSchema: z.ZodType<StoredWorkspaceTab> = z.discriminatedUnion(`kind`, [
     z.object({ kind: z.literal(`file`), id: named, path: named }),
     z.object({ kind: z.literal(`directory`), id: named, dir: z.string() }),
-    z.object({ kind: z.literal(`health`), id: named, repo: named }),
     // Restored on identity and its own label, not on the provider being back; a disabled extension's tab shows its
     // own "unavailable" instead of vanishing.
     z.object({ kind: z.literal(`document`), id: named, extension: named, provider: named, path: z.string(), title: named, icon: named }),

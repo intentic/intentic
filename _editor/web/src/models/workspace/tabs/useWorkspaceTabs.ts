@@ -247,12 +247,6 @@ const openDirectory = (dir: string, view?: string): void => {
     place(paneOf(strip.value, id) ?? focused.value, { kind: `directory`, id, dir, ...(view === undefined ? {} : { view }) }, `keep`);
 };
 
-// Health-report tab opens/focuses by repo, like openDirectory: re-opening never stacks a duplicate.
-const openHealth = (repo: string): void => {
-    const id = `health:${repo}`;
-    place(paneOf(strip.value, id) ?? focused.value, { kind: `health`, id, repo }, `keep`);
-};
-
 // Document tab keyed by extension+provider+path (two providers on one directory get separate tabs). Title/icon
 // are copied onto the tab, not looked up live, so a restored tab keeps its label if the extension never reactivates.
 const openDocument = (extension: string, provider: string, path: string, title: string, icon: string): void => {
@@ -392,7 +386,6 @@ export function useWorkspaceTabs() {
         openDiff,
         fillDiff,
         openDirectory,
-        openHealth,
         openDocument,
         selectTab,
         deselect,

@@ -42,7 +42,7 @@ export interface SearchOptions {
     readonly signal?: AbortSignal | undefined;
 }
 
-// What a page carries per file and line, as the daemon's engine pages them (iq-engine).
+// What a page carries per file and line, as the daemon's search route pages them (workspace-search.routes.ts).
 const PAGE_FILES = 300;
 const PAGE_HITS = 1_000;
 

@@ -61,17 +61,8 @@ export const configSchema = z.object({
     intenticAgentTools: z.string().default(""),
     // Daemon-wide default Claude model for turns with none pinned (headless wakes); empty ⇒ account default.
     intenticAgentModel: z.string().default(""),
-    // Image-baked iq embedding/reranker models dir; empty (bare dev run) ⇒ semantic search just degrades.
-    iqModelDir: z.string().default(""),
-    // Explicit ripgrep path for the resident engine; empty ⇒ `rg` from PATH (always present in the image).
-    iqRgPath: z.string().default(""),
-    // Image-baked iq Claude Code plugin dir, gated by the iqSearch setting (opt-in); empty ⇒ not loaded.
-    iqPluginDir: z.string().default(""),
-    // Pre-turn retrieval (agent/run/turn/turn-context.ts); off unless "true" or "1", and only with the iqSearch setting.
-    iqTurnContext: z
-        .string()
-        .default("")
-        .transform((value) => value === "true" || value === "1"),
+    // Explicit ripgrep path for the search box's searches; empty ⇒ `rg` from PATH (always present in the image).
+    rgPath: z.string().default(""),
     // Image-baked webq Claude Code plugin dir, loaded ungated (CLI is always on PATH); empty ⇒ not loaded.
     webqPluginDir: z.string().default(""),
     // Image-baked extensions dir; each subdir is an extension checkout, enumerated with git-installed ones.

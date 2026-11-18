@@ -5,7 +5,7 @@ import { headlineOf, outcomeOf, tableOf } from "./experimentReadings";
 // range, the sample still owed) must say what the daemon's margin says. Pins each state rather than trusting the panel.
 
 const reading = (overrides: Partial<TurnMetricReading> = {}): TurnMetricReading => ({
-    metric: `searchCalls`,
+    metric: `callsBeforeTarget`,
     on: { turns: 133, mean: 3.2 },
     off: { turns: 14, mean: 6.4 },
     ...overrides,
@@ -69,15 +69,15 @@ describe(`tableOf`, () => {
         const table = tableOf(
             experiment(
                 [
-                    reading({ metric: `searchCalls`, marginPct: 24.9, controlTurnsNeeded: 838 }),
-                    reading({ metric: `openingSearches`, deltaPct: -26.6, marginPct: 12 }),
+                    reading({ metric: `callsBeforeTarget`, marginPct: 24.9, controlTurnsNeeded: 838 }),
+                    reading({ metric: `failedCalls`, deltaPct: -26.6, marginPct: 12 }),
                 ],
                 { sampleUnit: `conversations` },
             ),
         );
         expect(table?.rows.map((row) => [row.key, row.outcome.kind])).toEqual([
-            [`searchCalls`, `unclear`],
-            [`openingSearches`, `lower`],
+            [`callsBeforeTarget`, `unclear`],
+            [`failedCalls`, `lower`],
         ]);
         expect(table?.rows[1]).toMatchObject({ on: 3.2, off: 6.4 });
     });
@@ -154,7 +154,7 @@ describe(`headlineOf`, () => {
     it(`picks the biggest measured drop over a rise, a no-difference and an open row`, () => {
         const table = tableOf(
             experiment([
-                reading({ metric: `searchCalls`, marginPct: 10 }),
+                reading({ metric: `openingWrite`, marginPct: 10 }),
                 reading({ metric: `failedCalls`, deltaPct: 12, marginPct: 4 }),
                 reading({ metric: `openedWithListing`, deltaPct: -20, marginPct: 5 }),
                 reading({ metric: `callsBeforeTarget`, deltaPct: -45, marginPct: 9 }),

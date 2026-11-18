@@ -114,7 +114,6 @@ export interface TurnContext {
     // Resolved once above the provider split; optional only for a focused caller that invokes an arm directly.
     readonly settings?: SandboxSettings;
     readonly conversationTurns?: number;
-    readonly iqSearchEnabled?: boolean;
     // Whether the CLI defers connected tools' schemas behind its tool search (decide/turn-premise.ts); undefined leaves
     // the CLI's own rule.
     readonly toolSearch?: boolean;
@@ -123,7 +122,6 @@ export interface TurnContext {
     // What the model's declared window will not pay for (context-trim.ts), resolved once above everything that reads
     // it. Absent means the window is unknown or large enough, which is every model outside a local one's card.
     readonly contextTrim?: TurnTrim;
-    readonly iqSearchCohort?: string;
     // Who the turn is and what it may do, resolved once by planTurn; absent on the context the route builds before a
     // card is read.
     readonly persona?: TurnPersona;

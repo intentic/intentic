@@ -15,7 +15,7 @@ import { filterOutput } from "../src/agent-output-filter.mjs";
 import { parseCleaners } from "../src/cleaners.mjs";
 import { parseStatsFile, summarizeStats } from "../src/filter-stats.mjs";
 
-// ~4 chars/token, the same heuristic as iq-engine's estimateTokens.
+// ~4 chars/token, the same heuristic as @intentic/base/format's estimateTokens.
 // Simulate the runtime's raw-output handle without writing corpus contents to disk.
 const retain = () => "/bench/raw";
 const estimateTokens = (text) => Math.ceil(text.length / 4);

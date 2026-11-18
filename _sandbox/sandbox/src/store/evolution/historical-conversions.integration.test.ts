@@ -112,8 +112,7 @@ test("settings a withdrawn rule once made unreadable read again, the rule gone a
     expect(outcome.plan?.steps).toEqual([]);
     expect(outcome.plan?.converts).toEqual([
         { document: settingsDocument.path, change: "drops rules at a withdrawn moment or with a withdrawn action (push.starting, instruct, three built-in checks)" },
-        // A file from before iq search and the project map turned on for new sandboxes (2026-11-04) keeps them off.
-        { document: settingsDocument.path, change: "keeps the earlier default for iqSearch" },
+        // A file from before the project map turned on for new sandboxes (2026-11-04) keeps it off.
         { document: settingsDocument.path, change: "keeps the earlier default for workspaceMap" },
         { document: settingsDocument.path, change: "converts personaRouting from its old values", detail: '"suggest" became true' },
     ]);
@@ -312,8 +311,8 @@ test("the retired projects host's folder registry is deleted, and nothing else i
     expect((await converge(roots, [], [projectsHostLeftoversStep])).plan?.steps ?? []).toEqual([]);
 });
 
-// New sandboxes start shielded, taught iq and handed the project map (2026-11-04). A workspace a release from before ran
-// and that never saved either file has the old values written down once; a new one, or one that saved its own, is left be.
+// New sandboxes start shielded and handed the project map (2026-11-04). A workspace a release from before ran and that
+// never saved either file has the old values written down once; a new one, or one that saved its own, is left be.
 describe("the defaults a sandbox from before 2026-11 ran on", () => {
     const stamped = async (version: string | undefined): Promise<{ roots: StateRoots; settings: string; privacy: string }> => {
         const roots = await volumes();
@@ -325,17 +324,16 @@ describe("the defaults a sandbox from before 2026-11 ran on", () => {
         return { roots, settings, privacy: join(roots.auth, privacyShieldDocument.path) };
     };
 
-    test("an older sandbox that never saved them keeps the shield, iq search and the project map off", async () => {
+    test("an older sandbox that never saved them keeps the shield and the project map off", async () => {
         const { roots, settings, privacy } = await stamped("1.394.0");
 
         const outcome = await converge(roots, [], [earlierDefaultsStep]);
 
         expect(outcome.plan?.steps).toEqual([
-            { document: "earlier-defaults-2026-11", change: "keeps iq search and the project map off" },
+            { document: "earlier-defaults-2026-11", change: "keeps the project map off" },
             { document: "earlier-defaults-2026-11", change: "keeps the privacy shield off" },
         ]);
-        const read = await fileSandboxSettingsStore(settings).get();
-        expect([read.iqSearch, read.workspaceMap]).toEqual([false, false]);
+        expect((await fileSandboxSettingsStore(settings).get()).workspaceMap).toBe(false);
         expect((await filePrivacyPolicy(privacy).get()).mode).toBe("off");
         // Written down, so the stamp moving to this release changes nothing at the next boot.
         await commitState(roots);
@@ -345,13 +343,13 @@ describe("the defaults a sandbox from before 2026-11 ran on", () => {
 
     test("what an older sandbox saved is never written over", async () => {
         const { roots, settings, privacy } = await stamped("1.300.0");
-        await put(settings, { iqSearch: true });
+        await put(settings, { workspaceMap: true });
         await put(privacy, { mode: "watch" });
 
         const outcome = await converge(roots, [], [earlierDefaultsStep]);
 
         expect(outcome.plan?.steps ?? []).toEqual([]);
-        expect(await json(settings)).toEqual({ iqSearch: true });
+        expect(await json(settings)).toEqual({ workspaceMap: true });
         expect(await json(privacy)).toEqual({ mode: "watch" });
     });
 
@@ -359,14 +357,13 @@ describe("the defaults a sandbox from before 2026-11 ran on", () => {
         ["a first boot", undefined],
         ["a sandbox only a dev build ran", "0.0.0"],
         ["a sandbox made by a release with the new defaults", "1.395.0"],
-    ])("%s starts shielded, with iq search and the project map", async (_name, version) => {
+    ])("%s starts shielded, with the project map", async (_name, version) => {
         const { roots, settings, privacy } = await stamped(version);
 
         const outcome = await converge(roots, [], [earlierDefaultsStep]);
 
         expect(outcome.plan?.steps ?? []).toEqual([]);
-        const read = await fileSandboxSettingsStore(settings).get();
-        expect([read.iqSearch, read.workspaceMap]).toEqual([true, true]);
+        expect((await fileSandboxSettingsStore(settings).get()).workspaceMap).toBe(true);
         expect((await filePrivacyPolicy(privacy).get()).mode).toBe("on");
     });
 });

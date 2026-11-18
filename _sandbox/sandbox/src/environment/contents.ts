@@ -53,7 +53,7 @@ const STAPLES: readonly Staple[] = [
     { bin: "uv", name: "uv", purpose: "Installs Python projects and the interpreters they ask for." },
     { bin: "ruff", name: "Ruff", purpose: "Lints and formats Python, and checks every Python file an agent edits." },
     { bin: "pyright", name: "Pyright", purpose: "Type-checks Python where the project's environment resolves." },
-    { bin: "rg", name: "ripgrep", purpose: "Fast text search across the workspace, and the engine behind code search." },
+    { bin: "rg", name: "ripgrep", purpose: "Fast text search across the workspace, and the engine behind the search box." },
     { bin: "jq", name: "jq", purpose: "Reads and rewrites JSON on the command line." },
     { bin: "yq", name: "yq", purpose: "The same for YAML, compose files, pipelines, manifests." },
     { bin: "sqlite3", name: "SQLite", purpose: "Opens and queries a local database file." },

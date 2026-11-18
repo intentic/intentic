@@ -82,9 +82,9 @@ export const fencedClassification = (fence: Fence, classified: WorkspaceClassifi
 
 /**
  * The subtrees a search may actually run over: what the caller asked for, met with what they hold.
- * Undefined is the whole index. An EMPTY list is the engine's own "nothing matches" (scan.ts filterScope keeps an
- * entry only when some prefix contains it), which is the answer a fence admitting no folder has to produce — the
- * index covers the whole tree, so leaving the scope open here would hand out snippets from folders that refuse.
+ * Undefined is the whole tree. An EMPTY list is the search's own "nothing matches" (@intentic/text-search walks no path
+ * when given none), which is the answer a fence admitting no folder has to produce — a search walks the whole tree, so
+ * leaving the scope open here would hand out snippets from folders that refuse.
  */
 export const searchPaths = (fence: Fence, dir: string): readonly string[] | undefined => fenceIntersection(fence, dir === "" ? undefined : [dir]);
 

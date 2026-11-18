@@ -11,13 +11,13 @@ import { stateRelPath } from "../state-paths.js";
 // store: a small JSON file the /settings routes edit and streamAgent reads. No secrets, so not on the denylist.
 
 // Its conversions are the contract's (SETTINGS_HISTORY), shared with a sandbox.toml's [settings] table, then this file's
-// own: iq search and the project map turned on for new sandboxes on 2026-11-04, and a file from before that names
-// neither keeps them off. Here, not in the shared list, so a new sandbox's sandbox.toml that leaves them out gets the
-// new default. A file never written at all is earlier-defaults-step.ts's.
+// own: the project map turned on for new sandboxes on 2026-11-04, and a file from before that does not name it keeps it
+// off. Here, not in the shared list, so a new sandbox's sandbox.toml that leaves it out gets the new default. A file
+// never written at all is earlier-defaults-step.ts's.
 export const settingsDocument = defineDocument({
     path: stateRelPath(".intentic/config/settings.json"),
     schema: SandboxSettingsSchema,
-    history: [...SETTINGS_HISTORY, pinDefault("iqSearch", false), pinDefault("workspaceMap", false)],
+    history: [...SETTINGS_HISTORY, pinDefault("workspaceMap", false)],
 });
 
 export interface SandboxSettingsStore {

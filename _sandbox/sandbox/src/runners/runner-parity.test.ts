@@ -91,19 +91,19 @@ test("adopt REPLACES: an omitted key returns to its default, and adopting the pa
     let stored: Record<string, unknown> | undefined;
     const runner = {
         sandboxSettings: {
-            get: async () => stored ?? { iqSearch: true },
+            get: async () => stored ?? { toolSearch: false },
             set: async (settings: Record<string, unknown>) => {
                 stored = settings;
             },
         },
     } as unknown as Services;
 
-    // The parent's claim omits iqSearch and sets hashlineEdits; the runner starts with the opposite.
+    // The parent's claim omits toolSearch and sets hashlineEdits; the runner starts with the opposite.
     const parentClaim = await runnerClaim({ hashlineEdits: true });
     const applied = await adoptDefinitionSettings(runner, parseDefinitionToml(parentClaim));
     expect(applied).toEqual(["hashlineEdits"]);
     expect(stored?.["hashlineEdits"]).toBe(true);
-    expect(stored?.["iqSearch"]).toBe(SandboxSettingsSchema.parse({}).iqSearch);
+    expect(stored?.["toolSearch"]).toBe(SandboxSettingsSchema.parse({}).toolSearch);
 
     expect(await runnerClaim(stored ?? {})).toBe(parentClaim);
 });

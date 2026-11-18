@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { isMissing } from "./runtime.js";
+import { isMissing } from "@intentic/base/errors";
 
 // The plugin's switches: one entry per mechanism, and the single source for both sides of a switch. The manifest's
 // `userConfig` is generated from this table (manifest.ts), so each entry is a row in Claude Code's /config; the hooks read
@@ -62,13 +62,6 @@ export const OPTIONS = {
             "Open each session with a map of the project it starts in: its areas, what each is for, and where Claude is standing. Worked out from the tree every time, never stored, so it cannot go stale.",
         default: true,
     },
-    iq: {
-        type: "boolean",
-        title: "iq search",
-        description:
-            "Teach Claude the `iq` code search CLI and recall past sessions on a matching prompt. Needs `npm i -g @intentic/iq`; without it this switch does nothing and says so once.",
-        default: true,
-    },
     fileq: {
         type: "boolean",
         title: "fileq",
@@ -80,7 +73,7 @@ export const OPTIONS = {
         type: "number",
         title: "Measured share",
         description:
-            "Share of sessions opened without the map and the iq teaching, so `/intentic:stats` can show what each changed. 0 sends them to every session and measures nothing.",
+            "Share of sessions opened without the map, so `/intentic:stats` can show what it changed. 0 sends it to every session and measures nothing.",
         default: 0.1,
         min: 0,
         max: 0.5,

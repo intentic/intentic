@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-// Where a folder's search runs: ripgrep, the engine the sandbox's own search runs (iq's `find`), started beside the
-// files rather than reading them across a boundary. A folder in a WSL distro, which Windows reaches through
+// Where a folder's search runs: ripgrep, the engine the sandbox's own search runs (@intentic/text-search), started
+// beside the files rather than reading them across a boundary. A folder in a WSL distro, which Windows reaches through
 // \\wsl.localhost\<distro>, is searched by a Linux rg inside that distro: across the share every file is a round trip,
 // and a repository of 10,745 files took 37 s to read from the Windows side and 132 ms from inside the distro (measured
 // 2026-10-17 on the owner's PC). Every other folder is searched by this computer's own rg. With no rg to run, the

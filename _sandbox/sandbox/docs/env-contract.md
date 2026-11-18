@@ -26,7 +26,7 @@ when the daemon runs from a checkout), the process environment, then command-lin
 | Owner and sign-in | `CONNECT_TOKEN`, `OWNER_EMAIL`, `GOOGLE_CLIENT_ID`, `PLATFORM_IDENTITY_KEY`, `WEB_ORIGIN` |
 | Reachability | `SANDBOX_GRANT`, `INGRESS_URL`, `SANDBOX_PUBLIC_URL`, `PLATFORM_URL`, `SANDBOX_PORT` |
 | Posture | `SANDBOX_PROFILE`, `SANDBOX_VM`, `SANDBOX_PREWARM`, `IDLE_STOP_MINUTES` |
-| Image assets | `IQ_MODEL_DIR`, `WEBQ_PLUGIN_DIR`, `EXTENSIONS_DIR`, `TRANSLATOR_URL` |
+| Image assets | `WEBQ_PLUGIN_DIR`, `EXTENSIONS_DIR`, `TRANSLATOR_URL` |
 | Setup pairings | `SYNC_PAIR_TOKEN`, `HOST_PAIR_TOKEN` |
 
 ## Who sets what

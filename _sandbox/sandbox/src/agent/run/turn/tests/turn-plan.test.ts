@@ -1,8 +1,6 @@
 import { openCodeMounts } from "../../../../runtimes/opencode/opencode-mcp.js";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import { repoRoot } from "@intentic/constants/node";
 import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../../../../composition.js";
@@ -48,7 +46,6 @@ jest.mock("../../../../browser/tools/browser-tools.js", () => ({
 }));
 
 /* NOTHING HERE TOUCHES THE DISK, which is what keeps this suite under the unit budget: the shared fixture's ROOT is a path that does not exist. */
-const IQ_PLUGIN_DIR = join(repoRoot(import.meta.url), "_search/iq/plugin");
 
 beforeEach(() => {
     credentials.mockReset();
@@ -501,43 +498,6 @@ test("Grok replaces a model its live catalog no longer offers, and keeps one it 
     expect(offered).toMatchObject({ account: "xai" });
 });
 
-test("iq search teaching reaches native Codex and OpenCode as the shipped nudge, not the full skill Claude loads", async () => {
-    const settings = unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
-        get: async () => SandboxSettingsSchema.parse({ iqSearch: true }),
-    });
-    const agents = unstubbed<Services["agents"]>("agents", { entry: () => undefined });
-    const codex = await planTurn(
-        codexServices({
-            config: { ...testConfig, iqPluginDir: IQ_PLUGIN_DIR, translator: { url: "http://127.0.0.1:8788", token: "local" } },
-            sandboxSettings: settings,
-            agents,
-        }),
-        turn({ agent: "codex", conversationId: "codex-iq" }),
-        context,
-    );
-    expect(wire(codex)).toContain("## iq workspace search");
-    expect(wire(codex)).toContain(".agents/skills/iq/SKILL.md");
-    expect(wire(codex)).not.toContain("iq def createIgnoreScope");
-
-    const grok = await planTurn(
-        servicesWith({
-            config: { ...testConfig, iqPluginDir: IQ_PLUGIN_DIR },
-            sandboxSettings: settings,
-            agents,
-            openCode: unstubbed<Services["openCode"]>("openCode", {
-                shielded: async () => true,
-                connected: async () => true,
-                xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
-            }),
-        }),
-        turn({ agent: "grok", conversationId: "grok-iq" }),
-        context,
-    );
-    expect(wire(grok)).toContain("## iq workspace search");
-    expect(wire(grok)).toContain(".agents/skills/iq/SKILL.md");
-    expect(wire(grok)).not.toContain("iq def createIgnoreScope");
-});
-
 // The checks-after-landing note only needs to be said once per conversation: by the second turn it is already in the
 // session's own history. Compaction erases that history, so it is the one event that re-earns the note.
 // A conversation as the registry has it: turns run, the turn a compaction happened under (compactedTurn), and the
@@ -873,9 +833,9 @@ test("a conversation that has never run leaves the account to the resolver's own
 test("a holdout assigns one balanced arm deterministically per conversation", () => {
     for (let index = 0; index < 20; index += 1) {
         const id = `conversation-${index}`;
-        expect(experimentArm("iq-search", id, 0.5)).toBe(experimentArm("iq-search", id, 0.5));
+        expect(experimentArm("tool-search", id, 0.5)).toBe(experimentArm("tool-search", id, 0.5));
     }
-    const arms = new Set(Array.from({ length: 100 }, (_, index) => experimentArm("iq-search", `conversation-${index}`, 0.5)));
+    const arms = new Set(Array.from({ length: 100 }, (_, index) => experimentArm("tool-search", `conversation-${index}`, 0.5)));
     expect(arms).toEqual(new Set([true, false]));
 });
 
@@ -884,7 +844,7 @@ test("a holdout assigns one balanced arm deterministically per conversation", ()
 test("two experiments draw independent arms for the same conversation", () => {
     const together = Array.from({ length: 200 }, (_, index) => {
         const id = `conversation-${index}`;
-        return experimentArm("iq-search", id, 0.5) === experimentArm("workspace-map", id, 0.5);
+        return experimentArm("tool-search", id, 0.5) === experimentArm("workspace-map", id, 0.5);
     }).filter(Boolean).length;
     // Independent draws agree about half the time. Perfect agreement is the bug this guards.
     expect(together).toBeGreaterThan(60);
@@ -1214,91 +1174,6 @@ test("a rule naming a repository enters the namespace inside that repository", (
     expect(ruleCommandIn(`pnpm verify:push`, anchor, `intentic`)).toContain(`--wdns=${WORKSPACE_ROOT}/intentic`);
     // "root" is the workspace's own repository, which is where an unaimed command already runs.
     expect(ruleCommandIn(`pnpm verify:push`, anchor, `root`)).toContain(`--wdns=${WORKSPACE_ROOT}`);
-});
-
-// Pre-turn retrieval was fully built and never called; these pin that it is wired, and that the kill-switch really
-// kills it rather than merely hiding the note.
-const RETRIEVED = "## Retrieved workspace context";
-
-const iqAnswering = (): Services["iq"] =>
-    unstubbed<Services["iq"]>("iq", {
-        run: async () => ({
-            exitCode: 0 as const,
-            text: "answer: src/widget.ts:6 · confident\n  6: export const createWidget = (",
-            result: unstubbed<Awaited<ReturnType<Services["iq"]["run"]>>["result"]>("iq.result", {
-                groups: [{ path: "src/widget.ts", score: 1, hits: [] }],
-                freshness: { state: "fresh" as const },
-            }),
-        }),
-    });
-
-const searchOn = (): Services["sandboxSettings"] =>
-    unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ iqSearch: true }) });
-
-test("with the flag on, the daemon looks the message up before the turn and hands the model the anchors", async () => {
-    const plan = await planTurn(
-        servicesWith({
-            iq: iqAnswering(),
-            config: { ...testConfig, iqTurnContext: true },
-            sandboxSettings: searchOn(),
-            agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
-        }),
-        turn({ prompt: "why does createWidget drop the name?" }),
-        context,
-    );
-    expect(wire(plan)).toContain(RETRIEVED);
-    expect(wire(plan)).toContain("src/widget.ts:6");
-    // The note says whose words it is not, so the model never reads the anchors as something the user typed.
-    expect(wire(plan)).toContain("Not the user's words");
-    // Delivery on the ledger row, not just assignment: the first A/B could not tell a mechanism with no effect from
-    // one that never arrived, and that is what killed the reading rather than the mechanism.
-    expect(plan).toMatchObject({ experiments: { turnContext: "delivered", turnContextMs: expect.any(Number) } });
-});
-
-// The mechanism shipped once as `iqContext` and an A/B removed it, so the default has to be OFF: a workspace that
-// never set the flag must not pay the lookup.
-test("off by default: no flag, no lookup, no note", async () => {
-    let asked = 0;
-    const plan = await planTurn(
-        servicesWith({
-            iq: unstubbed<Services["iq"]>("iq", {
-                run: async () => {
-                    asked += 1;
-                    throw new Error("retrieval must not run with the flag unset");
-                },
-            }),
-            sandboxSettings: searchOn(),
-            agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
-        }),
-        turn({ prompt: "why does createWidget drop the name?" }),
-        context,
-    );
-    expect(asked).toBe(0);
-    expect(wire(plan)).not.toContain(RETRIEVED);
-    // Absent, not a skip reason: nothing was attempted, which a reader must be able to tell from a lookup that ran.
-    expect(plan).not.toHaveProperty("experiments.turnContext");
-});
-
-// A workspace that turned search off has no index worth asking, and pays nothing for the feature either.
-test("the flag alone is not enough: a workspace with iq search off still pays nothing", async () => {
-    let asked = 0;
-    const plan = await planTurn(
-        servicesWith({
-            iq: unstubbed<Services["iq"]>("iq", {
-                run: async () => {
-                    asked += 1;
-                    throw new Error("retrieval must not run with search off");
-                },
-            }),
-            config: { ...testConfig, iqTurnContext: true },
-            agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
-            sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ iqSearch: false }) }),
-        }),
-        turn({ prompt: "why does createWidget drop the name?" }),
-        context,
-    );
-    expect(asked).toBe(0);
-    expect(wire(plan)).not.toContain(RETRIEVED);
 });
 
 // A helper's request on the Claude Code arm: the credential a turn would spend, behind the gateway like a turn's, and

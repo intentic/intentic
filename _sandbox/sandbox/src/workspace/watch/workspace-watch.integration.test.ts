@@ -23,8 +23,8 @@ test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not so
     // Agent worktrees are full checkouts an agent edits at speed: never watched; sibling .claude config is.
     expect(watchIgnored(at("app", ".claude", "worktrees", "fix", "src", "main.ts"))).toBe(true);
     expect(watchIgnored(at("app", ".claude", "settings.json"))).toBe(false);
-    // Daemon state that churns constantly (iq WAL, transcripts) is never watched, to avoid feeding back noise.
-    expect(watchIgnored(at(".intentic", "local", "cache", "iq", "index.db-wal"))).toBe(true);
+    // Daemon state that churns constantly (cache WALs, transcripts) is never watched, to avoid feeding back noise.
+    expect(watchIgnored(at(".intentic", "local", "cache", "code-counts.db-wal"))).toBe(true);
     expect(watchIgnored(at(".intentic", "records", "sessions", "claude", "projects", "-work", "session.jsonl"))).toBe(true);
     expect(watchIgnored(at(".intentic", "secrets", "auth", "codex", "default", "auth.json"))).toBe(true);
     expect(watchIgnored(at(".intentic", "local", "runtime", "extensions", "whatsapp", "gateway.url"))).toBe(true);

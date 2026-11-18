@@ -30,9 +30,11 @@ export const LANDING_CHECKS_NOTE_HEADER = "## Checks after landing";
 // The note the checks note replaced, still parsed out of prompts records hold, never sent.
 const LEGACY_TURN_ENDING_NOTE_TITLE = "Automatic end-of-turn checks";
 const LEGACY_TURN_ENDING_NOTE_HEADER = "## Automatic end-of-turn checks";
-export const IQ_SEARCH_INSTRUCTION_HEADER = "## iq workspace search";
-export const TURN_CONTEXT_NOTE_TITLE = "Workspace context found for this message";
-export const TURN_CONTEXT_NOTE_HEADER = "## Retrieved workspace context";
+// The iq teaching and the per-turn retrieval iq answered, removed with iq (2026-11-18): still parsed out of prompts records
+// hold, never sent.
+const LEGACY_IQ_SEARCH_HEADER = "## iq workspace search";
+const LEGACY_TURN_CONTEXT_NOTE_TITLE = "Workspace context found for this message";
+const LEGACY_TURN_CONTEXT_NOTE_HEADER = "## Retrieved workspace context";
 export const MEMORY_NOTE_TITLE = "Standing instructions for this workspace";
 export const MEMORY_NOTE_HEADER = `## ${MEMORY_NOTE_TITLE}`;
 export const CONTEXT_NOTE_HEADER = "## Context of this session";
@@ -63,7 +65,7 @@ export const INJECTED: readonly { readonly header: string; readonly title: strin
     { header: SETUP_NOTICE_HEADER, title: "Dependencies aren't installed yet" },
     // Separate opening: a stale-only notice can appear alone, without SETUP_NOTICE_HEADER ahead of it.
     { header: STALE_NOTICE_HEADER, title: "Dependencies are behind" },
-    { header: IQ_SEARCH_INSTRUCTION_HEADER, title: "Using iq for workspace search" },
+    { header: LEGACY_IQ_SEARCH_HEADER, title: "Using iq for workspace search" },
     // Computed off the filesystem at open, so a reader can check the map against how the project looks now.
     { header: WORKSPACE_MAP_NOTE_HEADER, title: "Map of this project" },
     // Which repos the conversation's tree holds and lacks; without it a missing directory looks deleted.
@@ -73,7 +75,7 @@ export const INJECTED: readonly { readonly header: string; readonly title: strin
     // What a home conversation works by: how it delegates, judges, merges and lands (conversations/home/home-policy.ts).
     { header: HOME_NOTE_HEADER, title: HOME_NOTE_TITLE },
     { header: SKILL_CATALOG_NOTE_HEADER, title: SKILL_CATALOG_NOTE_TITLE },
-    { header: TURN_CONTEXT_NOTE_HEADER, title: TURN_CONTEXT_NOTE_TITLE },
+    { header: LEGACY_TURN_CONTEXT_NOTE_HEADER, title: LEGACY_TURN_CONTEXT_NOTE_TITLE },
     { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },
     { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },
     { header: REPO_SYNC_NOTE_HEADER, title: "Repos synced with their remotes" },

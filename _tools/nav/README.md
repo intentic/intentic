@@ -73,5 +73,5 @@ a renamed file does not erase an earlier session's wrong guess. `replay` is stor
 the general navigation benchmark; compare the same `replay` symbols separately for a task-level result.
 
 The simulated lookup uses the existing read-window model; literal search rows count substring matches in source
-and tests separately. Neither runs `iq`, executes an autonomous session, nor measures elapsed task time. A smaller
+and tests separately. Neither runs a search tool, executes an autonomous session, nor measures elapsed task time. A smaller
 file can reduce whole-file reading while leaving a skilled window unchanged or increasing import-line matches.

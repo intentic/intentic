@@ -151,18 +151,14 @@
                 "bin/*.test.mjs",
                 "scripts/*.{sh,mjs}"
             ],
-            // @playwright/mcp is found with require.resolve (browser-tools.ts); the image runs iq from node_modules
-            // (Dockerfile); pino-pretty is a transport loaded by name (logger.ts).
+            // @playwright/mcp is found with require.resolve (browser-tools.ts); pino-pretty is a transport loaded by
+            // name (logger.ts).
             "ignoreDependencies": [
                 "@intentic/webq",
                 "vitest",
                 "@playwright/mcp",
-                "@intentic/iq",
                 "pino-pretty"
             ]
-        },
-        "_search/iq": {
-            "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_sandbox/webq": {
             "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.{ts,mts,mjs}"]
@@ -238,9 +234,6 @@
         "_extensions/*": {
             "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
-        "_search/iq-engine": {
-            "entry": ["src/index.ts", "scripts/*.mjs", "src/**/*.test.{ts,mts,mjs}"]
-        },
         // The browser extension has no library entry point, so the `_devices/*` default (src/index.ts) would
         // read every file in it as unreachable. Its three real roots — the service worker, the content script,
         // the popup — are already found in its build script, so what is left to declare is the suite.
@@ -271,10 +264,9 @@
         },
         // Hooks run by path from hooks/hooks.json, and a suite outside src/.
         "_sandbox/claude-plugin": {
-            "entry": ["src/{emit,prompt-submit}.ts", "src/**/*.test.{ts,mts,mjs}", "tests/**", "build.mjs"],
-            // emit.ts copies files out of @intentic/iq by subpath (packageFile), which no import names; `claude-code/testing`
-            // is provided by `claude plugin test`, which runs tests/ (test-mod.mjs).
-            "ignoreDependencies": ["@intentic/iq", "claude-code"]
+            "entry": ["src/emit.ts", "src/**/*.test.{ts,mts,mjs}", "tests/**", "build.mjs"],
+            // `claude-code/testing` is provided by `claude plugin test`, which runs tests/ (test-mod.mjs).
+            "ignoreDependencies": ["claude-code"]
         },
         // OCR runs in a worker thread loaded by path.
         "_sandbox/ocr": {
@@ -347,9 +339,6 @@
             ],
             // Resolved from the web app's own manifest (mobile/wire.ts), not this package's.
             "ignoreDependencies": ["posthog-js"]
-        },
-        "_search/iq-bench": {
-            "entry": ["src/**/*.ts"]
         },
         "_tools/e2e": {
             "entry": [

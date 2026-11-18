@@ -1,5 +1,4 @@
 import { refuse } from "@intentic/contract-serve";
-import { demoHealth } from "../../fixture/health";
 import { pictureDimensions, readFile, resolveReference, restoreEntry, searchWorkspace } from "../../fixture/workspace";
 import { addApps, appsList, startApp, stopApp, templates } from "./apps";
 import { derive, readDerived } from "./derived";
@@ -19,8 +18,7 @@ import { okAfter, type Doors } from "../doors";
 seedPages();
 
 // The search box's options, read the same way by the plain search and its streamed first page.
-const searchOptions = (input: { mode?: string; literal?: boolean; word?: boolean; caseSensitive?: boolean; include?: string; dir?: string }) => ({
-    smart: input.mode === `q`,
+const searchOptions = (input: { literal?: boolean; word?: boolean; caseSensitive?: boolean; include?: string; dir?: string }) => ({
     literal: input.literal === true,
     word: input.word === true,
     caseSensitive: input.caseSensitive === true,
@@ -60,8 +58,6 @@ export const workspaceDoors = {
     runTests: ({ repo, session, dirs }) => okAfter(() => runTests(repo, session, dirs)),
     packageGraph: ({ repo }) => packageGraph(repo),
     packageModules: ({ repo, package: name }) => packageModules(repo, name),
-    // The Health tab's report: hotspots and key modules for the shop's repositories (fixture/health.ts).
-    health: ({ repo, since }) => demoHealth(repo, since, Date.now()),
     // The tickets an element spends where it cannot send a bearer (daemon/workspace/tickets.ts).
     mediaTicket: ({ path }) => mintMediaTicket(path),
     downloadTicket: ({ paths }) => mintDownloadTicket(paths),

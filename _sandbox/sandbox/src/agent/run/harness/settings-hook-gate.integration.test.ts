@@ -188,7 +188,7 @@ describe("plugins under the gate", () => {
     test("only the mounts the image does not ship are gated", () => {
         const mount = (origin: AgentMount["origin"], id: string, shipped: boolean): AgentMount => ({ origin, id, owner: `${id} owner`, pluginDir: `/p/${id}`, shipped });
 
-        expect(gatedPlugins([mount("builtin", "iq", true), mount("extension", "baked", true), mount("extension", "git", false), mount("plugin", "cap", false), mount("persona", "kit", false)])).toEqual([
+        expect(gatedPlugins([mount("builtin", "webq", true), mount("extension", "baked", true), mount("extension", "git", false), mount("plugin", "cap", false), mount("persona", "kit", false)])).toEqual([
             { name: "git owner", from: "extension", dir: "/p/git" },
             { name: "cap owner", from: "plugin", dir: "/p/cap" },
             { name: "kit owner", from: "persona", dir: "/p/kit" },

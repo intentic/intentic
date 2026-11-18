@@ -42,25 +42,25 @@ test("declared absent on CI, a machine that has it still runs the tests", () => 
 test("unmet in the CI lane that provides it: a failing test naming the requirement and the lane", () => {
     const registered: { title: string; body: () => void }[] = [];
     const env = { CI: "true", [CI_LANE]: "machine" };
-    const needs = requirementOf(false, "the iq models", env, (title, body) => registered.push({ title, body }), { lane: "machine" });
+    const needs = requirementOf(false, "a browser", env, (title, body) => registered.push({ title, body }), { lane: "machine" });
     expect(needs.runs).toBe(false);
-    expect(registered.map(({ title }) => title)).toEqual(["requires the iq models"]);
-    expect(registered[0]?.body).toThrow("this machine lacks the iq models, which CI provides on purpose in this job, its machine lane");
+    expect(registered.map(({ title }) => title)).toEqual(["requires a browser"]);
+    expect(registered[0]?.body).toThrow("this machine lacks a browser, which CI provides on purpose in this job, its machine lane");
 });
 
 test("unmet in any other CI job: stands down, naming the lane that runs it", () => {
     for (const env of [{ CI: "true" }, { CI: "true", [CI_LANE]: "netd" }]) {
-        const needs = requirementOf(false, "the iq models", env, never, { lane: "machine" });
-        expect({ runs: needs.runs, title: needs.title("ranks") }).toEqual({
+        const needs = requirementOf(false, "a browser", env, never, { lane: "machine" });
+        expect({ runs: needs.runs, title: needs.title("renders") }).toEqual({
             runs: false,
-            title: "ranks (stood down: needs the iq models, which CI provides in its machine lane)",
+            title: "renders (stood down: needs a browser, which CI provides in its machine lane)",
         });
     }
 });
 
 test("a lane is a CI word: unmet on a developer's machine, it stands down like any requirement", () => {
-    const needs = requirementOf(false, "the iq models", { [CI_LANE]: "machine" }, never, { lane: "machine" });
-    expect({ runs: needs.runs, title: needs.title("ranks") }).toEqual({ runs: false, title: "ranks (stood down: needs the iq models)" });
+    const needs = requirementOf(false, "a browser", { [CI_LANE]: "machine" }, never, { lane: "machine" });
+    expect({ runs: needs.runs, title: needs.title("renders") }).toEqual({ runs: false, title: "renders (stood down: needs a browser)" });
 });
 
 test("each test that stands down is written for suites to count", () => {

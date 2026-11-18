@@ -48,8 +48,8 @@ diff; do not convert both versions by hand.
 `;
 
 // Searching documents: in the sandbox the daemon keeps every document's shadow current and points ripgrep at fileq's
-// preprocessor (RIPGREP_CONFIG_PATH, while the "Search documents" setting is on), and iq indexes the shadows under the
-// documents' own paths. Elsewhere the same preprocessor is one config line away.
+// preprocessor (RIPGREP_CONFIG_PATH, while the "Search documents" setting is on). Elsewhere the same preprocessor is one
+// config line away.
 const SEARCH = {
     sandbox: `## Searching documents
 The text of every pdf, docx, xlsx, pptx, odt, ods, odp, rtf and epub in the workspace is searchable under the
@@ -58,7 +58,6 @@ document's own path, kept current as files change:
   \`docs/terms.pdf:345:[p. 12] … wniosek …\`: the line number counts lines of the document's text, and
   \`[p. 12] \` (or \`[slide 3] \`) is the page or slide that line is on. Use \`rg\` in the shell for documents:
   a Grep tool that runs its own bundled ripgrep may skip them.
-- \`iq "<question>"\` finds documents by meaning too; their passages carry the same page marks.
 - When you answer from a document, cite it as file and page: "docs/terms.pdf, p. 12". Read the page around a hit
   with \`fileq read <file>\` (or the sidecar it names) rather than guessing from one line.
 - Scans are OCR'd only where the image carries the OCR models, and the shadow notes it when they are missing.

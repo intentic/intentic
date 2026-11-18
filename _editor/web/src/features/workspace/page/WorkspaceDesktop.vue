@@ -165,7 +165,6 @@ const {
     openAtLine,
     openDiff,
     openDirectory,
-    openHealth,
     openDocument,
     selectTab,
     deselect,
@@ -275,7 +274,7 @@ watch(
     { immediate: true },
 );
 
-// Repos a directory-surface extension serves (Git, Docs, Health, Apps, UI); selecting one opens its management tab,
+// Repos a directory-surface extension serves (Git, Docs, Maintenance, Apps, UI); selecting one opens its management tab,
 // not an editor.
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
@@ -583,7 +582,6 @@ const WORKSPACE_COMMANDS: readonly (readonly [BuiltinCommand, CommandRegistratio
     [`workspace.showChanges`, openReview],
     [`workspace.showFiles`, () => focusSearch()],
     [`workspace.showHistory`, () => layout.setSidebarPanel(`history`)],
-    [`workspace.codebaseHealth`, () => openHealth(`root`)],
     [`workspace.showHome`, showHome],
     [`workspace.toggleSidebar`, () => toggleSidebar()],
     [`workspace.splitEditor`, () => openToSide()],
@@ -641,10 +639,6 @@ const explorerTooltip = computed((): Tip => ({
     keys: commandShortcut(`workspace.toggleSidebar`),
     note: autoHidden.value ? t(`workspace.workspaceDesktop.hiddenForSplit`) : undefined,
 }));
-const rootHealthTooltip = computed((): Tip => ({
-    title: t(`workspace.workspaceDesktop.codebaseHealth`),
-    keys: commandShortcut(`workspace.codebaseHealth`),
-}));
 const homeTooltip = computed((): Tip => ({
     title: t(`workspace.workspaceDesktop.showHome`),
     keys: commandShortcut(`workspace.showHome`),
@@ -683,7 +677,7 @@ const homeTooltip = computed((): Tip => ({
             >
                 <!-- Files and Changes are the primary modes; restore history is deliberately quieter, sharing one resize handle. -->
                 <!-- No bar rule: the tabs' own line is the header's foot, up to its buttons; `shadow-none` drops the skin fillet that would draw a second. -->
-                <!-- Tabs, not pills: they name the column, and pills here read as one more mode beside the search's own Name | Text | Smart below. -->
+                <!-- Tabs, not pills: they name the column, and pills here read as one more mode beside the search's own Name | Text below. -->
                 <!-- On the column's 8px edge, as the field, the bar and the chips under it are, so "Files" starts where they do. -->
                 <div class="view-header flex items-center gap-1 px-2 shadow-none">
                     <SegmentedControl v-model="sidebarMode" size="xs" variant="underline" :options="sidebarModeOptions" class="min-w-0 flex-1 self-stretch" />
@@ -730,18 +724,6 @@ const homeTooltip = computed((): Tip => ({
                     :filter-tip="lensTip"
                 >
                     <template #tools>
-                        <!-- Root's own codebase health: root is a repo (ensureRootRepo) with no tree row, so this lives on the toolbar. -->
-                        <!-- Codebase health is a developer's reading: a maker's toolbar has no press for it. -->
-                        <button
-                            v-if="!maker"
-                            type="button"
-                            class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
-                            v-tooltip.bottom="rootHealthTooltip"
-                            :aria-label="t(`workspace.workspaceDesktop.openCodebaseHealthWorkspace`)"
-                            @click="openHealth('root')"
-                        >
-                            <Icon name="wave-pulse" class="text-xs" />
-                        </button>
                         <!-- Running the root's own project: root is a repo with no tree row, so its ▷ lives here, shown once its
                              .intentic/run.json or its own files (a Procfile, a dev script) give it something to run. -->
                         <RouterLink

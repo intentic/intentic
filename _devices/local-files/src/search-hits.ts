@@ -1,8 +1,8 @@
 import type { WorkspaceSearchGroup, WorkspaceSearchHit, WorkspaceSearchSpan } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 
 // What both engines of a folder's search answer in (search.ts): ripgrep's (search-rg.ts) and the folder read here
-// (search-read.ts). Lines are kept and cut as the daemon's engine keeps them (iq-engine), so a match reads the same
-// whichever side found it.
+// (search-read.ts). Lines are kept and cut as the daemon's search keeps them (@intentic/text-search), so a match reads
+// the same whichever side found it.
 
 // The bounds of one search: files looked at, matching lines kept, and the wall clock, read off `now`.
 export interface SearchBounds {

@@ -44,8 +44,8 @@ const signals = (over: Partial<ChoreSignals> = {}): ChoreSignals => ({
     shape: shape(),
     hotspots: [],
     keyModules: [],
-    totals: { files: 100, symbols: 1000, complexity: 900, hotspots: 0 },
-    indexed: true,
+    totals: { files: 100, symbols: 0, complexity: 0, hotspots: 0 },
+    indexed: false,
     ...over,
 });
 
@@ -305,47 +305,6 @@ describe(`the badge speaks about transitions, not about statistics`, () => {
 });
 
 describe(`the findings themselves`, () => {
-    test(`complexity reports only files that are load-bearing or out of proportion, never just the ranking's top`, () => {
-        const hotspot = (path: string, complexity: number) => ({
-            path,
-            commits: 20,
-            adds: 100,
-            dels: 50,
-            complexity,
-            score: complexity * 20,
-            latestMs: NOW,
-        });
-        // An even ranking has no outlier and no key module: a healthy repository, an empty finding.
-        const even = report({
-            repos: [{ repo: `app`, probes: [], signals: signals({ hotspots: [hotspot(`a.ts`, 30), hotspot(`b.ts`, 28), hotspot(`c.ts`, 26)] }) }],
-        });
-        expect(verdictFor(even, `complexity`).state).toBe(`clear`);
-
-        const outlier = report({
-            repos: [{ repo: `app`, probes: [], signals: signals({ hotspots: [hotspot(`a.ts`, 200), hotspot(`b.ts`, 28), hotspot(`c.ts`, 26)] }) }],
-        });
-        const verdict = verdictFor(outlier, `complexity`);
-        expect(verdict.state).toBe(`due`);
-        expect(verdict.detail).toHaveLength(1);
-        expect(verdict.detail[0]).toContain(`a.ts`);
-    });
-
-    test(`a half-built index says nothing rather than ranking what it has read so far`, () => {
-        const partial = report({
-            repos: [
-                {
-                    repo: `app`,
-                    probes: [],
-                    signals: signals({
-                        indexed: false,
-                        hotspots: [{ path: `a.ts`, commits: 9, adds: 1, dels: 1, complexity: 900, score: 8100, latestMs: NOW }],
-                    }),
-                },
-            ],
-        });
-        expect(verdictFor(partial, `complexity`).state).toBe(`clear`);
-    });
-
     test(`two libraries for one job is the finding; one is not`, () => {
         const one = report({ repos: [{ repo: `app`, probes: [], signals: signals({ packages: [pkg({ dependencies: [`zod`] })] }) }] });
         expect(verdictFor(one, `library-overlap`).state).toBe(`clear`);
@@ -481,7 +440,7 @@ describe(`what does not apply here`, () => {
     test(`a tiny repository is not surveyed for cross-cutting patterns it cannot have`, () => {
         const fileCount = 4;
         const tiny = report({
-            repos: [{ repo: `app`, probes: [], signals: signals({ totals: { files: fileCount, symbols: 10, complexity: 5, hotspots: 0 } }) }],
+            repos: [{ repo: `app`, probes: [], signals: signals({ totals: { files: fileCount, symbols: 0, complexity: 0, hotspots: 0 } }) }],
         });
         const verdict = verdictFor(tiny, `standardize-patterns`);
         expect(verdict.state).toBe(`not-applicable`);

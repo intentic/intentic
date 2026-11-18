@@ -69,7 +69,6 @@ const LOGOS: Readonly<Record<string, string>> = {
 // A glyph per kind of work with no brand to borrow, so baked tools and own skills are still told apart.
 const GLYPHS: Readonly<Record<string, string>> = {
     lsp: `code`,
-    iq: `search`,
     search: `search`,
     approvals: `check-square`,
     notes: `file-edit`,

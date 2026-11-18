@@ -9,10 +9,7 @@ import { gzipSync } from "node:zlib";
 import sharp from "sharp";
 import { pack } from "tar-stream";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 
-import { HEALTH_LIMIT } from "@intentic/sandbox-contract/schemas/codebase-health";
-import { includeGlobs } from "@intentic/sandbox-contract/policy/search-globs";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
@@ -58,163 +55,6 @@ test("workspace dependency installs join the coordinator queue instead of starti
 
     expect(await client.workspace.install({ dirs: ["app"] })).toEqual({ queued: ["app"] });
     expect(requested).toEqual([["app"]]);
-});
-
-test("workspace.search runs every kind but text on the resident engine, mapping the wire query to a QueryRequest", async () => {
-    const requests: QueryRequest[] = [];
-    const groups = [
-        { path: "alpha/src/widget.ts", score: 1, hits: [{ line: 3, text: "export const createWidget", spans: [{ start: 13, end: 25 }], tags: [] }] },
-    ];
-    const client = clientFor(
-        createApp(
-            services({
-                iq: {
-                    run: async (request) => {
-                        requests.push(request);
-                        return {
-                            result: { mode: request.verb, total: 1, files: 1, shown: 1, groups, freshness: { state: "fresh" }, truncated: false },
-                            text: "",
-                            exitCode: 0,
-                        };
-                    },
-                    health: async () => ({
-                        totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
-                        hotspots: [],
-                        modules: [],
-                        freshness: { state: "fresh" },
-                    }),
-                    markDirty: () => {},
-                    warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh", ageMs: 0 } }),
-                    close: async () => {},
-                },
-            }),
-        ),
-    );
-    const result = await client.workspace.search({
-        query: "createWidget",
-        mode: "def",
-        includeIgnored: "true",
-        limit: 3,
-        literal: "true",
-        caseSensitive: "true",
-    });
-    expect(result.groups).toEqual(groups);
-    // The echo seeds the pagination cursor, so two searches differing only by a switch must not share one.
-    expect(requests).toEqual([
-        {
-            verb: "def",
-            query: "createWidget",
-            scope: { ignored: true },
-            render: { budget: 2_000, list: { hits: 1_000, files: 3 } },
-            options: { literal: true, caseSensitive: true },
-            echo: 'def "createWidget" --ignored --literal --case',
-        },
-    ]);
-});
-
-// The editor narrows every view to the open project; a search that answered from the whole workspace would name files
-// the tree beside it cannot show. `dir` is a prefix, not a glob, so a caller's own `include` still applies on top of it.
-test("workspace.search confines the engine to one subtree, and says so in the echo the cursor is keyed by", async () => {
-    const requests: QueryRequest[] = [];
-    const client = clientFor(
-        createApp(
-            services({
-                iq: {
-                    run: async (request) => {
-                        requests.push(request);
-                        return {
-                            result: { mode: request.verb, total: 0, files: 0, shown: 0, groups: [], freshness: { state: "fresh" }, truncated: false },
-                            text: "",
-                            exitCode: 0,
-                        };
-                    },
-                    health: async () => ({
-                        totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
-                        hotspots: [],
-                        modules: [],
-                        freshness: { state: "fresh" },
-                    }),
-                    markDirty: () => {},
-                    warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh", ageMs: 0 } }),
-                    close: async () => {},
-                },
-            }),
-        ),
-    );
-    // Trailing slash and `./` are the shapes a caller joins paths into; the engine's own prefix filter drops both, so
-    // the scope and the echo have to agree on one spelling or two identical searches would page separately.
-    await client.workspace.search({ query: "createWidget", dir: "./apps/web/", include: "*.ts" });
-
-    // Read from the same expansion the route runs, so this pins the composition rather than one release's glob spelling.
-    const { globs } = includeGlobs("*.ts");
-    expect(requests[0]?.scope).toEqual({ paths: ["apps/web"], globs });
-    expect(requests[0]?.echo).toBe(`"createWidget" --in 'apps/web' ${globs.map((glob) => `--glob '${glob}'`).join(" ")}`);
-});
-
-test("workspace.search asks for a LIST page, capped at the GUI file limit whatever the caller asks for", async () => {
-    const requests: QueryRequest[] = [];
-    const client = clientFor(
-        createApp(
-            services({
-                iq: {
-                    run: async (request) => {
-                        requests.push(request);
-                        return {
-                            result: { mode: request.verb, total: 0, files: 0, shown: 0, groups: [], freshness: { state: "fresh" }, truncated: false },
-                            text: "",
-                            exitCode: 1,
-                        };
-                    },
-                    health: async () => ({
-                        totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
-                        hotspots: [],
-                        modules: [],
-                        freshness: { state: "fresh" },
-                    }),
-                    markDirty: () => {},
-                    warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh", ageMs: 0 } }),
-                    close: async () => {},
-                },
-            }),
-        ),
-    );
-    await client.workspace.search({ query: "the", limit: 100_000 });
-    // `list` means the caller renders its own rows, skipping the text capsule and symbol enrichment.
-    expect(requests[0]?.render).toEqual({ budget: 2_000, list: { hits: 1_000, files: 300 } });
-});
-
-test("workspace.health scopes the resident engine to one repo: 'root' is the workspace repo's empty scope", async () => {
-    const requests: HealthRequest[] = [];
-    const report = {
-        totals: { files: 12, symbols: 40, complexity: 88, hotspots: 3 },
-        hotspots: [{ path: "app/src/gate.ts", commits: 7, adds: 120, dels: 40, complexity: 19, score: 133, latestMs: 1_700_000_000_000 }],
-        modules: [{ path: "app/src/widget.ts", exports: 4 }],
-        freshness: { state: "fresh" as const },
-    };
-    const client = clientFor(
-        createApp(
-            services({
-                workspace: tempWorkspace([{ name: "app" }]),
-                iq: {
-                    ...services().iq,
-                    health: async (request) => {
-                        requests.push(request);
-                        return report;
-                    },
-                },
-            }),
-        ),
-    );
-    expect(await client.workspace.health({ repo: "root" })).toEqual({ repo: "root", ...report });
-    await client.workspace.health({ repo: "app", since: "30d", limit: 5 });
-    expect(requests).toEqual([
-        // The sweep tags root files with the empty repo id, so "root" means exactly those, not everything nested.
-        { scope: { repo: "" }, limit: HEALTH_LIMIT },
-        { scope: { repo: "app" }, since: "30d", limit: 5 },
-    ]);
-    // A missing repo would otherwise read as a healthy empty one, so it's an error instead.
-    expect(await errorCode(client.workspace.health({ repo: "ghost" }))).toBe("NOT_FOUND");
-    expect(await errorCode(client.workspace.health({ repo: "../escape" }))).toBe("BAD_REQUEST");
 });
 
 test("user file mutations ping history for a user-authored snapshot", async () => {
@@ -370,27 +210,6 @@ test("workspace.file passes the requested window through and reports the range i
         shared: true,
     });
     expect(asked).toEqual([{ offset: -8, limit: 64 }]);
-});
-
-// Round-trips against a real resident engine over a real tmp workspace (needs `rg` on PATH); the min-length rejection
-// is contract validation that never reaches the engine.
-test("workspace.search round-trips the WorkspaceSearchResult from the resident engine; rejects a too-short query", async () => {
-    const root = await mkdtemp(join(tmpdir(), "iq-daemon-"));
-    await writeFile(join(root, "notes.md"), "the needle is here\n");
-    const iq = createResidentEngine({ root });
-    try {
-        const client = clientFor(createApp(services({ workspace: workspacePaths(root), iq })));
-        const result = await client.workspace.search({ query: "needle" });
-        expect(result.mode).toBe("q");
-        expect(result.groups[0]?.path).toBe("notes.md");
-        expect(result.truncated).toBe(false);
-        const empty = await client.workspace.search({ query: "zzzqqqvvv" });
-        expect(empty.total).toBe(0);
-        expect(await errorCode(client.workspace.search({ query: "x" }))).toBe("BAD_REQUEST");
-    } finally {
-        await iq.close();
-        await rm(root, { recursive: true, force: true });
-    }
 });
 
 test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s escape, 413s oversize", async () => {

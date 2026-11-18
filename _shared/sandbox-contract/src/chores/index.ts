@@ -1,7 +1,7 @@
 export { CHORE_KINDS, CHORES, choreAutomationPrompt, choreById, chorePrompt, repoLabel, repoName } from "./chores.js";
 export type { Chore, ChoreContext, ChoreFinding, ChoreKind, ChoreKindSpec, ChoreStance } from "./chores.js";
 export { bucketOf, digestOf } from "./digest.js";
-export { CHORE_INVARIANTS, composeAsk, REFACTOR_INVARIANTS, REPORT_INVARIANTS, TRIAGE_NOTE } from "./prompt.js";
+export { CHORE_INVARIANTS, composeAsk, REPORT_INVARIANTS, TRIAGE_NOTE } from "./prompt.js";
 export type { Ask } from "./prompt.js";
 export { updateBrief } from "./extension-update.js";
 export type { UpdateBrief } from "./extension-update.js";

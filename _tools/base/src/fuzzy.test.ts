@@ -26,7 +26,7 @@ test("no match, an empty needle, and a needle longer than the path are all undef
 
 test("a subsequence score stays within 0..1, while a substring score may pass 1 on purpose", () => {
     // The substring branch is deliberately uncapped so path length still separates two otherwise equal hits; a
-    // caller that SHOWS the number (iq's `fuzzy` tag) clamps it, and one that only ranks by it must not.
+    // caller that SHOWS the number clamps it, and one that only ranks by it must not.
     expect(fuzzyScore("wdgt", "alpha/src/widget.ts")!).toBeLessThanOrEqual(1);
     expect(fuzzyScore("wdgt", "alpha/src/widget.ts")!).toBeGreaterThan(0);
     expect(fuzzyScore("notes", "notes.md")!).toBeGreaterThan(1);

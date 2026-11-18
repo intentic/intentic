@@ -42,6 +42,6 @@ describe("the OCR page cap (interactive 20, the background keeper more)", () => 
     });
 });
 
-test("fileq's document formats are the extensions iq and the preprocessor treat as documents", () => {
+test("fileq's document formats are the extensions searches treat as documents", () => {
     expect(documentExtensions()).toEqual([...SHADOWED_DOCUMENT_EXTENSIONS].toSorted());
 });

@@ -32,8 +32,6 @@
     "_sandbox/sandbox/src/runtimes/pi/pi-extension-ui.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/runtimes/pi/pi-rpc.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/sandboxes/fleet-client.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
-    "_search/iq-engine/src/engines/git.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
-    "_search/iq-engine/src/verbs/dispatch.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_tools/base/src/git/locks.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_tools/base/src/git/runner.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)"
 }

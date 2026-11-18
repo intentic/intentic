@@ -184,11 +184,7 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         part: `tools`,
         partLabel: () => t(`sandbox.sandboxAgent.tools`),
         title: () => t(`sandbox.agentCodeSearch.codeSearch`),
-        terms: () => [
-            t(`sandbox.agentCodeSearch.iqCodeSearch`),
-            t(`sandbox.agentCodeSearch.projectMap`),
-            t(`sandbox.search.agentCodeSearch`),
-        ],
+        terms: () => [t(`sandbox.agentCodeSearch.projectMap`), t(`sandbox.search.agentCodeSearch`)],
     },
     {
         id: `agent-command-output`,

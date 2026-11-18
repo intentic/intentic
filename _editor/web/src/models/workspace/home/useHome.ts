@@ -17,7 +17,7 @@ import type { SearchScope } from "../search/useWorkspaceSearch";
 export const HOME_DIR_ACTIONS: InjectionKey<(dir: string) => readonly RowAction[]> = Symbol(`home-dir-actions`);
 
 // The sidebar's search, as the home reads and writes it: one query for both views. Name scope the home answers itself
-// over the loaded tree; text and smart are the daemon's, and the home draws the files its groups name.
+// over the loaded tree; text is the daemon's, and the home draws the files its groups name.
 export interface HomeSearch {
     readonly filter: Ref<string>;
     readonly scope: Ref<"name" | SearchScope>;

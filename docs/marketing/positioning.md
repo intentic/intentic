@@ -22,7 +22,7 @@ Claude/Codex/Grok subscription. Run one, or ten in parallel.
 nothing, and you and the agent drive the same surfaces, by construction: one implementation of
 what connecting a VPN means (the browser on `/vpn`, the agent on `/usr/local/bin/vpn`: the tunnel it
 dials appears in your UI with nothing syncing the two), one `tmux` server behind your terminals and
-its shell commands, one `iq` index behind `/workspace/search` and its Bash calls, and one tree: each
+its shell commands, ripgrep over the same files behind `/workspace/search` and its Bash calls, and one tree: each
 agent on its own git worktree, landing its delta into your Changes panel as the review boundary
 (`_sandbox/sandbox/src/conversations/worktrees/worktrees.ts`, `conversations/land/land.ts`). A window opened anywhere shows the run as
 it actually is, not a replay of it.

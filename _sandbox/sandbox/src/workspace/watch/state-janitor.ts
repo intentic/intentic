@@ -11,9 +11,15 @@ import { createWorkspaceTrash } from "../files/trash/workspace-trash.js";
 // - the pnpm store is pruned via pnpm's own unreferenced-blob definition of garbage
 // - browser screenshots age out after 30 days, since a transcript that outlives its images degrades to a path string
 // - the file view's trash ages out after a day, its Undo window
+// - what a removed feature left behind is deleted at boot, once nothing can be writing it
 
 // Screenshots older than this are deleted; attachments and reports in artifacts/ stay untouched.
 const SCREENSHOT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+// The iq index, its churn folds and its vector cache, removed with iq (2026-11-18): about 1.2 GB on a workspace the size of
+// Intentic's own, which nothing reads or writes any more. A name below the cache folder; a file's covers its SQLite
+// `-wal` and `-shm`.
+const RETIRED_CACHES: readonly string[] = ["iq", "iq-churn", "iq-vectors.db", "iq-vectors.db-wal", "iq-vectors.db-shm"];
 
 // Ceiling on `pnpm store prune` per boot, so a hung child can't hold the boot sweep's promise forever.
 const PRUNE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -65,6 +71,7 @@ export const pruneStore = (storeDir: string, log: Logger): Promise<boolean> =>
 // race a writer.
 export const sweepStateAtBoot = async (workspaceRoot: string, log: Logger): Promise<void> => {
     await emptyDir(statePath(workspaceRoot, ".intentic/local/tmp/"), log, "boot scratch");
+    await Promise.all(RETIRED_CACHES.map((name) => remove(statePath(workspaceRoot, ".intentic/local/cache/", name), log, "a retired cache")));
     const storeDir = statePath(workspaceRoot, ".intentic/local/.pnpm-store/");
     if ((await stat(storeDir).catch(() => undefined))?.isDirectory() === true) {
         await pruneStore(storeDir, log);

@@ -33,7 +33,7 @@ word “agent” in the UI.
 From the repository root, locate source first and then read the tests beside the owning seam:
 
 ```sh
-iq "how does Continue choose a provider session?" --in _sandbox/sandbox/src --only src --budget 1800
+rg -n 'provider session' _sandbox/sandbox/src -g '!*.test.ts' -g '!*.testing.ts'
 rg -n 'routingFor' _sandbox/sandbox/src -g '!*.test.ts' -g '!*.testing.ts'
 rg -n 'routingFor' _sandbox/sandbox/src -g '*.test.ts'
 ```
@@ -1068,8 +1068,7 @@ flowchart LR
   Code and the SDK read only plain `.jsonl`, so every daemon reader thaws a session by its id first
   (`sessions/session-freeze.ts`, `thawClaudeSession`): a turn before the CLI resumes it, the session probe before
   that, cold trim and the hand-off's copy, the history and interrupted-turn reads, a subagent's transcript, a handle
-  lookup and the jail's move. iq's session recall reads the compressed files itself (`_search/iq`). Fenced and jail
-  stores stay plain. `zstdcat` reads a compressed one by hand.
+  lookup and the jail's move. Fenced and jail stores stay plain. `zstdcat` reads a compressed one by hand.
 - Data retention (`retention/retention-sweep.ts`, 2026-10-13) makes `settings.retention` real, on the same clock:
   each positive `*Days` DELETES that kind of copy once it is older (nothing is archived or set aside first), and every
   value is 0 by default except restore points, which default to 30 days. Zero runs nothing.
@@ -1094,8 +1093,7 @@ flowchart LR
   its OCR stopped short of 500 pages. It runs one fileq at a time under `nice`, in the same two slots interactive
   renders use (`derived/fileq.ts`): the keeper holds at most one and never takes one an interactive render is waiting
   for. A file fileq refuses is not asked again until it changes; more than 20 000 documents is logged and not swept.
-  Each batch that moved a shadow marks iq dirty, since the watcher does not look under `.intentic/local/cache`. The
-  `documentSearch` setting (Sandbox ▸ Agent ▸ Tools, on by default) switches it off, and with it the
+  The `documentSearch` setting (Sandbox ▸ Agent ▸ Tools, on by default) switches it off, and with it the
   `RIPGREP_CONFIG_PATH=/etc/fileq/ripgreprc` every turn's shell gets (`derived/search-env.ts`), which makes plain `rg`
   read documents through fileq's preprocessor. Claude Code's Grep tool runs its bundled ripgrep with `--no-config`
   (read off 0.3.296's binary), so it would skip documents; the same env sets `USE_BUILTIN_RIPGREP=0`, which makes it
@@ -1261,7 +1259,7 @@ whose own daemon prices its checkout, build output included, against its own dis
 is the same: a runner turn's room is admitted by the runner's budget, never this sandbox's.
 Storage calls what agents' tools keep in `.intentic/local/cache/<tool>/` (Python environments, model weights,
 downloads) tool caches (`toolCaches`, 2026-11-12), one item per tool folder, cleaned only after the owner reads the cost
-and never while a running program stands in or names it; the daemon's own folders there (iq, fileq's shadows,
+and never while a running program stands in or names it; the daemon's own folders there (fileq's shadows,
 thumbnails, speech models, extension caches: `DAEMON_CACHES` in `storage-catalog.ts`) stay its indexes. The Python pack
 points uv, pip, Hugging Face, torch and CUDA's caches into that folder, one per kind, so venvs there hardlink one copy
 of each wheel instead of copying it (`image-packs/python.Dockerfile`).

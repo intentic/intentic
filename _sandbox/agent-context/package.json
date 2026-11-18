@@ -98,7 +98,6 @@
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
-        "@intentic/iq": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*"
     },
     "devDependencies": {

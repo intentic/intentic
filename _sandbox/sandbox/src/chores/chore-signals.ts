@@ -1,7 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { CodebaseHealth } from "@intentic/iq-engine";
-import { within } from "@intentic/base/async";
 import { pathExists } from "@intentic/base/fs";
 import type { ChorePackage, ChoreShape, ChoreSignals } from "@intentic/sandbox-contract/schemas/maintenance";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
@@ -9,11 +7,8 @@ import { readWorkspaceManifestsAsync, type WorkspaceManifest } from "../workspac
 import type { Services } from "../composition.js";
 import { generationMemo } from "../git/feed/generation-memo.js";
 
-// Local chore evidence is shared by checkout generation. The age bound also refreshes ignored files and lets an index
-// still building catch up. probes.ts holds facts that need a registry call or a shell-out.
-
-// Hotspots and key modules a chore ever needs; the complexity chore only asks if a file outranks this list.
-const RANKING_LIMIT = 12;
+// Local chore evidence is shared by checkout generation. The age bound also refreshes ignored files. probes.ts holds
+// facts that need a registry call or a shell-out.
 
 // The architecture doc a package is expected to have: its own README, checked for existence only, not imported from the
 // docs extension.
@@ -147,47 +142,43 @@ export const choreShape = async (repoDir: string, workspaceRoot = false, manifes
     };
 };
 
-// How long the polled list waits on one repo's rankings, under the 30 s the editor calls a stalled query. The history
-// read behind them can take minutes when it has to start over (no kept fold, a rewritten branch); it goes on in the
-// engine, which keeps it, and a later poll finds it done.
-const HEALTH_WAIT_MS = 20_000;
+// What counts as code for the size a survey needs: source files, not data, configuration or prose, so a scaffold of
+// config files does not pass for a codebase.
+const CODE_FILES = "**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,vue,svelte,astro,py,go,rs,java,kt,kts,swift,rb,php,c,h,cc,cpp,cxx,hpp,cs,scala,dart,lua,sh}";
 
-// Rankings that say nothing: `indexed: false` keeps every chore that reads them from acting, as a half-built index does,
-// and keeps the reading out of the generation memo so the next ask tries again.
-const NO_RANKINGS: CodebaseHealth = {
-    hotspots: [],
-    modules: [],
-    totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
-    freshness: { state: "building" },
-};
-
-// One repo's rankings, or none: an engine that fails or is slow costs the list its rankings, never the whole answer
-// (Oct 28-Nov 6: 137 list calls answered 500 on one history read that ran out of time).
-const rankingsOf = async (services: Pick<Services, "iq" | "logger">, repo: string): Promise<CodebaseHealth> => {
+// How many code files the repo holds, by the search box's own file listing (a ripgrep walk, tens of ms); a listing that
+// fails counts nothing, which only keeps the size-gated surveys from applying.
+const codeFilesIn = async (services: Pick<Services, "textSearch" | "workspace" | "logger">, repo: string): Promise<number> => {
     try {
-        const health = await within(services.iq.health({ scope: { repo }, limit: RANKING_LIMIT }), HEALTH_WAIT_MS, NO_RANKINGS);
-        if (health === NO_RANKINGS) {
-            services.logger.warn({ repo, waitedMs: HEALTH_WAIT_MS }, "chores: code health still reading, listing without rankings until it is done");
-        }
-        return health;
+        const found = await services.textSearch.files({
+            root: services.workspace.root,
+            query: CODE_FILES,
+            ignored: false,
+            paths: repo === "" ? undefined : [repo],
+            globs: [],
+            notGlobs: [],
+            limit: 1,
+        });
+        return found.files;
     } catch (error) {
-        services.logger.warn({ err: error, repo }, "chores: code health unavailable, listing without rankings");
-        return NO_RANKINGS;
+        services.logger.warn({ err: error, repo }, "chores: could not count the repo's code files, listing without a size");
+        return 0;
     }
 };
 
-const choreSignals = async (services: Pick<Services, "iq" | "workspace" | "logger">, repo: string): Promise<ChoreSignals> => {
+const choreSignals = async (services: Pick<Services, "textSearch" | "workspace" | "logger">, repo: string): Promise<ChoreSignals> => {
     const repoDir = join(services.workspace.root, repo);
-    const [health, manifests] = await Promise.all([rankingsOf(services, repo), readWorkspaceManifestsAsync(repoDir)]);
+    const [files, manifests] = await Promise.all([codeFilesIn(services, repo), readWorkspaceManifestsAsync(repoDir)]);
     const [packages, shape] = await Promise.all([packageSignals(repoDir, manifests), choreShape(repoDir, repo === "", manifests)]);
     return {
         packages,
         shape,
-        hotspots: health.hotspots,
-        keyModules: health.modules,
-        totals: health.totals,
-        // Only a fresh index may drive a verdict; "stale" (behind by a few files) is fine, "building" is not.
-        indexed: health.freshness.state !== "building",
+        // Retired with the iq index that ranked them (2026-11-18), sent empty so a Maintenance build from before still
+        // parses the report; `indexed: false` keeps such a build from acting on them.
+        hotspots: [],
+        keyModules: [],
+        totals: { files, symbols: 0, complexity: 0, hotspots: 0 },
+        indexed: false,
     };
 };
 
@@ -206,14 +197,15 @@ export interface SharedChoreSignals {
     readonly of: (repo: string, asked: number) => Promise<ChoreSignals>;
 }
 
-// The rail badge and the panel ask at once, each walking every repo through one iq engine that answers them one by one,
-// so the second paid for every reading the first had just taken. A reading is shared only with callers that asked before
-// it began when no generation can vouch for freshness. A generation-validated completed reading can serve the next
-// caller too, avoiding another index request and another synchronous manifest/shape scan.
-export const sharedChoreSignals = (services: Pick<Services, "iq" | "workspace" | "logger">): SharedChoreSignals => {
+// The rail badge and the panel ask at once, each walking every repo, so the second would pay for every reading the first
+// had just taken. A reading is shared only with callers that asked before it began when no generation can vouch for
+// freshness. A generation-validated completed reading can serve the next caller too, avoiding another file listing and
+// another synchronous manifest/shape scan.
+export const sharedChoreSignals = (services: Pick<Services, "textSearch" | "workspace" | "logger">): SharedChoreSignals => {
     let clock = 0;
     const flights = new Map<string, Flight>();
-    const memo = generationMemo<ChoreSignals>({ maxAgeMs: 10_000, cacheable: (signals) => signals.indexed });
+    // A reading that counted no code is not kept: a listing that failed reads as none, and the next ask should try again.
+    const memo = generationMemo<ChoreSignals>({ maxAgeMs: 10_000, cacheable: (signals) => signals.totals.files > 0 });
     const begin = (repo: string): Promise<ChoreSignals> => {
         const reading = memo(repo, [join(services.workspace.root, repo)], "", () => choreSignals(services, repo));
         const flight: Flight = { begun: (clock += 1), reading };

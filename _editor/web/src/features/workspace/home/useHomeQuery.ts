@@ -5,7 +5,7 @@ import { HOME_SEARCH } from "../../../models/workspace/home/useHome";
 import { contentMatches, nameMatches } from "./homeResults";
 
 // The query: the sidebar's own (HOME_SEARCH), answered here under the open folder. Names the home matches itself over
-// the loaded tree; text and smart are the daemon's, and the home draws the files its groups name. Typing on the home
+// the loaded tree; text is the daemon's, and the home draws the files its groups name. Typing on the home
 // writes the same query, so the tree narrows with it.
 
 export interface HomeQueryContext {
@@ -46,12 +46,6 @@ export const useHomeQuery = ({ dir, children, entryAt, listingOf, shows }: HomeQ
     });
     // The folder each result sits in, for the line under its name; "" (the open folder itself) draws nothing.
     const whereByPath = computed(() => new Map(results.value.map((result) => [result.entry.path, result.where])));
-    const placeholder = computed(() =>
-        search?.scope.value === `text`
-            ? t(`workspace.homeView.searchText`)
-            : search?.scope.value === `smart`
-              ? t(`workspace.homeView.smartSearch`)
-              : t(`workspace.homeView.filterNames`),
-    );
+    const placeholder = computed(() => (search?.scope.value === `text` ? t(`workspace.homeView.searchText`) : t(`workspace.homeView.filterNames`)));
     return { search, query, querying, searching, results, whereByPath, placeholder };
 };

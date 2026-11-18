@@ -4,7 +4,6 @@ import type { DiffPayload } from "@intentic/extension-api";
 // file → the path is its identity.
 // diff → a synthetic id per diff source + file, built from a Changes/History payload.
 // directory → a repository's management surface (DirectoryOperator).
-// health → one repo's codebase-health report (CodebaseHealth.vue).
 // document → open-ended: whatever an extension's document provider says about a directory (architecture, git
 // history), rendered beside the code it explains (documentRegistry.ts).
 
@@ -22,7 +21,6 @@ export type WorkspaceTab =
     // `view` is the tab the panel opens on, for a caller that wants a named surface (the review's "show the graph");
     // absent leaves the panel on its first tab, which is what a tree row's cog asks for.
     | { readonly kind: "directory"; readonly id: string; readonly dir: string; readonly view?: string }
-    | { readonly kind: "health"; readonly id: string; readonly repo: string }
     | {
           readonly kind: "document";
           readonly id: string;

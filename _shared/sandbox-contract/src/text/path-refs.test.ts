@@ -47,7 +47,7 @@ test("isTestPath: test files, fixture dirs and runner configs: never product cod
         `_deploy/cli/src/cli.e2e.test.ts`,
         `src/e2e-harness.ts`,
         `pkg/__tests__/helper.ts`,
-        `_search/iq-recall/src/__fixtures__/transcripts/a.jsonl`,
+        `_sandbox/agent-context/src/__fixtures__/transcripts/a.jsonl`,
         `vitest.config.ts`,
         `_editor/web/vitest.workspace.config.mts`,
         `playwright.config.ts`,

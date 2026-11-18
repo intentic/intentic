@@ -37,7 +37,7 @@ const REVIEWED = new Map([
         "@img/sharp-*",
         {
             licence: "LGPL-3.0-or-later",
-            why: "Needs an owner decision: the prebuilt libvips sharp loads (the daemon's dependency, and @huggingface/transformers' for iq), dynamically linked; the image hands it on, and LGPL asks for its notice and a way to replace the library.",
+            why: "Needs an owner decision: the prebuilt libvips sharp loads (the daemon's dependency, and @huggingface/transformers'), dynamically linked; the image hands it on, and LGPL asks for its notice and a way to replace the library.",
         },
     ],
     [

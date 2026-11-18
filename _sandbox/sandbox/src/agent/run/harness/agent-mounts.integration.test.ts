@@ -37,12 +37,10 @@ const writeSkill = async (dir: string, name: string, description: string): Promi
     await writeFile(join(dir, name, SKILL_FILE), `---\nname: ${name}\ndescription: ${description}\n---\n\nBody.\n`);
 };
 
-// One skill behind each kind of mount: the image's two plugins, a plugin capability, an extension's agent plugin, a kit.
+// One skill behind each kind of mount: the image's plugin, a plugin capability, an extension's agent plugin, a kit.
 const workspaceWithEveryMount = async () => {
     const root = mkdtempSync(join(tmpdir(), "agent-mounts-"));
-    const iqPluginDir = join(root, "image", "iq-plugin");
     const webqPluginDir = join(root, "image", "webq-plugin");
-    await writeSkill(join(iqPluginDir, "skills"), "iq", "Workspace code search.");
     await writeSkill(join(webqPluginDir, "skills"), "webq", "Web pages as markdown.");
     const plugin: Capability = { id: "my-pack", kind: "plugin", config: { url: "https://example.com/pack.git" } };
     await writeSkill(join(pluginDir(root, "my-pack"), "skills"), "review", "Use when reviewing a diff.");
@@ -58,12 +56,12 @@ const workspaceWithEveryMount = async () => {
     const services = harnessServices({
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
-        config: { ...testConfig, iqPluginDir, webqPluginDir },
+        config: { ...testConfig, webqPluginDir },
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [plugin, extension] }),
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [studio] }),
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ iqSearch: true }) }),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
     });
-    return { root, services, plugin, studio, iqPluginDir, webqPluginDir, checkout };
+    return { root, services, plugin, studio, webqPluginDir, checkout };
 };
 
 // The plugin dirs a planned turn mounts; a refused plan fails the test rather than reading as mounting none.
@@ -75,12 +73,12 @@ const mountedPlugins = (plan: TurnArmPlan): readonly string[] => {
 };
 
 test("the Skills list names exactly the skills under the plugin dirs a turn mounts", async () => {
-    const { root, services, plugin, studio, iqPluginDir, webqPluginDir, checkout } = await workspaceWithEveryMount();
+    const { root, services, plugin, studio, webqPluginDir, checkout } = await workspaceWithEveryMount();
     const wearing = turnPersona({ personas: [studio], actsAs: "studio", unattended: false });
 
     const plan = await planHarnessTurn(services, turn(), { ...context, persona: wearing }, [plugin]);
     const mounted = mountedPlugins(plan);
-    expect(mounted).toEqual([iqPluginDir, webqPluginDir, pluginDir(root, "my-pack"), join(checkout, "plugin"), personaKitDir(root, "studio")]);
+    expect(mounted).toEqual([webqPluginDir, pluginDir(root, "my-pack"), join(checkout, "plugin"), personaKitDir(root, "studio")]);
 
     const loaded = await Promise.all(mounted.map((dir) => scanSkillFolders(join(dir, "skills"), readWorkspaceFile)));
     const listed = (await skillInventory(services)).filter((row) => row.id.includes(":"));
@@ -91,7 +89,6 @@ test("the Skills list names exactly the skills under the plugin dirs a turn moun
             .toSorted(),
     );
     expect(listed.map((row) => row.id)).toEqual([
-        "builtin:iq:iq",
         "builtin:webq:webq",
         "plugin:my-pack:review",
         "persona:studio:voice",
@@ -102,16 +99,16 @@ test("the Skills list names exactly the skills under the plugin dirs a turn moun
 // An extension's agent plugin loads into a turn only when the persona it wears is granted that extension: its
 // `extensions` shelf, absent meaning every one, naming the extension, or empty meaning none.
 test("a turn loads an extension's agent plugin only when its persona's extensions shelf grants that extension", async () => {
-    const { root, services, plugin, iqPluginDir, webqPluginDir, checkout } = await workspaceWithEveryMount();
+    const { root, services, plugin, webqPluginDir, checkout } = await workspaceWithEveryMount();
     const pluginsWearing = async (extensions: readonly string[]): Promise<readonly string[]> => {
         const persona: Persona = { id: "narrow", label: "Narrow", capabilities: [], powers: { ...turnPersona({ personas: [], actsAs: undefined, unattended: false }).powers, extensions: [...extensions] } };
         const wearing = turnPersona({ personas: [persona], actsAs: "narrow", unattended: false });
         const plan = await planHarnessTurn(services, turn(), { ...context, persona: wearing }, [plugin]);
         return mountedPlugins(plan);
     };
-    expect(await pluginsWearing([])).toEqual([iqPluginDir, webqPluginDir, pluginDir(root, "my-pack")]);
-    expect(await pluginsWearing(["someone.else"])).toEqual([iqPluginDir, webqPluginDir, pluginDir(root, "my-pack")]);
-    expect(await pluginsWearing(["ext-1"])).toEqual([iqPluginDir, webqPluginDir, pluginDir(root, "my-pack"), join(checkout, "plugin")]);
+    expect(await pluginsWearing([])).toEqual([webqPluginDir, pluginDir(root, "my-pack")]);
+    expect(await pluginsWearing(["someone.else"])).toEqual([webqPluginDir, pluginDir(root, "my-pack")]);
+    expect(await pluginsWearing(["ext-1"])).toEqual([webqPluginDir, pluginDir(root, "my-pack"), join(checkout, "plugin")]);
     // A persona named but missing gets nothing at all, this included.
     const missing = turnPersona({ personas: [], actsAs: "gone", unattended: false });
     const refused = await planHarnessTurn(services, turn(), { ...context, persona: missing }, []);

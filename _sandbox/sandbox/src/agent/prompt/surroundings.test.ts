@@ -73,8 +73,8 @@ const LOOP: GuidanceFacts = {
 };
 
 test("a stable block leaves out exactly what the note says, and nothing else", () => {
-    const full = guidanceBlock(LOOP, "rg");
-    const stable = guidanceBlock(LOOP, "rg", true);
+    const full = guidanceBlock(LOOP);
+    const stable = guidanceBlock(LOOP, true);
     const note = surroundingsNote(fleet(), "c1", FRESH, LOOP)?.text ?? "";
 
     expect(full).toContain("Nobody is watching this turn");

@@ -1,25 +1,19 @@
 # Search
 
-The tools an agent uses to find the right code instead of reading everything: ranked workspace search, recall of past sessions, and compiler-backed rename and diagnostics.
+The code tools in the sandbox: compiler-backed rename and diagnostics for agents, and the ripgrep searches behind the editor's search box.
 
 ```mermaid
 flowchart LR
-    agent["Agent<br/>Claude Code · Codex"] -- "iq '…'" --> iq(["iq"])
-    iq --> engine(["iq-engine"])
-    iq -- "iq sessions" --> recall["session recall<br/>inside iq"]
-    daemon["Sandbox daemon<br/>search box · turn context"] --> engine
-    engine --> index[".intentic/local/cache/iq<br/>SQLite index"]
-    recall --> transcripts["~/.claude/projects<br/>transcripts"]
-    agent -- "lsp rename · diag" --> lsp(["lsp"])
-    daemon -- "post-edit check" --> lsp
-    bench(["iq-bench"]) -. "measures" .-> engine
+    agent["Agent<br/>Claude Code · Codex"] -- "lsp rename · diag" --> lsp(["lsp"])
+    daemon["Sandbox daemon"] -- "post-edit check" --> lsp
+    box["Editor search box<br/>quick-open · @-mentions"] --> daemon
+    daemon -- "find · files" --> text(["text-search"])
+    text -- "rg --json · rg --files" --> tree["workspace tree<br/>on disk"]
 ```
 
 | Package | Role |
 | --- | --- |
-| [iq](iq) | The `iq` CLI, its recall of past sessions, and the Claude Code plugin that teaches agents to use it. |
-| [iq-engine](iq-engine) | Index, retrieval engines, rank fusion and the token-budgeted renderer. |
 | [lsp](lsp) | The `lsp` CLI: TypeScript rename and diagnostics over the native compiler. |
-| [iq-bench](iq-bench) | Benchmarks retrieval configs and paired agent runs with and without iq. |
+| [text-search](text-search) | The search box's text and file-name searches, each a ripgrep walk of the tree with no index. |
 
-All of it runs inside the sandbox: the CLIs are on `PATH`, and the daemon keeps one resident `iq-engine` in a child process for the editor's search box and for the ranked anchors it prepends to each agent turn. The search box's plain-text search is the exception: the daemon runs it with ripgrep itself (`@intentic/iq-engine/text`), so it never waits on that child.
+Both run inside the sandbox. The `lsp` CLI is on `PATH`, and the daemon imports its client for the post-edit check. The daemon runs each text or file-name search in its own process; nothing stays resident and no index is kept on disk.

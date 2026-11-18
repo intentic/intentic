@@ -38,7 +38,7 @@ flowchart LR
   on its fast path). Given a pdf, docx, xlsx, pptx, odt, ods, odp, rtf or epub, it prints the fresh sidecar's body when
   the recorded stat is the file's, else `fileq read --plain`'s; a file that is not a document passes through. Every
   line under a `## Page N` heading carries `[p. N] ` and under `## Slide N` `[slide N] `, so a hit is a citation:
-  `docs/terms.pdf:345:[p. 12] … wniosek …`. Line numbers count lines of the document's text, the same ones iq gives.
+  `docs/terms.pdf:345:[p. 12] … wniosek …`. Line numbers count lines of the document's text.
   `fileq ripgrep-config` prints the config (`--pre` plus one `--pre-glob` per document extension, both cases) for
   RIPGREP_CONFIG_PATH; the sandbox image bakes it at `/etc/fileq/ripgreprc`.
 - `fileq derive --ocr-pages N` recognises up to N pages of a scan (default 20). The daemon's shadow keeper asks for

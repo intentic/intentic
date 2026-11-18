@@ -78,14 +78,14 @@ test("scannerPruneGlobs under includeIgnored keeps only .git", () => {
     expect(scannerPruneGlobs(true)).toEqual(["!**/.git"]);
 });
 
-// The agent plane is deliberately absent: it's the search engine's own default-deny floor, derived from the state
-// table, not an attention boundary this package decides.
-test("scannerPruneGlobs leaves the agent plane to the engine's floor", () => {
+// The agent plane is deliberately absent: it's text-search's own default-deny floor (its floor.ts), derived from the
+// state table, not an attention boundary this package decides.
+test("scannerPruneGlobs leaves the agent plane to text-search's floor", () => {
     expect(scannerPruneGlobs(false).some((glob) => glob.includes(".intentic"))).toBe(false);
 });
 
 // A git pointer file (worktree, submodule, --separate-git-dir) is deliberately not ignored here: a portability bundle
-// has to carry it. Keeping it out of search is the sweep's own call.
+// has to carry it. Keeping it out of search is each search's own call.
 test("a .git pointer file is left to each caller: this layer only knows the directory", () => {
     const scope = createIgnoreScope();
     expect(scope.isIgnored(".git", "repo/.git", true)).toBe(true);

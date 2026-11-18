@@ -4,16 +4,14 @@ import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, useTemplateRef } from "vue";
 import { useAudience } from "../../../app/useAudience";
-import { folderSurface } from "../../../client/sandbox/useDaemonRoutes";
 import { matchToggles } from "../../../models/workspace/search/useSearchOptions";
 import { useLayout } from "../../../workbench/window/useLayout";
 import type { ExplorerSearchBox } from "./useExplorerSearch";
 
 // The explorer's search box over the Files list, one for every explorer that lists files: the workspace's
-// (WorkspaceDesktop.vue) and a desktop window's on a folder of this computer (local/LocalFiles.vue). One query in three
-// scopes: Name filters the tree, Text and Smart ask the files' own search. Text's switches (Aa, ab, .*) and the files to
-// include ride along where they apply, and the funnel holds what the list leaves out. Smart reads an index only a
-// sandbox keeps, so a folder of this computer, which has none, is not offered it.
+// (WorkspaceDesktop.vue) and a desktop window's on a folder of this computer (local/LocalFiles.vue). One query in two
+// scopes: Name filters the tree, Text asks the files' own search. Text's switches (Aa, ab, .*) and the files to include
+// ride along where they apply, and the funnel holds what the list leaves out.
 
 const {
     search,
@@ -42,12 +40,9 @@ const { filter, scope, contentMode, textMode, options, clear } = search;
 const scopes = computed(() => [
     { label: t(`shared.name`), value: `name` as const, title: t(`workspace.workspaceDesktop.scopeNameHint`) },
     { label: t(`workspace.words.text`), value: `text` as const, title: t(`workspace.workspaceDesktop.scopeTextHint`) },
-    ...(folderSurface.value
-        ? []
-        : [{ label: t(`workspace.workspaceDesktop.smart`), value: `smart` as const, title: t(`workspace.workspaceDesktop.scopeSmartHint`) }]),
 ]);
 
-// Rows follow the scope: Name filters the tree the explorer draws, Text and Smart reach the search's own match list.
+// Rows follow the scope: Name filters the tree the explorer draws, Text reaches the search's own match list.
 const filterMenu = ref<{ show: (event: Event) => void }>();
 const filterItems = computed<MenuItem[]>(() =>
     contentMode.value

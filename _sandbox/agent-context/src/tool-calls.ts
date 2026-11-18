@@ -141,7 +141,7 @@ export const toolCategoryOf = (name: string): ToolKind => {
 };
 
 // Programs that go looking for code; `ls`/`tree` included since the LS tool itself categorizes as `search`.
-const SEARCH_COMMANDS = new Set(["iq", "grep", "rg", "ag", "ack", "find", "fd", "fdfind", "locate", "ls", "tree"]);
+const SEARCH_COMMANDS = new Set(["grep", "rg", "ag", "ack", "find", "fd", "fdfind", "locate", "ls", "tree"]);
 
 // Shell programs that open file contents directly; arrive as `execute`, the same transition as Read/Edit.
 const FILE_WORK_COMMANDS = new Set(["cat", "sed", "head", "tail", "less", "more", "bat", "awk"]);
@@ -149,7 +149,7 @@ const FILE_WORK_COMMANDS = new Set(["cat", "sed", "head", "tail", "less", "more"
 // Splits a shell line on statement separators, never on a pipe: `git log | grep fix` filters output, not a search.
 const statementsOf = (command: string): string[] => command.split(/&&|\|\||;|\n/);
 
-// Each statement's leading program, past an env prefix and a path: `cd /work && iq q ...` runs two, the second matters.
+// Each statement's leading program, past an env prefix and a path: `cd /work && rg -n ...` runs two, the second matters.
 const commandHeads = (command: string): string[] =>
     statementsOf(command).map((statement) => {
         const head =
@@ -160,8 +160,8 @@ const commandHeads = (command: string): string[] =>
         return head.split("/").pop() ?? head;
     });
 
-// Whether a call went looking for code: category alone misses this workspace's search tool, a CLI (`iq q ...`) that
-// arrives as Bash and categorizes as `execute`.
+// Whether a call went looking for code: category alone misses a search CLI (`rg -n ...`), which arrives as Bash and
+// categorizes as `execute`.
 export const isSearchCall = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean => {
     if (call.category === "search") {
         return true;
@@ -171,11 +171,6 @@ export const isSearchCall = (call: { readonly category: ToolKind; readonly targe
     }
     return commandHeads(call.target).some((head) => SEARCH_COMMANDS.has(head));
 };
-
-// Whether a search ran iq, the workspace's own search CLI. Both it and rg are searches above, so this is the only way to
-// tell whether the search teaching changed what a turn reached for.
-export const isIqSearch = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean =>
-    call.category === "execute" && call.target !== undefined && commandHeads(call.target).includes("iq");
 
 // Programs that list a directory, as opposed to searching inside one; a subset of SEARCH_COMMANDS.
 const LISTING_COMMANDS = new Set(["ls", "tree"]);

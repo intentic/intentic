@@ -20,8 +20,6 @@ import { SKILL_CATALOG_NOTE_TITLE, skillCatalogNoteOf } from "../../../store/loa
 import { catalogFor } from "./turn-skills.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import { type InstallReach, setupNoticeFor, setupNoticeTitle } from "../../../workspace/layout/workspace-setup.js";
-import type { SearchTool } from "../../prompt/guidance.js";
-import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
 import {
     fencedNote,
@@ -41,11 +39,7 @@ import { peopleAtEditor } from "../../../system/presence.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import type { AdmittedTurnFacts } from "./turn-facts.js";
 import { notesDue, type TurnPremise } from "./turn-premise.js";
-import { SPAWN_NOTE_TITLE, TURN_CONTEXT_NOTE_TITLE } from "../../../sessions/vocabulary/prompt-envelope.js";
-
-// The tool this product's guidance names for finding code: iq wherever the conversation has the iq teaching, so the two
-// never disagree; its holdout, and a sandbox with iq off, keep `rg`.
-const searchToolOf = (premise: TurnPremise): SearchTool => (premise.iqSearchEnabled ? "iq" : "rg");
+import { SPAWN_NOTE_TITLE } from "../../../sessions/vocabulary/prompt-envelope.js";
 
 // The one point every provider arm passes through: controls a runtime cannot honour are dropped, and every
 // runtime-agnostic fact (worktree, dependency readiness, persona shelves, credential gates, standing instructions) is
@@ -179,9 +173,6 @@ const workspaceNotes = (
 
 // What the turn is taught, what it cannot reach and why, and what runs after its work lands.
 const turnNotes = (facts: AdmittedTurnFacts, premise: TurnPremise, spawn: string | undefined, withheld: readonly CredentialGate[]): TurnNote[] => [
-    ...(premise.send.iqTeaching && facts.iqTeaching !== undefined ? [{ title: IQ_SEARCH_INSTRUCTION_TITLE, text: facts.iqTeaching.note }] : []),
-    // Last of the standing notes and nearest the message, since it answers this message rather than the workspace.
-    ...(facts.turnContext !== undefined && "note" in facts.turnContext ? [{ title: TURN_CONTEXT_NOTE_TITLE, text: facts.turnContext.note }] : []),
     ...(spawn === undefined ? [] : [{ title: SPAWN_NOTE_TITLE, text: spawn }]),
     // On every turn missing something, not once per conversation: the condition changes the moment someone clicks.
     ...[gatedCredentialsNote(withheld)].filter((note) => note !== undefined),
@@ -249,7 +240,6 @@ export const honoured = (
         ...opt("memoryNote", facts.memoryNote),
         // What the window will not pay for: this product's guidance, and on the smallest windows the base prompt too.
         ...opt("trim", promptTrim(context.contextTrim)),
-        search: searchToolOf(premise),
     });
     const access = turnAccess(facts, base, persona, withheldMounts);
     return {
@@ -269,7 +259,6 @@ export const honoured = (
             systemPromptMode: prompt.mode,
             ...opt("systemPrompt", placement.systemPrompt),
             ...opt("systemAppend", placement.systemAppend),
-            search: searchToolOf(premise),
             ...opt("stablePrompt", premise.stablePrompt),
             ...opt("reviewScope", facts.fresh?.review),
             sessionStore: facts.sessionStore,

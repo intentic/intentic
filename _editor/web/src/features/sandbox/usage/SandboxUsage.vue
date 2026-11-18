@@ -166,9 +166,7 @@ const byAgent = computed(() => rankByCost(current.value, (row) => row.conversati
 const { savings } = useSavings(window);
 const composition = computed(() => (savings.value === undefined ? undefined : compositionOf(savings.value.input)));
 // Hidden entirely rather than showing "nothing yet": furniture on a sandbox that never enabled a cleaner.
-const hasSavings = computed(
-    () => (savings.value?.input.commands ?? 0) > 0 || savings.value?.search !== undefined || savings.value?.map !== undefined,
-);
+const hasSavings = computed(() => (savings.value?.input.commands ?? 0) > 0 || savings.value?.map !== undefined);
 // States its own period beside the number, since the same digits mean different things under different ranges.
 const savingsPeriod = computed(() => (preset.value === `all` ? t(`sandbox.sandboxUsage.periodAllTime`) : t(`sandbox.sandboxUsage.periodThisRange`)));
 

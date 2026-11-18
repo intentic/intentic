@@ -1,5 +1,5 @@
-// The fzf-style path scorer both ends of quick-open rank with: the sandbox's iq `files` engine and the app's own
-// search box. One implementation, or the same keystrokes put a different file first depending on which one answered.
+// The fzf-style path scorer both ends of quick-open rank with: the sandbox's file-name search (@intentic/text-search)
+// and the app's own search box. One implementation, or the same keystrokes put a different file first depending on which one answered.
 
 // A character after one of these, or a camelCase hump, starts a "word" and is worth more than a mid-word hit.
 const BOUNDARY = new Set(["/", ".", "_", "-"]);

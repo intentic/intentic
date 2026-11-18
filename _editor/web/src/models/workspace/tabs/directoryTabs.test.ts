@@ -2,8 +2,8 @@ import type { ViewRegistration } from "@intentic/extension-api";
 import type { ActiveExtension } from "../../../workbench/views/registry";
 import { directoryTabs } from "./directoryTabs";
 
-// The management panel is the only way in to a repository's git history, docs and health, so which tabs it shows and
-// which one it opens on is the whole affordance: a wrong order silently buries one.
+// The management panel is the only way in to a repository's git history, docs and maintenance, so which tabs it shows
+// and which one it opens on is the whole affordance: a wrong order silently buries one.
 
 const tab = (id: string, repo: string, surface: ViewRegistration[`surface`] = `directory`): ActiveExtension => ({
     owner: `builtin`,
@@ -20,7 +20,7 @@ describe(`directoryTabs`, () => {
         const detected = [
             tab(`directory-ui`, `shop`),
             tab(`apps`, `shop`),
-            tab(`codebase-health`, `shop`),
+            tab(`maintenance-repo`, `shop`),
             tab(`documentation-repo`, `shop`),
             tab(`git-history-repo`, `shop`),
         ];
@@ -28,7 +28,7 @@ describe(`directoryTabs`, () => {
         expect(ids(directoryTabs(detected, `shop`, false))).toEqual([
             `git-history-repo`,
             `documentation-repo`,
-            `codebase-health`,
+            `maintenance-repo`,
             `apps`,
             `directory-ui`,
         ]);
@@ -41,10 +41,10 @@ describe(`directoryTabs`, () => {
         expect(ids(directoryTabs(detected, `shop`, false))).toEqual([`documentation-repo`, `acme.audit`, `acme.costs`]);
     });
 
-    // Git history and codebase health are a developer's surfaces: they left the tree row for this panel, and the
-    // audience rule has to travel with them or a maker gets them back through the cog.
-    it(`hides Git and Health from a maker, keeping the rest`, () => {
-        const detected = [tab(`git-history-repo`, `shop`), tab(`documentation-repo`, `shop`), tab(`codebase-health`, `shop`), tab(`apps`, `shop`)];
+    // Git history is a developer's surface: it left the tree row for this panel, and the audience rule has to travel
+    // with it or a maker gets it back through the cog.
+    it(`hides Git from a maker, keeping the rest`, () => {
+        const detected = [tab(`git-history-repo`, `shop`), tab(`documentation-repo`, `shop`), tab(`apps`, `shop`)];
 
         expect(ids(directoryTabs(detected, `shop`, true))).toEqual([`documentation-repo`, `apps`]);
     });

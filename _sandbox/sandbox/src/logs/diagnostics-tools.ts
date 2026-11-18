@@ -79,7 +79,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     "the largest of its slice. A path naming an object or a list (`system`, `processes.top`) answers with its newest " +
                     "value instead. Useful paths: `system.cgroup.event_oom_kill` (processes the kernel killed), " +
                     "`processes.byRole.toolchain.rssBytes` (a build, test or typecheck fan-out; also browser, agentRuntime, localModel, " +
-                    "container, searchEngine, terminal, languageServer, git, extension), `processes.top` (the eight heaviest " +
+                    "container, terminal, languageServer, git, extension), `processes.top` (the eight heaviest " +
                     "processes by resident plus swapped, each with its `owner`, the conversation whose turn or job started it or " +
                     "`daemon` / `one-shot`, absent on a process nothing stamped, and its `jobId` when it ran under a job (a background " +
                     "job, or a foreground command filed as one)), `processes.byOwner` (count, rssBytes and swapBytes per owner, " +

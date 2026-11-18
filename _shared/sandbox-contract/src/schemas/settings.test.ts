@@ -100,11 +100,11 @@ describe(`an owner's rule at the turn.ending moment`, () => {
 // keep-warm's four top-level settings became one object on 2026-09-26; a stored file keeps what its owner picked.
 describe(`the folded keep-warm settings`, () => {
     test(`fold into one object, keeping each value and the key's place`, () => {
-        const stored = { timezone: `Europe/Warsaw`, keepWarm: true, keepWarmHours: 6, keepWarmMinTokens: 50_000, keepWarmReserve: 20, iqSearch: true };
+        const stored = { timezone: `Europe/Warsaw`, keepWarm: true, keepWarmHours: 6, keepWarmMinTokens: 50_000, keepWarmReserve: 20, workspaceMap: true };
         const converted = convertDocument(SETTINGS_HISTORY, `object`, stored, true);
-        expect(converted.value).toEqual({ timezone: `Europe/Warsaw`, keepWarm: { auto: true, hours: 6, minTokens: 50_000, reserve: 20 }, iqSearch: true });
+        expect(converted.value).toEqual({ timezone: `Europe/Warsaw`, keepWarm: { auto: true, hours: 6, minTokens: 50_000, reserve: 20 }, workspaceMap: true });
         expect(JSON.stringify(converted.value)).toBe(
-            `{"timezone":"Europe/Warsaw","keepWarm":{"auto":true,"hours":6,"minTokens":50000,"reserve":20},"iqSearch":true}`,
+            `{"timezone":"Europe/Warsaw","keepWarm":{"auto":true,"hours":6,"minTokens":50000,"reserve":20},"workspaceMap":true}`,
         );
         expect(SandboxSettingsSchema.parse(converted.value).keepWarm).toEqual({ auto: true, subagents: true, hours: 6, minTokens: 50_000, reserve: 20 });
     });
@@ -123,16 +123,23 @@ describe(`the folded keep-warm settings`, () => {
 
 // Tool-result clearing lost its A/B and was removed (2026-10-12); a file that still switches it on reads, without it.
 test(`a stored tool-result clearing switch is dropped, and the rest of the file kept`, () => {
-    const converted = convertDocument(SETTINGS_HISTORY, `object`, { iqSearch: true, toolResultClearing: true, toolResultClearingHoldout: 0.5 }, true);
-    expect(converted.value).toEqual({ iqSearch: true });
-    expect(SandboxSettingsSchema.parse(converted.value).iqSearch).toBe(true);
+    const converted = convertDocument(SETTINGS_HISTORY, `object`, { workspaceMap: true, toolResultClearing: true, toolResultClearingHoldout: 0.5 }, true);
+    expect(converted.value).toEqual({ workspaceMap: true });
+    expect(SandboxSettingsSchema.parse(converted.value).workspaceMap).toBe(true);
 });
 
 // The field notes were removed (2026-11-06); a file that still switches them on reads, without them.
 test(`stored field-notes settings are dropped, and the rest of the file kept`, () => {
-    const converted = convertDocument(SETTINGS_HISTORY, `object`, { iqSearch: true, fieldNotes: true, fieldNotesBudget: 4000, fieldNotesHoldout: 0.5 }, true);
-    expect(converted.value).toEqual({ iqSearch: true });
-    expect(SandboxSettingsSchema.parse(converted.value).iqSearch).toBe(true);
+    const converted = convertDocument(SETTINGS_HISTORY, `object`, { workspaceMap: true, fieldNotes: true, fieldNotesBudget: 4000, fieldNotesHoldout: 0.5 }, true);
+    expect(converted.value).toEqual({ workspaceMap: true });
+    expect(SandboxSettingsSchema.parse(converted.value).workspaceMap).toBe(true);
+});
+
+// iq was removed (2026-11-18); a file that still switches its teaching on reads, without it.
+test(`stored iq teaching settings are dropped, and the rest of the file kept`, () => {
+    const converted = convertDocument(SETTINGS_HISTORY, `object`, { workspaceMap: false, iqSearch: true, iqSearchHoldout: 0.5 }, true);
+    expect(converted.value).toEqual({ workspaceMap: false });
+    expect(SandboxSettingsSchema.parse(converted.value).workspaceMap).toBe(false);
 });
 
 // What a job runs on, read the way every reader reads it, over a sandbox with nothing connected: the setups a stored

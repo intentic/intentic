@@ -91,6 +91,8 @@ export type PersonaContext = z.infer<typeof PersonaContextSchema>;
 // editor has to name the same rows the transcript does, and two lists would drift into two vocabularies for one thing.
 // Ids, not titles, are what a card stores: a title is display text and gets reworded, and a reworded title must not
 // silently switch a note back on. The daemon maps each id to the titles it covers (agent/prompt/turn-briefing.ts).
+// `search` named the iq teaching note, removed with iq (2026-11-18); it stays readable because a saved card may still
+// list it, and covers no row now.
 export const TurnBriefingNoteIdSchema = z.enum(["map", "context", "skills", "search", "delegation", "checks", "dependencies", "repoSync", "handoff"]);
 export type TurnBriefingNoteId = z.infer<typeof TurnBriefingNoteIdSchema>;
 
@@ -127,12 +129,6 @@ export const TURN_BRIEFING_NOTES: readonly TurnBriefingNote[] = [
         label: "Skills available in this workspace",
         when: "First message, on a runtime that cannot read the skills folder for itself.",
         cost: "On those runtimes the agent never learns its skills exist, so it will not load one.",
-    },
-    {
-        id: "search",
-        label: "Using iq for workspace search",
-        when: "First message, when the workspace search setting is on and the runtime has no plugin seam.",
-        cost: "The agent falls back to grep-style searching, which it can already do.",
     },
     {
         id: "delegation",

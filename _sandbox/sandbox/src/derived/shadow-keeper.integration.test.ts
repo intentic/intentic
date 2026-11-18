@@ -17,7 +17,6 @@ let derived: string[];
 let ocrPages: string[];
 // Files the fake refuses, as fileq refuses a corrupt one.
 let corrupt: Set<string>;
-let changes: number;
 let enabled: boolean;
 
 const quiet = { info: () => undefined, warn: () => undefined };
@@ -67,9 +66,6 @@ const start = (limits?: { maxDocuments?: number; maxBytes?: number }): ShadowKee
         root,
         enabled: async () => enabled,
         logger: quiet,
-        onShadowsChanged: () => {
-            changes += 1;
-        },
         exec: fakeFileq,
         limits: { debounceMs: 5, ...limits },
     });
@@ -88,7 +84,6 @@ beforeEach(async () => {
     derived = [];
     ocrPages = [];
     corrupt = new Set();
-    changes = 0;
     enabled = true;
 });
 afterEach(async () => {
@@ -114,7 +109,7 @@ describe("the boot sweep", () => {
         expect(report).toEqual({ state: "done", documents: 3, queued: 3, removed: 0 });
         expect(derived.toSorted()).toEqual(["docs/budget.xlsx", "docs/terms.pdf", "notes/letter.docx"]);
         expect(ocrPages.every((pages) => pages === String(KEEPER_OCR_PAGES))).toBe(true);
-        expect(changes).toBeGreaterThan(0);
+        expect(shadowExists("docs/terms.pdf")).toBe(true);
     });
 
     test("a second sweep over unchanged files renders nothing: size and mtime vouch for them", async () => {
@@ -192,7 +187,6 @@ describe("the boot sweep", () => {
             root,
             enabled: async () => true,
             logger: quiet,
-            onShadowsChanged: () => undefined,
             exec: async () => {
                 throw Object.assign(new Error("spawn fileq ENOENT"), { code: "ENOENT" });
             },
@@ -216,11 +210,9 @@ describe("watcher batches", () => {
         expect(derived).toEqual(["docs/new.pdf", "docs/new.pdf"]);
 
         await rm(join(root, "docs/new.pdf"));
-        const before = changes;
         live.changed(["docs/new.pdf"]);
         await live.idle();
         expect(shadowExists("docs/new.pdf")).toBe(false);
-        expect(changes).toBeGreaterThan(before);
     });
 
     test("a rename is a removal and a render; a deleted folder takes its shadows with it", async () => {

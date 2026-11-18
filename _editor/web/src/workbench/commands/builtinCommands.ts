@@ -197,8 +197,6 @@ export const BUILTIN_COMMANDS = {
         category: WORKSPACE,
         icon: `history`,
     },
-    // The root repo's health report: the palette route to what a nested repo opens from its own tree row.
-    "workspace.codebaseHealth": { title: () => t(`workspace.workspaceDesktop.showCodebaseHealth`), category: WORKSPACE, icon: `wave-pulse` },
     "workspace.showHome": { title: () => t(`workspace.workspaceDesktop.showHome2`), category: WORKSPACE, icon: `th-large` },
     // ⌘B on a Mac, as in VS Code; never from a field, where ⌘B is bold.
     "workspace.toggleSidebar": {

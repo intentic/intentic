@@ -1,12 +1,12 @@
-import { isFileWorkCall, isIqSearch, isRootListing, isSearchCall, searchPrecedesFileWork, type ToolKind } from "./tool-calls.js";
+import { isFileWorkCall, isRootListing, isSearchCall, searchPrecedesFileWork, type ToolKind } from "./tool-calls.js";
 
 // What one turn did before its first edit, read off its tool calls in order. Order matters and three of the four readings
 // share state (has work started, which paths seen), so they are kept in one ledger rather than four independent counters.
 // Runtime-neutral: the sandbox daemon feeds it the frames of a live turn, the Claude Code plugin the tool_use blocks of a
 // transcript, and both get the same numbers for the same calls. A subagent's calls count toward `calls()` and toward no
-// reading: they interleave with the main agent's, so "before the first file" has no order across the two, and none of
-// the treatments the readings judge (the map, the search teaching) reaches a subagent. Counted as the
-// turn's own, a first turn that sent three researchers out read 999 calls before its file where its own agent took 97.
+// reading: they interleave with the main agent's, so "before the first file" has no order across the two, and the
+// treatment the readings judge (the map) does not reach a subagent. Counted as the turn's own, a first turn that sent
+// three researchers out read 999 calls before its file where its own agent took 97.
 
 // A tool call as the readings see it: what kind of act it was and what it aimed at. The daemon's `tool_call` frame and a
 // transcript's rebuilt call both carry at least this much.
@@ -27,8 +27,6 @@ export interface ToolCallFacts {
 export interface TurnMetricsReading {
     // Every call that went looking for code: dedicated search tools and CLI searches alike.
     readonly searchCalls: number;
-    // Of those, the ones that ran iq: whether the search teaching was taken up at all.
-    readonly iqSearches: number;
     // Of those, the ones before the turn first opened or changed a file.
     readonly openingSearches: number;
     // Shallow directory listings among openingSearches, the part of orientation the project map addresses.
@@ -60,7 +58,6 @@ export const createTurnMetrics = (root: string): TurnMetrics => {
     // The turn's own agent's calls, the position every reading is taken at.
     let own = 0;
     let searchCalls = 0;
-    let iqSearches = 0;
     let openingSearches = 0;
     let openingListings = 0;
     let reachedTheWork = false;
@@ -92,7 +89,6 @@ export const createTurnMetrics = (root: string): TurnMetrics => {
             const searched = isSearchCall(call);
             if (searched) {
                 searchCalls += 1;
-                iqSearches += Number(isIqSearch(call));
             }
             if (searched && !reachedTheWork && searchPrecedesFileWork(call)) {
                 openingSearches += 1;
@@ -117,7 +113,6 @@ export const createTurnMetrics = (root: string): TurnMetrics => {
             const reached = edited.map((path) => firstTouch.get(path)).filter((at) => at !== undefined);
             return {
                 searchCalls,
-                iqSearches,
                 openingSearches,
                 openingListings,
                 failedCalls: failed.size,

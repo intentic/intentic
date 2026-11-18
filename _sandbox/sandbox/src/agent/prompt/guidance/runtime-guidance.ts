@@ -101,7 +101,7 @@ export const withComposedGuidance = async (
     const { spec } = plan.request;
     const facts = await runtimeGuidanceFacts(deps, { ...turn, request: plan.request });
     const stable = spec.stablePrompt === true;
-    const guidance = guidanceBlock(facts, spec.search ?? "rg", stable);
+    const guidance = guidanceBlock(facts, stable);
     // Under a stable prompt the volatile half rides the message, and only when it moved since this session was told.
     const surroundings = stable ? surroundingsNote(deps.conversations, turn.conversationId, { fresh: spec.sessionId === undefined || turn.compacted }, facts) : undefined;
     return { ...plan, request: { ...plan.request, spec: withRuntimeGuidance(spec, turn.capabilities, guidance, surroundings) } };

@@ -1,12 +1,10 @@
 import { resolve } from "node:path";
-import type { ResidentEngine } from "@intentic/iq-engine";
 import type { DerivedSide } from "@intentic/sandbox-contract/schemas/diff";
 import type { WorkspaceChildren, WorkspaceDerived, WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { Logger } from "pino";
 import type { BlobSource } from "../derived/derived-blob.js";
 import type { Config } from "../env.config.js";
 import { statePath } from "../state-paths.js";
-import { createCodeSearchEngine } from "./code-search.js";
 import { heldDirReads } from "./files/dir-reads.js";
 import { createWorkspaceTrash, type WorkspaceTrash } from "./files/trash/workspace-trash.js";
 import { extractArchive } from "./files/archive/workspace-extract.js";
@@ -31,7 +29,7 @@ import { createTextSearch, type TextSearch } from "./text-search.js";
 import { residentTreeWritten, residentWorkspaceTree } from "./watch/workspace-watch.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace.js";
 
-// The workspace tree: its paths, files, derived sidecars, tree reads and the code-search engine.
+// The workspace tree: its paths, files, derived sidecars, tree reads and the search box's searches.
 export interface WorkspaceSlice {
     readonly workspace: WorkspacePaths;
     // Was /work empty at daemon start; must be asked before any boot step writes into the workspace, not later.
@@ -72,9 +70,7 @@ export interface WorkspaceSlice {
     // instead of after the watcher's batch, so a browser's paste is confirmed by the delta as it is answered.
     readonly workspaceWritten: (absPaths: readonly string[]) => void;
     readonly workspaceChildren: (root: string, relPath: string, options?: { depth?: number }) => Promise<WorkspaceChildren>;
-    // Resident workspace search: one iq engine, its sweep cached in memory; indexing runs on its own thread.
-    readonly iq: ResidentEngine;
-    // The search box's text search: ripgrep from the daemon itself, its answers kept for their later pages.
+    // The search box's text and file-name searches: ripgrep from the daemon itself, text answers kept for their later pages.
     readonly textSearch: TextSearch;
 }
 
@@ -115,7 +111,6 @@ export const createWorkspaceSlice = ({ config, logger }: { readonly config: Conf
         workspaceWritten: (absPaths) =>
             void residentTreeWritten(absPaths).catch((err: Error) => logger.warn({ err }, "resident tree could not re-list a write")),
         workspaceChildren: listWorkspaceChildren,
-        iq: createCodeSearchEngine(config, workspace.root, logger),
-        textSearch: createTextSearch({ rgPath: config.iqRgPath === "" ? undefined : config.iqRgPath }),
+        textSearch: createTextSearch({ rgPath: config.rgPath === "" ? undefined : config.rgPath }),
     };
 };

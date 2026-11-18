@@ -180,21 +180,6 @@ catalogs:
     '@anthropic-ai/claude-agent-sdk':
       specifier: 0.3.326
       version: 0.3.326
-    '@ast-grep/lang-go':
-      specifier: 0.0.6
-      version: 0.0.6
-    '@ast-grep/lang-java':
-      specifier: 0.0.7
-      version: 0.0.7
-    '@ast-grep/lang-python':
-      specifier: 0.0.6
-      version: 0.0.6
-    '@ast-grep/lang-rust':
-      specifier: 0.0.7
-      version: 0.0.7
-    '@ast-grep/napi':
-      specifier: 0.51.0
-      version: 0.51.0
     '@astrojs/check':
       specifier: 0.9.12
       version: 0.9.12
@@ -561,9 +546,6 @@ catalogs:
     smol-toml:
       specifier: 1.9.0
       version: 1.9.0
-    sqlite-vec:
-      specifier: 0.1.9
-      version: 0.1.9
     ssh2:
       specifier: 1.17.0
       version: 1.17.0
@@ -2273,9 +2255,6 @@ importers:
       '@intentic/base':
         specifier: workspace:*
         version: link:../../_tools/base
-      '@intentic/iq':
-        specifier: workspace:*
-        version: link:../../_search/iq
       '@intentic/workspace-ignore':
         specifier: workspace:*
         version: link:../../_shared/workspace-ignore
@@ -2307,9 +2286,6 @@ importers:
       '@intentic/fileq':
         specifier: workspace:*
         version: link:../fileq
-      '@intentic/iq':
-        specifier: workspace:*
-        version: link:../../_search/iq
       '@intentic/output-cleaners':
         specifier: workspace:*
         version: link:../output-cleaners
@@ -2634,12 +2610,6 @@ importers:
       '@intentic/fileq':
         specifier: workspace:*
         version: link:../fileq
-      '@intentic/iq':
-        specifier: workspace:*
-        version: link:../../_search/iq
-      '@intentic/iq-engine':
-        specifier: workspace:*
-        version: link:../../_search/iq-engine
       '@intentic/issue-sdk':
         specifier: workspace:*
         version: link:../issue-sdk
@@ -2676,6 +2646,9 @@ importers:
       '@intentic/speech':
         specifier: workspace:*
         version: link:../speech
+      '@intentic/text-search':
+        specifier: workspace:*
+        version: link:../../_search/text-search
       '@intentic/webchat-widget':
         specifier: workspace:*
         version: link:../webchat-widget
@@ -2942,132 +2915,6 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  _search/iq:
-    dependencies:
-      '@intentic/agent-cli':
-        specifier: workspace:*
-        version: link:../../_tools/agent-cli
-      '@intentic/base':
-        specifier: workspace:*
-        version: link:../../_tools/base
-      '@intentic/constants':
-        specifier: workspace:*
-        version: link:../../_tools/constants
-      '@intentic/iq-engine':
-        specifier: workspace:*
-        version: link:../iq-engine
-      '@puristic/env':
-        specifier: 'catalog:'
-        version: 1.6.1(zod@4.6.7)
-      '@stricli/core':
-        specifier: 'catalog:'
-        version: 1.3.0
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@intentic/testing':
-        specifier: workspace:*
-        version: link:../../_tools/testing
-      '@intentic/tsconfig':
-        specifier: workspace:*
-        version: link:../../_tools/tsconfig
-      '@types/bun':
-        specifier: 'catalog:'
-        version: 1.4.4
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.19.2
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
-  _search/iq-bench:
-    dependencies:
-      '@intentic/constants':
-        specifier: workspace:*
-        version: link:../../_tools/constants
-      '@intentic/iq-engine':
-        specifier: workspace:*
-        version: link:../iq-engine
-      '@intentic/sandbox-contract':
-        specifier: workspace:*
-        version: link:../../_shared/sandbox-contract
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@intentic/testing':
-        specifier: workspace:*
-        version: link:../../_tools/testing
-      '@intentic/tsconfig':
-        specifier: workspace:*
-        version: link:../../_tools/tsconfig
-      '@types/bun':
-        specifier: 'catalog:'
-        version: 1.4.4
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.19.2
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
-  _search/iq-engine:
-    dependencies:
-      '@ast-grep/lang-go':
-        specifier: 'catalog:'
-        version: 0.0.6
-      '@ast-grep/lang-java':
-        specifier: 'catalog:'
-        version: 0.0.7
-      '@ast-grep/lang-python':
-        specifier: 'catalog:'
-        version: 0.0.6
-      '@ast-grep/lang-rust':
-        specifier: 'catalog:'
-        version: 0.0.7
-      '@ast-grep/napi':
-        specifier: 'catalog:'
-        version: 0.51.0
-      '@huggingface/hub':
-        specifier: 'catalog:'
-        version: 2.17.5
-      '@huggingface/transformers':
-        specifier: 'catalog:'
-        version: 4.3.0(@types/node@24.19.2)
-      '@intentic/base':
-        specifier: workspace:*
-        version: link:../../_tools/base
-      '@intentic/constants':
-        specifier: workspace:*
-        version: link:../../_tools/constants
-      '@intentic/sandbox-contract':
-        specifier: workspace:*
-        version: link:../../_shared/sandbox-contract
-      '@intentic/workspace-ignore':
-        specifier: workspace:*
-        version: link:../../_shared/workspace-ignore
-      sqlite-vec:
-        specifier: 'catalog:'
-        version: 0.1.9
-    devDependencies:
-      '@intentic/testing':
-        specifier: workspace:*
-        version: link:../../_tools/testing
-      '@intentic/tsconfig':
-        specifier: workspace:*
-        version: link:../../_tools/tsconfig
-      '@types/bun':
-        specifier: 'catalog:'
-        version: 1.4.4
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.19.2
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
   _search/lsp:
     dependencies:
       '@intentic/base':
@@ -3089,6 +2936,37 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
+
+  _search/text-search:
+    dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
+      '@intentic/constants':
+        specifier: workspace:*
+        version: link:../../_tools/constants
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+      '@intentic/workspace-ignore':
+        specifier: workspace:*
+        version: link:../../_shared/workspace-ignore
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.4
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
   _shared/api-contract:
     dependencies:
@@ -4053,103 +3931,6 @@ packages:
   '@asamuzakjp/dom-selector@10.0.5':
     resolution: {integrity: sha512-EgmJ7oEaGQECTn3H3wmnQpEy4hKY66VvM7VQndwPIQob3p877BgbyOUE3EX0LgXQCciF2H8KMdR+RznqjMNOLw==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
-
-  '@ast-grep/lang-go@0.0.6':
-    resolution: {integrity: sha512-PZap9Rp6t+YKbLjRnFRF5aGBX3/HV9s5Rp7ZPsCM+o3tlTZDo1IqDYnFu+Oeh5Razs2U8K8ccPSJ+GBxalVhWg==}
-    peerDependencies:
-      tree-sitter-cli: 0.25.8
-    peerDependenciesMeta:
-      tree-sitter-cli:
-        optional: true
-
-  '@ast-grep/lang-java@0.0.7':
-    resolution: {integrity: sha512-7muXd2MqUxJ8SrLrXU+JbvU6qSASZ5BZqH/eCDkIIjXge5wMl7kIYxKEgP375W8lnTXQYjM+VgeOkYSU9EexJg==}
-    peerDependencies:
-      tree-sitter-cli: 0.25.8
-    peerDependenciesMeta:
-      tree-sitter-cli:
-        optional: true
-
-  '@ast-grep/lang-python@0.0.6':
-    resolution: {integrity: sha512-eF/bEBspmrxdVuPNihvZDyyJx5qtIpGEMz9l1nNQmrji7NZcUiRNC8WwzYyQCBdy1mj8HZ0Tn4I2q3gp/6Bkiw==}
-    peerDependencies:
-      tree-sitter-cli: 0.25.8
-    peerDependenciesMeta:
-      tree-sitter-cli:
-        optional: true
-
-  '@ast-grep/lang-rust@0.0.7':
-    resolution: {integrity: sha512-CF6jv8XmlVQgr/pFKADM87EkoGiHIrHKsG1wcX2iqgdBX5kW8wH+Zd4GP6SMme2eZogD49f19vRoRTF44iZqzg==}
-    peerDependencies:
-      tree-sitter-cli: 0.25.8
-    peerDependenciesMeta:
-      tree-sitter-cli:
-        optional: true
-
-  '@ast-grep/napi-darwin-arm64@0.51.0':
-    resolution: {integrity: sha512-jKzwYtHqVAY3F6Ch9sE4zRc2iDP74U2bJB2AucRDpQe3HrHUz4rCCfXS4PZpq9FL+kI6YS+qglZG3LRgnv1JsA==}
-    engines: {node: '>= 10'}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@ast-grep/napi-darwin-x64@0.51.0':
-    resolution: {integrity: sha512-P0Vrid8pJrLuhJ23TskxsqzZYdATOY49JfC6u4295CTz2O9hPH+YkURIPYpV424AItsQ6I4LfyJieXaK+noNcQ==}
-    engines: {node: '>= 10'}
-    cpu: [x64]
-    os: [darwin]
-
-  '@ast-grep/napi-linux-arm64-gnu@0.51.0':
-    resolution: {integrity: sha512-0TEQf4dydUVL2ieG8aVyxSF+JdoPJDqyHTHfXIOVpYRmuwFS5MC0Lt1kjh5mO3uFzxF1dqobqigeKB7UhklfRQ==}
-    engines: {node: '>= 10'}
-    cpu: [arm64]
-    os: [linux]
-    libc: [glibc]
-
-  '@ast-grep/napi-linux-arm64-musl@0.51.0':
-    resolution: {integrity: sha512-2rqfTEwNjaYsi2Db76BIfmRTF28P2fLul05G8EvX1p7YHL9y2pn+on8Ex/SuPnS2whpNn399h8GQ7hupPNugwQ==}
-    engines: {node: '>= 10'}
-    cpu: [arm64]
-    os: [linux]
-    libc: [musl]
-
-  '@ast-grep/napi-linux-x64-gnu@0.51.0':
-    resolution: {integrity: sha512-V2kuGNPF6rA5OGK6eMxEdUtzDy4lMJyPeCh0LnO3nL7gscRBaytwUBhx851mutOUqQkGbgZwAdDXv77VaeWKDg==}
-    engines: {node: '>= 10'}
-    cpu: [x64]
-    os: [linux]
-    libc: [glibc]
-
-  '@ast-grep/napi-linux-x64-musl@0.51.0':
-    resolution: {integrity: sha512-yOYdRAP6i8tEuDx8RgayAirn3fhNIA/aA3mQ4OibPIR9q4uzl0uJeGH6xjdcFhXCbCgIuTuPQKxIIO5HnPazIQ==}
-    engines: {node: '>= 10'}
-    cpu: [x64]
-    os: [linux]
-    libc: [musl]
-
-  '@ast-grep/napi-win32-arm64-msvc@0.51.0':
-    resolution: {integrity: sha512-/pwe01sSnKdVMyybKiJ8tvOaaM3dUVXj9JiYHEAs14xTAS0RWKMOAoqpKxB97Yg4ukssQiemUiViBby88TGy6A==}
-    engines: {node: '>= 10'}
-    cpu: [arm64]
-    os: [win32]
-
-  '@ast-grep/napi-win32-ia32-msvc@0.51.0':
-    resolution: {integrity: sha512-RF49CWQslYIx1DGq090a3gqBQEYxLBmg8CsVRgnEyF0KDlcGinCDeRg/EqxVyDQ+e9VT3ycKpUjby+V7aMujXg==}
-    engines: {node: '>= 10'}
-    cpu: [ia32]
-    os: [win32]
-
-  '@ast-grep/napi-win32-x64-msvc@0.51.0':
-    resolution: {integrity: sha512-OlGEtNSx1q2NdRXOSHBEGtuyZXS6Ix3bE2HdGepuYnNZJoafvX/WljkO+kzNimJGGSXTs6/t+o7XeGsB8vL/Bw==}
-    engines: {node: '>= 10'}
-    cpu: [x64]
-    os: [win32]
-
-  '@ast-grep/napi@0.51.0':
-    resolution: {integrity: sha512-thHIZoygVkwW/6yBFBgqPtmKpAnEfwsJyIFliKo6hxkXlYLLfvwReDH2le/5zk358ir/97IJdTB7xv309LYbSQ==}
-    engines: {node: '>= 10'}
-
-  '@ast-grep/setup-lang@0.0.6':
-    resolution: {integrity: sha512-aSYZNF5nGQMxnwiA3Lcc8zi0AtpGlug47ADgqCgP/2n7p922FbnW7vo1rbW4kKjW72B/3mDdN7uvYidv8JnPnw==}
 
   '@astrojs/astro2tsx@0.1.3':
     resolution: {integrity: sha512-GMDC7Eo0myBUA/QLBl0u+OcegJ8LiBhccmNZR34KmprQNP8gQUJlWlOOZWUsxNA2rNS6GuPYcGDyLoPnjmn4/Q==}
@@ -11608,34 +11389,6 @@ packages:
     resolution: {integrity: sha512-6CKD38c31SENivxOADeMNLdukOnUxUcflKtzVWzace7Riv1v7cAEym5Cx9Q7gYZ3ezIJI7ZpqecQq8cqNeSSFg==}
     engines: {bun: '>=1.0.0', deno: '>=2.0.0', node: '>=12.0.0'}
 
-  sqlite-vec-darwin-arm64@0.1.9:
-    resolution: {integrity: sha512-jSsZpE42OfBkGL/ItyJTVCUwl6o6Ka3U5rc4j+UBDIQzC1ulSSKMEhQLthsOnF/MdAf1MuAkYhkdKmmcjaIZQg==}
-    cpu: [arm64]
-    os: [darwin]
-
-  sqlite-vec-darwin-x64@0.1.9:
-    resolution: {integrity: sha512-KDlVyqQT7pnOhU1ymB9gs7dMbSoVmKHitT+k1/xkjarcX8bBqPxWrGlK/R+C5WmWkfvWwyq5FfXfiBYCBs6PlA==}
-    cpu: [x64]
-    os: [darwin]
-
-  sqlite-vec-linux-arm64@0.1.9:
-    resolution: {integrity: sha512-5wXVJ9c9kR4CHm/wVqXb/R+XUHTdpZ4nWbPHlS+gc9qQFVHs92Km4bPnCKX4rtcPMzvNis+SIzMJR1SCEwpuUw==}
-    cpu: [arm64]
-    os: [linux]
-
-  sqlite-vec-linux-x64@0.1.9:
-    resolution: {integrity: sha512-w3tCH8xK2finW8fQJ/m8uqKodXUZ9KAuAar2UIhz4BHILfpE0WM/MTGCRfa7RjYbrYim5Luk3guvMOGI7T7JQA==}
-    cpu: [x64]
-    os: [linux]
-
-  sqlite-vec-windows-x64@0.1.9:
-    resolution: {integrity: sha512-y3gEIyy/17bq2QFPQOWLE68TYWcRZkBQVA2XLrTPHNTOp55xJi/BBBmOm40tVMDMjtP+Elpk6UBUXdaq+46b0Q==}
-    cpu: [x64]
-    os: [win32]
-
-  sqlite-vec@0.1.9:
-    resolution: {integrity: sha512-L7XJWRIBNvR9O5+vh1FQ+IGkh/3D2AzVksW5gdtk28m78Hy8skFD0pqReKH1Yp0/BUKRGcffgKvyO/EON5JXpA==}
-
   ssh-remote-port-forward@1.0.4:
     resolution: {integrity: sha512-x0LV1eVDwjf1gmG7TTnfqIzf+3VPRz7vrNIjX6oYLbeCrf/PeVY6hkT68Mg+q02qXxQhrLjB0jfgvhevoCRmLQ==}
 
@@ -12783,63 +12536,6 @@ snapshots:
       css-tree: 3.2.1
       is-potential-custom-element-name: 1.0.1
       lru-cache: 11.5.3
-
-  '@ast-grep/lang-go@0.0.6':
-    dependencies:
-      '@ast-grep/setup-lang': 0.0.6
-
-  '@ast-grep/lang-java@0.0.7':
-    dependencies:
-      '@ast-grep/setup-lang': 0.0.6
-
-  '@ast-grep/lang-python@0.0.6':
-    dependencies:
-      '@ast-grep/setup-lang': 0.0.6
-
-  '@ast-grep/lang-rust@0.0.7':
-    dependencies:
-      '@ast-grep/setup-lang': 0.0.6
-
-  '@ast-grep/napi-darwin-arm64@0.51.0':
-    optional: true
-
-  '@ast-grep/napi-darwin-x64@0.51.0':
-    optional: true
-
-  '@ast-grep/napi-linux-arm64-gnu@0.51.0':
-    optional: true
-
-  '@ast-grep/napi-linux-arm64-musl@0.51.0':
-    optional: true
-
-  '@ast-grep/napi-linux-x64-gnu@0.51.0':
-    optional: true
-
-  '@ast-grep/napi-linux-x64-musl@0.51.0':
-    optional: true
-
-  '@ast-grep/napi-win32-arm64-msvc@0.51.0':
-    optional: true
-
-  '@ast-grep/napi-win32-ia32-msvc@0.51.0':
-    optional: true
-
-  '@ast-grep/napi-win32-x64-msvc@0.51.0':
-    optional: true
-
-  '@ast-grep/napi@0.51.0':
-    optionalDependencies:
-      '@ast-grep/napi-darwin-arm64': 0.51.0
-      '@ast-grep/napi-darwin-x64': 0.51.0
-      '@ast-grep/napi-linux-arm64-gnu': 0.51.0
-      '@ast-grep/napi-linux-arm64-musl': 0.51.0
-      '@ast-grep/napi-linux-x64-gnu': 0.51.0
-      '@ast-grep/napi-linux-x64-musl': 0.51.0
-      '@ast-grep/napi-win32-arm64-msvc': 0.51.0
-      '@ast-grep/napi-win32-ia32-msvc': 0.51.0
-      '@ast-grep/napi-win32-x64-msvc': 0.51.0
-
-  '@ast-grep/setup-lang@0.0.6': {}
 
   '@astrojs/astro2tsx@0.1.3(@emnapi/runtime@1.11.3)':
     dependencies:
@@ -20423,29 +20119,6 @@ snapshots:
   sprintf-js@1.0.3: {}
 
   sql-escaper@1.5.2: {}
-
-  sqlite-vec-darwin-arm64@0.1.9:
-    optional: true
-
-  sqlite-vec-darwin-x64@0.1.9:
-    optional: true
-
-  sqlite-vec-linux-arm64@0.1.9:
-    optional: true
-
-  sqlite-vec-linux-x64@0.1.9:
-    optional: true
-
-  sqlite-vec-windows-x64@0.1.9:
-    optional: true
-
-  sqlite-vec@0.1.9:
-    optionalDependencies:
-      sqlite-vec-darwin-arm64: 0.1.9
-      sqlite-vec-darwin-x64: 0.1.9
-      sqlite-vec-linux-arm64: 0.1.9
-      sqlite-vec-linux-x64: 0.1.9
-      sqlite-vec-windows-x64: 0.1.9
 
   ssh-remote-port-forward@1.0.4:
     dependencies:

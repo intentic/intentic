@@ -1,6 +1,6 @@
 # intentic plugin for Claude Code
 
-Trims Bash output before Claude reads it, opens each session with a map of the project, teaches the `fileq` and `iq` CLIs, and reports what each of these saved. Every mechanism is a switch in `/config`.
+Trims Bash output before Claude reads it, opens each session with a map of the project, teaches the `fileq` CLI, and reports what each of these saved. Every mechanism is a switch in `/config`.
 
 ```
 /plugin marketplace add intentic/intentic
@@ -14,8 +14,6 @@ The hooks and the bundled commands run on Node.js 20.11 or later, which has to b
 | When | What happens | Switch |
 | --- | --- | --- |
 | A session opens | Claude gets a map of the project: its areas, what each is for, and where the session started. It is recomputed from the tree for every session. | `project_map` |
-| A session opens | Claude is taught `iq`, a code search that answers a question with ranked `path:line` anchors, if `iq` is installed. | `iq` |
-| A prompt is sent | `iq` points a prompt that matches earlier work at the session that did it. | `iq` |
 | A Bash command succeeds | The output is cleaned before Claude reads it: progress bars, install chatter, repeated lines, the middle of huge logs. A footer names the command that reads the full text back. | `output_cleaners`, `cleaners` |
 | Claude reads a document | `fileq` turns docx, pdf, xlsx, pptx, epub, ipynb, images, audio and archives into markdown. | `fileq` |
 | Claude makes a document | `fileq check` lists what is wrong with a docx, pptx, xlsx or pdf by slide, page or cell, and `fileq render` draws its pages as PNGs for Claude to look at (with LibreOffice and poppler installed). The fileq skill says to run both before handing the file over. | `fileq` |
@@ -28,7 +26,7 @@ The `intentic:Intentic` output style adds three working habits to Claude Code's 
 
 ## Switches
 
-Open `/config` and find the rows under intentic. The switches read at session start (`project_map`, `iq`, `fileq`, `holdout`) apply from the next session.
+Open `/config` and find the rows under intentic. The switches read at session start (`project_map`, `fileq`, `holdout`) apply from the next session.
 
 | Key | Default | Effect |
 | --- | --- | --- |
@@ -36,11 +34,12 @@ Open `/config` and find the rows under intentic. The switches read at session st
 | `cleaners` | empty (all) | Which cleaners run: `-cap,-wide` switches some off, `git,pnpm` allows only those |
 | `output_holdout` | 0 | Share of commands left uncleaned, to measure the saving against real output |
 | `project_map` | on | Send the project map at session start |
-| `iq` | on | Teach `iq` and run its session recall, when `iq` is installed |
 | `fileq` | on | Let the bundled `fileq` run. Off, it refuses, and its skill stays listed because a plugin cannot hide its own skills |
-| `holdout` | 0.1 | Share of sessions opened without the map and the iq teaching, so the report can compare |
+| `holdout` | 0.1 | Share of sessions opened without the map, so the report can compare |
 
 2026-11-06: the field notes (`/intentic:field-notes` and the `field_notes` switch) were removed. In the sandbox, where the same brief was measured against a held-out half, it moved neither failed tool calls nor calls before the edited file across two revisions, while every request carried it. A `.claude/intentic/field-notes.toon` an earlier version wrote is no longer read and can be deleted.
+
+2026-11-18: the iq teaching (the `iq` switch, the iq skill and session-start hint, and the session recall run on each prompt) was removed. In the sandbox, a randomized test found that iq made no measurable difference to agents, while its index and models cost memory, disk and latency. An `iq/` directory an earlier version left in the plugin's data directory is no longer written and can be deleted.
 
 ## What it saved
 
@@ -53,13 +52,12 @@ Biggest cleaners: cap 1.1M (96 commands), pnpm 210k (40 commands), dedup 88k (13
 
 ## Session context
 Project map, opening turns that listed directories: -45.2% ±20.1pp (95%): 17% with it vs 31% without, over 118 and 31 opening turns.
-iq teaching, search calls per turn: measuring, 12 of 30 conversations in the smaller arm: 2.1 with it vs 2.9 without, over 96 and 12 conversations.
 ```
 
 The numbers above are an illustration of the format. The report reads two things:
 
 - The cleaners' ledger, one row per command with the bytes before and after and what each cleaner removed. That saving is exact. With `output_holdout` above 0 it also compares the median cleaned output against commands left uncleaned.
-- Claude Code's own session transcripts, compared across the two arms each session was drawn into. A hash of the session id puts `holdout` of the sessions in the control arm for each mechanism, so the draw needs no state and gives the same answer every time it is read. The map is judged on the share of first turns that listed the project's directories, and the iq teaching on search calls, each counting the main agent's calls and not its subagents'. A change is stated only once both arms hold 30 samples and the 95% margin excludes zero.
+- Claude Code's own session transcripts, compared across the two arms each session was drawn into. A hash of the session id puts `holdout` of the sessions in the control arm for each mechanism, so the draw needs no state and gives the same answer every time it is read. The map is judged on the share of first turns that listed the project's directories, counting the main agent's calls and not its subagents'. A change is stated only once both arms hold 30 samples and the 95% margin excludes zero.
 
 The arithmetic is the one behind the savings page of an Intentic sandbox, from the same packages, so a number here means what it means there.
 
@@ -82,7 +80,7 @@ Older Claude Code versions are not harmed by the mod. `modules` in `hooks/hooks.
 
 | Path | Holds |
 | --- | --- |
-| `~/.claude/plugins/data/intentic-intentic/` | `sessions.jsonl` (the arms each session drew), `options.json` (the switches of the last session), `output/` (the cleaners' ledger, the full text of trimmed commands, the repeat cache), `iq/` (the logs of iq's transcript ingest) |
+| `~/.claude/plugins/data/intentic-intentic/` | `sessions.jsonl` (the arms each session drew), `options.json` (the switches of the last session), `output/` (the cleaners' ledger, the full text of trimmed commands, the repeat cache) |
 | `.intentic/local/cache/derived/` | `fileq`'s cache: the markdown of each document it has read, reused while the document is unchanged. The directory ignores itself in git |
 
 The plugin makes no network requests. Uninstalling it deletes the data directory unless you pass `--keep-data`.
@@ -98,7 +96,6 @@ The plugin is built from the packages that own each mechanism, so the sandbox an
 - [@intentic/output-cleaners](../output-cleaners): the cleaners, `filterRun`, and `summarizeStats`.
 - [@intentic/agent-context](../agent-context): the project map, how a session draws its arm, what each turn is scored on, the comparison between the arms, and the transcript reader.
 - [@intentic/fileq](../fileq): the CLI, bundled as `dist/fileq.mjs`, the text of its skill, and its NOTICE (rules adapted from SurfSense under Apache-2.0), copied to `generated/fileq-NOTICE`.
-- [@intentic/iq](../../_search/iq): the iq skill and the hint a session opens with. The build rewords the hint's two sandbox phrases for a plain install and fails if they change upstream.
 
 The mod is one source file, [hooks/register.ts](hooks/register.ts), shipped as it is: Claude Code loads TypeScript hooks modules itself, in an environment with no Node and no imports beyond the plugin's own files, so there is nothing to bundle. Its helpers are exported and tested with bun (`src/mod.test.ts`); the hooks as Claude Code wires them are tested with its own test runner (`tests/mod.test.ts`).
 
@@ -107,7 +104,7 @@ The build writes `dist/` (one esbuild bundle per hook and command, so an install
 ### Key files
 
 - [src/features.ts](src/features.ts): the switches, the one table behind both `userConfig` and what the hooks read.
-- [src/session-start.ts](src/session-start.ts): what a session is told, which arm it drew, and the background work it starts.
+- [src/session-start.ts](src/session-start.ts): what a session is told and which arm it drew.
 - [src/post-bash.ts](src/post-bash.ts): the cleaning pass as a `PostToolUse` hook that returns `updatedToolOutput`.
 - [src/stats.ts](src/stats.ts): the `/intentic:stats` report.
 - [src/generated.ts](src/generated.ts): the skill and output-style files the build writes.

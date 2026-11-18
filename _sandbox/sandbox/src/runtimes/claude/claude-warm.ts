@@ -39,7 +39,7 @@ export const claudeWarmBudget = (ttlMs: number): number => Math.floor((writeCost
 // is sent again by default.
 type WarmSpec = Pick<
     TurnSpec,
-    "cwd" | "ownCheckout" | "model" | "effort" | "thinking" | "fast" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "search"
+    "cwd" | "ownCheckout" | "model" | "effort" | "thinking" | "fast" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim"
 >;
 
 const warmSpec = (spec: TurnSpec): WarmSpec => ({
@@ -53,8 +53,6 @@ const warmSpec = (spec: TurnSpec): WarmSpec => ({
     ...opt("systemPrompt", spec.systemPrompt),
     ...opt("systemAppend", spec.systemAppend),
     ...opt("contextTrim", spec.contextTrim),
-    // Which search tool the guidance names, iq or rg: a line of the system prompt, so of the prefix.
-    ...opt("search", spec.search),
 });
 
 // Everything one refresh is built from. The policy and tools travel whole since they are the prefix's tool list and the

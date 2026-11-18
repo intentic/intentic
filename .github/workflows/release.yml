@@ -306,13 +306,6 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The same iq-models cache the images + publish jobs share — the models are arch-neutral bytes.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            .image-out/iq-models
-            .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
       - run: pnpm install --frozen-lockfile
       - run: bash _tools/scripts/release/set-versions.sh "$RELEASE_VERSION"
       - run: bash _tools/scripts/image/prepare-image-trees.sh
@@ -359,13 +352,6 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The same iq-models cache the ci.yml image jobs share — the models are arch-neutral bytes.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            .image-out/iq-models
-            .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
       - run: bash _tools/scripts/release/set-versions.sh "$RELEASE_VERSION"
       - run: bash _tools/scripts/image/prepare-image-trees.sh
       - run: TAGS="$RELEASE_VERSION" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/image/publish-images.sh

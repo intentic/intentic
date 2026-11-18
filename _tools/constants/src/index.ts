@@ -21,10 +21,10 @@ export const HISTORY_ROOT = "/history";
 export const STATE_DIR = ".intentic";
 
 // fileq's text shadows of workspace documents, one `<path>.md` per file at its mirrored path: written by fileq,
-// kept current by the daemon's shadow keeper, read by iq and by the ripgrep preprocessor as the text of the original.
+// kept current by the daemon's shadow keeper, read by the ripgrep preprocessor as the text of the original.
 export const DERIVED_SHADOWS_DIR = `${STATE_DIR}/local/cache/derived`;
 
-// The documents whose shadow stands in for their bytes when searched (iq, ripgrep): fileq's document formats, by
+// The documents whose shadow stands in for their bytes when searched with ripgrep: fileq's document formats, by
 // extension, lower case. fileq's own table (formats.ts DOCUMENT_FORMATS) is held to this one by a test.
 export const SHADOWED_DOCUMENT_EXTENSIONS: readonly string[] = [
     ".docx",

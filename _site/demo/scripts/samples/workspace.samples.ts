@@ -33,7 +33,6 @@ export const workspaceSamples: GroupSamples<`workspace`> = ({ fleet }) => ({
     runTests: { repo: `storefront-kit`, session: `storefront__test`, dirs: [`_apps/storefront`] },
     packageGraph: { repo: `storefront-kit` },
     packageModules: { repo: `storefront-kit`, package: `@storefront-kit/ui` },
-    health: { repo: `web` },
     // The order chime plays; the shop's two static pages leave as one ZIP; the offline page previews with its edits.
     mediaTicket: { path: `web/public/sounds/order-placed.wav` },
     downloadTicket: { paths: [`web/public/offline.html`, `web/public/offline.css`] },

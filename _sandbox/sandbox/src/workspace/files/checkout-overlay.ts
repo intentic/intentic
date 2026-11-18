@@ -5,7 +5,7 @@ import type { IsolatedAgent, RepoRecord } from "../../conversations/registry/age
 import type { ReferenceView } from "./resolve-reference.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
 
-// What a conversation's checkout holds that the shared tree's search index cannot say. The index covers /work alone, so
+// What a conversation's checkout holds that the shared tree's file search cannot say. That search lists /work alone, so
 // a file the conversation created exists nowhere it can see, and a file it renamed still answers under its old name.
 // Read from the conversation's own change list (the one its review shows, renames included), workspace-relative like
 // every path a reference resolves to.
@@ -111,14 +111,14 @@ const presentIn = (dir: string, relPath: string): boolean => {
 
 /**
  * One copy of the workspace for the reference resolver: the conversation's checkout laid over the shared tree, the
- * shared tree's index answering for every file the conversation did not touch, and its own change list for the ones it
+ * shared tree's file search answering for every file the conversation did not touch, and its own change list for the ones it
  * did. With `checkout` equal to `shared` and no overlay, it is the shared tree alone.
  */
 export const overlaidView = (deps: {
     readonly checkout: string;
     readonly shared: string;
     readonly overlay: CheckoutOverlay;
-    // Every shared-tree file a glob matches, from the resident index's sweep.
+    // Every shared-tree file a glob matches, from the search box's file search.
     readonly matching: (glob: string) => Promise<readonly string[]>;
 }): ReferenceView => {
     const { checkout, shared, overlay, matching } = deps;

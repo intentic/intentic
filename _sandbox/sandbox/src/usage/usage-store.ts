@@ -27,6 +27,9 @@ export const usageLedgerDocument = defineDocument({
         ...dropAll(["clearingArm"]),
         // The field-notes experiment's stamps (2026-11-06): the brief moved nothing, and the experiment went with it.
         ...dropAll(["notesArm", "notesChars", "notesCohort"]),
+        // The iq teaching's stamps and its pre-turn retrieval (2026-11-18): the teaching moved nothing against its
+        // holdout, and iq went with it.
+        ...dropAll(["iqSearchArm", "iqSearchCohort", "iqSearches", "turnContext", "turnContextMs"]),
     ],
 });
 

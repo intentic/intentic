@@ -1,89 +1,7 @@
-// node:sqlite is experimental, so a cache store holds the `SqliteDb` seam; openSqlite and immediateTransaction serve one holding it raw.
+// A node:sqlite database opened the way every store here opens one, and its writes grouped under one lock.
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { DatabaseSync, type StatementSync } from "node:sqlite";
-
-export type SqliteValue = string | number | bigint | Uint8Array | null;
-export type Row = Record<string, SqliteValue>;
-
-export interface SqliteDb {
-    all(sql: string, ...params: SqliteValue[]): Row[];
-    get(sql: string, ...params: SqliteValue[]): Row | undefined;
-    run(sql: string, ...params: SqliteValue[]): void;
-    transaction(fn: () => void): void;
-    close(): void;
-}
-
-// Dynamic scope/IN queries vary with each search, so a connection must not retain every SQL string it sees.
-const STATEMENT_CACHE_LIMIT = 128;
-const CACHEABLE_SQL_MAX_LENGTH = 16_384;
-const CACHEABLE_SQL = /^\s*(SELECT|INSERT|UPDATE|DELETE|REPLACE|WITH)\b/i;
-
-/**
- * The seam over a driver handle. `transaction` is an explicit BEGIN/COMMIT/ROLLBACK because node:sqlite has no
- * helper of its own, and a throw inside it must roll back rather than leave the connection inside a transaction.
- */
-export const wrapDb = (db: DatabaseSync): SqliteDb => {
-    const statements = new Map<string, StatementSync>();
-    const prepare = (sql: string): StatementSync => {
-        const held = statements.get(sql);
-        if (held !== undefined) {
-            // Refresh its insertion order: recurring index writes survive a stream of distinct search queries.
-            statements.delete(sql);
-            statements.set(sql, held);
-            return held;
-        }
-        const statement = db.prepare(sql);
-        // PRAGMAs can take effect during preparation; schema and transaction commands also stay uncached.
-        if (sql.length <= CACHEABLE_SQL_MAX_LENGTH && CACHEABLE_SQL.test(sql)) {
-            if (statements.size === STATEMENT_CACHE_LIMIT) {
-                statements.delete(statements.keys().next().value!);
-            }
-            statements.set(sql, statement);
-        }
-        return statement;
-    };
-    return {
-        all: (sql, ...params) => prepare(sql).all(...params) as Row[],
-        get: (sql, ...params) => prepare(sql).get(...params) as Row | undefined,
-        run: (sql, ...params) => {
-            prepare(sql).run(...params);
-        },
-        transaction: (fn) => {
-            db.exec("BEGIN");
-            try {
-                fn();
-                db.exec("COMMIT");
-            } catch (error) {
-                // SQLite ends the transaction itself on a full disk or an I/O error; a ROLLBACK then would replace that error.
-                if (db.isTransaction) {
-                    db.exec("ROLLBACK");
-                }
-                throw error;
-            }
-        },
-        close: () => {
-            db.close();
-            statements.clear();
-        },
-    };
-};
-
-/**
- * Stamps the version into a fresh database's `meta` table, and refuses one written by a different version.
- * Never a migration: these stores are caches, so the caller answers a mismatch by deleting and reopening.
- */
-export const guardSchemaVersion = (db: SqliteDb, version: string, label: string): void => {
-    const found = db.get("SELECT value FROM meta WHERE key = 'schema_version'")?.["value"];
-    if (found === undefined) {
-        db.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", version);
-        return;
-    }
-    if (found !== version) {
-        db.close();
-        throw new Error(`${label} schema ${String(found)} != ${version}`);
-    }
-};
+import { DatabaseSync } from "node:sqlite";
 
 // A database that lives and dies with its handle: the same schema and SQL, for a test that must not touch disk.
 export const IN_MEMORY = ":memory:";
@@ -106,7 +24,7 @@ export const openSqlite = (path: string, options: { readonly readOnly?: boolean 
     return db;
 };
 
-// All of `work` or none of it, unlike the seam's plain BEGIN: an open transaction is joined, so the outermost caller's covers it.
+// All of `work` or none of it: an open transaction is joined, so the outermost caller's covers it.
 export const immediateTransaction = <T>(db: DatabaseSync, work: () => T): T => {
     if (db.isTransaction) {
         return work();

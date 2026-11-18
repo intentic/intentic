@@ -26,7 +26,7 @@ import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, root at <worktreesRoot>/<id>/, nested repos
 // at <id>/<repo>/, mirroring the /work layout. Worktrees live on /history: they survive container rebuilds and stay
-// outside the /work tree walk, watcher, iq and history scopes; object stores stay shared.
+// outside the /work tree walk, watcher, search and history scopes; object stores stay shared.
 // Repos an agent clones inside its own worktree are outside diff and land.
 
 export interface ConversationWorktree {

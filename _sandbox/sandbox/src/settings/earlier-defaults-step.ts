@@ -9,7 +9,7 @@ import { newestRunDocument } from "../store/newest-run.js";
 import { defineStep } from "../store/evolution/state-steps.js";
 import { settingsDocument } from "./settings-store.js";
 
-// New sandboxes start with the privacy shield masking, the iq search teaching and the project map (2026-11-04); a sandbox
+// New sandboxes start with the privacy shield masking and the project map (2026-11-04); a sandbox
 // that ran before that keeps what it had. A file that names a key keeps its value, and one that does not reads the old
 // default (settings-store.ts pins it; a policy without `mode` reads off anyway). What neither covers is a file never
 // written, which reads as the new answer: so a sandbox whose newest-run stamp names a release from before the change,
@@ -30,13 +30,13 @@ const spelled = (value: Partial<SandboxSettings> | Partial<PrivacyShieldPolicy>)
 
 export const earlierDefaultsStep = defineStep({
     id: "earlier-defaults-2026-11",
-    describe: "writes down the privacy shield, iq search and project map defaults a sandbox from before 2026-11 ran on, where it never saved them",
+    describe: "writes down the privacy shield and project map defaults a sandbox from before 2026-11 ran on, where it never saved them",
     plan: async ({ roots, read, kind }) => {
         if (!ranBefore(stampVersion(await read(join(roots.workspace, newestRunDocument.path))))) {
             return undefined;
         }
         const owed = [
-            { path: join(roots.workspace, settingsDocument.path), text: spelled({ iqSearch: false, workspaceMap: false }), change: "keeps iq search and the project map off" },
+            { path: join(roots.workspace, settingsDocument.path), text: spelled({ workspaceMap: false }), change: "keeps the project map off" },
             { path: join(roots[privacyShieldDocument.root], privacyShieldDocument.path), text: spelled({ mode: "off" }), change: "keeps the privacy shield off" },
         ];
         const writes = new Map<string, string>();

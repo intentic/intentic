@@ -1,14 +1,14 @@
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { experimentArm } from "@intentic/agent-context/experiments";
+import { isMissing } from "@intentic/base/errors";
 import type { Options } from "./features.js";
-import { isMissing } from "./runtime.js";
 
 // Which arm each session drew for each measured mechanism, and what it was sent, written once as the session opens. The
 // transcript says what the session then did; this says what it was given, and /intentic:stats joins the two.
 
 // The salts the sandbox draws with (the daemon's decide/experiments.ts), so one id draws the same arm in both.
-export const SALTS = { map: "workspace-map", iq: "iq-search" } as const;
+export const SALTS = { map: "workspace-map" } as const;
 
 export type Mechanism = keyof typeof SALTS;
 
@@ -21,13 +21,12 @@ export interface SessionRow {
     readonly project: string;
     readonly transcript?: string;
     readonly arms: Arms;
-    // What rode in: characters of the map, and whether the iq teaching went.
-    readonly sent: { readonly map?: number; readonly iq?: boolean };
+    // What rode in: characters of the map.
+    readonly sent: { readonly map?: number };
 }
 
 const MECHANISM_ON: { readonly [K in Mechanism]: (options: Options) => boolean } = {
     map: (options) => options.project_map,
-    iq: (options) => options.iq,
 };
 
 // A session is measured only while its mechanism is on and something is held out; otherwise it is simply treated.
@@ -44,9 +43,8 @@ export const armsOf = (options: Options, session: string | undefined): Arms => {
 // Whether a mechanism goes to this session: on, and not drawn into the control.
 export const sends = (options: Options, arms: Arms, mechanism: Mechanism): boolean => MECHANISM_ON[mechanism](options) && arms[mechanism] !== false;
 
-// The arms worth recording: only for a mechanism that had something to give this session. With no areas to map, or no
-// iq installed, both arms were sent the same nothing, and counting that session would compare
-// it against itself.
+// The arms worth recording: only for a mechanism that had something to give this session. With no areas to map, both
+// arms were sent the same nothing, and counting that session would compare it against itself.
 export const measuredArms = (arms: Arms, offered: { readonly [K in Mechanism]?: boolean }): Arms =>
     Object.fromEntries(Object.entries(arms).filter(([mechanism]) => offered[mechanism as Mechanism] === true));
 

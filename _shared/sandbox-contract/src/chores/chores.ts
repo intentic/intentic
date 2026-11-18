@@ -446,65 +446,6 @@ const documentation: Chore = {
     done: `Done when every package you named has a document that a newcomer could use to find the file they need, and no other file changed.`,
 };
 
-// Reports only the two shapes worth arguing about in a hotspot ranking:
-// - volatile and depended-on: a hotspot that is also a key module, every edit ripples outward.
-// - out of proportion: branching three times the median of its own ranking.
-const COMPLEXITY_MULTIPLE = 3;
-
-const median = (values: readonly number[]): number => {
-    if (values.length === 0) {
-        return 0;
-    }
-    const sorted = values.toSorted((left, right) => left - right);
-    const middle = Math.floor(sorted.length / 2);
-    return sorted.length % 2 === 0 ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2 : (sorted[middle] ?? 0);
-};
-
-const complexity: Chore = {
-    id: `complexity`,
-    title: `Simplify what everything waits on`,
-    icon: `wave-pulse`,
-    description: `Files that both churn and carry the repository, where edits are slow and ripple outward.`,
-    kind: `accruing`,
-    criterion: `A file in the hotspot ranking is also a key module, or its branching is three times the median of that ranking.`,
-    stance: `act`,
-    needs: [],
-    cadenceMs: 30 * DAY_MS,
-    assess: (context) => {
-        // A half-built index ranks whatever it has finished reading, not the repository; better to say nothing than
-        // target the wrong file.
-        if (!context.signals.indexed || context.signals.hotspots.length === 0) {
-            return undefined;
-        }
-        const keyModules = new Set(context.signals.keyModules.map((module) => module.path));
-        const middle = median(context.signals.hotspots.map((hotspot) => hotspot.complexity));
-        const found = context.signals.hotspots.filter(
-            (hotspot) => keyModules.has(hotspot.path) || hotspot.complexity >= middle * COMPLEXITY_MULTIPLE,
-        );
-        if (found.length === 0) {
-            return undefined;
-        }
-        const reason = (path: string, branches: number): string =>
-            keyModules.has(path) ? `churns and the rest of the repository imports it` : `${branches} branch points against a median of ${middle}`;
-        return {
-            headline: `${plural(found.length, `file`)} where every edit is slow and ripples outward`,
-            detail: found.map((hotspot) => `${hotspot.path}, ${hotspot.commits} commits, ${reason(hotspot.path, hotspot.complexity)}`),
-            digest: digestOf(...found.map((hotspot) => hotspot.path).toSorted()),
-            severity: `info`,
-            why:
-                `${plural(found.length, `file`)} in ${repoLabel(context.repo)} are both change magnets and structurally tangled: ` +
-                `${found.map((hotspot) => `${hotspot.path} (${hotspot.commits} commits, ${hotspot.complexity} branch points)`).join(`; `)}.`,
-        };
-    },
-    diagnosis: `A file that changes constantly and branches heavily makes every edit near it slow and easy to get wrong.`,
-    goal:
-        `Take ONE file: the worst of them, and no more. Read it first. If the rest of the repository imports it, separate the stable ` +
-        `contract from the churn: a narrow surface for importers, the volatile implementation private behind it. If it is simply ` +
-        `tangled, flatten it where it stands: edge cases as early returns, compound conditions behind named predicates, long chains as ` +
-        `lookups, and extract a unit only if a cohesive one falls out. Behaviour stays identical, and no re-export shims are left behind.`,
-    done: `Done when \`iq hotspots\` reports materially fewer branch points for that file, the checks of what it changed pass, and no importer changed meaning.`,
-};
-
 // A static table, current only as of this file's last edit; no network call. Source: nodejs/Release.
 const NODE_EOL: Readonly<Record<number, string>> = {
     16: `2023-09-11`,
@@ -937,7 +878,7 @@ const survey = ({ id, title, icon, description, diagnosis, goal, done, cadenceDa
     done,
 });
 
-// Below this a repo is too small for cross-cutting patterns to have diverged; counted in indexed files so a config-only
+// Below this a repo is too small for cross-cutting patterns to have diverged; counted in code files so a config-only
 // scaffold doesn't pass by accident.
 const PATTERNS_FLOOR = 25;
 
@@ -956,7 +897,7 @@ const patterns = survey({
     cadenceDays: 90,
     // The one cause that is a measurement, not an absence; every size-gated chore uses this same string so they group
     // together.
-    applies: (signals) => (signals.totals.files >= PATTERNS_FLOOR ? undefined : `only ${signals.totals.files} indexed files`),
+    applies: (signals) => (signals.totals.files >= PATTERNS_FLOOR ? undefined : `only ${signals.totals.files} code files`),
 });
 
 const deprecated = survey({
@@ -1051,7 +992,6 @@ const BOOK: readonly Chore[] = [
     runtime,
     dependencies,
     deadCode,
-    complexity,
     testStrength,
     bundleWeight,
     frameworkIdiom,

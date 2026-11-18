@@ -777,7 +777,7 @@ jobs:
       - run: bash _tools/scripts/ci/install-provider-clis.sh
       - run: pnpm e2e:providers
 
-  # Machine-lane suites require privileged namespaces/overlay mounts, an exec-capable /history tmpfs, browser, template and model inputs.
+  # Machine-lane suites require privileged namespaces/overlay mounts, an exec-capable /history tmpfs, browser and template inputs.
   # INTENTIC_CI_LANE=machine makes missing requirements fail here; other jobs stand down with the lane named.
   # Run only these test files because their other package suites already run in verify-core; keep workflow-policy's lane coverage intact.
   # Wait for ci-base, and require this proof before publishing sandbox images/releases.
@@ -817,23 +817,6 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
         with:
           lockfile-drift: measure
-      # The same key and paths as `images`, so each fills the cache for the other.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            .image-out/iq-models
-            .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
-      # A miss fetches exactly what prepare-image-trees.sh would, behind the same marker.
-      - name: The iq models
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ ! -f .image-out/.iq-models-complete ]; then
-            rm -rf .image-out/iq-models
-            node _search/iq-engine/scripts/fetch-model.mjs .image-out/iq-models
-            touch .image-out/.iq-models-complete
-          fi
       - name: Install Chromium
         shell: bash
         run: |
@@ -873,20 +856,15 @@ jobs:
           done
           git -C "$dir" checkout -q -B main FETCH_HEAD
           echo "INTENTIC_CANONICAL_DIR=$dir" >> "$GITHUB_ENV"
-      # The query worker runs dist/query/query-worker.js on a worker thread, which has no TypeScript loader; everything
-      # else here runs from source under bun's @intentic/src condition.
-      - run: pnpm turbo run build --filter=@intentic/iq-engine...
       # One step, every package run whatever the one before it did, so a failed run names every failure at once.
       - name: The suites this lane exists for
         shell: bash
         run: |
           set -uo pipefail
-          export IQ_MODEL_DIR="$PWD/.image-out/iq-models"
           failed=0
           pnpm --filter @intentic/sandbox exec suites src/agent/verification/watch-check.integration.test.ts src/conversations/worktrees/isolation.integration.test.ts src/conversations/worktrees/turn-sandbox.integration.test.ts src/runtimes/cursor/cursor-host.integration.test.ts src/runtimes/claude/claude-policy.integration.test.ts || failed=1
           pnpm --filter @intentic/webq exec suites src/cli.integration.test.ts || failed=1
           pnpm --filter @intentic/scaffold exec suites src/inject-template.integration.test.ts || failed=1
-          pnpm --filter @intentic/iq-engine exec suites src/query/query-worker.integration.test.ts src/verbs/natural.integration.test.ts || failed=1
           exit "$failed"
 
   # The desktop app's local face, the editor a window on a folder shows (_tools/e2e/local-face): built, then booted in
@@ -1526,19 +1504,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # The iq models (~57 MB, fetched from HuggingFace) that prepare-image-trees.sh bakes into the sandbox
-      # image's `trees` context. That script skips the download when .iq-models-complete is already there, so
-      # this cache is the whole reason the fetch happens once per change of fetch-model.mjs rather than once
-      # per pipeline. It stays an Actions cache rather than moving to /ci-cache for one reason: the directory
-      # has to land inside .image-out, and this job and `release` run CONCURRENTLY — one shared directory
-      # would need the fetch to be race-safe first.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            .image-out/iq-models
-            .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
-
       - run: bash _tools/scripts/image/prepare-image-trees.sh
       # `shell: bash` because the job's default is `sh`, where the `${VAR::N}` slice below is a Bad substitution.
       # The sandbox pushes per-arch tags (this runner is the amd64 half; images-arm64 is the other) and the
@@ -1607,13 +1572,6 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The same key and paths as `images`, so each fills the cache for the other.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            .image-out/iq-models
-            .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
       - run: bash _tools/scripts/image/prepare-image-trees.sh
       - run: PUSH=0 TAGS="dry-${GITHUB_SHA::8}" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/image/publish-images.sh
         shell: bash
@@ -1671,12 +1629,6 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            .image-out/iq-models
-            .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
       - run: pnpm install --frozen-lockfile
       - run: bash _tools/scripts/image/prepare-image-trees.sh
       - run: TAGS="latest sha-${GITHUB_SHA::8}" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/image/publish-images.sh

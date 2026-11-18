@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { pino } from "pino";
 import { sweepAgedState, sweepStateAtBoot } from "./state-janitor.js";
 
@@ -23,6 +24,23 @@ test("boot sweep empties tmp/ but keeps the directory for the next writer", asyn
 
     expect(await exists(join(root, ".intentic/local/tmp"))).toBe(true);
     expect(await readdir(join(root, ".intentic/local/tmp"))).toEqual([]);
+});
+
+// iq was removed (2026-11-18); its index, churn folds and vector cache take about 1.2 GB that nothing reads any more.
+test("boot sweep deletes the retired iq caches and leaves the cache folder's other tenants alone", async () => {
+    const root = await workspace();
+    const cache = join(root, STATE_DIR, "local", "cache");
+    await mkdir(join(cache, "iq/spool"), { recursive: true });
+    await writeFile(join(cache, "iq/index.db"), "index");
+    await mkdir(join(cache, "iq-churn"), { recursive: true });
+    for (const name of ["iq-vectors.db", "iq-vectors.db-wal", "iq-vectors.db-shm", "code-counts.db"]) {
+        await writeFile(join(cache, name), "bytes");
+    }
+    await mkdir(join(cache, "iqtool"), { recursive: true });
+
+    await sweepStateAtBoot(root, log);
+
+    expect((await readdir(cache)).toSorted()).toEqual(["code-counts.db", "iqtool"]);
 });
 
 /* THE SWEEP DELETES WHAT THE TABLE CLASSES AS DISPOSABLE, AND NOTHING ELSE. */

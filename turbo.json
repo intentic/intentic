@@ -135,10 +135,11 @@
             "dependsOn": ["^build"],
             "outputs": []
         },
+        // RG_PATH: the ripgrep the daemon's search box runs (env.config.ts `rgPath`), when it is not the `rg` on PATH.
         "dev": {
             "cache": false,
             "persistent": true,
-            "passThroughEnv": ["WORKSPACE_ROOT", "PREVIEW_PORT"]
+            "passThroughEnv": ["WORKSPACE_ROOT", "PREVIEW_PORT", "RG_PATH"]
         },
         "docker:release": {
             "dependsOn": ["build"],
@@ -303,18 +304,10 @@
             "cache": false,
             "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH", "SIGNIN_E2E_REUSE_BUILD", "SIGNIN_E2E_DATABASE_URL", "COMPAT_E2E_IMAGE"]
         },
-        "bench:retrieval": {
-            "dependsOn": ["^build", "build"],
-            "cache": false,
-            "passThroughEnv": ["IQ_MODEL_DIR", "IQ_RG_PATH"]
-        },
         "bench:agents": {
             "dependsOn": ["^build", "build"],
             "cache": false,
             "passThroughEnv": [
-                "IQ_BENCH_AGENTS",
-                "IQ_BENCH_DANGEROUS",
-                "IQ_BENCH_TRANSCRIPTS",
                 "ANTHROPIC_API_KEY",
                 "CLAUDE_CODE_OAUTH_TOKEN",
                 "OPENAI_API_KEY",

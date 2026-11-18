@@ -1,7 +1,7 @@
-import { searchCameBackEmpty, searchNoticeHooks, walksTreeWithGrep } from "./agent-search.js";
+import { searchNoticeHooks, walksTreeWithGrep } from "./agent-search.js";
 
-// These predicates are judged on the miss, not the hit: a notice firing on a filtering grep, or on an empty result that
-// was only redirected, teaches the agent to ignore the sentence.
+// The predicate is judged on the miss, not the hit: a notice firing on a filtering grep teaches the agent to ignore the
+// sentence.
 
 test("a recursive grep reading the filesystem is what earns the notice", () => {
     for (const command of [
@@ -36,26 +36,6 @@ test("a grep that is filtering, not walking, is left alone", () => {
     }
 });
 
-test("an empty ripgrep, and only a search that really did answer nothing", () => {
-    expect(searchCameBackEmpty(`rg -n "nothingHere" .`, "")).toBe(true);
-    expect(searchCameBackEmpty(`cd /work/intentic && rg -l "nothingHere"`, "")).toBe(true);
-    expect(searchCameBackEmpty(`rg "nothingHere" | head -20`, "   \n  ")).toBe(true);
-    // a hit is a hit
-    expect(searchCameBackEmpty(`rg -n "found" .`, "src/a.ts:1:found")).toBe(false);
-});
-
-test("an empty stdout that is not an empty search stays quiet", () => {
-    // redirected: the matches went to the file, not to the agent
-    expect(searchCameBackEmpty(`rg -n "found" . > /tmp/hits.txt`, "")).toBe(false);
-    // backgrounded: nothing has answered yet
-    expect(searchCameBackEmpty(`rg -n "found" . &`, "")).toBe(false);
-    // the empty belongs to some other command in the chain, not to the search
-    expect(searchCameBackEmpty(`rg -n "found" . && mkdir -p /tmp/x`, "")).toBe(false);
-    expect(searchCameBackEmpty(`mkdir -p /tmp/x`, "")).toBe(false);
-    // grep's empty is not ripgrep's: this notice is about the tool that was actually reached for
-    expect(searchCameBackEmpty(`grep -rn "nothingHere" .`, "")).toBe(false);
-});
-
 const bashCall = (command: string, response: string) =>
     ({ hook_event_name: "PostToolUse", tool_input: { command }, tool_response: { stdout: response, stderr: "" } }) as never;
 const contextOf = (result: unknown): string | undefined =>
@@ -64,7 +44,7 @@ const contextOf = (result: unknown): string | undefined =>
 // Once per turn is the whole economy here: a notice repeated many times in one turn is not amplified steering, it's the
 // reason later ones go unread.
 test("each notice is said once per turn, however many times it is earned", async () => {
-    const { PostToolUse } = searchNoticeHooks(true);
+    const { PostToolUse } = searchNoticeHooks();
     const fire = PostToolUse?.[0]?.hooks[0];
     if (fire === undefined) {
         throw new Error("expected a PostToolUse hook");
@@ -73,28 +53,4 @@ test("each notice is said once per turn, however many times it is earned", async
     expect(contextOf(first)).toContain("ripgrep");
     const second = await fire(bashCall(`grep -rn bar .`, "src/b.ts:2:bar"), undefined, { signal: new AbortController().signal });
     expect(second).toEqual({});
-});
-
-test("iq is named on an empty search only where its plugin is actually loaded", async () => {
-    const call = bashCall(`rg -n "nothingHere" .`, "");
-    const on = searchNoticeHooks(true).PostToolUse?.[0]?.hooks[0];
-    const off = searchNoticeHooks(false).PostToolUse?.[0]?.hooks[0];
-    if (on === undefined || off === undefined) {
-        throw new Error("expected a PostToolUse hook");
-    }
-    expect(contextOf(await on(call, undefined, { signal: new AbortController().signal }))).toContain("iq");
-    // Defaults off with a holdout arm; naming iq anyway would jump the gate ahead of the control group.
-    expect(await off(call, undefined, { signal: new AbortController().signal })).toEqual({});
-});
-
-// The empty result is the answer itself, not just an offered alternative: telling an agent only "try iq" rephrases the
-// same dead pattern first.
-test("the empty-search notice keeps the negative signal, not just the escape hatch", async () => {
-    const fire = searchNoticeHooks(true).PostToolUse?.[0]?.hooks[0];
-    if (fire === undefined) {
-        throw new Error("expected a PostToolUse hook");
-    }
-    const text = contextOf(await fire(bashCall(`rg -n "nothingHere" .`, ""), undefined, { signal: new AbortController().signal })) ?? "";
-    expect(text).toContain("not in the tree");
-    expect(text).toContain("do not keep");
 });

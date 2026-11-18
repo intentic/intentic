@@ -56,6 +56,9 @@ const slowSearch = (paths: readonly string[], gapMs: number) => {
             }
             return ANSWER;
         },
+        files: async () => {
+            throw new Error("a stream never asks for file names");
+        },
     };
     return { search, seen };
 };
@@ -96,6 +99,9 @@ test("a search that fails ends the stream with its error", async () => {
     const search: TextSearch = {
         find: async () => {
             throw new Error("ripgrep: something broke");
+        },
+        files: async () => {
+            throw new Error("a stream never asks for file names");
         },
     };
     const sent: WorkspaceSearchFrame[] = [];

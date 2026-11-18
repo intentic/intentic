@@ -36,12 +36,6 @@ describe("what a process is", () => {
         ["cli-proxy-api --port 8317", "translator"],
         ["node extension-backend-host.js", "extension"],
         ["tmux: server", "terminal"],
-        // pnpm encodes the path with `+`, so nothing in it reads as a directory called iq-engine.
-        [
-            "MainThread /usr/local/bin/node /opt/sandbox/node_modules/.pnpm/@intentic+iq-engine@file++++work+_search+iq-engine/node_modules/@intentic/iq-engine/dist/host/child.js",
-            "searchEngine",
-        ],
-        ["node /opt/sandbox/node_modules/@intentic/iq-engine/dist/host/child.js", "searchEngine"],
         ["cargo /usr/local/cargo/bin/cargo build --release", "toolchain"],
         ["rustc /root/.rustup/toolchains/stable/bin/rustc --crate-name server", "toolchain"],
         ["rustdoc rustdoc --test src/lib.rs", "toolchain"],

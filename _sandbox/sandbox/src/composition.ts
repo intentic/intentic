@@ -778,7 +778,6 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
                 transcriptSearch: transcriptSearchMetrics(),
                 saidIndex: sessionsSlice.saidIndexMetrics(),
                 ...conversationsParts.metrics(),
-                iq: workspaceSlice.iq.metrics(),
             }),
         }),
         ...providersSlice,

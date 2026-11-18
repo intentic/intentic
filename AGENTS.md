@@ -175,9 +175,9 @@ rules are about what a test stands the code up with, not about how it asserts.
 - Never spread a bare `Partial<T>` into a `T`-annotated literal – it tells the compiler every key might be
   supplied, so a fake missing REQUIRED members still type-checks. Split the wide seams out of the override
   type and complete them yourself (`app.test.ts`, `ServiceOverrides`).
-- Derive fixture facts, don't transcribe them – schema defaults come from `Schema.parse({})`, a golden `def`
-  anchor's line comes from the tree (`iq-bench/src/anchors.ts`). A transcribed copy decays silently and reads
-  as a hard case rather than a broken label.
+- Derive fixture facts, don't transcribe them – schema defaults come from `Schema.parse({})`, a planted defect's
+  line comes from the file it was planted in (`_sandbox/sandbox/bench/agent-tasks.ts`). A transcribed copy decays
+  silently and reads as a hard case rather than a broken label.
 - Assert on fields that exist – an assertion against a field the type does not have passes forever and proves
   nothing. This is what type-checking the tests buys; don't cast it away.
 - State the mode a test means – no-CAP_SYS_ADMIN vs namespace, image vs host checkout. A suite that reads the

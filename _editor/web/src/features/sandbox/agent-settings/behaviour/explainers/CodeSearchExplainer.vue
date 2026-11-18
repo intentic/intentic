@@ -1,17 +1,13 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import Explainer from "./Explainer.vue";
-import { ARROW, BOX, BOX_FADED, BOX_GOOD, LANE } from "../../../../../components/explainerAtoms";
+import { LANE } from "../../../../../components/explainerAtoms";
 
-// Code search, drawn: the hunt without iq against the one ranked search with it, then what each turn actually sends.
-// A request is the whole conversation so far, so the stack grows turn by turn: the map rides in the opening message and
-// every request after it, read back from the prompt cache like the rest of the history. Only the tail is new.
+// The project map, drawn: what each turn actually sends. A request is the whole conversation so far, so the stack grows
+// turn by turn: the map rides in the opening message and every request after it, read back from the prompt cache like
+// the rest of the history. Only the tail is new.
 
 const t = useT();
-// Command names, which no language translates: the hunt without iq, then the one search with it.
-const HUNT = [`grep`, `find`] as const;
-const IQ = `iq`;
 
 interface Block {
     readonly key: string;
@@ -55,30 +51,8 @@ const STACKS = Array.from({ length: TURNS }, (_, index) => ({ turn: index + 1, b
         :experience="t(`sandbox.explainers.codeSearch.experience`)"
         :tokens="t(`sandbox.explainers.codeSearch.tokens`)"
     >
-        <div class="flex flex-col gap-1">
-            <span :class="LANE">{{ t(`sandbox.explainers.codeSearch.without`) }}</span>
-            <div class="flex flex-wrap items-center gap-1">
-                <span :class="BOX_FADED"><Icon name="search" />{{ HUNT[0] }}</span>
-                <Icon name="arrow-right" :class="ARROW" />
-                <span :class="BOX_FADED"><Icon name="file" /></span>
-                <Icon name="arrow-right" :class="ARROW" />
-                <span :class="BOX_FADED"><Icon name="search" />{{ HUNT[1] }}</span>
-                <Icon name="arrow-right" :class="ARROW" />
-                <span :class="BOX_FADED"><Icon name="file" /></span>
-                <Icon name="arrow-right" :class="ARROW" />
-                <span :class="BOX_GOOD"><Icon name="check" />{{ t(`sandbox.explainers.codeSearch.rightFile`) }}</span>
-            </div>
-        </div>
-        <div class="flex flex-col gap-1">
-            <span :class="LANE">{{ t(`sandbox.explainers.codeSearch.with`) }}</span>
-            <div class="flex flex-wrap items-center gap-1">
-                <span :class="BOX"><Icon name="search" />{{ IQ }}</span>
-                <Icon name="arrow-right" :class="ARROW" />
-                <span :class="BOX_GOOD"><Icon name="check" />{{ t(`sandbox.explainers.codeSearch.rightFile`) }}</span>
-            </div>
-        </div>
         <!-- What each turn sends: the conversation so far, front first. Faded is read back from the cache; solid is new. -->
-        <div class="flex flex-col gap-1 border-t border-line-subtle pt-2">
+        <div class="flex flex-col gap-1">
             <span :class="LANE">{{ t(`sandbox.explainers.codeSearch.ridesAlong`) }}</span>
             <div class="grid grid-cols-3 items-start gap-1 text-[0.625rem] leading-tight">
                 <div v-for="stack in STACKS" :key="stack.turn" class="flex min-w-0 flex-col gap-0.5 rounded-md border border-line-subtle p-1">

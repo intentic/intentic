@@ -1,5 +1,5 @@
-# Build context for the sandbox image is the MONOREPO ROOT (for the source-copied bits: iq plugin, skills,
-# bin scripts, entrypoint, connectors). The compiled payload does NOT ride this context — prepare-image-trees.sh
+# Build context for the sandbox image is the MONOREPO ROOT (for the source-copied bits: skills, bin scripts,
+# entrypoint, connectors). The compiled payload does NOT ride this context — prepare-image-trees.sh
 # assembles it in .image-out/, which enters the build as the separate named context `trees` (its node_modules
 # and dist are needed there; the excludes below don't apply to a named context).
 .image-out

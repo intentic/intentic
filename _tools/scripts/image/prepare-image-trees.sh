@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Build the sandbox image's payload OUTSIDE Docker: compile the baked packages with turbo (warm cache —
 # in CI this replays release:verify's work instead of re-compiling the monorepo inside a cacheless container),
-# prune each to a production tree under .image-out/, and fetch the iq models once (.image-out/iq-models is
-# CI-cached keyed on the fetch script, and survives re-runs here). The Dockerfile consumes .image-out as the
-# named build context `trees`, so its own layers are pure COPYs.
+# prune each to a production tree under .image-out/, and fetch the baked dictation model once (it survives re-runs
+# here). The Dockerfile consumes .image-out as the named build context `trees`, so its own layers are pure COPYs.
 #   bash _tools/scripts/image/prepare-image-trees.sh
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
@@ -17,7 +16,7 @@ out=.image-out
 
 # Derive build filters from these payload lists: TREE deploys production dependencies; BUNDLE copies self-contained dist output.
 # Both must compile first; stale dist directories on retained runners can hide a missing build until a fresh checkout.
-# lsp/iq/ocr arrive through the sandbox dependency tree and are symlinked there, avoiding duplicate deployments.
+# lsp/ocr arrive through the sandbox dependency tree and are symlinked there, avoiding duplicate deployments.
 TREES="
 @intentic/sandbox:$out/sandbox
 @intentic/cli:$out/cli
@@ -138,15 +137,15 @@ done
 # not change keeps its digest and an update does not download it again. Two things decide that digest besides the
 # content, and both used to change from build to build: each file's mtime (when this runner happened to fetch or
 # deploy it) and the parent directories a COPY creates (`opt/`, stamped with the build's own clock). Measured between
-# 1.342.0 and 1.344.0: the speech and iq model layers held identical files and still got new digests (speech on both
-# counts, iq on `opt/` alone), ~504 MB of the ~1 GB compressed an update downloaded. So each root carries its whole path from / down, every entry at one fixed time, and --link builds the
+# 1.342.0 and 1.344.0: two model layers held identical files and still got new digests (one on both counts, the other
+# on `opt/` alone), ~504 MB of the ~1 GB compressed an update downloaded. So each root carries its whole path from / down, every entry at one fixed time, and --link builds the
 # layer apart from whatever sits under it. The image's Dockerfile splices these ABOVE the trees that change per commit,
 # because Docker's classic store re-downloads every layer above the first changed one whatever its digest.
 normalize_times() { find "$1" -exec env TZ=UTC touch -h -t 198001010000.00 {} +; }
 static_layer() { # <layer name> <directory to carry> <its path in the image>
     local root="$out/layers/$1"
     mkdir -p "$root$(dirname "$3")"
-    # Hard links where the filesystem allows them: the model dirs are hundreds of MiB, and the cached original is
+    # Hard links where the filesystem allows them: a model dir is hundreds of MiB, and the cached original is
     # what the next run reuses (only its mtimes change, which nothing reads).
     if ! cp -al "$2" "$root$3" 2>/dev/null; then
         rm -rf "$root$3"
@@ -191,21 +190,12 @@ normalize_times "$out/layers/messaging-deps"
 # payload no JS build produces, and whose glibc must be the image's rather than this machine's.
 bash _tools/scripts/image/build-netd.sh "$out/netd"
 
-# The baked embedding + reranker models (~57MB from HF). The marker sits OUTSIDE the model dir so the tree
-# COPY'd into the image stays exactly the layout fetch-model.mjs validated.
-if [ ! -f "$out/.iq-models-complete" ]; then
-    rm -rf "$out/iq-models"
-    node _search/iq-engine/scripts/fetch-model.mjs "$out/iq-models"
-    touch "$out/.iq-models-complete"
-fi
-
 # The baked dictation model (~640 MiB, image-packs/speech.Dockerfile), fetched at the revision and digests the
 # speech package pins. The script skips a file already there at its digest, so a reused trees context fetches nothing.
 if [ ! -f "$out/.speech-models-complete" ]; then
     node _sandbox/speech/scripts/fetch-speech-models.mjs "$out/speech-models" parakeet
     touch "$out/.speech-models-complete"
 fi
-static_layer iq-models "$out/iq-models" /opt/iq-models
 static_layer speech-models "$out/speech-models" /opt/speech-models
 
 # The starter site a new sandbox opens on, scaffolded by this commit's CLI and installed (_sandbox/sandbox/starter/

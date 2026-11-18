@@ -10,7 +10,7 @@ import { sharedChoreSignals } from "./chore-signals.js";
 // route: a chore run is an ordinary isolated agent turn (POST /agent). No verdicts either: the daemon only serves
 // measurements, @intentic/sandbox-contract/chores decides what's due, in the browser.
 
-// "root" is the wire id for the workspace's own repo; the iq scope and filesystem call it the empty string.
+// "root" is the wire id for the workspace's own repo; the file search and filesystem call it the empty string.
 const REPO_ROOT = "root";
 const repoDir = (repo: string): string => (repo === REPO_ROOT ? "" : repo);
 const repoId = (dir: string): string => (dir === "" ? REPO_ROOT : dir);
@@ -27,7 +27,7 @@ export const createChoresRoutes = (services: Services) => {
         list: i.list.handler(async () => {
             const asked = signals.asked();
             const cache = await services.chores.probes();
-            // Sequential, not Promise.all: fanning every repo at the resident iq engine would compete with live search.
+            // Sequential, not Promise.all: a walk per repo at once would compete with the search box's own.
             const repos = [];
             for (const repo of [REPO_ROOT, ...(await discoverRepos(services.workspace.root))]) {
                 repos.push({ repo, probes: Object.values(cache[repoDir(repo)] ?? {}), signals: await signals.of(repoDir(repo), asked) });

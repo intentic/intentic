@@ -8,7 +8,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 const { label, title, experience, tokens } = defineProps<{
-    /** The icon's accessible name: "How code search works". */
+    /** The icon's accessible name: "How the project map works". */
     label: string;
     title: string;
     /** What the reader notices in the chat. */

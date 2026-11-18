@@ -14,16 +14,14 @@ export interface AgentMount {
     // Who ships it, as the list names them.
     readonly owner: string;
     readonly pluginDir: string;
-    // Baked into the image (iq, webq, a baked extension's plugin): nothing in /work changes it, so its hooks are outside
+    // Baked into the image (webq, a baked extension's plugin): nothing in /work changes it, so its hooks are outside
     // the approval the settings-hook gate asks for (guard/settings-hooks.ts says why the rest are not).
     readonly shipped: boolean;
 }
 
-export type MountHost = ExtensionHost & { readonly config: Pick<Services["config"], "iqPluginDir" | "webqPluginDir"> };
+export type MountHost = ExtensionHost & { readonly config: Pick<Services["config"], "webqPluginDir"> };
 
 export interface MountChoice {
-    // Whether the iq teaching loads: a turn's experiment arm, or the sandbox's own setting for the list.
-    readonly iqLoaded: boolean;
     // The plugin capabilities that mount: those granted to a turn, or every one the list may show.
     readonly capabilities: readonly Capability[];
     // Whose kit mounts, when its manifest exists: the persona a turn wears, or every persona for the list.
@@ -35,7 +33,7 @@ export interface MountChoice {
 
 const baked = (id: string, owner: string, pluginDir: string): AgentMount => ({ origin: "builtin", id, owner, pluginDir, shipped: true });
 
-// In load order: iq ahead of any user plugin so code search prefers it, webq ungated as its CLI is always on PATH, a kit last.
+// In load order: webq first, ungated as its CLI is always on PATH, then the owner's plugins and extensions, a kit last.
 export const agentMounts = async (host: MountHost, choice: MountChoice): Promise<AgentMount[]> => {
     const root = host.workspace.root;
     const [extensions, kits] = await Promise.all([
@@ -43,7 +41,6 @@ export const agentMounts = async (host: MountHost, choice: MountChoice): Promise
         Promise.all(choice.personas.map(async (persona) => ({ persona, dir: await personaKitPlugin(root, persona.id) }))),
     ]);
     return [
-        ...(choice.iqLoaded && host.config.iqPluginDir !== "" ? [baked("iq", "Code search", host.config.iqPluginDir)] : []),
         ...(host.config.webqPluginDir !== "" ? [baked("webq", "Web pages", host.config.webqPluginDir)] : []),
         ...pluginDirsOf(choice.capabilities, root).map(({ id, dir }): AgentMount => ({ origin: "plugin", id, owner: id, pluginDir: dir, shipped: false })),
         ...extensions.flatMap(({ id, name, dir, source }): AgentMount[] =>

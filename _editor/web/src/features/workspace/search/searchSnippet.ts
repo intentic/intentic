@@ -10,7 +10,7 @@ import { ref } from "vue";
 // The visible slice of a hit line, and where its matches sit inside it.
 export interface SnippetWindow {
     readonly text: string;
-    // Offsets into `text`, in order; empty when a semantic/definition hit matched the whole line, not a span.
+    // Offsets into `text`, in order; empty when a hit matched the whole line, not a span.
     readonly spans: readonly WorkspaceSearchSpan[];
     // Whether text was cut from the front to bring the match into view; shown as a leading ellipsis.
     readonly elided: boolean;

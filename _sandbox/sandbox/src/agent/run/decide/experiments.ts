@@ -3,7 +3,6 @@ import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/setting
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { opt } from "../../../opt.js";
-import type { TurnContextOutcome, TurnContextSkip } from "../turn/turn-context.js";
 import type { TurnExperimentStamps } from "../turn/turn-plan.js";
 
 // The per-turn A/B experiments, one declaration each: the salt a conversation's arm is drawn with, the settings that
@@ -13,11 +12,8 @@ import type { TurnExperimentStamps } from "../turn/turn-plan.js";
 
 // What one turn measured of each experiment: the only input its stamps are written from.
 export interface ExperimentReadings {
-    readonly iqSearch: { readonly arm: boolean | undefined; readonly cohort: string | undefined };
     // The notes as the turn sends them, trimmed: the map's size is read off what was composed, not the decision to send.
     readonly workspaceMap: { readonly arm: boolean | undefined; readonly notes: readonly TurnNote[] | undefined };
-    // Undefined when retrieval was never attempted, which is a different fact from a lookup that skipped.
-    readonly turnContext: TurnContextOutcome | undefined;
     // Undefined where the turn is not one the switch reaches (decide/turn-premise.ts toolSearchReaches).
     readonly toolSearch: { readonly arm: boolean | undefined };
     readonly stablePrompt: { readonly arm: boolean | undefined };
@@ -38,21 +34,11 @@ interface Experiment<Reading> {
 // comparison: the unstamped map-or-none rows, whose holdout share moved between 10% and 54% while the population moved
 // under it; the compact-vs-full rows (2026-10-06 to 10-12), whose arm meant another thing; and the first "map-vs-none"
 // day (2026-10-12 to 10-13), which read subagents' calls as the main agent's (999 calls before the edited file where its
-// own agent took 97) and drew spawned children an arm.
-export const MAP_COMPARISON = "map-vs-none-2";
-
-// Annotated, not inferred: a nested ternary over a literal and a union widens to `string`.
-const deliveryOf = (outcome: TurnContextOutcome | undefined): TurnContextSkip | "delivered" | undefined =>
-    outcome === undefined ? undefined : "note" in outcome ? "delivered" : outcome.skipped;
+// own agent took 97) and drew spawned children an arm; and the "map-vs-none-2" rows (2026-10-13 to 11-18), whose map
+// pointed at `iq files` in a sandbox where half the conversations were taught iq.
+export const MAP_COMPARISON = "map-vs-none-3";
 
 export const EXPERIMENTS: { readonly [K in keyof ExperimentReadings]: Experiment<ExperimentReadings[K]> } = {
-    iqSearch: {
-        salt: "iq-search",
-        on: (settings) => settings.iqSearch,
-        holdout: (settings) => settings.iqSearchHoldout,
-        // A cohort only beside its arm: on an unmeasured turn it names a revision nothing was compared against.
-        stamps: ({ arm, cohort }) => ({ ...opt("iqSearchArm", arm), ...opt("iqSearchCohort", arm === undefined ? undefined : cohort) }),
-    },
     // The map (the arm) against none (the holdout). Its own salt and cohort, since both comparisons before it stamped
     // the same arm field.
     workspaceMap: {
@@ -64,13 +50,6 @@ export const EXPERIMENTS: { readonly [K in keyof ExperimentReadings]: Experiment
             ...opt("mapCohort", arm === undefined ? undefined : MAP_COMPARISON),
             ...opt("mapChars", notes?.find((note) => note.title === WORKSPACE_MAP_NOTE_TITLE)?.text.length),
         }),
-    },
-    // Also behind env.config.ts iqTurnContext, and holding nobody out until re-measured, so it stamps delivery, not assignment.
-    turnContext: {
-        salt: "turn-context",
-        on: (settings) => settings.iqSearch,
-        holdout: () => 0,
-        stamps: (outcome) => ({ ...opt("turnContext", deliveryOf(outcome)), ...opt("turnContextMs", outcome?.durationMs) }),
     },
     // Connected tools' schemas loaded on demand (the arm) against all of them sent with every request (the holdout).
     toolSearch: {

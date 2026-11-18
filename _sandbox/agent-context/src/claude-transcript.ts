@@ -2,8 +2,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { isMissing } from "@intentic/base/errors";
 import { parseJsonOr } from "@intentic/base/json";
-import { promptOf as kindOfPrompt } from "@intentic/iq/transcript";
 import { displayNameOf, toolCategoryOf, toolPathsUnder, toolTarget } from "./tool-calls.js";
+import { promptOf as kindOfPrompt } from "./transcript-lines.js";
 import type { ToolCallFacts } from "./turn-metrics.js";
 
 // A Claude Code session transcript (`~/.claude/projects/<project>/<session>.jsonl`), read back as turns of tool calls:
@@ -98,8 +98,8 @@ const parse = (raw: string): Line | undefined => {
 
 // A prompt a person sent, or a slash command they typed, as opposed to a user line carrying tool results, a caveat the
 // CLI inserted, a compaction summary, a local command's echo or the CLI's note of an interruption: the only turn
-// boundary this format has. Which line is which is @intentic/iq's classification, the one its recall reads too; a
-// prompt that carried only images still starts a turn, with "" as its text.
+// boundary this format has. Which line is which is transcript-lines' classification; a prompt that carried only images
+// still starts a turn, with "" as its text.
 const promptOf = (line: Line): string | undefined => {
     const prompt = kindOfPrompt(line as Readonly<Record<string, unknown>>);
     return prompt?.kind === "typed" || prompt?.kind === "command" ? prompt.text : undefined;

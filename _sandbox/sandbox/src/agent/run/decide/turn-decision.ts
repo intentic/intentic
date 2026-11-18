@@ -159,11 +159,9 @@ const sharedContext = (
     // The merged rule list travels with the settings, so no reader asks a second question to learn what stands.
     settings,
     conversationTurns: runtime.conversationTurns,
-    iqSearchEnabled: premise.iqSearchEnabled,
     ...opt("toolSearch", premise.toolSearch),
     ...opt("compacted", compactedSinceLastTurn(facts.entry, runtime.conversationTurns) ? true : undefined),
     ...opt("contextTrim", trim),
-    ...opt("iqSearchCohort", facts.iqTeaching?.cohort),
 });
 
 // The turn index only for a turn in a conversation; the map's size off the notes as they will be sent, trimmed. The
@@ -175,9 +173,7 @@ const experimentsOf = (
     sent: readonly TurnNote[] | undefined,
 ): TurnExperimentStamps =>
     experimentStamps(input.conversationId === undefined ? undefined : runtime.conversationTurns, {
-        iqSearch: { arm: premise.arms.search, cohort: facts.iqTeaching?.cohort },
         workspaceMap: { arm: premise.arms.map, notes: sent },
-        turnContext: facts.turnContext,
         toolSearch: { arm: premise.arms.toolSearch },
         stablePrompt: { arm: premise.arms.stablePrompt },
         coldTrim: undefined,

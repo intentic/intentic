@@ -1,13 +1,12 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { agentCommand, toolResultText } from "../providers/agent-installs.js";
+import { agentCommand } from "../providers/agent-installs.js";
 
-// Two PostToolUse-on-Bash notices, said once per turn, advisory only: the command already ran and its result stands. A
+// A PostToolUse-on-Bash notice, said once per turn, advisory only: the command already ran and its result stands. A
 // standing prompt instruction decays as context grows (as browser-artifacts.ts found for screenshot paths), so a hook
 // is what actually holds. Never rewrites the command: GNU grep's `\|` and ripgrep's differ, so a silent translation
 // could return wrong results with no error.
 
-// Cheap filters: a grep left of a pipe or with no -r is correct as written; only recursive is worth a word.
-const FILTERS = new Set(["head", "tail", "wc", "sort", "uniq", "cat", "cut", "awk", "sed", "tr", "jq", "grep", "rg"]);
+// A grep left of a pipe or with no -r is correct as written; only recursive is worth a word.
 
 const executableOf = (segment: string): string | undefined =>
     segment
@@ -44,57 +43,16 @@ export const walksTreeWithGrep = (command: string): boolean =>
             !segment.pipedInto && executableOf(segment.text) === "grep" && /(?:^|\s)-(?:-recursive\b|\w*[rR])/.test(unquoted(segment.text)),
     );
 
-// A search whose answer was really nothing: conservative on purpose, since a redirected, backgrounded, or chained
-// command can print nothing while the search matched plenty.
-export const searchCameBackEmpty = (command: string, result: string): boolean => {
-    if (result.trim() !== "") {
-        return false;
-    }
-    const unwrapped = agentCommand(command);
-    if (/[>&]/.test(unwrapped.replace(/&&/g, ""))) {
-        return false;
-    }
-    const segments = segmentsOf(unwrapped);
-    let sawSearch = false;
-    for (const segment of segments) {
-        const executable = executableOf(segment.text);
-        if (executable === undefined) {
-            return false;
-        }
-        // `cd somewhere && rg …` is the ordinary shape and the `cd` prints nothing either way.
-        if (executable === "cd" && !segment.pipedInto) {
-            continue;
-        }
-        if (executable === "rg" && !segment.pipedInto) {
-            sawSearch = true;
-            continue;
-        }
-        if (segment.pipedInto && FILTERS.has(executable)) {
-            continue;
-        }
-        return false;
-    }
-    return sawSearch;
-};
-
 const RIPGREP_NOTICE =
     "That `grep` walked the repository. `rg` (ripgrep) is installed here and answers the same search about 30× " +
     "faster, returning roughly a third of the bytes, because it skips node_modules, dist and binaries without " +
     "being told to. Use it for the rest of this turn. One gotcha when you translate: GNU grep reads `\\|` as " +
     "alternation and ripgrep reads it as a literal pipe, so write `|`, and `--include=*.ts` becomes `-g '*.ts'`.";
 
-// Empty is itself an answer; automatic substitution would destroy that signal, since iq never returns nothing.
-const IQ_NOTICE =
-    "`rg` matched nothing, and that is itself an answer: this literal text is not in the tree, so do not keep " +
-    "rephrasing the same pattern. If what you actually want is a CONCEPT rather than a string (\"where is X " +
-    "decided\", \"how does Y work\"), `iq \"<your question>\"` searches by meaning and can find what no pattern " +
-    "expresses. If you did mean the literal text, take the absence and move on.";
-
 // Each flag is scoped once per turn (closure created per baseOptions), like the memories in agent-deps.ts; a later turn
 // has drifted enough to be worth telling again.
-export const searchNoticeHooks = (iqAvailable: boolean): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
+export const searchNoticeHooks = (): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     let toldRipgrep = false;
-    let toldIq = false;
     return {
         PostToolUse: [
             {
@@ -111,12 +69,6 @@ export const searchNoticeHooks = (iqAvailable: boolean): Partial<Record<HookEven
                         if (!toldRipgrep && walksTreeWithGrep(command)) {
                             toldRipgrep = true;
                             return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: RIPGREP_NOTICE } };
-                        }
-                        // Named only where iq is loaded: the setting defaults off with a holdout arm this would
-                        // otherwise jump.
-                        if (iqAvailable && !toldIq && searchCameBackEmpty(command, toolResultText(input.tool_response))) {
-                            toldIq = true;
-                            return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: IQ_NOTICE } };
                         }
                         return {};
                     },

@@ -36,8 +36,6 @@ export interface ShadowKeeperDeps {
     /** The sandbox setting; read before every sweep and every batch, so turning it off stops the work in hand. */
     readonly enabled: () => Promise<boolean>;
     readonly logger: Pick<Logger, "info" | "warn">;
-    /** Shadows were written or removed: iq re-indexes them (the watcher does not look under .intentic/local/cache). */
-    readonly onShadowsChanged: () => void;
     readonly exec?: ExecFn;
     readonly limits?: { readonly maxDocuments?: number; readonly maxBytes?: number; readonly debounceMs?: number };
 }
@@ -183,11 +181,9 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
         }
     };
 
-    // One batch through fileq; answers whether any shadow moved.
-    const renderBatch = async (batch: readonly string[]): Promise<boolean> => {
-        let moved = false;
+    // One batch through fileq; a file it refused is remembered so it is not asked again until it changes.
+    const renderBatch = async (batch: readonly string[]): Promise<void> => {
         for (const outcome of outcomesOf(await runFileq(batch))) {
-            moved ||= outcome.kind === "derived" || outcome.kind === "fresh" || outcome.kind === "removed";
             if (outcome.kind !== "skipped" || outcome.relPath === undefined || outcome.reason === "missing") {
                 continue;
             }
@@ -196,7 +192,6 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
                 refused.set(outcome.relPath, statKey(source));
             }
         }
-        return moved;
     };
 
     const drain = async (): Promise<void> => {
@@ -206,9 +201,7 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
                 queue.delete(relPath);
             }
             try {
-                if (await renderBatch(batch)) {
-                    deps.onShadowsChanged();
-                }
+                await renderBatch(batch);
             } catch (error) {
                 deps.logger.warn({ err: error }, "shadow keeper: fileq is not on PATH, so no document gets a shadow in the background");
                 stopped = true;
@@ -296,9 +289,6 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
         }
         stamps = read;
         const removed = await pruneOrphans();
-        if (removed > 0) {
-            deps.onShadowsChanged();
-        }
         const documents = await findDocuments();
         if (documents.length > maxDocuments) {
             deps.logger.warn(
@@ -324,18 +314,14 @@ export const createShadowKeeper = (deps: ShadowKeeperDeps): ShadowKeeper => {
         if (!(await deps.enabled())) {
             return;
         }
-        let removed = false;
         const render: string[] = [];
         for (const relPath of paths) {
             const presence = await presenceOf(join(deps.root, relPath));
             if (presence.gone) {
-                removed = (await removeShadow(relPath)) || removed;
+                await removeShadow(relPath);
             } else if (presence.isFile && documentFormatOf(relPath) !== undefined && (await needsRender(relPath))) {
                 render.push(relPath);
             }
-        }
-        if (removed) {
-            deps.onShadowsChanged();
         }
         await enqueue(render);
     };

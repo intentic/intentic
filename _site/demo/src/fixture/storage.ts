@@ -118,12 +118,9 @@ const DEMO_DISK: Readonly<Partial<Record<StorageCategoryId, DemoCategory>>> = {
         ],
     },
     indexes: {
-        bytes: 0.7 * GIB,
-        files: 300,
-        items: [
-            [`${STATE}/local/cache/iq`, 0.45 * GIB],
-            [`${HISTORY_ROOT}/said-index`, 0.2 * GIB],
-        ],
+        bytes: 0.25 * GIB,
+        files: 120,
+        items: [[`${HISTORY_ROOT}/said-index`, 0.2 * GIB]],
     },
     logs: {
         bytes: 250 * MIB,

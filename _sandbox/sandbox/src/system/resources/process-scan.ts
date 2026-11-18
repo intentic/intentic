@@ -122,8 +122,6 @@ const PROGRAMS = [
     "llama-server",
     "ollama",
     "tsserver",
-    "iq-engine",
-    "iq",
     "git",
     "tmux",
     "postgres",
@@ -181,8 +179,6 @@ const BROWSER = /chrom(e|ium)|firefox|webkit|playwright|browser-mcp|browser_serv
 const LANGUAGE_SERVER =
     /typescript-language-server|tsserver|rust-analyzer|pyright|pylsp|gopls|clangd|jdtls|solargraph|intelephense|language-server|lsp-daemon/u;
 const OWN_LANGUAGE_SERVER = /@intentic[/]lsp|_search[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)|(^|[ /])(?:tsgo|tsc)([ .]|$)/u;
-// Its own role, not `other`: a long-lived index host with a heap cap of its own, whose growth `other` would hide.
-const SEARCH_ENGINE = /iq-engine|(^|[ /])iq([ /]|$)/u;
 const TRANSLATOR = /cli-proxy-api|endpoint-translator|translator-proxy/u;
 const EXTENSION = /extension-backend|extension-host|backend-host-main|backend-supervisor/u;
 const GIT = /git.*fork.*broker|(^|[ /])git([ /]|$)/u;
@@ -196,7 +192,6 @@ const ROLE_RULES: readonly (readonly [ProcessRole, (value: string) => boolean])[
     ["localModel", (value) => LOCAL_MODEL.test(value)],
     ["toolchain", isToolchain],
     ["languageServer", (value) => LANGUAGE_SERVER.test(value) || OWN_LANGUAGE_SERVER.test(value)],
-    ["searchEngine", (value) => SEARCH_ENGINE.test(value)],
     ["translator", (value) => TRANSLATOR.test(value)],
     ["extension", (value) => EXTENSION.test(value)],
     ["git", (value) => GIT.test(value)],

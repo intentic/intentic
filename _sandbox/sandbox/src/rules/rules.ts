@@ -10,9 +10,9 @@ import type { Rule, RuleCondition, RuleMoment, RuleOutcome } from "@intentic/san
 // can reorder.
 const decidesAt = (moment: RuleMoment): boolean => moment === "agent.finished";
 
-// A rule's path glob as the contract's one matcher reads it, after the reading rules have always had (ripgrep's -g, as
-// `iq` takes a scope): a glob without a slash names a file at any depth, a leading `./` is the root, and a trailing `/`
-// is the directory and everything under it.
+// A rule's path glob as the contract's one matcher reads it, after the reading rules have always had (ripgrep's -g, as the
+// search box takes a scope): a glob without a slash names a file at any depth, a leading `./` is the root, and a trailing
+// `/` is the directory and everything under it.
 const pathMatcher = (glob: string): ((path: string) => boolean) => {
     const rooted = glob.includes("/") ? glob.replace(/^\.\//, "") : `**/${glob}`;
     return globMatcher(rooted.endsWith("/") ? `${rooted}**` : rooted);

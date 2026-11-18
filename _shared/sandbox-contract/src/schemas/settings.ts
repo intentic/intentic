@@ -1,6 +1,6 @@
 // Per-sandbox agent settings (.intentic/config/settings.json) and the repository checks they adopt.
 import { z } from "zod";
-import { claudeExperimentSettings, iqSearchSettings } from "./settings-experiments.js";
+import { claudeExperimentSettings } from "./settings-experiments.js";
 import { CommandJudgeModeSchema, ProjectInstallModeSchema } from "../policy/safety-policy.js";
 import { MODEL_ROLES, ModelRoleSchema } from "../models/model-roles.js";
 import { MODEL_SETUP_ID, ModelSetupSchema } from "../models/model-setups.js";
@@ -309,7 +309,7 @@ export const SandboxSettingsSchema = z.object({
         .boolean()
         .default(true)
         .describe(
-            "Keep the text of every document in the workspace (pdf, Word, OpenDocument, spreadsheets, presentations, epub, and scans where OCR is installed) ready to search. In the background, one low-priority process at a time, each document is rendered to text when it appears or changes, so `rg` and iq find what documents say under their own paths, cited by page. Off, nothing renders until someone opens a document, and searches skip them.",
+            "Keep the text of every document in the workspace (pdf, Word, OpenDocument, spreadsheets, presentations, epub, and scans where OCR is installed) ready to search. In the background, one low-priority process at a time, each document is rendered to text when it appears or changes, so `rg` finds what documents say under their own paths, cited by page. Off, nothing renders until someone opens a document, and searches skip them.",
         ),
     // Whether the daemon tells its host it is unneeded (system/quiet-watch.ts): off, the work signal carries no
     // `quietSince` and says `keepAwake`, so the machine's keeper never puts it to sleep (ic's `sandbox sleep`). Only a
@@ -343,11 +343,11 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Your own instructions, used only when the mode above says custom. Then it is the whole of them: both built-in bases go, and so does everything this product would otherwise add, including the guidance the chat's own cards are driven by. That is the price of total control.",
         ),
-    ...iqSearchSettings,
     ...claudeExperimentSettings,
     // Rooted at the run's own starting folder (a persona's, an isolated conversation's worktree), not the workspace
     // root — it maps the project containing that folder. On for new sandboxes from 2026-11-04, kept off for older ones
-    // as iqSearch is (settings-experiments.ts).
+    // (the daemon's settings-store.ts pins the old default, settings/earlier-defaults-step.ts writes it down where never
+    // saved).
     workspaceMap: z
         .boolean()
         .default(true)

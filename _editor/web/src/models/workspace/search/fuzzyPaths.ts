@@ -1,5 +1,6 @@
 // The client half of quick-open. The scorer and the ranking order are `@intentic/base/fuzzy`, the same ones the
-// sandbox's iq `files` engine answers with, so typing the same letters here and there puts the same file first.
+// daemon's `files` search ranks ripgrep's file list with, so typing the same letters here and there puts the same file
+// first.
 import { fuzzyRanker } from "@intentic/base/fuzzy";
 
 /**

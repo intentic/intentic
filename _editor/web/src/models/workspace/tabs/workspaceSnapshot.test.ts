@@ -90,20 +90,34 @@ describe(`the editor's open tabs`, () => {
     it(`restores every kind that can be reopened from what it names`, () => {
         session.set(
             TABS_KEY,
-            strip(`health:web`, [
+            strip(`dir:`, [
                 { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
                 { kind: `directory`, id: `dir:`, dir: `` },
+            ]),
+        );
+
+        const restored = readTabStrip(`sb1`);
+        expect(restored?.active).toBe(`dir:`);
+        expect(restored?.tabs).toEqual([
+            { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
+            { kind: `directory`, id: `dir:`, dir: `` },
+        ]);
+    });
+
+    // Older editors had a Code Health tab per repository. The view is gone, so a stored one is skipped like any
+    // unreadable entry, and the focus it held goes with it.
+    it(`drops a Code Health tab an older editor stored`, () => {
+        session.set(
+            TABS_KEY,
+            strip(`health:web`, [
+                { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
                 { kind: `health`, id: `health:web`, repo: `web` },
             ]),
         );
 
         const restored = readTabStrip(`sb1`);
-        expect(restored?.active).toBe(`health:web`);
-        expect(restored?.tabs).toEqual([
-            { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
-            { kind: `directory`, id: `dir:`, dir: `` },
-            { kind: `health`, id: `health:web`, repo: `web` },
-        ]);
+        expect(restored?.tabs.map((tab) => tab.id)).toEqual([`src/main.ts`]);
+        expect(restored?.active).toBeNull();
     });
 
     // A diff carries both sides of a file as content, and shows a comparison the agent has likely moved past by
@@ -136,7 +150,7 @@ describe(`the editor's open tabs`, () => {
             TABS_KEY,
             strip(`src/main.ts`, [
                 { kind: `file`, id: `no-path` },
-                { kind: `health`, id: `health:` },
+                { kind: `directory`, id: `dir:` },
                 { kind: `nonsense`, id: `x` },
                 { id: `kindless` },
                 { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },

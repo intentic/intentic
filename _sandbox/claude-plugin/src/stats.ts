@@ -13,10 +13,10 @@ import {
 } from "@intentic/agent-context/arm-stats";
 import { readClaudeSession } from "@intentic/agent-context/claude-transcript";
 import { createTurnMetrics } from "@intentic/agent-context/turn-metrics";
+import { isMissing } from "@intentic/base/errors";
 import { parseStatsFile, summarizeStats, type SavingsSummary, type StatRow } from "@intentic/output-cleaners/stats";
 import { loadOptions, OPTIONS, optionEnvName, type OptionKey, readOptions, type Options } from "./features.js";
 import { outputDir } from "./post-bash.js";
-import { isMissing } from "./runtime.js";
 import { readSessions, type SessionRow } from "./sessions.js";
 
 // /intentic:stats: what each mechanism saved, read off the plugin's own ledgers and the sessions' transcripts. The
@@ -91,7 +91,6 @@ const cleanerLines = (summary: SavingsSummary, options: Options): string[] => {
 
 interface PluginTurn extends MeasuredTurn {
     readonly mapArm?: boolean | undefined;
-    readonly iqArm?: boolean | undefined;
 }
 
 // A recorded session's turns, scored by the same ledger the sandbox scores a live turn with.
@@ -118,7 +117,6 @@ export const turnsOf = (row: SessionRow): PluginTurn[] => {
             turnIndex: turn.index,
             ...metrics.reading(edited),
             mapArm: row.arms.map,
-            iqArm: row.arms.iq,
         };
     });
 };
@@ -130,7 +128,6 @@ const DESIGNS: readonly { readonly title: string; readonly option: keyof Options
         design: { ...MECHANISMS.map, arm: (turn) => turn.mapArm, cohort: () => undefined },
         reads: "opening turns that listed directories",
     },
-    { title: "iq teaching", option: "iq", design: { ...MECHANISMS.search, arm: (turn) => turn.iqArm, cohort: () => undefined }, reads: "search calls per turn" },
 ];
 
 // Said the way the sandbox's savings chart says it: the change once the margin excludes zero, the margin in percentage

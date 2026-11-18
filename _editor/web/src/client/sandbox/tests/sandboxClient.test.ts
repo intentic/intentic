@@ -111,8 +111,8 @@ it("blames the image for a 400 on a route whose shape the daemon disagrees about
 it("passes an ordinary 400 through with the daemon's own words", async () => {
     // Route present, shapes agree: the daemon's own message explains the refusal best.
     setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...sandboxRouteFingerprints() });
-    const error = await sandboxError(json(400, { message: `iqSearchHoldout must be between 0 and 1` }), { method: `POST`, path: `/settings` });
-    expect(error.message).toBe(`iqSearchHoldout must be between 0 and 1`);
+    const error = await sandboxError(json(400, { message: `workspaceMapHoldout must be between 0 and 1` }), { method: `POST`, path: `/settings` });
+    expect(error.message).toBe(`workspaceMapHoldout must be between 0 and 1`);
 });
 
 // A path the contract does not declare has no route name, so no drift reading: its refusal is the daemon's own.

@@ -46,16 +46,13 @@ const tabLabel = (tab: WorkspaceTab): string => {
     if (tab.kind === `document`) {
         return basename(tab.path);
     }
-    return tab.kind === `health` ? basename(tab.repo) : basename(tab.path);
+    return basename(tab.path);
 };
 // A card naming what kind of surface a tab is and what it is of. A file reaches it only as the preview tab: a kept one
 // hovers with its bare path.
 const tabSubject = (tab: WorkspaceTab): Tip => {
     if (tab.kind === `directory`) {
         return { title: t(`workspace.fileTabs.management`), rows: [{ label: t(`workspace.fileTabs.folder`), value: tab.dir }] };
-    }
-    if (tab.kind === `health`) {
-        return { title: t(`workspace.fileTabs.health`), rows: [{ label: t(`workspace.fileTabs.repo`), value: tab.repo }] };
     }
     if (tab.kind === `document`) {
         return { title: tab.title, rows: [{ label: t(`workspace.fileTabs.folder`), value: tab.path }] };
@@ -209,7 +206,6 @@ watch(
                     :class="explorerColorClass(basename(tab.path), 'file', false)"
                 />
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
-                <Icon name="wave-pulse" v-else-if="tab.kind === 'health'" class="text-2xs text-link" />
                 <!-- Provider's own glyph, an open string; an unknown name falls back in the icon set rather than erroring. -->
                 <Icon v-else-if="tab.kind === 'document'" :name="tab.icon as IconName" class="text-2xs text-link" />
                 <ChangeStatusMark v-else :status="tab.status" />

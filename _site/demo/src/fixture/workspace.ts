@@ -984,8 +984,7 @@ export const sessions = (now: number): SessionSummary[] => {
     ];
 };
 
-// Fixture's answer to GET /workspace/search: a real text search (literal or regex, case rules, per-line spans). Smart
-// scope can't rank by meaning, so it answers with the same matcher and a note.
+// Fixture's answer to GET /workspace/search: a real text search (literal or regex, case rules, per-line spans).
 // Searches files with a real body, ignored paths excluded — the same two limits the daemon's search has, so a hit here
 // is a hit there too.
 const searchablePaths = (include: string, dir: string): string[] => {
@@ -1013,7 +1012,6 @@ const matcher = (query: string, options: SearchOptions): { regex: RegExp; note?:
 };
 
 interface SearchOptions {
-    readonly smart: boolean;
     readonly literal: boolean;
     readonly word: boolean;
     readonly caseSensitive: boolean;
@@ -1044,15 +1042,17 @@ export const searchWorkspace = (query: string, options: SearchOptions): Workspac
             total += hits.length;
         }
     }
-    const smartNote = `This recording answers Smart like Text: ranking by meaning needs your own sandbox's index.`;
-    return {
-        mode: options.smart ? `q` : `find`,
+    const result: WorkspaceSearchResult = {
+        mode: `find`,
         total,
         files: groups.length,
         shown: total,
         groups,
         freshness: { state: `fresh`, ageMs: 0 },
         truncated: false,
-        ...(options.smart ? { note: smartNote } : note !== undefined ? { note } : {}),
     };
+    if (note !== undefined) {
+        result.note = note;
+    }
+    return result;
 };

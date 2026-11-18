@@ -250,7 +250,7 @@ describe(`what it draws`, () => {
     }, 30_000);
 
     test(`a table is drawn as a table, its pipes markers like any other markup`, () => {
-        const source = "| Command | Does |\n| --- | --- |\n| `iq` | searches |";
+        const source = "| Command | Does |\n| --- | --- |\n| `rg` | searches |";
         const element = buildBlockElement(source);
         expect(element.tagName).toBe(`TABLE`);
         expect([...element.querySelectorAll(`th`)]).toHaveLength(2);

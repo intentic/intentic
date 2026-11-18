@@ -69,14 +69,10 @@ export const UsageTurnSchema = z.object({
     // with `costUsd: 0, costKnown: false` rather than silently claiming they were free.
     costKnown: z.boolean().optional().describe("False when the vendor did not report a cost and the recorded zero is a placeholder, not a price. Absent or true means the cost is real."),
     durationMs: z.number().describe("How long it took, in milliseconds."),
-    // Arm of the search-teaching experiment; stable per conversation. Absent means unmeasured.
-    iqSearchArm: z.boolean().optional(),
-    // Hash of the plugin nudge and skill body for this arm; recorded on control turns too, for report pairing.
-    iqSearchCohort: z.string().optional(),
-    // Every tool call that searched, including CLI searches like `iq q`; absent means unmeasured, not zero.
+    // Every tool call that searched, including CLI searches like `rg`; absent means unmeasured, not zero. Rows written
+    // before 2026-11-18 can also carry the iq teaching's arm, cohort and uptake (iqSearchArm, iqSearchCohort,
+    // iqSearches) and its pre-turn retrieval (turnContext, turnContextMs), which nothing reads now that iq is gone.
     searchCalls: z.number().optional(),
-    // Of searchCalls, the ones that ran iq: the search teaching's uptake. Absent on rows written before 2026-10-19.
-    iqSearches: z.number().optional(),
     // Search calls before the first file touch; absent as searchCalls; a turn touching nothing counts them all.
     openingSearches: z.number().optional(),
     // Directory listings (ls, tree, LS tool) before the turn's first file touch, same window as openingSearches.
@@ -91,7 +87,8 @@ export const UsageTurnSchema = z.object({
     mapChars: z.number().optional(),
     // Which comparison `mapArm` belongs to: absent on the first map-or-none rows; "compact-vs-full" from 2026-10-06 to
     // 10-12, when the arm was the compact map and the holdout the full one; "map-vs-none" for 2026-10-12 to 10-13, the map
-    // against none; "map-vs-none-2" since, the same with readings off the main agent's calls and spawned children out.
+    // against none; "map-vs-none-2" for 2026-10-13 to 11-18, the same with readings off the main agent's calls and spawned
+    // children out; "map-vs-none-3" since, the map pointing at `rg --files` once iq was gone.
     mapCohort: z.string().optional(),
     // Arm of the tool-search experiment, stable per conversation: true loads connected tools' schemas on demand, false
     // sends them all with every request. Absent where the turn was not a native Claude one on the Claude Code loop.
@@ -105,12 +102,6 @@ export const UsageTurnSchema = z.object({
     // A home conversation's turn that opened a fresh session rather than resuming its old one, and why (handoff.ts
     // FreshStartSchema). Absent on every other turn, a home's included. What `bench:home` reads the rollover's cost off.
     homeFresh: FreshStartWhySchema.optional(),
-    // What became of pre-turn retrieval on this turn, and how long it took. Assignment and DELIVERY are different
-    // facts: the first version of this mechanism was assigned to every eligible turn and reached four in five of them,
-    // which is the difference between a null result and a mechanism that never ran. Absent means the flag was off, so
-    // nothing was attempted; `ineligible` means the message carried nothing to look up.
-    turnContext: z.enum(["delivered", "ineligible", "deadline", "indexing", "no-hits", "failed"]).optional(),
-    turnContextMs: z.number().optional(),
     // Zero-based turn count in its conversation; 0 marks the opening turn. Absent means unmeasured.
     turnIndex: z.number().optional(),
     // outcome alone can't tell a turn that finished from one that stopped talking; these fields carry the difference

@@ -67,20 +67,3 @@ export const claudeExperimentSettings = {
             "How many measured context tokens a Claude Code session must exceed before a cold follow-up can clear older tool output. Smaller sessions save little from trimming.",
         ),
 };
-
-// On for new sandboxes from 2026-11-04; one from before keeps it off unless its owner switched it on (the daemon's
-// settings-store.ts pins the old default, settings/earlier-defaults-step.ts writes it down where never saved).
-export const iqSearchSettings = {
-    iqSearch: z
-        .boolean()
-        .default(true)
-        .describe("Teach the agent how to use this workspace's own search tool, rather than leaving it to grep around."),
-    iqSearchHoldout: z
-        .number()
-        .min(0)
-        .max(1)
-        .default(0)
-        .describe(
-            "What share of conversations to run without that teaching, so the two can be compared. Whole conversations rather than individual turns, because once the teaching is in a session, withholding it from the next request does not make the model forget it.",
-        ),
-};

@@ -4,7 +4,7 @@ import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/work
 // agree on what a level holds. None truly hides: an ignored path opens by name, a hidden test or tooling file is a
 // switch away. Matches by name, not path; pure, no framework code.
 
-// Mirrors iq's CLASS_TESTS (scan.ts), widened by the Go/Rust `_test.` suffix; dots required on both sides.
+// A `.test.`/`.spec.` infix or a `test_` prefix, plus the Go/Rust `_test.` suffix; dots required on both sides.
 const TEST_FILE = /\.(test|spec)\.|^test_|_test\./;
 const TEST_DIRS = new Set([`__tests__`, `__test__`, `test`, `tests`, `spec`, `specs`, `e2e`]);
 

@@ -5880,14 +5880,9 @@
         },
         "agentCodeSearch": {
             "codeSearch": "Wyszukiwanie kodu",
-            "iqCodeSearch": "Wyszukiwanie kodu iq",
             "ofConversationsOpenWithout": "rozmów zaczyna się bez mapy",
-            "ofConversationsRunWithout": "rozmów działa bez iq",
             "projectMap": "Mapa projektu",
             "provideProjectStructureOverview": "Dawaj nowym rozmowom przegląd struktury projektu.",
-            "useIqSearchCli": "Używaj CLI wyszukiwania iq zamiast grep/find/glob.",
-            "withIq": "Z iq",
-            "iqUptake": "Wyszukiwania przez iq: {on} z nim, {off} bez niego.",
             "withMap": "Z mapą"
         },
         "agentCommandOutput": {
@@ -7684,10 +7679,8 @@
                 "failedCalls": "Nieudane wywołania narzędzi na turę",
                 "openedWithListing": "Pierwsze tury z listowaniem katalogów",
                 "openingPrompt": "Tokeny promptu na zapytanie",
-                "openingSearches": "Wyszukiwania przed otwarciem pliku",
                 "openingWrite": "Prompt zapisany ponownie na kolejną turę",
-                "outputReached": "Wyjście docierające do agenta",
-                "searchCalls": "Wyszukiwania na turę"
+                "outputReached": "Wyjście docierające do agenta"
             },
             "more": "{pct}% więcej",
             "moreWouldSettle": {
@@ -7708,9 +7701,7 @@
                 "failedCalls": "Dotąd około {count} nieudanych wywołań mniej.",
                 "openedWithListing": "Dotąd około {count} pierwszych tur mniej z listowaniem katalogów.",
                 "openingPrompt": "Dotąd około {count} tokenów promptu mniej.",
-                "openingSearches": "Dotąd około {count} wyszukiwań mniej.",
-                "openingWrite": "Dotąd około {count} tokenów promptu mniej zapisanych ponownie.",
-                "searchCalls": "Dotąd około {count} wyszukiwań mniej."
+                "openingWrite": "Dotąd około {count} tokenów promptu mniej zapisanych ponownie."
             },
             "tooEarly": "Za wcześnie, by ocenić",
             "without": "Bez"
@@ -9911,7 +9902,7 @@
                 "label": "Naprawy pipeline’ów"
             },
             "refactorRun": {
-                "blurb": "Agent uruchamiany z punktu zapalnego lub kluczowego modułu na karcie Kondycja repozytorium.",
+                "blurb": "Zostawione, by dało się odczytać ustawienia zapisane przed usunięciem karty Kondycja; nic już nie uruchamia refaktoryzacji.",
                 "label": "Refaktoryzacje"
             },
             "safetyJudge": {
@@ -9981,7 +9972,7 @@
         "agentDocumentSearch": {
             "group": "Dokumenty",
             "title": "Przeszukuj treść dokumentów",
-            "description": "W tle przygotowuje tekst PDF-ów, plików Word, arkuszy i prezentacji, by rg i iq go znajdowały, ze wskazaniem strony."
+            "description": "W tle przygotowuje tekst PDF-ów, plików Word, arkuszy i prezentacji, by rg go znajdował, ze wskazaniem strony."
         },
         "agentChatPages": {
             "group": "Strony w czacie",
@@ -10668,7 +10659,7 @@
             "agentSkills": "umiejętność, poradnik, przepis, polecenie z ukośnikiem, playbook",
             "agentMemory": "zapamiętaj, pamięć, plik pamięci, notatki, preferencje",
             "agentMemoryImport": "chatgpt, claude, import pamięci, przenieś, migracja, skopiuj pamięć",
-            "agentCodeSearch": "grep, ripgrep, szukaj w kodzie, baza kodu, indeks, szukaj w plikach, mapa projektu",
+            "agentCodeSearch": "szukaj w kodzie, baza kodu, mapa projektu, struktura projektu, przegląd",
             "agentDocumentSearch": "pdf, word, docx, excel, xlsx, arkusz kalkulacyjny, powerpoint, pliki, dokumenty",
             "agentRepoChecks": "lint, linter, sprawdzanie typów, typecheck, testy, hooki, weryfikacja",
             "agentCommandOutput": "tokeny, przycinanie, logi, kompresja, szum, skróć wynik",
@@ -10783,13 +10774,10 @@
             "inTheChat": "W czacie",
             "tokens": "Tokeny",
             "codeSearch": {
-                "label": "Jak działa wyszukiwanie kodu",
-                "title": "Właściwy plik w mniejszej liczbie kroków",
-                "experience": "Agent szybciej dociera do potrzebnego kodu, więc szybciej zaczyna odpowiadać i mniej błądzi.",
-                "tokens": "Mniej wyszukiwań i odczytów plików na turę. Mapa jest wysyłana raz, a w kolejnych turach odczytywana z pamięci podręcznej, jak reszta rozmowy; niewielka część rozmów działa bez niej, więc oszczędność jest zmierzona, a nie zakładana.",
-                "without": "Bez iq",
-                "with": "Z iq",
-                "rightFile": "właściwy plik",
+                "label": "Jak działa mapa projektu",
+                "title": "Układ projektu znany od pierwszej wiadomości",
+                "experience": "Agent od początku wie, co gdzie leży, więc szybciej dociera do potrzebnego kodu i mniej błądzi.",
+                "tokens": "Mniej listowań katalogów i wywołań narzędzi przed właściwym plikiem. Mapa jest wysyłana raz, a w kolejnych turach odczytywana z pamięci podręcznej, jak reszta rozmowy; niewielka część rozmów działa bez niej, więc oszczędność jest zmierzona, a nie zakładana.",
                 "ridesAlong": "Co wysyła każda tura",
                 "turn": "Tura {turn}",
                 "instructions": "Instrukcje",
@@ -12305,7 +12293,6 @@
     },
     "views": {
         "coreViews": {
-            "health": "Kondycja",
             "ui": "Interfejs"
         },
         "extensionDocument": {
@@ -12485,38 +12472,6 @@
             "copyPaths": "Kopiuj ścieżki ({count})",
             "copyRepoPath": "Kopiuj ścieżkę w repozytorium",
             "copyRepoPaths": "Kopiuj ścieżki w repozytorium ({count})"
-        },
-        "codebaseHealth": {
-            "actionLegend": "Uruchamia agenta z refaktoryzacją, której wymagają liczby danego wiersza",
-            "branchPoints": "Punkty rozgałęzień",
-            "commits": "Commity od",
-            "commits2": "Commity",
-            "couldntRead": "Nie udało się odczytać kondycji kodu",
-            "exports": "eksporty: {exports}",
-            "file": "Plik",
-            "filesBothChurnBranching": "plików o dużej zmienności i dużym rozgałęzieniu",
-            "functionsTypesClasses": "funkcje, typy, klasy",
-            "hotspots": "Punkty zapalne",
-            "hotspotsLead": "Pliki, które często się zmieniają i mocno rozgałęziają. Żadne z tych dwóch samo nie jest ostrzeżeniem: często zmieniany plik konfiguracyjny jest trywialny, a zaplątany plik, którego nikt nie dotyka, nic nie kosztuje.",
-            "indexStillBuildingFigures": "Indeks wciąż się buduje: te liczby obejmują tylko to, co dotąd przeczytano.",
-            "indexedIgnoringBuildOutput": "zaindeksowanych, bez wyników budowania",
-            "keyModules": "Kluczowe moduły",
-            "noFileHereBoth": "Żaden plik tutaj nie ma jednocześnie commitów i punktów rozgałęzień: repozytorium bez historii albo takie, które trzyma tylko znaczniki i konfigurację, niczego nie klasyfikuje.",
-            "noReportYet": "Nie ma jeszcze raportu.",
-            "nothingInRepositoryExports": "Nic w tym repozytorium nie eksportuje symbolu, który indeks czyta.",
-            "perFile": "{files} na plik",
-            "rankedByPagerankOver": "Uszeregowane według PageRank na grafie importów: to, na czym opiera się reszta tego repozytorium, a co rzadko jest tym, co drzewo plików stawia na początku.",
-            "readingIndex": "Odczytywanie indeksu…",
-            "recompute": "Przelicz",
-            "refactor": "Refaktoryzuj {name}",
-            "refactorAction": "{action}: {name}",
-            "refreshCodebaseHealth": "Odśwież kondycję bazy kodu",
-            "repository": "Repozytorium",
-            "risk": "Ryzyko",
-            "riskNote": "Commity × punkty rozgałęzień",
-            "shownOf": "Top {count} z {hotspots}",
-            "suggested": "Sugestia",
-            "symbols": "Symbole"
         },
         "compareDiffView": {
             "couldNotLoadVersions": "Nie udało się wczytać obu wersji tego dokumentu.",
@@ -12719,13 +12674,6 @@
             "writing": "Pisze",
             "draftNote": "Szkic agenta"
         },
-        "healthCodebaseHealth": {
-            "all": "Wszystko",
-            "allHistory": "Cała historia",
-            "days30": "30 dni",
-            "days7": "7 dni",
-            "days90": "90 dni"
-        },
         "historyPanel": {
             "autoCapture": "Automatyczne przechwytywanie",
             "beforeGoingBack": "Przed cofnięciem",
@@ -12782,7 +12730,6 @@
             "nothingHere": "Nic tu nie ma.",
             "nothingMatchesIn": "Nic nie pasuje do „{trim}” w {here}.",
             "searchText": "Szukaj w treści",
-            "smartSearch": "Inteligentne wyszukiwanie",
             "toolingHidden": "Ukryto {count} plik narzędziowy | Ukryto {count} pliki narzędziowe | Ukryto {count} plików narzędziowych",
             "groupFiles": "Grupuj pliki według",
             "byKind": "Rodzaj",
@@ -12862,18 +12809,6 @@
         },
         "pushBadge": {
             "sendingCommits": "Wysyłanie commitów"
-        },
-        "refactorAsk": {
-            "decompose": "Podziel wzdłuż szwów",
-            "months": "{count} miesiąc | {count} miesiące | {count} miesięcy",
-            "narrow": "Zawęź powierzchnię",
-            "simplify": "Spłaszcz rozgałęzienia",
-            "split": "Podziel wg odpowiedzialności",
-            "stabilize": "Oddziel kontrakt",
-            "startsAgent": "Uruchamia agenta",
-            "tests": "Podziel testy",
-            "untouched": "Nietknięty od",
-            "years": "{count} rok | {count} lata | {count} lat"
         },
         "reviewPanel": {
             "abort": "Przerwij",
@@ -13087,7 +13022,6 @@
             "closeSplit": "Zamknij podział",
             "closeTab": "Zamknij kartę",
             "closeTabsToRight": "Zamknij karty po prawej",
-            "codebaseHealth": "Kondycja kodu",
             "collapseAll": "Zwiń wszystko",
             "collapseAllFolders": "Zwiń wszystkie foldery",
             "commaSeparated": "Oddzielone przecinkami",
@@ -13103,7 +13037,6 @@
             "landingNow": "{landing}…",
             "nextTab": "Następna karta",
             "nobody": "Nikt",
-            "openCodebaseHealthWorkspace": "Otwórz kondycję bazy kodu katalogu głównego przestrzeni roboczej",
             "runWorkspace": "Uruchom workspace",
             "openTabToSide": "Otwórz kartę obok",
             "previousTab": "Poprzednia karta",
@@ -13111,17 +13044,14 @@
             "refreshFiles": "Odśwież pliki",
             "reopenClosedTab": "Otwórz ponownie zamkniętą kartę",
             "scopeNameHint": "Nazwy plików",
-            "scopeSmartHint": "Według znaczenia",
             "scopeTextHint": "Dokładny tekst",
             "showExplorer": "Pokaż eksplorator",
-            "smart": "Inteligentne",
             "tabsStayOpen": "Karty zostają otwarte",
             "search": "Szukaj…",
             "searchIgnoredFiles": "Przeszukuj ignorowane pliki",
             "searchInFiles2": "Szukaj w plikach…",
             "show": "Pokaż {restorePoints}",
             "showChanges": "Pokaż zmiany",
-            "showCodebaseHealth": "Pokaż kondycję bazy kodu",
             "showFiles": "Pokaż pliki",
             "showHome": "Pokaż stronę główną",
             "showHome2": "Pokaż stronę główną",
@@ -13356,11 +13286,9 @@
             "doubleClickToKeep": "Dwuklik, by zachować",
             "file": "Plik",
             "folder": "Folder",
-            "health": "Kondycja kodu",
             "management": "Panel zarządzania",
             "path": "Ścieżka",
             "preview": "Podgląd",
-            "repo": "Repozytorium",
             "closeTab": "Zamknij {title}"
         },
         "outgoingWork": {

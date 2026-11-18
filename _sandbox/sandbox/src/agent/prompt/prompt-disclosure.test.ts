@@ -30,7 +30,7 @@ const OTHER: GuidanceFacts = {
 // The spec as planTurn hands it to the loop: the placement, then (for every loop but Claude Code's, which composes its
 // own) the guidance composed from what the arm mounted.
 const sentSpec = (capabilities: typeof CLAUDE, spec: { readonly systemPromptMode: "intentic" | "claude" | "custom"; readonly systemAppend?: string; readonly systemPrompt?: string }) =>
-    withRuntimeGuidance({ prompt: "", cwd: "/w", ...spec }, capabilities, guidanceBlock(OTHER, "rg"), undefined);
+    withRuntimeGuidance({ prompt: "", cwd: "/w", ...spec }, capabilities, guidanceBlock(OTHER), undefined);
 
 // Stands in for the installed CLI, answering with a preset that names the model it was rendered for.
 jest.mock("./preset-prompt.js", () => ({
@@ -111,7 +111,7 @@ test("the guidance shown is the block the turn was sent", () => {
             terminal: tmuxRunEnabled(),
             hostDevices: undefined,
             ownBrowsers: undefined,
-        }, "rg"),
+        }),
     );
     const codex = promptDisclosure({
         capabilities: CODEX,
@@ -122,7 +122,7 @@ test("the guidance shown is the block the turn was sent", () => {
         },
         at: AT,
     });
-    expect(textOf(codex, "guidance")).toBe(guidanceBlock(OTHER, "rg"));
+    expect(textOf(codex, "guidance")).toBe(guidanceBlock(OTHER));
 });
 
 test("a runtime that keeps its own prompt says so, and its guidance is the append's own head", () => {

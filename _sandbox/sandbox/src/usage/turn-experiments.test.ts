@@ -11,8 +11,6 @@ const turn = (overrides: Partial<UsageTurn>): UsageTurn => ({
     turns: 1,
     inputTokens: 100,
     outputTokens: 1000,
-    searchCalls: 4,
-    openingSearches: 2,
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
     costUsd: 0.01,
@@ -25,120 +23,68 @@ const storeOf = (turns: readonly UsageTurn[]): UsageStore =>
         turns: () => Promise.resolve([...turns]),
     }) as unknown as UsageStore;
 
-const searchArms = (on: number, off: number, onSearches: number, offSearches: number): UsageTurn[] => [
-    ...Array.from({ length: on }, (_, index) =>
-        turn({ conversationId: `on-${index}`, iqSearchArm: true, searchCalls: onSearches, openingSearches: onSearches / 2 }),
-    ),
-    ...Array.from({ length: off }, (_, index) =>
-        turn({ conversationId: `off-${index}`, iqSearchArm: false, searchCalls: offSearches, openingSearches: offSearches / 2 }),
-    ),
-];
-
 test("absent when no turn was in the experiment", async () => {
     expect(await readTurnExperiments(storeOf([turn({}), turn({})]), {})).toEqual({});
 });
 
+const toolArms = (on: number, off: number, onPrompt: number, offPrompt: number): UsageTurn[] => [
+    ...Array.from({ length: on }, (_, index) =>
+        turn({ conversationId: `on-${index}`, toolSearchArm: true, openingCacheReadTokens: onPrompt - 1000, openingCacheCreationTokens: 1000, failedCalls: 1 }),
+    ),
+    ...Array.from({ length: off }, (_, index) =>
+        turn({ conversationId: `off-${index}`, toolSearchArm: false, openingCacheReadTokens: offPrompt - 1000, openingCacheCreationTokens: 1000, failedCalls: 1 }),
+    ),
+];
+
+// The opening prompt a turn sent, as tool search reads it: cache reads plus writes.
+const promptTurn = (conversationId: string, arm: boolean, prompt: number, over: Partial<UsageTurn> = {}): UsageTurn =>
+    turn({ conversationId, toolSearchArm: arm, openingCacheReadTokens: prompt - 1000, openingCacheCreationTokens: 1000, ...over });
+
 test("reports both arms but withholds the delta until each clears the threshold", async () => {
-    const { search } = await readTurnExperiments(storeOf(searchArms(MIN_ARM_TURNS, MIN_ARM_TURNS - 1, 3.2, 6.4)), {});
-    expect(search?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
-    expect(search?.metrics[0].off.turns).toBe(MIN_ARM_TURNS - 1);
-    expect(search?.metrics[0].deltaPct).toBeUndefined();
-    expect(search?.metrics[0].marginPct).toBeUndefined();
-    expect(search?.metrics[0].saved).toBeUndefined();
+    const { toolSearch } = await readTurnExperiments(storeOf(toolArms(MIN_ARM_TURNS, MIN_ARM_TURNS - 1, 30_000, 60_000)), {});
+    expect(toolSearch?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
+    expect(toolSearch?.metrics[0].off.turns).toBe(MIN_ARM_TURNS - 1);
+    expect(toolSearch?.metrics[0].deltaPct).toBeUndefined();
+    expect(toolSearch?.metrics[0].marginPct).toBeUndefined();
+    expect(toolSearch?.metrics[0].saved).toBeUndefined();
 });
 
-test("the search experiment is judged on searches, to the tenth", async () => {
-    const { search } = await readTurnExperiments(storeOf(searchArms(40, 30, 3.2, 6.4)), {});
-    expect(search?.metrics[0].metric).toBe("searchCalls");
-    expect(search?.metrics[0].on.mean).toBe(3.2);
-    expect(search?.metrics[0].off.mean).toBe(6.4);
-    expect(search?.metrics[0].deltaPct).toBeCloseTo(-50, 0);
-});
-
-test("iq search teaching is measured on its conversation-stable arm", async () => {
-    const arms = [
-        ...Array.from({ length: 40 }, (_, index) => turn({ conversationId: `on-${index}`, iqSearchArm: true, searchCalls: 2, openingSearches: 1 })),
-        ...Array.from({ length: 30 }, (_, index) => turn({ conversationId: `off-${index}`, iqSearchArm: false, searchCalls: 5, openingSearches: 3 })),
-    ];
-    const { search } = await readTurnExperiments(storeOf(arms), {});
-    expect(search?.metrics.map((reading) => reading.metric)).toEqual(["searchCalls", "openingSearches"]);
-    expect(search?.sampleUnit).toBe("conversations");
-    expect(search?.metrics[0]).toMatchObject({ on: { turns: 40, mean: 2 }, off: { turns: 30, mean: 5 } });
-    expect(search?.metrics[0].saved).toBeUndefined();
-});
-
-test("iq search results do not mix instruction revisions into one unnamed experiment", async () => {
-    const rows = [
-        turn({ at: 1, conversationId: "old-on", iqSearchArm: true, iqSearchCohort: "old", searchCalls: 20 }),
-        turn({ at: 1, conversationId: "old-off", iqSearchArm: false, iqSearchCohort: "old", searchCalls: 20 }),
-        turn({ at: 2, conversationId: "new-on", iqSearchArm: true, iqSearchCohort: "new", searchCalls: 2 }),
-        turn({ at: 2, conversationId: "new-off", iqSearchArm: false, iqSearchCohort: "new", searchCalls: 5 }),
-    ];
-    const { search } = await readTurnExperiments(storeOf(rows), {});
-    expect(search?.cohort).toBe("new");
-    expect(search?.metrics[0]).toMatchObject({ on: { turns: 1, mean: 2 }, off: { turns: 1, mean: 5 } });
-});
-
-test("a re-spelled iq cohort hash is read together with the revision it re-spells", async () => {
-    const rows = [
-        turn({ at: 1, conversationId: "older-on", iqSearchArm: true, iqSearchCohort: "9fca5b085548", searchCalls: 50 }),
-        turn({ at: 2, conversationId: "sep-on", iqSearchArm: true, iqSearchCohort: "af7b1874e40c", searchCalls: 2 }),
-        turn({ at: 2, conversationId: "sep-off", iqSearchArm: false, iqSearchCohort: "af7b1874e40c", searchCalls: 6 }),
-        turn({ at: 3, conversationId: "oct-on", iqSearchArm: true, iqSearchCohort: "afccafc52ce9", searchCalls: 4 }),
-        turn({ at: 3, conversationId: "oct-off", iqSearchArm: false, iqSearchCohort: "afccafc52ce9", searchCalls: 8 }),
-    ];
-    const { search } = await readTurnExperiments(storeOf(rows), {});
-    expect(search?.cohort).toBe("af7b1874e40c");
-    expect(search?.metrics[0]).toMatchObject({ on: { turns: 2, mean: 3 }, off: { turns: 2, mean: 7 } });
-});
-
-test("a long iq-search conversation contributes one sample rather than manufacturing independent turns", async () => {
-    const arms = [
-        ...Array.from({ length: 20 }, () => turn({ conversationId: "one-long-chat", iqSearchArm: true, searchCalls: 2 })),
-        turn({ conversationId: "one-control", iqSearchArm: false, searchCalls: 5 }),
-    ];
-    const { search } = await readTurnExperiments(storeOf(arms), {});
-    expect(search?.metrics[0]).toMatchObject({ on: { turns: 1, mean: 2 }, off: { turns: 1, mean: 5 } });
+test("a long conversation contributes one sample rather than manufacturing independent turns", async () => {
+    const arms = [...Array.from({ length: 20 }, () => promptTurn("one-long-chat", true, 20_000)), promptTurn("one-control", false, 50_000)];
+    const { toolSearch } = await readTurnExperiments(storeOf(arms), {});
+    expect(toolSearch?.metrics[0]).toMatchObject({ on: { turns: 1, mean: 20_000 }, off: { turns: 1, mean: 50_000 } });
 });
 
 test("a delta whose margin spans zero is not a delta: only its resolution is reported", async () => {
     const noisy = [
-        ...Array.from({ length: 40 }, (_, index) =>
-            turn({ conversationId: `on-${index}`, iqSearchArm: true, searchCalls: index % 2 === 0 ? 2 : 18 }),
-        ),
-        ...Array.from({ length: 40 }, (_, index) =>
-            turn({ conversationId: `off-${index}`, iqSearchArm: false, searchCalls: index % 2 === 0 ? 1 : 18 }),
-        ),
+        ...Array.from({ length: 40 }, (_, index) => promptTurn(`on-${index}`, true, index % 2 === 0 ? 2_000 : 18_000)),
+        ...Array.from({ length: 40 }, (_, index) => promptTurn(`off-${index}`, false, index % 2 === 0 ? 1_500 : 18_000)),
     ];
-    const { search } = await readTurnExperiments(storeOf(noisy), {});
-    expect(search?.metrics[0].on.turns).toBe(40);
-    expect(search?.metrics[0].marginPct).toBeGreaterThan(0);
-    expect(search?.metrics[0].deltaPct).toBeUndefined();
-    expect(search?.metrics[0].saved).toBeUndefined();
+    const { toolSearch } = await readTurnExperiments(storeOf(noisy), {});
+    expect(toolSearch?.metrics[0].on.turns).toBe(40);
+    expect(toolSearch?.metrics[0].marginPct).toBeGreaterThan(0);
+    expect(toolSearch?.metrics[0].deltaPct).toBeUndefined();
+    expect(toolSearch?.metrics[0].saved).toBeUndefined();
 });
 
 // One runaway conversation used to carry its arm: identical arms read 42 vs 28 on the ledger, and a shuffled-label check
 // called one no-effect split in ten significant. Capped at the pooled 95th percentile, it counts as high, not unbounded.
 test("one runaway conversation counts as high, not as a difference between the arms", async () => {
-    const arms = [...searchArms(40, 40, 2, 2), turn({ conversationId: "runaway", iqSearchArm: true, searchCalls: 900, openingSearches: 450 })];
-    const { search } = await readTurnExperiments(storeOf(arms), {});
-    expect(search?.metrics[0].on.mean).toBe(2);
-    expect(search?.metrics[0].deltaPct).toBeUndefined();
+    const arms = [...toolArms(40, 40, 20_000, 20_000), promptTurn("runaway", true, 9_000_000)];
+    const { toolSearch } = await readTurnExperiments(storeOf(arms), {});
+    expect(toolSearch?.metrics[0].on.mean).toBe(20_000);
+    expect(toolSearch?.metrics[0].deltaPct).toBeUndefined();
 });
 
 test("failed and cancelled turns are dropped from the population", async () => {
-    const healthy = searchArms(MIN_ARM_TURNS, MIN_ARM_TURNS, 4, 4);
-    const failures = Array.from({ length: MIN_ARM_TURNS }, () =>
-        turn({ conversationId: "fail", iqSearchArm: true, searchCalls: 0, outcome: "error" }),
-    );
-    const stopped = Array.from({ length: MIN_ARM_TURNS }, () =>
-        turn({ conversationId: "stop", iqSearchArm: true, searchCalls: 0, outcome: "cancelled" }),
-    );
+    const healthy = toolArms(MIN_ARM_TURNS, MIN_ARM_TURNS, 40_000, 40_000);
+    const failures = Array.from({ length: MIN_ARM_TURNS }, () => promptTurn("fail", true, 2_000, { outcome: "error" }));
+    const stopped = Array.from({ length: MIN_ARM_TURNS }, () => promptTurn("stop", true, 2_000, { outcome: "cancelled" }));
 
     const clean = await readTurnExperiments(storeOf(healthy), {});
     const polluted = await readTurnExperiments(storeOf([...healthy, ...failures, ...stopped]), {});
 
-    expect(polluted.search).toEqual(clean.search);
+    expect(polluted.toolSearch).toEqual(clean.toolSearch);
 });
 
 /* ---- the project map, judged on the opening turn it was sent to ---- */
@@ -254,45 +200,19 @@ test("only turns inside the window count", async () => {
 
 // Codex counts about twelve failed calls a turn to Claude Code's two: pooled, a comparison reads the two loops' mix.
 test("a comparison is read within the loop that ran most of its conversations", async () => {
-    const claude = searchArms(MIN_ARM_TURNS, MIN_ARM_TURNS, 1, 3);
-    const codex = searchArms(5, 5, 12, 12).map((row) => ({ ...row, conversationId: `codex-${row.conversationId}`, provider: "codex", runtime: "codex" }));
-    const { search } = await readTurnExperiments(storeOf([...claude, ...codex]), {});
-    expect(search?.metrics[0].on).toEqual({ turns: MIN_ARM_TURNS, mean: 1 });
-    expect(search?.metrics[0].off).toEqual({ turns: MIN_ARM_TURNS, mean: 3 });
+    const claude = mapArms(MIN_ARM_TURNS, MIN_ARM_TURNS, 0.5, 1);
+    const codex = mapArms(5, 5, 0, 0).map((row) => ({ ...row, conversationId: `codex-${row.conversationId}`, provider: "codex", runtime: "codex" }));
+    const { map } = await readTurnExperiments(storeOf([...claude, ...codex]), {});
+    expect(map?.metrics[0].on).toEqual({ turns: MIN_ARM_TURNS, mean: 0.5 });
+    expect(map?.metrics[0].off).toEqual({ turns: MIN_ARM_TURNS, mean: 1 });
 });
 
 test("a row from before the loop was recorded is placed by its provider and harness", async () => {
     // Rows of 2026-10-12 and earlier carry no `runtime`; Claude on its own loop is Claude Code, as a recorded one says.
-    const old = searchArms(20, 20, 1, 3);
-    const recent = searchArms(20, 20, 1, 3).map((row) => ({ ...row, conversationId: `recent-${row.conversationId}`, runtime: "claude-code" }));
-    expect((await readTurnExperiments(storeOf([...old, ...recent]), {})).search?.metrics[0].on.turns).toBe(40);
+    const old = mapArms(20, 20, 0.5, 1);
+    const recent = mapArms(20, 20, 0.5, 1).map((row) => ({ ...row, conversationId: `recent-${row.conversationId}`, runtime: "claude-code" }));
+    expect((await readTurnExperiments(storeOf([...old, ...recent]), {})).map?.metrics[0].on.turns).toBe(40);
 });
-
-const uptakeArms = (count: number, onIq: number): UsageTurn[] => [
-    ...Array.from({ length: count }, (_, index) =>
-        turn({ conversationId: `on-${index}`, iqSearchArm: true, iqSearchCohort: "teach", searchCalls: 10, iqSearches: onIq }),
-    ),
-    ...Array.from({ length: count }, (_, index) =>
-        turn({ conversationId: `off-${index}`, iqSearchArm: false, iqSearchCohort: "teach", searchCalls: 10, iqSearches: 0 }),
-    ),
-];
-
-test("the search reading says what share of each group's searches ran iq, once the taught group has enough turns", async () => {
-    expect((await readTurnExperiments(storeOf(uptakeArms(MIN_ARM_TURNS, 2)), {})).search?.uptake).toEqual({ on: 0.2, off: 0, turns: MIN_ARM_TURNS });
-    expect((await readTurnExperiments(storeOf(uptakeArms(MIN_ARM_TURNS - 1, 2)), {})).search?.uptake).toBeUndefined();
-    // Rows from before the count was recorded say nothing either way.
-    const unrecorded = uptakeArms(MIN_ARM_TURNS, 2).map(({ iqSearches: _, ...row }) => row);
-    expect((await readTurnExperiments(storeOf(unrecorded), {})).search?.uptake).toBeUndefined();
-});
-
-const toolArms = (on: number, off: number, onPrompt: number, offPrompt: number): UsageTurn[] => [
-    ...Array.from({ length: on }, (_, index) =>
-        turn({ conversationId: `on-${index}`, toolSearchArm: true, openingCacheReadTokens: onPrompt - 1000, openingCacheCreationTokens: 1000, failedCalls: 1 }),
-    ),
-    ...Array.from({ length: off }, (_, index) =>
-        turn({ conversationId: `off-${index}`, toolSearchArm: false, openingCacheReadTokens: offPrompt - 1000, openingCacheCreationTokens: 1000, failedCalls: 1 }),
-    ),
-];
 
 test("tool search is judged on the opening request's prompt, then on failed calls, per conversation", async () => {
     const { toolSearch } = await readTurnExperiments(storeOf(toolArms(40, 40, 30_000, 80_000)), {});

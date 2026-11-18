@@ -1,10 +1,10 @@
 # agent-cli
 
-The process contract, budgeted output and in-process test runner that the agent-facing CLIs `iq`, `fileq` and `webq` share, so a failure never reads as an empty answer.
+The process contract, budgeted output and in-process test runner that the agent-facing CLIs `fileq` and `webq` share, so a failure never reads as an empty answer.
 
 ```mermaid
 flowchart LR
-    agent["Agent shell<br/>pipes into head, drops stderr"] --> bin["iq · fileq · webq"]
+    agent["Agent shell<br/>pipes into head, drops stderr"] --> bin["fileq · webq"]
     bin --> run(["agent-cli<br/>runAgentCli"])
     run --> app["The tool's stricli app<br/>loaded lazily"]
     app --> out["stdout<br/>capsule, clipped body, errors"]

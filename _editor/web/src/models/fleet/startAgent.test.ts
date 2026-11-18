@@ -86,7 +86,7 @@ it(`opens, focuses and hands the composer a tab from the fleet board and from th
     expect(conversations.value.slice(before).every((conversation) => conversation.isolated.value)).toBe(true);
 });
 
-// A run button (Health's refactor, say) hands over the model its job stands at, or the one its caret picked: the new tab
+// A run button (Fix with agent, say) hands over the model its job stands at, or the one its caret picked: the new tab
 // opens on that, not on whatever the composer last held, and the composer's own pick is not overwritten by it.
 it(`opens the new agent on the run button's model, effort and speed`, async () => {
     const { conversations } = useChat();

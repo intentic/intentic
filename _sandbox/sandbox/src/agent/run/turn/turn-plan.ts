@@ -30,8 +30,6 @@ export type TurnExperimentStamps = Partial<
     Pick<
         UsageTurn,
         | "turnIndex"
-        | "iqSearchArm"
-        | "iqSearchCohort"
         | "mapArm"
         | "mapChars"
         | "mapCohort"
@@ -40,8 +38,6 @@ export type TurnExperimentStamps = Partial<
         | "coldTrimArm"
         | "coldTrimmed"
         | "homeFresh"
-        | "turnContext"
-        | "turnContextMs"
     >
 >;
 

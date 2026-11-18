@@ -86,10 +86,7 @@ const SESSIONS = folder(dirname(stateRelPath(".intentic/records/sessions/claude/
 // Hugging Face weights, Python environments and uv downloads, which Storage called the sandbox's own indexes and offered
 // no way to clean).
 const DAEMON_CACHES: readonly string[] = [
-    // iq's index with its churn and vector stores, and the freshness marks fileq and iq keep.
-    "iq/",
-    "iq-churn/",
-    "iq-vectors.db",
+    // The freshness marks fileq keeps.
     "freshness/",
     "code-counts.db",
     // fileq's markdown shadows and page renders, the derived blobs, and the editor's previews.

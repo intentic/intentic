@@ -1,17 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { anySignal, sleep } from "@intentic/base/async";
-import { findText, TEXT_MAX_HITS, type TextFind } from "@intentic/iq-engine/text";
+import { FILES_MAX_LISTED, findFiles, findText, TEXT_MAX_HITS, type TextFind } from "@intentic/text-search";
 import type {
     WorkspaceSearchFrame,
     WorkspaceSearchGroup,
     WorkspaceSearchResult,
 } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 
-// The search box's text search (workspace.search with `mode` find, and its stream): ripgrep run from the daemon itself
-// (iq-engine's text-search.ts), at the daemon's own priority, rather than inside the iq engine child, which runs niced as
-// a background service, shares its one process with every turn's context lookups and the embedding worker, and after
-// ten idle minutes has to be started again before it answers. Its slow searches measured 10 to 20 s on 2026-10-26 while
-// ripgrep alone took 20 to 100 ms over the same tree.
+// The search box's searches (workspace.search with `mode` find, and its stream; `mode` files): ripgrep run from the
+// daemon itself (@intentic/text-search), at the daemon's own priority. They ran in the iq engine's child process until
+// 2026-10-26, where a slow one measured 10 to 20 s while ripgrep alone took 20 to 100 ms over the same tree.
 //
 // One scan answers every page: it runs in parallel to the end of the tree (or TEXT_MAX_HITS lines), its files sorted by
 // path, and the answer is kept for a while so Load more is a slice of it rather than another scan whose answer may have
@@ -59,8 +57,21 @@ export interface TextAnswer {
     readonly timing: TextTiming;
 }
 
+// A file-name search: the scope a text search takes, a query matched against paths, and how many files to name.
+export interface FileQuery {
+    readonly root: string;
+    readonly query: string;
+    readonly ignored: boolean;
+    readonly paths: readonly string[] | undefined;
+    readonly globs: readonly string[];
+    readonly notGlobs: readonly string[];
+    readonly limit: number;
+}
+
 export interface TextSearch {
     readonly find: (query: TextQuery, signal?: AbortSignal, onGroup?: (group: WorkspaceSearchGroup) => void) => Promise<TextAnswer>;
+    // One page, best first, with no cursor: a name search is asked again as its query grows, never paged.
+    readonly files: (query: FileQuery, signal?: AbortSignal) => Promise<WorkspaceSearchResult>;
 }
 
 interface Kept {
@@ -200,6 +211,22 @@ export const createTextSearch = ({ rgPath, now = Date.now }: { readonly rgPath: 
                 result: resultOf(id, found, cursor?.offset ?? 0, query.page),
                 timing: { kept: false, scanMs: performance.now() - from, firstMs: found.firstMs, ceiling: found.ceiling },
             };
+        },
+        files: async (query, signal) => {
+            const found = await findFiles({ ...query, rgPath, signal });
+            const result: WorkspaceSearchResult = {
+                mode: "files",
+                total: found.files,
+                files: found.files,
+                shown: found.groups.length,
+                groups: [...found.groups],
+                freshness: { state: "fresh", ageMs: 0 },
+                truncated: found.files > found.groups.length,
+            };
+            if (found.ceiling) {
+                result.note = `listed the first ${FILES_MAX_LISTED.toLocaleString("en")} files only; narrow the search for the rest`;
+            }
+            return result;
         },
     };
 };

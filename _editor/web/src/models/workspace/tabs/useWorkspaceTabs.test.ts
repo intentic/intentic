@@ -13,7 +13,7 @@ sessionStorage.setItem(
         active: `src/main.ts`,
         tabs: [
             { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
-            { kind: `health`, id: `health:root`, repo: `root` },
+            { kind: `directory`, id: `dir:root`, dir: `root` },
         ],
     }),
 );
@@ -62,7 +62,7 @@ interface StoredPane {
 const stored = (): StoredPane & { side?: StoredPane } => JSON.parse(sessionStorage.getItem(KEY) ?? `{}`);
 
 it(`comes back with the tabs and focus the last visit left`, () => {
-    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`]);
+    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `dir:root`]);
     expect(activeId.value).toBe(`src/main.ts`);
 });
 
@@ -70,7 +70,7 @@ it(`persists an opened tab`, async () => {
     openFile(`README.md`);
     await nextTick();
 
-    expect(stored().tabs.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`]);
+    expect(stored().tabs.map((tab) => tab.id)).toEqual([`src/main.ts`, `dir:root`, `README.md`]);
     expect(stored().active).toBe(`README.md`);
 });
 
@@ -79,7 +79,7 @@ it(`leaves a diff out, and the focus it held with it`, async () => {
     await nextTick();
 
     expect(tabs.value.some((tab) => tab.kind === `diff`)).toBe(true);
-    expect(stored().tabs.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`]);
+    expect(stored().tabs.map((tab) => tab.id)).toEqual([`src/main.ts`, `dir:root`, `README.md`]);
     expect(stored().active).toBe(`README.md`);
 });
 
@@ -96,19 +96,19 @@ it(`reopens the last closed tab at the position it held, and focuses it`, () => 
     selectTab(`src/main.ts`);
     const before = tabs.value.map((tab) => tab.id);
 
-    closeTabIds(new Set([`health:root`])); // the middle tab
+    closeTabIds(new Set([`dir:root`])); // the middle tab
 
     expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `README.md`]);
     reopenClosedTab();
 
     expect(tabs.value.map((tab) => tab.id)).toEqual(before);
-    expect(activeId.value).toBe(`health:root`);
+    expect(activeId.value).toBe(`dir:root`);
     // The diff closed above is still on the stack, one entry below what reopenClosedTab just popped off it.
     expect(closedTabs.value).toHaveLength(1);
 });
 
 it(`restores a whole bulk close in one press, in order and focused as it was`, () => {
-    selectTab(`health:root`);
+    selectTab(`dir:root`);
     closeTabIds(new Set(tabs.value.map((tab) => tab.id))); // Close All
 
     expect(tabs.value).toEqual([]);
@@ -116,8 +116,8 @@ it(`restores a whole bulk close in one press, in order and focused as it was`, (
 
     reopenClosedTab();
 
-    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`]);
-    expect(activeId.value).toBe(`health:root`);
+    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `dir:root`, `README.md`]);
+    expect(activeId.value).toBe(`dir:root`);
 });
 
 it(`does nothing when nothing has been closed`, () => {
@@ -126,7 +126,7 @@ it(`does nothing when nothing has been closed`, () => {
 
     reopenClosedTab();
 
-    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`]);
+    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `dir:root`, `README.md`]);
     expect(activeId.value).toBe(`README.md`);
 });
 
@@ -155,7 +155,7 @@ it(`hands the tab over on a double-click, and previews the next one beside it`, 
 
     openDiff(diffPayload(`src/c.ts`), `preview`);
 
-    expect<(string | null)[]>(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`, promoted, activeId.value]);
+    expect<(string | null)[]>(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `dir:root`, `README.md`, promoted, activeId.value]);
 });
 
 it(`releases the slot when the previewed row is re-opened to keep`, () => {

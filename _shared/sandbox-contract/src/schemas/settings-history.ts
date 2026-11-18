@@ -177,4 +177,7 @@ export const SETTINGS_HISTORY = [
     // The field notes (2026-11-06): a ranked brief on this place's traps sent with every turn moved neither failed calls
     // nor calls before the edited file against a held-out half, across two revisions of it, while every call carried it.
     ...dropAll(["fieldNotes", "fieldNotesBudget", "fieldNotesHoldout"]),
+    // iq (2026-11-18): teaching agents the workspace search tool moved neither cost, calls nor searches against a held-out
+    // half over 1,480 conversations, and the tool itself was removed.
+    ...dropAll(["iqSearch", "iqSearchHoldout"]),
 ] as const;

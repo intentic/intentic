@@ -8,7 +8,7 @@ import { fileqSkill } from "@intentic/fileq/skill";
 // permission parser refuses the whole line over it. The report reads the switches the last session opened with instead.
 export const statsSkill = (): string => `---
 name: stats
-description: Show what the intentic plugin saved in this project — Bash output trimmed, and what the project map and iq teaching changed against the sessions held out without them. Add "all" for every project.
+description: Show what the intentic plugin saved in this project — Bash output trimmed, and what the project map changed against the sessions held out without it. Add "all" for every project.
 disable-model-invocation: true
 allowed-tools: Bash(intentic-stats *)
 argument-hint: "[all]"
@@ -20,22 +20,6 @@ Show the report above to the person as it is. Then say, in one or two sentences,
 `;
 
 export const fileqSkillText = (): string => fileqSkill({ host: "standalone" });
-
-// iq's nudge is written for the sandbox, where iq is baked into the image and a non-Claude runtime reads the skill from
-// the workspace's `.agents/skills`. Everything else in it holds anywhere, so the plugin ships it with those two
-// phrases said for a plain install; a rewording upstream fails the build here rather than shipping a sandbox path.
-const SANDBOX_PHRASES: readonly (readonly [string, string])[] = [
-    ["is a pre-installed CLI in this workspace", "is installed here"],
-    ["run `iq --help` or read `.agents/skills/iq/SKILL.md` for the verb cheat-sheet", "run `iq --help` or load the iq skill for the verb cheat-sheet"],
-];
-
-export const portableIqNudge = (nudge: string): string =>
-    SANDBOX_PHRASES.reduce((text, [sandbox, anywhere]) => {
-        if (!text.includes(sandbox)) {
-            throw new Error(`iq's nudge no longer says "${sandbox}"; update SANDBOX_PHRASES in generated.ts to its new wording`);
-        }
-        return text.replace(sandbox, anywhere);
-    }, nudge);
 
 // Opt-in: a person picks it with /output-style, and it adds to Claude Code's own instructions rather than replacing them.
 export const outputStyle = (): string => `---

@@ -6,8 +6,8 @@ import { commitPercent } from "./numberInputs";
 import type { Outcome, ResultRow, ResultTable } from "./experimentReadings";
 import { formatCompact, formatCount, formatDayMonth, formatFixed, formatPercent } from "@intentic/ui/format";
 
-// The measured half of a setting that holds some of its work back for comparison (iq search, the project map, the field
-// notes, the guidance form, the output cleaners). One table, every reading a row of the same shape: what it counts, each
+// The measured half of a setting that holds some of its work back for comparison (the project map, the field notes,
+// the guidance form, the output cleaners). One table, every reading a row of the same shape: what it counts, each
 // group's average, and the change. A clear difference is always in the last column, in the same colour, whichever
 // reading found it. The statistics behind a row (its likely range, the samples it stands on) are a hover away.
 // A row with no answer yet shows no averages: two figures side by side read as a result whatever colour they are, and on
@@ -30,9 +30,9 @@ const {
     table: ResultTable | undefined;
     /** Share of work held back for comparison, 0-100. */
     percent: number;
-    /** Finishes the sentence the percent box starts: "10% of conversations run without iq". */
+    /** Finishes the sentence the percent box starts: "10% of conversations start without the map". */
     note: string;
-    /** Column heads in the reader's words: "With iq" / "Without", "Short" / "Long". */
+    /** Column heads in the reader's words: "With map" / "Without", "Short" / "Long". */
     onLabel: string;
     offLabel: string;
     disabled?: boolean;

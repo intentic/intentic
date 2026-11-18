@@ -18,7 +18,7 @@ import { listWorkspaceChildren } from "../workspace-tree.js";
 // every read of a path THROUGH the archive is served from there.
 //
 // The cache sits in /tmp, never under /work: it must not reach git, the delta that lands in the owner's tree, the tree
-// walk, iq, or the file watcher. It is keyed by the archive's content hash, so a changed archive lands in a different
+// walk, the search box, or the file watcher. It is keyed by the archive's content hash, so a changed archive lands in a different
 // directory and a stale listing is impossible rather than merely unlikely.
 
 const CACHE_ROOT = join(tmpdir(), "intentic-archives");

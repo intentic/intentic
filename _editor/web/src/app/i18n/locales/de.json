@@ -6483,14 +6483,9 @@
         },
         "agentCodeSearch": {
             "codeSearch": "Codesuche",
-            "iqCodeSearch": "iq-Codesuche",
             "ofConversationsOpenWithout": "der Unterhaltungen beginnen ohne die Karte",
-            "ofConversationsRunWithout": "der Unterhaltungen laufen ohne iq",
             "projectMap": "Projektkarte",
             "provideProjectStructureOverview": "Neuen Unterhaltungen einen Überblick über die Projektstruktur geben.",
-            "useIqSearchCli": "Die iq-Such-CLI statt grep/find/glob verwenden.",
-            "withIq": "Mit iq",
-            "iqUptake": "Suchen über iq: {on} damit, {off} ohne.",
             "withMap": "Mit Karte"
         },
         "agentCommandOutput": {
@@ -8237,10 +8232,8 @@
                 "failedCalls": "Fehlgeschlagene Tool-Aufrufe pro Runde",
                 "openedWithListing": "Erste Runden mit Verzeichnisauflistung",
                 "openingPrompt": "Prompt-Tokens pro Anfrage",
-                "openingSearches": "Suchen vor dem ersten Öffnen einer Datei",
                 "openingWrite": "Pro Folgeanfrage erneut geschriebener Prompt",
-                "outputReached": "Ausgabe, die den Agenten erreicht",
-                "searchCalls": "Suchen pro Runde"
+                "outputReached": "Ausgabe, die den Agenten erreicht"
             },
             "more": "{pct} % mehr",
             "moreWouldSettle": {
@@ -8261,9 +8254,7 @@
                 "failedCalls": "Bisher etwa {count} fehlgeschlagene Aufrufe weniger.",
                 "openedWithListing": "Bisher etwa {count} erste Runden weniger mit Verzeichnisauflistung.",
                 "openingPrompt": "Bisher etwa {count} Prompt-Tokens weniger.",
-                "openingSearches": "Bisher etwa {count} Suchen weniger.",
-                "openingWrite": "Bisher etwa {count} weniger erneut geschriebene Prompt-Tokens.",
-                "searchCalls": "Bisher etwa {count} Suchen weniger."
+                "openingWrite": "Bisher etwa {count} weniger erneut geschriebene Prompt-Tokens."
             },
             "tooEarly": "Noch zu früh",
             "without": "Ohne"
@@ -10514,7 +10505,7 @@
                 "label": "Pipeline-Reparaturen"
             },
             "refactorRun": {
-                "blurb": "Der Agent, der an einem Hotspot oder Schlüsselmodul im Tab Zustand eines Repositorys gestartet wird.",
+                "blurb": "Bleibt erhalten, damit Einstellungen, die vor dem Entfernen des Tabs Zustand gespeichert wurden, lesbar bleiben; nichts startet mehr einen Refaktorierungslauf.",
                 "label": "Refaktorierungen"
             },
             "safetyJudge": {
@@ -10584,7 +10575,7 @@
         "agentDocumentSearch": {
             "group": "Dokumente",
             "title": "In Dokumenten suchen",
-            "description": "Hält den Text aus PDFs, Word-Dateien, Tabellen und Präsentationen im Hintergrund bereit, damit rg und iq ihn mit Seitenangaben finden."
+            "description": "Hält den Text aus PDFs, Word-Dateien, Tabellen und Präsentationen im Hintergrund bereit, damit rg ihn mit Seitenangaben findet."
         },
         "agentChatPages": {
             "group": "Seiten im Chat",
@@ -11271,7 +11262,7 @@
             "agentSkills": "Fähigkeit, Anleitung, Rezept, Slash-Befehl, Playbook",
             "agentMemory": "merken, Gedächtnis, Erinnerung, Speicherdatei, Notizen, Vorlieben",
             "agentMemoryImport": "chatgpt, claude, Gedächtnis importieren, übertragen, umziehen, Erinnerungen kopieren",
-            "agentCodeSearch": "grep, ripgrep, Code durchsuchen, Codebasis, Index, in Dateien suchen, Projektkarte",
+            "agentCodeSearch": "Code durchsuchen, Codebasis, Projektkarte, Projektstruktur, Überblick",
             "agentDocumentSearch": "pdf, word, docx, excel, xlsx, Tabelle, Tabellenkalkulation, powerpoint, Dateien",
             "agentRepoChecks": "lint, Linter, Typprüfung, typecheck, Tests, Hooks, prüfen, Prüfungen",
             "agentCommandOutput": "Tokens, kürzen, Logs, Protokolle, komprimieren, Rauschen, Ausgabe verkürzen",
@@ -11386,13 +11377,10 @@
             "inTheChat": "Im Chat",
             "tokens": "Tokens",
             "codeSearch": {
-                "label": "So funktioniert die Codesuche",
-                "title": "In weniger Schritten zur richtigen Datei",
-                "experience": "Der Agent erreicht den benötigten Code früher. Antworten beginnen schneller und schweifen weniger ab.",
-                "tokens": "Weniger Suchen und Dateizugriffe pro Zug. Die Karte wird einmal gesendet und bei späteren Zügen wie die übrige Unterhaltung aus dem Cache gelesen. Ein kleiner Anteil der Unterhaltungen läuft ohne sie, damit die Ersparnis gemessen statt angenommen wird.",
-                "without": "Ohne iq",
-                "with": "Mit iq",
-                "rightFile": "richtige Datei",
+                "label": "So funktioniert die Projektkarte",
+                "title": "Die Struktur des Projekts ab der ersten Nachricht kennen",
+                "experience": "Der Agent weiß von Anfang an, was wo liegt. Er erreicht den benötigten Code früher und schweift weniger ab.",
+                "tokens": "Weniger Verzeichnisauflistungen und Tool-Aufrufe bis zur richtigen Datei. Die Karte wird einmal gesendet und bei späteren Zügen wie die übrige Unterhaltung aus dem Cache gelesen. Ein kleiner Anteil der Unterhaltungen läuft ohne sie, damit die Ersparnis gemessen statt angenommen wird.",
                 "ridesAlong": "Was jeder Zug sendet",
                 "turn": "Zug {turn}",
                 "instructions": "Anweisungen",
@@ -12908,7 +12896,6 @@
     },
     "views": {
         "coreViews": {
-            "health": "Gesundheit",
             "ui": "UI"
         },
         "extensionDocument": {
@@ -13089,38 +13076,6 @@
             "copyRepoPath": "Pfad im Repo kopieren",
             "copyRepoPaths": "{count} Pfade im Repo kopieren"
         },
-        "codebaseHealth": {
-            "actionLegend": "Startet einen Agenten mit dem Umbau, den die Zahlen jeder Zeile nahelegen",
-            "branchPoints": "Verzweigungspunkte",
-            "commits": "Commits seit",
-            "commits2": "Commits",
-            "couldntRead": "Zustand der Codebasis konnte nicht gelesen werden",
-            "exports": "{exports} Exporte",
-            "file": "Datei",
-            "filesBothChurnBranching": "Dateien mit hoher Änderungsrate und starker Verzweigung",
-            "functionsTypesClasses": "Funktionen, Typen, Klassen",
-            "hotspots": "Brennpunkte",
-            "hotspotsLead": "Dateien, die sich oft ändern und stark verzweigen. Keines allein ist eine Warnung: eine oft geänderte Konfigurationsdatei ist trivial, und eine verworrene Datei, die niemand anfasst, kostet nichts.",
-            "indexStillBuildingFigures": "Der Index wird noch gebaut: diese Zahlen decken nur ab, was bisher gelesen wurde.",
-            "indexedIgnoringBuildOutput": "indexiert, Build-Ausgaben ausgenommen",
-            "keyModules": "Schlüsselmodule",
-            "noFileHereBoth": "Keine Datei hier hat sowohl Commits als auch Verzweigungspunkte: ein Repository ohne Historie, oder eines mit nur Markup und Konfiguration, bewertet nichts.",
-            "noReportYet": "Noch kein Bericht.",
-            "nothingInRepositoryExports": "Nichts in diesem Repository exportiert ein Symbol, das der Index liest.",
-            "perFile": "{files} pro Datei",
-            "rankedByPagerankOver": "Nach PageRank über den Import-Graphen sortiert: worauf sich der Rest dieses Repositorys stützt, was selten das ist, was der Dateibaum zuerst zeigt.",
-            "readingIndex": "Der Index wird gelesen…",
-            "recompute": "Neu berechnen",
-            "refactor": "{name} umbauen",
-            "refactorAction": "{action}: {name}",
-            "refreshCodebaseHealth": "Zustand der Codebasis aktualisieren",
-            "repository": "Repository",
-            "risk": "Risiko",
-            "riskNote": "Commits × Verzweigungspunkte",
-            "shownOf": "Top {count} von {hotspots}",
-            "suggested": "Vorschlag",
-            "symbols": "Symbole"
-        },
         "compareDiffView": {
             "couldNotLoadVersions": "Beide Versionen dieses Dokuments konnten nicht geladen werden.",
             "showTextInstead": "Stattdessen den Text zeigen"
@@ -13241,7 +13196,6 @@
             "nothingHere": "Nichts hier.",
             "nothingMatchesIn": "Nichts passt zu „{trim}“ in {here}.",
             "searchText": "Text durchsuchen",
-            "smartSearch": "Intelligente Suche",
             "toolingHidden": "{count} Werkzeugdatei ausgeblendet | {count} Werkzeugdateien ausgeblendet",
             "groupFiles": "Dateien gruppieren nach",
             "byKind": "Art",
@@ -13400,13 +13354,6 @@
             "writing": "Schreibt",
             "draftNote": "Zeigt den Entwurf des Agenten"
         },
-        "healthCodebaseHealth": {
-            "all": "Alle",
-            "allHistory": "Gesamte Historie",
-            "days30": "30 Tage",
-            "days7": "7 Tage",
-            "days90": "90 Tage"
-        },
         "historyPanel": {
             "autoCapture": "Automatisch erfassen",
             "beforeGoingBack": "Vor dem Zurückgehen",
@@ -13483,18 +13430,6 @@
         },
         "pushBadge": {
             "sendingCommits": "Commits werden gesendet"
-        },
-        "refactorAsk": {
-            "decompose": "An Nähten teilen",
-            "months": "{count} Monat | {count} Monate",
-            "narrow": "Oberfläche verkleinern",
-            "simplify": "Verzweigung glätten",
-            "split": "Nach Zuständigkeit teilen",
-            "stabilize": "Vertrag abtrennen",
-            "startsAgent": "Startet einen Agenten",
-            "tests": "Tests aufteilen",
-            "untouched": "Unberührt",
-            "years": "{count} Jahr | {count} Jahre"
         },
         "reviewPanel": {
             "abort": "Abbrechen",
@@ -13705,7 +13640,6 @@
             "closeSplit": "Teilung schließen",
             "closeTab": "Tab schließen",
             "closeTabsToRight": "Tabs rechts schließen",
-            "codebaseHealth": "Codebase-Zustand",
             "collapseAll": "Alle einklappen",
             "collapseAllFolders": "Alle Ordner einklappen",
             "commaSeparated": "Durch Kommas getrennt",
@@ -13721,7 +13655,6 @@
             "landingNow": "{landing}…",
             "nextTab": "Nächster Tab",
             "nobody": "Niemand",
-            "openCodebaseHealthWorkspace": "Zustand der Codebasis für das Workspace-Wurzelverzeichnis öffnen",
             "runWorkspace": "Workspace ausführen",
             "openTabToSide": "Tab daneben öffnen",
             "previousTab": "Vorheriger Tab",
@@ -13729,17 +13662,14 @@
             "refreshFiles": "Dateien aktualisieren",
             "reopenClosedTab": "Geschlossenen Tab wieder öffnen",
             "scopeNameHint": "Dateinamen",
-            "scopeSmartHint": "Nach Bedeutung",
             "scopeTextHint": "Genauer Text",
             "showExplorer": "Explorer zeigen",
-            "smart": "Smart",
             "tabsStayOpen": "Tabs bleiben offen",
             "search": "Suchen…",
             "searchIgnoredFiles": "Ignorierte Dateien durchsuchen",
             "searchInFiles2": "In Dateien suchen…",
             "show": "{restorePoints} zeigen",
             "showChanges": "Änderungen zeigen",
-            "showCodebaseHealth": "Zustand der Codebasis zeigen",
             "showHome": "Schreibtisch zeigen",
             "showHome2": "Schreibtisch zeigen",
             "showFiles": "Dateien zeigen",
@@ -13959,11 +13889,9 @@
             "doubleClickToKeep": "Doppelklick behält ihn",
             "file": "Datei",
             "folder": "Ordner",
-            "health": "Codebase-Zustand",
             "management": "Verwaltungspanel",
             "path": "Pfad",
             "preview": "Vorschau",
-            "repo": "Repo",
             "closeTab": "{title} schließen"
         },
         "outgoingWork": {

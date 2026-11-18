@@ -7,11 +7,11 @@ import { useSearchOptions } from "../../../models/workspace/search/useSearchOpti
 import type { ExplorerSearchBox } from "./useExplorerSearch";
 
 // The one search box every explorer shows, the workspace's and a folder of this computer's: its scopes, and the switches
-// each scope brings. A folder has no index for Smart to ask, so it is not offered there.
+// each scope brings.
 
 const { default: ExplorerSearchBar } = await import("./ExplorerSearchBar.vue");
 
-const boxIn = (scope: `name` | `text` | `smart`): ExplorerSearchBox => {
+const boxIn = (scope: `name` | `text`): ExplorerSearchBox => {
     const filter = ref(``);
     const chosen = ref(scope);
     return {
@@ -54,22 +54,24 @@ afterEach(() => {
 });
 
 describe(`ExplorerSearchBar`, () => {
-    it(`offers Name, Text and Smart in a sandbox, and Text's switches only in Text`, async () => {
+    it(`offers Name and Text in a sandbox, and Text's switches only in Text`, async () => {
         setDaemonRoutes([`workspace.search`], undefined, `sandbox`);
         const box = boxIn(`name`);
         const { el, unmount } = await mount(box);
-        expect(labels(el)).toEqual(expect.arrayContaining([`Name`, `Text`, `Smart`]));
+        expect(labels(el)).toEqual(expect.arrayContaining([`Name`, `Text`]));
+        // The meaning search that read the sandbox's index is gone; nothing offers it any more.
+        expect(labels(el)).not.toContain(`Smart`);
         expect(labels(el)).not.toContain(`Aa`);
         expect(el.querySelectorAll(`input`)).toHaveLength(1);
         box.scope.value = `text`;
         await nextTick();
         expect(labels(el)).toEqual(expect.arrayContaining([`Aa`, `ab`, `.*`]));
-        // Text and Smart take the files to include as well.
+        // Text takes the files to include as well.
         expect(el.querySelectorAll(`input`)).toHaveLength(2);
         unmount();
     });
 
-    it(`leaves Smart out on a folder of this computer, which keeps no index`, async () => {
+    it(`offers the same scopes on a folder of this computer`, async () => {
         setDaemonRoutes([`workspace.search`], undefined, `folder`);
         const { el, unmount } = await mount(boxIn(`name`));
         expect(labels(el)).toEqual(expect.arrayContaining([`Name`, `Text`]));

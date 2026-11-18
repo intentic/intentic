@@ -340,7 +340,7 @@ export interface WorkspaceMapInput {
     readonly root: string;
     // Where this run actually starts, a persona's start folder, an isolated worktree, or the root.
     readonly cwd: string;
-    // How the reader should find an exact path, as the note names it; the sandbox has iq on every PATH, a plain Claude
+    // How the reader should find an exact path, as the note names it; the sandbox has rg on every PATH, a plain Claude
     // Code install may not.
     readonly exactPaths?: string;
 }
@@ -478,7 +478,7 @@ const cache = new Map<string, { at: number; note: string | undefined }>();
 // Swallows its own failures: this is unsolicited help, so an unreadable directory or a filesystem that moved mid-walk
 // should cost the note, never the turn.
 export const workspaceMapNote = (input: WorkspaceMapInput): string | undefined => {
-    const exactPaths = input.exactPaths ?? "`iq files` or Read";
+    const exactPaths = input.exactPaths ?? "`rg --files` or Read";
     const key = `${input.root}\u0000${input.cwd}\u0000${exactPaths}`;
     const hit = cache.get(key);
     if (hit !== undefined && Date.now() - hit.at < TTL_MS) {

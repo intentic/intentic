@@ -10,7 +10,6 @@ import type { Admission } from "../../../workload/resource-budget.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { REACH_ALL } from "../../../secrets/credential-reach.js";
 import { GATED_CREDENTIALS_TITLE } from "../../../secrets/credential-gating.js";
-import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { MAP_COMPARISON } from "./experiments.js";
 import { opt } from "../../../opt.js";
@@ -42,12 +41,10 @@ const FACTS: AdmittedTurnFacts = {
     grant: undefined,
     skillCatalog: undefined,
     contextNote: undefined,
-    turnContext: undefined,
     gates: [],
     releases: createCredentialGrants(),
     reach: REACH_ALL,
     ceiling: undefined,
-    iqTeaching: undefined,
     personaPrompt: undefined,
     memoryNote: undefined,
     mapNote: undefined,
@@ -339,44 +336,6 @@ test("a card that drops the checks note never shows it, even where the facts car
     expect(titles(decision)).not.toContain(LANDING_CHECKS_NOTE_TITLE);
 });
 
-// the iq teaching: runtimes with no plugin loader, on a conversation's opening turn
-
-const TEACHING = { note: "## iq workspace search\n\nAsk iq before you grep.", cohort: "c0ffee" };
-const SEARCH_ON = SandboxSettingsSchema.parse({ iqSearch: true, ...TOOLS_UNMEASURED });
-const SEARCH_MEASURED = SandboxSettingsSchema.parse({ iqSearch: true, iqSearchHoldout: 0.5, ...TOOLS_UNMEASURED });
-
-test.each([
-    ["native Codex on an opening turn", SEARCH_ON, "codex", "c-iq", undefined, true, { turnIndex: 0 }],
-    ["OpenCode on an opening turn", SEARCH_ON, "grok", "c-iq", undefined, true, { turnIndex: 0 }],
-    ["native Codex on a follow-up, which its session already carries", SEARCH_ON, "codex", "c-iq", conversationAfter(2), false, { turnIndex: 2 }],
-    ["the Claude Code loop, which loads it as a plugin", SEARCH_ON, "claude", "c-iq", undefined, false, { turnIndex: 0 }],
-    ["a workspace with search off", SandboxSettingsSchema.parse({ iqSearch: false }), "codex", "c-iq", undefined, false, { turnIndex: 0 }],
-    [
-        "a treated conversation, stamped with its cohort",
-        SEARCH_MEASURED,
-        "codex",
-        conversationIn("iq-search", true),
-        undefined,
-        true,
-        { turnIndex: 0, iqSearchArm: true, iqSearchCohort: "c0ffee" },
-    ],
-    [
-        "a control conversation, stamped with the cohort it was withheld",
-        SEARCH_MEASURED,
-        "codex",
-        conversationIn("iq-search", false),
-        undefined,
-        false,
-        { turnIndex: 0, iqSearchArm: false, iqSearchCohort: "c0ffee" },
-    ],
-] as const)("the iq teaching on %s", (_case, settings, agent, conversationId, entry, sent, experiments) => {
-    const decision = decided({ ...FACTS, settings, entry, iqTeaching: TEACHING }, turn({ agent, conversationId }));
-
-    expect(titles(decision).includes(IQ_SEARCH_INSTRUCTION_TITLE)).toBe(sent);
-    expect(decision.context.base.spec.notes?.find((note) => note.title === IQ_SEARCH_INSTRUCTION_TITLE)?.text).toBe(sent ? TEACHING.note : undefined);
-    expect(decision.experiments).toEqual(experiments);
-});
-
 // tool search: native Claude on the Claude Code loop draws an arm; the arm is the switch the CLI is handed
 
 const TOOLS_MEASURED = SandboxSettingsSchema.parse({ toolSearch: true, toolSearchHoldout: 0.5, stableSystemPromptHoldout: 0 });
@@ -495,24 +454,19 @@ test.each([
 // the experiments' arms: one per salt, the same on every turn of a conversation
 
 const ALL_MEASURED = SandboxSettingsSchema.parse({
-    iqSearch: true,
-    iqSearchHoldout: 0.5,
     workspaceMap: true,
     workspaceMapHoldout: 0.5,
     ...TOOLS_UNMEASURED,
 });
-const MEASURED_FACTS: AdmittedTurnFacts = { ...FACTS, settings: ALL_MEASURED, iqTeaching: TEACHING, mapNote: MAP };
+const MEASURED_FACTS: AdmittedTurnFacts = { ...FACTS, settings: ALL_MEASURED, mapNote: MAP };
 
 test.each(Array.from({ length: 8 }, (_, index) => `conversation-${index}`))("%s draws one arm per salt, the same on every turn", (conversationId) => {
-    const search = experimentArm("iq-search", conversationId, 0.5);
     const map = experimentArm("workspace-map-or-none", conversationId, 0.5);
 
     const first = decided(MEASURED_FACTS, turn({ conversationId }));
 
     expect(first.experiments).toEqual({
         turnIndex: 0,
-        iqSearchArm: search,
-        iqSearchCohort: TEACHING.cohort,
         mapArm: map,
         mapCohort: MAP_COMPARISON,
         // What the opening message paid, so only on a conversation that was sent the map.
@@ -523,20 +477,6 @@ test.each(Array.from({ length: 8 }, (_, index) => `conversation-${index}`))("%s 
 
 test("a turn with no conversation is in no experiment, and still stamps what its prompt paid", () => {
     expect(decided(MEASURED_FACTS).experiments).toEqual({ mapChars: MAP.length });
-});
-
-// The system prompt names the tool the conversation was taught, so its guidance and the iq teaching never disagree; the
-// holdout keeps `rg`, or the guidance would teach the control what the experiment withholds from it.
-test.each([true, false])("a conversation drawing the %s iq arm is told to find code with the tool it was taught", (arm) => {
-    const decision = decided({ ...FACTS, settings: SEARCH_MEASURED }, turn({ conversationId: conversationIn("iq-search", arm) }));
-
-    expect(decision.context.base.spec.search).toBe(arm ? "iq" : "rg");
-});
-
-test("a sandbox with iq off is told rg", () => {
-    const decision = decided({ ...FACTS, settings: SandboxSettingsSchema.parse({ iqSearch: false }) }, turn({ conversationId: "c-1" }));
-
-    expect(decision.context.base.spec.search).toBe("rg");
 });
 
 // the spawn door: the delegate shelf and full agency, on a conversation with a supervisor handed down

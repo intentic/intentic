@@ -33,7 +33,7 @@ export const githubProfileUrl = "https://github.com/radarsu";
 export const linkedinProfileUrl = "https://www.linkedin.com/in/radarsu/";
 export const personalSiteUrl = "https://radarsu.com/";
 
-// The npm scope every published package lives under (@intentic/cli, @intentic/iq, …).
+// The npm scope every published package lives under (@intentic/cli, @intentic/fileq, …).
 export const npmOrgUrl = "https://www.npmjs.com/org/intentic";
 
 // Official profiles a search engine uses to resolve this domain; Discord belongs here like the GitHub org does.

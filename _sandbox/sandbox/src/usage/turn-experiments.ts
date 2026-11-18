@@ -1,25 +1,15 @@
-import { MECHANISMS, measureExperiment, MIN_ARM_TURNS, type Design } from "@intentic/agent-context/arm-stats";
+import { MECHANISMS, measureExperiment, type Design } from "@intentic/agent-context/arm-stats";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { AgentHarnessSchema } from "@intentic/sandbox-contract/schemas/agent";
 import type { DayWindowQuery, UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
-import type { SavingsReport, TurnExperiment } from "@intentic/sandbox-contract/schemas/settings";
+import type { SavingsReport } from "@intentic/sandbox-contract/schemas/settings";
 import { opt } from "../opt.js";
 import type { UsageStore } from "./usage-store.js";
 
-// The mechanism experiments (iq search teaching, project map, tool search, stable prompt, cold trim)
-// measured off the usage ledger.
+// The mechanism experiments (project map, tool search, stable prompt, cold trim) measured off the usage ledger. The iq
+// search teaching was one until iq was removed (2026-11-18); its rows stay in the ledger and nothing reads them.
 // What each is judged on and the arithmetic over its two arms are @intentic/agent-context's, shared with the Claude Code
 // plugin's stats; this module only says where a ledger row keeps each experiment's arm and treatment revision.
-
-// Cohort hashes that name one treatment under two spellings, read as the earlier one. `afccafc52ce9` is what
-// fcf9970ffa's hash of `af7b1874e40c`'s words came out as once the lean line left the hash input (2026-10-06): the nudge and
-// the full search line are byte-identical, and the lean line went to both arms alike, so splitting them only halved
-// the sample.
-const SAME_IQ_TEACHING: Readonly<Record<string, string>> = { afccafc52ce9: "af7b1874e40c" };
-const iqCohortOf = (turn: UsageTurn): string | undefined =>
-    turn.iqSearchCohort === undefined ? undefined : (SAME_IQ_TEACHING[turn.iqSearchCohort] ?? turn.iqSearchCohort);
-
-const SEARCH_DESIGN: Design<UsageTurn> = { ...MECHANISMS.search, arm: (turn) => turn.iqSearchArm, cohort: iqCohortOf };
 
 // Cohorted by comparison rather than by revision (the map is recomputed on every send): the current rows are read apart
 // from the comparisons before them (experiments.ts MAP_COMPARISON). Every earlier one also compared the map against none
@@ -66,34 +56,12 @@ const withinOneLoop = (turns: readonly UsageTurn[], design: Design<UsageTurn>): 
     return busiest === undefined ? turns : turns.filter((turn) => loopOf(turn) === busiest);
 };
 
-const sumOf = (turns: readonly UsageTurn[], field: "searchCalls" | "iqSearches"): number => turns.reduce((sum, turn) => sum + (turn[field] ?? 0), 0);
-
-// The share of each group's searches that ran iq, over the reading's own cohort: a teaching nobody takes up cannot move
-// the readings, and they alone cannot say which happened. Pooled over turns, since it describes rather than compares.
-const uptakeOf = (turns: readonly UsageTurn[], cohort: string | undefined): TurnExperiment["uptake"] => {
-    const recorded = turns.filter((turn) => turn.iqSearches !== undefined && SEARCH_DESIGN.arm(turn) !== undefined && iqCohortOf(turn) === cohort);
-    const share = (arm: boolean): number => {
-        const group = recorded.filter((turn) => turn.iqSearchArm === arm);
-        const searches = sumOf(group, "searchCalls");
-        return searches === 0 ? 0 : Math.round((sumOf(group, "iqSearches") / searches) * 1000) / 1000;
-    };
-    const treated = recorded.filter((turn) => turn.iqSearchArm === true).length;
-    return treated < MIN_ARM_TURNS ? undefined : { on: share(true), off: share(false), turns: treated };
-};
-
-const searchExperiment = (turns: readonly UsageTurn[]): TurnExperiment | undefined => {
-    const experiment = measureExperiment(turns, SEARCH_DESIGN);
-    const uptake = experiment === undefined ? undefined : uptakeOf(turns, experiment.cohort);
-    return experiment === undefined || uptake === undefined ? experiment : { ...experiment, uptake };
-};
-
 export const readTurnExperiments = async (
     usage: UsageStore,
     window: DayWindowQuery,
-): Promise<Pick<SavingsReport, "search" | "map" | "toolSearch" | "stablePrompt" | "coldTrim">> => {
+): Promise<Pick<SavingsReport, "map" | "toolSearch" | "stablePrompt" | "coldTrim">> => {
     const turns = (await usage.turns(window)).filter(measurable);
     return {
-        ...opt("search", searchExperiment(withinOneLoop(turns, SEARCH_DESIGN))),
         ...opt("map", measureExperiment(withinOneLoop(turns, MAP_DESIGN), MAP_DESIGN)),
         ...opt("toolSearch", measureExperiment(turns, TOOL_SEARCH_DESIGN)),
         ...opt("stablePrompt", measureExperiment(turns, STABLE_PROMPT_DESIGN)),

@@ -62,8 +62,8 @@ describe(`staleQueryKeys`, () => {
     });
 
     it(`ignores unrelated churn under .intentic/`, () => {
-        // iq's index and a session transcript: frequent enough writes to storm every query under a prefix-only match.
-        expect(staleQueryKeys([`.intentic/local/cache/iq/index.db`, `.intentic/records/sessions/claude/projects/p/session.jsonl`], [])).toEqual([]);
+        // A cache database and a session transcript: frequent enough writes to storm every query under a prefix-only match.
+        expect(staleQueryKeys([`.intentic/local/cache/code-counts.db`, `.intentic/records/sessions/claude/projects/p/session.jsonl`], [])).toEqual([]);
     });
 
     it(`ignores a store's own temp file while it is mid-swap`, () => {

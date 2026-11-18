@@ -5,7 +5,7 @@
 #   docs/terms.pdf:345:[p. 12] … wniosek …
 #
 # Every line under a page or slide heading carries `[p. N] ` or `[slide N] `, so a hit is already a citation. Line
-# numbers are lines of the document's text, the same ones iq reports for it.
+# numbers are lines of the document's text.
 #
 # Fast path (no Node): the file's shadow at <root>/.intentic/local/cache/derived/<path>.md, when its recorded
 # source_size and source_mtime are the file's own (one `stat`). Otherwise `fileq read --plain`, which derives it

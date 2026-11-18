@@ -128,12 +128,10 @@
             "accent": "4",
             "id": "search",
             "name": "Code search",
-            "oneLiner": "How an agent finds the right file instead of reading everything.",
+            "oneLiner": "The search box's text and file-name search, and the agents' TypeScript rename and diagnostics.",
             "packages": [
-                "_search/iq",
-                "_search/iq-bench",
-                "_search/iq-engine",
-                "_search/lsp"
+                "_search/lsp",
+                "_search/text-search"
             ]
         },
         {
@@ -249,8 +247,7 @@
         "_editor/web",
         "_shared/sandbox-contract",
         "_sandbox/sandbox",
-        "_shared/extension-api",
-        "_search/iq"
+        "_shared/extension-api"
     ],
     "repo": "intentic"
 }

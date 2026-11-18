@@ -7,7 +7,6 @@ import { useDiffStat } from "../changes/useDiffStat";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import ExtensionDocument from "../../../core-views/ExtensionDocument.vue";
-import CodebaseHealth from "../health/CodebaseHealth.vue";
 import DirectoryOperator from "../directory-ui/DirectoryOperator.vue";
 import DirectoryUiHost from "../directory-ui/DirectoryUiHost.vue";
 import HomeView from "../home/HomeView.vue";
@@ -164,10 +163,6 @@ const diff = useLoaded(() => ({
         </template>
         <div v-else-if="activeTab?.kind === 'directory'" class="min-h-0 flex-1">
             <DirectoryOperator :dir="activeTab.dir" :view="activeTab.view" />
-        </div>
-        <!-- The workspace root's report; a nested repository's is the Health tab of its management panel. -->
-        <div v-else-if="activeTab?.kind === 'health'" class="min-h-0 flex-1">
-            <CodebaseHealth :repo="activeTab.repo" />
         </div>
         <!-- A directory's document, rendered by whichever extension has something to say about it. -->
         <div v-else-if="activeTab?.kind === 'document'" class="min-h-0 flex-1">

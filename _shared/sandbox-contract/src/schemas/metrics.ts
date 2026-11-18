@@ -6,6 +6,8 @@ import { z } from "zod";
 // The kinds of process a sandbox runs, as the daemon classifies them by command line.
 export const PROCESS_ROLES = [
     "languageServer",
+    // iq's resident engine, removed 2026-11-18: no daemon classifies a process as it now, but an editor reads an older
+    // daemon's metrics against this list, and an unknown role would fail the whole reading.
     "searchEngine",
     "agentRuntime",
     "browser",

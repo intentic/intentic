@@ -90,7 +90,7 @@ test("a read outside the fence is FORBIDDEN, and inside it is not", async () => 
     expect(await errorCode(client.workspace.file({ path: "support/faq.md" }))).toBeUndefined();
 });
 
-// The index covers the whole tree; without this the fence is decorative, since a query returns the lines themselves.
+// A search walks the whole tree; without this the fence is decorative, since a query returns the lines themselves.
 test("a fenced search runs inside the fence, and inside a folder outside it runs over nothing", async () => {
     const scopes: (readonly string[] | undefined)[] = [];
     let caller = proven(`fay@example.com`, `viewer`, [`google`], [`support`]);
@@ -99,12 +99,13 @@ test("a fenced search runs inside the fence, and inside a folder outside it runs
             services({
                 areas: memoryAreasStore(AREAS),
                 auth: { authorize: async () => caller, authorizeOwner: rejectForbidden },
-                iq: unstubbed<Services["iq"]>("iq", {
-                    run: async (request) => {
-                        scopes.push(request.scope.paths);
+                textSearch: unstubbed<Services["textSearch"]>("textSearch", {
+                    find: async (query) => {
+                        scopes.push(query.paths);
                         return {
-                            result: { mode: "q", total: 0, files: 0, shown: 0, groups: [], freshness: { state: "fresh" }, truncated: false },
-                        } as never;
+                            result: { mode: "find", total: 0, files: 0, shown: 0, groups: [], freshness: { state: "fresh" }, truncated: false },
+                            timing: { kept: false, scanMs: 0, firstMs: undefined, ceiling: false },
+                        };
                     },
                 }),
             }),
@@ -116,7 +117,7 @@ test("a fenced search runs inside the fence, and inside a folder outside it runs
     await client.workspace.search({ query: "salary", dir: "support/tickets" });
     caller = proven(`ada@example.com`, `owner`);
     await client.workspace.search({ query: "salary" });
-    // Fenced with no folder asked for: the fence itself. Asked for a folder outside it: nothing, which the engine's
+    // Fenced with no folder asked for: the fence itself. Asked for a folder outside it: nothing, which the search's
     // own prefix filter renders as no results. Asked for one inside it: the narrower of the two. Unfenced: no scope.
     expect(scopes).toEqual([["support"], [], ["support/tickets"], undefined]);
 });

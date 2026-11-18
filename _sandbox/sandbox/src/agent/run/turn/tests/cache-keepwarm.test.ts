@@ -57,7 +57,7 @@ const lastRequest = (credential: AgentRequest["credential"] = { kind: "claude-oa
         systemAppend: "the delegation note",
     },
     policy: { permissionMode: "bypassPermissions" },
-    tools: { iqAvailable: true },
+    tools: { diagnostics: true },
     hooks: { cards: CARDS, resync: async () => undefined },
     credential,
     signal: new AbortController().signal,
@@ -262,7 +262,7 @@ describe("tending a hold", () => {
         await tendKeepWarm(deps, ID, T0 + 51 * MINUTE);
         const [request] = sent;
         expect(request?.policy).toEqual({ permissionMode: "bypassPermissions", keepWarm: true });
-        expect(request?.tools).toEqual({ iqAvailable: true });
+        expect(request?.tools).toEqual({ diagnostics: true });
         expect(request?.spec).toEqual({
             prompt: KEEP_WARM_PROMPT,
             cwd: WORKSPACE_ROOT,

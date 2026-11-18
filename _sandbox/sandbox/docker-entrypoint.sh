@@ -341,11 +341,10 @@ if [ -n "$daemon_allocator" ] && [ "${SANDBOX_MALLOC:-jemalloc}" = jemalloc ] &&
 fi
 
 # --max-semi-space-size: Node 24 let each isolate's young generation grow to 128 MiB here (two 64 MiB halves), and a
-# V8 flag is process-wide, so the daemon's worker threads and the iq engine (forked with these flags) each get one
-# too. 2026-11-17, the shinobi-society audit, measured on a daemon 4 hours up: its own young generation sat at
-# 109-128 MiB resident with about 36 MiB of it live, of about 960 MiB in all, and the workspace watcher's thread,
-# listing /work in isolation, held 162 MiB at 64 against 113 MiB at 16, in the same time. At 16 scavenges come more
-# often, and each still copies only what survives.
+# V8 flag is process-wide, so the daemon's worker threads each get one too. 2026-11-17, the shinobi-society audit,
+# measured on a daemon 4 hours up: its own young generation sat at 109-128 MiB resident with about 36 MiB of it live,
+# of about 960 MiB in all, and the workspace watcher's thread, listing /work in isolation, held 162 MiB at 64 against
+# 113 MiB at 16, in the same time. At 16 scavenges come more often, and each still copies only what survives.
 semi_space_mb=16
 
 # netd owns every port and the tunnel, and supervises the daemon behind it: a daemon crash is restarted while the

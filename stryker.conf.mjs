@@ -39,7 +39,7 @@ export default {
     // For Stryker's own exit code and report colour, not the chore: its real floor lives in chores.ts. `break: null`
     // keeps a low score from failing this command, since the probe already runs it with `|| true`.
     thresholds: { high: 80, low: 60, break: null },
-    // Outside the repo tree, so a run's files never drag into the iq index or a file listing.
+    // Outside the repo tree, so a run's files never drag into a search or a file listing.
     tempDirName: "/tmp/intentic-stryker",
     incrementalFile: "/tmp/intentic-stryker/incremental.json",
 };

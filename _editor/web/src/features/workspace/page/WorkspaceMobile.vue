@@ -457,7 +457,6 @@ const onPick = (event: Event): void => {
                         :options="[
                             { label: t(`shared.name`), value: `name` },
                             { label: t(`workspace.words.text`), value: `text` },
-                            { label: t(`workspace.workspaceDesktop.smart`), value: `smart` },
                         ]"
                     />
                 </div>

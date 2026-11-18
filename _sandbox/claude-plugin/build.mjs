@@ -13,12 +13,11 @@ import { build } from "esbuild";
 const root = import.meta.dirname;
 const dist = join(root, "dist");
 
-// Hooks run on every session start, tool call and prompt, so each is its own small bundle rather than one that parses
+// Hooks run on every session start and tool call, so each is its own small bundle rather than one that parses
 // fileq's document stack on every Bash call.
 const ENTRIES = {
     "session-start": "src/session-start.ts",
     "post-bash": "src/post-bash.ts",
-    "prompt-submit": "src/prompt-submit.ts",
     stats: "src/stats.ts",
     emit: "src/emit.ts",
     fileq: "../fileq/src/cli.ts",

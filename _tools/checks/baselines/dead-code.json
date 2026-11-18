@@ -53,7 +53,6 @@
         "count": 2,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_devices/local-files/src/search.ts": "standing when the check arrived (2026-10-16)",
     "_devices/local-files/src/testing.ts": "standing when the check arrived (2026-10-16)",
     "_devices/local-files/src/walk.ts": "standing when the check arrived (2026-10-16)",
     "_devices/local-files/src/watch.ts": "standing when the check arrived (2026-10-16)",
@@ -422,7 +421,6 @@
         "count": 2,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/claude-plugin/src/runtime.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/claude-plugin/src/sessions.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/claude-plugin/src/stats.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/fileq/src/commands/derive.command.ts": "standing when the check arrived (2026-10-16)",
@@ -837,18 +835,6 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/speech/src/voice/voice-synth.ts": "standing when the check arrived (2026-10-16)",
-    "_search/iq-engine/src/engines/catalog.ts": "standing when the check arrived (2026-10-16)",
-    "_search/iq-engine/src/verbs/context.ts": "standing when the check arrived (2026-10-16)",
-    "_search/iq-engine/src/verbs/literal.ts": "standing when the check arrived (2026-10-16)",
-    "_search/iq-engine/src/verify/check.ts": "standing when the check arrived (2026-10-16)",
-    "_search/iq-engine/src/workspace/shadows.ts": {
-        "count": 2,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/recall.ts": {
-        "count": 2,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_shared/sandbox-contract/src/contracts/usage.contract.ts": "standing when the check arrived (2026-10-16)",
     "_site/demo/src/fixture/audit.ts": "standing when the check arrived (2026-10-16)",
     "_site/demo/src/fixture/fleet.ts": {
