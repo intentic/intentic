@@ -120,7 +120,7 @@ RUN printf '%s\n' \
 # ponytail: bump together with package.json's packageManager field.
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PATH
-RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.20.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.21.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 # bun on PATH. Every package's tests run on Bun (`suites` is `bun test`), every typecheck is `bun check`, and the
@@ -185,11 +185,11 @@ RUN arch="$(dpkg --print-architecture)" \
 # it at 2.46.0 (March 2024, still the version in unstable), and gh is a client for an API that keeps moving under it.
 # A static Go binary, sha256-checked per architecture like ripgrep and jq; the tool bumper
 # (_tools/scripts/tools/bump-tools.mjs) moves the version and both checksums together.
-ARG GH_VERSION=2.103.3
+ARG GH_VERSION=2.104.0
 RUN set -eu; arch="$(dpkg --print-architecture)"; \
     case "$arch" in \
-      amd64) gh_sha=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d ;; \
-      arm64) gh_sha=ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63 ;; \
+      amd64) gh_sha=98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e ;; \
+      arm64) gh_sha=cb34cefc6f4e77b90731374a2b737516bb8f3033c6ca46aa949e5344f68069e3 ;; \
       *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${arch}.tar.gz" -o /tmp/gh.tar.gz; \
