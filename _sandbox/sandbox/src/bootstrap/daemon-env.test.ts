@@ -1,6 +1,15 @@
 import { os } from "@orpc/server";
 import { failureOf, orpcLink } from "../peers/orpc-link.testing.js";
-import { COMPILE_CACHE_ENV, forgetCompileCacheEnv, isAbandonedPeerSend, keepCompiledCode, logEscaped } from "./daemon-env.js";
+import {
+    ALLOCATOR_ENV,
+    COMPILE_CACHE_ENV,
+    DAEMON_MALLOC_CONF,
+    forgetAllocatorEnv,
+    forgetCompileCacheEnv,
+    isAbandonedPeerSend,
+    keepCompiledCode,
+    logEscaped,
+} from "./daemon-env.js";
 
 const recording = () => {
     const lines: { level: string; data: Record<string, unknown>; message: string }[] = [];
@@ -57,6 +66,23 @@ test("the compile cache folder Node was started with is the daemon's alone: no c
     const env: NodeJS.ProcessEnv = { [COMPILE_CACHE_ENV]: "/var/tmp/compile-cache", PATH: "/usr/bin" };
     forgetCompileCacheEnv(env);
     expect(env).toEqual({ PATH: "/usr/bin" });
+});
+
+const JEMALLOC = "/usr/lib/x86_64-linux-gnu/libjemalloc.so.2";
+
+test("the allocator the entrypoint preloaded is the daemon's alone: no child inherits it", () => {
+    const env: NodeJS.ProcessEnv = { LD_PRELOAD: JEMALLOC, MALLOC_CONF: DAEMON_MALLOC_CONF, [ALLOCATOR_ENV]: JEMALLOC, PATH: "/usr/bin" };
+    forgetAllocatorEnv(env);
+    expect(env).toEqual({ PATH: "/usr/bin" });
+});
+
+test("an LD_PRELOAD or MALLOC_CONF the entrypoint did not set stays for the children", () => {
+    const operators: NodeJS.ProcessEnv = { LD_PRELOAD: "/opt/debug/libtrace.so", MALLOC_CONF: "prof:true" };
+    forgetAllocatorEnv(operators);
+    expect(operators).toEqual({ LD_PRELOAD: "/opt/debug/libtrace.so", MALLOC_CONF: "prof:true" });
+    const mixed: NodeJS.ProcessEnv = { LD_PRELOAD: "/opt/debug/libtrace.so", MALLOC_CONF: DAEMON_MALLOC_CONF, [ALLOCATOR_ENV]: JEMALLOC };
+    forgetAllocatorEnv(mixed);
+    expect(mixed).toEqual({ LD_PRELOAD: "/opt/debug/libtrace.so" });
 });
 
 test("writing the compiled code is asked once and a failure to write it is a trace, never a throw", () => {

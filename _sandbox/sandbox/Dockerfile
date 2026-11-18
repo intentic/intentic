@@ -22,10 +22,11 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean \
 # SSH is key-only; generate host keys on persistent /history at boot, never in the image. tmux keeps processes alive across web disconnects.
 # Python venv/pip plus Debian PyYAML/Pillow avoid PEP 668 failures for common scripts; uncommon toolchains remain overlay additions.
 # bubblewrap is core access control: without it fenced turns must refuse to run, regardless of optional desktop tooling.
+# libjemalloc2 is the daemon's allocator (docker-entrypoint.sh preloads it); tmux pulls it in today, named so it never depends on that.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv python-is-python3 python3-yaml python3-pil make g++ bubblewrap
+    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv python-is-python3 python3-yaml python3-pil make g++ bubblewrap libjemalloc2
 # Standalone binaries must support both sandbox architectures without newer system libraries.
 ARG RIPGREP_VERSION=15.2.0
 ARG JQ_VERSION=1.8.2

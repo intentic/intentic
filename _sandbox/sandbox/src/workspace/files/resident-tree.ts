@@ -21,11 +21,32 @@ import { realPathOf } from "./workspace-files-paths.js";
 export const MODEL_MAX_ENTRIES = 200_000;
 
 // One entry of a listing, with what the walk decides about it: whether its name is ignored, and whether it is opened.
-interface Node extends Entry {
+// `real` is kept for a link alone; anything else is its listing's real path joined with its name (realOf). path.join
+// hands back a string built of one slice per segment over a copy of its arguments, so held for every entry it was 586
+// bytes a node, 21.5 of the watch thread's 54 MB live on this workspace (2026-11-18, a heap snapshot of the daemon).
+interface Node extends Omit<Entry, "real"> {
+    readonly real?: string;
     readonly path: string;
     readonly ignored: boolean;
     readonly opened: boolean;
 }
+
+const realOf = (node: Node, listingReal: string): string => node.real ?? join(listingReal, node.name);
+
+// Whether two nodes of one listing would list alike: what shallow() writes, whether the walk opens it, and where a
+// link lands. Compared field by field: a rebuild asks this of every node it holds, and serializing both sides made two
+// strings per node.
+const sameNode = (left: Node, right: Node): boolean =>
+    left === right ||
+    (left.name === right.name &&
+        left.isDir === right.isDir &&
+        left.size === right.size &&
+        left.mtime === right.mtime &&
+        left.ignored === right.ignored &&
+        left.opened === right.opened &&
+        left.real === right.real &&
+        left.link?.to === right.link?.to &&
+        left.link?.state === right.link?.state);
 
 // One listed directory, with the ignore state inside it (its parents' layers and its own .gitignore). `nodes` is
 // undefined when it could not be read, which the walk shows as empty.
@@ -74,15 +95,40 @@ const shallow = (node: Node): WorkspaceTreeEntry => ({
 const entriesOf = (listing: Listing): WorkspaceTreeEntry[] => (listing.nodes ?? []).map(shallow);
 
 // Whether two listings show the same entries; the ignore state is compared through what it decided. Re-listing keeps
-// unchanged nodes by identity, so a file event need not allocate and serialize every untouched sibling twice.
+// unchanged nodes by identity, so a file event need not allocate and compare every untouched sibling.
 const sameEntries = (left: Listing, right: Listing): boolean =>
     left.nodes === undefined || right.nodes === undefined
         ? left.nodes === right.nodes
-        : left.nodes.length === right.nodes.length &&
-          left.nodes.every((node, index) => {
-              const other = right.nodes![index]!;
-              return node === other || (node.opened === other.opened && JSON.stringify(shallow(node)) === JSON.stringify(shallow(other)));
-          });
+        : left.nodes === right.nodes || (left.nodes.length === right.nodes.length && left.nodes.every((node, index) => sameNode(node, right.nodes![index]!)));
+
+// The nodes a rebuild lists, with every one that lists as before swapped for the node already held, and the held array
+// itself when nothing moved. A rebuild lists everything every ten minutes; without this each one put a second copy of
+// the tree in the old generation, garbage V8 left uncollected, and the watch thread sat at twice its live size.
+const keptNodes = (fresh: readonly Node[], prior: Listing | undefined): readonly Node[] => {
+    if (prior?.nodes === undefined) {
+        return fresh;
+    }
+    const held = new Map(prior.nodes.map((node) => [node.name, node]));
+    let moved = fresh.length !== prior.nodes.length;
+    const nodes = fresh.map((node, index) => {
+        const kept = held.get(node.name);
+        if (kept !== undefined && sameNode(kept, node)) {
+            moved ||= prior.nodes![index] !== kept;
+            return kept;
+        }
+        moved = true;
+        return node;
+    });
+    return moved ? nodes : prior.nodes;
+};
+
+const nodeOf = (entry: Entry, dir: string, dirReal: string, scope: IgnoreScope): Node => {
+    const path = childOf(dir, entry.name);
+    const ignored = scope.isIgnored(entry.name, path, entry.isDir);
+    const opened = entry.isDir && !ignored && !isLockedWorkspacePath(path) && descendable(entry, dirReal);
+    const { real, ...listed } = entry;
+    return entry.link === undefined ? { ...listed, path, ignored, opened } : { ...listed, real, path, ignored, opened };
+};
 
 export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIES } = {}): ResidentTree => {
     const base = resolve(root);
@@ -93,14 +139,9 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
     let barrenAt = -1;
     let barren: string[] = [];
 
-    const nodeOf = (entry: Entry, dir: string, dirReal: string, scope: IgnoreScope): Node => {
-        const path = childOf(dir, entry.name);
-        const ignored = scope.isIgnored(entry.name, path, entry.isDir);
-        return { ...entry, path, ignored, opened: entry.isDir && !ignored && !isLockedWorkspacePath(path) && descendable(entry, dirReal) };
-    };
-
     // One directory as the walk lists it: its own .gitignore layered on first, then every entry followed and sorted.
-    const list = async (abs: string, real: string, rel: string, parentScope: IgnoreScope): Promise<Listing> => {
+    // `prior` is what the last listing of this directory held, whose nodes a rebuild keeps where nothing moved.
+    const list = async (abs: string, real: string, rel: string, parentScope: IgnoreScope, prior?: Listing): Promise<Listing> => {
         const scope = await parentScope.descend(abs, rel);
         // allow(silent-catch): a directory that cannot be read lists as unknown, which is not empty.
         const dirents = await readdir(abs, { withFileTypes: true }).catch(() => undefined);
@@ -108,13 +149,15 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
             return { abs, real, scope, nodes: undefined };
         }
         const entries = await followEntries(abs, real, realRoot, dirents);
-        return { abs, real, scope, nodes: entries.map((entry) => nodeOf(entry, rel, real, scope)) };
+        const nodes = keptNodes(entries.map((entry) => nodeOf(entry, rel, real, scope)), prior);
+        return prior === undefined ? { abs, real, scope, nodes } : { abs: prior.abs, real: prior.real === real ? prior.real : real, scope, nodes };
     };
 
     // Breadth-first from one directory, in the walk's order, into `into`; stops opening directories at the cap.
     const listFrom = async (
         start: { readonly abs: string; readonly real: string; readonly rel: string; readonly parentScope: IgnoreScope },
         into: Map<string, Listing>,
+        prior?: ReadonlyMap<string, Listing>,
     ): Promise<void> => {
         let level = [start];
         while (level.length > 0) {
@@ -123,12 +166,12 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
                 if (held >= maxEntries) {
                     return;
                 }
-                const listing = await list(job.abs, job.real, job.rel, job.parentScope);
+                const listing = await list(job.abs, job.real, job.rel, job.parentScope, prior?.get(job.rel));
                 into.set(job.rel, listing);
                 held += listing.nodes?.length ?? 0;
                 for (const node of listing.nodes ?? []) {
                     if (node.opened) {
-                        next.push({ abs: join(job.abs, node.name), real: node.real, rel: node.path, parentScope: listing.scope });
+                        next.push({ abs: join(job.abs, node.name), real: realOf(node, listing.real), rel: node.path, parentScope: listing.scope });
                     }
                 }
             }
@@ -185,7 +228,7 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
         for (const node of nodes ?? []) {
             if (node.opened && !listings.has(node.path)) {
                 const added = new Map<string, Listing>();
-                await listFrom({ abs: join(old.abs, node.name), real: node.real, rel: node.path, parentScope: listing.scope }, added);
+                await listFrom({ abs: join(old.abs, node.name), real: realOf(node, old.real), rel: node.path, parentScope: listing.scope }, added);
                 for (const [path, sub] of added) {
                     listings.set(path, sub);
                     changed.set(path, sub);
@@ -265,7 +308,7 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
         realRoot = await realPathOf(base);
         held = 0;
         const built = new Map<string, Listing>();
-        await listFrom({ abs: base, real: realRoot, rel: "", parentScope: createIgnoreScope() }, built);
+        await listFrom({ abs: base, real: realRoot, rel: "", parentScope: createIgnoreScope() }, built, listings);
         return built;
     };
 

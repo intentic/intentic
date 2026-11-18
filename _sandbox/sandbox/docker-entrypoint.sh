@@ -315,6 +315,31 @@ export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-32}"
 # default, in the same time within noise. Children inherit it, the same as the pool.
 export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"
 
+# THE DAEMON'S ALLOCATOR (2026-11-18): jemalloc, preloaded for netd and the daemon alone. glibc gives memory back to
+# the system only from the top of its heap, so a peak of native work (zlib, sqlite, sharp, a child's whole output, a
+# heap snapshot) stays resident long after it is freed. Measured on rog, a daemon 35 minutes up held 940 MB of glibc
+# arena with 84 MB of it in use, and one malloc_trim took it from 1,543 MB resident to 735 MB in 31 ms. The daemon's
+# kind of native work on this sandbox's own data (1,500 transcripts unzstd'd and parsed, 24 large `git log -p`, 12,000
+# files read and hashed, 150 screenshots through sharp, on 32 pool threads) settled at 243 MB anonymous resident under
+# glibc at two arenas, 202 MB with fixed mmap and trim thresholds, and 138 MB under jemalloc with a background purging
+# thread and four arenas, in the same time (6.06 s against 6.07 s, medians of three); with a heap snapshot on top,
+# 1,743 MB against 481 MB. Without the background thread jemalloc purges only when it next allocates, and an idle
+# process kept 308 MB. The daemon takes all three variables off its own environment before it starts anything
+# (bootstrap/daemon-env.ts), so no agent's command, runtime or build runs on it. SANDBOX_MALLOC=glibc, an LD_PRELOAD or
+# MALLOC_CONF already set, or an image without the library leaves glibc in place.
+daemon_allocator=""
+for jemalloc in /usr/lib/x86_64-linux-gnu/libjemalloc.so.2 /usr/lib/aarch64-linux-gnu/libjemalloc.so.2; do
+    if [ -f "$jemalloc" ]; then
+        daemon_allocator="$jemalloc"
+        break
+    fi
+done
+if [ -n "$daemon_allocator" ] && [ "${SANDBOX_MALLOC:-jemalloc}" = jemalloc ] && [ -z "${LD_PRELOAD:-}" ] && [ -z "${MALLOC_CONF:-}" ]; then
+    export LD_PRELOAD="$daemon_allocator"
+    export MALLOC_CONF="background_thread:true,narenas:4"
+    export INTENTIC_DAEMON_ALLOCATOR="$daemon_allocator"
+fi
+
 # --max-semi-space-size: Node 24 let each isolate's young generation grow to 128 MiB here (two 64 MiB halves), and a
 # V8 flag is process-wide, so the daemon's worker threads and the iq engine (forked with these flags) each get one
 # too. 2026-11-17, the shinobi-society audit, measured on a daemon 4 hours up: its own young generation sat at

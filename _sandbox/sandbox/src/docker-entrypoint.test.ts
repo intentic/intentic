@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { COMPILE_CACHE_ENV } from "./bootstrap/daemon-env.js";
+import { ALLOCATOR_ENV, COMPILE_CACHE_ENV, DAEMON_MALLOC_CONF } from "./bootstrap/daemon-env.js";
 
 const entrypoint = readFileSync(fileURLToPath(new URL("../docker-entrypoint.sh", import.meta.url)), "utf8");
 
@@ -78,5 +78,25 @@ describe(`entrypoint young generation`, () => {
         expect(entrypoint).toMatch(/^semi_space_mb=16$/mu);
         expect(exec.split("\n")[0]).toContain(`node --max-old-space-size="$heap_mb" --max-semi-space-size="$semi_space_mb" `);
         expect(entrypoint).not.toMatch(/NODE_OPTIONS=.*semi-space/u);
+    });
+});
+
+/* 2026-11-18: glibc kept 856 MB freed inside a daemon whose live native memory was 84 MB; jemalloc with a background
+   purging thread settles the same work at 138 MB against glibc's 243 (docker-entrypoint.sh has the measurements). */
+describe(`entrypoint allocator`, () => {
+    const exec = entrypoint.indexOf("exec /opt/sandbox/netd/intentic-netd");
+
+    it(`preloads jemalloc for netd and the daemon under the names the daemon takes back off its children`, () => {
+        const preload = entrypoint.indexOf(`export LD_PRELOAD="$daemon_allocator"`);
+        expect(preload).toBeGreaterThan(-1);
+        expect(entrypoint).toContain(`export MALLOC_CONF="${DAEMON_MALLOC_CONF}"`);
+        expect(entrypoint).toContain(`export ${ALLOCATOR_ENV}="$daemon_allocator"`);
+        expect(exec).toBeGreaterThan(preload);
+        // After sshd: a shell over ssh never starts on the daemon's allocator.
+        expect(preload).toBeGreaterThan(entrypoint.indexOf("/usr/sbin/sshd"));
+    });
+
+    it(`steps aside for SANDBOX_MALLOC=glibc and for an LD_PRELOAD or MALLOC_CONF already set`, () => {
+        expect(entrypoint).toContain(`[ "\${SANDBOX_MALLOC:-jemalloc}" = jemalloc ] && [ -z "\${LD_PRELOAD:-}" ] && [ -z "\${MALLOC_CONF:-}" ]`);
     });
 });

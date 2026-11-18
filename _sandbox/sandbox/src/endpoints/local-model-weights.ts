@@ -3,7 +3,6 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { basename, dirname, join } from "node:path";
-import { downloadFile } from "@huggingface/hub";
 import { SingleFlight } from "@intentic/base/async";
 import { undefinedIfMissing, errorMessage } from "@intentic/base/errors";
 import { type Capability, LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LocalModelConfigSchema, localModelChoice } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -128,8 +127,11 @@ interface OpenedStream {
     readonly appending: boolean;
 }
 
-// A Hugging Face file through hub's downloadFile, which slices its own blob for a resume.
+// A Hugging Face file through hub's downloadFile, which slices its own blob for a resume. Imported here, on the first
+// download, never at boot: hub's Xet code allocates a 5 MB block buffer as it loads, which a daemon that never fetches
+// weights held for its life (2026-11-18, a heap snapshot of the daemon).
 const openHubStream = async (repo: string, path: string, source: LocalModelSource, from: number, signal: AbortSignal): Promise<OpenedStream> => {
+    const { downloadFile } = await import("@huggingface/hub");
     const blob = await downloadFile({
         repo,
         path,

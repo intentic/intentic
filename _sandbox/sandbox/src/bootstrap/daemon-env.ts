@@ -61,6 +61,7 @@ export const prepareDaemonProcess = (config: Config, traits: ProfileTraits): Log
     // (system/boot/generation-sweep.ts). Fresh each boot, whatever this process inherited.
     adoptDaemonGeneration();
     forgetCompileCacheEnv();
+    forgetAllocatorEnv();
     // Nothing this daemon starts lands on the host GPU unasked; `gpu-run` hands it to a command that asks (2026-11-03).
     forgetGpuLibraryPath();
     if (!traits.sharedTmux) {
@@ -98,6 +99,28 @@ export const COMPILE_CACHE_ENV = "NODE_COMPILE_CACHE";
 
 export const forgetCompileCacheEnv = (env: NodeJS.ProcessEnv = process.env): void => {
     delete env[COMPILE_CACHE_ENV];
+};
+
+/* THE DAEMON'S ALLOCATOR (2026-11-18). The entrypoint preloads jemalloc for the daemon (docker-entrypoint.sh, which has
+ * the measurements) and names the library it preloaded in ALLOCATOR_ENV. The loader read LD_PRELOAD as this process
+ * started, so taking it off the environment changes nothing here, and keeps it off every child: an agent's command,
+ * a runtime, a build or a sanitizer would otherwise run on an allocator nobody asked it for. Only what the entrypoint
+ * set is taken: an LD_PRELOAD or MALLOC_CONF that differs is someone else's and stays. */
+export const ALLOCATOR_ENV = "INTENTIC_DAEMON_ALLOCATOR";
+export const DAEMON_MALLOC_CONF = "background_thread:true,narenas:4";
+
+export const forgetAllocatorEnv = (env: NodeJS.ProcessEnv = process.env): void => {
+    const preloaded = env[ALLOCATOR_ENV];
+    if (preloaded === undefined) {
+        return;
+    }
+    if (env["LD_PRELOAD"] === preloaded) {
+        delete env["LD_PRELOAD"];
+    }
+    if (env["MALLOC_CONF"] === DAEMON_MALLOC_CONF) {
+        delete env["MALLOC_CONF"];
+    }
+    delete env[ALLOCATOR_ENV];
 };
 
 // Never throws: a cache that cannot be written only means the next start compiles what it does not find.
