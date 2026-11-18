@@ -53,7 +53,9 @@ flowchart LR
   Google's script off it). The login page offers the code only where `GET /me/sign-in-options` says the platform mails
   them. Inside the desktop webview and the iOS shell the code runs in place, typed, because the mail's link opens the
   system browser. An account's ways in come from `/me` (`signInMethods`, absent meaning Google), held in
-  `client/auth/signInMethods.ts` for the session module.
+  `client/auth/signInMethods.ts` for the session module. On a browser already signed in as someone, `/me` is asked at
+  the same time as the session check instead of after it, so a returning page load waits one platform round trip less;
+  a 401 to that early ask is not read as the session ending (`client/auth/useAuth.ts`).
 - **Several accounts in one browser.** The account menu lists the other accounts signed in here (Better Auth's
   multi-session, up to five), switches with one press, adds one through `/login?add=1` (Google's chooser forced, the
   first account kept), and signs out of just the account in front of the reader, carrying on as the next, or of all of

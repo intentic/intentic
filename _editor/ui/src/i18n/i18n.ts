@@ -122,9 +122,20 @@ const collect = (tree: MessageTree): void => {
     }
 };
 
+// Trees merged but not yet collected into `words` and `templates`. Collecting walks every message, and the app's own
+// catalog is ~15,000 of them: done as each catalog merged, it took ~34 ms of the start in a profile at 4x CPU throttling,
+// for sets only session replay reads, and only once a recording starts. So the walk waits for the first reader.
+const uncollected: MessageTree[] = [];
+
+const collected = (): void => {
+    for (const tree of uncollected.splice(0)) {
+        collect(tree);
+    }
+};
+
 const merge = (locale: Locale, catalog: Catalog, tree: MessageTree): void => {
     i18n.global.mergeLocaleMessage(locale, nest(catalog.namespace, tree) as MergeableMessages);
-    collect(tree);
+    uncollected.push(tree);
 };
 
 /**
@@ -133,14 +144,20 @@ const merge = (locale: Locale, catalog: Catalog, tree: MessageTree): void => {
  * here was written by us and reads the same for everyone, and text that is not could be anyone's. Session replay uses it
  * to keep the interface legible while it masks the rest (web/src/app/replayPrivacy.ts).
  */
-export const staticCopy = (): ReadonlySet<string> => words;
+export const staticCopy = (): ReadonlySet<string> => {
+    collected();
+    return words;
+};
 
 /**
  * Every loaded message whose only syntax is placeholders, as written (`{count} files changed`) with its whitespace
  * collapsed: the app's own wording around values it did not write. Session replay keeps the wording and judges each value
  * on its own (web/src/app/replayPrivacy.ts). Grows as catalogs arrive, like `staticCopy`.
  */
-export const copyTemplates = (): ReadonlySet<string> => templates;
+export const copyTemplates = (): ReadonlySet<string> => {
+    collected();
+    return templates;
+};
 
 const fetchInto = (locale: Locale, catalog: Catalog): Promise<void> => {
     const slot = slotOf(locale, catalog);

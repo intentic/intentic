@@ -14,10 +14,17 @@ import { reportedFetch } from "./platform/platformHealth";
 // The cookie is the browser's, shared by every tab, and the browser may hold several accounts (accountBoundary.ts): a call
 // that changes something names the account this page is drawn for, and an answer made as another account is refused here,
 // before any view or this device's memory of the account's sandboxes can take it as this page's.
-export const apiClient: ContractRouterClient<typeof apiContract> = createORPCClient(
-    new OpenAPILink(apiContract, {
+export interface ApiCallContext {
+    // A read asked before the session check has answered, on the guess that there is a session (useAuth's sign-in
+    // methods): its 401 says only that there was none, which the session check answers for itself, so it does not tear the
+    // window down the way a 401 to a signed-in call does.
+    readonly ahead?: boolean;
+}
+
+export const apiClient: ContractRouterClient<typeof apiContract, ApiCallContext> = createORPCClient(
+    new OpenAPILink<ApiCallContext>(apiContract, {
         url: `${environment.api.url}/rpc`,
-        fetch: async (request) => {
+        fetch: async (request, _init, { context }) => {
             assertAccountCurrent();
             const expectation = Object.entries(accountExpectation(request.method));
             let sent = request;
@@ -31,7 +38,7 @@ export const apiClient: ContractRouterClient<typeof apiContract> = createORPCCli
             const response = await reportedFetch(() => globalThis.fetch(sent, { credentials: `include` }));
             // The api's own refusal is JSON (oRPC's error body); a 401 from anything in front of it (a proxy's page, a
             // captive portal's) is not the platform saying the session ended, and must not tear the window down.
-            if (response.status === 401 && (response.headers.get(`content-type`) ?? ``).includes(`json`)) {
+            if (response.status === 401 && context.ahead !== true && (response.headers.get(`content-type`) ?? ``).includes(`json`)) {
                 await invalidatePlatformAuth();
             }
             await checkAnswerAccount(response);

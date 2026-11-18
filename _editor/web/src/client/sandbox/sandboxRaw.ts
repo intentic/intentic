@@ -6,6 +6,7 @@ import {
     type RawJsonRouteKey,
 } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
 import { type RawRouteParams, rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import { answerParseOptions } from "./daemon/answerParse";
 import { jsonBody } from "./jsonBody";
 import { sandboxJson } from "./sandboxClient";
 import { staleDaemonReason } from "./useDaemonRoutes";
@@ -94,7 +95,8 @@ export async function sandboxRaw<Key extends RawJsonRouteKey>(key: Key, call?: S
         headers: call?.headers,
         signal: call?.signal,
     });
-    // SAFETY: the route's own output schema parsed the answer, and RawJsonOutput is that schema's output for this key.
     const answer = init === undefined ? await sandboxJson<unknown>(`${path}${query}`) : await sandboxJson<unknown>(`${path}${query}`, init);
-    return route.output.parse(answer) as RawJsonOutput<Key>;
+    // Interpreted until the route turns out to be hot (daemon/answerParse.ts).
+    // SAFETY: the route's own output schema parsed the answer, and RawJsonOutput is that schema's output for this key.
+    return route.output.parse(answer, answerParseOptions(key)) as RawJsonOutput<Key>;
 }

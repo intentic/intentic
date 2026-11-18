@@ -4,6 +4,7 @@ import { createAuthClient } from "better-auth/client";
 import { emailOTPClient, multiSessionClient } from "better-auth/client/plugins";
 import { ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
+import { accountPartition } from "../../app/storage/browserStorage";
 import { environment } from "../../app/environments/environment";
 import { localFace } from "../../app/environments/local";
 import { useSandboxSession } from "../session/sandboxSession";
@@ -71,12 +72,34 @@ let leaving = false;
 // failed ask is not kept, so the next session check asks again; until then the account reads as a Google one, the
 // answer every platform from before email sign-in gives.
 let methodsKnown: { readonly id: string; readonly methods: readonly SignInMethod[] | undefined } | undefined;
-const signInMethodsOf = async (id: string): Promise<readonly SignInMethod[] | undefined> => {
+
+type MeAnswer = Awaited<ReturnType<typeof apiClient.me.get>>;
+
+// THE ACCOUNT'S WAYS IN, ASKED BESIDE THE SESSION CHECK (2026-11-18). Asked after it, /me was a second platform round trip
+// on every returning page load: session, then /me, then the sandbox list, each waiting on the one before. Asked beside
+// it, a returning load of the demo build drew its first view 169 ms sooner with 150 ms between browser and platform
+// (753 to 584 ms), 113 ms sooner at 100 ms and 44 ms sooner at 50 ms. So when this
+// browser is signed in as someone (its account pointer, gone at sign-out) and the answer is not already known, /me goes
+// out with the session check, as a read `ahead` of it: if there turns out to be no session, its 401 only says so, and
+// the window is not torn down for it. Its answer counts only for the account the session check then names: one naming
+// another account is asked again after the check, and one that failed is the ask failing, exactly as an ask after it.
+const askedAhead = (): Promise<MeAnswer> | undefined => {
+    if (methodsKnown !== undefined || accountPartition() === undefined) {
+        return undefined;
+    }
+    const ahead = apiClient.me.get(undefined, { context: { ahead: true } });
+    // allow(silent-catch): read by signInMethodsOf, which owns a failure; a check that found no session never reads it.
+    ahead.catch(() => undefined);
+    return ahead;
+};
+
+const signInMethodsOf = async (id: string, ahead?: Promise<MeAnswer>): Promise<readonly SignInMethod[] | undefined> => {
     if (methodsKnown?.id === id) {
         return methodsKnown.methods;
     }
     try {
-        const me = await apiClient.me.get();
+        const early = await ahead;
+        const me = early !== undefined && early !== null && early.id === id ? early : await apiClient.me.get();
         const methods = me?.id === id ? me.signInMethods : undefined;
         methodsKnown = { id, methods };
         return methods;
@@ -121,6 +144,7 @@ const SessionAnswerSchema = z.union([z.null(), z.looseObject({ user: z.looseObje
 
 const refresh = async (): Promise<User | null> => {
     const pending = (refreshing ??= (async () => {
+        const ahead = askedAhead();
         const { data, error } = await client.getSession();
         // The platform's answer to the start's session check (app/perf/boot.ts; only the first one counts).
         markBoot(`session`);
@@ -151,7 +175,7 @@ const refresh = async (): Promise<User | null> => {
             return new Promise<never>(() => undefined);
         }
         sessionToken = data.session.token;
-        const methods = await signInMethodsOf(data.user.id);
+        const methods = await signInMethodsOf(data.user.id, ahead);
         if (methods !== undefined) {
             account.signInMethods = [...methods];
         }

@@ -6,6 +6,7 @@ import { type ClientContext, type ClientLink, createORPCClient, type InferClient
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";
 import { trackPerf } from "../../app/perf/perf";
+import { answerParseOptions } from "./daemon/answerParse";
 import { uuid } from "../../lib/uuid";
 import { routeRefusalText, staleDaemonReason, supportsRoute } from "./useDaemonRoutes";
 import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";
@@ -126,13 +127,14 @@ const linkOptions: OpenAPILinkOptions<SandboxCallContext> = {
 };
 
 // Every answer as the app reads it, for its own client and each extension's alike: a refusal becomes a
-// SandboxHttpError in the daemon's words, and what arrived is parsed by the procedure's output schema.
+// SandboxHttpError in the daemon's words, and what arrived is parsed by the procedure's output schema, interpreted
+// until the route turns out to be hot (daemon/answerParse.ts).
 const answered: NonNullable<OpenAPILinkOptions<SandboxCallContext>[`interceptors`]>[number] = async ({ path, context, next }) => {
     const answer = await next().catch((error: unknown) => {
         throw refusalOf(error, context.at === undefined ? path.join(`.`) : undefined);
     });
     const schema = (await loadContract()).sandboxAnswerSchema(path);
-    return schema === undefined ? answer : schema.parse(answer);
+    return schema === undefined ? answer : schema.parse(answer, answerParseOptions(path.join(`.`)));
 };
 
 // A link over the contract that is still loading (daemon/contract.ts): each call waits for it, which at the start is the import
