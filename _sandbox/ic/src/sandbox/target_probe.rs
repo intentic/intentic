@@ -72,11 +72,32 @@ pub(crate) struct Probe<'a> {
     pub(crate) args: &'a [String],
 }
 
+/// Where a dev sandbox's checkout is mounted (dev-mounts.mjs), and the checkout's script that lays its package
+/// manifests over the image's baked ones (docker-entrypoint.sh runs it before every daemon start).
+const DEV_CHECKOUT: &str = "/opt/sandbox/dev-checkout";
+const DEV_HEAL: &str = "/opt/sandbox/dev-checkout/_sandbox/sandbox/scripts/dev-heal-manifests.mjs";
+
+/// Whether the -v specs mount a dev checkout. Matched on the destination, since a Windows source carries a colon.
+fn mounts_dev_checkout(extra: &[String]) -> bool {
+    let marker = format!(":{DEV_CHECKOUT}");
+    extra.iter().any(|spec| {
+        spec.split_once(&marker)
+            .is_some_and(|(_, rest)| rest.is_empty() || rest.starts_with(':'))
+    })
+}
+
 /// The probe's `docker run`. Split out so it is asserted without a daemon, because each flag is a promise about the
 /// owner's data: `:ro` on every data mount is what makes asking harmless (the daemon's code opens its stores as it
 /// composes, and would write to them), `--network none` keeps the script from reaching anything but those files, and
 /// `--rm` leaves nothing behind.
+///
+/// With a dev checkout mounted, the checkout's dists replace the image's but its manifests do not, and a dist built
+/// against a newer manifest (a new export subpath) cannot load under the baked one. The daemon's own start heals that
+/// first (dev-heal-manifests.mjs), so the probe does too, or it refuses a swap whose daemon would have started
+/// (2026-11-18: `@intentic/sandbox-contract/project-id`). The heal writes only this throwaway container's own layer,
+/// and its words go to stderr so the script's answer stays the last line of stdout.
 pub(crate) fn argv(probe: &Probe) -> Vec<String> {
+    let heal = mounts_dev_checkout(probe.extra);
     let mut args: Vec<String> = [
         "run",
         "--rm",
@@ -86,7 +107,7 @@ pub(crate) fn argv(probe: &Probe) -> Vec<String> {
         "none",
         // The image's own entrypoint is the daemon, which would boot and convert for real.
         "--entrypoint",
-        "node",
+        if heal { "sh" } else { "node" },
     ]
     .iter()
     .map(|arg| arg.to_string())
@@ -104,6 +125,12 @@ pub(crate) fn argv(probe: &Probe) -> Vec<String> {
         args.push(pair.clone());
     }
     args.push(probe.image.to_string());
+    if heal {
+        args.push("-c".to_string());
+        args.push(format!("node {DEV_HEAL} >&2 || true; exec node \"$@\""));
+        // $0 for the shell; the script and its arguments are "$@".
+        args.push("probe".to_string());
+    }
     args.push(probe.script.to_string());
     args.extend(probe.args.iter().cloned());
     args
@@ -210,6 +237,57 @@ mod tests {
                 "img:1",
             ]
         );
+    }
+
+    #[test]
+    fn a_dev_checkout_heals_the_baked_manifests_before_the_script_runs() {
+        let mounts = [mount("w", "/work")];
+        let extra = [
+            "C:\\src\\intentic:/opt/sandbox/dev-checkout:ro".to_string(),
+            "/x/dist:/opt/sandbox/dist:ro".to_string(),
+        ];
+        let args = ["--workspace".to_string(), "/work".to_string()];
+        let argv = argv(&Probe {
+            name: "intentic-preflight-abc".to_string(),
+            image: "img:1",
+            script: "/opt/sandbox/dist/state-plan.js",
+            mounts: &mounts,
+            extra: &extra,
+            env: &[],
+            args: &args,
+        });
+        assert_eq!(
+            argv,
+            [
+                "run",
+                "--rm",
+                "--name",
+                "intentic-preflight-abc",
+                "--network",
+                "none",
+                "--entrypoint",
+                "sh",
+                "-v",
+                "w:/work:ro",
+                "-v",
+                "C:\\src\\intentic:/opt/sandbox/dev-checkout:ro",
+                "-v",
+                "/x/dist:/opt/sandbox/dist:ro",
+                "img:1",
+                "-c",
+                "node /opt/sandbox/dev-checkout/_sandbox/sandbox/scripts/dev-heal-manifests.mjs >&2 || true; exec node \"$@\"",
+                "probe",
+                "/opt/sandbox/dist/state-plan.js",
+                "--workspace",
+                "/work",
+            ]
+        );
+        assert!(!mounts_dev_checkout(&[
+            "/a:/opt/sandbox/dev-checkout-old:ro".to_string()
+        ]));
+        assert!(mounts_dev_checkout(&[
+            "/a:/opt/sandbox/dev-checkout".to_string()
+        ]));
     }
 
     #[test]
