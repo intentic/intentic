@@ -426,30 +426,32 @@ test("an account flapping between two refusals writes each one once per outage, 
 test("a failing account's background reads back off, doubling, while a watched re-measure still reads it", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(NOW);
+    const draw = jest.spyOn(Math, "random").mockReturnValue(0.5);
     try {
         const { store } = memoryStore({ a: { windows: [...WINDOWS.windows], measuredAt: 0 } });
-        let reads = 0;
+        const readOffsets: number[] = [];
         const { source: codex } = source([
             {
                 key: "a",
                 provider: "codex",
                 answer: async () => {
-                    reads += 1;
+                    readOffsets.push(Date.now() - NOW);
                     return { windows: [], failure: "the read failed" };
                 },
             },
         ]);
-        const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [codex], logger: pino({ level: "silent" }) });
-        // A pass every 30 seconds for ten minutes: the first read, then one per doubled wait, not twenty.
+        const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [codex], logger: silent });
+        // Midpoint draws on the first three rungs give waits of 90, 150 and 270 seconds.
         for (let pass = 0; pass < 20; pass += 1) {
             jest.setSystemTime(NOW + pass * 30_000);
             await service.refresh({ maxAgeMs: 0 });
         }
-        expect(reads).toBeLessThanOrEqual(4);
-        const before = reads;
+        const backgroundReads = [0, 90_000, 240_000, 510_000];
+        expect(readOffsets).toEqual(backgroundReads);
         await service.refresh({ maxAgeMs: 0, watched: true });
-        expect(reads).toBe(before + 1);
+        expect(readOffsets).toEqual([...backgroundReads, 570_000]);
     } finally {
+        draw.mockRestore();
         jest.useRealTimers();
     }
 });

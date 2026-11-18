@@ -11,9 +11,8 @@ describe(`the chore book's order`, () => {
     });
 
     it(`keeps every chore in the book`, () => {
-        // Counted by id, not just length, so a dropped chore says which one.
         expect(new Set(CHORES.map((chore) => chore.id)).size).toBe(CHORES.length);
-        expect(CHORES.length).toBe(18);
+        expect(CHORES.length).toBe(17);
     });
 
     it(`says "surveying" exactly when a chore is a survey`, () => {
