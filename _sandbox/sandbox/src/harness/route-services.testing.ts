@@ -55,7 +55,7 @@ import { phonesSliceFake } from "../phones/phone-slice.testing.js";
 import { depsSliceFake } from "../workspace/deps/deps-slice.testing.js";
 import { workspaceSliceFake } from "../workspace/workspace-slice.testing.js";
 import { fakeHistory } from "./route-fakes.testing.js";
-import { memoryAreasStore, memoryRolesStore, memorySshKeyStore } from "./route-stores.testing.js";
+import { memoryAccessProfiles, memoryAreasStore, memoryRolesStore, memorySshKeyStore } from "./route-stores.testing.js";
 import type { SliceFakeContext } from "./slice-fake.testing.js";
 import { createAgentExecutionService } from "../workload/agent-execution.js";
 
@@ -213,6 +213,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         roles: memoryRolesStore(),
         // No areas by default: the unfenced workspace, which is what every member row without them already means.
         areas: memoryAreasStore(),
+        // No access profiles by default: every planned turn reads them for the areas a role's own fence it to.
+        accessProfiles: memoryAccessProfiles(),
         // Not a runner, as a sandbox is until runner mode names its parent: its own words start its own turns
         // (runners/ownership/wake.ts), and no turn mirrors a parent's.
         runnerParent: {},

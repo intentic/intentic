@@ -176,7 +176,7 @@ describe("a definition from an earlier release", () => {
             "[settings]",
             "hashlineEdits = true",
             "terseOutput = true",
-            'roleRouting = "auto"',
+            'personaRouting = "auto"',
             "",
             "[[capabilities]]",
             'id = "laptop"',

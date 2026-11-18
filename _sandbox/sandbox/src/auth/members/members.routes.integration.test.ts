@@ -212,7 +212,7 @@ test("a grant carries agents and edit areas, and its role must be the tier they 
 
     const misnamed = await postJson(app, "/members", { ...editor, tier: "collaborator" });
     expect(misnamed.status).toBe(400);
-    expect(await misnamed.json()).toEqual({ error: "the role does not match the access granted, which makes a writer" });
+    expect(await misnamed.json()).toEqual({ error: "the tier does not match the access granted, which makes a writer" });
 
     // Editing reaches only where they can see, and every area named for editing exists.
     const unseen = await postJson(app, "/members", { ...editor, areas: ["finance"] });
