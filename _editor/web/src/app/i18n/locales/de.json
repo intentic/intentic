@@ -1359,6 +1359,7 @@
             "agentCarriesOn": "Der Agent macht weiter",
             "fixStepHandBack": "Erledige diesen Schritt auf der Seite und gib dann zurück.",
             "starting": "Dein Browser startet…",
+            "waitingFor": "Warte auf {host}…",
             "startCaption": "Dein Browser läuft in dieser Sandbox: Seiten laden über ihr Netz, und wo du dich anmeldest, bleibst du angemeldet.",
             "replyFailed": "Ihre Antwort hat den Agenten nicht erreicht. Versuchen Sie es erneut."
         },

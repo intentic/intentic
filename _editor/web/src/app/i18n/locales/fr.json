@@ -1359,6 +1359,7 @@
             "agentCarriesOn": "L'agent continue",
             "fixStepHandBack": "Réglez cette étape dans la page, puis rendez la main.",
             "starting": "Démarrage de votre navigateur…",
+            "waitingFor": "En attente de {host}…",
             "startCaption": "Votre navigateur tourne dans ce sandbox : les pages passent par son réseau, et vos connexions y restent ouvertes.",
             "replyFailed": "Impossible de transmettre votre réponse à l'agent. Réessayez."
         },

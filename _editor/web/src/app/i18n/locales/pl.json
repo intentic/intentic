@@ -1359,6 +1359,7 @@
             "agentCarriesOn": "Agent kontynuuje",
             "fixStepHandBack": "Napraw ten krok na stronie, potem oddaj sterowanie.",
             "starting": "Uruchamianie Twojej przeglądarki…",
+            "waitingFor": "Oczekiwanie na {host}…",
             "startCaption": "Twoja przeglądarka działa w tym sandboksie: strony ładują się przez jego sieć, a to, do czego się zalogujesz, pozostaje zalogowane.",
             "replyFailed": "Nie udało się przekazać agentowi Twojej odpowiedzi. Spróbuj ponownie."
         },

@@ -22,6 +22,7 @@ import { videoWindow } from "./video-window.js";
 import { encodeVideo, frameGate, grabStill, startVideocast, type Videocast, type VideoFrame } from "./videocast.js";
 import { startXInput, type XInput } from "./xinput.js";
 import { sanitizeUrl } from "../tools/network-redaction.js";
+import { stopLoading } from "../navigation/page-navigation.js";
 
 // One live browser over one socket; the choice of video vs frames is made once here, not per route. Video grabs the
 // page's viewport off its X display (region.ts): cheaper than frames and showing everything Chromium draws there, a
@@ -114,9 +115,7 @@ const steer = (page: Page | undefined, message: Steer): void => {
             void page.reload({ waitUntil: "commit" }).catch(swallow);
             return;
         case "stop":
-            void page.evaluate(() => window.stop()).catch(swallow);
-            return;
-        default:
+            void stopLoading(page).catch(swallow);
             return;
     }
 };

@@ -74,9 +74,26 @@ export const BrowserPageSchema = z.object({
         ),
     // The page's title; absent mid-navigation, when a tab still needs to render.
     title: z.string().optional().describe("The page's title. Absent mid-navigation, which is exactly when a tab still has to be drawn."),
-    url: z.string().describe("Where it is."),
+    url: z.string().describe("Where it is. On the browser's error page, the address that failed to load."),
     // The page the agent last drove; for a finished session, the one it ended on. Exactly one page has it.
     active: z.boolean().describe("The one the agent last touched, or for a finished session, the one it ended on. Exactly one page has this."),
+    // What a browser's own chrome says about a tab between two addresses, which the picture crops away: it turns, it
+    // names the host it waits on, and it says why it gave up. All absent from a daemon older than them.
+    loading: z
+        .boolean()
+        .optional()
+        .describe("It is on its way somewhere: a navigation in flight, or its page still loading. Absent once it has finished."),
+    navigation: z
+        .object({
+            url: z.string().describe("The address being fetched now; each redirect along the way replaces it."),
+            since: z.number().describe("When the navigation set off, in milliseconds."),
+        })
+        .optional()
+        .describe("A navigation that has set off and not arrived yet: where it is waiting, and for how long. Absent once it arrives or fails."),
+    error: z
+        .string()
+        .optional()
+        .describe("Why the last navigation failed, in the browser's own words (net::ERR_CONNECTION_TIMED_OUT), while the page shows its error page."),
 });
 export const BrowserSessionSchema = z.object({
     name: z.string().describe("Its id, and what the close route takes."),

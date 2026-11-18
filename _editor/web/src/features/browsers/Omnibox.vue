@@ -3,9 +3,11 @@
      as the kit's AddressField: while nobody is typing, the scheme folds into the padlock and the host stands out from
      the path; the moment somebody clicks, the whole address comes back, selected, ready to be typed over. -->
 <script setup lang="ts">
+import type { BrowserPage } from "@intentic/sandbox-contract/schemas/terminal";
 import { CopyButton, Icon, type IconName } from "@intentic/ui";
 import { computed, nextTick, ref } from "vue";
 import { addressParts, securityOf } from "./address";
+import { useNavigationLine } from "./pageProgress";
 
 const {
     value,
@@ -15,6 +17,7 @@ const {
     secureLabel,
     insecureLabel,
     kind,
+    page,
 } = defineProps<{
     // The page's own address; empty for a blank page. Typing never changes it, the caller does after `submit`.
     value: string;
@@ -27,7 +30,13 @@ const {
     insecureLabel?: string;
     // What the address is of, where it is not a web page (`desktop://`, `app://`): drawn in the padlock's place.
     kind?: IconName | undefined;
+    // The web page in front, while one is: on its way somewhere, a line breathes along the bar's foot where a browser
+    // draws its progress, and what it waits on ("Waiting for host… · 12s") is said at the bar's end while nobody types.
+    page?: BrowserPage | undefined;
 }>();
+
+const loading = computed(() => page?.loading === true);
+const status = useNavigationLine(computed(() => page));
 
 // `cancel` is Escape: the caller puts the keyboard back on the page.
 const emit = defineEmits<{ submit: [text: string]; cancel: [] }>();
@@ -134,6 +143,8 @@ defineExpose({ focus });
                 </span>
             </span>
         </div>
+        <span v-if="status && !focused" class="max-w-[45%] shrink-0 truncate text-2xs text-subtle" role="status">{{ status }}</span>
+        <span v-if="loading" aria-hidden="true" class="pointer-events-none absolute inset-x-4 bottom-0 h-0.5 animate-pulse rounded-full bg-primary-500" />
         <!-- Out of the way until the pointer comes: this bar is for typing, copying is the second thing. -->
         <CopyButton
             v-if="value"

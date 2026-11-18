@@ -2,10 +2,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Dialog, Page } from "playwright";
-import { publishRuntimeChange } from "../../seams/runtime-feed.js";
+import { publishRuntimeChange, publishRuntimeMilestone } from "../../seams/runtime-feed.js";
 import { releaseDisplay } from "../cast/display.js";
 import { placeWindow } from "../cast/region.js";
 import { armPasskeys } from "../tools/passkeys.js";
+import { freshNavigation, navigationCommitted, navigationFields, type NavigationState, watchLoading, watchNavigation } from "../navigation/page-navigation.js";
 
 // Makes the agent's browser (launched and owned by @playwright/mcp) visible to the daemon: it attaches over CDP the
 // first time a browser tool is called, without taking over Chromium's lifecycle.
@@ -35,6 +36,9 @@ interface PageRecord {
     closed: boolean;
     // The JavaScript dialog the page has open, held for whoever answers first; see watchPage.
     dialog: Dialog | undefined;
+    // What it is doing between addresses: loading, a navigation in flight, the reason the last one failed
+    // (page-navigation.ts).
+    readonly navigation: NavigationState;
 }
 
 // What the daemon knows about one browser; `context` is set only once the CDP attach lands. Most are an agent's; the
@@ -118,16 +122,34 @@ const notePage = async (record: BrowserSessionRecord, entry: PageRecord): Promis
     record.activePageId = entry.id;
     record.lastPageId = entry.id;
     entry.url = entry.page.url();
-    // Throws if the page navigated away mid-read; the next event retries. An empty title counts as no title.
-    const title = await entry.page.title().catch(() => undefined);
-    entry.title = title === undefined || title === "" ? undefined : title;
+    await readTitle(entry);
     // Navigating the active page is what changes the roster; rate-limited on the bus, not here.
     publishRuntimeChange("browsers");
 };
 
-// Clears the held dialog once Chromium reports it closed, by whichever hand: the owner's answer over the view, or the
-// agent's browser_handle_dialog. Playwright's own Dialog says nothing after the fact, so a raw session listens.
-const watchDialogClose = async (context: BrowserContext, entry: PageRecord): Promise<void> => {
+// Throws if the page navigated away mid-read; the next event retries. An empty title counts as no title. A read that
+// lands while a navigation is in flight is Playwright's placeholder ("Loading <url>"), not the page's own, and is
+// dropped: the page coming to rest reads it again (navigationMoved).
+const readTitle = async (entry: PageRecord): Promise<void> => {
+    const title = await entry.page.title().catch(() => undefined);
+    if (entry.navigation.pending === undefined) {
+        entry.title = title === undefined || title === "" ? undefined : title;
+    }
+};
+
+// A tab setting off, arriving or failing is what a viewer is watching for, so it goes out within the milestone window
+// rather than the domain's second. Come to rest (stopped, failed, loaded), it reads its title again, the one a read on
+// the way could not have.
+const navigationMoved = (entry: PageRecord): void => {
+    publishRuntimeMilestone("browsers");
+    if (!entry.navigation.loading && entry.navigation.pending === undefined) {
+        void readTitle(entry).then(() => publishRuntimeChange("browsers"));
+    }
+};
+
+// The page's own DevTools session, for what Playwright says nothing about after the fact: a dialog closing, by whichever
+// hand (the owner's answer over the view, or the agent's browser_handle_dialog), and Chromium's own loading flag.
+const watchPageSession = async (context: BrowserContext, entry: PageRecord): Promise<void> => {
     const session = await context.newCDPSession(entry.page).catch(() => undefined);
     if (session === undefined) {
         return;
@@ -140,10 +162,19 @@ const watchDialogClose = async (context: BrowserContext, entry: PageRecord): Pro
     });
     entry.page.once("close", () => void session.detach().catch(() => undefined));
     await session.send("Page.enable").catch(() => undefined);
+    await watchLoading(session, entry.navigation, () => navigationMoved(entry));
 };
 
 const watchPage = (record: BrowserSessionRecord, page: Page): void => {
-    const entry: PageRecord = { id: `p${record.nextPageId}`, page, url: page.url(), title: undefined, closed: false, dialog: undefined };
+    const entry: PageRecord = {
+        id: `p${record.nextPageId}`,
+        page,
+        url: page.url(),
+        title: undefined,
+        closed: false,
+        dialog: undefined,
+        navigation: freshNavigation(),
+    };
     record.nextPageId += 1;
     record.pages.set(entry.id, entry);
     // Unreported: no logger reaches this module (agent.ts and codex-agent.ts open sessions without one).
@@ -158,13 +189,15 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
         publishRuntimeChange("browsers");
     });
     if (record.context !== undefined) {
-        void watchDialogClose(record.context, entry);
+        void watchPageSession(record.context, entry);
         // A popup lands wherever a display with no window manager puts it; over its opener, where the viewer looks.
         void placeWindow(record.context, page).catch(() => undefined);
     }
     void notePage(record, entry);
+    watchNavigation(page, entry.navigation, () => navigationMoved(entry));
     page.on("framenavigated", (frame) => {
         if (frame.parentFrame() === null) {
+            navigationCommitted(entry.navigation, frame.url());
             void notePage(record, entry);
         }
     });
@@ -463,10 +496,12 @@ const hostOf = (url: string | undefined): string | undefined => {
 };
 
 // Live sessions list only open tabs; finished ones list every tab they ever had, since a closed browser only answers
-// where it went.
+// where it went, and nothing of a closed one is still loading.
 // title is omitted rather than set to undefined, per exactOptionalPropertyTypes.
-const summarizePage = (entry: PageRecord, activeId: string | undefined): BrowserPage => {
-    const page: BrowserPage = { id: entry.id, url: entry.url, active: entry.id === activeId };
+const summarizePage = (entry: PageRecord, activeId: string | undefined, running: boolean): BrowserPage => {
+    const page: BrowserPage = running
+        ? { id: entry.id, ...navigationFields(entry.navigation, entry.url), active: entry.id === activeId }
+        : { id: entry.id, url: entry.url, active: entry.id === activeId };
     return entry.title === undefined ? page : { ...page, title: entry.title };
 };
 
@@ -527,7 +562,7 @@ const summarize = (record: BrowserSessionRecord): BrowserSession => {
         server: record.server,
         running,
         activityAt: record.activityAt,
-        pages: [...record.pages.values()].filter((entry) => !running || !entry.closed).map((entry) => summarizePage(entry, activeId)),
+        pages: [...record.pages.values()].filter((entry) => !running || !entry.closed).map((entry) => summarizePage(entry, activeId, running)),
         ...optional("help", record.help),
         ...optional("dialog", running ? openDialog(record) : undefined),
         ...optional("finishedAt", record.finishedAt),

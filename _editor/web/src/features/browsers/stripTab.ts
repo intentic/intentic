@@ -1,3 +1,4 @@
+import type { BrowserPage } from "@intentic/sandbox-contract/schemas/terminal";
 import type { IconName } from "@intentic/ui";
 
 // One tab of the Browsers strip, whatever it is of: a web page of one of the open windows, or one of the reader's pins (a
@@ -71,3 +72,15 @@ export const stripItems = (tabs: readonly StripTab[]): StripItem[] =>
             { kind: `tab`, key: tab.key ?? tab.id, tab, seam: false },
         ];
     });
+
+// A web page's tab as a browser's own strip draws it between two addresses, which the picture (the page alone) cannot
+// show: turning while it is on its way, a warning on the error page with why on hover, the globe at rest. A daemon from
+// before those fields says none of this, and the tab rests as it always did (2026-11-18: a click that sent a page to a
+// host that never answered looked like a click that did nothing).
+export const pageTabLook = (page: BrowserPage): Pick<StripTab, `note` | `icon` | `spin` | `tint`> => {
+    const note = page.url === `` ? undefined : page.error === undefined ? page.url : `${page.url} · ${page.error}`;
+    if (page.loading === true) {
+        return { note, icon: `spinner`, spin: true };
+    }
+    return page.error === undefined ? { note, icon: `globe` } : { note, icon: `exclamation-triangle`, tint: `text-warning` };
+};

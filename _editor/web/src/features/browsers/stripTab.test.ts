@@ -1,4 +1,5 @@
-import { initialOf, stripItems, type StripGroup, type StripTab } from "./stripTab";
+import type { BrowserPage } from "@intentic/sandbox-contract/schemas/terminal";
+import { initialOf, pageTabLook, stripItems, type StripGroup, type StripTab } from "./stripTab";
 
 const group = (id: string): StripGroup => ({ id, label: id, mark: { kind: `icon`, icon: `user` }, current: false });
 const tab = (id: string, extra: Partial<StripTab> = {}): StripTab => ({ id, label: id, icon: `globe`, closable: true, pinned: false, ...extra });
@@ -64,5 +65,28 @@ describe(`a tab's key`, () => {
     test(`is its id, or the key it was given`, () => {
         const items = stripItems([tab(`a`), { ...tab(`b`), key: `opening:1` }]);
         expect(items.map((item) => item.key)).toEqual([`a`, `opening:1`]);
+    });
+});
+
+describe(`a web page's tab between two addresses`, () => {
+    const page = (extra: Partial<BrowserPage> = {}): BrowserPage => ({ id: `p1`, url: `http://192.168.0.103:9120/login`, active: true, ...extra });
+
+    test(`turns while the page is on its way`, () => {
+        expect(pageTabLook(page({ loading: true }))).toEqual({ note: `http://192.168.0.103:9120/login`, icon: `spinner`, spin: true });
+    });
+
+    test(`warns on the error page and says why on hover; turning wins over an error a new navigation is leaving`, () => {
+        const failed = page({ url: `http://192.168.0.168/`, error: `net::ERR_CONNECTION_TIMED_OUT` });
+        expect(pageTabLook(failed)).toEqual({
+            note: `http://192.168.0.168/ · net::ERR_CONNECTION_TIMED_OUT`,
+            icon: `exclamation-triangle`,
+            tint: `text-warning`,
+        });
+        expect(pageTabLook({ ...failed, loading: true })).toMatchObject({ icon: `spinner`, spin: true });
+    });
+
+    test(`rests as the globe, as it always did against a daemon that says none of this, with no hover for no address`, () => {
+        expect(pageTabLook(page())).toEqual({ note: `http://192.168.0.103:9120/login`, icon: `globe` });
+        expect(pageTabLook(page({ url: `` }))).toEqual({ note: undefined, icon: `globe` });
     });
 });

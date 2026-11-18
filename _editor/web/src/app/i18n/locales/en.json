@@ -1359,6 +1359,7 @@
             "agentCarriesOn": "The agent carries on",
             "fixStepHandBack": "Fix that step in the page, then hand back.",
             "starting": "Starting your browser…",
+            "waitingFor": "Waiting for {host}…",
             "startCaption": "Your browser runs in this sandbox: pages load over its network, and what you sign into stays signed in.",
             "replyFailed": "Couldn't reach the agent with your answer. Try again."
         },

@@ -15,7 +15,7 @@ import { parseTabKey, sameTab, tabKey, type LiveTab, type PinnedTab } from "../.
 import { toggleBrowsersFloating, useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import LiveTabStrip from "../../features/browsers/LiveTabStrip.vue";
 import LiveLauncher, { type LaunchGroup } from "./LiveLauncher.vue";
-import { initialOf, type GroupMark, type StripGroup, type StripTab } from "../../features/browsers/stripTab";
+import { initialOf, pageTabLook, type GroupMark, type StripGroup, type StripTab } from "../../features/browsers/stripTab";
 import { closeBrowser, closeBrowserPage, openBrowser, useBrowsersQuery } from "../../features/browsers/browsersQuery";
 import type { BrowserCommand } from "../../models/browsers/keyIntent";
 import Omnibox from "../../features/browsers/Omnibox.vue";
@@ -370,8 +370,7 @@ const pageEntries = computed(() =>
                 id: stripIdOf(session.name, page.id),
                 key: arrivedKeys.value.get(stripIdOf(session.name, page.id)),
                 label: pageLabel(page),
-                note: page.url === `` ? undefined : page.url,
-                icon: `globe`,
+                ...pageTabLook(page),
                 closable: usable(session),
                 pinned: false,
                 group,
@@ -591,6 +590,7 @@ const webAddress = computed(() => activePage.value?.url ?? BLANK);
 
 // What Enter sent the active tab to, said until the tab reports getting there (heldAddress.ts).
 const typed = useHeldAddress(activePage);
+const pageLoading = computed(() => webInFront.value && activePage.value?.loading === true); // reload becomes stop
 
 const address = computed<string>(() => {
     const tab = front.value;
@@ -1247,11 +1247,11 @@ const { floats } = useBrowsersFloating();
                 type="button"
                 :class="ui.iconButton({ size: `md`, round: true })"
                 :disabled="front.kind === `preview` ? frontPreview?.framed !== true : !webInFront || !interactive || blankOnTheWay"
-                :aria-label="t(`ui.action.reload`)"
-                v-tooltip.bottom="t(`ui.action.reload`)"
-                @click="reload"
+                :aria-label="pageLoading ? t(`ui.action.stop`) : t(`ui.action.reload`)"
+                v-tooltip.bottom="pageLoading ? t(`ui.action.stop`) : t(`ui.action.reload`)"
+                @click="pageLoading ? view.stop() : reload()"
             >
-                <Icon name="refresh" class="text-xs" />
+                <Icon :name="pageLoading ? `times` : `refresh`" class="text-xs" />
             </button>
 
             <Omnibox
@@ -1259,6 +1259,7 @@ const { floats } = useBrowsersFloating();
                 :editable="addressEditable"
                 :value="address"
                 :kind="addressKind"
+                :page="webInFront ? activePage : undefined"
                 :placeholder="t(`browsers.browsers.addressPlaceholder`)"
                 :copy-label="t(`browsers.browsers.copyAddress`)"
                 :secure-label="t(`browsers.browsers.connectionSecure`)"
