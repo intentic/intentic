@@ -295,7 +295,7 @@ const folder = computed(() => {
 });
 const entryType = computed(() => (view.value?.kind === `folder` ? `dir` : `file`));
 const icon = computed(() => iconForEntry(name.value, entryType.value));
-const iconColour = computed(() => explorerColorClass(`colorful`, name.value, entryType.value, false));
+const iconColour = computed(() => explorerColorClass(name.value, entryType.value, false));
 
 // The fact beside the path: how long the file is once known, how big bytes are, how much a folder holds.
 const aside = computed(() => {

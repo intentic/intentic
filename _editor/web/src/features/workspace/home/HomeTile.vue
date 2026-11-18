@@ -66,8 +66,7 @@ const emit = defineEmits<{
 }>();
 
 const icon = computed<IconName>(() => (locked ? `lock` : iconForEntry(entry.name, entry.type)));
-// Always the colourful hue, whatever the tree's own setup: a 2rem glyph in the minimal setup's grey reads as disabled.
-const color = computed(() => (locked ? `text-subtle` : explorerColorClass(`colorful`, entry.name, entry.type, dimmed)));
+const color = computed(() => (locked ? `text-subtle` : explorerColorClass(entry.name, entry.type, dimmed)));
 const quiet = computed(() => dimmed || locked || pending);
 
 // --- The thumbnail: fetched once the tile is near the viewport, never for a folder of four hundred off-screen shots. ---

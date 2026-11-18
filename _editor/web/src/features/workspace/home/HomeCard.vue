@@ -58,7 +58,7 @@ const emit = defineEmits<{
 }>();
 
 const icon = computed<IconName>(() => (locked ? `lock` : iconForEntry(entry.name, entry.type)));
-const color = computed(() => (locked ? `text-subtle` : explorerColorClass(`colorful`, entry.name, entry.type, dimmed)));
+const color = computed(() => (locked ? `text-subtle` : explorerColorClass(entry.name, entry.type, dimmed)));
 const quiet = computed(() => dimmed || locked || pending);
 // Its size, and its age or the line the home hands in its place (a result's folder, a time under a date heading).
 const facts = computed(() =>

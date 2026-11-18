@@ -240,7 +240,7 @@ const marks = computed<ReadonlyMap<string, CoverMark>>(() =>
 // How many folders below a drawn folder hold the file, 0 while no cover is chosen.
 const insideOf = (path: string): number => marks.value.get(path)?.inside ?? 0;
 const coverIcon = computed(() => (cover === undefined ? `file` : iconForEntry(cover, `file`)));
-const coverColor = computed(() => (cover === undefined ? `` : explorerColorClass(`colorful`, cover, `file`, false)));
+const coverColor = computed(() => (cover === undefined ? `` : explorerColorClass(cover, `file`, false)));
 // A closed folder says whether it holds the file only once its listing is known, so the ones in view are listed ahead,
 // a few at a time. Bounded by the screen: a folder of a thousand folders asks for what is drawn, not for all of them.
 // Only plain folders: listing an archive unpacks it, and an ignored one (node_modules) can hold tens of thousands.

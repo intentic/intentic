@@ -73,7 +73,7 @@ const emit = defineEmits<{
 }>();
 
 const icon = computed<IconName>(() => (locked ? `lock` : iconForEntry(entry.name, entry.type)));
-const color = computed(() => (locked ? `text-subtle` : explorerColorClass(`colorful`, entry.name, entry.type, dimmed)));
+const color = computed(() => (locked ? `text-subtle` : explorerColorClass(entry.name, entry.type, dimmed)));
 const quiet = computed(() => dimmed || locked || pending);
 
 const kind = computed(() => (locked || pending ? undefined : thumbnailKind(entry)));

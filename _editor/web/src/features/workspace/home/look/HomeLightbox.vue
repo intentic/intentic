@@ -35,7 +35,7 @@ const entry = computed(() => entries[index.value]);
 const medium = computed(() => (entry.value === undefined ? undefined : galleryArtOf(entry.value)));
 const icon = computed(() => (entry.value === undefined ? `image` : iconForEntry(entry.value.name, entry.value.type)));
 const color = computed(() =>
-    entry.value === undefined ? `` : explorerColorClass(`colorful`, entry.value.name, entry.value.type, entry.value.ignored),
+    entry.value === undefined ? `` : explorerColorClass(entry.value.name, entry.value.type, entry.value.ignored),
 );
 
 // --- Where the picture stands: centred in the stage, clear of the arrows either side. -------------------------------

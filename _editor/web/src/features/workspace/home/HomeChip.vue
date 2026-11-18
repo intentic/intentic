@@ -59,7 +59,7 @@ const emit = defineEmits<{
 }>();
 
 const icon = computed<IconName>(() => (locked ? `lock` : iconForEntry(entry.name, entry.type)));
-const color = computed(() => (locked ? `text-subtle` : explorerColorClass(`colorful`, entry.name, entry.type, dimmed)));
+const color = computed(() => (locked ? `text-subtle` : explorerColorClass(entry.name, entry.type, dimmed)));
 const quiet = computed(() => dimmed || locked || pending);
 // A chip stands on a faint fill of its own at rest, so a strip of them reads as places to go rather than loose words.
 // The selected tint and a drop's fill are the row's own (`ui-row-select-*`), which a fill set here would paint over.

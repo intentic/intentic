@@ -35,8 +35,7 @@ const surface = useChatSurface();
 const openable = computed(() => surface.openFile !== undefined && progress === undefined);
 const open = (): void => surface.openFile?.(path);
 
-// Fixed `colorful`: a chip is not the file tree, but the tree's vocabulary of which hue means which kind is worth sharing.
-const iconColor = computed(() => explorerColorClass(`colorful`, name, `file`, false));
+const iconColor = computed(() => explorerColorClass(name, `file`, false));
 </script>
 
 <template>

@@ -45,7 +45,7 @@ const kind = computed<QuickLookKind>(() => {
     return planned === `document` && documentViewer.value === undefined ? `none` : planned;
 });
 const icon = computed(() => (entry === undefined ? `file` : iconForEntry(entry.name, entry.type)));
-const color = computed(() => (entry === undefined ? `` : explorerColorClass(`colorful`, entry.name, entry.type, entry.ignored)));
+const color = computed(() => (entry === undefined ? `` : explorerColorClass(entry.name, entry.type, entry.ignored)));
 // Markdown prose in the quick look: file links resolve against the file's own folder, scoped to the viewed conversation.
 const decorate = computed(() => {
     if (entry === undefined || kind.value !== `markdown`) {
@@ -356,7 +356,7 @@ onBeforeUnmount(() => {
                                 <Icon
                                     :name="iconForEntry(child.name, child.type)"
                                     class="shrink-0 text-2xs"
-                                    :class="explorerColorClass('colorful', child.name, child.type, child.ignored)"
+                                    :class="explorerColorClass(child.name, child.type, child.ignored)"
                                 />
                                 <span class="truncate">{{ child.name }}</span>
                             </li>
