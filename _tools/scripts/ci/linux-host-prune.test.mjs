@@ -21,14 +21,17 @@ const stubs = {
     docker: dockerStub,
     // No job running, so the full pass (volumes included) runs.
     pgrep: "#!/usr/bin/env bash\n[ \"$1\" = -cx ] && echo 0\nexit 1\n",
-    df: "#!/usr/bin/env bash\necho header\necho ' 50% 1G 1G'\n",
+    // Half full: an idle pass, not a pressure one.
+    df: '#!/usr/bin/env bash\necho header\ncase "$*" in *pcent*) echo " 50%" ;; *) echo " 1G 1G" ;; esac\n',
     systemctl: "#!/usr/bin/env bash\nexit 0\n",
+    // `ctr content active`: a header, and one in-flight ingest when PRUNE_TEST_INGEST is set.
+    ctr: '#!/usr/bin/env bash\nprintf "REF\\tSIZE\\tAGE\\n"\n[ -n "${PRUNE_TEST_INGEST:-}" ] && printf "tar-blobs/sha256/2fbb\\t118558746\\t47s\\n"\nexit 0\n',
 };
 
 // docker's CreatedAt format, in UTC.
 const createdAt = (hoursAgo) => `${new Date(Date.now() - hoursAgo * 3_600_000).toISOString().slice(0, 19).replace("T", " ")} +0000 UTC`;
 
-const prune = (containers) => {
+const prune = (containers, { ingest = false } = {}) => {
     const root = mkdtempSync(join(tmpdir(), "linux-host-prune-test-"));
     try {
         const bin = join(root, "bin");
@@ -51,6 +54,7 @@ const prune = (containers) => {
                 PRUNE_STATE_DIR: join(root, "state"),
                 PRUNE_RUNNERS_GLOB: join(root, "no-runners-*"),
                 PRUNE_RUNNER_CACHE: join(root, "no-cache"),
+                PRUNE_TEST_INGEST: ingest ? "1" : "",
             },
         });
         assert.equal(result.status, 0, result.stderr);
@@ -87,4 +91,13 @@ test("the volume prune takes anonymous volumes and testcontainers', never every 
 test("the network prune leaves a compose project's networks", () => {
     const networks = prune([]).filter((call) => call.startsWith("network prune"));
     assert.deepEqual(networks, ["network prune -f --filter until=24h --filter label!=com.docker.compose.project"]);
+});
+
+test("images and build cache wait while docker is writing an image; volumes do not", () => {
+    const writing = prune([], { ingest: true });
+    assert.ok(!writing.some((call) => /^(image|builder) prune/.test(call)), writing.join("\n"));
+    assert.ok(writing.includes("volume prune -f"));
+    const quiet = prune([]);
+    assert.ok(quiet.includes("image prune -f --filter until=1h"));
+    assert.ok(quiet.some((call) => call.startsWith("builder prune")));
 });

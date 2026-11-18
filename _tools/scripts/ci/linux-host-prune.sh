@@ -31,6 +31,15 @@ run() {
 }
 used_percent() { df --output=pcent / | tail -n1 | tr -dc '0-9'; }
 idle() { ! pgrep -x Runner.Worker >/dev/null; }
+# Whether containerd is writing content for docker right now. "Idle" only knows about CI jobs, but an image prune on
+# the containerd image store takes the lease of ANY transfer in flight, CI's or not: at 2026-11-17 16:37:45 EST an idle
+# pass on z440 took the lease of an `ic` sandbox move's 8.7 GB image load, which failed 47 s later ("commit failed:
+# lease does not exist"). `ctr content active` lists every ingest not yet committed; a host without ctr, or on the
+# classic image store, has nothing listed there and prunes as before.
+ingesting() {
+    command -v ctr >/dev/null || return 1
+    [ -n "$(timeout 10 ctr -n moby content active 2>/dev/null | tail -n +2)" ]
+}
 
 mkdir -p "$STATE_DIR"
 log "start: $(used_percent)% of / used; $(idle && echo 'no job running' || echo "jobs running: $(pgrep -cx Runner.Worker)")"
@@ -102,13 +111,17 @@ if [ -z "$mode" ]; then
     log "full pass: waiting for an idle moment (last one ${since_hours}h ago, forced at ${FORCE_AFTER_HOURS}h)"
 else
     log "full pass ($mode)"
-    run docker image prune -f --filter until=1h
-    run docker builder prune -f --max-used-space "$BUILD_CACHE_MAX"
-    if [ "$mode" = pressure ]; then
-        run docker image prune -af
-        run docker builder prune -af
+    if [ "$mode" != pressure ] && ingesting; then
+        log "images and build cache: left for the next pass, docker is writing an image (a pull, load or build)"
     else
-        run docker image prune -af --filter until="$IMAGE_AGE"
+        run docker image prune -f --filter until=1h
+        run docker builder prune -f --max-used-space "$BUILD_CACHE_MAX"
+        if [ "$mode" = pressure ]; then
+            run docker image prune -af
+            run docker builder prune -af
+        else
+            run docker image prune -af --filter until="$IMAGE_AGE"
+        fi
     fi
     # Anonymous volumes, and of the named ones only what testcontainers made. Never -a over everything: a named
     # volume is unreferenced whenever its stack's container is gone, and it holds that deployment's data (a sandbox's
