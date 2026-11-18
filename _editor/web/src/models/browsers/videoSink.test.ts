@@ -2,7 +2,7 @@
 // pane hands the sink `null` every time a browser stops or the picture path changes. Production caught this as
 // "Cannot read properties of null (reading 'style')" from both `attach` and `close`.
 import "@intentic/testing/dom";
-import { stillScale, videoSink } from "./videoSink";
+import { commonColour, stillScale, videoSink } from "./videoSink";
 
 const canvas = (): HTMLCanvasElement => document.createElement(`canvas`);
 
@@ -53,4 +53,26 @@ it("drops the still at once when the picture is about to change wholesale", () =
     still.style.visibility = `visible`;
     sink.dropStill();
     expect(still.style.visibility).toBe(`hidden`);
+});
+
+// What fills the stage beside a picture smaller than it: the page's own background, or nothing where the edge has none.
+it("reads a page's background off its edge, and none off an edge that is a picture", () => {
+    const pixels = (...colours: (readonly [number, number, number])[]): Uint8ClampedArray =>
+        new Uint8ClampedArray(colours.flatMap(([red, green, blue]) => [red, green, blue, 255]));
+    const white = [255, 255, 255] as const;
+    const nearWhite = [253, 254, 255] as const;
+    const ink = [20, 20, 20] as const;
+    // A white page with text running to its edge, and a video's noise on the white: still white.
+    expect(commonColour(pixels(white, nearWhite, white, ink, nearWhite, white, ink, white))).toBe(`rgb(255 255 255)`);
+    // Every sample its own colour, as a photograph's edge is: no background to extend.
+    const photo = Array.from({ length: 16 }, (_, at) => [at * 16, 255 - at * 16, (at * 37) % 256] as const);
+    expect(commonColour(pixels(...photo))).toBeUndefined();
+    expect(commonColour(new Uint8ClampedArray())).toBeUndefined();
+    // A canvas nothing has painted reads as transparent black, which is no page's background.
+    expect(commonColour(new Uint8ClampedArray(64 * 4))).toBeUndefined();
+});
+
+it("reads no edge colour before a frame has painted", () => {
+    const sink = videoSink(() => undefined);
+    expect(sink.edgeColour()).toBeUndefined();
 });

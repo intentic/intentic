@@ -15,7 +15,9 @@ import { onScreen } from "../../workbench/window/onScreen";
 // Roughly one display frame, the rate the far side can act on anyway: only enough to keep a 1000 Hz mouse from
 // flooding the socket; each move is a few dozen bytes of JSON, and a press carries its own position.
 export const MOVE_THROTTLE_MS = 16;
-// A size is asked once the box has held still this long: every step of a drag would otherwise restart the encoder.
+// A box that changes after holding still this long is asked at once (a panel opened or closed, the window maximised);
+// one changing again within it is a drag, asked once it holds still this long, since every step of a drag would
+// otherwise restart the encoder.
 export const RESIZE_DEBOUNCE_MS = 250;
 
 // A field the daemon sends, read loosely: one of a type this build does not expect is absent, not a refused message.
@@ -45,8 +47,11 @@ const readMessage = (raw: string): ScreencastMessage | undefined => {
     return parseJsonWith(raw, ScreencastMessageSchema);
 };
 
-// What the screencast itself says on the socket, beside each route's own vocabulary.
-export type ScreencastControl = { readonly type: `pause` | `resume` } | { readonly type: `resize`; readonly width: number; readonly height: number };
+// What the screencast itself says on the socket, beside each route's own vocabulary. `keyframe`: the decoder lost the
+// stream, and a fresh one is asked for.
+export type ScreencastControl =
+    | { readonly type: `pause` | `resume` | `keyframe` }
+    | { readonly type: `resize`; readonly width: number; readonly height: number };
 
 interface Size {
     readonly width: number;
@@ -55,6 +60,70 @@ interface Size {
 
 const sameSize = (left: Size | undefined, right: Size | undefined): boolean =>
     left !== undefined && right !== undefined && left.width === right.width && left.height === right.height;
+
+interface BoxAsker {
+    // The box was measured at this size, in CSS px.
+    readonly measured: (width: number, height: number) => void;
+    // Asks for the box now, unless it is not to be asked or the daemon was asked it already.
+    readonly ask: () => void;
+    // The daemon has forgotten every box asked (a fresh socket, another picture, a phone let go of).
+    readonly forget: () => void;
+    readonly dispose: () => void;
+}
+
+// The box the daemon is asked to size the picture to: the last one measured, sent when `canAsk` allows and only when the
+// daemon does not have it already, with RESIZE_DEBOUNCE_MS's rule for when.
+const boxAsker = (send: (size: Size) => void, canAsk: () => boolean): BoxAsker => {
+    let box: Size | undefined;
+    let asked: Size | undefined;
+    let timer: number | undefined;
+    // When the box last changed size: what tells a one-step change from a drag.
+    let changedAt = 0;
+    const ask = (): void => {
+        if (box !== undefined && canAsk() && !sameSize(box, asked)) {
+            asked = box;
+            send(box);
+        }
+    };
+    return {
+        measured: (boxWidth, boxHeight) => {
+            const size = { width: Math.round(boxWidth), height: Math.round(boxHeight) };
+            if (size.width <= 0 || size.height <= 0 || sameSize(size, box)) {
+                return;
+            }
+            box = size;
+            const held = timer === undefined && Date.now() - changedAt >= RESIZE_DEBOUNCE_MS;
+            changedAt = Date.now();
+            window.clearTimeout(timer);
+            timer = held
+                ? undefined
+                : window.setTimeout(() => {
+                      timer = undefined;
+                      ask();
+                  }, RESIZE_DEBOUNCE_MS);
+            if (held) {
+                ask();
+            }
+        },
+        ask,
+        forget: () => {
+            asked = undefined;
+        },
+        dispose: () => {
+            window.clearTimeout(timer);
+            timer = undefined;
+        },
+    };
+};
+
+// The video frame as painted on the canvas, for a pane that places it and fills around it.
+export interface PaintedPicture {
+    // Its size in its own pixels; it trails `width`/`height` by the moment a new stream's first frame takes to decode.
+    // Undefined until one paints, and on the frames path.
+    readonly painted: Ref<Size | undefined>;
+    // The page's background as its edges show it (videoSink's edgeColour); undefined when it has none.
+    readonly edgeColour: () => string | undefined;
+}
 
 export interface ScreencastOptions<Action extends string, Pointer, Out> {
     // The route's authenticated address, or undefined while there is nowhere to dial (liveSocket's `mint`).
@@ -100,6 +169,7 @@ export interface Screencast<Action extends string, Pointer, Out> {
     readonly scale: Ref<number>;
     // The current frames-path picture as an object URL; undefined on video.
     readonly frame: Ref<string | undefined>;
+    readonly picture: PaintedPicture;
     // The pointer message for this action, or undefined when a move comes inside the throttle or there is no box.
     readonly pointerAt: (action: Action, event: MouseEvent, picture: HTMLElement) => Pointer | undefined;
     // Asks the daemon to size the picture to this box once it holds still; a box it already has is not asked again.
@@ -120,25 +190,20 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
     const height = ref(800);
     const scale = ref(1);
     const frame = ref<string | undefined>();
-    const video = videoSink(options.onVideoError);
+    const painted = ref<Size | undefined>();
     // Turns each frames-path picture into an object URL, releasing ones the img has moved on from.
     const pictures = options.frames === true ? frameUrls() : undefined;
     let lastMove = 0;
-    // The box's last measured size, and the last one asked on this socket.
-    let boxSize: Size | undefined;
-    let askedSize: Size | undefined;
-    let resizeTimer: number | undefined;
 
     // The socket below; declared ahead so every verb can say something on it.
     const say = (message: ScreencastControl): void => live.send(message);
-
-    const askSize = (): void => {
-        if (kind.value !== `video` || options.holdSize?.() === true || boxSize === undefined || sameSize(boxSize, askedSize)) {
-            return;
-        }
-        askedSize = boxSize;
-        say({ type: `resize`, ...boxSize });
-    };
+    const sizes = boxAsker((size) => say({ type: `resize`, ...size }), () => kind.value === `video` && options.holdSize?.() !== true);
+    const video = videoSink(options.onVideoError, {
+        onLost: () => say({ type: `keyframe` }),
+        onSize: (paintedWidth, paintedHeight) => {
+            painted.value = { width: paintedWidth, height: paintedHeight };
+        },
+    });
 
     // Sent before any picture, and again for every fresh stream (a resize, another window): which decoder to build and
     // what a click's coordinates mean. The codec is read out of the stream by the daemon rather than assumed.
@@ -155,7 +220,7 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
             video.configure(message.codec ?? ``);
         }
         options.onReady?.(message);
-        askSize();
+        sizes.ask();
     };
 
     const takeText = (raw: string): void => {
@@ -207,7 +272,7 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
         open: webSocketChannel({ text: takeText, binary: takePicture }),
         onOpen: () => {
             // A fresh socket knows nothing of the box; the first `ready` asks again.
-            askedSize = undefined;
+            sizes.forget();
             options.socket?.onOpen?.();
         },
     };
@@ -223,7 +288,7 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
     }
 
     onScopeDispose(() => {
-        window.clearTimeout(resizeTimer);
+        sizes.dispose();
         // An unreleased object URL holds its blob for the life of the document; a decoder holds buffers of its own.
         pictures?.release();
         video.close();
@@ -237,6 +302,7 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
         height,
         scale,
         frame,
+        picture: { painted, edgeColour: () => video.edgeColour() },
         pointerAt: (action, event, picture) => {
             if (action === `move`) {
                 const now = Date.now();
@@ -247,24 +313,17 @@ export const useScreencast = <Action extends string, Pointer extends object, Out
             }
             return options.pointer(action, event, picture, width.value, height.value);
         },
-        requestSize: (boxWidth, boxHeight) => {
-            const size = { width: Math.round(boxWidth), height: Math.round(boxHeight) };
-            if (size.width <= 0 || size.height <= 0 || sameSize(size, boxSize)) {
-                return;
-            }
-            boxSize = size;
-            window.clearTimeout(resizeTimer);
-            resizeTimer = window.setTimeout(askSize, RESIZE_DEBOUNCE_MS);
-        },
+        requestSize: sizes.measured,
         askSizeAgain: () => {
-            askedSize = undefined;
-            askSize();
+            sizes.forget();
+            sizes.ask();
         },
         syncVisibility,
         reset: () => {
-            window.clearTimeout(resizeTimer);
-            askedSize = undefined;
+            sizes.dispose();
+            sizes.forget();
             frame.value = undefined;
+            painted.value = undefined;
             // A decoder holds state for the stream it was built for; the next `ready` builds a new one.
             video.close();
             kind.value = undefined;

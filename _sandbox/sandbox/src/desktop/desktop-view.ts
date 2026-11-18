@@ -4,7 +4,7 @@ import type { WSContext } from "hono/ws";
 import { z } from "zod";
 import { redeemTicket } from "../auth/tokens/ws-tickets.js";
 import { regionsEqual, type Region } from "../browser/cast/region.js";
-import { encodeVideo, startVideocast, type Videocast, type VideoFrame } from "../browser/cast/videocast.js";
+import { encodeVideo, frameGate, type FrameGate, startVideocast, type Videocast, type VideoFrame } from "../browser/cast/videocast.js";
 import { startXInput, type XInput } from "../browser/cast/xinput.js";
 import type { Services } from "../composition.js";
 import {
@@ -22,13 +22,10 @@ import { parseJsonWith } from "@intentic/base/json";
 
 /* /system/desktop-view streams x11grab H.264 and XTEST input in one coordinate space; owner control holds out agent input until handback/idle/close.
  * window=<list id> crops/follows a window, remaps pointer pixels and raises it for keys; movement/resize emits a new ready, closure sends gone/1000.
- * Client JSON: ping, pause/resume, control and driving-only mouse/key/text. Server: ready, binary frame tags 3/4, pong and held owner changes. */
+ * Client JSON: ping, pause/resume, keyframe, control and driving-only mouse/key/text. Server: ready, binary frame tags 3/4, pong and held owner changes. */
 
 type Socket = WSContext;
 
-// A socket holding more than this unsent is slower than the picture; frames are dropped until a keyframe finds it
-// drained, as the browser view does.
-const BACKLOG_LIMIT = 256 * 1024;
 // How often a window's view asks where its window is now: a dragged window's picture catches up within this.
 const FOLLOW_MS = 750;
 // How many looks in a row may find a window off the window manager's list before it counts as closed. One could be a
@@ -50,6 +47,8 @@ export const DesktopViewMessageSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("ping") }),
     z.object({ type: z.literal("pause") }),
     z.object({ type: z.literal("resume") }),
+    // The view's decoder lost the stream: a restart brings a fresh keyframe (videocast.ts's frameGate).
+    z.object({ type: z.literal("keyframe") }),
     z.object({ type: z.literal("control"), driving: z.boolean() }),
     MouseMessageSchema,
     z.object({ type: z.literal("key"), key: z.string().min(1), ctrl: z.boolean().optional(), alt: z.boolean().optional(), shift: z.boolean().optional() }),
@@ -185,7 +184,9 @@ export const createDesktopViewRoute = (services: Services) =>
         let input: XInput | undefined;
         let closed = false;
         let paused = false;
-        let dropping = false;
+        // Drops frames a slow socket cannot take and restarts the stream for a keyframe once it drains, as the browser
+        // view does; made with the socket, in onOpen.
+        let gate: FrameGate | undefined;
         // Whether THIS view took the desktop: only the view that took it hands it back when it closes.
         let driving = false;
         let unregisterAccess: (() => void) | undefined;
@@ -216,17 +217,9 @@ export const createDesktopViewRoute = (services: Services) =>
         };
 
         const deliver = (ws: Socket, frame: VideoFrame): void => {
-            const backlog = backlogOf(ws);
-            if (dropping) {
-                if (!frame.key || backlog > BACKLOG_LIMIT) {
-                    return;
-                }
-                dropping = false;
-            } else if (backlog > BACKLOG_LIMIT) {
-                dropping = true;
-                return;
+            if (gate?.admit(frame) !== false) {
+                ws.send(encodeVideo(frame));
             }
-            ws.send(encodeVideo(frame));
         };
 
         // Every start is a fresh stream that begins at a keyframe, announced by its own `ready`.
@@ -237,7 +230,7 @@ export const createDesktopViewRoute = (services: Services) =>
                 return;
             }
             cast?.stop();
-            dropping = false;
+            gate?.started();
             cast = startVideocast(at.display, shown, {
                 onFrame: (frame) => deliver(ws, frame),
                 onCodec: (codec) => ws.send(JSON.stringify({ type: "ready", kind: "video", width: shown.width, height: shown.height, scale: 1, codec })),
@@ -256,6 +249,7 @@ export const createDesktopViewRoute = (services: Services) =>
             closed = true;
             clearTimeout(lapse);
             clearInterval(follower);
+            gate?.stop();
             cast?.stop();
             input?.stop();
             unwatch?.();
@@ -375,6 +369,7 @@ export const createDesktopViewRoute = (services: Services) =>
                     return;
                 }
                 only = asked;
+                gate = frameGate({ backlog: () => backlogOf(ws), restart: () => play(ws) });
                 try {
                     // Opening the view starts the desktop: the owner asking to see it is asking to use it.
                     desk = await agentDesktop();
@@ -426,6 +421,9 @@ export const createDesktopViewRoute = (services: Services) =>
                     case "resume":
                         paused = false;
                         play(ws);
+                        return;
+                    case "keyframe":
+                        gate?.askKey();
                         return;
                     case "control":
                         driving = message.driving;

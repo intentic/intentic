@@ -17,6 +17,46 @@ const FRAME_US = Math.round(1_000_000 / 30);
 export const stillScale = (still: { readonly width: number }, picture: { readonly width: number }): number =>
     picture.width > 0 ? Math.max(1, Math.round(still.width / picture.width)) : 1;
 
+// How many points along each edge the edge colour is read from, and how far in from the right the column is read: past
+// a classic scrollbar, which is the scrollbar's grey rather than the page's own background.
+const EDGE_SAMPLES = 64;
+const SCROLLBAR_PX = 20;
+// The share of samples one colour needs to count as the page's background rather than whatever runs to its edge.
+const EDGE_MAJORITY = 0.25;
+
+// The commonest colour among pixels, by 5 bits a channel so a video's ±1 noise on a flat white counts as one colour;
+// undefined when none holds EDGE_MAJORITY of them. A pixel not fully opaque is a canvas nothing has painted yet, which
+// would otherwise read as black, and counts for no colour.
+export const commonColour = (pixels: Uint8ClampedArray): string | undefined => {
+    const counts = new Map<number, number>();
+    let best: number | undefined;
+    let bestCount = 0;
+    for (let at = 0; at + 3 < pixels.length; at += 4) {
+        if (pixels[at + 3] !== 255) {
+            continue;
+        }
+        const key = ((pixels[at]! >> 3) << 10) | ((pixels[at + 1]! >> 3) << 5) | (pixels[at + 2]! >> 3);
+        const count = (counts.get(key) ?? 0) + 1;
+        counts.set(key, count);
+        if (count > bestCount) {
+            bestCount = count;
+            best = at;
+        }
+    }
+    if (best === undefined || bestCount < (pixels.length / 4) * EDGE_MAJORITY) {
+        return undefined;
+    }
+    return `rgb(${pixels[best]} ${pixels[best + 1]} ${pixels[best + 2]})`;
+};
+
+// What the pane hears from the sink besides an error.
+export interface VideoSinkEvents {
+    // The decoder lost the stream (a decode error closes it): only a fresh stream, with its own `ready`, paints again.
+    readonly onLost?: () => void;
+    // The picture painted is now this many pixels: on the first frame and on every frame of another size.
+    readonly onSize?: (width: number, height: number) => void;
+}
+
 export interface VideoSink {
     // Builds the decoder for the codec the daemon reports; safe to call again, a second `ready` replaces rather than
     // stacks.
@@ -25,6 +65,9 @@ export interface VideoSink {
     readonly push: (bytes: Uint8Array, key: boolean, quiet: boolean) => void;
     // A sharp WebP of the page as it stands; shown over the video until the page moves.
     readonly still: (bytes: Uint8Array<ArrayBuffer>) => void;
+    // The page's background as its right and bottom edges show it, for what shows beside a picture smaller than its
+    // box; undefined before a frame paints, or for an edge with no one colour to it.
+    readonly edgeColour: () => string | undefined;
     // The picture is about to change wholesale (another tab picked): the still of what was shown goes now, along with
     // one still decoding, rather than standing over the new tab until its first frame paints.
     readonly dropStill: () => void;
@@ -37,7 +80,54 @@ export interface VideoSink {
 // Safari <16.4 and Firefox <130 can't decode video; there's no fallback, so saying so beats a black rectangle.
 export const canDecodeVideo = (): boolean => typeof globalThis.VideoDecoder === `function`;
 
-export const videoSink = (onError: (message: string) => void): VideoSink => {
+// A small canvas the edges are copied into to be read: reading the picture's own canvas back makes Chromium move it off
+// the GPU, which a 30 fps picture cannot afford. Made on first use, and shared, since a read is over before it returns.
+let probe: CanvasRenderingContext2D | null | undefined;
+
+// The edge colour of a painted picture: a column just inside its right edge and its bottom row, each copied into a row
+// of the probe pixel for pixel, never blended.
+const readEdgeColour = (source: HTMLCanvasElement): string | undefined => {
+    if (source.width <= SCROLLBAR_PX || source.height < 2) {
+        return undefined;
+    }
+    probe ??= document.createElement(`canvas`).getContext(`2d`, { willReadFrequently: true });
+    if (probe === null) {
+        return undefined;
+    }
+    probe.canvas.width = EDGE_SAMPLES;
+    probe.canvas.height = EDGE_SAMPLES + 1;
+    probe.imageSmoothingEnabled = false;
+    probe.drawImage(source, 0, source.height - 1, source.width - SCROLLBAR_PX, 1, 0, 0, EDGE_SAMPLES, 1);
+    probe.drawImage(source, source.width - SCROLLBAR_PX, 0, 1, source.height, 0, 1, 1, EDGE_SAMPLES);
+    const row = probe.getImageData(0, 0, EDGE_SAMPLES, 1).data;
+    const column = probe.getImageData(0, 1, 1, EDGE_SAMPLES).data;
+    const both = new Uint8ClampedArray(row.length + column.length);
+    both.set(row);
+    both.set(column, row.length);
+    return commonColour(both);
+};
+
+// Paints a decoded still over the video (`under`) and shows it. Backed at the video's shape at the still's scale, not
+// the still's own shape: a still can be a scrollbar narrower or a pixel taller than the picture, and a differently shaped
+// canvas would letterbox out of line with it. A strip it leaves is transparent, showing the video beneath.
+const drawStill = (target: HTMLCanvasElement, under: HTMLCanvasElement, bitmap: ImageBitmap): void => {
+    const scale = stillScale(bitmap, under);
+    const width = under.width * scale;
+    const height = under.height * scale;
+    if (target.width !== width || target.height !== height) {
+        target.width = width;
+        target.height = height;
+    }
+    const layer = target.getContext(`2d`);
+    if (layer === null) {
+        return;
+    }
+    layer.clearRect(0, 0, width, height);
+    layer.drawImage(bitmap, 0, 0);
+    target.style.visibility = `visible`;
+};
+
+export const videoSink = (onError: (message: string) => void, events: VideoSinkEvents = {}): VideoSink => {
     let decoder: VideoDecoder | undefined;
     let canvas: HTMLCanvasElement | undefined;
     let context: CanvasRenderingContext2D | undefined;
@@ -66,6 +156,7 @@ export const videoSink = (onError: (message: string) => void): VideoSink => {
             canvas.width = frame.displayWidth;
             canvas.height = frame.displayHeight;
             context = canvas.getContext(`2d`) ?? undefined;
+            events.onSize?.(canvas.width, canvas.height);
         }
         context?.drawImage(frame, 0, 0);
     };
@@ -114,10 +205,12 @@ export const videoSink = (onError: (message: string) => void): VideoSink => {
             }
             const built = new VideoDecoder({
                 output: draw,
-                // A decode error is recoverable: wait for the next keyframe rather than tearing down a good socket.
+                // A decode error closes the decoder, so the daemon is asked for a fresh stream, whose `ready` builds a new
+                // one, rather than the socket torn down or the picture frozen until the next resize.
                 error: () => {
                     awaitingKey = true;
                     quietAt.clear();
+                    events.onLost?.();
                 },
             });
             // No `description`: that's for AVCC's length-prefixed form; this is Annex-B with parameter sets repeated
@@ -138,9 +231,10 @@ export const videoSink = (onError: (message: string) => void): VideoSink => {
             try {
                 decoder.decode(new EncodedVideoChunk({ type: key ? `key` : `delta`, timestamp: stamp, data: bytes }));
             } catch {
-                // A frame the decoder refused; recovery is just waiting for the next keyframe.
+                // A frame the decoder refused; recovery is a fresh keyframe, asked for since the periodic one is far.
                 awaitingKey = true;
                 quietAt.delete(stamp);
+                events.onLost?.();
             }
         },
         still: (bytes) => {
@@ -153,27 +247,10 @@ export const videoSink = (onError: (message: string) => void): VideoSink => {
             void createImageBitmap(new Blob([bytes], { type: `image/webp` }))
                 .then((bitmap) => {
                     try {
-                        // The page moved while this decoded; the still is of a picture already gone.
-                        if (since !== motion || stillCanvas !== target) {
-                            return;
+                        // Unless the page moved while this decoded: then the still is of a picture already gone.
+                        if (since === motion && stillCanvas === target) {
+                            drawStill(target, under, bitmap);
                         }
-                        // Backed at the video's shape at the still's scale, not the still's own shape: a still can be a
-                        // scrollbar narrower or a pixel taller than the picture, and a differently shaped canvas would
-                        // letterbox out of line with it. A strip it leaves is transparent, showing the video beneath.
-                        const scale = stillScale(bitmap, under);
-                        const width = under.width * scale;
-                        const height = under.height * scale;
-                        if (target.width !== width || target.height !== height) {
-                            target.width = width;
-                            target.height = height;
-                        }
-                        const layer = target.getContext(`2d`);
-                        if (layer === null) {
-                            return;
-                        }
-                        layer.clearRect(0, 0, width, height);
-                        layer.drawImage(bitmap, 0, 0);
-                        target.style.visibility = `visible`;
                     } finally {
                         bitmap.close();
                     }
@@ -184,6 +261,7 @@ export const videoSink = (onError: (message: string) => void): VideoSink => {
             motion += 1;
             hideStill();
         },
+        edgeColour: () => (canvas === undefined ? undefined : readEdgeColour(canvas)),
         attach: (video, still) => {
             // Normalised here, the one door in: everything below reads "no canvas" as undefined, and a template ref
             // hands over null the moment its element unmounts.

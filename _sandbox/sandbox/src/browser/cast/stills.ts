@@ -16,7 +16,7 @@ import { STILL_DELAY_MS, STILL_IDLE_MS } from "./screencast.js";
 // and a loud frame is always the page moving.
 
 // A delta frame of a still page costs x264 a few hundred bytes; anything moving costs kilobytes. Keyframes are never
-// motion: one arrives every second whatever the page does.
+// motion: one opens every stream, and the backstop one comes whatever the page does (videocast.ts).
 export const QUIET_BYTES = 3000;
 
 export interface EncodedFrame {

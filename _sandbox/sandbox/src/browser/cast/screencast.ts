@@ -101,6 +101,8 @@ export type ScreencastClientMessage =
     // The client's picture box in CSS px; the daemon sizes the browser window so the viewport is exactly that. Ignored
     // while a device is emulated (the device decides the size), but remembered and applied once it is not.
     | { readonly type: "resize"; readonly width: number; readonly height: number }
+    // The viewer's decoder lost the stream: a fresh keyframe, by restarting the stream (videocast.ts's frameGate).
+    | { readonly type: "keyframe" }
     // Renders the page this view shows, and any it shows after, as a device (emulation.ts): its CSS size, `mobile` for
     // the meta viewport, touch, and a user agent when given. Without `device`, back to the browser itself. Answered by
     // a fresh `ready` with the picture's new size. Checked at the view (EmulateMessageSchema), not trusted as typed.

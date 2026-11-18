@@ -86,6 +86,8 @@ test("keys arrive in xdotool's names with their modifiers", () => {
 
 test("only well-formed messages are read off the socket", () => {
     expect(DesktopViewMessageSchema.safeParse({ type: "mouse", action: "down", x: 1, y: 2, button: 0 }).success).toBe(true);
+    // The view's decoder lost the stream and asks for a fresh keyframe.
+    expect(DesktopViewMessageSchema.safeParse({ type: "keyframe" }).success).toBe(true);
     expect(DesktopViewMessageSchema.safeParse({ type: "mouse", action: "down", x: "1", y: 2 }).success).toBe(false);
     expect(DesktopViewMessageSchema.safeParse({ type: "control" }).success).toBe(false);
     expect(DesktopViewMessageSchema.safeParse({ type: "exec", command: "rm -rf /" }).success).toBe(false);

@@ -1,4 +1,4 @@
-import { readCodec, splitAccessUnits } from "./videocast.js";
+import { BACKLOG_LIMIT, frameGate, readCodec, splitAccessUnits } from "./videocast.js";
 
 // Bytes between ffmpeg and a browser's decoder, checked as a pure function since a malformed split has no natural error
 // (a green smear, not a crash). Shapes tested are what a real capture produces (verified against ffmpeg 5.1 + libx264).
@@ -89,5 +89,75 @@ describe("readCodec", () => {
     test("a frame with no parameter set answers with nothing", () => {
         expect(readCodec(Buffer.from([...nal(AUD), ...nal(SLICE, 1, 2, 3)]))).toBeUndefined();
         expect(readCodec(Buffer.from([...nal(AUD), ...nal(SPS)]))).toBeUndefined();
+    });
+});
+
+// A viewer slower than the picture, or one whose decoder lost the stream, resumes on a fresh keyframe a restart brings,
+// since the periodic one is a minute away; and the restarts never come faster than one a second.
+describe("frameGate", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    const delta = { bytes: Buffer.alloc(10), key: false };
+    const key = { bytes: Buffer.alloc(10), key: true };
+
+    test("a backed-up socket drops frames, and once it drains the stream restarts for a keyframe", () => {
+        let backlog = 0;
+        let restarts = 0;
+        const gate = frameGate({ backlog: () => backlog, restart: () => (restarts += 1) });
+        gate.started();
+        expect(gate.admit(delta)).toBe(true);
+
+        backlog = BACKLOG_LIMIT + 1;
+        expect(gate.admit(delta)).toBe(false);
+        // Still backed up: a keyframe would only pile on.
+        expect(gate.admit(key)).toBe(false);
+
+        backlog = 0;
+        // Drained mid-stream: the delta cannot be decoded without what was dropped, so a restart is asked instead.
+        expect(gate.admit(delta)).toBe(false);
+        expect(gate.admit(delta)).toBe(false);
+        jest.advanceTimersByTime(1000);
+        expect(restarts).toBe(1);
+
+        gate.started();
+        expect(gate.admit(key)).toBe(true);
+        expect(gate.admit(delta)).toBe(true);
+    });
+
+    test("a keyframe that finds the socket drained resumes the stream without a restart", () => {
+        let backlog = BACKLOG_LIMIT + 1;
+        let restarts = 0;
+        const gate = frameGate({ backlog: () => backlog, restart: () => (restarts += 1) });
+        gate.started();
+        expect(gate.admit(delta)).toBe(false);
+        backlog = 0;
+        expect(gate.admit(key)).toBe(true);
+        expect(gate.admit(delta)).toBe(true);
+        jest.advanceTimersByTime(5000);
+        expect(restarts).toBe(0);
+    });
+
+    test("a viewer asking for a keyframe gets a restart, no sooner than a second after the last", () => {
+        let restarts = 0;
+        const gate = frameGate({ backlog: () => 0, restart: () => (restarts += 1) });
+        gate.started();
+        gate.askKey();
+        // Nothing more goes until the fresh stream: the viewer cannot decode it.
+        expect(gate.admit(delta)).toBe(false);
+        jest.advanceTimersByTime(999);
+        expect(restarts).toBe(0);
+        jest.advanceTimersByTime(1);
+        expect(restarts).toBe(1);
+    });
+
+    test("a gate stopped before its restart is due restarts nothing", () => {
+        let restarts = 0;
+        const gate = frameGate({ backlog: () => 0, restart: () => (restarts += 1) });
+        gate.started();
+        gate.askKey();
+        gate.stop();
+        jest.advanceTimersByTime(5000);
+        expect(restarts).toBe(0);
     });
 });

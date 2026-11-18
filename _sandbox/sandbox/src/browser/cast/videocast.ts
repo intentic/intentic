@@ -11,9 +11,11 @@ import type { Region } from "./region.js";
 
 // 30fps is where a page stops looking stepped; 60 costs about twice as much for a barely visible difference.
 const FPS = 30;
-// Recovery point every second: a viewer whose socket backed up (live-view.ts) resumes at the next one, so a freeze
-// under congestion is bounded at this.
-const KEYFRAME_INTERVAL = FPS;
+// A keyframe once a minute, as a backstop only: every stream opens on one (a resize, a resume, another window), and a
+// viewer that falls behind or loses its decoder is given one by a restart (frameGate). The rate cap squeezes each
+// keyframe and the next second or so of frames refines it; at one a second, a large still page never settled, so the
+// still never came (stills.ts) and the picture stayed soft at ~7 Mbit/s (measured 2026-11-18, 1800×1100 and up).
+const KEYFRAME_INTERVAL = FPS * 60;
 // CRF 24 is visually clean for text at this size; the rate ceiling bounds what a pathological page can cost.
 const CRF = 24;
 const MAX_RATE = "6M";
@@ -125,60 +127,58 @@ export const readCodec = (unit: Buffer): string | undefined => {
         .toUpperCase()}`;
 };
 
-// `-nostdin` avoids ffmpeg blocking on the daemon's own unwritten stdin pipe before it even opens the display.
-// `-draw_mouse 0`: the pointer is the client's own, drawn where the owner's hand is rather than a round trip behind
-// it; the shape comes from the page (screencast.ts's cursorReporter).
+// The encoder's command line for one region: x11grab off the display, H.264 on stdout. `-nostdin` avoids ffmpeg blocking
+// on the daemon's own unwritten stdin pipe before it even opens the display. `-draw_mouse 0`: the pointer is the
+// client's own, drawn where the owner's hand is rather than a round trip behind it; the shape comes from the page
+// (screencast.ts's cursorReporter).
+const encoderArgs = (display: { readonly name: string }, region: Region): string[] => [
+    "-nostdin",
+    "-loglevel",
+    "error",
+    "-f",
+    "x11grab",
+    "-draw_mouse",
+    "0",
+    "-video_size",
+    `${region.width}x${region.height}`,
+    "-framerate",
+    String(FPS),
+    "-i",
+    `${display.name}.0+${region.x},${region.y}`,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-tune",
+    "zerolatency",
+    "-profile:v",
+    "baseline",
+    "-level:v",
+    "4.0",
+    "-pix_fmt",
+    "yuv420p",
+    "-crf",
+    String(CRF),
+    "-maxrate",
+    MAX_RATE,
+    "-bufsize",
+    BUF_SIZE,
+    "-g",
+    String(KEYFRAME_INTERVAL),
+    // Delimiter this module splits on; parameter sets repeat at every keyframe so any one can help recovery.
+    "-bsf:v",
+    "h264_metadata=aud=insert,dump_extra=freq=keyframe",
+    "-f",
+    "h264",
+    "pipe:1",
+];
+
 export const startVideocast = (display: { readonly name: string }, region: Region, handlers: VideocastHandlers): Videocast => {
     // Bytes arrived mid-frame, waiting for the rest; typed since a socket chunk may back any ArrayBufferLike.
     let pending: Buffer = Buffer.alloc(0);
     let stopped = false;
     let announced = false;
-    const child: ChildProcess = spawnAs(
-        { class: "service" },
-        "ffmpeg",
-        [
-            "-nostdin",
-            "-loglevel",
-            "error",
-            "-f",
-            "x11grab",
-            "-draw_mouse",
-            "0",
-            "-video_size",
-            `${region.width}x${region.height}`,
-            "-framerate",
-            String(FPS),
-            "-i",
-            `${display.name}.0+${region.x},${region.y}`,
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-tune",
-            "zerolatency",
-            "-profile:v",
-            "baseline",
-            "-level:v",
-            "4.0",
-            "-pix_fmt",
-            "yuv420p",
-            "-crf",
-            String(CRF),
-            "-maxrate",
-            MAX_RATE,
-            "-bufsize",
-            BUF_SIZE,
-            "-g",
-            String(KEYFRAME_INTERVAL),
-            // Delimiter this module splits on; parameter sets repeat at every keyframe so any one can help recovery.
-            "-bsf:v",
-            "h264_metadata=aud=insert,dump_extra=freq=keyframe",
-            "-f",
-            "h264",
-            "pipe:1",
-        ],
-        { stdio: ["ignore", "pipe", "pipe"] },
-    );
+    const child: ChildProcess = spawnAs({ class: "service" }, "ffmpeg", encoderArgs(display, region), { stdio: ["ignore", "pipe", "pipe"] });
 
     child.stdout?.on("data", (chunk: Buffer) => {
         if (stopped) {
@@ -188,6 +188,10 @@ export const startVideocast = (display: { readonly name: string }, region: Regio
         const { units, rest } = splitAccessUnits(pending);
         pending = rest;
         for (const unit of units) {
+            // Stopped by a frame of this same chunk (a restart asked from onFrame): the rest belong to a stream gone.
+            if (stopped) {
+                return;
+            }
             if (!announced) {
                 const codec = readCodec(unit.bytes);
                 if (codec !== undefined) {
@@ -223,6 +227,82 @@ export const startVideocast = (display: { readonly name: string }, region: Regio
             } catch {
                 // already gone, which is the outcome asked for
             }
+        },
+    };
+};
+
+// Unsent bytes a viewer's socket may hold before frames are dropped until a fresh keyframe; a second of video at the
+// encoder's ceiling, so a link that keeps up never sees it.
+export const BACKLOG_LIMIT = 256 * 1024;
+// The least time between two restarts the gate asks for: a link that stays slower than the picture is offered a fresh
+// keyframe this often, rather than an encoder restarted on every frame that finds the socket drained.
+const RESTART_MIN_MS = 1000;
+
+export interface FrameGate {
+    // Whether this frame goes to the viewer: not while its socket holds a backlog, nor after one until a keyframe.
+    readonly admit: (frame: VideoFrame) => boolean;
+    // The viewer lost the stream (its decoder refused a frame): nothing more goes until a fresh keyframe, which a
+    // restart brings rather than the next periodic one.
+    readonly askKey: () => void;
+    // A fresh stream started, opening on a keyframe.
+    readonly started: () => void;
+    readonly stop: () => void;
+}
+
+// What every viewer of a videocast shares (live-view.ts, desktop-view.ts): frames are dropped while the socket is
+// slower than the picture, and once it drains the stream is restarted for a keyframe to resume on, since the periodic
+// one is a minute away (KEYFRAME_INTERVAL). `restart` starts a fresh stream and calls `started`.
+export const frameGate = (options: { readonly backlog: () => number; readonly restart: () => void }): FrameGate => {
+    let dropping = false;
+    let startedAt = 0;
+    let timer: NodeJS.Timeout | undefined;
+
+    // Never from inside the frame's own delivery: the restart stops the stream that frame came from.
+    const restartSoon = (): void => {
+        if (timer !== undefined) {
+            return;
+        }
+        timer = setTimeout(
+            () => {
+                timer = undefined;
+                if (dropping) {
+                    options.restart();
+                }
+            },
+            Math.max(0, startedAt + RESTART_MIN_MS - Date.now()),
+        );
+    };
+
+    return {
+        admit: (frame) => {
+            const backlog = options.backlog();
+            if (!dropping) {
+                dropping = backlog > BACKLOG_LIMIT;
+                return !dropping;
+            }
+            if (backlog > BACKLOG_LIMIT) {
+                return false;
+            }
+            if (frame.key) {
+                dropping = false;
+                return true;
+            }
+            restartSoon();
+            return false;
+        },
+        askKey: () => {
+            dropping = true;
+            restartSoon();
+        },
+        started: () => {
+            dropping = false;
+            startedAt = Date.now();
+            clearTimeout(timer);
+            timer = undefined;
+        },
+        stop: () => {
+            clearTimeout(timer);
+            timer = undefined;
         },
     };
 };

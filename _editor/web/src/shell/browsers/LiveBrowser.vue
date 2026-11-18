@@ -20,6 +20,7 @@ import { closeBrowser, closeBrowserPage, openBrowser, useBrowsersQuery } from ".
 import type { BrowserCommand } from "../../models/browsers/keyIntent";
 import Omnibox from "../../features/browsers/Omnibox.vue";
 import { useBrowserView } from "../../features/browsers/useBrowserView";
+import { usePictureFit } from "../../features/browsers/pictureFit";
 import { agentTitle, agentTurnRunning } from "../../features/browsers/agentTurns";
 import BrowserSelectMenu from "../../features/capabilities/connect/BrowserSelectMenu.vue";
 import { postTurnControl } from "../../client/sandbox/streams/turnStream";
@@ -1058,6 +1059,9 @@ watch(
 
 // ===== Sizes =====
 
+// The picture's box at the stage's top-left, and the page's own colour beside it while a new size is on its way.
+const { box: pictureBox, gap: gapStyle, measure: measurePicture } = usePictureFit(view, computed(() => webPhone.value !== undefined));
+
 // The stage's box is what the daemon sizes the page's viewport to, so the picture is the page at 1:1 rather than
 // scaled into whatever is left; measured via ResizeObserver, since the chrome's own text-scaled height is part of
 // what's left.
@@ -1072,6 +1076,7 @@ watch(stageEl, (stage) => {
     }
     observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
+            measurePicture(entry.contentRect.width, entry.contentRect.height);
             view.requestSize(entry.contentRect.width, entry.contentRect.height);
         }
     });
@@ -1449,12 +1454,12 @@ const { floats } = useBrowsersFloating();
                     <!-- Full bleed, or the page as a phone's own viewport inside a drawn handset; the same picture either way. -->
                     <PreviewStage :phone="webPhone" :clip-gutter="false" backdrop="bg-terminal">
                         <template #default="{ frame }">
-                            <div :style="frame" class="relative">
-                                <!-- The page's viewport off the browser's own X display: video beneath, a sharp still of the settled page over it (videoSink); the same box, so a click aims the same on either. -->
-                                <template v-if="view.kind.value === 'video'">
+                            <div :style="[frame, gapStyle]" class="relative">
+                                <!-- The page's viewport off the browser's own X display: video beneath, a sharp still of the settled page over it (videoSink); the same box, so a click aims the same on either. The box is the picture's own size at the top-left when full bleed (pictureFit.ts), the whole frame otherwise. -->
+                                <div v-if="view.kind.value === 'video'" class="absolute left-0 top-0" :class="pictureBox ? '' : 'h-full w-full'" :style="pictureBox">
                                     <canvas ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
                                     <canvas ref="stillEl" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
-                                </template>
+                                </div>
                                 <!-- Display-less browsers expose one compositor surface without a cursor. -->
                                 <img
                                     v-else

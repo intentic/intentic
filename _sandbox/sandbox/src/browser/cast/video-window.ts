@@ -12,10 +12,35 @@ import { phoneRegionOf, readGeometry, readRegion, resizeWindow, windowBoundsFor,
    the phone decides, and asked for again when it comes off. The phone follows the view from page to page, and comes off
    when the view stops, with the window put back as it was before it. */
 
-// Chromium applies window bounds asynchronously; the geometry is re-read after this.
+// Chromium applies window bounds asynchronously: a phone going on or off waits this long before the geometry is
+// re-read, and a resize waits for its bounds this long at most.
 const RESIZE_SETTLE_MS = 200;
+// How often a resize asks the page whether the new bounds have landed. Chromium applies them in 10-30 ms, so the
+// fixed settle above left the picture at its old size for ~170 ms of nothing (measured 2026-11-18).
+const SETTLE_POLL_MS = 15;
 
 const settleWindow = (): Promise<void> => sleep(RESIZE_SETTLE_MS);
+
+// Sizes the shown page's window so its viewport is `box`, then waits until the page reports that viewport, or
+// RESIZE_SETTLE_MS at most: a size Chromium will not make (narrower than its toolbar allows) never shows, and the refit
+// reads whatever it made. False once `current` says a newer box was asked meanwhile, whose own resize refits instead.
+// Only without a phone, which the page would report instead of its window.
+const sizeWindowTo = async (shown: Shown, box: Size, base: WindowGeometry, screen: Screen, current: () => boolean): Promise<boolean> => {
+    const bounds = windowBoundsFor(box, base, screen);
+    // allow(silent-catch): a window gone mid-resize leaves nothing to size; the refit after reads what there is.
+    await resizeWindow(shown.session, bounds).catch(() => undefined);
+    const width = bounds.width - Math.max(0, base.outerWidth - base.innerWidth);
+    const height = bounds.height - Math.max(0, base.outerHeight - base.innerHeight);
+    const deadline = Date.now() + RESIZE_SETTLE_MS;
+    while (current() && Date.now() < deadline) {
+        const read = await readGeometry(shown.page);
+        if (read !== undefined && read.innerWidth === width && read.innerHeight === height) {
+            break;
+        }
+        await sleep(SETTLE_POLL_MS);
+    }
+    return current();
+};
 
 // The window a page's session lives in, and where it is; undefined once the page is gone. CDP types every bound as
 // optional, and a window always has all four.
@@ -71,6 +96,8 @@ export const videoWindow = (host: WindowHost): VideoWindow => {
     let unphoned: { readonly windowId: number; readonly bounds: WindowBounds } | undefined;
     // The client's last box: obeyed while no phone decides the size, asked again once one stops.
     let box: Size | undefined;
+    // Boxes asked so far: a resize overtaken by a newer one leaves the refit to it (sizeWindowTo).
+    let boxes = 0;
     let stopping = false;
 
     const measure = async (page: Page): Promise<Region | undefined> => {
@@ -98,14 +125,11 @@ export const videoWindow = (host: WindowHost): VideoWindow => {
             return;
         }
         box = { width: size.width, height: size.height };
-        const at = host.shown()?.session;
-        if (at === undefined || geometry === undefined || phone !== undefined) {
-            return;
+        const ask = ++boxes;
+        const shown = host.shown();
+        if (shown !== undefined && geometry !== undefined && phone === undefined && (await sizeWindowTo(shown, box, geometry, screen, () => ask === boxes))) {
+            await host.refit();
         }
-        // allow(silent-catch): a window gone mid-resize leaves nothing to size; the refit below reads what there is.
-        await resizeWindow(at, windowBoundsFor(box, geometry, screen)).catch(() => undefined);
-        await settleWindow();
-        await host.refit();
     };
 
     // Takes the phone off the page wearing it, before that page's session goes.

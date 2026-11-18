@@ -1,6 +1,7 @@
 // The part every live picture shares (the agent's browser, the sandbox's desktop, a sign-in window): it pauses the
-// stream while nobody can see it, throttles pointer moves to one display frame, asks a size once it holds still and
-// only when it changes, and says so when the browser cannot decode video. Each case reads what went on the wire.
+// stream while nobody can see it, throttles pointer moves to one display frame, asks a size at once for a one-step
+// change and once a drag holds still, only when it changes, asks a fresh stream when its decoder loses this one, and
+// says so when the browser cannot decode video. Each case reads what went on the wire.
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { effectScope, type EffectScope, ref } from "vue";
@@ -28,6 +29,9 @@ class FakeSocket {
     }
     deliver(message: object): void {
         this.listeners.get(`message`)?.({ data: JSON.stringify(message) });
+    }
+    binary(data: ArrayBuffer): void {
+        this.listeners.get(`message`)?.({ data });
     }
 }
 
@@ -113,12 +117,15 @@ test("pointer moves inside one display frame are dropped, presses never are", as
     now.mockRestore();
 });
 
-test("a box is asked once it holds still and the picture is video, and the same box is not asked twice", async () => {
+const resizesOn = (wire: () => readonly object[]) => (): readonly object[] =>
+    wire().filter((message) => `type` in message && message.type === `resize`);
+
+test("a box is asked once the picture is video, and the same box is not asked twice", async () => {
     decodes();
     jest.useFakeTimers();
     try {
         const { cast, socket, wire } = await opened();
-        const resizes = (): readonly object[] => wire().filter((message) => `type` in message && message.type === `resize`);
+        const resizes = resizesOn(wire);
         cast.requestSize(900, 600);
         jest.advanceTimersByTime(RESIZE_DEBOUNCE_MS);
         // No `ready` yet: nothing to size.
@@ -126,14 +133,71 @@ test("a box is asked once it holds still and the picture is video, and the same 
         socket.deliver({ type: `ready`, width: 900, height: 600, codec: `avc1.42C028` });
         expect(resizes()).toEqual([{ type: `resize`, width: 900, height: 600 }]);
         cast.requestSize(900, 600);
-        cast.requestSize(1000, 600);
         cast.requestSize(900.2, 600);
         jest.advanceTimersByTime(RESIZE_DEBOUNCE_MS);
-        // The box came back to the size the daemon already has, so nothing new is asked.
         expect(resizes()).toHaveLength(1);
     } finally {
         jest.useRealTimers();
     }
+});
+
+// A panel opened or closed is one step, and every ms it waits the picture stands at the old size; a drag is many, and
+// each one asked would restart the encoder.
+test("a box that held still is asked at once, one that keeps changing once it holds still", async () => {
+    decodes();
+    jest.useFakeTimers();
+    const now = jest.spyOn(Date, `now`).mockReturnValue(10_000);
+    try {
+        const { cast, socket, wire } = await opened();
+        const resizes = resizesOn(wire);
+        cast.requestSize(900, 600);
+        socket.deliver({ type: `ready`, width: 900, height: 600, codec: `avc1.42C028` });
+        expect(resizes()).toHaveLength(1);
+
+        now.mockReturnValue(20_000);
+        cast.requestSize(1400, 600);
+        expect(resizes().at(-1)).toEqual({ type: `resize`, width: 1400, height: 600 });
+
+        // The same box moving again straight after: a drag, asked only once it holds still.
+        now.mockReturnValue(20_050);
+        cast.requestSize(1300, 600);
+        now.mockReturnValue(20_100);
+        cast.requestSize(1200, 600);
+        expect(resizes()).toHaveLength(2);
+        jest.advanceTimersByTime(RESIZE_DEBOUNCE_MS);
+        expect(resizes()).toHaveLength(3);
+        expect(resizes().at(-1)).toEqual({ type: `resize`, width: 1200, height: 600 });
+    } finally {
+        now.mockRestore();
+        jest.useRealTimers();
+    }
+});
+
+// A decode error closes the decoder for good; waiting for the next keyframe left the picture frozen, since only a fresh
+// stream's `ready` builds a new one.
+test("a decoder that refuses a frame asks for a fresh stream", async () => {
+    stubGlobal(
+        `VideoDecoder`,
+        class {
+            state = `configured`;
+            configure(): void {}
+            decode(): void {
+                throw new Error(`refused`);
+            }
+            close(): void {}
+        },
+    );
+    stubGlobal(
+        `EncodedVideoChunk`,
+        class {
+            constructor(readonly init: object) {}
+        },
+    );
+    const { socket, wire } = await opened();
+    socket.deliver({ type: `ready`, width: 900, height: 600, codec: `avc1.42C028` });
+    // A keyframe, tag 3, as the daemon sends it.
+    socket.binary(new Uint8Array([3, 0, 0, 0, 1, 9]).buffer);
+    expect(wire().filter((message) => `type` in message && message.type === `keyframe`)).toHaveLength(1);
 });
 
 test("a browser that cannot decode video says so rather than showing an empty box", async () => {

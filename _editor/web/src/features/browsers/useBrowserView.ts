@@ -5,7 +5,7 @@ import { z } from "zod";
 import { keyFrames, keyIntent, type BrowserCommand, type KeyFrame } from "../../models/browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../models/browsers/pointerFrame";
 import { selectionCopy } from "../../models/browsers/selectionCopy";
-import { type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
+import { type PaintedPicture, type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
 import { socketUrl as wsSocketUrl } from "../../client/sandbox/streams/wsTicket";
 import { useLineWithElapsed } from "../../components/progress/useProgress";
 
@@ -33,6 +33,9 @@ export interface BrowserView {
     readonly viewHeight: Ref<number>;
     // Display pixels per CSS pixel of the picture: shown at width/scale CSS px, the page is 1:1.
     readonly viewScale: Ref<number>;
+    // The video frame as painted, which trails viewWidth/viewHeight while a new stream's first frame decodes: what the
+    // pane sizes the picture by and colours the stage around it with (pictureFit.ts).
+    readonly picture: PaintedPicture;
     // Where the video and its still paint; the pane hands its canvases over on mount, nothing else uses them. Null is
     // the pane's canvases going away, which is how a template ref reads once unmounted.
     readonly attachCanvases: (video: HTMLCanvasElement | null, still: HTMLCanvasElement | null) => void;
@@ -226,7 +229,6 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             },
         },
     });
-    const { video } = cast;
 
     const teardown = (): void => {
         copy.cancel();
@@ -286,7 +288,8 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         viewWidth: cast.width,
         viewHeight: cast.height,
         viewScale: cast.scale,
-        attachCanvases: video.attach,
+        picture: cast.picture,
+        attachCanvases: cast.video.attach,
         frame: cast.frame,
         ...line,
         driving,
@@ -295,7 +298,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             // Another tab: the still over the picture is of the one being left (the frames path's img is replaced by
             // the next frame anyway).
             if (pinned !== pageId) {
-                video.dropStill();
+                cast.video.dropStill();
             }
             pinned = pageId;
             send({ type: `bind`, pageId });

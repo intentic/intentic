@@ -19,7 +19,7 @@ import {
 } from "./screencast.js";
 import { createStillTaker } from "./stills.js";
 import { videoWindow } from "./video-window.js";
-import { encodeVideo, grabStill, startVideocast, type Videocast, type VideoFrame } from "./videocast.js";
+import { encodeVideo, frameGate, grabStill, startVideocast, type Videocast, type VideoFrame } from "./videocast.js";
 import { startXInput, type XInput } from "./xinput.js";
 import { sanitizeUrl } from "../tools/network-redaction.js";
 
@@ -69,9 +69,6 @@ export interface LiveReady {
     readonly codec?: string;
 }
 
-// Unsent bytes a viewer's socket may hold before frames are dropped until the next keyframe; a second of video at the
-// encoder's ceiling, so a link that keeps up never sees it.
-const BACKLOG_LIMIT = 256 * 1024;
 // How often the shown page is checked for having gone behind another tab or changed shape; the picture itself is the
 // display, so only the cursor, keys and stills are ever this late.
 const FOLLOW_MS = 1000;
@@ -154,8 +151,6 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     let session: CDPSession | undefined;
     let region: Region | undefined;
     let cast: Videocast | undefined;
-    // Frames are being dropped until a keyframe finds the socket drained; see BACKLOG_LIMIT.
-    let dropping = false;
     let selectFocused = false;
     // What the picture cost and lost over this socket, said once when it stops: a viewer whose link is slower than the
     // picture shows as frames dropped, a page that settles as stills sent.
@@ -180,18 +175,12 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     });
 
     // Every frame is judged for motion, then either sent or dropped: a socket holding more than a second of video is
-    // slower than the picture, and sending on would only put the pointer further ahead of what the owner sees.
+    // slower than the picture, and sending on would only put the pointer further ahead of what the owner sees. The
+    // gate restarts the stream for a keyframe once the socket drains (videocast.ts); `run` is declared below.
+    const gate = frameGate({ backlog: () => sink.backlog?.() ?? 0, restart: () => run() });
     const deliver = (frame: VideoFrame): void => {
         const quiet = stills.noteFrame({ key: frame.key, bytes: frame.bytes.byteLength }) === "quiet";
-        const backlog = sink.backlog?.() ?? 0;
-        if (dropping) {
-            if (!frame.key || backlog > BACKLOG_LIMIT) {
-                counts.framesDropped += 1;
-                return;
-            }
-            dropping = false;
-        } else if (backlog > BACKLOG_LIMIT) {
-            dropping = true;
+        if (!gate.admit(frame)) {
             counts.framesDropped += 1;
             return;
         }
@@ -207,7 +196,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
             return;
         }
         cast?.stop();
-        dropping = false;
+        gate.started();
         cast = startVideocast(display, at, {
             onFrame: deliver,
             onCodec: (codec) =>
@@ -411,6 +400,8 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
                 if (asked !== "invalid") {
                     await sizing.emulate(asked);
                 }
+            } else if (message.type === "keyframe") {
+                gate.askKey();
             } else if (message.type === "newTab") {
                 const page = await openTab(context, message.url);
                 if (page !== undefined) {
@@ -428,6 +419,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
             log(counts, "live view: stopped");
             clearInterval(ticker);
             context.off("page", follow);
+            gate.stop();
             cast?.stop();
             cast = undefined;
             stills.stop();
@@ -567,8 +559,8 @@ const startFramesView = async (context: BrowserContext, sink: Sink, onError: (re
                 }
             } else if (isSteer(message)) {
                 steer(cast.page(), message);
-            } else if (message.type !== "resize") {
-                // A compositor surface is photographed at its fixed size, so a resize is nothing here.
+            } else if (message.type !== "resize" && message.type !== "keyframe") {
+                // A compositor surface is photographed whole at its fixed size: a resize or a keyframe is nothing here.
                 await dispatch(message);
             }
         },
