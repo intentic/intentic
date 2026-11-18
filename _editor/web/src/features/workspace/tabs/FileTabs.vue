@@ -5,7 +5,6 @@ import {
     type IconName,
     type Tip,
     type TooltipValue,
-    useExplorerStyle,
     ChangeStatusMark,
     explorerColorClass,
     iconForEntry,
@@ -35,7 +34,6 @@ const emit = defineEmits<{
 
 const t = useT();
 const { isDirty } = useEditBuffers(workspaceView);
-const { explorerStyle } = useExplorerStyle();
 
 // Locked files show a padlock in the tab too, matching the row that opened them (isLockedWorkspacePath).
 const fileIcon = (path: string): IconName => (isLockedWorkspacePath(path) ? `lock` : iconForEntry(basename(path), `file`));
@@ -208,7 +206,7 @@ watch(
                     v-if="tab.kind === 'file'"
                     :name="fileIcon(tab.path)"
                     class="text-2xs"
-                    :class="explorerColorClass(explorerStyle, basename(tab.path), 'file', false)"
+                    :class="explorerColorClass(basename(tab.path), 'file', false)"
                 />
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
                 <Icon name="wave-pulse" v-else-if="tab.kind === 'health'" class="text-2xs text-link" />

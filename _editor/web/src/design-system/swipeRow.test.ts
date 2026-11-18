@@ -2,7 +2,7 @@ import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { SwipeRow } from "@intentic/ui";
-import { useMotion } from "@intentic/ui/motion";
+import { stubReducedMotion } from "@intentic/ui/testing";
 
 // Pins what a thumb does to a SwipeRow: a swipe left past the line takes the row's action and swallows the tap the
 // release would turn into; one short of it puts the row back; a scroll, a swipe right, a mouse and a row with no action
@@ -46,10 +46,12 @@ describe(`a swipeable row`, () => {
 
     const body = (row: HTMLElement): HTMLElement => row.lastElementChild as HTMLElement;
 
+    let restoreMotion = (): void => {};
+
     beforeEach(() => {
         committed = 0;
         clicked = 0;
-        useMotion().setMotion(`off`);
+        restoreMotion = stubReducedMotion(true);
         stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback) => {
             // Drawn at once: the row's frame is asked for and painted inside the same move.
             callback(0);
@@ -63,7 +65,7 @@ describe(`a swipeable row`, () => {
         app = undefined;
         host.remove();
         unstubAllGlobals();
-        useMotion().setMotion(`system`);
+        restoreMotion();
         Reflect.deleteProperty(HTMLElement.prototype, `offsetWidth`);
     });
 

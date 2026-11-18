@@ -11742,7 +11742,6 @@
                 "liveMetricsHint": "CPU, Arbeitsspeicher und Festplatte in der Kopfzeile des Agenten-Boards, dazu auf der Karte jedes Agenten sein Anteil und was er gekostet hat. Anderswo nur eine kleine Kachel in der Leiste, wenn sich ein Wert seinem Limit nähert. Solange dies aus ist, wird nichts gemessen."
             },
             "explorer": {
-                "colorful": "Farbig",
                 "fileNesting": "Dateien verschachteln",
                 "fileNestingHint": "Die Dateien eines Ordners im Explorer unter seiner package.json einklappen.",
                 "group": "Dateibaum",
@@ -11750,11 +11749,8 @@
                 "hideTechnicalHint": "Lockfiles, Konfiguration, Punktdateien und Build-Ausgaben. Standardmäßig an, wenn Sie keinen Code schreiben.",
                 "hideTests": "Tests ausblenden",
                 "hideTestsHint": "Testdateien und -ordner im Explorer ausblenden.",
-                "minimal": "Minimal",
                 "showIgnored": "Ignorierte Dateien zeigen",
-                "showIgnoredHint": "node_modules, Build-Ausgaben und von gitignore erfasste Pfade zeigen.",
-                "title": "Explorer",
-                "vivid": "Kräftig"
+                "showIgnoredHint": "node_modules, Build-Ausgaben und von gitignore erfasste Pfade zeigen."
             },
             "look": {
                 "colour": "Farbe",
@@ -11767,7 +11763,6 @@
                 "textSizeComfortableHint": "110 % — die Größe, in der die Oberfläche gezeichnet wurde",
                 "textSizeLarge": "Groß",
                 "textSizeNow": "Jetzt {percent} %.",
-                "textSizeZoomKeys": "{mod} + und {mod} − machen sie größer oder kleiner, {mod} 0 setzt sie zurück.",
                 "theme": "Design",
                 "wallpaper": "Hintergrundbild",
                 "wallpaperHint": "Ein Bild hinter der Agenten-Übersicht, in der hellen oder dunklen Fassung deines Designs."
@@ -11790,14 +11785,6 @@
             "work": {
                 "developerHint": "Gits eigene Worte, der Dateibaum als Startseite, alle Panels.",
                 "makerHint": "Einfache Worte, Werkzeugdateien aus dem Weg."
-            },
-            "motion": {
-                "title": "Animationen",
-                "hint": "Wie sich Menüs, Bereiche und Seiten öffnen. Aus macht jede Änderung sofort sichtbar.",
-                "system": "System",
-                "systemHint": "Folgt deinem Betriebssystem: ohne Animation, wenn es weniger Bewegung wünscht, sonst animiert.",
-                "on": "An",
-                "off": "Aus"
             },
             "plain": {
                 "languageHint": "Die Sprache dieser Oberfläche. Deine Dateien und Gespräche bleiben unberührt.",
@@ -12148,7 +12135,6 @@
             "theme": "Dunkelmodus, dunkler Modus, heller Modus, Nachtmodus, Farbschema, Dark Mode",
             "wallpaper": "Hintergrund, Hintergrundbild, Bild",
             "accentColour": "Akzentfarbe, Farbe, Hervorhebung",
-            "motion": "Bewegung, Bewegung reduzieren, Übergänge, Animation",
             "textSize": "Schriftgröße, Zoom, größerer Text, kleinerer Text, Skalierung",
             "changesList": "Diff, Review, geänderte Dateien",
             "toolCalls": "Verlauf, Agentenschritte, Details, Werkzeuge",

@@ -381,11 +381,9 @@ export { sinceOf, timeWindows, type TimeWindow, timeWindowWords, withinWindow } 
 // (`@intentic/ui/path`, `@intentic/ui/langs`, `@intentic/ui/series`) so DOM-free callers and tests avoid this
 // barrel's component graph. Icon names live at `@intentic/ui/icons` for the same reason; render with <Icon name="…">.
 export { type IconName } from "./icons/iconSets.js";
-export { type ExplorerStyle, explorerStyles } from "./icons/explorerStyle.js";
 export { explorerColorClass, type ExplorerTreatment, explorerTreatment, iconForEntry } from "./icons/fileIcon.js";
 // What a file is by its name; pure modules take it from `@intentic/ui/file-format` without this barrel.
 export { type FileFormat, formatOf } from "./lib/fileFormat.js";
-export { useExplorerStyle } from "./composables/useExplorerStyle.js";
 export { commandLang, type CommandOs, osOptions, useOsPreference } from "./composables/useOsPreference.js";
 export { type Device, useDevice } from "./composables/useDevice.js";
 // Whether this element, not the screen, is too narrow for its layout; useDevice answers about the screen only.
@@ -434,4 +432,4 @@ export { type ColorScheme, type SchemeChoice, useTheme } from "./composables/use
 export { default as ColorPicker } from "./components/forms/ColorPicker.vue";
 export { type TextSize, useTextSize } from "./composables/useTextSize.js";
 // Whether the interface moves: the Appearance row, its OS fallback, and the one answer script-played moves ask.
-export { lessMotion, MOTION_CHOICES, type MotionChoice, useMotion } from "./motion/choice.js";
+export { lessMotion, useMotion } from "./motion/choice.js";

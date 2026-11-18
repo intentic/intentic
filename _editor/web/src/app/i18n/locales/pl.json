@@ -11139,7 +11139,6 @@
                 "showToolCallsHint": "Pokazuj pojedyncze wywołania narzędzi w zapisie rozmowy."
             },
             "explorer": {
-                "colorful": "Kolorowo",
                 "fileNesting": "Zagnieżdżanie plików",
                 "fileNestingHint": "Zwijaj pliki folderu pod jego package.json w eksploratorze.",
                 "group": "Drzewo plików",
@@ -11147,11 +11146,8 @@
                 "hideTechnicalHint": "Pliki blokad, konfiguracja, pliki z kropką i wyniki budowania. Domyślnie włączone, jeśli nie piszesz kodu.",
                 "hideTests": "Ukryj testy",
                 "hideTestsHint": "Ukrywaj pliki i foldery testów w eksploratorze.",
-                "minimal": "Minimalnie",
                 "showIgnored": "Pokaż ignorowane pliki",
-                "showIgnoredHint": "Pokazuj node_modules, wyniki budowania i ścieżki z gitignore.",
-                "title": "Eksplorator",
-                "vivid": "Wyraziście"
+                "showIgnoredHint": "Pokazuj node_modules, wyniki budowania i ścieżki z gitignore."
             },
             "look": {
                 "colour": "Kolor",
@@ -11164,18 +11160,9 @@
                 "textSizeComfortableHint": "110% — rozmiar, w jakim narysowano interfejs",
                 "textSizeLarge": "Duży",
                 "textSizeNow": "Teraz {percent}%.",
-                "textSizeZoomKeys": "{mod} + i {mod} − powiększają go lub zmniejszają, {mod} 0 przywraca domyślny.",
                 "theme": "Motyw",
                 "wallpaper": "Tapeta",
                 "wallpaperHint": "Obraz za tablicą agentów, w jasnej lub ciemnej wersji Twojego motywu."
-            },
-            "motion": {
-                "title": "Animacje",
-                "hint": "Jak otwierają się menu, panele i strony. Wyłączone sprawiają, że każda zmiana jest natychmiastowa.",
-                "system": "System",
-                "systemHint": "Podąża za systemem operacyjnym: natychmiast, gdy prosi o ograniczenie ruchu, z animacją, gdy nie.",
-                "on": "Wł.",
-                "off": "Wył."
             },
             "theme": {
                 "dark": "Ciemny",
@@ -11545,7 +11532,6 @@
             "theme": "tryb ciemny, ciemny motyw, tryb jasny, tryb nocny, schemat kolorów",
             "wallpaper": "tło, tapeta, obraz",
             "accentColour": "kolor akcentu, kolor, wyróżnienie",
-            "motion": "ruch, ogranicz ruch, przejścia, animacja",
             "textSize": "rozmiar czcionki, rozmiar tekstu, powiększenie, większy tekst, mniejszy tekst, skala",
             "changesList": "diff, przegląd, zmienione pliki",
             "toolCalls": "transkrypt, kroki agenta, szczegóły, narzędzia",

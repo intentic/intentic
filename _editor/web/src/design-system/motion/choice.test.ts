@@ -21,65 +21,32 @@ beforeEach(() => {
     root().removeAttribute(`data-motion`);
 });
 
-describe(`resolveReducedMotion`, () => {
-    it(`lets the reader's choice decide, and the OS only under system`, async () => {
-        const { resolveReducedMotion } = await load();
-
-        expect(resolveReducedMotion(`system`, false)).toBe(false);
-        expect(resolveReducedMotion(`system`, true)).toBe(true);
-        expect(resolveReducedMotion(`off`, false)).toBe(true);
-        expect(resolveReducedMotion(`on`, true)).toBe(false);
-    });
-});
-
 describe(`useMotion`, () => {
-    it(`opens at system and moves when the OS has not asked for less`, async () => {
-        osReduces(false);
-        const { useMotion } = await load();
-
-        expect(useMotion().motion.value).toBe(`system`);
-        expect(useMotion().reduced.value).toBe(false);
-        expect(root().hasAttribute(`data-motion`)).toBe(false);
-    });
-
-    it(`stills the page under system when the OS asks for less`, async () => {
-        osReduces(true);
-        const { useMotion } = await load();
-
-        expect(useMotion().reduced.value).toBe(true);
-        expect(root().getAttribute(`data-motion`)).toBe(`reduced`);
-    });
-
-    it(`keeps moving when the reader pinned it on, whatever the OS says`, async () => {
-        osReduces(true);
-        localStorage.setItem(`ui-motion`, `on`);
-        const { useMotion } = await load();
-
-        expect(useMotion().reduced.value).toBe(false);
-        expect(root().hasAttribute(`data-motion`)).toBe(false);
-    });
-
-    it(`stills the page when turned off, persists it, and stores system as nothing`, async () => {
+    it(`moves when the OS has not asked for less`, async () => {
         osReduces(false);
         const { useMotion, lessMotion } = await load();
-        const { setMotion } = useMotion();
 
-        setMotion(`off`);
-        expect(root().getAttribute(`data-motion`)).toBe(`reduced`);
-        expect(localStorage.getItem(`ui-motion`)).toBe(`off`);
-        expect(lessMotion()).toBe(true);
-
-        setMotion(`system`);
+        expect(useMotion().reduced.value).toBe(false);
         expect(root().hasAttribute(`data-motion`)).toBe(false);
-        expect(localStorage.getItem(`ui-motion`)).toBeNull();
         expect(lessMotion()).toBe(false);
     });
 
-    it(`ignores a stored value that is not a choice`, async () => {
+    it(`stills the page when the OS asks for less`, async () => {
+        osReduces(true);
+        const { useMotion, lessMotion } = await load();
+
+        expect(useMotion().reduced.value).toBe(true);
+        expect(root().getAttribute(`data-motion`)).toBe(`reduced`);
+        expect(lessMotion()).toBe(true);
+    });
+
+    // The Animations setting is gone: an Off a reader stored before it went must not still the page with no way back.
+    it(`ignores a choice stored by the setting that used to sit over the OS`, async () => {
         osReduces(false);
-        localStorage.setItem(`ui-motion`, `slow`);
+        localStorage.setItem(`ui-motion`, `off`);
         const { useMotion } = await load();
 
-        expect(useMotion().motion.value).toBe(`system`);
+        expect(useMotion().reduced.value).toBe(false);
+        expect(root().hasAttribute(`data-motion`)).toBe(false);
     });
 });

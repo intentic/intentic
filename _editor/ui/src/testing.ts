@@ -45,3 +45,18 @@ export class FakeWorker<Args, Result> implements WorkerPort<Args, Result> {
         this.terminated = true;
     }
 }
+
+// The OS asking for less motion, or not, as `lessMotion()` reads it afresh at each move (@intentic/ui/motion): the one
+// way a test stills the script-played moves, since the app keeps no setting of its own over the OS. Hands back what
+// puts the real `matchMedia` back.
+export const stubReducedMotion = (reduces: boolean): (() => void) => {
+    const real = globalThis.matchMedia;
+    globalThis.matchMedia = (query: string): MediaQueryList => {
+        const answer = real.call(globalThis, query);
+        // A move reads only `matches`; the rest of the query is the real one, so a bound query still subscribes.
+        return query.includes(`reduced-motion`) ? Object.assign(Object.create(answer), { matches: reduces }) : answer;
+    };
+    return () => {
+        globalThis.matchMedia = real;
+    };
+};

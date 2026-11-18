@@ -68,14 +68,18 @@ export const SETTINGS_CARDS: readonly SettingEntry[] = [
     { id: `theme`, slug: `appearance`, title: () => t(`settings.appearance.look.theme`), terms: () => [t(`settings.search.theme`)] },
     { id: `wallpaper`, slug: `appearance`, title: () => t(`settings.appearance.look.wallpaper`), terms: () => [t(`settings.search.wallpaper`)] },
     { id: `accent-colour`, slug: `appearance`, title: () => t(`settings.appearance.look.colour`), terms: () => [t(`settings.search.accentColour`)] },
-    { id: `motion`, slug: `appearance`, title: () => t(`settings.appearance.motion.title`), terms: () => [t(`settings.search.motion`)] },
-    { id: `text-size`, slug: `appearance`, title: () => t(`settings.appearance.look.textSize`), terms: () => [t(`settings.search.textSize`)] },
+    {
+        id: `text-size`,
+        slug: `appearance`,
+        title: () => t(`settings.appearance.look.textSize`),
+        terms: () => [t(`settings.search.textSize`)],
+        shown: (reader) => reader.phone,
+    },
     {
         id: `file-tree`,
         slug: `appearance`,
         title: () => t(`settings.appearance.explorer.group`),
         terms: () => [
-            t(`settings.appearance.explorer.title`),
             t(`settings.appearance.explorer.fileNesting`),
             t(`settings.appearance.explorer.showIgnored`),
             t(`settings.appearance.explorer.hideTests`),

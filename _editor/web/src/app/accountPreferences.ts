@@ -171,8 +171,8 @@ const send = async (id: string): Promise<void> => {
     }
 };
 
-// Only the first meeting offers: a preference the account has forgotten since (one set back to `null`, as `ui-motion`
-// is on `system`) stays forgotten, rather than coming back from whichever device still holds it.
+// Only the first meeting offers: a preference the account has forgotten since (one set back to `null`) stays
+// forgotten, rather than coming back from whichever device still holds it.
 const offer = async (id: string, values: Values): Promise<void> => {
     if (sync === undefined || storedValue(OFFERED_KEY) !== undefined) {
         return;

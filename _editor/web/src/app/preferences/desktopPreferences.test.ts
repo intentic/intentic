@@ -60,12 +60,12 @@ test(`the workspace says its whole set, and again when the account's copy change
     const { sent, preference } = await page({});
     await settle();
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ "ui-text-size": `default`, "ui-motion": null });
+    expect(sent[0]).toMatchObject({ "ui-text-size": `default`, "ui-agents-live-metrics": null });
 
-    preference.adoptPreference(`ui-motion`, `off`);
+    preference.adoptPreference(`ui-agents-live-metrics`, `off`);
     await settle();
     expect(sent).toHaveLength(2);
-    expect(sent[1]).toMatchObject({ "ui-motion": `off` });
+    expect(sent[1]).toMatchObject({ "ui-agents-live-metrics": `off` });
 
     // Not one of the account's: nothing to say.
     preference.adoptPreference(`ui-chat-width`, `400`);
@@ -79,10 +79,10 @@ test(`the workspace takes a choice made on This computer as its own`, async () =
     preference.onPreferenceWrite((key, raw) => heard.push(`${key}=${raw}`));
     expect(localStorage.getItem(`ui-text-size`)).toBe(`large`);
 
-    window.__INTENTIC_PREFS_IN__?.({ version: 6, values: { "ui-motion": `off` } });
-    expect(localStorage.getItem(`ui-motion`)).toBe(`off`);
+    window.__INTENTIC_PREFS_IN__?.({ version: 6, values: { "ui-agents-live-metrics": `off` } });
+    expect(localStorage.getItem(`ui-agents-live-metrics`)).toBe(`off`);
     // Heard as a choice: what the account sync sends.
-    expect(heard).toEqual([`ui-motion=off`]);
+    expect(heard).toEqual([`ui-agents-live-metrics=off`]);
     expect(localStorage.getItem(`intentic.prefs-version`)).toBe(`6`);
 });
 
@@ -94,12 +94,12 @@ test(`a handover this origin has taken already, or one older, is not taken again
 });
 
 test(`This computer wears the workspace's word and says back only what is chosen there`, async () => {
-    localStorage.setItem(`ui-motion`, `off`);
+    localStorage.setItem(`ui-agents-live-metrics`, `off`);
     const { sent, preference } = await page({
         __INTENTIC_LOCAL__: LOCAL,
-        __INTENTIC_PREFS__: { version: 3, values: { "ui-motion": null, "ui-text-size": `default` } },
+        __INTENTIC_PREFS__: { version: 3, values: { "ui-agents-live-metrics": null, "ui-text-size": `default` } },
     });
-    expect(localStorage.getItem(`ui-motion`)).toBeNull();
+    expect(localStorage.getItem(`ui-agents-live-metrics`)).toBeNull();
     expect(localStorage.getItem(`ui-text-size`)).toBe(`default`);
 
     // A change from the workspace: worn, not said back.
@@ -109,10 +109,10 @@ test(`This computer wears the workspace's word and says back only what is chosen
     expect(sent).toEqual([]);
 
     // A choice made here: said to the app.
-    const motion = preference.enumPreference(`ui-motion`, [`system`, `off`], `system`);
-    motion.value = `off`;
+    const gauges = preference.enumPreference(`ui-agents-live-metrics`, [`system`, `off`], `system`);
+    gauges.value = `off`;
     await settle();
-    expect(sent).toEqual([{ "ui-motion": `off` }]);
+    expect(sent).toEqual([{ "ui-agents-live-metrics": `off` }]);
 });
 
 test(`outside the app nothing is said and nothing is taken`, async () => {

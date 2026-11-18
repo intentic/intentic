@@ -11742,7 +11742,6 @@
                 "liveMetricsHint": "CPU, mémoire et disque dans l'en-tête du tableau des agents, et sur la carte de chaque agent sa part et ce qu'il a coûté. Ailleurs, une petite tuile dans la barre latérale seulement quand l'un approche de sa limite. Rien n'est mesuré tant que l'option est désactivée."
             },
             "explorer": {
-                "colorful": "Coloré",
                 "fileNesting": "Imbrication des fichiers",
                 "fileNestingHint": "Replier les fichiers d'un dossier sous son package.json dans l'explorateur.",
                 "group": "Arborescence",
@@ -11750,11 +11749,8 @@
                 "hideTechnicalHint": "Fichiers de verrouillage, configuration, fichiers cachés et sorties de compilation. Activé par défaut si vous n'écrivez pas de code.",
                 "hideTests": "Masquer les tests",
                 "hideTestsHint": "Masquer les fichiers et dossiers de test dans l'explorateur.",
-                "minimal": "Minimal",
                 "showIgnored": "Afficher les fichiers ignorés",
-                "showIgnoredHint": "Afficher node_modules, les sorties de compilation et les chemins ignorés par git.",
-                "title": "Explorateur",
-                "vivid": "Vif"
+                "showIgnoredHint": "Afficher node_modules, les sorties de compilation et les chemins ignorés par git."
             },
             "look": {
                 "colour": "Couleur",
@@ -11767,7 +11763,6 @@
                 "textSizeComfortableHint": "110 % — la taille à laquelle l'interface a été dessinée",
                 "textSizeLarge": "Grand",
                 "textSizeNow": "Actuellement {percent} %.",
-                "textSizeZoomKeys": "{mod} + et {mod} − l'agrandissent ou la réduisent, {mod} 0 la rétablit.",
                 "theme": "Thème",
                 "wallpaper": "Fond d’écran",
                 "wallpaperHint": "Une image derrière le tableau des agents, dans la version claire ou sombre de votre thème."
@@ -11790,14 +11785,6 @@
             "work": {
                 "developerHint": "Les mots de git, l'arborescence comme accueil, tous les panneaux.",
                 "makerHint": "Des mots simples, les fichiers d'outillage à l'écart."
-            },
-            "motion": {
-                "title": "Animations",
-                "hint": "La façon dont s'ouvrent les menus, les panneaux et les pages. Désactivées, chaque changement est instantané.",
-                "system": "Système",
-                "systemHint": "Suit votre système d'exploitation : instantané quand il demande moins de mouvement, animé sinon.",
-                "on": "Oui",
-                "off": "Non"
             },
             "plain": {
                 "languageHint": "La langue de cette interface. Vos fichiers et conversations restent intacts.",
@@ -12148,7 +12135,6 @@
             "theme": "mode sombre, mode clair, mode nuit, jeu de couleurs, thème sombre",
             "wallpaper": "fond, fond d'écran, arrière-plan, image",
             "accentColour": "couleur d'accent, couleur, surbrillance",
-            "motion": "mouvement, réduire les animations, transitions, animation",
             "textSize": "taille de police, taille du texte, zoom, texte plus grand, texte plus petit, échelle",
             "changesList": "diff, relecture, fichiers modifiés",
             "toolCalls": "transcription, étapes de l'agent, détails, outils",

@@ -59,16 +59,6 @@ describe(`installDocumentAppearance`, () => {
         expect(root().getAttribute(`data-text-size`)).toBe(`large`);
     });
 
-    // Turned off in one window, still in every other: a popped-out chat would otherwise keep sliding.
-    it(`makes motion turned off in another window land here`, async () => {
-        await boot();
-        receivePreferenceChange({ key: `ui-motion`, raw: `off` });
-
-        expect(root().getAttribute(`data-motion`)).toBe(`reduced`);
-
-        receivePreferenceChange({ key: `ui-motion`, raw: `on` });
-        expect(root().hasAttribute(`data-motion`)).toBe(false);
-    });
 
     it(`drops a skin back to none when light or dark is chosen`, async () => {
         localStorage.setItem(`ui-skin`, `sanctum`);

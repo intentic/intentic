@@ -12,7 +12,6 @@ import {
     type IconName,
     type Tip,
     toneWash,
-    useExplorerStyle,
     vAction,
 } from "@intentic/ui";
 import { useLoaded } from "@intentic/extension-api";
@@ -260,18 +259,10 @@ watch(
 // turning at once would read as the tree reloading.
 const loadingShown = (row: Row): boolean => lazyLoading.value.has(row.entry.path) && (cover === undefined || row.isExpanded);
 
-// The active file-tree setup (minimal/colorful/vivid): size, colour and folder emphasis for every row.
-const { explorerStyle } = useExplorerStyle();
 // A barren row dims like an ignored one: nothing is at risk, so it reads as a fact, not an alarm. A locked row wears a
 // padlock instead of its own icon.
 const treat = (row: Row): ExplorerTreatment => {
-    const treatment = explorerTreatment(
-        explorerStyle.value,
-        row.entry.name,
-        row.entry.type,
-        row.isExpanded,
-        row.entry.ignored === true || row.barren === true,
-    );
+    const treatment = explorerTreatment(row.entry.name, row.entry.type, row.isExpanded, row.entry.ignored === true || row.barren === true);
     return isLockedWorkspacePath(row.entry.path) ? { ...treatment, icon: `lock` satisfies IconName, colorClass: `text-subtle` } : treatment;
 };
 // Icon resting opacity: hidden for an action, dimmed for evidence there's a page, full for the selected row.
@@ -536,11 +527,11 @@ defineExpose({ focusTree });
                                     <span class="w-[0.7rem] shrink-0"></span>
                                     <span
                                         class="flex shrink-0 items-center justify-center"
-                                        :class="explorerTreatment(explorerStyle, '', edit.type, false, false).slotClass"
+                                        :class="explorerTreatment('', edit.type, false, false).slotClass"
                                     >
                                         <Icon
                                             :name="edit.type === 'dir' ? 'folder' : 'file'"
-                                            :class="[explorerTreatment(explorerStyle, '', edit.type, false, false).sizeClass, 'text-muted']"
+                                            :class="[explorerTreatment('', edit.type, false, false).sizeClass, 'text-muted']"
                                         />
                                     </span>
                                     <input

@@ -6,13 +6,9 @@ import {
     RowGroup,
     SegmentedControl,
     useDevice,
-    useExplorerStyle,
-    useMotion,
     useTextSize,
     useTheme,
-    explorerTreatment,
     type IconName,
-    MOTION_CHOICES,
 } from "@intentic/ui";
 import { activeLocale, type Locale, LOCALE_CODES, LOCALES, setLocale, useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -28,17 +24,13 @@ import { WALLPAPERS, useWallpaper } from "../../skins/useWallpaper";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "../../skins/themeRow";
 import { type Audience, useAudience } from "../../app/useAudience";
 import { embedded, tellNative } from "../../app/environments/nativeApp";
-import { isApplePlatform } from "@intentic/ui/keys";
 import { NAMED_TEXT_SIZES } from "@intentic/ui/text-size";
-import { inDesktopWindow } from "../../workbench/window/textZoom";
 
-// How the workspace looks: color scheme, accent color, file-tree treatment, and which tabs the terminal strip carries.
-// Each setting re-renders the whole UI live, so most of the app is its own preview; the Explorer gets an inline sample
-// since its tree isn't on this page.
+// How the workspace looks: color scheme, accent color, what the file tree and the review list show. Each setting
+// re-renders the whole UI live, so the app is its own preview.
 
 const { choice: schemeChoice, handed: handedScheme, set: setScheme, hand: handScheme, accent, setAccent } = useTheme();
 const { textSize, setTextSize, percent: textPercent } = useTextSize();
-const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { mobile } = useDevice();
 const { fileNesting } = useFileNesting();
 // Review-list reading: groupByModule also has a toggle on the Changes panel; largestFirst is set only here.
@@ -141,19 +133,6 @@ const setThemeChoice = (value: ThemeRow): void => {
     setScheme(look.scheme);
 };
 const wallpaperOptions = computed(() => WALLPAPERS.map((value) => ({ label: t(`settings.appearance.wallpaper.${value}`), value })));
-const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: t(`settings.appearance.explorer.${value}`), value })));
-// Whether the interface moves (@intentic/ui/motion, choice.ts): `system` defers to the OS's reduce-motion switch, the other two decide
-// outright. Off is instant, not merely calmer: every transition in the app reads its duration through motion.css.
-const { motion, setMotion } = useMotion();
-// Only `system` explains itself: the other two say what they do.
-const motionOptions = computed(() =>
-    MOTION_CHOICES.map((value) =>
-        value === `system`
-            ? { label: t(`settings.appearance.motion.system`), value, title: t(`settings.appearance.motion.systemHint`) }
-            : { label: t(`settings.appearance.motion.${value}`), value },
-    ),
-);
-
 // Labeled by effect, not percentage, so nobody sets this and the browser's 110% zoom together.
 const textSizeOptions = computed(() => [
     { label: t(`settings.words.iconRailCompact`), value: `compact` as const },
@@ -164,18 +143,10 @@ const textSizeOptions = computed(() => [
     },
     { label: t(`settings.appearance.look.textSizeLarge`), value: `large` as const },
 ]);
-// The zoom keys reach rungs between and past those three (textZoom.ts), so the row says a size none of them names, and,
-// where the keys work, what they are.
-const textSizeHint = computed(() => {
-    const parts: string[] = [];
-    if (!NAMED_TEXT_SIZES.includes(textSize.value)) {
-        parts.push(t(`settings.appearance.look.textSizeNow`, { percent: textPercent.value }));
-    }
-    if (inDesktopWindow()) {
-        parts.push(t(`settings.appearance.look.textSizeZoomKeys`, { mod: isApplePlatform() ? `⌘` : `Ctrl` }));
-    }
-    return parts.length === 0 ? undefined : parts.join(` `);
-});
+// A size zoomed to on another device (the account carries it) may be none of those three, so the row says it.
+const textSizeHint = computed(() =>
+    NAMED_TEXT_SIZES.includes(textSize.value) ? undefined : t(`settings.appearance.look.textSizeNow`, { percent: textPercent.value }),
+);
 
 // The one list on this page that is NOT translated: a reader hunting for their own language finds it faster written
 // in itself than in a language they cannot read. `activeLocale` rather than the choice, so the control shows what is
@@ -187,16 +158,6 @@ const pickLanguage = (locale: Locale | undefined): void => {
     }
 };
 
-// A few representative rows so the Explorer setup is visible here without opening the workspace.
-const explorerPreview: { name: string; type: "file" | "dir" }[] = [
-    { name: `monorepo`, type: `dir` },
-    { name: `package.json`, type: `file` },
-    { name: `index.ts`, type: `file` },
-    { name: `theme.css`, type: `file` },
-    { name: `schema.prisma`, type: `file` },
-];
-const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
-    explorerTreatment(explorerStyle.value, entry.name, entry.type, entry.type === `dir`, false);
 </script>
 
 <template>
@@ -266,42 +227,16 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     <ColorPicker :model-value="accent" size="sm" class="justify-end" @update:model-value="setAccent" />
                 </template>
             </Row>
-            <Row
-                data-setting="motion"
-                icon="sparkles"
-                :title="t(`settings.appearance.motion.title`)"
-                :description="t(`settings.appearance.motion.hint`)"
-            >
-                <template #control><SegmentedControl :model-value="motion" :options="motionOptions" @update:model-value="setMotion" /></template>
-            </Row>
-            <Row data-setting="text-size" icon="expand" :title="t(`settings.appearance.look.textSize`)" :description="textSizeHint">
+            <!-- A phone's only way to bigger text: a desktop has the zoom keys (textZoom.ts) or the browser's own zoom. -->
+            <Row v-if="mobile" data-setting="text-size" icon="expand" :title="t(`settings.appearance.look.textSize`)" :description="textSizeHint">
                 <template #control
                     ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
                 /></template>
             </Row>
         </RowGroup>
 
-        <!-- File tree: the explorer's look, with its live preview flush under the row (no boxed inset). -->
+        <!-- File tree: what the explorer shows. -->
         <RowGroup v-if="!maker" data-setting="file-tree" :label="t(`settings.appearance.explorer.group`)">
-            <Row icon="sitemap" :title="t(`settings.appearance.explorer.title`)" indent>
-                <template #control>
-                    <SegmentedControl
-                        :model-value="explorerStyle"
-                        :options="explorerOptions"
-                        @update:model-value="(value) => (explorerStyle = value)"
-                    />
-                </template>
-                <template #below>
-                    <div class="flex flex-col gap-0.5">
-                        <div v-for="entry in explorerPreview" :key="entry.name" class="flex items-center gap-1.5 py-0.5 text-[0.8125rem]">
-                            <span class="flex shrink-0 items-center justify-center" :class="treatPreview(entry).slotClass">
-                                <Icon :name="treatPreview(entry).icon" :class="[treatPreview(entry).sizeClass, treatPreview(entry).colorClass]" />
-                            </span>
-                            <span class="truncate text-content/80">{{ entry.name }}</span>
-                        </div>
-                    </div>
-                </template>
-            </Row>
             <Row
                 as="label"
                 icon="folder-open"

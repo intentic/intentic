@@ -77,7 +77,7 @@ export const wheelCounter = (): ((pixels: number, at: number) => ZoomStep | unde
 };
 
 /** Whether this window is one of the desktop app's: the workspace face and its floating panels, a folder's, the sandbox face. */
-export const inDesktopWindow = (): boolean => desktopApp() !== undefined || localFace() !== undefined || sandboxFace();
+const inDesktopWindow = (): boolean => desktopApp() !== undefined || localFace() !== undefined || sandboxFace();
 
 /** Installs the zoom keys and Ctrl+wheel in this window, if it is the desktop app's. Once per window, from main.ts. */
 export const installTextZoom = (): void => {

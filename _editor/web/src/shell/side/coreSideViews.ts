@@ -1,7 +1,7 @@
 import type { Disposable } from "@intentic/extension-api";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
-import { explorerColorClass, iconForEntry, type IconName, useExplorerStyle } from "@intentic/ui";
+import { explorerColorClass, iconForEntry, type IconName } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../workbench/views/vocabulary";
@@ -68,7 +68,6 @@ const ICONS = { preview: `eye`, web: `globe`, desktop: `screen`, app: `window-ma
 
 export const registerCoreSideViews = (): readonly Disposable[] => {
     const words = useVocabulary();
-    const { explorerStyle } = useExplorerStyle();
     const { agentById } = useAgents();
 
     const file = registerSideView({
@@ -88,7 +87,7 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
                 title: name,
                 // A reference nothing matched has no file to wear the glyph of.
                 icon: parsed?.missing === true ? `link-broken` : isLockedWorkspacePath(path) ? `lock` : iconForEntry(name, `file`),
-                iconClass: explorerColorClass(explorerStyle.value, name, `file`, false),
+                iconClass: explorerColorClass(name, `file`, false),
                 tip: {
                     title: path,
                     rows: agent === undefined ? undefined : [{ label: words.value.Agent, value: agentById(agent)?.title ?? agent }],

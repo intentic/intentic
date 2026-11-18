@@ -11,9 +11,9 @@ import {
     springSettles,
     springTiming,
     travelsPerSecond,
-    useMotion,
     velocityTracker,
 } from "@intentic/ui/motion";
+import { stubReducedMotion } from "@intentic/ui/testing";
 
 // Pins the arithmetic every swipe on a phone shares (motion/swipe.ts) and the spring a release is played on
 // (motion/spring.ts): the page's scroll wins every tie, a finger that paused before lifting was not flicking, a drag past
@@ -80,7 +80,7 @@ describe(`the spring`, () => {
             expect(springAt(SETTLE, velocity, 0)).toBeCloseTo(0, 6);
             const points = springPoints(SETTLE, velocity);
             expect(points[0]).toBe(0);
-            expect(points[points.length - 1]).toBe(1);
+            expect(points.at(-1)).toBe(1);
             expect(Math.max(...points)).toBeLessThanOrEqual(1.0015);
         }
     });
@@ -110,14 +110,14 @@ describe(`the spring`, () => {
     });
 
     it(`is a timing the compositor can play, and nothing at all for a reader who asked for less motion`, () => {
-        const { setMotion } = useMotion();
-        setMotion(`on`);
+        let restore = stubReducedMotion(false);
         const timing = springTiming(300, 1.2, SETTLE);
         expect(timing.duration).toBeGreaterThan(0);
         expect(timing.duration).toBeLessThan(1200);
         expect(springTiming(0.2, 1, SETTLE).duration).toBe(0);
-        setMotion(`off`);
+        restore();
+        restore = stubReducedMotion(true);
         expect(springTiming(300, 1.2, SETTLE)).toEqual({ duration: 0, easing: `linear` });
-        setMotion(`system`);
+        restore();
     });
 });

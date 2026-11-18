@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { receivePreferenceChange } from "@intentic/ui/preference";
+import { stubReducedMotion } from "@intentic/ui/testing";
 import { DISMISS_STEP_MS, dismissRows, REVEAL_ROWS, REVEAL_STEP_MS, revealRows, rowsUnder, settleDismissed } from "@intentic/ui/motion";
 
 // The row reveal reads the page's own markup for what to play (`data-reveal`, `data-reveal-column`) and plays it as Web
@@ -32,13 +32,15 @@ const record = (root: HTMLElement): Played[] => {
     return played;
 };
 
+let restoreMotion = (): void => {};
+
 beforeEach(() => {
     document.body.innerHTML = ``;
-    receivePreferenceChange({ key: `ui-motion`, raw: `on` });
+    restoreMotion = stubReducedMotion(false);
 });
 
 afterEach(() => {
-    receivePreferenceChange({ key: `ui-motion`, raw: null });
+    restoreMotion();
 });
 
 describe(`rowsUnder`, () => {
@@ -85,7 +87,8 @@ describe(`revealRows`, () => {
     });
 
     it(`plays nothing when motion is off`, () => {
-        receivePreferenceChange({ key: `ui-motion`, raw: `off` });
+        restoreMotion();
+        restoreMotion = stubReducedMotion(true);
         const root = build(`<div id="r1" data-reveal></div>`);
         const played = record(root);
 
@@ -129,7 +132,8 @@ describe(`dismissRows`, () => {
     });
 
     it(`settles at once, having played nothing, when motion is off`, async () => {
-        receivePreferenceChange({ key: `ui-motion`, raw: `off` });
+        restoreMotion();
+        restoreMotion = stubReducedMotion(true);
         const root = build(`<div id="r1" data-reveal></div>`);
         const { played } = recordExits(root);
 

@@ -97,8 +97,8 @@ flowchart LR
   get brighter, but it never changes hue. A new emphasis uses the accent ramp. Don't add a second colour for it, and
   don't write a skin rule for one component.
 - **Motion.** One module, `src/motion/` (`@intentic/ui/motion`), with its stylesheet `src/styles/motion.css`.
-  Appearance's Animations row (`useMotion`: System, On or Off) writes `data-motion="reduced"` on `<html>` when
-  motion is off, or when it is left at System and the OS asks for less. Under that attribute every duration token is
+  `useMotion` writes `data-motion="reduced"` on `<html>` when the OS asks for less motion; the app has no setting of
+  its own over it. Under that attribute every duration token is
   0ms and every transition stops, so a component never checks reduced motion itself. Moves played from script ask
   `lessMotion()`: the tray fold and the column FLIP (`fold.ts`) and the row reveal (`reveal.ts`, `useRowReveal`),
   which plays a list's `[data-reveal]` rows in reading order when it shows, and `dismissRows`, which plays rows out in

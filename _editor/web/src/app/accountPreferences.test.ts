@@ -19,8 +19,8 @@ jest.mock(`./environments/nativeApp`, () => ({ embedded: () => inApp }));
 const scheme = definePreference<string>({ key: `ui-color-scheme`, read: (raw) => raw ?? `system`, write: (value) => value });
 const skin = definePreference<string>({ key: `ui-skin`, read: (raw) => raw ?? `system`, write: (value) => value });
 const textSize = definePreference<string>({ key: `ui-text-size`, read: (raw) => raw ?? `compact`, write: (value) => value });
-// `system` is stored as nothing, as @intentic/ui/motion stores it.
-const motion = definePreference<string>({ key: `ui-motion`, read: (raw) => raw ?? `system`, write: (value) => (value === `system` ? null : value) });
+// A default stored as nothing, as a preference that keeps no value for its default does.
+const gauges = definePreference<string>({ key: `ui-agents-live-metrics`, read: (raw) => raw ?? `system`, write: (value) => (value === `system` ? null : value) });
 const audience = definePreference<string>({ key: `ui-audience`, read: (raw) => raw ?? `developer`, write: (value) => value });
 // No stored language reads as the browser's own, as @intentic/ui/i18n reads it.
 const locale = definePreference<string>({ key: `ui-locale`, read: (raw) => raw ?? `en`, write: (value) => value });
@@ -122,21 +122,21 @@ afterEach(() => {
 test(`the account's preferences are worn wherever this device holds others, and nothing goes back for them`, async () => {
     localStorage.setItem(`ui-color-scheme`, `light`);
     localStorage.setItem(`ui-text-size`, `large`);
-    const kept = keeping({ "ui-color-scheme": `dark`, "ui-text-size": `large`, "ui-motion": `off` });
+    const kept = keeping({ "ui-color-scheme": `dark`, "ui-text-size": `large`, "ui-agents-live-metrics": `off` });
 
     await start(kept);
 
     expect(scheme.value).toBe(`dark`);
-    expect(motion.value).toBe(`off`);
+    expect(gauges.value).toBe(`off`);
     expect(localStorage.getItem(`ui-color-scheme`)).toBe(`dark`);
-    expect(localStorage.getItem(`ui-motion`)).toBe(`off`);
+    expect(localStorage.getItem(`ui-agents-live-metrics`)).toBe(`off`);
     expect(kept.writes).toBe(0);
 });
 
 test(`a device meeting the account first offers what the account lacks in one patch, but no look nobody chose`, async () => {
     localStorage.setItem(`ui-wallpaper`, `valley`);
     localStorage.setItem(`ui-locale`, `pl`);
-    localStorage.setItem(`ui-motion`, `off`);
+    localStorage.setItem(`ui-agents-live-metrics`, `off`);
     // What the Theme row stores for "System", and what a profile link left in many a browser before anyone chose.
     localStorage.setItem(`ui-color-scheme`, `system`);
     localStorage.setItem(`ui-skin`, `system`);
@@ -148,25 +148,25 @@ test(`a device meeting the account first offers what the account lacks in one pa
 
     await start(kept);
 
-    expect(kept.patches).toEqual([{ "ui-wallpaper": `valley`, "ui-locale": `pl`, "ui-motion": `off` }]);
+    expect(kept.patches).toEqual([{ "ui-wallpaper": `valley`, "ui-locale": `pl`, "ui-agents-live-metrics": `off` }]);
     expect(localStorage.getItem(`ui-text-size`)).toBe(`large`);
 });
 
 test(`only the first meeting offers, so what the account has forgotten since stays forgotten`, async () => {
-    localStorage.setItem(`ui-motion`, `off`);
+    localStorage.setItem(`ui-agents-live-metrics`, `off`);
     const kept = keeping();
     const first = await start(kept);
-    expect(kept.patches).toEqual([{ "ui-motion": `off` }]);
+    expect(kept.patches).toEqual([{ "ui-agents-live-metrics": `off` }]);
 
     // Another device went back to following the OS, which the account keeps as nothing at all; then this device loads again.
-    kept.values.delete(`ui-motion`);
+    kept.values.delete(`ui-agents-live-metrics`);
     first.value = null;
     await start(kept);
 
     expect(kept.reads).toBe(2);
     expect(kept.patches).toHaveLength(1);
     // This device's own stands, as the platform's contract says of a preference it no longer keeps.
-    expect(localStorage.getItem(`ui-motion`)).toBe(`off`);
+    expect(localStorage.getItem(`ui-agents-live-metrics`)).toBe(`off`);
 });
 
 test(`another account's choices are not worn by the next one in, nor offered to it`, async () => {
@@ -212,7 +212,7 @@ test(`an account coming back wears its own again, and a choice it made on the wa
 
 test(`a choice made signed out is nobody's, and the next account in takes it`, async () => {
     jest.useFakeTimers();
-    const first = keeping({ "ui-locale": `pl`, "ui-motion": `off` });
+    const first = keeping({ "ui-locale": `pl`, "ui-agents-live-metrics": `off` });
     const one = await start(first, `account-1`);
     one.value = null;
     await realYield();
@@ -226,25 +226,25 @@ test(`a choice made signed out is nobody's, and the next account in takes it`, a
 
     expect(textSize.value).toBe(`large`);
     expect(locale.value).toBe(`en`);
-    expect(motion.value).toBe(`system`);
+    expect(gauges.value).toBe(`system`);
     expect(second.patches).toEqual([{ "ui-text-size": `large` }]);
 });
 
 test(`a choice made here goes to the account with whatever was chosen beside it, a removal as null`, async () => {
     jest.useFakeTimers();
-    const kept = keeping({ "ui-motion": `off` });
+    const kept = keeping({ "ui-agents-live-metrics": `off` });
     await start(kept);
 
     // The Theme row's sanctum: the skin, and the scheme it drags dark.
     skin.value = `sanctum`;
     scheme.value = `dark`;
-    motion.value = `system`;
+    gauges.value = `system`;
     audience.value = `maker`;
     await advanceTimersByTimeAsync(400);
     expect(kept.patches).toEqual([]);
     await advanceTimersByTimeAsync(100);
 
-    expect(kept.patches).toEqual([{ "ui-skin": `sanctum`, "ui-color-scheme": `dark`, "ui-motion": null }]);
+    expect(kept.patches).toEqual([{ "ui-skin": `sanctum`, "ui-color-scheme": `dark`, "ui-agents-live-metrics": null }]);
     expect(Object.fromEntries(kept.values)).toEqual({ "ui-skin": `sanctum`, "ui-color-scheme": `dark` });
 });
 

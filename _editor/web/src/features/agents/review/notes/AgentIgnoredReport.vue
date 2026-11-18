@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { IgnoredOutput } from "@intentic/sandbox-contract/schemas/git/git";
-import { explorerColorClass, formatBytes, iconForEntry, ui, useExplorerStyle } from "@intentic/ui";
+import { explorerColorClass, formatBytes, iconForEntry, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, ref, useId } from "vue";
@@ -13,7 +13,6 @@ import ChangeRowName from "../../../../components/ChangeRowName.vue";
 // copies on its own press, revealed on hover so the list reads as names and sizes rather than a column of buttons.
 
 const t = useT();
-const { explorerStyle } = useExplorerStyle();
 
 export type IgnoredGroup = { readonly repo: string; readonly paths: readonly IgnoredOutput[]; readonly more?: number };
 
@@ -169,7 +168,7 @@ const SIZE = `w-14 shrink-0 text-right text-2xs tabular-nums text-subtle`;
                             <Icon
                                 :name="iconForEntry(basename(file.output.path), 'file', false)"
                                 class="shrink-0 text-2xs"
-                                :class="explorerColorClass(explorerStyle, basename(file.output.path), 'file', false)"
+                                :class="explorerColorClass(basename(file.output.path), 'file', false)"
                             />
                             <ChangeRowName :path="file.output.path" :label="file.label" :named="true" />
                             <span v-if="file.output.kind === `changed`" class="shrink-0 text-2xs text-warning">{{
@@ -186,7 +185,7 @@ const SIZE = `w-14 shrink-0 text-right text-2xs tabular-nums text-subtle`;
                     <Icon
                         :name="iconForEntry(basename(line.file.output.path), 'file', false)"
                         class="shrink-0 text-2xs"
-                        :class="explorerColorClass(explorerStyle, basename(line.file.output.path), 'file', false)"
+                        :class="explorerColorClass(basename(line.file.output.path), 'file', false)"
                     />
                     <ChangeRowName :path="line.file.label" :label="line.file.label" :named="false" />
                     <!-- Only the case worth a word: a new file is the usual one. -->

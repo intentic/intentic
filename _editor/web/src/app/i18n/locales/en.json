@@ -11742,7 +11742,6 @@
                 "liveMetricsHint": "CPU, memory and disk in the Agents board's header, and on each agent's card its share and what it has cost. Elsewhere, a small tile on the rail only when one nears its limit. Nothing is measured while this is off."
             },
             "explorer": {
-                "colorful": "Colorful",
                 "fileNesting": "File nesting",
                 "fileNestingHint": "Fold a folder's files under its package.json in the explorer.",
                 "group": "File tree",
@@ -11750,11 +11749,8 @@
                 "hideTechnicalHint": "Lockfiles, configuration, dot files and build output. On by default when you don't write code.",
                 "hideTests": "Hide tests",
                 "hideTestsHint": "Hide test files and folders in explorer.",
-                "minimal": "Minimal",
                 "showIgnored": "Show ignored files",
-                "showIgnoredHint": "Show node_modules, build output, and gitignored paths.",
-                "title": "Explorer",
-                "vivid": "Vivid"
+                "showIgnoredHint": "Show node_modules, build output, and gitignored paths."
             },
             "look": {
                 "colour": "Color",
@@ -11767,7 +11763,6 @@
                 "textSizeComfortableHint": "110% — the size the interface was drawn at",
                 "textSizeLarge": "Large",
                 "textSizeNow": "Now {percent}%.",
-                "textSizeZoomKeys": "{mod} + and {mod} − make it bigger or smaller, {mod} 0 puts it back.",
                 "theme": "Theme",
                 "wallpaper": "Wallpaper",
                 "wallpaperHint": "A picture behind the agents board, drawn in the light or dark version of your theme."
@@ -11790,14 +11785,6 @@
             "work": {
                 "developerHint": "Git's own words, the file tree as the home, every panel.",
                 "makerHint": "Plain words, tooling files out of the way."
-            },
-            "motion": {
-                "title": "Animations",
-                "hint": "How menus, panels and pages open. Off makes every change instant.",
-                "system": "System",
-                "systemHint": "Follows your operating system: instant when it asks for reduced motion, animated when it does not.",
-                "on": "On",
-                "off": "Off"
             },
             "plain": {
                 "languageHint": "The language this interface is written in. Your files and conversations are untouched.",
@@ -12148,7 +12135,6 @@
             "theme": "dark mode, light mode, night mode, colour scheme, color scheme",
             "wallpaper": "background, backdrop, image",
             "accentColour": "accent, colour, color, highlight",
-            "motion": "motion, reduce motion, transitions, animation",
             "textSize": "font size, zoom, bigger text, smaller text, scale",
             "changesList": "diff, review, changed files",
             "toolCalls": "transcript, agent steps, details, tools",

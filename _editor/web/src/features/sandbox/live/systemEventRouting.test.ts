@@ -79,10 +79,10 @@ describe(`dropSandboxLocalState`, () => {
 
     it(`leaves other sandboxes and unscoped preferences alone`, () => {
         localStorage.setItem(`intentic.workspaceTabs.sbx-2`, `{}`);
-        localStorage.setItem(`ui-motion`, `off`);
+        localStorage.setItem(`ui-skin`, `silver`);
         dropSandboxLocalState(`sbx-1`);
         expect(localStorage.getItem(`intentic.workspaceTabs.sbx-2`)).toBe(`{}`);
-        expect(localStorage.getItem(`ui-motion`)).toBe(`off`);
+        expect(localStorage.getItem(`ui-skin`)).toBe(`silver`);
     });
 
     it(`sweeps the window's own sessionStorage copy too`, () => {

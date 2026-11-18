@@ -11742,7 +11742,6 @@
                 "liveMetricsHint": "CPU, memoria y disco en la cabecera del tablero de agentes, y en la tarjeta de cada agente su parte y lo que ha costado. En otras vistas, solo un pequeño icono en la barra lateral cuando uno se acerca a su límite. No se mide nada mientras esto esté desactivado."
             },
             "explorer": {
-                "colorful": "Colorido",
                 "fileNesting": "Anidar archivos",
                 "fileNestingHint": "Plegar los archivos de una carpeta bajo su package.json en el explorador.",
                 "group": "Árbol de archivos",
@@ -11750,11 +11749,8 @@
                 "hideTechnicalHint": "Lockfiles, configuración, archivos ocultos y salida de compilación. Activado por defecto si no escribes código.",
                 "hideTests": "Ocultar las pruebas",
                 "hideTestsHint": "Ocultar archivos y carpetas de pruebas en el explorador.",
-                "minimal": "Mínimo",
                 "showIgnored": "Mostrar los archivos ignorados",
-                "showIgnoredHint": "Mostrar node_modules, la salida de compilación y las rutas en gitignore.",
-                "title": "Explorador",
-                "vivid": "Vivo"
+                "showIgnoredHint": "Mostrar node_modules, la salida de compilación y las rutas en gitignore."
             },
             "look": {
                 "colour": "Color",
@@ -11767,7 +11763,6 @@
                 "textSizeComfortableHint": "110 %: el tamaño con el que se dibujó la interfaz",
                 "textSizeLarge": "Grande",
                 "textSizeNow": "Ahora {percent} %.",
-                "textSizeZoomKeys": "{mod} + y {mod} − lo agrandan o lo reducen, {mod} 0 lo restablece.",
                 "theme": "Tema",
                 "wallpaper": "Fondo de pantalla",
                 "wallpaperHint": "Una imagen detrás del tablero de agentes, en la versión clara u oscura de tu tema."
@@ -11790,14 +11785,6 @@
             "work": {
                 "developerHint": "Las palabras de git, el árbol de archivos como inicio, todos los paneles.",
                 "makerHint": "Palabras llanas, los archivos de herramientas apartados."
-            },
-            "motion": {
-                "title": "Animaciones",
-                "hint": "Cómo se abren los menús, paneles y páginas. Desactivadas, cada cambio es instantáneo.",
-                "system": "Sistema",
-                "systemHint": "Sigue a tu sistema operativo: instantáneo cuando pide reducir el movimiento, animado cuando no.",
-                "on": "Sí",
-                "off": "No"
             },
             "plain": {
                 "languageHint": "El idioma de esta interfaz. Tus archivos y conversaciones no cambian.",
@@ -12148,7 +12135,6 @@
             "theme": "modo oscuro, modo claro, modo noche, esquema de color, tema oscuro",
             "wallpaper": "fondo, fondo de pantalla, imagen",
             "accentColour": "color de acento, color, resaltado",
-            "motion": "movimiento, reducir movimiento, transiciones, animación",
             "textSize": "tamaño de letra, tamaño de fuente, zoom, texto más grande, texto más pequeño, escala",
             "changesList": "diff, revisión, archivos cambiados",
             "toolCalls": "transcripción, pasos del agente, detalles, herramientas",

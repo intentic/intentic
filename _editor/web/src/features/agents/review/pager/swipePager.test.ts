@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
-import { useMotion } from "@intentic/ui/motion";
+import { stubReducedMotion } from "@intentic/ui/testing";
 import SwipePages from "./SwipePages.vue";
 import { swipeBelongsElsewhere } from "./swipeYields";
 
@@ -88,10 +88,12 @@ describe(`a phone's agent pages`, () => {
         };
     };
 
+    let restoreMotion = (): void => {};
+
     beforeEach(() => {
         page.value = `chat`;
         pages.value = [`chat`, `changes`];
-        useMotion().setMotion(`off`);
+        restoreMotion = stubReducedMotion(true);
         stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback) => {
             // Drawn at once, inside the move that asked: 0, so the pager never thinks a frame is still pending.
             callback(0);
@@ -104,7 +106,7 @@ describe(`a phone's agent pages`, () => {
         app = undefined;
         host.remove();
         unstubAllGlobals();
-        useMotion().setMotion(`system`);
+        restoreMotion();
         document.getSelection()?.removeAllRanges();
     });
 

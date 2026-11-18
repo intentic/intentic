@@ -14,7 +14,6 @@ import {
     toneWash,
     ui,
     useDevice,
-    useExplorerStyle,
     useNarrow,
 } from "@intentic/ui";
 import type { Loaded } from "@intentic/extension-api";
@@ -107,7 +106,6 @@ const { agentId, at, changes } = defineProps<{
 const emit = defineEmits<{ chat: [] }>();
 const router = useRouter();
 const { mobile } = useDevice();
-const { explorerStyle } = useExplorerStyle();
 const shell = useLayout();
 const { openDiff, openDirectory, openDocument } = useWorkspaceTabs();
 const { tabsFor } = useDirectoryTabs();
@@ -758,7 +756,7 @@ const seamWidth = computed<number>({
                                                 <Icon
                                                     :name="iconForEntry(basename(file.change.path), 'file', false)"
                                                     class="shrink-0 text-2xs"
-                                                    :class="explorerColorClass(explorerStyle, basename(file.change.path), 'file', false)"
+                                                    :class="explorerColorClass(basename(file.change.path), 'file', false)"
                                                 />
                                                 <!-- How a changed file is named, shared with the workspace's Changes list (ChangeRowName). -->
                                                 <ChangeRowName :path="file.change.path" :label="file.label" :named="viewOf(group.key).named" />

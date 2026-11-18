@@ -1,18 +1,9 @@
-// Shared motion: choice.ts owns System/On/Off and lessMotion(), which script animations check before starting.
+// Shared motion: choice.ts follows the OS's reduce-motion switch and owns lessMotion(), which script animations check before starting.
 // loops.ts slows activity glyphs under reduced motion; fold/reveal/flash handle layout, row arrival and target feedback.
 // swipe.ts resolves gestures; spring.ts carries release velocity into compositor easing without per-frame script.
 // ../styles/motion.css owns duration/curve tokens, CSS recipes and the data-motion="reduced" transition switch.
 
-export {
-    isMotionChoice,
-    lessMotion,
-    MOTION_CHOICES,
-    type MotionChoice,
-    motionChoice,
-    REDUCE_MOTION_QUERY,
-    resolveReducedMotion,
-    useMotion,
-} from "./choice.js";
+export { lessMotion, REDUCE_MOTION_QUERY, useMotion } from "./choice.js";
 export { setDeveloperBuild, useCompositedLoops, useReducedMotion, useTouchMotion } from "./loops.js";
 export { canAnimate, FOLD_EASE, FOLD_MS, slideFrom, stopSlide, trayFold, useFoldFlip } from "./fold.js";
 export { FLASH_MS, flashElement } from "./flash.js";
