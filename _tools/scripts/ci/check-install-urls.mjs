@@ -28,7 +28,6 @@ const VERB_SAMPLES = [
     ["uninstall", []],
     ["device", ["sandbox-example.intentic.app", "AB12CD34"]],
     ["sync", ["sandbox-example.intentic.app", "AB12CD34"]],
-    ["server", ["sandbox-example.intentic.app", "AB12CD34"]],
 ];
 
 const verbTargets = VERB_SAMPLES.flatMap(([verb, args]) => {
