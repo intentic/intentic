@@ -80,7 +80,9 @@ test.skipIf(!chromium.runs)(
         const refused = await freePort();
         const name = openBrowserSession({ sessionId: "4a710000-0000-4000-8000-000000000001", server: "web", port });
         try {
-            expect(await browserSessionContext(name!)).toMatchObject({ pages: expect.any(Function) });
+            // Asked, not matched: toMatchObject writes its matcher onto the live context, whose pages() the daemon
+            // still calls.
+            expect((await browserSessionContext(name!))?.pages()).toEqual(expect.any(Array));
             const page = context.pages()[0] ?? (await context.newPage());
             await page.goto(`${origin}/start`);
             await pageWhen(name!, (listed) => listed.url === `${origin}/start` && listed.loading !== true);
@@ -100,7 +102,7 @@ test.skipIf(!chromium.runs)(
             await stopLoading(daemonPage);
             // Its title is read again once it rests: one read on the way would have been Playwright's "Loading <url>".
             const stopped = await pageWhen(name!, (listed) => listed.loading !== true && listed.title !== undefined);
-            expect(stopped).toEqual({ id: "p1", url: `${origin}/start`, title: "Arrived", active: true });
+            expect(stopped).toEqual({ id: "p1", url: `${origin}/start`, title: "Arrived", active: true, canGoBack: true, canGoForward: false });
 
             // A port nobody listens on: Chromium's error page, listed under the address that failed and why.
             sendTo(page, `http://127.0.0.1:${refused}/`);
@@ -111,7 +113,8 @@ test.skipIf(!chromium.runs)(
             // Arriving anywhere else forgets the failure.
             await page.goto(`${origin}/again`);
             const arrived = await pageWhen(name!, (listed) => listed.url === `${origin}/again` && listed.loading !== true && listed.title !== undefined);
-            expect(arrived).toEqual({ id: "p1", url: `${origin}/again`, title: "Arrived", active: true });
+            // Its history reaches back past /start to the tab's first page, about:blank.
+            expect(arrived).toEqual({ id: "p1", url: `${origin}/again`, title: "Arrived", active: true, canGoBack: true, canGoForward: false });
         } finally {
             await closeBrowserSession(name!);
             await context.close().catch(() => undefined);

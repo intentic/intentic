@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { type BrowserSession, BrowserSessionSchema } from "@intentic/sandbox-contract/schemas/terminal";
 import { t } from "@intentic/ui/i18n";
 import { type ComputedRef, onScopeDispose, ref, type Ref, watch } from "vue";
 import { z } from "zod";
@@ -25,6 +26,9 @@ const SelectMenuSchema = z.object({
 export type SelectMenu = z.infer<typeof SelectMenuSchema>;
 
 export interface BrowserView {
+    // The window whole (its tabs, the one in front, a dialog), as its own socket last sent it: newer than the browsers
+    // list whenever its `seq` is higher. Undefined until the socket says, and from a sandbox too old to.
+    readonly session: Ref<BrowserSession | undefined>;
     // Which picture this is, so the pane mounts canvases or an img; undefined until `ready`.
     readonly kind: Ref<"video" | "frames" | undefined>;
     // Remote geometry pointer coordinates map onto (the page's viewport, in the display's pixels on video); off the
@@ -102,6 +106,22 @@ export interface BrowserViewOptions {
     readonly visible?: Ref<boolean>;
 }
 
+// The window a `state` message carries, if it is the one this view watches; anything else is not this view's to show.
+const windowOf = (message: ScreencastMessage, name: string | undefined): BrowserSession | undefined => {
+    const parsed = BrowserSessionSchema.safeParse(message[`session`]);
+    return parsed.success && parsed.data.name === name ? parsed.data : undefined;
+};
+
+// Whether two devices render a page the same way; none is the page as itself.
+const sameDevice = (next: EmulatedDevice | undefined, device: EmulatedDevice | undefined): boolean =>
+    next === device ||
+    (next !== undefined &&
+        device !== undefined &&
+        next.width === device.width &&
+        next.height === device.height &&
+        next.mobile === device.mobile &&
+        next.userAgent === device.userAgent);
+
 // Authenticated wss URL, or undefined if unreachable/not signed in; base and token are read together after the
 // token await, from one active-sandbox snapshot.
 const socketUrl = (name: string): Promise<string | undefined> => wsSocketUrl(`/system/browser-view`, { session: name });
@@ -136,8 +156,9 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
     const driving = ref(false);
     const cursor = ref(`default`);
     const select = ref<SelectMenu | undefined>();
-    // The page the user picked, re-sent on every reconnect so a dropped socket doesn't silently switch them back to
-    // the agent's tab.
+    const streamed = ref<BrowserSession | undefined>();
+    // The page the user picked, re-sent on every reconnect to a sandbox too old to send `state`, so a dropped socket
+    // doesn't silently switch them back; one that sends it says which tab is in front, and that is what is shown.
     let pinned: string | undefined;
     // Keystrokes go to the display rather than the page while Chromium's find bar has them; see `find`.
     let rawKeys = false;
@@ -164,6 +185,9 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
                 break;
             case `selection`:
                 copy.answer(message.text);
+                break;
+            case `state`:
+                streamed.value = windowOf(message, name.value) ?? streamed.value;
                 break;
             case `select`:
                 // Sent after every release: a menu to draw, or null to close one the user clicked away from.
@@ -215,7 +239,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
                 say(t(`browsers.browserView.unreachable`), true);
             },
             onOpen: () => {
-                if (pinned !== undefined) {
+                if (pinned !== undefined && streamed.value === undefined) {
                     send({ type: `bind`, pageId: pinned });
                 }
                 if (device !== undefined) {
@@ -240,6 +264,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         () => {
             teardown();
             pinned = undefined;
+            streamed.value = undefined;
             rawKeys = false;
             // Each window is its own; the next one starts as itself, and the caller says again if it should not.
             device = undefined;
@@ -284,6 +309,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
     };
 
     return {
+        session: streamed,
         kind: cast.kind,
         viewWidth: cast.width,
         viewHeight: cast.height,
@@ -367,15 +393,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         },
         requestSize: cast.requestSize,
         emulate: (next) => {
-            const same =
-                next === device ||
-                (next !== undefined &&
-                    device !== undefined &&
-                    next.width === device.width &&
-                    next.height === device.height &&
-                    next.mobile === device.mobile &&
-                    next.userAgent === device.userAgent);
-            if (same) {
+            if (sameDevice(next, device)) {
                 return;
             }
             device = next;

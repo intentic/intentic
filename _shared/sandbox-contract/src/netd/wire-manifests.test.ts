@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { EDGE_VERDICT_HEADER, edgeVerdictOf } from "../protocol/edge-verdict.js";
 import { INGRESS_GRANT_HEADER, INGRESS_TUNNEL_PATH } from "../protocol/ingress-contract.js";
 import { VITALS_FILE, VITALS_PATH } from "../protocol/vitals.js";
-import { EDGE_TRANSPORTS, TERMINAL_PATH, WEBTRANSPORT_PATH } from "./browser-wire.js";
+import { BROWSER_FRAME_TAGS, BROWSER_VIEW_PATH, EDGE_TRANSPORTS, TERMINAL_PATH, WEBTRANSPORT_PATH } from "./browser-wire.js";
 import {
     ASK_PATIENCE_MS,
     FRAME_LENGTH_BYTES,
@@ -30,6 +30,7 @@ const socket = manifest("netd-wire") as {
     frame: { lengthBytes: number; maxBytes: number };
 };
 const browser = manifest("browser-wire") as {
+    browserView: { path: string; frameTags: Record<string, number> };
     edge: { verdictHeader: string; verdicts: { oneOf: { const: string }[] } };
     terminal: { path: string; upgrade: string };
     vitals: { path: string; file: string; body: { $defs: { NodeLink: { oneOf: { const: string }[] } } } };
@@ -78,6 +79,11 @@ describe("the wire outside oRPC, as the Rust crates define it", () => {
             session: browser.webTransport.path,
             upgrade: browser.terminal.upgrade,
         });
+    });
+
+    it("opens the browser view where browser-wire says, and tags its pictures as it numbers them", () => {
+        expect(BROWSER_VIEW_PATH).toBe(browser.browserView.path);
+        expect<Record<string, number>>(BROWSER_FRAME_TAGS).toEqual(browser.browserView.frameTags);
     });
 
     it("finds netd's vitals where browser-wire says it answers them, in the states it names", () => {

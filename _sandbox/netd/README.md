@@ -193,8 +193,9 @@ flowchart LR
   read error instead of turning off for good (2026-10-05). netd owns every socket and byte, Node every decision about them: which terminal a socket
   opens onto (netd composes tmux's command), and what becomes of a preview request (an upstream to relay, a page
   to write, or the outbox to hand back), decided once when asked. [crates/netd-wire](crates/netd-wire) defines the frames, and nothing a browser sees;
-  [crates/browser-wire](crates/browser-wire) defines what one does (the terminal's messages, the vitals, the
-  WebTransport path, the edge's verdict), and the edge builds it too. Each crate's tests, and the tunnel crate's, write their TypeScript
+  [crates/browser-wire](crates/browser-wire) defines what one does (the terminal's messages, the browser view's,
+  the vitals, the WebTransport path, the edge's verdict), and the edge builds it too. The browser view is Node's
+  today; its messages are written there so netd can serve it the way it serves terminals. Each crate's tests, and the tunnel crate's, write their TypeScript
   and a JSON manifest into `@intentic/sandbox-contract`, whose `contract.lock.json` pins the manifests.
 
 ## Key files

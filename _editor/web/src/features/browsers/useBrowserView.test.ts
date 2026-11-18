@@ -545,3 +545,23 @@ test("a view keeps one wait from connecting to its first picture, and none once 
     socket().deliver({ type: `ready`, kind: `video`, width: 1280, height: 880, codec: `avc1.42C028` });
     expect(view.waitingSince.value).toBeUndefined();
 });
+
+// The window whole, as its socket sends it on every change: what the strip and the address bar draw from once it comes,
+// since the browsers list it otherwise reads trails it by up to a second.
+const windowState = (name: string, front: string, seq: number) => ({
+    type: `state`,
+    session: { name, seq, label: `x`, server: `web`, running: true, activityAt: 0, pages: [{ id: front, url: `https://example.com/`, active: true }] },
+});
+
+test("the window's own state is held as it arrives, and a copy of any other window is not taken for it", async () => {
+    const { view, socket } = await connected();
+    expect(view.session.value).toBeUndefined();
+    socket().deliver(windowState(`browser-abc12345`, `p2`, 7));
+    await waitFor(() => expect(view.session.value?.pages[0]?.id).toBe(`p2`));
+    socket().deliver(windowState(`browser-other111`, `p9`, 8));
+    socket().deliver({ type: `state`, session: { name: `browser-abc12345` } });
+    socket().deliver(windowState(`browser-abc12345`, `p3`, 9));
+    await waitFor(() => expect(view.session.value?.pages[0]?.id).toBe(`p3`));
+    expect(view.session.value?.seq).toBe(9);
+});
+

@@ -4,7 +4,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { noticeOf } from "@intentic/ui/async";
 import { AnchoredOverlay, Button, EmptyState, Icon, Picker, ui } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowReactive, shallowRef, watch } from "vue";
-import { activePageOf } from "../../features/browsers/activePage";
+import { activePageOf, freshestWindow, settledPick } from "../../features/browsers/activePage";
 import { toUrl } from "../../features/browsers/address";
 import { useHeldAddress } from "../../features/browsers/heldAddress";
 import { browsersFront, browsersOpened, browsersPinned, browsersWantPreview, showTab, unpinTab } from "../../workbench/browsers/browsersSurface";
@@ -108,10 +108,10 @@ const selected = computed<string | undefined>(() => {
         open.toSorted((left, right) => right.activityAt - left.activityAt)[0]
     )?.name;
 });
-const current = computed(() => windows.value.find((session) => session.name === selected.value));
+const view = useBrowserView(selected, { visible: computed(() => seen.value && webInFront.value) });
+// The window as the newer of its two copies has it: the browsers list's, or the one its own socket sent.
+const current = computed(() => freshestWindow(windows.value.find((session) => session.name === selected.value), view.session.value));
 const pages = computed<readonly BrowserPage[]>(() => current.value?.pages ?? []);
-const watchable = computed(() => current.value?.name);
-const view = useBrowserView(watchable, { visible: computed(() => seen.value && webInFront.value) });
 
 const showWindow = (name: string): void => showTab({ kind: `web`, session: name });
 
@@ -137,10 +137,10 @@ watch(
 // Taken over from a running agent: the one state worth a ring, since a keystroke now lands in the agent's way.
 const steppedIn = computed(() => agentDriving.value && tookOver.value);
 
-// The page the user picked; cleared on window change, since a page id only means something inside its own session.
+// The page the user picked, until the window says it is in front (settledPick); cleared on window change, since a page
+// id only means something inside its own session. Which tab reads as selected: see activePageOf for the rule.
 const pickedPage = ref<string | undefined>();
-
-// Which tab reads as selected: see activePageOf for the rule.
+watch(pages, (now) => (pickedPage.value = settledPick(now, pickedPage.value, view.session.value !== undefined)));
 const activePage = computed<BrowserPage | undefined>(() => activePageOf(pages.value, pickedPage.value));
 
 const pickPage = (page: BrowserPage): void => {
@@ -1225,7 +1225,7 @@ const { floats } = useBrowsersFloating();
             <button
                 type="button"
                 :class="ui.iconButton({ size: `md`, round: true })"
-                :disabled="!webInFront || !interactive || blankOnTheWay"
+                :disabled="!webInFront || !interactive || blankOnTheWay || activePage?.canGoBack === false"
                 :aria-label="t(`browsers.browsers.back`)"
                 v-tooltip.bottom="t(`browsers.browsers.back`)"
                 @click="view.back()"
@@ -1236,7 +1236,7 @@ const { floats } = useBrowsersFloating();
                 v-if="!compact"
                 type="button"
                 :class="ui.iconButton({ size: `md`, round: true })"
-                :disabled="!webInFront || !interactive || blankOnTheWay"
+                :disabled="!webInFront || !interactive || blankOnTheWay || activePage?.canGoForward === false"
                 :aria-label="t(`browsers.browsers.forward`)"
                 v-tooltip.bottom="t(`browsers.browsers.forward`)"
                 @click="view.forward()"

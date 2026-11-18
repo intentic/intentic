@@ -4,10 +4,14 @@ import {
     answerBrowserDialog,
     browserSessionContext,
     browserSessionDisplayKey,
-    browserSessionEndpoint,
+    browserSessionFront,
     browserSessionPage,
+    browserSessionState,
     holdBrowserSession,
+    pickBrowserPage,
 } from "../sessions/browser-sessions.js";
+import { streamWindow, watchWindow } from "../state/window-feed.js";
+import type { BrowserViewServerMessage } from "@intentic/sandbox-contract/browser-wire";
 import { OWN_BROWSER_SESSION } from "../sessions/own-browser.js";
 import { startLiveView, type LiveView } from "./live-view.js";
 import type { ScreencastClientMessage } from "./screencast.js";
@@ -25,6 +29,36 @@ const sinkOf = (ws: Socket) => ({
     backlog: () => (ws.raw as { bufferedAmount?: number } | undefined)?.bufferedAmount ?? 0,
 });
 
+// The half of a view socket answered by the session rather than the view: a tab and a dialog belong to the browser,
+// which the session tracks (browser-sessions.ts) whether anyone is watching or not. Returns whether it handled the
+// frame.
+const answerSession = async (session: string, message: ScreencastClientMessage): Promise<boolean> => {
+    switch (message.type) {
+        case "closeTab":
+            // Closing what is already gone is the outcome asked for; the strip relists either way.
+            await browserSessionPage(session, message.pageId)
+                ?.close()
+                .catch(() => undefined);
+            return true;
+        case "dialog":
+            await answerBrowserDialog(session, message.accept, message.text);
+            return true;
+        case "navigate":
+            // A tab named by id goes there whichever tab the picture shows, which a `bind` sent just before may not have
+            // reached yet; not awaited past the commit, as live-view.ts steers. Unnamed, it is the view's.
+            if (message.pageId === undefined) {
+                return false;
+            }
+            void browserSessionPage(session, message.pageId)
+                ?.goto(message.url, { waitUntil: "commit" })
+                // allow(silent-catch): Chromium shows its own error page for an address that goes nowhere
+                .catch(() => undefined);
+            return true;
+        default:
+            return false;
+    }
+};
+
 // /system/browser-view: watches the agent's browser, and lets the user take the wheel. Same wire and pictures as
 // /system/browser-profile, pointed at a different browser. Read-only only because the client sends no input until the
 // user takes over; closing the socket stops the picture, not the turn's browser.
@@ -34,6 +68,8 @@ export const createBrowserViewRoute = (services: Services) =>
         let closed = false;
         let unregisterAccess: (() => void) | undefined;
         let releaseBrowser: (() => void) | undefined;
+        // Sends the window whole as `state` on every change, so this viewer's tabs and picture agree (window-feed.ts).
+        let stopState: (() => void) | undefined;
         // The session this socket watches, read once in onOpen and needed again by every `bind` frame.
         let session = "";
         // Settled once onOpen is done, whichever way it went. Hono hands frames over without waiting for onOpen, and the
@@ -58,6 +94,8 @@ export const createBrowserViewRoute = (services: Services) =>
             closed = true;
             unregisterAccess?.();
             unregisterAccess = undefined;
+            stopState?.();
+            stopState = undefined;
             releaseBrowser?.();
             releaseBrowser = undefined;
             await view?.stop();
@@ -67,11 +105,10 @@ export const createBrowserViewRoute = (services: Services) =>
             view = undefined;
         };
 
-        // Tab strip only the frames path needs: a screencast shows one page, so picking matters, while video shows the
-        // whole window with its own strip. `bind` answers either way; an unknown page id means the tab closed since the
-        // relist.
+        // A tab the person picked, brought in front for every viewer of the window; an unknown page id means the tab
+        // closed since the viewer last heard.
         const onBind = async (pageId: string, ws: Socket): Promise<void> => {
-            const page = browserSessionPage(session, pageId);
+            const page = await pickBrowserPage(session, pageId);
             if (page === undefined) {
                 ws.send(JSON.stringify({ type: "gone", pageId }));
                 return;
@@ -118,37 +155,8 @@ export const createBrowserViewRoute = (services: Services) =>
             }
         };
 
-        // The half answered by the session rather than the view: a tab and a dialog belong to the browser, which the
-        // session tracks (browser-sessions.ts) whether anyone is watching or not.
-        const handleSession = async (message: ScreencastClientMessage): Promise<boolean> => {
-            switch (message.type) {
-                case "closeTab":
-                    // Closing what is already gone is the outcome asked for; the strip relists either way.
-                    await browserSessionPage(session, message.pageId)
-                        ?.close()
-                        .catch(() => undefined);
-                    return true;
-                case "dialog":
-                    await answerBrowserDialog(session, message.accept, message.text);
-                    return true;
-                case "navigate":
-                    // A tab named by id goes there whichever tab the picture shows, which a `bind` sent just before may
-                    // not have reached yet; not awaited past the commit, as live-view.ts steers. Unnamed, it is the view's.
-                    if (message.pageId === undefined) {
-                        return false;
-                    }
-                    void browserSessionPage(session, message.pageId)
-                        ?.goto(message.url, { waitUntil: "commit" })
-                        // allow(silent-catch): Chromium shows its own error page for an address that goes nowhere
-                        .catch(() => undefined);
-                    return true;
-                default:
-                    return false;
-            }
-        };
-
         const handleControl = async (message: ScreencastClientMessage, ws: Socket): Promise<boolean> =>
-            (await handleView(message, ws)) || handleSession(message);
+            (await handleView(message, ws)) || answerSession(session, message);
 
         // Redeems the ticket and attaches the view: onOpen's whole body, apart so onOpen can settle `attached` on every
         // way out of it.
@@ -167,6 +175,10 @@ export const createBrowserViewRoute = (services: Services) =>
             }
             session = url.searchParams.get("session") ?? "";
             releaseBrowser = holdBrowserSession(session);
+            // Before the attach: the tabs can be drawn while Chromium is still starting.
+            stopState = streamWindow(session, () => browserSessionState(session), (window) =>
+                ws.send(JSON.stringify({ type: "state", session: window } satisfies BrowserViewServerMessage)),
+            );
             // Awaited, not polled: a click can arrive before Chromium's first paint; this resolves once the attach
             // lands.
             const context = await browserSessionContext(session);
@@ -188,7 +200,7 @@ export const createBrowserViewRoute = (services: Services) =>
                     (reason) => {
                         services.logger.warn({ reason }, "browser-view stream failed");
                     },
-                    { endpoint: browserSessionEndpoint(session), log: debug },
+                    { front: { page: () => browserSessionFront(session), watch: (changed) => watchWindow(session, changed) }, log: debug },
                 );
                 debug({ display }, "browser-view: opened");
             } catch (err) {

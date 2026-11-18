@@ -129,8 +129,8 @@ flowchart LR
 - The wire no oRPC route carries is defined by the Rust crates that speak it (`_sandbox/netd/crates`): `tunnel` (the
   `/tunnel/v2` door, its headers and lanes, the stream multiplexer, close codes, liveness, ALPN and the transports an
   edge declares; what the daemon announces as its transfers is `protocol/tunnel-bulk.ts`, held to the edge's reading by
-  the shared `ingress-contract.fixture.json`), `browser-wire` (what a browser sees: the terminal socket and its messages, netd's vitals,
-  the WebTransport path, the edge's verdict) and `netd-wire` (netd's control socket with Node, its env vars and its patience). The
+  the shared `ingress-contract.fixture.json`), `browser-wire` (what a browser sees: the terminal socket and its messages, the browser view
+  socket's messages and picture tags, netd's vitals, the WebTransport path, the edge's verdict) and `netd-wire` (netd's control socket with Node, its env vars and its patience). The
   vitals are read at the package root: `protocol/vitals.ts` gives `VITALS_PATH` and `parseVitals`, which reads any
   other body (an older sandbox's 404 from Node) as undefined. Their tests
   write TypeScript and a JSON manifest each into `src/netd/generated/`; `src/netd/browser-wire.ts` and

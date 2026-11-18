@@ -1491,10 +1491,6 @@
         "count": 144,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/browser/sessions/browser-sessions.ts": {
-        "count": 649,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/browser/tools/accounts-tools.ts#accountsServer.<anonymous>#cognitive": {
         "count": 22,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
@@ -2082,10 +2078,6 @@
         "count": 29,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/sandbox/src/roles/conversation-grants.ts#grantsOver#lines": {
-        "count": 131,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/portability/arrival.routes.ts#createArrivalRoutes#lines": {
         "count": 104,
         "why": "standing when the check arrived (2026-10-16)"
@@ -2193,6 +2185,10 @@
     "_sandbox/sandbox/src/public/public-serve.ts#createPublicHandler.<anonymous>#cognitive": {
         "count": 28,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/roles/conversation-grants.ts#grantsOver#lines": {
+        "count": 131,
+        "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runners/runner-command.ts#run.<anonymous>#cognitive": {
         "count": 34,

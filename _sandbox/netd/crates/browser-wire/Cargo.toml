@@ -8,8 +8,10 @@ publish = false
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+# The browser view's `state` carries the window's entry in the browsers list, which the daemon's contract defines and
+# this crate only passes through.
+serde_json = "1"
 ts-rs = "12"
 
 [dev-dependencies]
 schemars = "1"
-serde_json = "1"

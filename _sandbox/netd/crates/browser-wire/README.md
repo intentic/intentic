@@ -1,9 +1,13 @@
 # browser-wire
 
-Everything a browser sees of a sandbox's netd and of the edge in front of it outside the daemon's oRPC contract: the terminal socket, netd's vitals, the WebTransport path and the verdict the edge refuses a request with.
+Everything a browser sees of a sandbox's netd and of the edge in front of it outside the daemon's oRPC contract: the terminal socket, the browser view socket, netd's vitals, the WebTransport path and the verdict the edge refuses a request with.
 
 - The only definition of those names and shapes. Both ends build it: [netd](../netd) answers the terminal and vitals
   paths, and the edge (`_platform/ingress`) answers the WebTransport session and sets the verdict header.
+- The browser view (`/system/browser-view`) is answered by the Node daemon until netd takes it over as it took the
+  terminal. Its messages are here already, so the daemon and the editor read one definition: every client message,
+  every server message, and the tag byte each picture starts with. Its `state` carries one browser window whole, as
+  the contract's `BrowserSession` with its `seq`, which this crate passes through without reading.
 - Standalone rather than a member of netd's workspace, like [tunnel](../tunnel), because the edge builds it by path
   from its own workspace.
 - The editor reads the same types in TypeScript. `cargo test -p browser-wire` writes them, with a manifest the

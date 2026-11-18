@@ -65,7 +65,7 @@ export const TerminalScrollbackSchema = z.object({
 });
 export type TerminalScrollback = z.infer<typeof TerminalScrollbackSchema>;
 // The Chromium the agent drives via @playwright/mcp, listed apart from terminals since it holds several pages at once,
-// not one stream. `active` is the page the agent last touched.
+// not one stream. `active` is the tab the window has in front, which is what its picture shows.
 export const BrowserPageSchema = z.object({
     id: z
         .string()
@@ -75,8 +75,11 @@ export const BrowserPageSchema = z.object({
     // The page's title; absent mid-navigation, when a tab still needs to render.
     title: z.string().optional().describe("The page's title. Absent mid-navigation, which is exactly when a tab still has to be drawn."),
     url: z.string().describe("Where it is. On the browser's error page, the address that failed to load."),
-    // The page the agent last drove; for a finished session, the one it ended on. Exactly one page has it.
-    active: z.boolean().describe("The one the agent last touched, or for a finished session, the one it ended on. Exactly one page has this."),
+    // The tab the window has in front, which its picture shows, whoever brought it there (the agent, the person, a
+    // popup opening); for a finished session, the one it ended on. Exactly one page has it.
+    active: z
+        .boolean()
+        .describe("The tab the window has in front, which is what its picture shows; for a closed browser, the one it ended on. Exactly one page has this."),
     // What a browser's own chrome says about a tab between two addresses, which the picture crops away: it turns, it
     // names the host it waits on, and it says why it gave up. All absent from a daemon older than them.
     loading: z
@@ -94,9 +97,16 @@ export const BrowserPageSchema = z.object({
         .string()
         .optional()
         .describe("Why the last navigation failed, in the browser's own words (net::ERR_CONNECTION_TIMED_OUT), while the page shows its error page."),
+    // Whether the tab's history has somewhere to go, read off Chromium after each arrival; absent from an older daemon
+    // and before the first arrival, when the buttons stay as they were.
+    canGoBack: z.boolean().optional().describe("Its history has a page before this one to go back to."),
+    canGoForward: z.boolean().optional().describe("Its history has a page after this one to go forward to."),
 });
 export const BrowserSessionSchema = z.object({
     name: z.string().describe("Its id, and what the close route takes."),
+    // Rises on every change to the window, across daemon restarts too. The same window arrives two ways, in this list
+    // and on its own view socket's `state` (browser-wire): the higher `seq` is the newer. Absent from an older daemon.
+    seq: z.number().optional().describe("Rises with every change to this window; of two copies of it, the one with the higher number is the newer."),
     // The pill's text: the active page's title, else its host, else which browser this is.
     label: z.string().describe("What to call it on screen: the open page's title, or its site, or which browser this is."),
     // Which MCP server drives it: the credential-free browser, or a signed-in capability's id.

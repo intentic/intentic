@@ -1,3 +1,4 @@
+import type { BrowserViewClientMessage } from "@intentic/sandbox-contract/browser-wire";
 import type { BrowserContext, CDPSession, Page } from "playwright";
 
 // The live-browser wire shared by a connected account's own profile (browser-profile.routes.ts) and the agent's browser view
@@ -48,76 +49,10 @@ export const encodeFrame = (frame: ScreencastFrame): Uint8Array<ArrayBuffer> => 
     return wire;
 };
 
-// Client → server input frames (JSON), mirrored on the web side since the browser can't import this contract package.
-export type ScreencastClientMessage =
-    // A pointer event with the fields a click alone can't carry:
-    // - `buttons`: DOM/CDP bitmask of what is held, read off the DOM event so a lost `up` can't strand a button as
-    //   down.
-    // - `clickCount`: the browser's own `detail`, for double- and triple-click.
-    // - modifiers, so Ctrl/Shift-click work.
-    // No `meta`: a Mac's Cmd arrives already translated to `ctrl` by the client.
-    | {
-          readonly type: "mouse";
-          readonly action: "move" | "down" | "up" | "wheel";
-          readonly x: number;
-          readonly y: number;
-          // Which button changed, in DOM numbering (0 left, 1 middle, 2 right, 3 back, 4 forward).
-          readonly button?: number;
-          // Which buttons are held, as a DOM/CDP bitmask. Present on every action, including moves.
-          readonly buttons?: number;
-          readonly clickCount?: number;
-          readonly ctrl?: boolean;
-          readonly shift?: boolean;
-          readonly alt?: boolean;
-          readonly deltaX?: number;
-          readonly deltaY?: number;
-      }
-    // `raw` asks for the keystroke on the X display rather than the page: what Chromium's own find bar needs, since a
-    // CDP key event goes to the page whatever the browser has focused.
-    | { readonly type: "text"; readonly text: string; readonly raw?: boolean }
-    // A keystroke or chord; plain typing arrives via `text` instead. No `meta`: the target Chromium is Linux, so a
-    // Mac's Cmd arrives already translated to `ctrl`.
-    | { readonly type: "key"; readonly key: string; readonly ctrl?: boolean; readonly shift?: boolean; readonly alt?: boolean; readonly raw?: boolean }
-    // Requests the owner's selection for their own clipboard, since Ctrl+C over the picture would otherwise copy to the
-    // sandbox's. Answered by a `selection` frame going the other way.
-    | { readonly type: "selection" }
-    // Which entry of the client-drawn drop-down the owner picked; applied to the `<select>` the page currently has
-    // focused.
-    | { readonly type: "selectOption"; readonly index: number }
-    // Stream a specific page (the tab strip); pins the view so the agent opening a tab does not move it, see `pinned`
-    // below.
-    | { readonly type: "bind"; readonly pageId: string }
-    // The chrome is the client's own (tabs, address bar, navigation); these are what its buttons send. The picture
-    // carries the page alone, see live-view.ts.
-    // `pageId` names the tab when the client knows it and the picture may not be on it yet (an address typed into a new
-    // tab before the tab arrived); without one it is the tab the picture shows.
-    | { readonly type: "navigate"; readonly url: string; readonly pageId?: string }
-    | { readonly type: "back" }
-    | { readonly type: "forward" }
-    | { readonly type: "reload" }
-    | { readonly type: "stop" }
-    | { readonly type: "newTab"; readonly url?: string }
-    | { readonly type: "closeTab"; readonly pageId: string }
-    // The client's picture box in CSS px; the daemon sizes the browser window so the viewport is exactly that. Ignored
-    // while a device is emulated (the device decides the size), but remembered and applied once it is not.
-    | { readonly type: "resize"; readonly width: number; readonly height: number }
-    // The viewer's decoder lost the stream: a fresh keyframe, by restarting the stream (videocast.ts's frameGate).
-    | { readonly type: "keyframe" }
-    // Renders the page this view shows, and any it shows after, as a device (emulation.ts): its CSS size, `mobile` for
-    // the meta viewport, touch, and a user agent when given. Without `device`, back to the browser itself. Answered by
-    // a fresh `ready` with the picture's new size. Checked at the view (EmulateMessageSchema), not trusted as typed.
-    | {
-          readonly type: "emulate";
-          readonly device?: { readonly width: number; readonly height: number; readonly mobile: boolean; readonly userAgent?: string };
-      }
-    // Answers the JavaScript dialog the session lists (browser-sessions.ts); `text` is a prompt's reply.
-    | { readonly type: "dialog"; readonly accept: boolean; readonly text?: string }
-    // Tab backgrounded or route left; stops encoding and sending rather than pushing frames at a hidden `<img>`
-    // forever.
-    | { readonly type: "pause" }
-    | { readonly type: "resume" }
-    | { readonly type: "done" }
-    | { readonly type: "ping" };
+// Client → server messages (JSON), each answered by this view or the session behind it: browser-wire's
+// BrowserViewClientMessage, the one definition the editor sends from too. Parsed loosely by the routes, so every field
+// is read as the daemon's guess of the client, never trusted as typed.
+export type ScreencastClientMessage = BrowserViewClientMessage;
 
 // DOM button index to CDP name; "none" is what a move carries, since CDP treats a move naming a button as a button
 // event.

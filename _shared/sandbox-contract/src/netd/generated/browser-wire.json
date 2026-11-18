@@ -1,4 +1,764 @@
 {
+  "browserView": {
+    "client": {
+      "$defs": {
+        "EmulatedDevice": {
+          "description": "A phone a page is rendered as: its CSS viewport in portrait, whether it is a touch screen with a meta viewport, and\nthe user agent it sends.",
+          "properties": {
+            "height": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "mobile": {
+              "type": "boolean"
+            },
+            "userAgent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "width": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "width",
+            "height",
+            "mobile"
+          ],
+          "type": "object"
+        },
+        "PointerAction": {
+          "description": "What a pointer event did.",
+          "enum": [
+            "move",
+            "down",
+            "up",
+            "wheel"
+          ],
+          "type": "string"
+        }
+      },
+      "description": "What the editor sends on a browser view socket, each a JSON text message. Nothing that drives the page is sent\nuntil the person takes control; watching sends only the view's own housekeeping (`resize`, `pause`, `ping`, …).",
+      "oneOf": [
+        {
+          "description": "A pointer event in the picture's own pixels, with what a click alone cannot carry: `buttons`, the DOM bitmask of\nwhat is held, so a lost `up` cannot strand a button down; `clickCount`, the browser's own `detail`; and the\nmodifiers. No `meta`: the sandbox's Chromium is Linux, so a Mac's Cmd arrives already as `ctrl`.",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/PointerAction"
+            },
+            "alt": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "button": {
+              "description": "Which button changed, in DOM numbering (0 left, 1 middle, 2 right, 3 back, 4 forward).",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "buttons": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "clickCount": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ctrl": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "deltaX": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "deltaY": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "shift": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "mouse",
+              "type": "string"
+            },
+            "x": {
+              "format": "double",
+              "type": "number"
+            },
+            "y": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "action",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Typed or pasted text. `raw` puts it on the X display rather than into the page: what Chromium's own find bar\nneeds, since a page-level key event goes to the page whatever the browser has focused.",
+          "properties": {
+            "raw": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A keystroke or chord that is not plain text, by its DOM key name.",
+          "properties": {
+            "alt": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "ctrl": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "key": {
+              "type": "string"
+            },
+            "raw": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "shift": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "key",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Asks what the page has selected, for the person's own clipboard; answered by `selection`.",
+          "properties": {
+            "type": {
+              "const": "selection",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The entry of a drop-down the viewer drew itself (frames path only) that the person picked.",
+          "properties": {
+            "index": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "selectOption",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "index"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Brings a tab in front. The window shows one tab at a time for every viewer, so this moves everyone's picture,\nand the next `state` says so; a tab already gone is answered by `gone`.",
+          "properties": {
+            "pageId": {
+              "type": "string"
+            },
+            "type": {
+              "const": "bind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pageId"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Goes to an address, in the tab `pageId` names, or the one in front without it.",
+          "properties": {
+            "pageId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "navigate",
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "back",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "forward",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "reload",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "stop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "newTab",
+              "type": "string"
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "pageId": {
+              "type": "string"
+            },
+            "type": {
+              "const": "closeTab",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pageId"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The viewer's picture box in CSS px, rounded: the size the browser's viewport is asked to take.",
+          "properties": {
+            "height": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "resize",
+              "type": "string"
+            },
+            "width": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The viewer's decoder lost the stream and needs a keyframe to start again.",
+          "properties": {
+            "type": {
+              "const": "keyframe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Renders the page as `device`, or as itself again without one. Answered by a fresh `ready`.",
+          "properties": {
+            "device": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EmulatedDevice"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "emulate",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Answers the JavaScript dialog the window's state lists; `text` is a prompt's reply.",
+          "properties": {
+            "accept": {
+              "type": "boolean"
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "dialog",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "accept"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Nobody can see the picture now (a background tab, a parked view): stop sending it until `resume`.",
+          "properties": {
+            "type": {
+              "const": "pause",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "resume",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The account sign-in window only: the person is finished, and the profile is kept.",
+          "properties": {
+            "type": {
+              "const": "done",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The client's liveness; answered by `pong`.",
+          "properties": {
+            "type": {
+              "const": "ping",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "BrowserViewClientMessage"
+    },
+    "frameTags": {
+      "h264Delta": 4,
+      "h264DeltaQuiet": 6,
+      "h264Key": 3,
+      "h264KeyQuiet": 5,
+      "jpeg": 0,
+      "svg": 2,
+      "webp": 1
+    },
+    "path": "/system/browser-view",
+    "server": {
+      "$defs": {
+        "PictureKind": {
+          "description": "Which decoder a picture needs.",
+          "oneOf": [
+            {
+              "const": "video",
+              "description": "H.264 of the page's viewport off the browser's X display.",
+              "type": "string"
+            },
+            {
+              "const": "frames",
+              "description": "One image per change from the page's compositor, for a browser with no display.",
+              "type": "string"
+            }
+          ]
+        },
+        "PictureRect": {
+          "properties": {
+            "height": {
+              "format": "double",
+              "type": "number"
+            },
+            "width": {
+              "format": "double",
+              "type": "number"
+            },
+            "x": {
+              "format": "double",
+              "type": "number"
+            },
+            "y": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        },
+        "SelectEntry": {
+          "properties": {
+            "disabled": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "label",
+            "disabled"
+          ],
+          "type": "object"
+        },
+        "SelectMenu": {
+          "description": "A native drop-down the frames path cannot show in its pictures, for the viewer to draw: its entries, the one\nchosen, and where it opens, in the picture's pixels.",
+          "properties": {
+            "options": {
+              "items": {
+                "$ref": "#/$defs/SelectEntry"
+              },
+              "type": "array"
+            },
+            "rect": {
+              "$ref": "#/$defs/PictureRect"
+            },
+            "selected": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "options",
+            "selected",
+            "rect"
+          ],
+          "type": "object"
+        }
+      },
+      "description": "What a browser view socket sends as JSON text; the pictures travel as binary messages, each starting with one of\n[`BROWSER_FRAME_TAGS`].",
+      "oneOf": [
+        {
+          "description": "What the pictures after this one are: their decoder, and their size in the display's pixels, `scale` of them per\nCSS pixel, which is what pointer coordinates are in. `codec` is read off the stream, on the video path only.",
+          "properties": {
+            "codec": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "height": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "$ref": "#/$defs/PictureKind"
+            },
+            "scale": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": {
+              "const": "ready",
+              "type": "string"
+            },
+            "width": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "width",
+            "height",
+            "scale"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The window as the sandbox knows it now, whole: its tabs, which one is in front, what each is loading, an open\ndialog. Sent when the socket opens and again on every change, in order with the pictures, so the tabs a viewer\ndraws and the picture it shows agree. It is the window's entry in the browsers list (the contract's\n`BrowserSession`), carrying the same `seq`: of two copies, the higher `seq` is the newer. Absent from an older\nsandbox, whose viewers read the list alone.",
+          "properties": {
+            "session": true,
+            "type": {
+              "const": "state",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "session"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The CSS cursor the page shows under the pointer, sent when it changes.",
+          "properties": {
+            "cursor": {
+              "type": "string"
+            },
+            "type": {
+              "const": "cursor",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cursor"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A drop-down to draw, or null to close the one drawn (frames path only).",
+          "properties": {
+            "menu": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SelectMenu"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "select",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "What the page has selected, answering `selection`; empty when nothing is.",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "selection",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The tab a `bind` named has closed.",
+          "properties": {
+            "pageId": {
+              "type": "string"
+            },
+            "type": {
+              "const": "gone",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pageId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "pong",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The window is gone for good, in words for the person; the viewer must not reconnect.",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "const": "error",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The account sign-in window only: its profile was kept.",
+          "properties": {
+            "type": {
+              "const": "saved",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "BrowserViewServerMessage"
+    }
+  },
   "edge": {
     "verdictHeader": "x-intentic-edge",
     "verdicts": {

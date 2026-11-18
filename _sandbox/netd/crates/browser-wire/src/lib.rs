@@ -206,6 +206,276 @@ pub enum TerminalServerMessage {
     Deflate,
 }
 
+/// Where a browser view socket opens, on a sandbox's address: a WebSocket that shows one of the sandbox's browser windows
+/// and carries the person's input back. Node answers it today; it is written here, beside the terminal's, because netd
+/// is to serve it the way it serves terminals.
+pub const BROWSER_VIEW_PATH: &str = "/system/browser-view";
+
+/// The tag byte that starts every binary message on a browser view socket, so one socket carries every kind of picture
+/// and the decoder is told what it cannot work out itself. The rest of the message is the picture's bytes.
+pub const BROWSER_FRAME_TAGS: [(&str, u8); 7] = [
+    // One whole image each, on the frames path: a browser with no display, photographed by its compositor.
+    ("jpeg", 0),
+    // On the video path, a sharp still of the settled page, laid over the video.
+    ("webp", 1),
+    // The recorded demo's drawn pages; no sandbox sends it.
+    ("svg", 2),
+    // H.264, one access unit each: a keyframe can start a decoder, a delta cannot.
+    ("h264Key", 3),
+    ("h264Delta", 4),
+    // The same two, quiet: nothing in them a still the viewer holds does not show, so decoded but not painted.
+    ("h264KeyQuiet", 5),
+    ("h264DeltaQuiet", 6),
+];
+
+/// What a pointer event did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub enum PointerAction {
+    Move,
+    Down,
+    Up,
+    Wheel,
+}
+
+/// A phone a page is rendered as: its CSS viewport in portrait, whether it is a touch screen with a meta viewport, and
+/// the user agent it sends.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub struct EmulatedDevice {
+    pub width: u32,
+    pub height: u32,
+    pub mobile: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub user_agent: Option<String>,
+}
+
+/// What the editor sends on a browser view socket, each a JSON text message. Nothing that drives the page is sent
+/// until the person takes control; watching sends only the view's own housekeeping (`resize`, `pause`, `ping`, …).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub enum BrowserViewClientMessage {
+    /// A pointer event in the picture's own pixels, with what a click alone cannot carry: `buttons`, the DOM bitmask of
+    /// what is held, so a lost `up` cannot strand a button down; `clickCount`, the browser's own `detail`; and the
+    /// modifiers. No `meta`: the sandbox's Chromium is Linux, so a Mac's Cmd arrives already as `ctrl`.
+    #[serde(rename_all = "camelCase")]
+    Mouse {
+        action: PointerAction,
+        x: f64,
+        y: f64,
+        /// Which button changed, in DOM numbering (0 left, 1 middle, 2 right, 3 back, 4 forward).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        button: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        buttons: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        click_count: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        ctrl: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        shift: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        alt: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        delta_x: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        delta_y: Option<f64>,
+    },
+    /// Typed or pasted text. `raw` puts it on the X display rather than into the page: what Chromium's own find bar
+    /// needs, since a page-level key event goes to the page whatever the browser has focused.
+    Text {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        raw: Option<bool>,
+    },
+    /// A keystroke or chord that is not plain text, by its DOM key name.
+    Key {
+        key: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        ctrl: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        shift: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        alt: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        raw: Option<bool>,
+    },
+    /// Asks what the page has selected, for the person's own clipboard; answered by `selection`.
+    Selection,
+    /// The entry of a drop-down the viewer drew itself (frames path only) that the person picked.
+    SelectOption {
+        index: u32,
+    },
+    /// Brings a tab in front. The window shows one tab at a time for every viewer, so this moves everyone's picture,
+    /// and the next `state` says so; a tab already gone is answered by `gone`.
+    #[serde(rename_all = "camelCase")]
+    Bind {
+        page_id: String,
+    },
+    /// Goes to an address, in the tab `pageId` names, or the one in front without it.
+    #[serde(rename_all = "camelCase")]
+    Navigate {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        page_id: Option<String>,
+    },
+    Back,
+    Forward,
+    Reload,
+    Stop,
+    NewTab {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        url: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    CloseTab {
+        page_id: String,
+    },
+    /// The viewer's picture box in CSS px, rounded: the size the browser's viewport is asked to take.
+    Resize {
+        width: u32,
+        height: u32,
+    },
+    /// The viewer's decoder lost the stream and needs a keyframe to start again.
+    Keyframe,
+    /// Renders the page as `device`, or as itself again without one. Answered by a fresh `ready`.
+    Emulate {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        device: Option<EmulatedDevice>,
+    },
+    /// Answers the JavaScript dialog the window's state lists; `text` is a prompt's reply.
+    Dialog {
+        accept: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        text: Option<String>,
+    },
+    /// Nobody can see the picture now (a background tab, a parked view): stop sending it until `resume`.
+    Pause,
+    Resume,
+    /// The account sign-in window only: the person is finished, and the profile is kept.
+    Done,
+    /// The client's liveness; answered by `pong`.
+    Ping,
+}
+
+/// Which decoder a picture needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub enum PictureKind {
+    /// H.264 of the page's viewport off the browser's X display.
+    Video,
+    /// One image per change from the page's compositor, for a browser with no display.
+    Frames,
+}
+
+/// A native drop-down the frames path cannot show in its pictures, for the viewer to draw: its entries, the one
+/// chosen, and where it opens, in the picture's pixels.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[ts(export, export_to = "browser-wire.ts")]
+pub struct SelectMenu {
+    pub options: Vec<SelectEntry>,
+    pub selected: i32,
+    pub rect: PictureRect,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[ts(export, export_to = "browser-wire.ts")]
+pub struct SelectEntry {
+    pub label: String,
+    pub disabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[ts(export, export_to = "browser-wire.ts")]
+pub struct PictureRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// What a browser view socket sends as JSON text; the pictures travel as binary messages, each starting with one of
+/// [`BROWSER_FRAME_TAGS`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export, export_to = "browser-wire.ts")]
+pub enum BrowserViewServerMessage {
+    /// What the pictures after this one are: their decoder, and their size in the display's pixels, `scale` of them per
+    /// CSS pixel, which is what pointer coordinates are in. `codec` is read off the stream, on the video path only.
+    Ready {
+        kind: PictureKind,
+        width: u32,
+        height: u32,
+        scale: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        codec: Option<String>,
+    },
+    /// The window as the sandbox knows it now, whole: its tabs, which one is in front, what each is loading, an open
+    /// dialog. Sent when the socket opens and again on every change, in order with the pictures, so the tabs a viewer
+    /// draws and the picture it shows agree. It is the window's entry in the browsers list (the contract's
+    /// `BrowserSession`), carrying the same `seq`: of two copies, the higher `seq` is the newer. Absent from an older
+    /// sandbox, whose viewers read the list alone.
+    State {
+        #[ts(type = "unknown")]
+        session: serde_json::Value,
+    },
+    /// The CSS cursor the page shows under the pointer, sent when it changes.
+    Cursor {
+        cursor: String,
+    },
+    /// A drop-down to draw, or null to close the one drawn (frames path only).
+    Select {
+        menu: Option<SelectMenu>,
+    },
+    /// What the page has selected, answering `selection`; empty when nothing is.
+    Selection {
+        text: String,
+    },
+    /// The tab a `bind` named has closed.
+    #[serde(rename_all = "camelCase")]
+    Gone {
+        page_id: String,
+    },
+    Pong,
+    /// The window is gone for good, in words for the person; the viewer must not reconnect.
+    Error {
+        message: String,
+    },
+    /// The account sign-in window only: its profile was kept.
+    Saved,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,6 +495,12 @@ mod tests {
             "edge": {
                 "verdictHeader": VERDICT_HEADER,
                 "verdicts": schema::<EdgeVerdict>(),
+            },
+            "browserView": {
+                "path": BROWSER_VIEW_PATH,
+                "frameTags": BROWSER_FRAME_TAGS.iter().map(|(name, tag)| (name.to_string(), serde_json::json!(tag))).collect::<serde_json::Map<_, _>>(),
+                "client": schema::<BrowserViewClientMessage>(),
+                "server": schema::<BrowserViewServerMessage>(),
             },
             "terminal": {
                 "path": TERMINAL_PATH,
@@ -313,6 +589,91 @@ mod tests {
             .map(|link| serde_json::to_string(link).unwrap())
             .collect();
         assert_eq!(spellings, [r#""starting""#, r#""up""#, r#""restarting""#]);
+    }
+
+    #[test]
+    fn a_browser_view_speaks_the_json_the_editor_and_daemon_already_exchange() {
+        let click: BrowserViewClientMessage = serde_json::from_str(
+            r#"{"type":"mouse","action":"down","x":10.5,"y":20,"button":0,"buttons":1,"clickCount":2,"ctrl":true}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            click,
+            BrowserViewClientMessage::Mouse {
+                action: PointerAction::Down,
+                x: 10.5,
+                y: 20.0,
+                button: Some(0),
+                buttons: Some(1),
+                click_count: Some(2),
+                ctrl: Some(true),
+                shift: None,
+                alt: None,
+                delta_x: None,
+                delta_y: None,
+            }
+        );
+        let bind: BrowserViewClientMessage =
+            serde_json::from_str(r#"{"type":"bind","pageId":"p3"}"#).unwrap();
+        assert_eq!(
+            bind,
+            BrowserViewClientMessage::Bind {
+                page_id: "p3".into()
+            }
+        );
+        let phone: BrowserViewClientMessage = serde_json::from_str(
+            r#"{"type":"emulate","device":{"width":390,"height":844,"mobile":true,"userAgent":"x"}}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            phone,
+            BrowserViewClientMessage::Emulate {
+                device: Some(EmulatedDevice {
+                    width: 390,
+                    mobile: true,
+                    ..
+                })
+            }
+        ));
+        let off: BrowserViewClientMessage = serde_json::from_str(r#"{"type":"emulate"}"#).unwrap();
+        assert_eq!(off, BrowserViewClientMessage::Emulate { device: None });
+        assert_eq!(
+            serde_json::to_string(&BrowserViewServerMessage::Ready {
+                kind: PictureKind::Video,
+                width: 1280,
+                height: 800,
+                scale: 1.0,
+                codec: Some("avc1.42c028".into()),
+            })
+            .unwrap(),
+            r#"{"type":"ready","kind":"video","width":1280,"height":800,"scale":1.0,"codec":"avc1.42c028"}"#
+        );
+        let state = BrowserViewServerMessage::State {
+            session: serde_json::json!({"name": "browser-own", "seq": 7}),
+        };
+        assert_eq!(
+            serde_json::to_string(&state).unwrap(),
+            r#"{"type":"state","session":{"name":"browser-own","seq":7}}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserViewServerMessage::Select { menu: None }).unwrap(),
+            r#"{"type":"select","menu":null}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&BrowserViewServerMessage::Gone {
+                page_id: "p1".into()
+            })
+            .unwrap(),
+            r#"{"type":"gone","pageId":"p1"}"#
+        );
+    }
+
+    #[test]
+    fn every_browser_frame_tag_is_one_byte_of_its_own() {
+        let mut tags: Vec<u8> = BROWSER_FRAME_TAGS.iter().map(|(_, tag)| *tag).collect();
+        tags.sort_unstable();
+        tags.dedup();
+        assert_eq!(tags.len(), BROWSER_FRAME_TAGS.len());
     }
 
     #[test]

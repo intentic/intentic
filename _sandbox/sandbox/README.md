@@ -619,6 +619,15 @@ flowchart LR
   http instead. (2026-11-03: `web` used to carry the stealth script, and agents read its seeded GPU name as the hardware
   a game ran on. `file://` stays off rather than turning on @playwright/mcp's `allowUnrestrictedFileAccess`, which has no
   `/work` scope and lifts its limits on uploads and written files too; WASM and WebGPU need an http origin anyway.)
+- Every browser window the daemon lists, an agent's or the person's own, is one record (`browser/state/`), and each
+  change to it raises its `seq` and goes two ways: to the browsers list on the runtime feed's beat, and at once, whole,
+  to that window's view sockets as `state` (browser-wire), so the tabs a viewer draws and the picture it shows agree.
+  Which tab is in front is asked of Chromium itself (`front-tab.ts`'s DevTools list), by one reader per window
+  (`front-reader.ts`): when a tab opens or closes, when an agent's browser call returns, and every 2 s while someone
+  watches. A person's pick is brought in front for every viewer and told at once. (2026-11-18: before, each viewer
+  polled Chromium once a second on its own, and the list called the tab that last navigated the active one, so a tab
+  loading behind the others took the strip while the picture stayed put. A page cannot say whether it is in front:
+  Playwright's focus emulation keeps every tab "visible".)
 - The routers also answer tools of their own, sent to a backend as its own tools: `browser_webmcp_call`
   (`webmcp-call.ts`) and, on `browser`, the ChatGPT kit of [site-kits](../../_shared/site-kits) (`chatgpt_send`,
   `chatgpt_read`, `chatgpt_image`; `chatgpt-kit.ts`), listed only when one of the turn's accounts signs in on

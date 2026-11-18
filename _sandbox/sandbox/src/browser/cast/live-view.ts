@@ -2,7 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { BrowserContext, CDPSession, Page } from "playwright";
 import { type Display, displayOf } from "./display.js";
 import { type Device, EmulateMessageSchema, PHONE_BOX, type Phone, phoneFor, putPhoneOn, takePhoneOff } from "./emulation.js";
-import { frontTab, knownTargetId } from "./front-tab.js";
+import { frontTab, knownTargetId } from "../state/front-tab.js";
 import { regionsEqual, type Region, type Screen } from "./region.js";
 import {
     applySelect,
@@ -274,7 +274,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     // by the newest still open.
     const followFront = async (): Promise<void> => {
         const before = current;
-        const fronted = await frontTab(context, endpoint);
+        const fronted = options.front === undefined ? await frontTab(context, endpoint) : options.front.page();
         const front = fronted ?? (before === undefined || before.isClosed() ? context.pages().at(-1) : undefined);
         // A page attached while this was asking (a tab just opened, a tab the owner picked) is newer than the answer,
         // which was read before it; the next tick asks again.
@@ -302,6 +302,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         watchClose(page);
     }
     void followFront();
+    const unwatchFront = options.front?.watch(() => void followFront());
 
     const ticker = setInterval(() => {
         if (paused || stopped) {
@@ -417,6 +418,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
             stopped = true;
             log(counts, "live view: stopped");
             clearInterval(ticker);
+            unwatchFront?.();
             context.off("page", follow);
             gate.stop();
             cast?.stop();
@@ -578,8 +580,11 @@ const startFramesView = async (context: BrowserContext, sink: Sink, onError: (re
 };
 
 export interface LiveViewOptions {
-    // The browser's DevTools HTTP endpoint (http://127.0.0.1:<port>): how the video path knows which tab the display
-    // shows (front-tab.ts). Without it the picture follows only what the view itself opens, binds and loses.
+    // The window's own word on which tab it has in front, and a way to hear when that changes (browser-sessions.ts):
+    // what the video path follows for a window the browsers list holds, so every viewer and the tab strip agree.
+    readonly front?: { readonly page: () => Page | undefined; readonly watch: (changed: () => void) => () => void } | undefined;
+    // The browser's DevTools HTTP endpoint (http://127.0.0.1:<port>), asked each second (front-tab.ts) where there is no
+    // `front` to follow. Without either the picture follows only what the view itself opens, binds and loses.
     readonly endpoint?: string | undefined;
     // Debug lines from the video path: each tab the picture follows and why, and what it sent and dropped when it
     // stops. Absent logs nothing.

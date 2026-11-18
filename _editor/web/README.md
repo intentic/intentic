@@ -508,7 +508,11 @@ flowchart LR
   its tabs (an app, the desktop, a web window) is a side tab of its own, all sharing the one view (a `shared` side
   view, `shell/side/SideBrowsers.vue`), so the panel's strip is the only one there. Its state (pins, the tab in front,
   opening one beside) is `workbench/browsers/`, which any feature may call; a tab's key is the route's tail
-  (`browsersPaths.ts`).
+  (`browsersPaths.ts`). A web window reaches the view twice, in the browsers list and whole on its own socket's
+  `state` on every change; the strip and the address bar draw from whichever copy has the higher `seq`
+  (`features/browsers/activePage.ts`). The tab in front is the window's word for every viewer: a picked tab is brought
+  in front for all of them, and the pick lasts only until the window says so, after which an agent switching tabs moves
+  the strip with the picture.
   _2026-10-08: the Preview and Desktop views became tabs of Browsers. Both had been a screen of their own for one kind
   of live thing, with a picker standing in for tabs; `/preview` and `/desktop` redirect to their tabs._
 - **The browser tab.** `shell/browser-tab/` (its chimes and preferences in `workbench/browser-tab/`) shows the fleet's

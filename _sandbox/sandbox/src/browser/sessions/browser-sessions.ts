@@ -1,12 +1,18 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
+import type { BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
-import type { Browser, BrowserContext, Dialog, Page } from "playwright";
-import { publishRuntimeChange, publishRuntimeMilestone } from "../../seams/runtime-feed.js";
+import type { BrowserContext, Page } from "playwright";
+import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { releaseDisplay } from "../cast/display.js";
 import { placeWindow } from "../cast/region.js";
 import { armPasskeys } from "../tools/passkeys.js";
-import { freshNavigation, navigationCommitted, navigationFields, type NavigationState, watchLoading, watchNavigation } from "../navigation/page-navigation.js";
+import { freshNavigation, navigationCommitted, watchLoading, watchNavigation } from "../navigation/page-navigation.js";
+import { type FrontReader, frontReader } from "../state/front-reader.js";
+import { frontTab } from "../state/front-tab.js";
+import { historyOf } from "../state/page-history.js";
+import { nextSeq, windowChanged, windowWatched } from "../state/window-feed.js";
+import type { BrowserSessionRecord, PageRecord } from "../state/window-record.js";
+import { summarizeWindow } from "../state/window-summary.js";
 
 // Makes the agent's browser (launched and owned by @playwright/mcp) visible to the daemon: it attaches over CDP the
 // first time a browser tool is called, without taking over Chromium's lifecycle.
@@ -25,58 +31,9 @@ const TAB_ID_TICK_MS = 25;
 // How long a finished session stays listable, matching terminal-session.ts's retention window.
 const RETAIN_FINISHED_MS = 2 * 3_600_000;
 
-// One open tab: `page` is held so a bind looks it up rather than re-deriving from a possibly-stale url.
-// id is minted per session (p1, p2, …), opaque, stable for the page's life, and never reused.
-interface PageRecord {
-    readonly id: string;
-    readonly page: Page;
-    url: string;
-    title: string | undefined;
-    // Marked, not deleted: close/disconnect order isn't guaranteed; deletion could empty a finished session's strip.
-    closed: boolean;
-    // The JavaScript dialog the page has open, held for whoever answers first; see watchPage.
-    dialog: Dialog | undefined;
-    // What it is doing between addresses: loading, a navigation in flight, the reason the last one failed
-    // (page-navigation.ts).
-    readonly navigation: NavigationState;
-}
-
-// What the daemon knows about one browser; `context` is set only once the CDP attach lands. Most are an agent's; the
-// person's own window (own-browser.ts) is adopted with its context already in hand and a shutdown of its own.
-interface BrowserSessionRecord {
-    readonly name: string;
-    // The person's own window rather than an agent's: never reaped for idleness, and labelled by its page alone.
-    readonly own: boolean;
-    // How the window is ended when it is ours to end: Chromium's orderly close for a browser this daemon started, where
-    // Playwright's close() on an attached browser would only disconnect and leave the process running.
-    readonly shutdown: (() => Promise<void>) | undefined;
-    // Owning conversation, the reaper's key; undefined for a turn with no conversation (the bench).
-    readonly owner: string | undefined;
-    // MCP server driving it: `web`, or a logged-in capability's id.
-    readonly server: string;
-    readonly port: number;
-    // Passkey store for a logged-in capability; undefined for `web`, which holds no identity.
-    readonly passkeyStore: string | undefined;
-    readonly startedAt: number;
-    activityAt: number;
-    // Open pages, in open order, the order a browser's tab strip shows them.
-    readonly pages: Map<string, PageRecord>;
-    nextPageId: number;
-    // Last-driven page still open, the tab strip highlight; falls back as tabs close, undefined once none remain.
-    activePageId: string | undefined;
-    // Last page driven, never walked back (unlike activePageId); a finished session's label needs where it ended.
-    lastPageId: string | undefined;
-    // Set when the browser went away: turn ended, browser_close, or Chromium crashed.
-    finishedAt: number | undefined;
-    // Parked help request the agent is blocked on; cleared when the waiter settles or the session finishes.
-    help: { readonly requestId: string; readonly message: string; readonly requestedAt: number } | undefined;
-    // Settles that request as not-helped, bound by whoever raised it; what a closing browser owes its waiter.
-    abandonHelp: ((note: string) => void) | undefined;
-    browser: Browser | undefined;
-    context: BrowserContext | undefined;
-    // In-flight attach; a second tool call doesn't start another one, and the view route can await it.
-    attaching: Promise<BrowserContext | undefined> | undefined;
-}
+// A tab that just opened is taken to be in front at once, as Chromium puts it there; Chromium is asked again this much
+// later, once it lists the tab, for one opened behind (a Ctrl+click).
+const OPENED_TAB_SETTLE_MS = 150;
 
 const sessions = new Map<string, BrowserSessionRecord>();
 const consumers = new WeakMap<BrowserSessionRecord, number>();
@@ -114,17 +71,45 @@ export const browserServerOfTool = (tool: string): string | undefined => {
     return match?.[1];
 };
 
-// Records a page's current url/title and marks it active, this module's stand-in for foreground, since there's no CDP
-// signal for it in a headless browser.
+const bringForward = (record: BrowserSessionRecord, pageId: string): void => {
+    record.activePageId = pageId;
+    record.lastPageId = pageId;
+};
+
+// The window's reader of which tab is in front (front-reader.ts), for a browser with a DevTools port to ask.
+const readerFor = (record: BrowserSessionRecord, context: BrowserContext): FrontReader | undefined => {
+    if (record.port <= 0) {
+        return undefined;
+    }
+    const endpoint = `http://127.0.0.1:${record.port}`;
+    return frontReader({
+        read: async () => {
+            const page = await frontTab(context, endpoint);
+            return [...record.pages.values()].find((entry) => entry.page === page && !entry.closed)?.id;
+        },
+        apply: (pageId) => {
+            if (record.activePageId !== pageId && record.finishedAt === undefined) {
+                bringForward(record, pageId);
+                windowChanged(record, true);
+            }
+        },
+        watched: () => windowWatched(record.name),
+    });
+};
+
+// Records a page's current url, title and history. Which tab is in front is the reader's to say; a window without one
+// (no DevTools port to ask) takes the tab last driven for it.
 // Title is optional: a page mid-navigation may have a url but not yet a title.
 const notePage = async (record: BrowserSessionRecord, entry: PageRecord): Promise<void> => {
     record.activityAt = Date.now();
-    record.activePageId = entry.id;
-    record.lastPageId = entry.id;
+    if (record.front === undefined || record.activePageId === undefined) {
+        bringForward(record, entry.id);
+    }
     entry.url = entry.page.url();
     await readTitle(entry);
-    // Navigating the active page is what changes the roster; rate-limited on the bus, not here.
-    publishRuntimeChange("browsers");
+    entry.history = entry.cdp === undefined ? entry.history : ((await historyOf(entry.cdp)) ?? entry.history);
+    // Rate-limited on the bus, not here.
+    windowChanged(record);
 };
 
 // Throws if the page navigated away mid-read; the next event retries. An empty title counts as no title. A read that
@@ -140,29 +125,33 @@ const readTitle = async (entry: PageRecord): Promise<void> => {
 // A tab setting off, arriving or failing is what a viewer is watching for, so it goes out within the milestone window
 // rather than the domain's second. Come to rest (stopped, failed, loaded), it reads its title again, the one a read on
 // the way could not have.
-const navigationMoved = (entry: PageRecord): void => {
-    publishRuntimeMilestone("browsers");
+const navigationMoved = (record: BrowserSessionRecord, entry: PageRecord): void => {
+    windowChanged(record, true);
     if (!entry.navigation.loading && entry.navigation.pending === undefined) {
-        void readTitle(entry).then(() => publishRuntimeChange("browsers"));
+        void readTitle(entry).then(() => windowChanged(record));
     }
 };
 
 // The page's own DevTools session, for what Playwright says nothing about after the fact: a dialog closing, by whichever
 // hand (the owner's answer over the view, or the agent's browser_handle_dialog), and Chromium's own loading flag.
-const watchPageSession = async (context: BrowserContext, entry: PageRecord): Promise<void> => {
+const watchPageSession = async (record: BrowserSessionRecord, context: BrowserContext, entry: PageRecord): Promise<void> => {
     const session = await context.newCDPSession(entry.page).catch(() => undefined);
     if (session === undefined) {
         return;
     }
+    entry.cdp = session;
     session.on("Page.javascriptDialogClosed", () => {
         if (entry.dialog !== undefined) {
             entry.dialog = undefined;
-            publishRuntimeChange("browsers");
+            windowChanged(record);
         }
     });
     entry.page.once("close", () => void session.detach().catch(() => undefined));
     await session.send("Page.enable").catch(() => undefined);
-    await watchLoading(session, entry.navigation, () => navigationMoved(entry));
+    await watchLoading(session, entry.navigation, () => navigationMoved(record, entry));
+    // What arrived before this session opened has a history already.
+    entry.history = (await historyOf(session)) ?? entry.history;
+    windowChanged(record);
 };
 
 const watchPage = (record: BrowserSessionRecord, page: Page): void => {
@@ -174,9 +163,14 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
         closed: false,
         dialog: undefined,
         navigation: freshNavigation(),
+        cdp: undefined,
+        history: undefined,
     };
     record.nextPageId += 1;
     record.pages.set(entry.id, entry);
+    // Opened in front, where Chromium puts a new tab or popup, until Chromium is asked (a Ctrl+click opens one behind).
+    bringForward(record, entry.id);
+    record.front?.schedule(OPENED_TAB_SETTLE_MS);
     // Unreported: no logger reaches this module (agent.ts and codex-agent.ts open sessions without one).
     if (record.passkeyStore !== undefined && record.context !== undefined) {
         void armPasskeys(record.context, page, record.passkeyStore, () => undefined).catch(() => undefined);
@@ -186,15 +180,15 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
     // answers over the view (answerBrowserDialog), the agent through its tool; Chromium closes it once for both.
     page.on("dialog", (dialog) => {
         entry.dialog = dialog;
-        publishRuntimeChange("browsers");
+        windowChanged(record);
     });
     if (record.context !== undefined) {
-        void watchPageSession(record.context, entry);
+        void watchPageSession(record, record.context, entry);
         // A popup lands wherever a display with no window manager puts it; over its opener, where the viewer looks.
         void placeWindow(record.context, page).catch(() => undefined);
     }
     void notePage(record, entry);
-    watchNavigation(page, entry.navigation, () => navigationMoved(entry));
+    watchNavigation(page, entry.navigation, () => navigationMoved(record, entry));
     page.on("framenavigated", (frame) => {
         if (frame.parentFrame() === null) {
             navigationCommitted(entry.navigation, frame.url());
@@ -203,13 +197,15 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
     });
     // SPA titles set post-load; domcontentloaded is the only signal for that.
     page.on("domcontentloaded", () => void notePage(record, entry));
-    // Closed tab leaves the strip; active falls back to the newest still-open page. lastPageId is untouched here.
+    // Closed tab leaves the strip; active falls back to the newest still-open page until Chromium says which one it put
+    // in front. lastPageId is untouched here.
     page.on("close", () => {
         entry.closed = true;
         if (record.activePageId === entry.id) {
             record.activePageId = [...record.pages.values()].findLast((other) => !other.closed)?.id;
         }
-        publishRuntimeChange("browsers");
+        record.front?.schedule();
+        windowChanged(record);
     });
 };
 
@@ -235,6 +231,8 @@ const finish = (record: BrowserSessionRecord): void => {
         return;
     }
     record.finishedAt = Date.now();
+    record.front?.stop();
+    record.front = undefined;
     // Settles any parked help request as not-helped; idempotent against a racing turn-abort settle.
     record.abandonHelp?.("the browser closed before anyone could help");
     record.help = undefined;
@@ -244,7 +242,7 @@ const finish = (record: BrowserSessionRecord): void => {
     record.attaching = undefined;
     // After finishedAt is stamped, so this record no longer counts itself as a user of its own display.
     releaseIdleDisplay(record.server);
-    publishRuntimeChange("browsers");
+    windowChanged(record);
 };
 
 // State side of the help-request flow (accounts-tools.ts holds the waiter); the view's banner renders from this.
@@ -261,7 +259,7 @@ export const raiseBrowserHelp = (
     }
     record.help = help;
     record.abandonHelp = abandon;
-    publishRuntimeChange("browsers");
+    windowChanged(record, true);
     return record.name;
 };
 
@@ -271,7 +269,7 @@ export const clearBrowserHelp = (requestId: string): void => {
         if (record.help?.requestId === requestId) {
             record.help = undefined;
             record.abandonHelp = undefined;
-            publishRuntimeChange("browsers");
+            windowChanged(record);
         }
     }
 };
@@ -292,6 +290,7 @@ const attach = async (record: BrowserSessionRecord): Promise<BrowserContext | un
             }
             record.browser = browser;
             record.context = context;
+            record.front = readerFor(record, context);
             // Chromium disconnecting is the only end signal; the process belongs to the SDK's child tree, not this
             // daemon.
             browser.on("disconnected", () => finish(record));
@@ -322,13 +321,16 @@ export const openBrowserSession = (input: {
     }
     const existing = sessions.get(name);
     // Same port: same browser, just another call. Different port: a fresh per-turn Chromium; the record is replaced.
+    // Another call is also when an agent may have switched tabs (browser_tabs), so Chromium is asked again.
     if (existing !== undefined && existing.port === input.port && existing.finishedAt === undefined) {
         existing.activityAt = Date.now();
-        publishRuntimeChange("browsers");
+        existing.front?.schedule();
+        windowChanged(existing);
         return name;
     }
     const record: BrowserSessionRecord = {
         name,
+        seq: nextSeq(),
         own: false,
         shutdown: undefined,
         owner: input.owner,
@@ -341,6 +343,7 @@ export const openBrowserSession = (input: {
         nextPageId: 1,
         activePageId: undefined,
         lastPageId: undefined,
+        front: undefined,
         finishedAt: undefined,
         help: undefined,
         abandonHelp: undefined,
@@ -350,7 +353,7 @@ export const openBrowserSession = (input: {
     };
     sessions.set(name, record);
     // Published immediately so the rail tile counts this browser now, not at the next poll.
-    publishRuntimeChange("browsers");
+    windowChanged(record);
     record.attaching = attach(record).then((context) => {
         record.attaching = undefined;
         if (context === undefined) {
@@ -370,12 +373,13 @@ export const adoptBrowserSession = (input: {
     readonly server: string;
     readonly context: BrowserContext;
     readonly shutdown: () => Promise<void>;
-    // Its DevTools port, when it has one: what the view reads the tab in front off (browserSessionEndpoint).
+    // Its DevTools port, when it has one: what the tab in front is read off (front-reader.ts).
     readonly port?: number | undefined;
 }): void => {
     const now = Date.now();
     const record: BrowserSessionRecord = {
         name: input.name,
+        seq: nextSeq(),
         own: true,
         shutdown: input.shutdown,
         owner: undefined,
@@ -388,6 +392,7 @@ export const adoptBrowserSession = (input: {
         nextPageId: 1,
         activePageId: undefined,
         lastPageId: undefined,
+        front: undefined,
         finishedAt: undefined,
         help: undefined,
         abandonHelp: undefined,
@@ -396,12 +401,13 @@ export const adoptBrowserSession = (input: {
         attaching: undefined,
     };
     sessions.set(input.name, record);
+    record.front = readerFor(record, input.context);
     record.browser?.on("disconnected", () => finish(record));
     input.context.on("page", (page) => watchPage(record, page));
     for (const page of input.context.pages()) {
         watchPage(record, page);
     }
-    publishRuntimeChange("browsers");
+    windowChanged(record);
 };
 
 // Whether a session by this name is open now; a finished record still listed for its strip is not.
@@ -469,12 +475,6 @@ export const browserAccountPage = (account: string): Page | undefined => {
 // The view route uses it to tell a headed browser (real video) from a headless one; see live-view.ts.
 export const browserSessionDisplayKey = (name: string): string | undefined => sessions.get(name)?.server;
 
-// The session's DevTools HTTP endpoint, the one its attach dialled; undefined for a window adopted without a port.
-export const browserSessionEndpoint = (name: string): string | undefined => {
-    const port = sessions.get(name)?.port;
-    return port === undefined || port <= 0 ? undefined : `http://127.0.0.1:${port}`;
-};
-
 export const browserSessionPage = (name: string, pageId: string): Page | undefined => {
     const record = sessions.get(name);
     if (record === undefined || record.finishedAt !== undefined) {
@@ -484,96 +484,51 @@ export const browserSessionPage = (name: string, pageId: string): Page | undefin
     return entry === undefined || entry.closed ? undefined : entry.page;
 };
 
-const hostOf = (url: string | undefined): string | undefined => {
-    if (url === undefined || url === "" || url === "about:blank") {
-        return undefined;
-    }
-    try {
-        return new URL(url).host;
-    } catch {
-        return undefined;
-    }
-};
-
-// Live sessions list only open tabs; finished ones list every tab they ever had, since a closed browser only answers
-// where it went, and nothing of a closed one is still loading.
-// title is omitted rather than set to undefined, per exactOptionalPropertyTypes.
-const summarizePage = (entry: PageRecord, activeId: string | undefined, running: boolean): BrowserPage => {
-    const page: BrowserPage = running
-        ? { id: entry.id, ...navigationFields(entry.navigation, entry.url), active: entry.id === activeId }
-        : { id: entry.id, url: entry.url, active: entry.id === activeId };
-    return entry.title === undefined ? page : { ...page, title: entry.title };
-};
-
-// The one open dialog a running session has, if any; a page holds at most one, and Chromium queues the rest behind it.
-const openDialog = (record: BrowserSessionRecord): BrowserSession["dialog"] => {
-    for (const entry of record.pages.values()) {
-        const dialog = entry.dialog;
-        if (dialog !== undefined && !entry.closed) {
-            const defaultValue = dialog.defaultValue();
-            return {
-                pageId: entry.id,
-                kind: dialog.type() as "alert" | "confirm" | "prompt" | "beforeunload",
-                message: dialog.message(),
-                ...(defaultValue === "" ? {} : { defaultValue }),
-            };
-        }
-    }
-    return undefined;
-};
-
 // Answers the dialog the session lists. A dialog the agent answered first throws inside Playwright and is dropped
 // here the same way: Chromium's close event has already cleared it, or is about to.
 export const answerBrowserDialog = async (name: string, accept: boolean, text?: string): Promise<void> => {
     const record = sessions.get(name);
     const entry = record === undefined ? undefined : [...record.pages.values()].find((candidate) => candidate.dialog !== undefined);
     const dialog = entry?.dialog;
-    if (entry === undefined || dialog === undefined) {
+    if (record === undefined || entry === undefined || dialog === undefined) {
         return;
     }
     entry.dialog = undefined;
-    publishRuntimeChange("browsers");
+    windowChanged(record);
     await (accept ? dialog.accept(text) : dialog.dismiss()).catch(() => undefined);
-};
-
-// Logged-in label leads with owner so same-site identities stay distinct; web has none, so it's page-first, and so is
-// the person's own window, which is nobody's account but theirs.
-const labelOf = (record: BrowserSessionRecord, page: string | undefined): string =>
-    record.own
-        ? (page ?? "Your browser")
-        : record.server === "web"
-          ? (page ?? record.server)
-          : page === undefined
-            ? record.server
-            : `${record.server} · ${page}`;
-
-// A field present only with a value, per exactOptionalPropertyTypes: an absent one is omitted, never set undefined.
-const optional = <K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>> =>
-    value === undefined ? {} : ({ [key]: value } as Record<K, V>);
-
-const summarize = (record: BrowserSessionRecord): BrowserSession => {
-    const running = record.finishedAt === undefined;
-    // Running session's active tab is the one being driven; finished one's is the one it ended on.
-    const activeId = running ? record.activePageId : record.lastPageId;
-    const active = activeId === undefined ? undefined : record.pages.get(activeId);
-    return {
-        name: record.name,
-        label: labelOf(record, active?.title ?? hostOf(active?.url)),
-        server: record.server,
-        running,
-        activityAt: record.activityAt,
-        pages: [...record.pages.values()].filter((entry) => !running || !entry.closed).map((entry) => summarizePage(entry, activeId, running)),
-        ...optional("help", record.help),
-        ...optional("dialog", running ? openDialog(record) : undefined),
-        ...optional("finishedAt", record.finishedAt),
-        ...optional("own", record.own ? true : undefined),
-        ...optional("owner", record.owner),
-    };
 };
 
 export const listBrowserSessions = (): BrowserSession[] => {
     prune(Date.now());
-    return [...sessions.values()].map(summarize);
+    return [...sessions.values()].map(summarizeWindow);
+};
+
+// One window as the list has it, for its view sockets' `state`; undefined once it is no longer listed.
+export const browserSessionState = (name: string): BrowserSession | undefined => {
+    const record = sessions.get(name);
+    return record === undefined ? undefined : summarizeWindow(record);
+};
+
+// The tab the window has in front, which its picture follows (live-view.ts); undefined for a closed window.
+export const browserSessionFront = (name: string): Page | undefined => {
+    const record = sessions.get(name);
+    const entry = record?.activePageId === undefined ? undefined : record.pages.get(record.activePageId);
+    return record?.finishedAt !== undefined || entry === undefined || entry.closed ? undefined : entry.page;
+};
+
+// A person picked a tab: brought in front for real, since the window shows one tab to every viewer, and told at once
+// rather than when Chromium is next asked. Undefined when the tab or the window is gone.
+export const pickBrowserPage = async (name: string, pageId: string): Promise<Page | undefined> => {
+    const record = sessions.get(name);
+    const entry = record?.finishedAt === undefined ? record?.pages.get(pageId) : undefined;
+    if (record === undefined || entry === undefined || entry.closed) {
+        return undefined;
+    }
+    // allow(silent-catch): a tab closing as it is picked is answered by its own close event.
+    await entry.page.bringToFront().catch(() => undefined);
+    bringForward(record, entry.id);
+    windowChanged(record, true);
+    return entry.page;
 };
 
 export const browserSessionMetrics = (): Readonly<Record<string, number>> => {
