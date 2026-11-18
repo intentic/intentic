@@ -45,6 +45,8 @@ let leaving = false;
 // allow(module-state): how the page finds out who is signed in after an answer said it is someone else (useAuth's refresh)
 let reconciler: (() => Promise<void>) | undefined;
 let reconciling: Promise<void> | undefined;
+// allow(module-state): who is told when this page next enters an account (`onceAccountEntered`)
+const entering = new Set<(account: PageAccount) => void>();
 
 /** The account this page is drawn for; undefined before the platform said, in a local window, or once it has gone. */
 export const pageAccount = (): PageAccount | undefined => held;
@@ -116,7 +118,21 @@ export const enterAccount = (user: Pick<User, `id` | `email`>): `entered` | `rel
     if (stale && inShell && reloadNow(user.id, undefined)) {
         return `reloading`;
     }
+    for (const listener of entering) {
+        entering.delete(listener);
+        listener(held);
+    }
     return `entered`;
+};
+
+/**
+ * Has `listener` told the next time this page enters an account, synchronously, before the session module holds it as
+ * the user and anything that reads the user runs (useSandbox's list asked ahead of the session check). Once only; the
+ * function returned stops it being told.
+ */
+export const onceAccountEntered = (listener: (account: PageAccount) => void): (() => void) => {
+    entering.add(listener);
+    return () => entering.delete(listener);
 };
 
 /**
@@ -250,6 +266,7 @@ export const resetAccountBoundaryForTests = (): void => {
     stale = false;
     reconciler = undefined;
     reconciling = undefined;
+    entering.clear();
 };
 
 // One account per page, as useAuth keeps one user: a hot update re-running this module would forget whom it is drawn for.

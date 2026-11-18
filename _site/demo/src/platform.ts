@@ -1,4 +1,4 @@
-import { PlatformIdentitySchema } from "@intentic/api-contract";
+import { ACCOUNT_HEADER, PlatformIdentitySchema } from "@intentic/api-contract";
 import { ingressPath, type BrowsingCatalog } from "@intentic/api-contract/ingress";
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { DEMO_CATALOGS } from "./daemon/account/accounts";
@@ -73,6 +73,11 @@ export const platform = async (request: Request, url: URL): Promise<Response> =>
     }
     const answered = await answer(request, url);
     if (answered !== undefined) {
+        // Saying whose answer it is, as the platform does on every /rpc answer to a session (device-sessions.ts rpcAnswer),
+        // so the editor can tell an early read's answer is the signed-in account's (client/sandbox/useSandbox.ts).
+        if (!signedOut) {
+            answered.headers.set(ACCOUNT_HEADER, DEMO_USER.id);
+        }
         return answered;
     }
     console.info(`[demo] the platform's ${request.method} ${path} is left out: ${platformUnservedReason(platformRouteOf(request, url)) ?? `not a route of the api contract`}`);

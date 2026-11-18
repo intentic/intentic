@@ -23,6 +23,8 @@ import { forgetAddress } from "../directory/deviceDirectory";
 import { directMode } from "../directory/directState";
 import type { LeaveOutcome } from "./leaveSandbox";
 import { markBoot } from "../../app/perf/boot";
+import { onceAccountEntered } from "../../lib/accounts/accountBoundary";
+import { localFace } from "../../app/environments/local";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 
 // Browser's view of the user's sandboxes, as a module singleton. The registry (sandbox.list) is the source of
@@ -35,14 +37,65 @@ export const SANDBOX_LIST_KEY = [`sandbox`, `list`];
 // Ids with an in-flight remove(); the queryFn filters them out since a fetch mid-teardown reads pre-delete truth.
 const removing = new Set<string>();
 
+const listed = (rows: readonly SandboxSummary[]): SandboxSummary[] => rows.filter((sandbox) => !removing.has(sandbox.id));
+
 const sandboxListQuery = {
     queryKey: SANDBOX_LIST_KEY,
-    queryFn: async (): Promise<SandboxSummary[]> => (await apiClient.sandbox.list()).sandboxes.filter((sandbox) => !removing.has(sandbox.id)),
+    queryFn: async (): Promise<SandboxSummary[]> => listed((await apiClient.sandbox.list()).sandboxes),
     // 30s dedups the shell's per-navigation refetch; the list only changes via local writes or a daemon announce.
     staleTime: 30_000,
     // Pinned: the default gcTime would evict this observer-less entry after idle minutes and wipe daemonUrl
     // mid-session.
     gcTime: Infinity,
+};
+
+// THE LIST, ASKED BESIDE THE SESSION CHECK (2026-11-18). Every returning page load waited on the platform three times in
+// a row: the session check, then this list (asked by the liveness loop and the shell's gate once the check had answered),
+// then the first view. main.ts now has it asked with the session check, on a browser that had a sandbox open, as a read
+// `ahead` of the check: a 401 when there turns out to be no session does not tear the window down. The moment the page
+// enters an account (before anything that reads the user runs), the answer becomes the list's own fetch, which the reads
+// after it join as they join any list fetch in flight. It is that answer only when it was made as the account entered
+// (its ACCOUNT_HEADER), so no reader ever sees another account's list; otherwise the fetch asks the platform again as that
+// account, the read it would have been. A page that enters nobody within the session check's own budget (signed out, the
+// platform down) leaves the answer unread and the list as it was. With 150 ms between browser and platform, a returning
+// load of the demo build drew its first view one round trip sooner.
+const AHEAD_KEPT_MS = 10_000;
+
+// Whose answer the early ask got, filled in by the platform client when it lands (lib/useApi.ts).
+interface EarlyAnswer {
+    account?: string | null;
+}
+
+/** Asks the platform for the list now, beside the session check, for the reads once an account is entered (main.ts). */
+export const askListAhead = (): void => {
+    // A window on a folder of this computer enters no platform account (lib/accounts/accountBoundary.ts) to check it by.
+    if (directMode.value || localFace() !== undefined) {
+        return;
+    }
+    const askedAt = Date.now();
+    const answer: EarlyAnswer = {};
+    const early = apiClient.sandbox.list(undefined, {
+        context: {
+            ahead: true,
+            answeredAs: (account) => {
+                answer.account = account;
+            },
+        },
+    });
+    // allow(silent-catch): read by the fetch below, where a failed early ask is the platform asked again.
+    early.catch(() => undefined);
+    const listAhead = async (entered: string): Promise<SandboxSummary[]> => {
+        // allow(silent-catch): a failed early ask is no answer; the platform is asked again just below.
+        const rows = (await early.catch(() => undefined))?.sandboxes;
+        return listed(rows !== undefined && answer.account === entered ? rows : (await apiClient.sandbox.list()).sandboxes);
+    };
+    onceAccountEntered(({ id }) => {
+        if (directMode.value || Date.now() - askedAt > AHEAD_KEPT_MS) {
+            return;
+        }
+        // allow(silent-catch): the reads that join this fetch own its failure; one that finds it failed asks again.
+        queryClient.fetchQuery({ ...sandboxListQuery, queryFn: async () => listAhead(id) }).catch(() => undefined);
+    });
 };
 
 // A QueryCache subscription, not a QueryObserver (which detaches on queryClient.clear() at logout): mirrors the

@@ -35,7 +35,9 @@ flowchart LR
   the conversation's record however far back it is (`pageLookup.ts`). A page that asks is answered there through the
   conversation's one reply, as on its card in the chat.
 - **Two backends, two credentials.** The platform api (`src/lib/useApi.ts`) rides the Better Auth cookie and
-  answers sign-in, the sandbox list, invites and the hosted plan. Every workspace call goes directly to the daemon
+  answers sign-in, the sandbox list, invites and the hosted plan. On a browser that had a sandbox open, the sandbox list
+  is asked at the same time as the session check. Its answer is used only if it was made as the account the check then
+  enters (`client/sandbox/useSandbox.ts`), so a returning page load waits one platform round trip less. Every workspace call goes directly to the daemon
   through `sandboxRpc`, with a daemon-minted session that a proof establishes (`sandboxSession.ts`). The platform is not
   in that path. The daemon is reached over its tunnel, or over a certified loopback name when it runs on this machine
   (`client/endpoint/endpoint.ts`).

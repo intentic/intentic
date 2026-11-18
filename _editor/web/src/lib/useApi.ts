@@ -1,4 +1,4 @@
-import { apiContract } from "@intentic/api-contract";
+import { ACCOUNT_HEADER, apiContract } from "@intentic/api-contract";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
@@ -19,6 +19,9 @@ export interface ApiCallContext {
     // methods): its 401 says only that there was none, which the session check answers for itself, so it does not tear the
     // window down the way a 401 to a signed-in call does.
     readonly ahead?: boolean;
+    // Told which account the platform answered as (ACCOUNT_HEADER; null when the answer names nobody), for a read `ahead`
+    // whose answer is kept until the page knows whose it is (useSandbox's list, asked beside the session check).
+    readonly answeredAs?: (account: string | null) => void;
 }
 
 export const apiClient: ContractRouterClient<typeof apiContract, ApiCallContext> = createORPCClient(
@@ -42,6 +45,7 @@ export const apiClient: ContractRouterClient<typeof apiContract, ApiCallContext>
                 await invalidatePlatformAuth();
             }
             await checkAnswerAccount(response);
+            context.answeredAs?.(response.headers.get(ACCOUNT_HEADER));
             return response;
         },
     }),

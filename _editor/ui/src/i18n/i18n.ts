@@ -1,4 +1,4 @@
-import { computed, type ComputedRef, watch, type App } from "vue";
+import { computed, type ComputedRef, toRaw, watch, type App } from "vue";
 import { createI18n } from "vue-i18n";
 import { definePreference } from "../composables/preference.js";
 import { setFormatLocale } from "../lib/format.js";
@@ -81,6 +81,7 @@ const nest = (namespace: string | undefined, tree: MessageTree): MessageTree =>
 // crosses the boundary untyped, and `t`'s key checking is what re-establishes safety on the way out. Derived from
 // the function rather than written out, so the cast cannot drift from whatever signature the library actually has.
 type MergeableMessages = Parameters<typeof i18n.global.mergeLocaleMessage>[1];
+type SettableMessages = Parameters<typeof i18n.global.setLocaleMessage>[1];
 
 // The plain words of every message merged so far, for `staticCopy`. Collected on the way in, from the tree a catalog
 // hands over, so nothing has to read vue-i18n's store back out.
@@ -133,8 +134,21 @@ const collected = (): void => {
     }
 };
 
+// A MERGE DEEP-COPIES THE TREE INTO A REACTIVE STORE: vue-i18n keeps its messages in a deep `ref`, so merging the app's
+// own catalog wrote its ~15,000 messages one proxied property at a time, ~8 ms of the start in a profile without CPU
+// throttling. Catalogs sit side by side at the top of the tree (the app's at the root, every other under its namespace),
+// so one whose top-level keys are all new to the language is laid beside what is there as it is, with no walk; one that
+// shares a top-level key (two extensions under `ext`) is merged into it as before.
 const merge = (locale: Locale, catalog: Catalog, tree: MessageTree): void => {
-    i18n.global.mergeLocaleMessage(locale, nest(catalog.namespace, tree) as MergeableMessages);
+    const slice = nest(catalog.namespace, tree);
+    const held: MessageTree = toRaw(i18n.global.getLocaleMessage(locale));
+    if (Object.keys(slice).some((key) => Object.hasOwn(held, key))) {
+        // SAFETY: a catalog is a slice the augmented schema has not seen (MergeableMessages, above); `t` checks keys on the way out.
+        i18n.global.mergeLocaleMessage(locale, slice as MergeableMessages);
+    } else {
+        // SAFETY: the same slice beside the language's messages as they stand, which is all the tree vue-i18n held before.
+        i18n.global.setLocaleMessage(locale, { ...held, ...slice } as SettableMessages);
+    }
     uncollected.push(tree);
 };
 

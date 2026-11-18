@@ -21,7 +21,7 @@ interface Source {
     timer: ReturnType<typeof setTimeout> | undefined;
     idle: number | undefined;
     /** What the observer watches: the element, or its parent when the element is `display: contents` and has no box. */
-    readonly watched: Element;
+    watched: Element;
     /** Changes inside the element that leave its size alone: a pane of fixed size whose content arrives late. */
     readonly changes: MutationObserver | undefined;
 }
@@ -85,21 +85,52 @@ const observing = (): ResizeObserver | undefined => {
     return observer;
 };
 
+// Starts watching a mounted source: its own box, or its parent's when it has none.
+const watch = (element: HTMLElement, watcher: ResizeObserver): void => {
+    const source = sources.get(element);
+    if (source === undefined) {
+        return;
+    }
+    const watched = getComputedStyle(element).display === `contents` ? (element.parentElement ?? element) : element;
+    source.watched = watched;
+    const standing = watchers.get(watched) ?? new Set();
+    standing.add(element);
+    watchers.set(watched, standing);
+    watcher.observe(watched);
+};
+
+// WHICH BOX TO WATCH IS LOOKED UP ONCE A FRAME, NOT AS EACH SOURCE MOUNTS. Reading a computed style in `mounted` made the
+// browser recompute the styles of everything just inserted, there and then, in the middle of drawing the rest: every
+// <Await> answer is a source (and `display: contents`), and on a returning start those reads came to ~22 ms of the
+// main thread between the sandbox list and the first view (CPU profiles, 2026-11-18). Read in an animation frame, the
+// styles are the ones that frame computes anyway, once for every source mounted since the last. Nothing is taken
+// before an element has been quiet for SETTLE_MS, so starting to watch a frame later changes no capture.
+const unwatched = new Set<HTMLElement>();
+let watching: number | undefined;
+const watchUnwatched = (watcher: ResizeObserver): void => {
+    watching = undefined;
+    for (const element of unwatched) {
+        watch(element, watcher);
+    }
+    unwatched.clear();
+};
+
 export const vSkeletonSource: Directive<HTMLElement, string | undefined> = {
     mounted(element, { value, modifiers }) {
-        const watched = getComputedStyle(element).display === `contents` ? (element.parentElement ?? element) : element;
         const changes = `MutationObserver` in globalThis ? new MutationObserver(() => schedule(element)) : undefined;
         changes?.observe(element, { childList: true, subtree: true, characterData: true });
-        sources.set(element, { name: value, empty: modifiers[`empty`] === true, timer: undefined, idle: undefined, watched, changes });
+        sources.set(element, { name: value, empty: modifiers[`empty`] === true, timer: undefined, idle: undefined, watched: element, changes });
         const watcher = observing();
         if (watcher === undefined) {
             schedule(element);
             return;
         }
-        const standing = watchers.get(watched) ?? new Set();
-        standing.add(element);
-        watchers.set(watched, standing);
-        watcher.observe(watched);
+        if (!(`requestAnimationFrame` in globalThis)) {
+            watch(element, watcher);
+            return;
+        }
+        unwatched.add(element);
+        watching ??= requestAnimationFrame(() => watchUnwatched(watcher));
     },
     updated(element, { value, oldValue }) {
         const source = sources.get(element);
@@ -110,6 +141,7 @@ export const vSkeletonSource: Directive<HTMLElement, string | undefined> = {
         schedule(element);
     },
     beforeUnmount(element) {
+        unwatched.delete(element);
         const source = sources.get(element);
         if (source === undefined) {
             return;

@@ -288,7 +288,9 @@ describe(`v-skeleton-source`, () => {
     // Reports once on observe, as a browser's observer reports an element's first size.
     class ReportingObserver implements ResizeObserver {
         constructor(private readonly report: ResizeObserverCallback) {}
+        static watched: Element[] = [];
         observe(target: Element): void {
+            ReportingObserver.watched.push(target);
             const entry = {
                 target,
                 contentRect: rect(0, 0, 0, 0),
@@ -301,16 +303,23 @@ describe(`v-skeleton-source`, () => {
         unobserve(): void {}
         disconnect(): void {}
     }
-    const realObserver = globalThis.ResizeObserver;
+    const { ResizeObserver: realObserver, requestAnimationFrame: realFrame } = globalThis;
+    // Which box a source is watched by is looked up in the next animation frame; frames run when a case says so.
+    const frames: FrameRequestCallback[] = [];
     beforeEach(() => {
         jest.useFakeTimers();
         globalThis.ResizeObserver = ReportingObserver;
+        globalThis.requestAnimationFrame = (callback) => frames.push(callback);
     });
     afterEach(() => {
         jest.useRealTimers();
         globalThis.ResizeObserver = realObserver;
+        globalThis.requestAnimationFrame = realFrame;
+        frames.length = 0;
+        ReportingObserver.watched = [];
     });
 
+    // Mounts a source and lets the frame after its mount run, as a browser does before anything settles.
     const source = (name: string): void => {
         mount(() =>
             withDirectives(
@@ -318,6 +327,9 @@ describe(`v-skeleton-source`, () => {
                 [[vSkeletonSource, name]],
             ),
         );
+        for (const frame of frames.splice(0)) {
+            frame(performance.now());
+        }
     };
 
     it(`takes the element's imprint once it has settled`, async () => {
@@ -342,6 +354,35 @@ describe(`v-skeleton-source`, () => {
             { e: `span`, k: [{ h: 13, w: [90] }] },
             { e: `span`, k: [{ h: 13, w: [40] }] },
         ]);
+    });
+
+    // Mount reads no style (it would recompute everything just inserted): the box is looked up in the next frame, once
+    // for every source mounted since the last, and a source with none of its own (`display: contents`) is watched
+    // through its parent.
+    it(`looks up which box to watch in the frame after mount, its parent's for a source with none`, async () => {
+        mount(() =>
+            h(`section`, { "data-box": `0,0,300,40` }, [
+                withDirectives(h(`div`, { style: `display: contents` }, [h(`span`, { "data-box": `0,0,90,16`, "data-lines": `90` }, `ninety`)]), [
+                    [vSkeletonSource, `answer`],
+                ]),
+                withDirectives(h(`div`, { "data-box": `0,0,300,40` }), [[vSkeletonSource, `row`]]),
+            ]),
+        );
+        expect(ReportingObserver.watched).toEqual([]);
+        expect(frames).toHaveLength(1);
+
+        frames.splice(0)[0]?.(performance.now());
+        expect(ReportingObserver.watched.map((element) => element.tagName)).toEqual([`SECTION`, `DIV`]);
+    });
+
+    it(`never watches a source gone before its frame`, async () => {
+        const shown = ref(true);
+        mount(() => (shown.value ? withDirectives(h(`div`, { "data-box": `0,0,300,40` }), [[vSkeletonSource, `row`]]) : h(`p`)));
+        shown.value = false;
+        await nextTick();
+
+        frames.splice(0)[0]?.(performance.now());
+        expect(ReportingObserver.watched).toEqual([]);
     });
 
     it(`drops a capture whose scope changed while it waited`, async () => {

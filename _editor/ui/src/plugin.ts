@@ -6,7 +6,7 @@ import DialogStyle from "primevue/dialog/style";
 import DrawerStyle from "primevue/drawer/style";
 import PopoverStyle from "primevue/popover/style";
 import ToggleSwitchStyle from "primevue/toggleswitch/style";
-import type { App } from "vue";
+import { type App, markRaw } from "vue";
 import Icon from "./components/primitives/Icon.vue";
 import { installI18n } from "./i18n/index.js";
 import { Theme } from "./styles/theme.js";
@@ -52,7 +52,12 @@ export function installUi(app: App): void {
     app.use(PrimeVue, {
         ripple: true,
         theme: {
-            preset: Theme,
+            // RAW, SO VUE NEVER WALKS IT. PrimeVue keeps its options in `reactive()` and deep-watches them, and the preset is
+            // Aura's every token for every component: making it reactive proxied and tracked thousands of nested objects
+            // before the first mount, ~17 ms of the 42 ms PrimeVue's setup took without CPU throttling (profile,
+            // 2026-11-18), and every token read after went through a proxy. Nothing changes the preset in place; a new
+            // theme is a new value, which the watcher on `theme` still sees.
+            preset: markRaw(Theme),
             options: {
                 darkModeSelector: `[data-mode="dark"]`,
                 cssLayer: {

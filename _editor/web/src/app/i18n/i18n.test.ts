@@ -74,6 +74,7 @@ describe(`the language layer`, () => {
     // English with a correction a frame later.
     it(`loads the active language for a catalog that registers after the switch`, async () => {
         const { registerCatalog, setLocale, t: typed } = await freshI18n();
+        // SAFETY: the fixture catalogs registered just below hold every key this case asks for.
         const t = typed as AnyKeyT;
         await setLocale(`pl`);
 
@@ -147,6 +148,21 @@ describe(`the language layer`, () => {
 
         expect(t(`probe.title`)).toBe(`Namespaced`);
         expect(t(`title`)).toBe(`Root`);
+    });
+
+    // A catalog whose top-level keys are new is laid beside the tree as it is; two extensions share the top-level `ext`,
+    // so the second is merged into the first's branch rather than replacing it, in English and in a fetched language.
+    it(`keeps both of two catalogs that share a top-level key`, async () => {
+        const { registerCatalog, setLocale, t: typed } = await freshI18n();
+        // SAFETY: the fixture catalogs registered just below hold every key this case asks for.
+        const t = typed as AnyKeyT;
+        await registerCatalog({ base: { title: `Root` }, load: async () => ({ default: { title: `Wurzel` } }) });
+        await registerCatalog({ namespace: `ext.one`, base: { title: `One` }, load: async () => ({ default: { title: `Eins` } }) });
+        await registerCatalog({ namespace: `ext.two`, base: { title: `Two` }, load: async () => ({ default: { title: `Zwei` } }) });
+
+        expect([t(`title`), t(`ext.one.title`), t(`ext.two.title`)]).toEqual([`Root`, `One`, `Two`]);
+        await setLocale(`de`);
+        expect([t(`title`), t(`ext.one.title`), t(`ext.two.title`)]).toEqual([`Wurzel`, `Eins`, `Zwei`]);
     });
 
     // Session replay keeps the words the app wrote and masks the rest (web/src/app/replayPrivacy.ts), so this list is

@@ -12,6 +12,7 @@ import { initAnalytics } from "./app/analytics";
 import { sandboxAnalyticsGate } from "./features/sandbox/analytics/analyticsGate";
 import { useAuth } from "./client/auth/useAuth";
 import { startAudienceSync } from "./client/sandbox/audienceSync";
+import { askListAhead } from "./client/sandbox/useSandbox";
 import { directMode } from "./client/directory/directState";
 import { apiClient } from "./lib/useApi";
 import { startAccountPreferences } from "./app/accountPreferences";
@@ -85,6 +86,9 @@ if (returning) {
     const session = useAuth().refresh();
     // allow(silent-catch): the guard asks again and owns the failure (the outage screen, or the sign-in page).
     session.catch(() => undefined);
+    // The sandbox list the shell waits on next, asked beside the session check too, and read only as the account the check
+    // enters (client/sandbox/useSandbox.ts).
+    askListAhead();
     // The sandbox contract, which every daemon call waits on (client/sandbox/daemon/contract.ts): loading now, beside the
     // session check, rather than at the shell's first call. A failure is retried by that call, which owns it.
     // allow(silent-catch): as above.
