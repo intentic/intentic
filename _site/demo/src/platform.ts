@@ -7,6 +7,7 @@ import { hostedPlanAnswers } from "./platform/billing.handler";
 import { desktopAnswers } from "./platform/desktop.handler";
 import { inviteAnswers, meAnswers } from "./platform/people.handler";
 import { orgAnswers } from "./platform/orgs.handler";
+import { projectsAnswers } from "./platform/projects.handler";
 import { pushAnswers } from "./platform/pushRelay.handler";
 import { sandboxAnswers } from "./platform/sandbox.handler";
 import { tokenAnswers, walletAnswers } from "./platform/keys.handler";
@@ -40,6 +41,7 @@ const ANSWERS = {
     hostedPlan: hostedPlanAnswers,
     wallet: walletAnswers,
     org: orgAnswers,
+    projects: projectsAnswers,
     push: pushAnswers,
 } satisfies PlatformRouter;
 
