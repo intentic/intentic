@@ -104,6 +104,12 @@ interface Claim {
 const carried = shallowRef<readonly RestartWork[]>([]);
 // allow(module-state): the restart ledger, each record naming its sandbox; it outlives the page on purpose
 const claims = shallowRef<readonly Claim[]>([]);
+// WORK HELD AT THE GATE: built, and waiting for the owner to say go (a rebuild whose restart is held "until I say").
+// Kept apart from the claims because it is a phase of the same work rather than more of it, and it changes what the
+// tile must say: a spinner reads as "nothing for you to do", which is exactly wrong while it waits on a press.
+// Page memory only: a reload re-reads the gate from the producer's own log within a poll.
+// allow(module-state): the restart ledger's gate, keyed as the records are
+const awaiting = shallowRef<ReadonlyMap<string, string>>(new Map());
 
 const hydrate = (): void => {
     const found: RestartWork[] = [];
@@ -122,6 +128,14 @@ hydrate();
 
 const held = (sandbox: string): readonly RestartWork[] => claims.value.filter((claim) => claim.work.sandbox === sandbox).map((claim) => claim.work);
 
+const dropAwaiting = (key: string): void => {
+    if (awaiting.value.has(key)) {
+        const next = new Map(awaiting.value);
+        next.delete(key);
+        awaiting.value = next;
+    }
+};
+
 /**
  * Declares that this producer's work ends in a restart of `sandbox`, until the returned end is called. Producers end
  * it when their own run settles — never when their component unmounts, since walking away doesn't stop a container
@@ -138,6 +152,7 @@ export const expectRestart = (work: Omit<RestartWork, "startedAt">): (() => void
         // The record outlives this claim if another surface still holds the same work.
         if (!claims.value.some((current) => keyOf(current.work) === key)) {
             removeStoredValue(key);
+            dropAwaiting(key);
         }
     };
 };
@@ -167,9 +182,42 @@ export const restartExpected = (sandbox: string | undefined): RestartWork | unde
     return [...held(sandbox), ...carried.value.filter((record) => record.sandbox === sandbox)].sort((a, b) => b.startedAt - a.startedAt)[0];
 };
 
-/** The sandbox tile's sentence while work that ends in a restart is running here; several are counted, not listed. */
+/**
+ * Marks held work as finished on its side and waiting on the owner to let the restart happen, saying `what` it waits
+ * for ("Image built · restart to apply"), or clears that with `undefined`. Only work somebody holds is ever said to
+ * wait (the tile reads through the claims), and the mark goes with the last claim on it, so a producer that settles
+ * never leaves a "needs you" behind.
+ */
+export const restartAwaits = (work: { readonly sandbox: string; readonly id: RestartProducer }, what: string | undefined): void => {
+    const key = keyOf(work);
+    if (what === undefined) {
+        dropAwaiting(key);
+        return;
+    }
+    if (awaiting.value.get(key) !== what) {
+        awaiting.value = new Map(awaiting.value).set(key, what);
+    }
+};
+
+const awaitingFor = (sandbox: string, work: RestartWork): string | undefined => awaiting.value.get(keyOf({ sandbox, id: work.id }));
+
+/** The sandbox tile's sentence while work here is waiting on its owner to restart, which outranks anything running. */
+export const restartWaiting = (sandbox: string | undefined): string | undefined => {
+    if (sandbox === undefined) {
+        return undefined;
+    }
+    return held(sandbox)
+        .map((work) => awaitingFor(sandbox, work))
+        .find((what) => what !== undefined);
+};
+
+/** The sandbox tile's sentence while work that ends in a restart is running here; several are counted, not listed.
+ * Work waiting on its owner is not running: it is said by `restartWaiting` instead. */
 export const restartRunning = (sandbox: string | undefined): string | undefined => {
-    const running = sandbox === undefined ? [] : [...new Map(held(sandbox).map((work) => [work.id, work])).values()];
+    const running =
+        sandbox === undefined
+            ? []
+            : [...new Map(held(sandbox).filter((work) => awaitingFor(sandbox, work) === undefined).map((work) => [work.id, work])).values()];
     const first = running[0];
     if (first === undefined) {
         return undefined;
@@ -184,4 +232,5 @@ export const forgetRestarts = (): void => {
     }
     carried.value = [];
     claims.value = [];
+    awaiting.value = new Map();
 };

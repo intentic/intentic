@@ -15,7 +15,7 @@ import {
 import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
 import { SANDBOX_DEFAULT_SECTION } from "../../../models/sandbox/sandboxNav";
 import { useHostedBuild } from "../secrets/useHostedBuild";
-import { restartFinished } from "../../../models/sandbox/live/sandboxRestart";
+import { restartAwaits, restartFinished } from "../../../models/sandbox/live/sandboxRestart";
 import { t } from "@intentic/ui/i18n";
 import { formatElapsed } from "@intentic/ui/format";
 
@@ -137,6 +137,23 @@ export const startRestartWatch = (): void => {
             report(receipt);
         }
     });
+
+    // BUILT AND HELD AT THE GATE, on the sandbox's own tile: the rebuild's spinner stops and the corner says it waits on
+    // the owner instead. Said on every page, the card's included, since the tile is not a second copy of the card's
+    // sentence but the one mark that stays in view; it ends with the run's claim, whoever drops it first.
+    watch(
+        [activeSandboxId, () => followed.value !== undefined && rebuildRunning(followed.value.phase) && followed.value.waiting],
+        ([id, waiting], before) => {
+            const previous = before?.[0];
+            if (previous !== undefined && previous !== id) {
+                restartAwaits({ sandbox: previous, id: `dev-rebuild` }, undefined);
+            }
+            if (id !== undefined) {
+                restartAwaits({ sandbox: id, id: `dev-rebuild` }, waiting ? t(`sandbox.sandboxRestart.imageBuiltWaiting`) : undefined);
+            }
+        },
+        { immediate: true },
+    );
 
     // BUILT AND HELD AT THE GATE, said wherever the reader is: a restart held "until I say" is waiting on them, and the
     // one place it says so is a card they may be nowhere near. True for as long as the gate holds, and nowhere on the

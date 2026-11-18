@@ -10456,7 +10456,8 @@
             "listAnd": "{head} y {last}"
         },
         "sandboxRestart": {
-            "countRunning": "{count} en marcha"
+            "countRunning": "{count} en marcha",
+            "imageBuiltWaiting": "Imagen construida · esperando a que reinicies"
         },
         "recoveryDeps": {
             "sandboxAnswered": "el sandbox ha respondido {status}"

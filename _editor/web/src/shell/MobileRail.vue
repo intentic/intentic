@@ -16,8 +16,9 @@ import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxA
 import { useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlacement";
 import TourMark from "../features/tour/TourMark.vue";
 import type { MarkStep } from "../features/tour/tourMarks";
+import type { ViewBadge } from "@intentic/extension-api";
 import { askForAttention } from "../models/fleet/board/attentionOutside";
-import { restartRunning } from "../models/sandbox/live/sandboxRestart";
+import { restartRunning, restartWaiting } from "../models/sandbox/live/sandboxRestart";
 import { sandboxHubPath } from "../models/sandbox/sandboxNav";
 import { useWorkspaceTree } from "../models/workspace/tree/useWorkspaceTree";
 import PresenceAvatars from "../workbench/presence/PresenceAvatars.vue";
@@ -77,12 +78,15 @@ const isNavActive = (to: string): boolean => routeShows(route, to);
 const sandbox = useSandbox();
 const { badge: attentionBadge } = useSandboxAttention();
 const restarting = computed(() => restartRunning(sandbox.activeSandboxId.value));
+// The same work once it waits on its owner to restart: the turning mark stops and is plated (SandboxSwitcher.vue).
+const waiting = computed(() => restartWaiting(sandbox.activeSandboxId.value));
+const WAITING_BADGE: ViewBadge = { mark: `refresh`, tone: `info` };
 const placement = useSandboxPlacement();
 const { hasSnapshot } = useWorkspaceTree();
 const availability = useSandboxAvailability(hasSnapshot);
 const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability.value));
 const sandboxLabel = computed(() =>
-    [sandbox.active.value?.name, t(`shared.menu`), attentionBadge.value?.tooltip, availabilityVisual.value.label, restarting.value]
+    [sandbox.active.value?.name, t(`shared.menu`), attentionBadge.value?.tooltip, availabilityVisual.value.label, waiting.value, restarting.value]
         .filter((part) => part !== undefined && part !== ``)
         .join(` · `),
 );
@@ -115,8 +119,14 @@ const frame = phoneRailFrame();
                 <Icon :name="placement.icon" class="text-[0.9em]" />
             </span>
             <ViewBadgeChip :badge="attentionBadge" class="icon-rail-mark pointer-events-none absolute right-0.5 top-0.5" aria-hidden="true" />
+            <ViewBadgeChip
+                v-if="waiting !== undefined"
+                :badge="WAITING_BADGE"
+                class="icon-rail-mark pointer-events-none absolute bottom-0.5 right-0.5"
+                aria-hidden="true"
+            />
             <TileMark
-                v-if="restarting !== undefined"
+                v-else-if="restarting !== undefined"
                 name="spinner"
                 spin
                 :class="[RUNNING_MARK_CLASS, `icon-rail-mark pointer-events-none absolute bottom-0.5 right-0.5`]"

@@ -9853,7 +9853,8 @@
             "listAnd": "{head} i {last}"
         },
         "sandboxRestart": {
-            "countRunning": "{count} w toku"
+            "countRunning": "{count} w toku",
+            "imageBuiltWaiting": "Obraz zbudowany · czeka, aż zrestartujesz"
         },
         "recoveryDeps": {
             "sandboxAnswered": "sandbox odpowiedział kodem {status}"

@@ -9,7 +9,7 @@ import { useRoute, useRouter } from "vue-router";
 import ViewBadgeChip from "../../../workbench/views/ViewBadgeChip.vue";
 import { RUNNING_MARK_CLASS } from "../../../workbench/views/viewBadge";
 import TileMark from "../../../components/TileMark.vue";
-import { restartRunning } from "../../../models/sandbox/live/sandboxRestart";
+import { restartRunning, restartWaiting } from "../../../models/sandbox/live/sandboxRestart";
 import { GUEST_SECTION } from "../../../models/sandbox/sandboxNav";
 import { sandboxEntryPath } from "../../../models/sandbox/sandboxScreen";
 import { hereIn, isPage, page } from "../../../lib/routes/links";
@@ -55,6 +55,11 @@ const route = useRoute();
 // badge for it would teach the reader to stop reading the badge. A mark of its own, on its own corner, saying only
 // that something is moving. What it will do is said when it does it, by the lane.
 const restarting = computed(() => restartRunning(sandbox.activeSandboxId.value));
+// THE SAME WORK, ONCE IT WAITS ON THE OWNER: a rebuild built and held at the gate until they say restart. The spinner
+// would keep saying "working, nothing for you to do", the opposite of the truth, so its corner turns into a still,
+// plated mark (the rail's own "needs you" chip) and a press on the logo goes to the button that ends the wait.
+const waiting = computed(() => restartWaiting(sandbox.activeSandboxId.value));
+const WAITING_BADGE: ViewBadge = { mark: `refresh`, tone: `info` };
 
 // WHERE THIS SANDBOX RUNS: Intentic's cloud, a machine of the owner's, or somebody else's. Drawn as one mark with the
 // connection's state — the glyph says which machine, its ink says whether that machine answers — because both are
@@ -70,7 +75,7 @@ const switcherLabel = computed(() => {
         availability.value === `live` || availability.value === `stale`
             ? undefined
             : t(`sandbox.sandboxSwitcher.sandboxState`, { state: availabilityVisual.value.label.toLowerCase() });
-    return [name, placement.value?.detail, status, restarting.value].filter((part) => part !== undefined).join(` · `);
+    return [name, placement.value?.detail, status, waiting.value, restarting.value].filter((part) => part !== undefined).join(` · `);
 });
 
 // A short retry keeps the healthy ink; changing colour is itself the alarm being avoided.
@@ -98,9 +103,16 @@ const placementFor = (option: SandboxSummary): SandboxPlacement =>
 const settingsHere = (): void => {
     const active = sandbox.active.value;
     if (active !== undefined) {
-        void router.push(hereIn(active.id, page.sandboxSettings(active.role === `guest` ? GUEST_SECTION : undefined)));
+        const section = active.role === `guest` ? GUEST_SECTION : waiting.value === undefined ? undefined : `environment`;
+        void router.push(hereIn(active.id, page.sandboxSettings(section)));
     }
 };
+// While it waits, the tooltip says what for, in the receipt's own words, rather than the cog's.
+const doorTip = computed<TooltipValue>(() =>
+    waiting.value === undefined
+        ? t(`shared.settings`)
+        : { title: t(`sandbox.restartWatch.builtWaiting`), note: t(`sandbox.restartWatch.builtWaitingDetail`), tone: `info` },
+);
 const doorLabel = computed(() =>
     t(`sandbox.sandboxSwitcher.settingsOf`, { name: sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`) }) +
     switcherLabel.value.slice((sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`)).length),
@@ -222,7 +234,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? () => openThisComputer(master
             class="sandbox-switcher icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center overflow-hidden rounded-lg"
             :class="isPage(route, `sandboxSettings`) ? 'ui-row-select-on text-link' : 'text-muted hover:text-content'"
             :aria-label="doorLabel"
-            v-tooltip.right="t(`shared.settings`)"
+            v-tooltip.right="doorTip"
             @click="settingsHere()"
         >
             <span class="icon-rail-picture flex items-center justify-center overflow-hidden rounded-md [&_span]:text-inherit">
@@ -253,8 +265,15 @@ useSwitchCommands(switchable, pick, inDesktopApp ? () => openThisComputer(master
         <!-- The rail's running mark, on the bottom-right corner as on every other rail icon: it is an errand in flight,
      where the two beside it are standing facts, and the one thing here that must never be crowded. The sentence rides the control's own label,
      since a tooltip on a mark inside a tooltipped button nests inside it. -->
+        <!-- Work that has finished its side and waits on the owner to restart: the same corner, the spinner stopped and
+             plated, since a turning mark there would say nothing is asked of them. -->
+        <ViewBadgeChip
+            v-if="!local && waiting !== undefined"
+            :badge="WAITING_BADGE"
+            class="sandbox-switcher-mark pointer-events-none absolute bottom-0.5 right-0.5"
+        />
         <TileMark
-            v-if="restarting !== undefined || (local && logoBadge?.running !== undefined)"
+            v-else-if="restarting !== undefined || (local && logoBadge?.running !== undefined)"
             name="spinner"
             spin
             :class="[RUNNING_MARK_CLASS, `sandbox-switcher-mark pointer-events-none absolute bottom-0.5 right-0.5`]"

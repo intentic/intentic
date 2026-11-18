@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { freshImport } from "@intentic/testing/bun";
-import { expectRestart, forgetRestarts, type RestartWork, restartExpected, restartFinished, restartRunning } from "./sandboxRestart";
+import { expectRestart, forgetRestarts, type RestartWork, restartAwaits, restartExpected, restartFinished, restartRunning, restartWaiting } from "./sandboxRestart";
 
 // Needs jsdom: the ledger's whole point is surviving the container that serves this page, which it does in
 // localStorage.
@@ -48,6 +48,28 @@ describe(`what the app knows about a coming restart`, () => {
         fromTheRoot();
         expect(restartRunning(`sbx-1`)).toBeUndefined();
         expect(localStorage.getItem(`intentic.restart.sbx-1.dev-rebuild`)).toBeNull();
+    });
+
+    it(`stops calling held work running while it waits on its owner, and says what it waits for`, () => {
+        expectRestart(work());
+        restartAwaits({ sandbox: `sbx-1`, id: `dev-rebuild` }, `Image built · waiting for you to restart`);
+        expect(restartRunning(`sbx-1`)).toBeUndefined();
+        expect(restartWaiting(`sbx-1`)).toBe(`Image built · waiting for you to restart`);
+        expect(restartWaiting(`sbx-2`)).toBeUndefined();
+        restartAwaits({ sandbox: `sbx-1`, id: `dev-rebuild` }, undefined);
+        expect(restartWaiting(`sbx-1`)).toBeUndefined();
+        expect(restartRunning(`sbx-1`)).toBe(`Rebuilding from your checkout`);
+    });
+
+    it(`never says work waits once nobody holds it`, () => {
+        restartAwaits({ sandbox: `sbx-1`, id: `dev-rebuild` }, `Image built · waiting for you to restart`);
+        expect(restartWaiting(`sbx-1`)).toBeUndefined();
+        const end = expectRestart(work());
+        expect(restartWaiting(`sbx-1`)).toBe(`Image built · waiting for you to restart`);
+        end();
+        expect(restartWaiting(`sbx-1`)).toBeUndefined();
+        expectRestart(work());
+        expect(restartWaiting(`sbx-1`)).toBeUndefined();
     });
 
     it(`counts producers rather than listing them`, () => {
