@@ -151,6 +151,11 @@ built outside Fedora (NVIDIA's) would need a machine owner key, which this image
 
 `disk.sh --type raw` is a disk image to write straight onto a drive; `qcow2` is a VM disk.
 
+Each release's ISO and qcow2 disk (server edition) are published by [publish-download.sh](publish-download.sh) to the
+`intentic-os` R2 bucket, and downloaded from [intentic.dev/download](https://intentic.dev/download/#os) through
+`intentic.dev/os/iso` and `/os/qcow2`. `os.yml` runs it only after `install-test.sh` passed, with an R2 access key in
+the `R2_OS_ACCESS_KEY_ID` and `R2_OS_SECRET_ACCESS_KEY` secrets.
+
 ## Hardware
 
 | Machine | Edition | Result |
@@ -172,3 +177,4 @@ console.
 - [rootfs/usr/share/polkit-1/rules.d/50-intentic.rules](rootfs/usr/share/polkit-1/rules.d/50-intentic.rules) — what the `intentic` user may change without an administrator: Wi-Fi, removable drives.
 - [build.sh](build.sh), [disk.sh](disk.sh), [smoke.sh](smoke.sh) — build an image, make a disk or installer, boot and check it.
 - [install-test.sh](install-test.sh) — the installer end to end, with a software TPM and Secure Boot.
+- [publish-download.sh](publish-download.sh) — a release's ISO and VM disk, up to the R2 bucket intentic.dev/os serves.

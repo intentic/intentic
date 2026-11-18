@@ -1,0 +1,162 @@
+---
+import { APP_URL } from "@intentic/site-content/site";
+import { glyph, type GlyphName } from "./glyphs";
+
+/* INTENTIC OS, THE INSTALLER: a whole machine for sandboxes, from a USB stick. The links never carry a version; the
+   worker's /os/ routes (src/lib/worker/os-downloads.ts) hand over what os.yml last published to R2, and the script
+   below fills the version, size and checksum from /os/latest.json. Until a first build is published it says so and
+   the button stays off, rather than sending anyone to a download that would only bring them back here. */
+
+const steps: { title: string; body: string }[] = [
+    { title: "Download the ISO", body: "One file of a few gigabytes; a dropped download resumes." },
+    { title: "Write it to a USB stick", body: "With Fedora Media Writer, balenaEtcher, or Rufus in DD mode. 8\u00a0GB or larger." },
+    { title: "Boot the machine from the stick", body: "It installs by itself, with nothing to answer, and restarts." },
+    { title: "Pair it with your account", body: "Type the setup code from your account on its screen, or on the page it serves to your network." },
+];
+
+const traits: { glyph: GlyphName; text: string }[] = [
+    { glyph: "cube", text: "Docker and the sandbox runtime built in, nothing to set up" },
+    { glyph: "update", text: "Updates download in the background; a bad one rolls back by itself" },
+    { glyph: "shield", text: "With a TPM 2.0 chip, the disk is encrypted and unlocks by itself" },
+];
+---
+
+<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16">
+    <div class="min-w-0">
+        <p class="text-xs font-semibold tracking-[0.08em] text-gold uppercase">Intentic OS</p>
+        <h2 class="display mt-2 text-2xl sm:text-3xl">Give your sandboxes a machine of their own</h2>
+        <p class="mt-3 max-w-copy text-sm leading-relaxed text-muted">
+            A spare PC or a small server becomes a dedicated host for sandboxes. It needs no screen: you reach it from{" "}
+            <a href={APP_URL} class="text-link hover:underline">your browser</a> and the phone app, from anywhere.
+        </p>
+        <ul class="mt-6 flex flex-col gap-3 text-sm text-muted">
+            {
+                traits.map((trait) => (
+                    <li class="flex items-start gap-3">
+                        <span set:html={glyph(trait.glyph, "mt-0.5 h-4 w-4 shrink-0 text-gold")} />
+                        {trait.text}
+                    </li>
+                ))
+            }
+        </ul>
+
+        <div class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3" data-os>
+            <a href="/os/iso" class="btn btn-primary" data-os-cta>
+                <span set:html={glyph("download", "btn-icon")} />
+                <span data-os-label>Download the ISO</span>
+            </a>
+            <a href="/os/qcow2" class="text-sm text-link hover:underline" data-os-vm>Or a VM disk (qcow2)</a>
+        </div>
+        <p class="mt-4 text-xs text-subtle" data-os-meta>x86-64 · UEFI · 4 GB of memory or more</p>
+        <p class="mt-1.5 hidden font-mono text-2xs break-all text-subtle" data-os-sha title="SHA-256 of the ISO"></p>
+    </div>
+
+    <div class="min-w-0">
+        <ol class="os-steps">
+            {
+                steps.map((step, index) => (
+                    <li class="flex gap-4 p-5">
+                        <span class="os-step-number">{index + 1}</span>
+                        <div>
+                            <p class="font-mark text-base text-content">{step.title}</p>
+                            <p class="mt-0.5 text-sm text-muted">{step.body}</p>
+                        </div>
+                    </li>
+                ))
+            }
+        </ol>
+        <p class="mt-4 flex gap-2.5 text-xs leading-relaxed text-subtle">
+            <span class="shrink-0" set:html={glyph("caution", "h-4 w-4 text-warning")} />
+            <span>
+                Installing <strong class="font-medium text-muted">erases the machine's internal disk</strong>, everything on it. It never touches the USB stick it
+                booted from or a second disk.
+            </span>
+        </p>
+    </div>
+</div>
+
+<script>
+    // The version, size and checksum of what /os/iso hands over now. Answered by the worker only: under `astro dev`
+    // the fetch fails, and the built-in text stands.
+    const root = document.querySelector<HTMLElement>("[data-os]");
+    const cta = root?.querySelector<HTMLAnchorElement>("[data-os-cta]");
+    const meta = document.querySelector<HTMLElement>("[data-os-meta]");
+    const sha = document.querySelector<HTMLElement>("[data-os-sha]");
+
+    const gigabytes = (bytes: number): string => `${(bytes / 1e9).toFixed(1)} GB`;
+
+    interface OsLatest {
+        version: string;
+        files: { iso: { size: number; sha256: string } };
+    }
+
+    // Nothing published yet: say so, and close both links rather than send anyone round to this same section.
+    const noneYet = (): void => {
+        for (const link of root?.querySelectorAll<HTMLAnchorElement>("a") ?? []) {
+            link.removeAttribute("href");
+            link.setAttribute("aria-disabled", "true");
+        }
+        const label = cta?.querySelector("[data-os-label]");
+        if (label) {
+            label.textContent = "Coming with the next release";
+        }
+        root?.querySelector("[data-os-vm]")?.remove();
+    };
+
+    if (root && cta) {
+        fetch("/os/latest.json")
+            .then((response) => {
+                if (response.status === 503) {
+                    noneYet();
+                    return null;
+                }
+                // SAFETY: the worker answers 200 only with a manifest osManifestSchema parsed (os-downloads.ts).
+                return response.ok ? (response.json() as Promise<OsLatest>) : null;
+            })
+            .then((latest) => {
+                if (latest === null || !/^\d+\.\d+\.\d+$/u.test(latest.version)) {
+                    return;
+                }
+                const label = cta.querySelector("[data-os-label]");
+                if (label) {
+                    label.textContent = `Download the ISO (${gigabytes(latest.files.iso.size)})`;
+                }
+                if (meta) {
+                    meta.textContent = `Version ${latest.version} · x86-64 · UEFI · 4 GB of memory or more`;
+                }
+                if (sha) {
+                    sha.textContent = `SHA-256 ${latest.files.iso.sha256}`;
+                    sha.classList.remove("hidden");
+                }
+            })
+            .catch(() => {
+                // Offline or not served by the worker (astro dev): the built-in text stands.
+            });
+    }
+</script>
+
+<style>
+    .os-steps {
+        border: 1px solid var(--color-line);
+        background: var(--wash-panel);
+    }
+    .os-steps > li + li {
+        border-top: 1px solid var(--color-line);
+    }
+    .os-step-number {
+        display: grid;
+        place-items: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        flex: none;
+        font-size: var(--text-xs);
+        font-weight: var(--font-weight-semibold);
+        color: var(--color-gold);
+        border: 1px solid var(--color-line-strong);
+        background: var(--role-frame-fill);
+    }
+    [data-os] a[aria-disabled] {
+        pointer-events: none;
+        opacity: 0.55;
+    }
+</style>

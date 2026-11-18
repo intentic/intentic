@@ -2,8 +2,10 @@
 #
 # Two channels, two sources. `beta` is main: every push that touches the OS's files or `ic` builds both editions with
 # an `ic` compiled from that commit, boots the server edition in a VM (smoke.sh), and pushes `:beta` only once it booted.
-# `stable` is a release: when release.yml publishes v<x>, this builds both editions from that release's own `ic` and
-# desktop app, boots, and pushes `:stable` and `:<x>`, then attaches the installer ISO and a VM disk to the run.
+# `stable` is a release: release.yml's dispatch-publish.sh starts this AT THE TAG v<x> (a `release: published` trigger
+# never fired, since the Release is published with GITHUB_TOKEN, whose events start no workflow). It builds both
+# editions from that release's own `ic` and desktop app, boots, and pushes `:stable` and `:<x>`, then makes the
+# installer ISO and a VM disk, installs from the ISO, and publishes both to R2, where intentic.dev/os/iso serves them.
 #
 # A machine on a channel follows it by itself: intentic-os-update.timer stages what the tag points at, and the
 # owner (or the agent, with the owner's yes) reboots into it. So pushing a tag here is releasing the OS; nothing is
@@ -20,18 +22,16 @@ on:
       - "_os/**"
       - "_sandbox/ic/**"
       - ".github/workflows/os.yml"
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       push:
-        description: Push the images (beta from a branch build, stable from a release tag).
+        description: Push beta images from a branch build. A run at a v* tag is a stable release and always publishes.
         type: boolean
         default: false
 
 concurrency:
-  group: os-${{ github.event_name == 'release' && 'stable' || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'release' }}
+  group: os-${{ startsWith(github.ref, 'refs/tags/v') && 'stable' || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 permissions:
   contents: read
@@ -66,10 +66,11 @@ jobs:
         id: plan
         env:
           EVENT: ${{ github.event_name }}
-          TAG: ${{ github.event.release.tag_name }}
+          REF: ${{ github.ref }}
+          TAG: ${{ github.ref_name }}
           PUSH_INPUT: ${{ inputs.push }}
         run: |
-          if [ "$EVENT" = release ]; then
+          if [[ "$REF" == refs/tags/v* ]]; then
             version="${TAG#v}"
             echo "channel=stable" >> "$GITHUB_OUTPUT"
             echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -81,10 +82,10 @@ jobs:
           fi
 
       - name: ic and the desktop app, from the release
-        if: github.event_name == 'release'
+        if: steps.plan.outputs.channel == 'stable'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.ref_name }}
         run: |
           mkdir -p _sandbox/ic/dist-bin _editor/desktop-app/dist-bin
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern ic-linux-amd64 --dir _sandbox/ic/dist-bin
@@ -92,7 +93,7 @@ jobs:
           chmod +x _sandbox/ic/dist-bin/ic-linux-amd64
 
       - name: ic, from this commit
-        if: github.event_name != 'release'
+        if: steps.plan.outputs.channel != 'stable'
         run: |
           cargo build --release --locked --manifest-path _sandbox/ic/Cargo.toml
           mkdir -p _sandbox/ic/dist-bin
@@ -163,7 +164,7 @@ jobs:
           push-to-registry: true
 
       - name: Installer and VM disk
-        if: github.event_name == 'release'
+        if: steps.plan.outputs.channel == 'stable'
         run: |
           bash _os/os-image/disk.sh --type anaconda-iso --image ghcr.io/intentic/os:stable --out "$RUNNER_TEMP/iso"
           bash _os/os-image/disk.sh --type qcow2 --image ghcr.io/intentic/os:stable --out "$RUNNER_TEMP/qcow2"
@@ -172,19 +173,25 @@ jobs:
       # The installer as a person meets it: a blank disk, Secure Boot and a TPM (software ones), an unattended install,
       # then a first boot that must unlock its encrypted root by itself.
       - name: Install from the ISO
-        if: github.event_name == 'release'
+        if: steps.plan.outputs.channel == 'stable'
         run: bash _os/os-image/install-test.sh --iso "$RUNNER_TEMP/iso/bootiso/install.iso" --out "$RUNNER_TEMP/install-test"
 
-      # The ISO is past a release asset's 2 GB cap, so the run keeps both for the site's download page to point at.
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: github.event_name == 'release'
-        with:
-          name: intentic-os-${{ steps.plan.outputs.version }}
-          path: |
-            ${{ runner.temp }}/iso/bootiso/install.iso
-            ${{ runner.temp }}/qcow2/qcow2/disk.qcow2
-          retention-days: 90
-          compression-level: 0
+      # THE DOWNLOAD. The ISO is past a release asset's 2 GB cap, so both files go to the R2 bucket the site worker
+      # binds (_site/site/wrangler.jsonc), under os/<version>/, with os/stable.json written last: the worker reads that
+      # manifest for /os/iso, /os/qcow2 and /os/latest.json, so it never names a file that is not up yet. Only an ISO
+      # that installed and booted above gets here. The newest three versions stay; older ones are deleted.
+      - name: Publish the installer to intentic.dev/os
+        if: steps.plan.outputs.channel == 'stable'
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+          R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_OS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_OS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # R2 takes the CRC checksums newer AWS CLIs add to every upload only partly; ask for them where required.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: bash _os/os-image/publish-download.sh --version "$VERSION" --iso "$RUNNER_TEMP/iso/bootiso/install.iso" --qcow2 "$RUNNER_TEMP/qcow2/qcow2/disk.qcow2"
 
       - name: Boot log
         if: always()

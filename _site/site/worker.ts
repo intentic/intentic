@@ -3,14 +3,18 @@ import { DESKTOP_ROUTES } from "./src/lib/desktop-downloads";
 import { createReleaseResolver } from "./src/lib/release";
 import type { LiveContent, LiveSwitch } from "./src/lib/live";
 import { createLiveContentResolver } from "./src/lib/worker/live-resolver";
+import { createOsDownloads, type OsBucket } from "./src/lib/worker/os-downloads";
 import { injectPs1, injectSh, parseVerbRoute, refusalScript, resolveVerbRequest, scriptUrlOf, type VerbRequest } from "./src/lib/worker-verbs";
 import { aiFetchOf, sendAiFetch } from "./src/lib/ai-fetch";
 import { handleSiteWire, type WireEnv } from "./src/lib/site-wire";
 
-// The Worker's bindings: the static assets, and the site counter's PostHog key and salt (lib/site-wire.ts), set as
-// Worker secrets; the counter sends nothing without the key.
+// The Worker's bindings: the static assets, the R2 bucket the Intentic OS installer is published to (os-downloads.ts),
+// and the site counter's PostHog key and salt (lib/site-wire.ts), set as Worker secrets; the counter sends nothing
+// without the key.
 interface WorkerEnv extends WireEnv {
     readonly ASSETS: { fetch: typeof fetch };
+    /** Absent in `astro dev` and a local `wrangler dev` without the bucket: the /os/ routes then answer "none yet". */
+    readonly OS_DOWNLOADS?: OsBucket;
 }
 
 // Cloudflare's two-letter country for the visitor, or undefined where it does not know (`XX`, Tor, a local run).
@@ -90,10 +94,12 @@ async function latestReleaseJson(): Promise<Response> {
 
 const liveContent = createLiveContentResolver((input, init) => fetch(input, init));
 
+const osDownloads = createOsDownloads();
+
 // Switch controls matched by what a control already looks like (`a.btn` to the app host, or a download href).
 const APP_HOST = new URL(PLATFORM_WEB_ORIGIN).host;
 const WORKSPACE_CONTROLS = `a.btn[href*="${APP_HOST}"]`;
-const DOWNLOAD_CONTROLS = "a[data-download-cta], a[href^='/desktop/']";
+const DOWNLOAD_CONTROLS = "a[data-download-cta], a[href^='/desktop/'], a[href^='/os/']";
 
 // Closes an `<a>`: removes `href` (inert and unfocusable everywhere, stronger than styling) rather than repointing it,
 // and sets the reason as its `title`; the notice strip carries the visible explanation.
@@ -243,7 +249,7 @@ async function desktopDownload(
     return Response.redirect(await resolveDownload(download.asset, download.staged), 302);
 }
 
-async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
+async function route(request: Request, url: URL, env: WorkerEnv): Promise<Response> {
     if (url.pathname === SITEMAP_ALIAS) {
         return Response.redirect(new URL("/sitemap-index.xml", url).href, 301);
     }
@@ -256,6 +262,11 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
 
     if (url.pathname === LATEST_JSON_PATH) {
         return latestReleaseJson();
+    }
+
+    const os = await osDownloads.route(request, url, env.OS_DOWNLOADS, async () => (await liveContent())?.switches.download.enabled !== false);
+    if (os !== undefined) {
+        return os;
     }
 
     const download = DESKTOP_ROUTES[url.pathname.replace(/\/$/, "")];

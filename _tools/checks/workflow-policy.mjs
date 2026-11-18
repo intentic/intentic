@@ -111,7 +111,7 @@ for (const file of workflowFiles()) {
     }
 }
 
-// The tag push that never arrives.
+// The tag push, or the Release event, that never arrives.
 const tagTriggered = [];
 for (const file of workflowFiles()) {
     const lines = workflowText(file).split("\n");
@@ -124,6 +124,14 @@ for (const file of workflowFiles()) {
     for (let i = on + 1; i < lines.length && !/^\S/.test(lines[i]); i++) {
         if (/^ {2}\S/.test(lines[i])) {
             inPush = /^ {2}push:\s*$/.test(lines[i]);
+            if (/^ {2}release:/.test(lines[i])) {
+                tagTriggered.push(
+                    `.github/workflows/${file}: \`on: release\` is a trigger this repository can never fire, release.yml ` +
+                        `publishes its Releases with GITHUB_TOKEN, and GitHub starts no workflow from that token's events. Use ` +
+                        `\`on: workflow_dispatch\` and add this file to WORKFLOWS in _tools/scripts/release/dispatch-publish.sh, which ` +
+                        `dispatches it AT THE TAG`,
+                );
+            }
         } else if (inPush && /^ {4}tags:/.test(lines[i])) {
             tagTriggered.push(
                 `.github/workflows/${file}: \`on: push: tags\` is a trigger this repository can never fire, semantic-release ` +
@@ -198,7 +206,7 @@ finish(
         ["Self-hosted CI is reachable from a fork's pull request (docs/ops/ci-runner.md, 'The fork boundary')", exposed],
         ["A called workflow asks for more than its caller grants: Actions fails this before any job starts", overreach],
         ["A publish with provenance is on a runner npm's registry will not attest", unattestable],
-        ["A workflow is triggered by a tag push GitHub will never deliver (dispatch it instead)", tagTriggered],
+        ["A workflow is triggered by a tag push or Release event GitHub will never deliver (dispatch it instead)", tagTriggered],
         ["A job bootstraps pnpm with corepack rather than taking it from the action or the image", corepacked],
         ["A test waits on a CI lane no job runs it in (@intentic/testing/requires, `lane`)", unrun],
     ],
@@ -206,7 +214,7 @@ finish(
         "fork boundary: no self-hosted job is reachable from a fork's pull request",
         "workflow permissions: every reusable-workflow call grants what the workflow it calls asks for",
         "npm provenance: no job publishes an attested tarball from the self-hosted fleet",
-        "publish triggers: no workflow waits on a tag push GITHUB_TOKEN can never deliver",
+        "publish triggers: no workflow waits on a tag push or Release event GITHUB_TOKEN can never deliver",
         "pnpm bootstrap: no job's success hangs on corepack's unretried fetch of the `packageManager` tarball",
         `CI lanes: every test naming a \`lane\` is run by a job that sets ${CI_LANE} to it`,
     ],

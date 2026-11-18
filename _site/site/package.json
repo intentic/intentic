@@ -19,16 +19,17 @@
     "dependencies": {
         "@astrojs/sitemap": "catalog:",
         "@intentic/astro-integrations": "workspace:*",
-        "@intentic/site-content": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/entry-css": "workspace:*",
         "@intentic/registry": "workspace:*",
         "@intentic/sandbox-openapi": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",
+        "@intentic/site-content": "workspace:*",
         "@tailwindcss/vite": "catalog:",
         "astro": "catalog:",
         "sharp": "catalog:",
-        "tailwindcss": "catalog:"
+        "tailwindcss": "catalog:",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@astrojs/check": "catalog:",

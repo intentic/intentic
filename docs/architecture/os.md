@@ -154,6 +154,13 @@ those things with no seat session and no password: the machine agent that calls 
 in a VM before it pushes anything, so a tag never points at an image that did not boot. `ic os channel` moves a
 machine between them, within intentic's own repositories (the sudo rule allows nothing else).
 
+A release starts the stable build by dispatching `os.yml` at its tag (`dispatch-publish.sh`): a Release published with
+GITHUB_TOKEN starts no workflow by itself. Once the installer ISO has installed and booted (below),
+[`publish-download.sh`](../../_os/os-image/publish-download.sh) puts it and the qcow2 VM disk in the `intentic-os` R2
+bucket, since the ISO is past a GitHub release asset's 2 GB cap. The site worker serves them as `intentic.dev/os/iso`
+and `/os/qcow2`, which the [download page](../../_site/site/src/pages/download.astro) links to, from the bucket's
+`os/stable.json`. The newest three versions are kept.
+
 ## How it is checked
 
 [`smoke.sh`](../../_os/os-image/smoke.sh) boots the server edition in a VM and checks Docker, the Kata runtime, the

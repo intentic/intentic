@@ -5,6 +5,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 import ExternalIcon from "../components/ExternalIcon.astro";
+import OsInstaller from "../components/download/OsInstaller.astro";
 import PlatformTiles from "../components/download/PlatformTiles.astro";
 import SameSandbox from "../components/download/SameSandbox.astro";
 import SetupPath from "../components/download/SetupPath.astro";
@@ -138,6 +139,13 @@ const exits: { glyph: GlyphName; title: string; body: string; href: string }[] =
                 }
             })();
         </script>
+
+        {/* A whole machine rather than an app: its own band, after the tiles and before what the app does after setup. */}
+        <section id="os" class="band-rule scroll-mt-24 border-t" aria-label="Intentic OS">
+            <div class="mx-auto max-w-6xl px-6 py-16 lg:py-20">
+                <OsInstaller />
+            </div>
+        </section>
 
         <section class="band-rule border-t">
             <div class="mx-auto max-w-6xl px-6 py-16 lg:py-20">
