@@ -1,6 +1,6 @@
 import type { InvariantCheck } from "../../invariants/invariants.js";
 
-/* No runtime invariant: the context is a field on a persona card the owner writes and this subsystem only reads. */
+/* No runtime invariant: the context is a field on a role card the owner writes and this subsystem only reads. */
 
 export const owner = "context";
 

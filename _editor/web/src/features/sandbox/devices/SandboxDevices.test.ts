@@ -2,7 +2,7 @@
 import "@intentic/testing/dom";
 import { listedDevice } from "../../../testing/listedDevice";
 import type { CardlessHost, Device, SharedIdentity } from "@intentic/sandbox-contract/schemas/devices";
-import { type MemberRole, roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { type MemberTier, tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { RouteLocationRaw } from "vue-router";
 import PrimeVue from "primevue/config";
 import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups, tipText, type TooltipValue } from "@intentic/ui";
@@ -142,10 +142,10 @@ jest.mock(`../../../models/sandbox/devices/usePeerConnect`, () => ({
 // The reader's tier, and the two flags this page could read off it, derived as the real hook derives them. Pairing a
 // machine and revoking another device's access are maintainer and up at the daemon (its operating gate, `ownerDenied`),
 // so a maintainer who is not the owner is the reader that tells the two flags apart.
-const role = ref<MemberRole>(`owner`);
-jest.mock(`../../../client/sandbox/useRole`, () => ({
-    useRole: () => ({
-        canShip: computed(() => roleAtLeast(role.value, `maintainer`)),
+const role = ref<MemberTier>(`owner`);
+jest.mock(`../../../client/sandbox/useTier`, () => ({
+    useTier: () => ({
+        canShip: computed(() => tierAtLeast(role.value, `maintainer`)),
         isOwner: computed(() => role.value === `owner`),
     }),
 }));

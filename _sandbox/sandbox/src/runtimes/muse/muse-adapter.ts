@@ -21,7 +21,7 @@ import type { Services } from "../../composition.js";
 import { endpointModelId } from "../../endpoints/endpoint-translator.js";
 import { endpointConfigOf } from "../../endpoints/local-model.js";
 import { opt } from "../../opt.js";
-import { turnPersona } from "../../personas/personas.js";
+import { turnRole } from "../../roles/roles.js";
 import { type ServiceabilityDeps, unnamedAccount } from "../../usage/serviceability/serviceability.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
 import { daemonServersFor, type DaemonServersDeps } from "../daemon-tools/daemon-servers.js";
@@ -138,16 +138,16 @@ export const planMuseTurn = async (services: MuseAdapterDeps, input: RoutedAgent
     } catch (error) {
         return { ok: false, message: `${MUSE_CLI_MISSING} (${errorMessage(error)})` };
     }
-    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    const role = context.role ?? turnRole({ roles: [], actsAs: undefined, unattended: false });
     const mounted = await turnToolsOf(services, granted, {
         conversationId: input.conversationId,
-        anonymousBrowser: persona.powers.browser,
-        shell: persona.powers.shell,
-        extensions: persona.powers.extensions,
+        anonymousBrowser: role.powers.browser,
+        shell: role.powers.shell,
+        extensions: role.powers.extensions,
     });
     const settings = context.settings ?? (await services.sandboxSettings.get());
     // Muse asks about commands over its own approval channel, answered in-process (muse-asks.ts), so no gate server.
-    const daemon = daemonServersFor(services, { input, context, persona, granted, settings, mounted, gate: false });
+    const daemon = daemonServersFor(services, { input, context, role, granted, settings, mounted, gate: false });
     const remote = [...mounted.tools, ...daemon.tools];
     return armPlan(
         releasingMounts(runMuseAgent, mounted),

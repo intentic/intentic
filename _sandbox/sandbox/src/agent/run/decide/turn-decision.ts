@@ -8,11 +8,12 @@ import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities
 import type { Rule, SandboxSettings, SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
-import { mayDelegate, personaCapabilities, personaPrompt, type TurnPersona } from "../../../personas/personas.js";
-import { personaLimitsRefusal } from "./persona-limits.js";
+import { mayDelegate, roleCapabilities, rolePrompt, type TurnRole } from "../../../roles/roles.js";
+import { roleLimitsRefusal } from "./role-limits.js";
 import { withRepoChecks } from "../../../rules/repo-checks.js";
 import { gatedCapabilities } from "../../../secrets/credential-gating.js";
 import { withinReach } from "../../../secrets/credential-reach.js";
+import { conversationFence } from "../../../areas/area-scope.js";
 import type { TurnBriefing } from "../../prompt/turn-briefing.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import { contextShortfall } from "../../prompt/window/context-budget.js";
@@ -62,16 +63,21 @@ export interface TurnDecision extends DecidedEffects {
     readonly accountMove?: AccountMove;
     // What every arm builds on, the composed request as its base.
     readonly context: TurnContext;
-    // The manifest after the persona's shelves and the owner's gates: the only list an arm may mount from.
+    // The manifest after the role's shelves and the owner's gates: the only list an arm may mount from.
     readonly granted: Capability[];
-    // What the turn does not reach and why, by capability id: left out by its persona, or held by a gate for a named
-    // approver. Recorded as the turn's standing, which the needs door answers a turn's asks by.
-    readonly withheldByPersona: readonly string[];
+    // What the turn does not reach and why, by capability id: left out by its role (the accounts it speaks through,
+    // or an access profile listing it), or held by a gate for a named approver. Recorded as the turn's standing, which
+    // the needs door answers a turn's asks by.
+    readonly withheldByRole: readonly string[];
     readonly withheldByGate: readonly string[];
-    // Connected capability ids the people this conversation works for were not given; final, nothing raises for them.
+    // Connected capability ids the people and services this conversation acts for were not given, whatever role it
+    // wears; final, nothing raises for them.
     readonly withheldByReach: readonly string[];
-    // The most its tools may be, as the principals it acts for are held to; final like the reach (turn-standing.ts).
+    // The most its tools may be as the people and services it acts for are held to, whatever role it wears; final
+    // like the reach (turn-standing.ts).
     readonly ceiling?: ToolCeiling | undefined;
+    // The folders it may touch whatever role it wears: the fence it was born with. Undefined is the whole workspace.
+    readonly accessFence: readonly string[] | undefined;
     // Where a failing command's dependencies are looked up, the start folder; the planner binds it to the live probe.
     readonly dependencyDir: string;
     readonly briefing: TurnBriefing;
@@ -179,10 +185,30 @@ const experimentsOf = (
         coldTrim: undefined,
     });
 
+// What the turn does not reach, and why: the role holds back the accounts it does not speak through and what its
+// access profiles leave out that the people and services it acts for would allow, which another role could have;
+// a gate holds what waits on an approver; the rest of access holds what nothing here could open.
+const withheldOf = (
+    facts: AdmittedTurnFacts,
+    reachable: readonly Capability[],
+    gated: readonly { readonly subject: string }[],
+): Pick<TurnDecision, "withheldByRole" | "withheldByGate" | "withheldByReach" | "ceiling" | "accessFence"> => {
+    const hard = withinReach(facts.installed, facts.accessReach).withheld.map((capability) => capability.id);
+    const all = withinReach(facts.installed, facts.reach).withheld.map((capability) => capability.id);
+    const accounts = facts.installed.filter((capability) => !reachable.includes(capability)).map((capability) => capability.id);
+    return {
+        withheldByRole: [...new Set([...accounts, ...all.filter((id) => !hard.includes(id))])],
+        withheldByGate: gated.map((gate) => gate.subject),
+        withheldByReach: hard,
+        ...opt("ceiling", facts.accessCeiling),
+        accessFence: conversationFence(facts.areas, facts.entry?.identity),
+    };
+};
+
 // A turn acting as a card this workspace lacks runs with nothing, while its prompt still reads as if it had everything.
-const personaWarnings = (persona: TurnPersona, input: AgentTurn): TurnWarning[] =>
-    persona.reason === "unknown-persona"
-        ? [{ fields: { actsAs: input.actsAs }, message: "persona: no such card, this turn reaches no account and no tools" }]
+const roleWarnings = (role: TurnRole, input: AgentTurn): TurnWarning[] =>
+    role.reason === "unknown-role"
+        ? [{ fields: { actsAs: input.actsAs }, message: "role: no such card, this turn reaches no account and no tools" }]
         : [];
 
 // Why a turn on a removed endpoint was refused, in words the owner can act on: what is gone, and the two ways on.
@@ -251,29 +277,30 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
     }
     const { capabilities } = runtime;
     const premise = premiseOf(facts, input, runtime);
-    const { persona } = premise;
-    const unheld = personaLimitsRefusal(persona, runtime);
+    const { role } = premise;
+    const unheld = roleLimitsRefusal(role, runtime);
     if (unheld !== undefined) {
         return unheld;
     }
-    const warnings = [...personaWarnings(persona, input), ...routeWarnings(facts.accountRoute, input)];
+    const warnings = [...roleWarnings(role, input), ...routeWarnings(facts.accountRoute, input)];
     // What the declared window will not pay for; undefined for every model whose window holds a full turn.
     const trim = turnTrim(facts.declared?.window, capabilities.instructions);
     const settings = underRepoChecks(facts.settings, facts.repoChecks);
-    // The owner's gates after the persona's shelves, once for every runtime; honoured notes what they withheld.
-    const reachable = personaCapabilities(facts.installed, persona);
-    // Then what the people it works for may use, which no persona or release widens (secrets/credential-reach.ts).
+    // The owner's gates after the role's shelves, once for every runtime; honoured notes what they withheld.
+    const reachable = roleCapabilities(facts.installed, role);
+    // Then what everything it acts for may use, its role's access included, which no release widens
+    // (secrets/credential-reach.ts).
     const reached = withinReach(reachable, facts.reach).kept;
     const mounts = gatedCapabilities(reached, facts.gates, facts.releases, input.conversationId);
     // A child is a whole agent holding shell and write, so spawning needs the delegate shelf and full agency.
-    const spawn = context.children !== undefined && input.conversationId !== undefined && mayDelegate(persona);
-    const prompt = personaPrompt(persona.persona, facts.personaPrompt, facts.settings);
+    const spawn = context.children !== undefined && input.conversationId !== undefined && mayDelegate(role);
+    const prompt = rolePrompt(role.role, facts.rolePrompt, facts.settings);
     const shared = sharedContext(context, facts, settings, premise, runtime, trim);
     // The card's briefing, then the window's filter: what a small window left out is named by building what it would send.
     const system = systemPieces(capabilities, prompt.mode);
     const written = { spawn: spawnNoteFor(spawn, runtime) };
     const composed = trimmed(trim, honoured(facts, shared, settings, capabilities, premise, prompt, mounts.withheld, written), system);
-    const planned: TurnContext = { ...shared, base: composed.request, persona };
+    const planned: TurnContext = { ...shared, base: composed.request, role };
     // The last gate, and the only one that reads the prompt as it will be sent: notes and all, trimmed where trimmed.
     const shortfall = contextShortfall({
         runtime: capabilities.runtime,
@@ -293,10 +320,7 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         ...opt("accountMove", facts.accountRoute?.kind === "move" ? facts.accountRoute : undefined),
         context: planned,
         granted: mounts.capabilities,
-        withheldByPersona: facts.installed.filter((capability) => !reachable.includes(capability)).map((capability) => capability.id),
-        withheldByGate: mounts.withheld.map((gate) => gate.subject),
-        withheldByReach: withinReach(facts.installed, facts.reach).withheld.map((capability) => capability.id),
-        ...opt("ceiling", facts.ceiling),
+        ...withheldOf(facts, reachable, mounts.withheld),
         dependencyDir: premise.startIn ?? "",
         spawn,
         briefing: premise.briefing,

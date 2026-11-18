@@ -1,13 +1,15 @@
 import type { ControlTokenSummary } from "@intentic/sandbox-contract/policy/control-scopes";
+import type { AccessProfile } from "@intentic/sandbox-contract/schemas/access-profiles";
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import type { InboundLinkSummary, LinkTerms } from "@intentic/sandbox-contract/schemas/links";
 import type { Member } from "@intentic/sandbox-contract/schemas/members";
-import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { bundleId, holdersOf, lightingOf, relationsOf } from "./reachLighting";
 import { buildReachMap, type Principal, type ReachCapability, type ReachInput } from "./reachModel";
 
-// The workspace the cases share: two areas, three personas homed in each and at the root, and a connection of each kind
-// a rule decides differently. Every case asks the map what the daemon would let one principal do.
+// The workspace the cases share: two areas, three roles homed in each and at the root, the access profiles holding two
+// of them, and a connection of each kind a rule decides differently. Every case asks the map what the daemon would let
+// one principal do.
 
 const NOW = 1_800_000_000_000;
 
@@ -16,10 +18,20 @@ const areas: Area[] = [
     { id: `site`, label: `Marketing site`, folders: [`web/site`] },
 ];
 
-const personas: Persona[] = [
-    { id: `maya`, label: `Maya`, capabilities: [`gmail-support`], workspace: { startIn: `web/support`, folders: [`web/support`] } },
-    { id: `owen`, label: `Owen`, capabilities: [`x-brand`], workspace: { startIn: `web/site` }, powers: PersonaPowersSchema.parse({ connectors: [`github`] }) },
+const roles: Role[] = [
+    { id: `maya`, label: `Maya`, capabilities: [`gmail-support`], workspace: { startIn: `web/support` } },
+    { id: `owen`, label: `Owen`, capabilities: [`x-brand`], workspace: { startIn: `web/site` } },
     { id: `priya`, label: `Priya`, capabilities: [] },
+];
+
+// Maya is fenced to the support desk; Owen may spend GitHub and no other connector (accounts and the linked box stay his).
+const profiles: AccessProfile[] = [
+    { id: `support-only`, areas: [`support`], roles: [`maya`] },
+    {
+        id: `github-only`,
+        credentials: { capabilities: [`github`, `x-brand`, `gmail-support`, `support-id`, `ops-box`], secrets: [`SENTRY_DSN`, `STRIPE_KEY`] },
+        roles: [`owen`],
+    },
 ];
 
 const capability = (id: string, kind: ReachCapability[`kind`], extra: Partial<ReachCapability> = {}): ReachCapability => ({
@@ -46,21 +58,22 @@ const member = (row: Member): Member => row;
 
 const input = (over: Partial<ReachInput> = {}): ReachInput => ({
     areas,
-    personas,
+    roles,
+    profiles,
     capabilities,
     secrets: [`SENTRY_DSN`, `STRIPE_KEY`],
     models: [{ id: `model:claude`, label: `Claude`, tone: `success` }],
     roster: {
         owner: `ada@acme.dev`,
         members: [
-            member({ email: `jo@acme.dev`, role: `collaborator`, credentials: { capabilities: [`github`], secrets: [`SENTRY_DSN`] } }),
-            member({ email: `sam@acme.dev`, role: `guest`, areas: [`support`] }),
-            member({ email: `rin@acme.dev`, role: `viewer` }),
-            member({ email: `wes@acme.dev`, role: `writer`, areas: [`site`, `support`], edit: [`site`] }),
-            member({ email: `max@acme.dev`, role: `maintainer` }),
+            member({ email: `jo@acme.dev`, tier: `collaborator`, credentials: { capabilities: [`github`], secrets: [`SENTRY_DSN`] } }),
+            member({ email: `sam@acme.dev`, tier: `guest`, areas: [`support`] }),
+            member({ email: `rin@acme.dev`, tier: `viewer` }),
+            member({ email: `wes@acme.dev`, tier: `writer`, areas: [`site`, `support`], edit: [`site`] }),
+            member({ email: `max@acme.dev`, tier: `maintainer` }),
         ],
     },
-    self: { email: `ada@acme.dev`, role: `owner` },
+    self: { email: `ada@acme.dev`, tier: `owner` },
     now: NOW,
     ...over,
 });
@@ -84,7 +97,7 @@ describe(`people`, () => {
         expect(owner.reach.get(`area:support`)).toBe(`edit`);
         expect(owner.reach.get(`rest`)).toBe(`edit`);
         expect(owner.reach.get(`cap:x-brand`)).toBe(`use`);
-        expect(owner.reach.get(`persona:priya`)).toBe(`use`);
+        expect(owner.reach.get(`role:priya`)).toBe(`use`);
     });
 
     // Credential reach withholds only the kinds it decides: a connector off the list is out, docker never was a credential.
@@ -96,16 +109,16 @@ describe(`people`, () => {
             "cap:docker": `use`,
             "cap:github": `use`,
             "model:claude": `use`,
-            "persona:maya": `use`,
-            "persona:owen": `use`,
-            "persona:priya": `use`,
+            "role:maya": `use`,
+            "role:owen": `use`,
+            "role:priya": `use`,
             rest: `see`,
             "secret:SENTRY_DSN": `use`,
         });
     });
 
     // A guest talks to the cards its areas hold and reaches only what those cards act through.
-    it(`gives a guest only its area, the persona living there, and what that persona carries`, () => {
+    it(`gives a guest only its area, the role living there, and what that role carries`, () => {
         const sam = principal(buildReachMap(input()), `person:sam@acme.dev`);
         expect(reached(sam)).toEqual({
             "area:support": `see`,
@@ -115,7 +128,7 @@ describe(`people`, () => {
             "cap:ops-box": `through`,
             "cap:postgres": `through`,
             "model:claude": `through`,
-            "persona:maya": `use`,
+            "role:maya": `use`,
             "secret:SENTRY_DSN": `through`,
             "secret:STRIPE_KEY": `through`,
         });
@@ -132,8 +145,8 @@ describe(`people`, () => {
         expect(wes.reach.get(`area:support`)).toBe(`see`);
         expect(wes.reach.has(`rest`)).toBe(false);
         // Owen lives in the site, Maya in support; Priya lives at the root, which only the unfenced hold.
-        expect(wes.reach.has(`persona:owen`)).toBe(true);
-        expect(wes.reach.has(`persona:priya`)).toBe(false);
+        expect(wes.reach.has(`role:owen`)).toBe(true);
+        expect(wes.reach.has(`role:priya`)).toBe(false);
     });
 
     it(`marks an invite not yet taken up and one that ran out`, () => {
@@ -144,7 +157,7 @@ describe(`people`, () => {
 
     // Below the owner the roster is unreadable, and the reader still stands on the map as themselves.
     it(`draws a maintainer who cannot read the roster as themselves alone`, () => {
-        const map = buildReachMap(input({ roster: undefined, self: { email: `max@acme.dev`, role: `maintainer` } }));
+        const map = buildReachMap(input({ roster: undefined, self: { email: `max@acme.dev`, tier: `maintainer` } }));
         expect(map.rosterRead).toBe(false);
         expect(map.principals.filter((entry) => entry.kind === `person`).map((entry) => entry.label)).toEqual([`max@acme.dev`]);
         expect(principal(map, `person:max@acme.dev`).reach.get(`cap:postgres`)).toBe(`use`);
@@ -193,7 +206,7 @@ describe(`linked sandboxes`, () => {
         return { id, label: id, terms, createdAt: 0, conversations: 0, requests: [] };
     };
 
-    it(`works as its persona, inside that persona's folders`, () => {
+    it(`works as its role, inside that role's folders`, () => {
         const map = buildReachMap(input({ inbound: [link(`ops`, `maya`)] }));
         expect(reached(principal(map, `link:ops`))).toEqual({
             "area:support": `see`,
@@ -203,14 +216,14 @@ describe(`linked sandboxes`, () => {
             "cap:ops-box": `through`,
             "cap:postgres": `through`,
             "model:claude": `through`,
-            "persona:maya": `use`,
+            "role:maya": `use`,
             "secret:SENTRY_DSN": `through`,
             "secret:STRIPE_KEY": `through`,
         });
     });
 
-    // Nobody is watching a link's task: with no persona named it holds no signed-in account, and everything else.
-    it(`holds no signed-in account when it names no persona, and nothing when its persona is gone`, () => {
+    // Nobody is watching a link's task: with no role named it holds no signed-in account, and everything else.
+    it(`holds no signed-in account when it names no role, and nothing when its role is gone`, () => {
         const map = buildReachMap(input({ inbound: [link(`open`), link(`lost`, `gone`)] }));
         const open = principal(map, `link:open`);
         expect(open.reach.has(`cap:gmail-support`)).toBe(false);
@@ -248,39 +261,44 @@ describe(`the drawing`, () => {
         expect(holdersOf(map, `cap:gmail-support`).map(({ principal: who, how }) => `${who.label}:${how}`)).toEqual([
             `ada@acme.dev:use`,
             `max@acme.dev:use`,
-            // A writer runs agents with no persona named, so their turns hold every account.
+            // A writer runs agents with no role named, so their turns hold every account.
             `wes@acme.dev:use`,
             `sam@acme.dev:through`,
         ]);
     });
 
-    it(`threads a persona to the accounts it carries, and lights where it works`, () => {
-        const { lit, threads } = relationsOf(input(), `persona:maya`);
+    it(`threads a role to the accounts it carries, and lights where it works`, () => {
+        const { lit, threads } = relationsOf(input(), `role:maya`);
         expect(threads).toEqual([`cap:gmail-support`]);
         expect(lit.has(`area:support`)).toBe(true);
         expect(lit.has(`area:site`)).toBe(false);
-        // Owen carries only the connectors listed on his shelf.
-        expect(relationsOf(input(), `persona:owen`).lit.has(`cap:postgres`)).toBe(false);
+        // Owen carries only the connectors the profile holding him lists.
+        expect(relationsOf(input(), `role:owen`).lit.has(`cap:postgres`)).toBe(false);
+        // A profile that takes his commands away takes the stored secrets with them, and one fencing him lights only there.
+        const shut = input({ profiles: [{ id: `quiet`, tools: { shell: false }, areas: [`site`], roles: [`owen`] }] });
+        const quiet = relationsOf(shut, `role:owen`).lit;
+        expect(quiet.has(`secret:SENTRY_DSN`)).toBe(false);
+        expect([quiet.has(`area:site`), quiet.has(`area:support`), quiet.has(`rest`)]).toEqual([true, false, false]);
     });
 
-    it(`threads an area to the personas living in it, and the rest to the ones at the root`, () => {
-        expect(relationsOf(input(), `area:site`).threads).toEqual([`persona:owen`]);
-        expect(relationsOf(input(), `rest`).threads).toEqual([`persona:priya`]);
+    it(`threads an area to the roles living in it, and the rest to the ones at the root`, () => {
+        expect(relationsOf(input(), `area:site`).threads).toEqual([`role:owen`]);
+        expect(relationsOf(input(), `rest`).threads).toEqual([`role:priya`]);
     });
 
     it(`threads an identity to the accounts born in its browser, and the cards that carry it`, () => {
         expect(relationsOf(input(), `cap:support-id`).threads).toEqual([`cap:gmail-support`]);
-        expect(relationsOf(input(), `cap:gmail-support`).threads).toEqual([`persona:maya`, `cap:support-id`]);
+        expect(relationsOf(input(), `cap:gmail-support`).threads).toEqual([`role:maya`, `cap:support-id`]);
     });
 
     it(`lights a principal's reach, or a node's holders and ties`, () => {
         const map = buildReachMap(input());
         const sam = lightingOf(map, input(), { kind: `principal`, id: `person:sam@acme.dev` });
         expect(sam.principals.get(`person:sam@acme.dev`)).toBe(`self`);
-        expect(sam.nodes.get(`persona:maya`)).toBe(`use`);
+        expect(sam.nodes.get(`role:maya`)).toBe(`use`);
         expect(sam.nodes.has(`cap:x-brand`)).toBe(false);
-        const maya = lightingOf(map, input(), { kind: `node`, id: `persona:maya` });
-        expect(maya.nodes.get(`persona:maya`)).toBe(`self`);
+        const maya = lightingOf(map, input(), { kind: `node`, id: `role:maya` });
+        expect(maya.nodes.get(`role:maya`)).toBe(`self`);
         expect(maya.nodes.get(`cap:gmail-support`)).toBe(`related`);
         expect(maya.principals.get(`person:sam@acme.dev`)).toBe(`use`);
         expect(maya.principals.has(`person:rin@acme.dev`)).toBe(false);

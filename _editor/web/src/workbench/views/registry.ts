@@ -1,7 +1,7 @@
 import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, ViewRegistration } from "@intentic/extension-api";
 import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../../app/useAudience";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { guestFenceOf } from "../../lib/routes/guestPaths";
 import { here, page } from "../../lib/routes/links";
 import { badgeSpeaks } from "./viewBadge";
@@ -157,7 +157,7 @@ export const guestRailGroups = (homeOnly = false): readonly RailGroup[] =>
 // fence it will actually meet.
 // A home-only guest stands only in the master view and the sessions its home started (guestPaths.ts homeOnlyAllowedPath).
 export const sectionReachable = (to: string): boolean => {
-    const { isGuest, homeOnly } = useRole();
+    const { isGuest, homeOnly } = useTier();
     return !isGuest.value || guestFenceOf(homeOnly.value).allowed(to);
 };
 
@@ -166,7 +166,7 @@ export const railGroups = (): readonly RailGroup[] => railGroupsByAudience().dev
 
 // The table for whoever is looking; reactive when read inside a computed, like everything below that reads it.
 const activeGroups = (): readonly RailGroup[] => {
-    const { isGuest, homeOnly } = useRole();
+    const { isGuest, homeOnly } = useTier();
     return isGuest.value ? guestRailGroups(homeOnly.value) : railGroupsFor(useAudience().audience.value);
 };
 

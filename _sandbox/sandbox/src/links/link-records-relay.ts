@@ -1,4 +1,4 @@
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { DiagnosticsQuery } from "@intentic/sandbox-contract/schemas/diagnostics";
 import type { Context } from "hono";
@@ -13,7 +13,7 @@ import { provesOwner } from "../seams/workload-stamp.js";
 // and diagnostics with `--on <link>` (`agents ls|find|show|bundle`, `diagnostics`) or its link's tool server
 // (link-mounts.ts). Nothing here decides what may be read over there: that sandbox's link terms do (link-records.ts).
 // What is decided here is which turn may use which card, the same rule a delegated task is held to: the cards the turn
-// was granted, so a persona that leaves a link out leaves its records out too.
+// was granted, so a role that leaves a link out leaves its records out too.
 
 type LinkCard = Extract<Capability, { kind: "link" }>;
 
@@ -51,7 +51,7 @@ const linkReach = async (deps: LinkReachDeps, c: Context<AppEnv>, name: string):
     const identity = c.get("identity");
     if (identity !== undefined) {
         // A person: another sandbox's records are read at the floor this one's logs are.
-        return roleAtLeast(identity.role, "maintainer")
+        return tierAtLeast(identity.tier, "maintainer")
             ? { ok: true, target: { id: card.id, config: card.config }, sandbox: card.config.name ?? card.id }
             : { ok: false, status: 403, message: "Reading a linked sandbox's records is for this sandbox's owner and its maintainers." };
     }
@@ -68,7 +68,7 @@ const linkReach = async (deps: LinkReachDeps, c: Context<AppEnv>, name: string):
         return {
             ok: false,
             status: 403,
-            message: `This conversation's turn was not given the "${card.id}" link: its persona or the people it works for leave it out.`,
+            message: `This conversation's turn was not given the "${card.id}" link: its role or the people it works for leave it out.`,
         };
     }
     return { ok: true, target: { id: card.id, config: card.config }, sandbox: card.config.name ?? card.id };

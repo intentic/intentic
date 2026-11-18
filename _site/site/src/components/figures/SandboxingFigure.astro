@@ -11,13 +11,13 @@ const PEOPLE = [
     { name: `Kai`, role: `viewer`, reach: `area · web`, ada: false },
 ];
 const AREA_FOLDERS = [
-    { path: `support/`, persona: `Support desk` },
-    { path: `docs/help/`, persona: undefined },
+    { path: `support/`, role: `Support desk` },
+    { path: `docs/help/`, role: undefined },
 ];
 const OTHER_FOLDERS = [
-    { path: `web/`, persona: `Web dev`, control: false },
-    { path: `finance/`, persona: `Bookkeeper`, control: false },
-    { path: `.intentic/`, persona: undefined, control: true },
+    { path: `web/`, role: `Web dev`, control: false },
+    { path: `finance/`, role: `Bookkeeper`, control: false },
+    { path: `.intentic/`, role: undefined, control: true },
 ];
 const TOOLS = [`Node · Python`, `git · rg`, `skills`, `extensions`];
 const NEIGHBOURS = [`billing-ops`, `research`];
@@ -128,10 +128,10 @@ const glyph = (paths: string, size = 14) =>
                                         <div class="sb-row sb-folder sb-in" style={`--i:${index}`}>
                                             <span class="sb-icon" set:html={glyph(ICON.folder, 13)} />
                                             <span class="sb-path">{folder.path}</span>
-                                            {folder.persona && (
-                                                <span class="sb-persona">
+                                            {folder.role && (
+                                                <span class="sb-role">
                                                     <span set:html={glyph(ICON.card, 12)} />
-                                                    {folder.persona}
+                                                    {folder.role}
                                                 </span>
                                             )}
                                         </div>
@@ -143,10 +143,10 @@ const glyph = (paths: string, size = 14) =>
                                     <div class:list={["sb-row", "sb-folder", "sb-out", folder.control && "sb-control"]}>
                                         <span class="sb-icon" set:html={glyph(folder.control ? ICON.lock : ICON.folder, 13)} />
                                         <span class="sb-path">{folder.path}</span>
-                                        {folder.persona && (
-                                            <span class="sb-persona">
+                                        {folder.role && (
+                                            <span class="sb-role">
                                                 <span set:html={glyph(ICON.card, 12)} />
-                                                {folder.persona}
+                                                {folder.role}
                                             </span>
                                         )}
                                         {folder.control ? (
@@ -465,7 +465,7 @@ const glyph = (paths: string, size = 14) =>
     .sb-note,
     .sb-col-label,
     .sb-reach,
-    .sb-persona {
+    .sb-role {
         transition:
             opacity 0.5s var(--sb-ease),
             border-color 0.5s var(--sb-ease),
@@ -606,7 +606,7 @@ const glyph = (paths: string, size = 14) =>
         font-family: var(--font-mono);
         font-size: 0.74rem;
     }
-    .sb-persona {
+    .sb-role {
         display: inline-flex;
         align-items: center;
         gap: 0.25rem;
@@ -622,10 +622,10 @@ const glyph = (paths: string, size = 14) =>
         color: var(--color-subtle);
         white-space: nowrap;
     }
-    .sb-persona + .sb-note {
+    .sb-role + .sb-note {
         margin-left: 0.3rem;
     }
-    .sb-folder:not(:has(.sb-persona)) .sb-note {
+    .sb-folder:not(:has(.sb-role)) .sb-note {
         margin-left: auto;
     }
     .sb-note-out {
@@ -786,7 +786,7 @@ const glyph = (paths: string, size = 14) =>
         .sb-tab-name {
             font-size: 0.74rem;
         }
-        .sb-persona {
+        .sb-role {
             display: none;
         }
         .sb-captions {
@@ -884,7 +884,7 @@ const glyph = (paths: string, size = 14) =>
         box-shadow: var(--role-ember-glow-lit);
         animation: sb-fence 0.8s var(--sb-ease) both 0.25s;
     }
-    .sb[data-step="3"] .sb-area .sb-persona {
+    .sb[data-step="3"] .sb-area .sb-role {
         border-color: var(--role-ember-line-strong);
         color: var(--color-content);
     }
@@ -911,7 +911,7 @@ const glyph = (paths: string, size = 14) =>
     .sb[data-step="4"] .sb-out {
         opacity: 0.45;
     }
-    .sb[data-step="4"] .sb-out .sb-persona {
+    .sb[data-step="4"] .sb-out .sb-role {
         display: none;
     }
     .sb[data-step="4"] .sb-out:not(.sb-control) .sb-path {

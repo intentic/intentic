@@ -110,7 +110,7 @@ export interface TurnMounts {
     readonly lease: (conversationId?: string, options?: LeaseOptions) => TurnLease;
     readonly resolve: (token: string | undefined, name: string) => MountReach;
     // Whether a live turn of this conversation holds a mount on exactly this target: how a shell route the agent calls
-    // (not its MCP door) is held to what the turn was planned to reach, persona and all.
+    // (not its MCP door) is held to what the turn was planned to reach, role and all.
     readonly reaches: (conversationId: string, target: { readonly kind: "device" | "webext" | "phone"; readonly id: string }) => boolean;
     readonly closeAll: () => void;
 }

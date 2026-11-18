@@ -64,7 +64,7 @@ flowchart LR
   read, which is the host's own key for it, so a view shares the shell's entry and every push the daemon makes for that
   procedure; `api.sandbox.key(...names)` for anything else (a `json` route, a composite). The entry holds the
   procedure's whole answer, so a reader that wants part of it reshapes with `select` (2026-10-12: two packs had each
-  keyed `personas`, one storing the answer and one a bare list, and whichever filled the entry broke the other). The
+  keyed `roles`, one storing the answer and one a bare list, and whichever filled the entry broke the other). The
   editor's `queryKeys.guard.test.ts` reads the in-repo packs for a contract read under a hand-picked name. A paged
   (infinite) read is the exception: its entry holds pages, not the answer, so it keeps a name of its own.
 - A view reads the daemon through `api.sandbox.query(spec)` (2.28.0), which is the shell's own `useSandboxQuery`. It

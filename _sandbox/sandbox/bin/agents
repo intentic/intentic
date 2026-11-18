@@ -17,7 +17,7 @@
 // child spawned from here is indistinguishable from one a tool call started.
 //
 // It owns NO policy: whether this conversation may spawn was decided when its turn was planned, where the
-// persona was in hand, and recorded daemon-side (children.ts armSupervisor). This command only relays, and a
+// role was in hand, and recorded daemon-side (children.ts armSupervisor). This command only relays, and a
 // refusal arrives as the daemon's own sentence.
 //
 // node:http rather than fetch, deliberately: `wait` holds its connection for as long as a child takes to
@@ -142,7 +142,7 @@ SPAWN AND SUPERVISE
                                        hand a task to another of the owner's sandboxes over a link; prints its id
                                        and returns. It runs in a conversation of its own OVER THERE, with that
                                        sandbox's repos, connections and credentials, under the terms its owner
-                                       set (persona, approval, turns an hour), and lands there, never in your
+                                       set (role, approval, turns an hour), and lands there, never in your
                                        checkout. wait, send, answer and cancel reach it like any subagent
   agents wait [<id>] [--until blocked|finished] [--timeout <seconds>]
                                        block until a subagent needs input or finishes (default: either,
@@ -908,7 +908,7 @@ const links = async () => {
     for (const link of answer.links) {
         const terms = link.online
             ? [
-                  link.persona === undefined ? "no persona" : `wears ${link.persona}`,
+                  link.role === undefined ? "no role" : `wears ${link.role}`,
                   link.approve ? "each task waits for its owner" : "starts at once",
                   `${link.turnsPerHour} turns/h`,
                   link.records ? "shares records (--on)" : "shares no records",

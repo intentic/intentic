@@ -29,7 +29,7 @@ import { offloadDoors } from "./machine/offload.handler";
 import { orgDoors } from "./account/org.handler";
 import { pagesDoors } from "./board/pages.handler";
 import { panelsDoors } from "./extensions/panels.handler";
-import { personasDoors } from "./extensions/personas.handler";
+import { rolesDoors } from "./extensions/roles.handler";
 import { portsDoors } from "./machine/ports.handler";
 import { privacyDoors } from "./account/privacy.handler";
 import { providersDoors } from "./account/providers.handler";
@@ -77,7 +77,7 @@ export const procedures = {
     loops: loopsDoors,
     capabilities: capabilitiesDoors,
     skills: skillDoors,
-    personas: personasDoors,
+    roles: rolesDoors,
     audit: auditDoors,
     org: orgDoors,
     ...accessDoors,

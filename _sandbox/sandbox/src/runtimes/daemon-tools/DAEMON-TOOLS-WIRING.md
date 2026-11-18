@@ -7,7 +7,7 @@ What follows is the change each runtime still has to make.
 | Piece | Module | What it does |
 | --- | --- | --- |
 | Adapter | `sdk-door.ts` | Serves an SDK in-process server (`createSdkMcpServer`) as the door's `InProcessServer`, mount kind `daemon`. |
-| Builder | `daemon-servers.ts` `daemonServersFor` | Builds `ui`, `accounts`, `secrets`, `subagents`, `watch`, `deps`, `diagnostics`, `code` and optionally `gate` with the same persona decisions `harnessServers` makes. Mounts them on the lease, sealed by `sealedDoor` and holding the watchdog while a call runs. |
+| Builder | `daemon-servers.ts` `daemonServersFor` | Builds `ui`, `accounts`, `secrets`, `subagents`, `watch`, `deps`, `diagnostics`, `code` and optionally `gate` with the same role decisions `harnessServers` makes. Mounts them on the lease, sealed by `sealedDoor` and holding the watchdog while a call runs. |
 | Planner helper | `door-tools.ts` `doorToolsOf` | Step 1 below in one call: `turnToolsOf`, then `daemonServersFor` on the same lease, the turn's secret seam set on the request. Used by the OpenCode planners. |
 | Relay | `turn-relay.ts` | The late half. The loop attaches its event push, watchdog hold and gate. Anything a tool did before that waits in the relay. |
 | Policy | `runtimes/daemon-tools/policy-gate.ts` | `consultPolicy(turn, {tool, input})` and `createPolicyGate()` (key → turn). Fails closed. |
@@ -21,8 +21,8 @@ these lines right after `turnToolsOf(...)`. The planner's deps type gains `Daemo
 `context.settings ?? await services.sandboxSettings.get()`.
 
 ```ts
-const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
-const daemon = daemonServersFor(services, { input, context, persona, granted, settings, mounted, gate: /* see table */ false });
+const role = context.role ?? turnRole({ roles: [], actsAs: undefined, unattended: false });
+const daemon = daemonServersFor(services, { input, context, role, granted, settings, mounted, gate: /* see table */ false });
 const remote = [...mounted.tools, ...daemon.tools];
 // in the request:
 tools: { ...context.base.tools, ...(remote.length > 0 ? { remote } : {}), diagnostics: daemon.diagnostics },
@@ -42,7 +42,7 @@ hooks: { ...context.base.hooks, relay: daemon.relay },
 
 The `code` server mounts only where `context.base.tools.jsExecution` is set. That requires `execution: ["js"]` in the
 runtime's `AgentCapabilities` row (`agent-runtimes.ts`, read by `honoured.ts`). For ACP, Devin and the vendor CLIs, the warm session keeps
-the MCP config it opened with. A server name a later turn adds (a persona change) is not seen until a new session opens.
+the MCP config it opened with. A server name a later turn adds (a role change) is not seen until a new session opens.
 An ACP agent that does not advertise http MCP is handed the same mounts as stdio servers through the daemon's proxy
 (`runtimes/acp/acp-mcp-proxy.ts`), the bearer in each server's environment.
 

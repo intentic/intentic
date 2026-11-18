@@ -28,7 +28,7 @@ const choose = [
     },
     {
         situation: "The same people, but a task that needs other accounts or fewer powers",
-        use: "Another persona",
+        use: "Another role",
         because: "Same sandbox and area, with a different set of accounts and powers handed to the turn.",
     },
 ];
@@ -79,7 +79,7 @@ const choose = [
     <p>
         A sandbox is meant to last. It holds many conversations at once, keeps working after you close the browser, and builds up the way
         its project is done: the <a href="/docs/capabilities/">accounts and services</a> it is connected to, the
-        <a href="/docs/extensions/">extensions</a> installed in it, its skills, and its personas. When an agent needs a tool the image
+        <a href="/docs/extensions/">extensions</a> installed in it, its skills, and its roles. When an agent needs a tool the image
         lacks, it proposes the change and the owner approves it, so the next turn and the next person find the same tools. The shape of all
         this exports as a <a href="/docs/sandbox-definitions/">sandbox definition</a>, which can rebuild the same environment elsewhere.
     </p>
@@ -99,7 +99,7 @@ const choose = [
     <p>How areas combine with tiers:</p>
     <ul>
         <li><strong>A writer</strong> needs at least one area: it is where they may change files. They can't land or publish.</li>
-        <li><strong>A guest</strong> needs at least one area too: the personas homed in it are the ones a guest talks through.</li>
+        <li><strong>A guest</strong> needs at least one area too: the roles homed in it are the ones a guest talks through.</li>
         <li><strong>A viewer or collaborator</strong> may be given areas to narrow what they see, or none for the whole workspace.</li>
         <li><strong>A maintainer</strong> can't be given areas. See below for why.</li>
     </ul>
@@ -109,7 +109,7 @@ const choose = [
     <p>
         Agents don't have access of their own. A conversation started by a person in the <code>support</code> area works in{" "}
         <code>support</code>, whoever later reads it, and keeps that fence for its whole life even if the person's grant changes. A
-        persona homed in a narrower folder narrows the turn further. Its edits go to the conversation's own branch, so nothing reaches the
+        role homed in a narrower folder narrows the turn further. Its edits go to the conversation's own branch, so nothing reaches the
         main tree until someone allowed to <a href="/docs/glossary/">land</a> it reviews the diff. For the branch mechanics, see{" "}
         <a href="/docs/parallel-agents/">parallel agents</a>.
     </p>
@@ -127,7 +127,7 @@ const choose = [
         ))
     }
 
-    <h2>An area, a sandbox, or a persona</h2>
+    <h2>An area, a sandbox, or a role</h2>
     <table>
         <thead>
             <tr><th>You have</th><th>Use</th><th>Why</th></tr>
@@ -150,7 +150,7 @@ const choose = [
     <DocsRelated
         links={[
             { href: "/docs/access/", title: "Access & sharing", why: "the tiers, and how an invite carries areas." },
-            { href: "/docs/worksite/", title: "The worksite", why: "machine, sandbox, persona and project as one picture." },
+            { href: "/docs/worksite/", title: "The worksite", why: "machine, sandbox, role and project as one picture." },
             { href: "/docs/architecture/", title: "Architecture", why: "where identity, code, state and compute live." },
             { href: "/docs/docker/", title: "Docker setup", why: "the container, its volumes and its capability posture." },
         ]}

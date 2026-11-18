@@ -95,7 +95,7 @@ export const steerPerson = async (services: Services, conversationId: string, st
 // A wake (a watch's report, a finished background job, a child's report, a land follow-up) continues the conversation as
 // it runs when the wake goes out, never as it ran when the wake was armed or queued: the routing it captured then goes
 // stale the moment the conversation moves, and replaying it would put the current session on an account, runtime or
-// model nobody chose. Only who serves the turn is replaced; its persona, placement, audience and job stay the wake's.
+// model nobody chose. Only who serves the turn is replaced; its role, placement, audience and job stay the wake's.
 // The account is left unnamed: routingFor fills in the conversation's own, and a wake naming none is routed off that
 // account where it can no longer serve (blocked-account.ts), as a person's next message is; naming it would pin it.
 const onCurrentRouting = (services: Services, turn: Turn): Turn => {

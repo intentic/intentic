@@ -6,7 +6,7 @@ import { deviceEnvironment } from "@intentic/sandbox-contract/schemas/devices";
 import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { canFence, fenceLine } from "../../../models/sandbox/devices/egressFlow";
 import { useDevices } from "../../../models/sandbox/devices/useDevices";
@@ -18,7 +18,7 @@ import { EDITABLE_VALUE, FIXED_VALUE } from "./overviewLook";
 const t = useT();
 
 const sandbox = useSandbox();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { hostId, slug, row, refetch } = useSelfResources();
 const { devices } = useDevices({ poll: false });
 

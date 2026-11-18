@@ -31,10 +31,10 @@ interface Daemon {
 // The roster the daemon-verified doors hold a proof to: owner, member, and a Forbidden stranger.
 const roster = async (proof: Proof): Promise<ProvenCaller> => {
     if (proof.email === OWNER) {
-        return { ...proof, role: "owner" };
+        return { ...proof, tier: "owner" };
     }
     if (proof.email === MEMBER) {
-        return { ...proof, role: "collaborator" };
+        return { ...proof, tier: "collaborator" };
     }
     throw new ForbiddenError("not authorized for this sandbox");
 };
@@ -45,7 +45,7 @@ const authFor = (caller: ProvenCaller | undefined) => {
         return { authorize: rejectAuth, authorizeOwner: rejectAuth, authorizeRecovery: rejectAuth };
     }
     const admit = async () => caller;
-    return caller.role === "owner"
+    return caller.tier === "owner"
         ? { authorize: admit, authorizeOwner: async () => {}, authorizeRecovery: admit }
         : { authorize: admit, authorizeOwner: rejectForbidden, authorizeRecovery: rejectForbidden };
 };

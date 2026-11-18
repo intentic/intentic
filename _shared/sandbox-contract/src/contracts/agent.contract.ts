@@ -224,7 +224,7 @@ export const agentContract = {
         .meta({ guest: true })
         .input(AgentCommandsQuerySchema)
         .output(AgentCommandsSchema),
-    // Never throws: no offer, no personas, no model, or a deadline are all "nothing chosen" with a reason; the composer
+    // Never throws: no offer, no roles, no model, or a deadline are all "nothing chosen" with a reason; the composer
     // is waiting.
     routeChat: procedure
         .route({
@@ -232,7 +232,7 @@ export const agentContract = {
             path: "/agent/route-chat",
             summary: "Choose what a new chat opens on",
             description:
-                "Reads a new chat's opening message once and answers whichever of two questions it still has: the model, effort and account that conversation should run on, from what is connected and still has allowance left, and which of this sandbox's personas should handle it. `model` and `persona` on the ask say which halves to answer, and only those are put to the model. Asked once per chat, on the message actually sent, and never again: every turn after it runs on what the chat is wearing, which you are free to change. Answers with nothing, and a reason, whenever it cannot choose — a chat is never held up by this.",
+                "Reads a new chat's opening message once and answers whichever of two questions it still has: the model, effort and account that conversation should run on, from what is connected and still has allowance left, and which of this sandbox's roles should handle it. `model` and `role` on the ask say which halves to answer, and only those are put to the model. Asked once per chat, on the message actually sent, and never again: every turn after it runs on what the chat is wearing, which you are free to change. Answers with nothing, and a reason, whenever it cannot choose — a chat is never held up by this.",
         })
         // A read shaped as a POST, costing one model call the tier about to spend a whole turn may spend.
         .meta({ floor: "collaborator" })

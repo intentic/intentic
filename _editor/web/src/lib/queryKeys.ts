@@ -67,7 +67,7 @@ const PUSHED_READS: Readonly<Record<string, readonly ProcedureName[]>> = {
     // What agents wait on people for: the chat's need cards, the conversation strip, the board and the inbox share it.
     needs: [`needs.list`, `needs.grants`],
     panels: [`panels.list`],
-    personas: [`personas.list`, `personas.kit`],
+    roles: [`roles.list`, `roles.kit`],
     // The forward table moving: the rail's exposure indicator, Preview's targets and the preview extension's ports view.
     ports: [`ports.list`],
     // A write under `public/`, through the preview extension's manifest: its outbox view and the shell's Preview target.

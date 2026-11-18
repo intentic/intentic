@@ -32,7 +32,7 @@ afterEach(() => {
 
 describe(`useMembers`, () => {
     it(`is read once for every surface that names the roster`, async () => {
-        sandboxJson.mockResolvedValue({ owner: `owner@example.com`, members: [{ email: `a@example.com`, role: `viewer` }] });
+        sandboxJson.mockResolvedValue({ owner: `owner@example.com`, members: [{ email: `a@example.com`, tier: `viewer` }] });
         const [access, gates] = inScope(() => [useMembers(), useMembers()] as const);
         await waitFor(() => expect(gates.owner.value).toBe(`owner@example.com`));
         expect(access.members.value.map((member) => member.email)).toEqual([`a@example.com`]);
@@ -65,21 +65,21 @@ describe(`the roster writes`, () => {
         const { roster, members } = inScope(() => useMembers());
         await waitFor(() => expect(roster.value).toEqual({ owner: `owner@example.com`, members: [] }));
 
-        sandboxJson.mockResolvedValue({ members: [{ email: `b@example.com`, role: `guest`, areas: [`support`] }] });
-        await grantMember({ email: `b@example.com`, role: `guest`, areas: [`support`] });
+        sandboxJson.mockResolvedValue({ members: [{ email: `b@example.com`, tier: `guest`, areas: [`support`] }] });
+        await grantMember({ email: `b@example.com`, tier: `guest`, areas: [`support`] });
 
         expect(sandboxJson).toHaveBeenCalledWith(`/members`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
-            body: JSON.stringify({ email: `b@example.com`, role: `guest`, areas: [`support`] }),
+            body: JSON.stringify({ email: `b@example.com`, tier: `guest`, areas: [`support`] }),
         });
-        expect(members.value).toEqual([{ email: `b@example.com`, role: `guest`, areas: [`support`] }]);
+        expect(members.value).toEqual([{ email: `b@example.com`, tier: `guest`, areas: [`support`] }]);
         expect(roster.value?.owner).toBe(`owner@example.com`);
         expect(reads()).toBe(1);
     });
 
     it(`take a revoked person off every reader at once`, async () => {
-        sandboxJson.mockResolvedValue({ owner: `owner@example.com`, members: [{ email: `a@example.com`, role: `viewer` }] });
+        sandboxJson.mockResolvedValue({ owner: `owner@example.com`, members: [{ email: `a@example.com`, tier: `viewer` }] });
         const [access, board] = inScope(() => [useMembers(), useMembers()] as const);
         await waitFor(() => expect(board.members.value).toHaveLength(1));
 
@@ -95,12 +95,12 @@ describe(`the roster writes`, () => {
         sandboxJson.mockReturnValueOnce(first.promise);
         const { roster } = inScope(() => useMembers());
 
-        sandboxJson.mockResolvedValue({ owner: `owner@example.com`, members: [{ email: `c@example.com`, role: `viewer` }] });
-        await grantMember({ email: `c@example.com`, role: `viewer` });
+        sandboxJson.mockResolvedValue({ owner: `owner@example.com`, members: [{ email: `c@example.com`, tier: `viewer` }] });
+        await grantMember({ email: `c@example.com`, tier: `viewer` });
         first.resolve({ members: [] });
 
         await waitFor(() => expect(roster.value?.owner).toBe(`owner@example.com`));
-        expect(roster.value?.members).toEqual([{ email: `c@example.com`, role: `viewer` }]);
+        expect(roster.value?.members).toEqual([{ email: `c@example.com`, tier: `viewer` }]);
     });
 
     it(`are not overwritten by a refresh that was already on its way, which started before the write`, async () => {
@@ -111,12 +111,12 @@ describe(`the roster writes`, () => {
         const stale = Promise.withResolvers<object>();
         sandboxJson.mockReturnValueOnce(stale.promise);
         const refreshing = query.refetch();
-        sandboxJson.mockResolvedValue({ members: [{ email: `e@example.com`, role: `viewer` }] });
-        await grantMember({ email: `e@example.com`, role: `viewer` });
+        sandboxJson.mockResolvedValue({ members: [{ email: `e@example.com`, tier: `viewer` }] });
+        await grantMember({ email: `e@example.com`, tier: `viewer` });
         stale.resolve({ owner: `owner@example.com`, members: [] });
         await refreshing;
 
-        expect(roster.value?.members).toEqual([{ email: `e@example.com`, role: `viewer` }]);
+        expect(roster.value?.members).toEqual([{ email: `e@example.com`, tier: `viewer` }]);
     });
 
     it(`leave the entry alone when the daemon refuses, and pass the refusal on`, async () => {
@@ -125,7 +125,7 @@ describe(`the roster writes`, () => {
         await waitFor(() => expect(roster.value).toEqual({ owner: `owner@example.com`, members: [] }));
 
         sandboxJson.mockRejectedValue(new Error(`only the owner may grant`));
-        await expect(grantMember({ email: `d@example.com`, role: `viewer` })).rejects.toThrow(`only the owner may grant`);
+        await expect(grantMember({ email: `d@example.com`, tier: `viewer` })).rejects.toThrow(`only the owner may grant`);
         expect(members.value).toEqual([]);
     });
 });

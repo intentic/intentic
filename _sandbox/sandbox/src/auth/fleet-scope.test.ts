@@ -6,15 +6,15 @@ import { framedEvent, framedMetrics, framedSubagents, type Provenance, refuseUnl
 
 // The two fences over the fleet, as pure rules: whose conversation counts as a guest's, what a fenced member may see
 // of work that is not theirs, and which frames of the event stream reach either. The routes apply these; this pins
-// what they apply. Which persona cards that fence hands over is personas/persona-reach.test.ts, since answering it
+// what they apply. Which role cards that fence hands over is roles/role-reach.test.ts, since answering it
 // costs a manifest read.
 
 // Unfenced on purpose, so the ownership narrowing is pinned on its own; the two are independent rules. The roster
 // refuses an unfenced guest (auth.ts MemberSchema), and `fencedGuest` below is the shape that actually exists.
-const guest: ProvenCaller = { email: "Dee@Example.com", role: "guest", methods: ["google"] };
-const viewer: ProvenCaller = { email: "vic@example.com", role: "viewer", methods: ["google"] };
+const guest: ProvenCaller = { email: "Dee@Example.com", tier: "guest", methods: ["google"] };
+const viewer: ProvenCaller = { email: "vic@example.com", tier: "viewer", methods: ["google"] };
 // Fenced to one area; the fence rides on the row whatever the tier, so a collaborator carries one too.
-const fenced: ProvenCaller = { email: "fay@example.com", role: "collaborator", areas: ["support"], methods: ["google"] };
+const fenced: ProvenCaller = { email: "fay@example.com", tier: "collaborator", areas: ["support"], methods: ["google"] };
 
 describe("visibleTo", () => {
     test("a guest sees what it owns or started, compared folded; nothing else", () => {
@@ -32,12 +32,12 @@ describe("visibleTo", () => {
 
     test("a home conversation is its owner's and the sandbox owner's to see, no other member's", () => {
         const home: Provenance = { owner: { email: "ada@example.com" }, startedBy: "ada@example.com", home: true };
-        const owner: ProvenCaller = { email: "own@example.com", role: "owner", methods: ["google"] };
-        const ada: ProvenCaller = { email: "Ada@Example.com", role: "collaborator", methods: ["google"] };
+        const owner: ProvenCaller = { email: "own@example.com", tier: "owner", methods: ["google"] };
+        const ada: ProvenCaller = { email: "Ada@Example.com", tier: "collaborator", methods: ["google"] };
         expect(visibleTo(ada, home)).toBe(true);
         expect(visibleTo(owner, home)).toBe(true);
         expect(visibleTo(viewer, home)).toBe(false);
-        expect(visibleTo({ ...viewer, role: "maintainer" }, home)).toBe(false);
+        expect(visibleTo({ ...viewer, tier: "maintainer" }, home)).toBe(false);
         // Its subagents are ordinary work on the board.
         expect(visibleTo(viewer, { owner: { email: "ada@example.com" }, startedBy: "agent:home-1" })).toBe(true);
     });
@@ -45,7 +45,7 @@ describe("visibleTo", () => {
     // Fencing the files and leaving the transcripts open would be a fence with a door in it: a conversation carries
     // whatever it read.
     test("a home-only member sees their home and the sessions it started or opened to judge, nothing else", () => {
-        const bo: ProvenCaller = { email: "Bo@Example.com", role: "guest", agents: "home", methods: ["google"] };
+        const bo: ProvenCaller = { email: "Bo@Example.com", tier: "guest", agents: "home", methods: ["google"] };
         const home = homeConversationId("bo@example.com");
         expect(visibleTo(bo, { owner: { email: "bo@example.com" }, startedBy: "bo@example.com", home: true })).toBe(true);
         expect(visibleTo(bo, { startedBy: `agent:${home}` })).toBe(true);
@@ -212,13 +212,13 @@ describe("framedEvent", () => {
         const tab = (path: string, sessionId: string) => ({
             clientId: `t-${sessionId}`,
             email: "ada@example.com",
-            role: "owner" as const,
+            tier: "owner" as const,
             idle: false,
             view: "workspace",
             path,
             sessionId,
         });
-        const online = { clientId: "", email: "ada@example.com", role: "owner" as const, idle: false, view: "workspace" };
+        const online = { clientId: "", email: "ada@example.com", tier: "owner" as const, idle: false, view: "workspace" };
         const frame = { kind: "presence" as const, users: [tab("finance/ledger.csv", "finance"), tab("support/faq.md", "support"), tab("support/faq.md", "gone")] };
 
         expect(framedEvent(fenced, ["support"], frame, agentOf)).toEqual({

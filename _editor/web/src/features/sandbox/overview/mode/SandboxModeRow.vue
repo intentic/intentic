@@ -8,14 +8,14 @@ import type { SandboxMode } from "@intentic/constants";
 import { Button, Notice, ResponsiveOverlay } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, useId, watch } from "vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { modeSwitchLines, useSandboxMode } from "../../../../models/sandbox/mode/useSandboxMode";
 import ModeChoice from "../../../../parts/sandbox/ModeChoice.vue";
 import OverviewSettingRow from "../OverviewSettingRow.vue";
 import { EDITABLE_VALUE, FIXED_VALUE } from "../overviewLook";
 
 const t = useT();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { mode, settings, switchTo, saving, refusal } = useSandboxMode();
 
 const summary = computed(() => (mode.value === `hands-off` ? t(`sandbox.mode.handsOff.summary`) : t(`sandbox.mode.handsOn.summary`)));

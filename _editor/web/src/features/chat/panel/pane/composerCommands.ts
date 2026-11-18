@@ -2,7 +2,7 @@ import { writeClipboard } from "@intentic/ui/clipboard";
 import { t } from "@intentic/ui/i18n";
 import { computed, inject, type InjectionKey, type Ref } from "vue";
 import { useRouter } from "vue-router";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { here, page } from "../../../../lib/routes/links";
 import { type CommandResult, commandResultOf } from "../../../../models/conversations/commands/commandResult";
 import {
@@ -169,7 +169,7 @@ const answersOf = (
 export const useComposerCommands = (host: CommandsHost) => {
     const { view } = host;
     const effects = inject(COMMAND_EFFECTS, realEffects, true);
-    const { isGuest, canShip } = useRole();
+    const { isGuest, canShip } = useTier();
     const offered = computed(() => offeredCommands({ guest: isGuest.value, maintainer: canShip.value }));
     // What the `/` list offers and what Enter runs: ours beside the provider's, a clash settled as Claude Code settles it.
     const rows = computed(() => slashRows(offered.value, view.availableCommands.value));

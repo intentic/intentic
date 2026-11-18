@@ -6,8 +6,8 @@ import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
 import { parkedCards } from "../../../../conversations/actor/parked-cards.js";
 import type { TurnPlacement } from "../../../../conversations/worktrees/isolation.js";
-import { memoryConversationGrants } from "../../../../personas/conversation-grants.js";
-import { memoryOwnerGrants } from "../../../../personas/owner-grants.js";
+import { memoryConversationGrants } from "../../../../roles/conversation-grants.js";
+import { memoryOwnerGrants } from "../../../../roles/owner-grants.js";
 import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import type { TurnBase } from "../../../providers/agent-request.js";
 import { type TurnSafetyDeps, withTurnSafety } from "../turn-safety.js";
@@ -86,7 +86,7 @@ test("every runtime's base carries the owner's policy, judge mode, outside wake 
     expect(await base.tools.heavyCommands?.()).toMatchObject({ queue: true });
 });
 
-test("an isolated turn's install rule says it writes to its own copy, and a persona without the power is carried as such", async () => {
+test("an isolated turn's install rule says it writes to its own copy, and a role without the power is carried as such", async () => {
     const { deps } = harness();
     const isolation: TurnPlacement = {
         plan: {

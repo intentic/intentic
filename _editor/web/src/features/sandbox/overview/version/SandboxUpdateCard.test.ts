@@ -57,8 +57,8 @@ jest.mock(`./useBackgroundDownload`, () => ({
     },
 }));
 jest.mock(`../../../../models/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
-type ActiveRow = { id: string; role: string; hosted?: { region: string; warm: boolean; canRollBack?: boolean } };
-const active = ref<ActiveRow>({ id: `sb1`, role: `owner` });
+type ActiveRow = { id: string; tier: string; hosted?: { region: string; warm: boolean; canRollBack?: boolean } };
+const active = ref<ActiveRow>({ id: `sb1`, tier: `owner` });
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 // The platform's restart, held back by a test that leaves it running while the card closes and opens again.
 let hostedAnswer: Promise<undefined> | undefined;
@@ -154,7 +154,7 @@ afterEach(() => {
     slug.value = `demo`;
     composeManaged.value = false;
     skipVersion.mockClear();
-    active.value = { id: `sb1`, role: `owner` };
+    active.value = { id: `sb1`, tier: `owner` };
     useOsPreference().cmdOs.value = `unix`;
     app?.unmount();
     app = undefined;
@@ -222,9 +222,9 @@ it(`asks the machine for the download only while an update on offer is neither d
     expect(asked()).toBeUndefined();
     stagedPlan.value = undefined;
     // The platform restarts a hosted sandbox onto its image; there is no machine of the owner's to download on.
-    active.value = { id: `sb1`, role: `owner`, hosted: { region: `ams`, warm: true } };
+    active.value = { id: `sb1`, tier: `owner`, hosted: { region: `ams`, warm: true } };
     expect(asked()).toBeUndefined();
-    active.value = { id: `sb1`, role: `owner` };
+    active.value = { id: `sb1`, tier: `owner` };
     info.value = { ...info.value, updateAvailable: false };
     expect(asked()).toBeUndefined();
 });
@@ -271,7 +271,7 @@ it(`offers an update before developer notes, and names and folds those notes rat
 // The half minute the sandbox is down is also when the reader wanders: the card opened again then holds its button,
 // so a second press can't ask the platform twice.
 it(`holds the hosted restart across the card closing and opening again`, async () => {
-    active.value = { id: `sb1`, role: `owner`, hosted: { region: `ams`, warm: true } };
+    active.value = { id: `sb1`, tier: `owner`, hosted: { region: `ams`, warm: true } };
     let finish: () => void = () => {};
     hostedAnswer = new Promise<undefined>((resolve) => (finish = () => resolve(undefined)));
     let el = mount();
@@ -289,7 +289,7 @@ it(`holds the hosted restart across the card closing and opening again`, async (
 });
 
 it(`offers a hosted sandbox its update as the platform's restart, in the same gold`, async () => {
-    active.value = { id: `sb1`, role: `owner`, hosted: { region: `ams`, warm: true } };
+    active.value = { id: `sb1`, tier: `owner`, hosted: { region: `ams`, warm: true } };
     const el = mount();
     const button = [...el.querySelectorAll(`button`)].find((node) => node.textContent?.trim() === `Restart and update`);
     expect(button?.classList.contains(`ui-button-gilded`)).toBe(true);
@@ -302,7 +302,7 @@ it(`offers a hosted sandbox its update as the platform's restart, in the same go
 // The platform restarts a machine it runs for the sandbox's owner alone; a maintainer's press came back "sandbox not
 // found". They read the offer and whose press it is, with no button to refuse them.
 it(`tells a maintainer of a hosted sandbox that its owner restarts it onto the update, with no button`, () => {
-    active.value = { id: `sb1`, role: `maintainer`, hosted: { region: `ams`, warm: true } };
+    active.value = { id: `sb1`, tier: `maintainer`, hosted: { region: `ams`, warm: true } };
     const el = mount();
     expect([...el.querySelectorAll(`button`)].map((node) => node.textContent?.trim())).not.toContain(`Restart and update`);
     expect(el.textContent).toContain(`Only this sandbox's owner can restart it onto the new version: we run its machine on their account.`);
@@ -310,7 +310,7 @@ it(`tells a maintainer of a hosted sandbox that its owner restarts it onto the u
 });
 
 it(`offers a maintainer the update of a sandbox on somebody's own machine, which they reach through it`, () => {
-    active.value = { id: `sb1`, role: `maintainer` };
+    active.value = { id: `sb1`, tier: `maintainer` };
     const el = mount();
     expect(recreates(el)).toEqual([`Update`]);
     expect(el.textContent).not.toContain(`Only this sandbox's owner`);
@@ -460,7 +460,7 @@ it(`says a skipped release is skipped, and offers it again`, async () => {
 });
 
 it(`offers a hosted sandbox the platform's way back once it kept an image, through its own question`, async () => {
-    active.value = { id: `sb1`, role: `owner`, hosted: { region: `ams`, warm: true, canRollBack: true } };
+    active.value = { id: `sb1`, tier: `owner`, hosted: { region: `ams`, warm: true, canRollBack: true } };
     info.value = { version: LATEST, latest: LATEST, updateAvailable: false, channel: `stable` };
     const el = mount();
     // No host keeps a version ready for a day on the platform's machines, so that line is not said there.
@@ -473,7 +473,7 @@ it(`offers a hosted sandbox the platform's way back once it kept an image, throu
 });
 
 it(`keeps the platform's way back from a maintainer, whose rollback it would refuse`, () => {
-    active.value = { id: `sb1`, role: `maintainer`, hosted: { region: `ams`, warm: true, canRollBack: true } };
+    active.value = { id: `sb1`, tier: `maintainer`, hosted: { region: `ams`, warm: true, canRollBack: true } };
     info.value = { version: LATEST, latest: LATEST, updateAvailable: false, channel: `stable` };
     const el = mount();
     expect([...el.querySelectorAll(`button`)].map((node) => node.textContent?.trim())).not.toContain(`Having trouble?`);

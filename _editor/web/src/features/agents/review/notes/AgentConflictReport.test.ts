@@ -156,7 +156,7 @@ it(`says a queued fix waits for the turn, and lets it be cancelled`, async () =>
     expect(cancelled).toBe(1);
 });
 
-// A land refused over personas.json as "your uncommitted edits", although only the Personas page had written it: the
+// A land refused over roles.json as "your uncommitted edits", although only the Roles page had written it: the
 // bar names the page, and one press saves those files and lands.
 const settingsHeld: LandConflict[] = [
     {
@@ -164,7 +164,7 @@ const settingsHeld: LandConflict[] = [
         clean: 3,
         mainBranch: `main`,
         paths: [
-            { path: `${STATE_DIR}/config/personas.json`, reason: `workspace` },
+            { path: `${STATE_DIR}/config/roles.json`, reason: `workspace` },
             { path: `${STATE_DIR}/config/capabilities.json`, reason: `workspace` },
         ],
     },
@@ -174,12 +174,12 @@ it(`names the Sandbox page behind settings files it holds, and saves them and la
     const saved: (readonly string[])[] = [];
     const el = await mount({ conflicts: settingsHeld, onSaveSettings: (paths) => saved.push(paths) });
 
-    expect(text(el)).toContain(`Settings changed on the Personas, Capabilities page aren't saved yet.`);
+    expect(text(el)).toContain(`Settings changed on the Roles, Capabilities page aren't saved yet.`);
     expect(text(el)).not.toContain(`uncommitted edits`);
     expect(hasButton(el, `Open Changes`)).toBe(false);
 
     press(el, `Save settings and land`);
-    expect(saved).toEqual([[`.intentic/config/personas.json`, `.intentic/config/capabilities.json`]]);
+    expect(saved).toEqual([[`.intentic/config/roles.json`, `.intentic/config/capabilities.json`]]);
 });
 
 // The agent's own part still blocks too; the settings press stays, and the files still don't read as the owner's.

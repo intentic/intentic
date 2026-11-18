@@ -342,7 +342,7 @@ const createChildrenRoutes = (services: Services) => ({
 
 // The child-agent surface: start a full agent on any connected provider, park for input, list this conversation's
 // children.
-// The gate is the arming recorded at plan time, since the agent token names the sandbox, never a persona; scoped
+// The gate is the arming recorded at plan time, since the agent token names the sandbox, never a role; scoped
 // like `services`/`capabilities`.
 export const childrenRawRoutes = defineRawRoutes((services: Services) => {
     const childrenRoutes = createChildrenRoutes(services);

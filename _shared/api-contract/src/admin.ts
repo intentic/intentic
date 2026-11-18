@@ -161,7 +161,7 @@ export const AdminUserSandboxSchema = z.object({
             idleWarnedAt: z.iso.datetime().nullable(),
         })
         .nullable(),
-    members: z.array(z.object({ email: z.email(), role: z.string(), accepted: z.boolean() })),
+    members: z.array(z.object({ email: z.email(), tier: z.string(), accepted: z.boolean() })),
 });
 
 export const AdminUserDetailSchema = z.object({
@@ -211,7 +211,7 @@ export const AdminUserDetailSchema = z.object({
     ),
     sandboxes: z.array(AdminUserSandboxSchema),
     // Sandboxes this account is a MEMBER of (owned ones are above).
-    memberOf: z.array(z.object({ sandboxName: z.string(), ownerEmail: z.email(), role: z.string(), accepted: z.boolean() })),
+    memberOf: z.array(z.object({ sandboxName: z.string(), ownerEmail: z.email(), tier: z.string(), accepted: z.boolean() })),
 });
 export type AdminUserDetail = z.infer<typeof AdminUserDetailSchema>;
 

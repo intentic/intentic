@@ -1,6 +1,6 @@
 import { toneTint } from "@intentic/ui";
 
-// The pieces every explainer diagram draws with (the (i) cards on the Tools settings, on Areas, on Personas), so they
+// The pieces every explainer diagram draws with (the (i) cards on the Tools settings, on Areas, on Roles), so they
 // read as one visual language: a box is a thing (a command, a file, the agent), a bar is an amount, an arrow is what
 // happens next. Here rather than beside one feature's explainers, since several features draw with them.
 

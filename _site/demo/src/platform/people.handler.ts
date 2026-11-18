@@ -17,7 +17,7 @@ const GATHER_MS = 1_500;
 // left out (session, OAuth and connect tokens are secrets, not personal data).
 const exportOf = () => {
     const plan = planState();
-    const owned = sandboxRows().filter((row) => row.role === `owner`);
+    const owned = sandboxRows().filter((row) => row.tier === `owner`);
     const now = new Date();
     return {
         user: DEMO_USER,
@@ -25,9 +25,9 @@ const exportOf = () => {
         accounts: [{ providerId: `google`, accountId: `104729384756102938475`, scope: `openid email profile`, createdAt: `2026-08-02T09:14:00.000Z` }],
         sandboxes: owned.map((row) => ({ id: row.id, name: row.name, image: row.image, daemonUrl: row.daemonUrl })),
         memberships: sandboxRows()
-            .filter((row) => row.role !== `owner`)
+            .filter((row) => row.tier !== `owner`)
             .map((row) => ({ sandboxId: row.id })),
-        invitesSent: inviteRecords().map((record) => ({ email: record.email, role: record.role, status: record.status, createdAt: record.invitedAt })),
+        invitesSent: inviteRecords().map((record) => ({ email: record.email, tier: record.tier, status: record.status, createdAt: record.invitedAt })),
         organisations: membershipsOf(),
         hostedPlan: plan.status === undefined ? null : { status: plan.status, currentPeriodEnd: plan.renewsAt ?? null },
         hostedUsage: (plan.hosted?.machines ?? []).map((machine) => ({ month: now.toISOString().slice(0, 7), tier: machine.tier, minutes: machine.hours.usedMinutes })),
@@ -76,6 +76,7 @@ const sent = () => ({ members: inviteRecords(), link: INVITE_LINK, delivery: `lo
 
 export const inviteAnswers = {
     list: roster,
+    setTier: roster,
     setRole: roster,
     revoke: roster,
     create: sent,

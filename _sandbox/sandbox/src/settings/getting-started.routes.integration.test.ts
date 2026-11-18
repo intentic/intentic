@@ -21,7 +21,7 @@ const routesOnFreshVolume = () =>
 const as = (email: string | undefined) => {
     const context: OrpcContext = { headers: new Headers(), method: "POST", url: "/settings/getting-started" };
     if (email !== undefined) {
-        const identity: ProvenCaller = { email, role: "maintainer", methods: ["google"] };
+        const identity: ProvenCaller = { email, tier: "maintainer", methods: ["google"] };
         context.identity = identity;
     }
     return { context };

@@ -5,7 +5,7 @@ import { computed } from "vue";
 import StandingGrants from "../StandingGrants.vue";
 import { useStandingGrants } from "../useStandingGrants";
 
-// ACCESS ▸ ALLOWED: what conversations were allowed past their persona or area, and the yeses that name no conversation,
+// ACCESS ▸ ALLOWED: what conversations were allowed past their role or area, and the yeses that name no conversation,
 // each taken back here. The Needs you inbox's Allowed tab until 2026-10-12, then the foot of the one Access page, where a
 // yes nobody was looking for sat under nine other groups. A part of its own now, with its count on the tab, so a standing
 // exception is seen without scrolling for it.

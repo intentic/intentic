@@ -6,7 +6,7 @@ export interface LinkListing {
     readonly sandbox: string;
     readonly online: boolean;
     readonly why?: string;
-    readonly persona?: string;
+    readonly role?: string;
     readonly approve?: boolean;
     readonly turnsPerHour?: number;
     readonly records?: boolean;

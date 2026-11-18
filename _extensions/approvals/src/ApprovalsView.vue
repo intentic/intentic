@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ActionApprovalSummary, ApprovalSummary, HookRequest, PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import {
     appLink,
     Await,
@@ -72,7 +72,7 @@ const hooksNotice = computed<NoticeModel | undefined>(() => {
     return ledgerUnreadable.value ? { tone: `danger`, title: t(`approvalsView.hookLedgerUnreadable`) } : undefined;
 });
 // Below maintainer, the queue is read-only (the daemon floors the mutation too); a viewer can still watch.
-const canShip = computed(() => roleAtLeast(host().sandbox.role(), `maintainer`));
+const canShip = computed(() => tierAtLeast(host().sandbox.role(), `maintainer`));
 const { notice: actionError, run } = useAsyncAction();
 
 const isPost = (item: ApprovalSummary): item is PostApprovalSummary => item.kind === `post`;

@@ -89,7 +89,7 @@ const tunnelDown = (netd: NetdProbe): boolean => netd.kind === `edge` || netd.ki
 
 const gather = async (sandboxId: string, daemonUrl: string): Promise<Evidence> => {
     const box = active.value;
-    const owner = box?.role === `owner`;
+    const owner = box?.tier === `owner`;
     const hosted = (box?.hosted ?? null) !== null;
     const [platform, netd, machine] = await Promise.all([
         // The desktop app's own copy of the editor answers the list itself, so asking it says nothing of the platform.
@@ -233,7 +233,7 @@ export const useDiagnosis = (clock: { readonly elapsed: ComputedRef<number> }): 
             lane: hosted === null ? `own` : `hosted`,
             warm: hosted?.warm,
             evidence: diagnosisEvidence.value,
-            hostReport: box?.role === `owner` ? box.hostReport : undefined,
+            hostReport: box?.tier === `owner` ? box.hostReport : undefined,
             now: now.value,
             address: addressOf(box?.daemonUrl),
         });

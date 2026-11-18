@@ -718,7 +718,7 @@ if (channel !== undefined) {
 }
 
 const removalRequest = async (sandbox: SandboxSummary, base: string, bearer: string): Promise<Response> => {
-    const route = sandbox.role === `owner` ? (`POST /system/access/disable` as const) : (`DELETE /members/self` as const);
+    const route = sandbox.tier === `owner` ? (`POST /system/access/disable` as const) : (`DELETE /members/self` as const);
     // allow(daemon-doors): aimed at the address of a sandbox that is not the active one, with that sandbox's own bearer, so
     // the active session and target the client carries would be the wrong ones.
     return fetch(`${base.replace(/\/$/, ``)}${rawRouteUrl(route)}`, {
@@ -765,7 +765,7 @@ const retireSandboxAccess = async (sandbox: SandboxSummary): Promise<void> => {
         response = await removalRequest(sandbox, base, bearer);
     }
     // An already-removed member is the desired end state; a 403 there completes the removal rather than blocking it.
-    if (!response.ok && !(sandbox.role !== `owner` && response.status === 403)) {
+    if (!response.ok && !(sandbox.tier !== `owner` && response.status === 403)) {
         throw new Error(`access removal failed (${response.status})`);
     }
     invalidateSession(sandbox.id);

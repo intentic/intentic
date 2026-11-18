@@ -53,7 +53,7 @@ const titleId = useId();
 // Tab stays inside the gate while it is up, as it does in every <Modal>.
 const vFocustrap = FocusTrap;
 // Only the owner holds recovery codes; the platform's own roster says who the reader is before any session exists.
-const isOwner = computed(() => sandbox.active.value?.role === `owner`);
+const isOwner = computed(() => sandbox.active.value?.tier === `owner`);
 
 const busy = ref(false);
 const notice = ref<NoticeModel | undefined>(undefined);

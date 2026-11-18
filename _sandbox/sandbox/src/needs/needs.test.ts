@@ -11,9 +11,9 @@ const SUBJECT: NeedSubject = { kind: "secret", name: "OPENAI_API_KEY" };
 const STANDING: TurnStanding = {
     at: 0,
     unattended: false,
-    persona: undefined,
+    role: undefined,
     granted: [],
-    withheldByPersona: [],
+    withheldByRole: [],
     withheldByGate: [],
     withheldByReach: [],
     fence: undefined,
@@ -282,7 +282,7 @@ describe("needs", () => {
         const needs = createNeeds(deps);
         const stop = needs.start();
         await needs.ask({ raise: raise(0), conversationId: "conv-1", signal: signal() });
-        await needs.answer("need-1", { kind: "grant", scope: "conversation" }, { email: undefined });
+        await needs.answer("need-1", { kind: "grant", role: "writer" }, { email: undefined });
         expect(woken).toEqual([]);
         settings.live = false;
         endTurn("conv-1");

@@ -9,8 +9,8 @@ import { createProgramGuardGate, type ProgramGuardGateDeps, type ProgramWidenReq
 
 const cards = parkedCards(memoryFleet().conversations);
 
-const OWNER = { email: "owner@corp.com", role: "owner" } as const;
-const EVE = { email: "eve@corp.com", role: "maintainer" } as const;
+const OWNER = { email: "owner@corp.com", tier: "owner" } as const;
+const EVE = { email: "eve@corp.com", tier: "maintainer" } as const;
 
 const fake = (over: Partial<ProgramGuardGateDeps> = {}) => {
     const frames: AgentEvent[] = [];

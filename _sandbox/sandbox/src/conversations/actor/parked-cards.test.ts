@@ -6,7 +6,7 @@ import { type NightAnswers, type NightCard, parkedCards, standingOn } from "./pa
 
 const onAbort = { kind: "question", requestId: "", cancelled: true } as const;
 
-const OWNER_CALLER = { email: "owner@corp.com", role: "owner" } as const;
+const OWNER_CALLER = { email: "owner@corp.com", tier: "owner" } as const;
 
 // The cards of one fleet's actors, which every test not about a dispose parks in.
 const cards = parkedCards(memoryFleet().conversations);
@@ -83,7 +83,7 @@ test("only the first settle counts: a second reply for the same id finds nothing
 
 // Who may answer is a card-level check here, not in the reply route, since a second copy of the list there is the one
 // that goes stale. A refusal must leave the card standing.
-const approver = { email: "bob@corp.com", role: "collaborator" } as const;
+const approver = { email: "bob@corp.com", tier: "collaborator" } as const;
 
 test("a caller the card does not name is refused, and the card stays parked for one who is", async () => {
     const { id, wait } = cards.create("credential_offer", { kind: "credential_offer", requestId: "", approve: false }, "c-1", {
@@ -91,11 +91,11 @@ test("a caller the card does not name is refused, and the card stays parked for 
     });
     const settled = wait(new AbortController().signal);
 
-    expect(cards.resolve({ kind: "credential_offer", requestId: id, approve: true }, { email: "eve@corp.com", role: "maintainer" })).toEqual({
+    expect(cards.resolve({ kind: "credential_offer", requestId: id, approve: true }, { email: "eve@corp.com", tier: "maintainer" })).toEqual({
         refused: "Only bob@corp.com can release this credential",
     });
     // A stranger's no is refused too, or skipping a release on the approver's behalf becomes a denial-of-service.
-    expect(cards.resolve({ kind: "credential_offer", requestId: id, approve: false }, { email: "eve@corp.com", role: "maintainer" })).toEqual({
+    expect(cards.resolve({ kind: "credential_offer", requestId: id, approve: false }, { email: "eve@corp.com", tier: "maintainer" })).toEqual({
         refused: "Only bob@corp.com can release this credential",
     });
     // Still parked: the approver's own click settles it.

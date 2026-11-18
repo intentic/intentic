@@ -29,7 +29,7 @@ import { useRegistry } from "../extensions/useRegistry";
 import { useDevices } from "../../models/sandbox/devices/useDevices";
 import { HOST_DOOR, PHONE_DOOR, usePeerConnect, WEBEXT_DOOR } from "../../models/sandbox/devices/usePeerConnect";
 import { useLiveLinks } from "../../models/sandbox/devices/useLiveLinks";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { useBackgroundProcesses, viewProcessLogs } from "../../models/terminal/useBackgroundProcesses";
 import { useCapabilityCatalog } from "./capabilityCatalog";
 import { addsByItself, swallowFileDrag, takenNameWords, useCapabilityForm } from "./capabilityForm";
@@ -185,7 +185,7 @@ const { submit, submitting, failure: saveFailure, meter: submitMeter } = useCapa
     handOff,
     stopEditing,
     error,
-    ownsSandbox: useRole().isOwner,
+    ownsSandbox: useTier().isOwner,
 });
 
 const actions = useConnectionActions({ remove, rename, refetchFleet });

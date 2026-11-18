@@ -36,10 +36,10 @@ What the daemon does around you:
   accounts and identities, their own devices (computers, and Android phones through the Intentic Device app), Docker,
   MCP servers, a wallet. Each connected one ships a skill and its tools. A missing one is asked for with the
   `capabilities` skill, never set up by hand.
-- **Personas** are cards the owner writes that decide what a turn IS and MAY DO: which accounts it speaks through,
+- **Roles** are cards the owner writes that decide what a turn IS and MAY DO: which accounts it speaks through,
   which shelves of tools are open, which folder it may touch, which model and system prompt it runs on. Enforcement
   is by absence: a withheld tool is not mounted and a withheld credential is never injected, so a refusal you meet
-  may be a card, not a fault (`references/personas-and-models.md`).
+  may be a card, not a fault (`references/roles-and-models.md`).
 - **Automations** start a turn on their own (a cron expression, a connector's listener); one with a model-free check
   is a **watch**. **Workflows** are daemon-scheduled graphs of turns. **Approvals** hold posts and outward-facing
   actions for the owner's yes. **Extensions** add connectors, channels, viewers and skills
@@ -75,7 +75,7 @@ description of the product, and it may describe a project that has nothing to do
 
 Memory is that `AGENTS.md`, at the workspace root, which the daemon composes into every runtime's instructions. It is
 read from the turn's own tree, so the owner's uncommitted edit reaches isolated conversations only once committed.
-Settings, personas and grants are read as each turn is planned: a change applies from every conversation's next turn,
+Settings, roles and grants are read as each turn is planned: a change applies from every conversation's next turn,
 with no restart (`references/instructions-and-settings.md`).
 
 ## Routing: what the owner wants → what to do
@@ -85,13 +85,13 @@ with no restart (`references/instructions-and-settings.md`).
 | a service, account, device, database or Docker this sandbox is not connected to | `capabilities` skill: `capabilities list`, then `capabilities request <card> --why …` (`--target` for the site or host, `--set` for what you can fill in) |
 | a setting changed on a connected one (a device switch, a Docker option) or a refused credential replaced | `capabilities request <connection> --set key=value --why …`, or `--reconnect`: the card shows the change, and the owner applies it with one press |
 | a tool, toolchain or system package that survives a rebuild | `environment` skill: `environment propose <tool>` puts the overlay steps on a card the owner approves |
-| an account, folder or shelf of tools this conversation's persona or area withholds | `grants request capability\|folder\|shelf <what> --why "…"`; it reaches the conversation from its next turn |
+| an account, folder or shelf of tools this conversation's role or area withholds | `grants request capability\|folder\|shelf <what> --why "…"`; it reaches the conversation from its next turn |
 | to know what this conversation is still waiting on people for | `needs`; answers arrive by themselves, so never poll and never ask twice. Every asking command (`capabilities request`, `secrets ask`/`want`/`request`, `environment propose`, `grants request`) exits 0 when usable now, 1 when refused (carry on without it and say what it would have enabled), 2 for no verdict (read its stdout and fix the command), 3 while still waiting (carry on with what does not need it) |
 | another conversation in this workspace: what it was asked, where it got to, its branch, worktree or record | `agents show <handle>` (its id, branch, an id prefix, its session id, or words from its title), `agents ls` (`--owner <who>`), `agents find '<text>'` for who said a phrase, `--transcript` for the messages; never a search of `/history` by hand. `agents message <handle> '<text>'` reaches it even idle, read as a peer's words, so ask rather than direct and report what the command says happened (steered, a turn opened, queued); `agents resume <handle>` runs a held or ended turn again (`--provider`/`--model` moves it off a spent model); `agents --help` |
 | a repo they can start, run and preview from the sidebar or Browsers | `panels` skill: `.intentic/run.json` targets that run in the sandbox or on their computers, what Start finds without one, and an `operator/` web app for a panel |
-| a model on their GPU, or a model server they already run | a model endpoint, never a model built into this image: `references/personas-and-models.md` |
+| a model on their GPU, or a model server they already run | a model endpoint, never a model built into this image: `references/roles-and-models.md` |
 | to pay an x402 endpoint | `wallet` skill; the owner approves each payment outside their auto-approve band |
-| a SEPARATE sandbox: a second project, a specialized agent with its own tools and access, a team of them | `fleet` skill (`sandboxes` CLI); every create and removal asks in chat first. A difference only in how a turn behaves is a persona, not a machine |
+| a SEPARATE sandbox: a second project, a specialized agent with its own tools and access, a team of them | `fleet` skill (`sandboxes` CLI); every create and removal asks in chat first. A difference only in how a turn behaves is a role, not a machine |
 | to tell the sandbox that owns a project about a problem you saw in it (an API answering 500, a broken release, wrong docs), with no link | `projects report <github.com/owner/repo> --title "…" [--detail "…"]`: it lands in that sandbox's issues inbox, grouped with every report of the same problem, delivered now or retried for a week. `projects` lists what this sandbox claims; the owner claims projects in Settings ▸ Projects |
 | work done in ANOTHER of the owner's sandboxes, with its credentials, repos or devices | `links` skill: `mcp__<name>__delegate`, followed with `wait`; it lands over there, on that owner's terms. No link yet: `capabilities request link --why …` |
 | a post (X, Reddit, Discord, YouTube…) or an outward-facing action prepared rather than done | `approvals` skill: one JSON file per item in `.intentic/config/approvals/` |
@@ -101,10 +101,10 @@ with no restart (`references/instructions-and-settings.md`).
 | to wait on work started here: a background command, a subagent | `mcp__subagents__wait` with the command's ID from its Bash call, or the subagent's id (its Agent call's, or the one spawn returned); `mcp__subagents__stop` ends a background command early, whichever ID names it; never `sleep`, and never detach a process yourself |
 | to know why something failed, died, hung or felt slow | Diagnostics, below |
 | to look into a bug they met in ANOTHER of their sandboxes (its logs, its transcripts) | `agents show <id> --on <link>` and `diagnostics … --on <link>` over a link that shares records, a connected computer's `inspect_sandbox`, or a debug bundle: "Another sandbox's records" in `references/diagnostics.md`. Never `docker exec` into its container |
-| how personas work, keeping an agent inside one project, which model runs what (and whether that is enforced) | `references/personas-and-models.md` |
+| how roles work, keeping an agent inside one project, which model runs what (and whether that is enforced) | `references/roles-and-models.md` |
 | the workspace from a phone or another computer, the app's link, letting someone else in | `references/remote-access.md` |
 | to rename agents, tell them apart at a glance, tag or filter them | `references/agents-board.md` (there are no tags; it says what exists instead) |
-| where instructions live (`AGENTS.md`, the system prompt, a persona's prompt, skills), or whether a change needs a restart | `references/instructions-and-settings.md` |
+| where instructions live (`AGENTS.md`, the system prompt, a role's prompt, skills), or whether a change needs a restart | `references/instructions-and-settings.md` |
 | Land, Accept, Save changes, Back up, Approve, Rebuild explained, and in which order | `references/land-save-rebuild.md` |
 | what a view, panel, card or button of the editor does, or where a setting is | `references/editor.md` |
 | "needs an update" in place of the sandbox, an editor error naming a part of the app or a field ("too old for this part of the app", "doesn't provide", "didn't keep", "answered in a shape"), a blank panel, a setting that snaps back | the sandbox is likely older than the app: check the daemon's version before blaming the browser (`references/sandbox-behind-app.md`) |
@@ -130,7 +130,7 @@ source lives, and what a restart or a checkpoint does under a turn: `references/
 The app is **https://app.intentic.dev**. Its views: **Home** (`/home`, every sandbox), **Agents** (`/agents`, the
 board; **Land** / **Accept** is on its cards), **Chat** (`/chat`), **Workspace** (`/workspace/<path>`, files and
 **Commit**), **Capabilities**, **Devices**, **Browsers**, **Sandbox** (`/sandbox/<tab>`: Models, Agent, Environment,
-Secrets, Extensions, Access, Personas, Privacy & safety, Activity…), **Settings** (the person's own), and extension
+Secrets, Extensions, Access, Roles, Privacy & safety, Activity…), **Settings** (the person's own), and extension
 pages under `/ext/…`. Settings and config are the owner's to change there: read them to answer, edit them only when
 asked to. What each view holds, in the owner's words: `references/editor.md`.
 

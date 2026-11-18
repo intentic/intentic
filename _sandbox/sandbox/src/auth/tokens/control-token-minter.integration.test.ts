@@ -19,7 +19,7 @@ const MAINTAINER = "max@example.com";
 const sandbox = async () => {
     const root = mkdtempSync(join(tmpdir(), "control-minter-"));
     const slice = createAuthSlice({ ...testConfig, historyRoot: join(root, "history") }, join(root, "work"), pino({ level: "silent" }));
-    await slice.members.add(MAINTAINER, { role: "maintainer" });
+    await slice.members.add(MAINTAINER, { tier: "maintainer" });
     const emails: Record<string, string> = { "tok-owner": OWNER, "tok-max": MAINTAINER };
     const authorizer = createAuthorizer({
         verify: async (bearer) => {
@@ -86,7 +86,7 @@ test("a maintainer's control token stops working once the owner removes them", a
 
 test("a maintainer's control token stops working once they are re-graded below maintainer", async () => {
     const { as, withToken } = await sandbox();
-    expect((await as("tok-owner", "POST", "/members", { email: MAINTAINER, role: "collaborator" })).status).toBe(200);
+    expect((await as("tok-owner", "POST", "/members", { email: MAINTAINER, tier: "collaborator" })).status).toBe(200);
     expect(await withToken()).toBe(401);
 });
 

@@ -4,7 +4,7 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Services } from "../composition.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 
-// A settings page's own write (a persona's card or kit, a connection's manifest entry, the Agent tab's settings.json),
+// A settings page's own write (a role's card or kit, a connection's manifest entry, the Agent tab's settings.json),
 // committed on its own as it lands.
 // These files are versioned in the workspace (VERSIONED_STATE_PATHS), and left uncommitted they read as the owner's own
 // edits: a land touching the same file was refused as work only its owner could move, and it took three Accepts, a

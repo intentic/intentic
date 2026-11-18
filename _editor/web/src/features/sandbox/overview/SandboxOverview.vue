@@ -32,7 +32,7 @@ import { useSandboxAvailability } from "./useSandboxAvailability";
 import { useSandboxPlacement } from "./useSandboxPlacement";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { useSelfResources } from "../../../models/sandbox/devices/useSelfResources";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
@@ -80,12 +80,12 @@ const copyImage = async (): Promise<void> => {
     }
 };
 
-const isOwner = computed(() => sandbox.active.value?.role === `owner`);
+const isOwner = computed(() => sandbox.active.value?.tier === `owner`);
 // The name and the logo are the owner's and Full access's to change (the platform's `requireFullAccess`).
 // (2026-11-09) Both live on the platform, so neither is offered while it isn't answering or the window is open without
 // it: the name and logo show as they are, and the rail's offline tile says why (RailSignals.vue).
 const platformAnswering = computed(() => !platformHealth.down.value && !directMode.value);
-const canEditIdentity = computed(() => platformAnswering.value && (isOwner.value || sandbox.active.value?.role === `maintainer`));
+const canEditIdentity = computed(() => platformAnswering.value && (isOwner.value || sandbox.active.value?.tier === `maintainer`));
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
 // Platform-hosted (starter) sandbox; the upgrade card below keys on this.
 const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
@@ -110,7 +110,7 @@ const selfResources = useSelfResources();
 // Changing that share is a device op, maintainer and up at the daemon (`manageDeviceSandbox`), so it reads `canShip`;
 // the name and the logo read `canEditIdentity` (owner or Full access at the platform), and the hosted card `isOwner`,
 // since it goes to the platform's owner-only routes.
-const { canShip } = useRole();
+const { canShip } = useTier();
 const shareLine = computed(() => (selfResources.row.value === undefined ? undefined : resourcesSummary(selfResources.row.value)));
 const resizing = ref(false);
 // The sandbox recreates under this page, so success is the reconnect, not a sentence here. Only a refusal the machine

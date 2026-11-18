@@ -1,7 +1,7 @@
 <!-- A record row, built on <Row>, that opens into its own evidence below. -->
 <script setup lang="ts">
 import { computed, useId, useSlots } from "vue";
-import { FACE_SIZES } from "../brand/personaFace.js";
+import { FACE_SIZES } from "../brand/roleFace.js";
 import Icon from "../primitives/Icon.vue";
 import Row from "./Row.vue";
 import type { IconName } from "../../icons/iconSets.js";
@@ -21,7 +21,7 @@ const {
     open?: boolean;
     // Leave unset: the enclosing <RowGroup> publishes the tier, and a group defaults to compact. See <RowGroup>.
     density?: RowDensity;
-    /** Forwarded to <Row>: `face` sizes `#lead` for a <PersonaFace> and pays for it out of the row's padding. */
+    /** Forwarded to <Row>: `face` sizes `#lead` for a <RoleFace> and pays for it out of the row's padding. */
     lead?: `icon` | `face`;
     // What the press target is (pressing the row always opens it; this only decides the button's edges).
     // `header`: lead + title + description are one button; the chevron is the last thing on the row, after

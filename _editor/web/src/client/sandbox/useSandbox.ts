@@ -369,7 +369,7 @@ const remove = async (id: string): Promise<LeaveOutcome | undefined> => {
         SANDBOX_LIST_KEY,
         (live) => live.filter((sandbox) => sandbox.id !== id),
         async () => {
-            if (target.role === `owner`) {
+            if (target.tier === `owner`) {
                 await apiClient.sandbox.delete({ sandboxId: id });
                 // It is in the account's trash now: every list pointing there counts it from this moment.
                 void queryClient.invalidateQueries({ queryKey: SANDBOX_TRASH.every });

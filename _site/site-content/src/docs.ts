@@ -28,14 +28,14 @@ export const docsBook: Book = {
                         },
                         {
                             // Before Architecture on purpose: that page is a system map, and this is the vocabulary it
-                            // is drawn in. Owns "persona" and "project", which no other page defined.
+                            // is drawn in. Owns "role" and "project", which no other page defined.
                             id: "worksite",
                             title: "The worksite",
-                            blurb: "Machine, sandbox, persona and project, in one picture",
+                            blurb: "Machine, sandbox, role and project, in one picture",
                             meta: {
                                 title: "The worksite · intentic docs",
                                 description:
-                                    "The four words these docs assume, drawn as a building camp: the machine your work runs on, a sandbox, the persona that scopes a turn, and the projects agents are put on.",
+                                    "The four words these docs assume, drawn as a building camp: the machine your work runs on, a sandbox, the role that scopes a turn, and the projects agents are put on.",
                                 datePublished: "2026-09-15",
                             },
                         },
@@ -72,7 +72,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Glossary · intentic docs",
                                 description:
-                                    "What intentic means by machine, sandbox, persona, project, daemon, conversation, worktree, landing, harness, capability, runner and control token.",
+                                    "What intentic means by machine, sandbox, role, project, daemon, conversation, worktree, landing, harness, capability, runner and control token.",
                                 datePublished: "2026-08-11",
                             },
                         },

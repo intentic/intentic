@@ -15,7 +15,7 @@ const sandbox = (hosted: SandboxSummary["hosted"]): SandboxSummary => ({
     removedBy: null,
     hosted,
     token: null,
-    role: "owner",
+    tier: "owner",
     providedAddress: false,
     localHostname: null,
 });

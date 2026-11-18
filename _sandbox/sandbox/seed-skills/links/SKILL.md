@@ -1,6 +1,6 @@
 ---
 name: links
-description: Hand a task to another of the owner's sandboxes that is linked to this one (`mcp__<sandbox>__delegate`, or `agents delegate` from a shell) and supervise it like a subagent, read its records, or operate it directly (`mcp__<sandbox>__run_command`, `read_file`, `write_file`) to look into or repair that sandbox itself. Use when the work needs what only that sandbox has (its credentials, its repos, its devices, its persona) or is that sandbox's own state, not for more hands on this sandbox's own work, which is `spawn`.
+description: Hand a task to another of the owner's sandboxes that is linked to this one (`mcp__<sandbox>__delegate`, or `agents delegate` from a shell) and supervise it like a subagent, read its records, or operate it directly (`mcp__<sandbox>__run_command`, `read_file`, `write_file`) to look into or repair that sandbox itself. Use when the work needs what only that sandbox has (its credentials, its repos, its devices, its role) or is that sandbox's own state, not for more hands on this sandbox's own work, which is `spawn`.
 ---
 
 # Linked sandboxes
@@ -10,7 +10,7 @@ devices: a `link` card under Your devices, and a tool server of its own named af
 beside the computers' `mcp__devices__run_command`). The token behind it was minted by the other sandbox's owner
 and stays with this sandbox's daemon, never in your environment. What a task may do over there is decided **there**, on the link's terms:
 
-- the **persona** its tasks wear (their accounts, tool shelves, folders and model);
+- the **role** its tasks wear (their accounts and model, and through the access profiles holding it, their tools and folders);
 - whether each task **waits for that sandbox's owner** to allow it before anything runs;
 - how many **turns an hour** the link may start;
 - whether it **shares its records** with this sandbox, and whether this sandbox may **operate** it.
@@ -71,7 +71,7 @@ inbound link; `about` and `agents links` say whether), act there directly:
 - Every call is **logged over there** with the link's name. Look before you change: read the state, say what you will
   change, change only that, then read it back.
 - A long command is followed until it ends or its timeout (default 120 s, at most 600 s); a refusal names why.
-- A turn started by outside content, or one whose persona does not delegate, may not operate another sandbox.
+- A turn started by outside content, or one whose role does not delegate, may not operate another sandbox.
 
 A link that may not operate says so. Turning it on is that sandbox's owner's, in its Access ▸ Programs ▸ Linked
 sandboxes, never yours: say what you would have run there, and why.
@@ -81,7 +81,7 @@ sandboxes, never yours: say what you would have run there, and why.
 - It opens **its own conversation** in the other sandbox, in that conversation's own checkout of its repos (never
   the shared one), and **lands there**, under that sandbox's rules. Nothing of it comes back into your checkout: `merge` has nothing to bring.
   If you need its changes here, ask it to push a branch, or to report the diff.
-- It runs **unattended**: no signed-in account unless the link's persona carries one, and a card that needs a
+- It runs **unattended**: no signed-in account unless the link's role carries one, and a card that needs a
   person (a permission, a plan) waits for that sandbox's owner. A plain question waits for you: answer it.
 - It sees **nothing of this conversation**. Give it a self-contained task: every path, every requirement, and what
   you want in its closing report, since that report is all that comes back.
@@ -96,7 +96,7 @@ sandboxes, never yours: say what you would have run there, and why.
   it is refused on both sides, so two sandboxes cannot pass one task back and forth.
 - A link's tasks reach **only the conversations they opened** over there; its other conversations are readable only
   through its records, while its owner shares them, and its files only through operating it, while its owner allows that.
-- Your persona picks linked sandboxes on its **devices** list, beside computers, and handing one work also needs its
+- Your role picks linked sandboxes on its **devices** list, beside computers, and handing one work also needs its
   **delegate** shelf, as `spawn` does; a turn started by outside content may not hand work on. The people this
   conversation works for must have been given the link card.
 
@@ -115,7 +115,7 @@ card that pairs them in place. Name the sandbox by its name or address and the c
 capabilities request link --target ops --why "the migration check needs the ops sandbox's database access"
 ```
 
-The owner's editor, signed in to both sandboxes, mints the link over there: they choose the persona, the approval
+The owner's editor, signed in to both sandboxes, mints the link over there: they choose the role, the approval
 and the hourly limit on the card, and one press links them. It reaches this conversation from its next turn. A link
 you no longer need goes the same way: `capabilities request <name> --remove --why "…"`.
 

@@ -162,7 +162,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
             "Personality: SOUL.md",
             "Imported personality (OpenClaw SOUL.md)",
             soul,
-            "Merged into the agent's memory files as standing context. Make it a persona later if the agent should act as this character.",
+            "Merged into the agent's memory files as standing context. Make it a role later if the agent should act as this character.",
         );
     }
     const identity = text(files, `${WS}IDENTITY.md`);

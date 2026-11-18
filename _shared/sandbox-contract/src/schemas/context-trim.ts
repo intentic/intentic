@@ -30,5 +30,5 @@ export const contextTrimLine = (trim: ContextTrim): string => {
     const { window, omitted, base } = contextTrimNotice(trim).params;
     const swapped = base ? ` The agent's own base instructions were swapped for a short paragraph, too.` : ``;
     const left = omitted === undefined ? `` : ` — left out: ${omitted}`;
-    return `Sent thin for this model's ${window} window${left}.${swapped}` + ` Your workspace rules, this turn's persona and where its files live still rode.`;
+    return `Sent thin for this model's ${window} window${left}.${swapped}` + ` Your workspace rules, this turn's role and where its files live still rode.`;
 };

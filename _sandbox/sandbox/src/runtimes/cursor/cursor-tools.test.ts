@@ -114,7 +114,7 @@ describe("which tools mount", () => {
         ]);
     });
 
-    // jsExecutionPlanOf answers undefined where the persona's card withheld the backend, so the tool is absent rather
+    // jsExecutionPlanOf answers undefined where the role's card withheld the backend, so the tool is absent rather
     // than present-and-refused.
     it("the JS backend mounts only where the turn was planned with one", () => {
         expect(Object.keys(cursorCustomTools(request({ tools: { jsExecution: jsPlan() } }), guard(allowing()), push()))).toEqual(["ask", "code"]);

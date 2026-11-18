@@ -1,18 +1,18 @@
 // The words and the sample sandbox of the home page's access band (`AccessMapFigure.astro`): the public redraw of the
 // app's Sandbox ▸ Map (`_editor/web/src/features/sandbox/map/`). Who gets in on the left, the box with its areas,
-// personas and secrets in the middle, and everything it reaches on the right.
+// roles and secrets in the middle, and everything it reaches on the right.
 //
 // The sample is invented, but every line of it follows the rules the daemon enforces and the app's map draws
 // (`reachModel.ts`): a writer edits only inside the areas they hold, a person's agents carry only the keys their grant
-// lists, a guest acts only through the personas homed in their area, a control token is limited by its scope alone, and
-// a linked sandbox's tasks run as the persona its link names. Change a principal here and check it against those rules.
+// lists, a guest acts only through the roles homed in their area, a control token is limited by its scope alone, and
+// a linked sandbox's tasks run as the role its link names. Change a principal here and check it against those rules.
 
 /** How a way in reaches one thing: changes it by hand, only reads it, acts through it, or acts through it only as a
- *  persona. The same four the app's map tells apart. */
+ *  role. The same four the app's map tells apart. */
 export type AccessHow = "edit" | "see" | "use" | "through";
 
 export type AccessAreaId = "area:support" | "area:storefront" | "rest";
-export type AccessPersonaId = "persona:maya" | "persona:owen";
+export type AccessRoleId = "role:maya" | "role:owen";
 export type AccessOutwardId =
     | "cap:github"
     | "cap:stripe"
@@ -28,7 +28,7 @@ export type AccessOutwardId =
     | "outbox"
     | "model:claude"
     | "model:codex";
-export type AccessNodeId = AccessAreaId | AccessPersonaId | "secrets" | AccessOutwardId;
+export type AccessNodeId = AccessAreaId | AccessRoleId | "secrets" | AccessOutwardId;
 
 export type AccessGroupKey = "services" | "accounts" | "machines" | "sandboxes" | "network" | "models";
 export type AccessClusterKey = "people" | "programs" | "sandboxes";
@@ -40,13 +40,14 @@ export interface AccessArea {
     folders: readonly string[];
 }
 
-export interface AccessPersona {
-    id: AccessPersonaId;
+export interface AccessRole {
+    id: AccessRoleId;
     name: string;
     role: string;
     /** The area it is homed in: whoever holds that area may pick it. */
     home: AccessAreaId;
-    /** The connections its turns may act through, by the daemon's `personaAllowsCapability`. */
+    /** The connections its turns may act through: the accounts it speaks through (the daemon's `roleAllowsCapability`),
+     *  inside the access profiles that list it. */
     allows: readonly AccessOutwardId[];
     /** One sentence for the caption when it is pointed at. */
     note: string;
@@ -78,8 +79,8 @@ export interface AccessPrincipal {
     body: string;
     /** For a person: the hue of their face, as the app gives each address its own. */
     hue?: number;
-    /** The persona it acts as, named on a room it reaches only that way. */
-    actsAs?: AccessPersonaId;
+    /** The role it acts as, named on a room it reaches only that way. */
+    actsAs?: AccessRoleId;
     reach: Readonly<Partial<Record<AccessNodeId, AccessHow>>>;
 }
 
@@ -95,7 +96,7 @@ export interface AccessMapScene {
     columns: { in: string; out: string };
     clusters: Readonly<Record<AccessClusterKey, string>>;
     areas: readonly AccessArea[];
-    personas: readonly AccessPersona[];
+    roles: readonly AccessRole[];
     /** `called` is the secrets' name inside a sentence: "Who reaches the secrets". */
     secrets: { label: string; called: string; names: readonly string[]; note: string };
     groups: readonly AccessGroup[];
@@ -103,7 +104,7 @@ export interface AccessMapScene {
     /** What the caption says before anything is pointed at. */
     intro: { title: string; body: string };
     /** The caption's words for a thing pointed at: who reaches it, sorted by how. */
-    reachedBy: { title: string; nobody: string; how: Readonly<Record<AccessHow, string>>; persona: string };
+    reachedBy: { title: string; nobody: string; how: Readonly<Record<AccessHow, string>>; role: string };
     /** The small word a lit room or chip wears, by how it is reached. */
     tags: Readonly<Record<AccessHow, string>>;
     legend: { direct: string; through: string };
@@ -147,9 +148,9 @@ export const accessMapScene: AccessMapScene = {
         { id: "area:storefront", name: "Storefront", folders: ["web/"] },
         { id: "rest", name: "Rest of the workspace", folders: ["api/", "ops/", ".github/"] },
     ],
-    personas: [
+    roles: [
         {
-            id: "persona:maya",
+            id: "role:maya",
             name: "Maya",
             role: "Customer Care",
             home: "area:support",
@@ -157,7 +158,7 @@ export const accessMapScene: AccessMapScene = {
             note: "Lives in Support desk. Her turns may use Zendesk, Stripe and the support inbox, and nothing else.",
         },
         {
-            id: "persona:owen",
+            id: "role:owen",
             name: "Owen",
             role: "Growth",
             home: "area:storefront",
@@ -225,8 +226,8 @@ export const accessMapScene: AccessMapScene = {
             line: "Owns it",
             hue: 32,
             title: "You own acme-shop.",
-            body: "Every folder, every persona, every key. Ownership is bound at your first sign-in and can never be granted to anyone else.",
-            reach: { ...EVERY_AREA, "persona:maya": "use", "persona:owen": "use", secrets: "use", ...EVERY_OUTWARD("use") },
+            body: "Every folder, every role, every key. Ownership is bound at your first sign-in and can never be granted to anyone else.",
+            reach: { ...EVERY_AREA, "role:maya": "use", "role:owen": "use", secrets: "use", ...EVERY_OUTWARD("use") },
         },
         {
             id: "ada",
@@ -236,10 +237,10 @@ export const accessMapScene: AccessMapScene = {
             hue: 200,
             title: "Ada changes files only in Support desk.",
             body: "She is a writer on one area. Her agents carry just the three keys her grant lists, so Stripe, the machines and every secret stay out of her reach.",
-            // A writer: edits where she sees, wears the personas homed there, and her credential reach names three.
+            // A writer: edits where she sees, wears the roles homed there, and her credential reach names three.
             reach: {
                 "area:support": "edit",
-                "persona:maya": "use",
+                "role:maya": "use",
                 "cap:github": "use",
                 "cap:zendesk": "use",
                 "cap:gmail": "use",
@@ -252,13 +253,13 @@ export const accessMapScene: AccessMapScene = {
             name: "Kai",
             line: "Chats as Maya",
             hue: 145,
-            actsAs: "persona:maya",
+            actsAs: "role:maya",
             title: "Kai talks to Maya, and only to Maya.",
             body: "A guest sees no files and no other conversations. Kai can reach only what Maya's turns may use, and the owner kept the secrets back.",
-            // A guest on Support desk: acts only through the persona homed there, with the secrets left out of the grant.
+            // A guest on Support desk: acts only through the role homed there, with the secrets left out of the grant.
             reach: {
                 "area:support": "through",
-                "persona:maya": "use",
+                "role:maya": "use",
                 "cap:zendesk": "through",
                 "cap:stripe": "through",
                 "cap:gmail": "through",
@@ -276,8 +277,8 @@ export const accessMapScene: AccessMapScene = {
                 "area:support": "see",
                 "area:storefront": "see",
                 rest: "see",
-                "persona:maya": "use",
-                "persona:owen": "use",
+                "role:maya": "use",
+                "role:owen": "use",
                 secrets: "use",
                 ...EVERY_OUTWARD("use"),
             },
@@ -296,13 +297,13 @@ export const accessMapScene: AccessMapScene = {
             cluster: "sandboxes",
             name: "helpdesk",
             line: "Runs tasks as Maya",
-            actsAs: "persona:maya",
+            actsAs: "role:maya",
             title: "helpdesk hands its tasks over, and they run as Maya.",
-            body: "Another sandbox, linked to this one. Its tasks work inside Maya's folders, through Maya's connections, and change no file by hand.",
-            // A link pinned to a persona: that persona's folders, its connections, read-only by hand.
+            body: "Another sandbox, linked to this one. Its tasks work inside the folders Maya's access allows, through Maya's connections, and change no file by hand.",
+            // A link pinned to a role: the folders its access allows, its connections, read-only by hand.
             reach: {
                 "area:support": "see",
-                "persona:maya": "use",
+                "role:maya": "use",
                 secrets: "through",
                 "cap:zendesk": "through",
                 "cap:stripe": "through",
@@ -318,12 +319,12 @@ export const accessMapScene: AccessMapScene = {
     reachedBy: {
         title: "Who reaches {name}",
         nobody: "Nothing that gets in reaches it.",
-        how: { edit: "Changes it", see: "Only reads it", use: "Uses it", through: "Only as a persona" },
-        // A persona is worn rather than used: its caption names who may work as it.
-        persona: "Works as {name}",
+        how: { edit: "Changes it", see: "Only reads it", use: "Uses it", through: "Only as a role" },
+        // A role is worn rather than used: its caption names who may work as it.
+        role: "Works as {name}",
     },
-    tags: { edit: "edits", see: "reads", use: "uses", through: "as a persona" },
-    legend: { direct: "Acts directly", through: "Only through a persona" },
+    tags: { edit: "edits", see: "reads", use: "uses", through: "as a role" },
+    legend: { direct: "Acts directly", through: "Only through a role" },
     tour: { pause: "Pause the tour", play: "Play the tour" },
-    label: "A map of one sandbox, acme-shop. On the left, who gets in: you, Ada, Kai, two control tokens and a linked sandbox. In the middle, the sandbox: its areas Support desk, Storefront and the rest of the workspace, the personas Maya and Owen homed in them, and its secrets. On the right, what it reaches: services, accounts, machines, another sandbox, what it publishes and the models it runs on. Each way in reaches only part of it.",
+    label: "A map of one sandbox, acme-shop. On the left, who gets in: you, Ada, Kai, two control tokens and a linked sandbox. In the middle, the sandbox: its areas Support desk, Storefront and the rest of the workspace, the roles Maya and Owen homed in them, and its secrets. On the right, what it reaches: services, accounts, machines, another sandbox, what it publishes and the models it runs on. Each way in reaches only part of it.",
 };

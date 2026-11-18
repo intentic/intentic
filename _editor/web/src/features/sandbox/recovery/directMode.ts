@@ -37,7 +37,7 @@ export const summaryOf = (entry: RememberedSandbox): SandboxSummary => ({
     removedAt: null,
     removedBy: null,
     token: null,
-    role: entry.role,
+    tier: entry.tier,
     providedAddress: false,
     localHostname: entry.localHostname ?? null,
     hosted: null,
@@ -76,7 +76,7 @@ export const accountFromProof = (proof: DirectProof, now = new Date()): Remember
 // rendering fact only; the daemon decides what the reader may do.
 export const sandboxAt = (daemonUrl: string): RememberedSandbox => {
     const host = new URL(daemonUrl).hostname;
-    return { id: `direct:${host}`, name: host, image: null, daemonUrl, role: `owner`, hosted: false, lastSeenAt: null };
+    return { id: `direct:${host}`, name: host, image: null, daemonUrl, tier: `owner`, hosted: false, lastSeenAt: null };
 };
 
 // WITHOUT ASKING (2026-11-09). A device that remembers the account no longer stops at the outage screen when the session

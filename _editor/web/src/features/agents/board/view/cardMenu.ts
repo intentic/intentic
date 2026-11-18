@@ -1,7 +1,7 @@
 import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, type Ref, ref } from "vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { agentWork } from "../../../../models/fleet/agentActions";
@@ -177,7 +177,7 @@ export const useCardMenu = (host: MenuHost) => {
     const menuPresses = ref<CardOwnPresses>();
     // The element pressed, whose own document the clipboard is asked of (clipboardOf), not this module's `navigator`.
     const menuAnchor = ref<Element>();
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     const { can } = useAccess();
     const { pressLand } = useAgentDrag();
     const act: MenuActions = {

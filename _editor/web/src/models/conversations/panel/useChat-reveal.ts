@@ -200,7 +200,7 @@ export interface AgentTabSeed {
     effort?: string;
     thinking?: boolean;
     fast?: boolean;
-    // The persona the conversation acts as, so the chat lands under it in the rail's Personas cut.
+    // The role the conversation acts as, so the chat lands under it in the rail's Roles cut.
     actsAs?: string;
     // Whether the fleet actually knows this agent; false only for the board's client-only draft card.
     registered?: boolean;

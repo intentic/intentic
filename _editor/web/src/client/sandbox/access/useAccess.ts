@@ -1,4 +1,4 @@
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import { type RawRouteKey, rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { holdsRight, type ManageRight, type MemberSelf } from "@intentic/sandbox-contract/schemas/members";
 import { computed, type ComputedRef, effectScope } from "vue";
@@ -34,14 +34,14 @@ const isRawKey = (route: AccessRoute): route is RawRouteKey => route.includes(` 
 interface AccessState {
     readonly active: ReturnType<typeof useSandbox>[`active`];
     readonly refresh: () => void;
-    readonly role: ComputedRef<MemberRole | undefined>;
+    readonly tier: ComputedRef<MemberTier | undefined>;
     readonly caller: ComputedRef<Caller | undefined>;
     readonly known: ComputedRef<boolean>;
 }
 
 // What the check reads of the person (sandbox-contract protocol/member-reach.ts `memberRefusal`).
 interface Caller {
-    readonly role: MemberRole;
+    readonly tier: MemberTier;
     readonly areas?: readonly string[] | undefined;
     readonly agents?: MemberSelf[`agents`] | undefined;
     readonly lands?: true | undefined;
@@ -56,19 +56,19 @@ const build = (): AccessState => {
     const sandbox = useSandbox();
     const self = selfMember();
     // The tier the daemon itself reports wins over the platform's record of it, which can lag a change by a reconnect.
-    const role = computed<MemberRole | undefined>(() => self.value?.role ?? sandbox.active.value?.role ?? undefined);
+    const tier = computed<MemberTier | undefined>(() => self.value?.tier ?? sandbox.active.value?.tier ?? undefined);
     // The facts the check reads. Before the daemon's own answer lands (it is read for every tier but the owner's),
     // the tier alone: the floor answers by it, and whether agents run only ever narrows a collaborator-floor route further.
     const caller = computed((): Caller | undefined => {
-        const tier = role.value;
-        if (tier === undefined) {
+        const held = tier.value;
+        if (held === undefined) {
             return undefined;
         }
         const answer = self.value;
-        return { role: tier, areas: answer?.areas, agents: answer?.agents, lands: answer?.lands === true ? true : undefined, manages: answer?.manages };
+        return { tier: held, areas: answer?.areas, agents: answer?.agents, lands: answer?.lands === true ? true : undefined, manages: answer?.manages };
     });
     const known = computed(() => caller.value !== undefined && accessPolicy.value !== undefined && contractModule.value !== undefined);
-    return { active: sandbox.active, refresh: () => void sandbox.refresh(), role, caller, known };
+    return { active: sandbox.active, refresh: () => void sandbox.refresh(), tier, caller, known };
 };
 
 const stateOf = (): AccessState => {
@@ -128,7 +128,7 @@ export interface Access {
     /** Whether the person's access has loaded; until it has, `refusal` answers undefined for everything. */
     readonly known: ComputedRef<boolean>;
     /** Their tier on the active sandbox, undefined until it is known. */
-    readonly role: ComputedRef<MemberRole | undefined>;
+    readonly tier: ComputedRef<MemberTier | undefined>;
     /** Why they may not make this call, or undefined when they may (or it is not known yet). Reactive inside a computed. */
     readonly refusal: (route: AccessRoute, params?: RouteParams) => AccessReason | undefined;
     /** Whether they may make this call: known, and nothing refuses it. */
@@ -148,6 +148,6 @@ const holdsOf = (right: ManageRight): boolean => {
 };
 
 export const useAccess = (): Access => {
-    const { known, role } = stateOf();
-    return { known, role, refusal: refusalOf, can: (route, params) => known.value && refusalOf(route, params) === undefined, holds: holdsOf };
+    const { known, tier } = stateOf();
+    return { known, tier, refusal: refusalOf, can: (route, params) => known.value && refusalOf(route, params) === undefined, holds: holdsOf };
 };

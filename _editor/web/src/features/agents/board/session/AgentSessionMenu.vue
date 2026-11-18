@@ -9,7 +9,7 @@ import AgentReactions from "../cards/AgentReactions.vue";
 import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "../../../../models/conversations/endings/turnBreak";
 import type { useAgentChanges } from "../../review/useAgentChanges";
 import { useAgents } from "../../../../models/fleet/useAgents";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { useAuth } from "../../../../client/auth/useAuth";
 import { agentWork, assignAgent, notifyFromAgent } from "../../../../models/fleet/agentActions";
@@ -193,7 +193,7 @@ const toggleWarm = async (): Promise<void> => {
 
 // Ship-tier items are hidden below maintainer, not shown disabled: a collaborator's request lives on the card instead.
 // A menu of grey rows reads as broken, not as tiered.
-const { canShip } = useRole();
+const { canShip } = useTier();
 // Each of the rest is offered only to a reader the daemon would take it from, asked of the same check (useAccess): a
 // viewer's menu is the reads and nothing that would only be refused.
 const { can } = useAccess();

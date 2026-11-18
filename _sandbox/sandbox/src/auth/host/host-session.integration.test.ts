@@ -107,7 +107,7 @@ test("the daemon authorizes a host session for its owner only, and the require-p
         members: noMembers,
     });
     const { token } = await mintHostSession({ historyRoot: root });
-    await expect(authorizer.authorize(token, undefined, LOOPBACK)).resolves.toMatchObject({ email: "owner@example.com", role: "owner", methods: ["host"] });
+    await expect(authorizer.authorize(token, undefined, LOOPBACK)).resolves.toMatchObject({ email: "owner@example.com", tier: "owner", methods: ["host"] });
     // Owner moved on (another owner bound): the same session is somebody who is no longer on this sandbox.
     await writeFile(join(root, ownerDocument.path), JSON.stringify({ email: "next@example.com" }));
     await expect(authorizer.authorize(token, undefined, LOOPBACK)).rejects.toThrow("not authorized");
@@ -130,7 +130,7 @@ test("a host session stands on the loopback port alone: over the tunnel or any o
     });
     const { token } = await mintHostSession({ historyRoot: root });
     await expect(authorizer.authorizeOwner(token, "loopback")).resolves.toBeUndefined();
-    await expect(authorizer.authorizeRecovery(token, "loopback")).resolves.toMatchObject({ role: "owner" });
+    await expect(authorizer.authorizeRecovery(token, "loopback")).resolves.toMatchObject({ tier: "owner" });
     for (const listener of [undefined, "tunnel", "Loopback", ""]) {
         await expect(authorizer.authorize(token, undefined, { listener })).rejects.toThrow("only on this machine's own loopback port");
         await expect(authorizer.authorizeOwner(token, listener)).rejects.toThrow("only on this machine's own loopback port");

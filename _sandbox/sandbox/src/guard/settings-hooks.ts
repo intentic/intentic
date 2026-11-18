@@ -38,7 +38,7 @@ export interface HookPlace {
 
 export interface MountedPlugin {
     readonly name: string;
-    readonly from: "plugin" | "extension" | "persona";
+    readonly from: "plugin" | "extension" | "role";
     readonly dir: string;
 }
 

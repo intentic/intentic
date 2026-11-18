@@ -33,7 +33,7 @@ import { phoneById, phonePickerGroups, phoneUserAgent, storePhoneId, storedPhone
 import DesktopTab from "../../features/desktop/DesktopTab.vue";
 import { useDesktopQuery } from "../../features/desktop/desktopQuery";
 import { usePorts } from "../../models/sandbox/environment/usePorts";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { useT } from "@intentic/ui/i18n";
 
 // EVERYTHING LIVE THE SANDBOX SHOWS, AS TABS OF ONE BROWSER: the live apps its dev servers serve (framed straight from
@@ -59,7 +59,7 @@ const { parked = false, beside = false } = defineProps<{
 }>();
 
 const t = useT();
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 const front = browsersFront;
 const pinned = browsersPinned;

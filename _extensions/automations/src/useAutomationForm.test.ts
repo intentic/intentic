@@ -376,7 +376,7 @@ describe(`editing preserves fields outside the changed control`, () => {
                 conversationMessageMax: 8,
                 sessionTtlMinutes: 30,
             },
-            // Narrower than its persona; editing must not widen a security boundary.
+            // Narrower than its role; editing must not widen a security boundary.
             allowedTools: [`Read`],
             actsAs: `visitor-chat`,
             account: `reliable-account`,
@@ -388,7 +388,7 @@ describe(`editing preserves fields outside the changed control`, () => {
         expect(build()).toEqual(automation);
     });
 
-    it(`gives a Visitor chat that names no persona the visitor chat`, () => {
+    it(`gives a Visitor chat that names no role the visitor chat`, () => {
         const { form, build } = formState();
         form.kind = `listener`;
         form.provider = `webchat`;
@@ -398,7 +398,7 @@ describe(`editing preserves fields outside the changed control`, () => {
         expect(build().actsAs).toBe(`visitor-chat`);
     });
 
-    it(`leaves a Visitor chat's chosen persona alone`, () => {
+    it(`leaves a Visitor chat's chosen role alone`, () => {
         const { form, build } = formState();
         form.kind = `listener`;
         form.provider = `webchat`;
@@ -461,7 +461,7 @@ describe(`the model ladder`, () => {
     });
 });
 
-// Who a listener answers: rules by id or group, each naming a persona, drawn only where the source vouches for a sender.
+// Who a listener answers: rules by id or group, each naming a role, drawn only where the source vouches for a sender.
 describe(`sender rules`, () => {
     const frontLine: Automation = {
         id: `front-line`,
@@ -480,7 +480,7 @@ describe(`sender rules`, () => {
         enabled: true,
     };
 
-    it(`round-trips rules, their personas and what everyone else gets`, () => {
+    it(`round-trips rules, their roles and what everyone else gets`, () => {
         const { form, load, build } = formState();
         load(frontLine);
         expect(form.runAs).toBe(`support-service`);
@@ -741,7 +741,7 @@ describe(`a stored watch`, () => {
 
 
 describe(`service authority`, () => {
-    it(`defaults to owner and clears a service without changing its persona`, () => {
+    it(`defaults to owner and clears a service without changing its role`, () => {
         const { form, load, build } = formState();
         load({ id: `nightly`, trigger: { kind: `schedule`, cron: `0 1 * * *` }, prompt: `Review`, models: LADDER, enabled: true, runAs: `review-service`, actsAs: `reviewer` });
         expect(form.runAs).toBe(`review-service`);

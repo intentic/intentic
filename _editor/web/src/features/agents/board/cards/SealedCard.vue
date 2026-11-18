@@ -7,7 +7,7 @@
 import { Avatar } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { identityHue } from "../../../../lib/identityHue";
 import { agentStandingMeta, cornerStandingShown } from "../../../../models/agent-status/agentStatus-meta";
 import { laneOf } from "../../../../models/agent-status/agentStatus-lanes";
@@ -34,7 +34,7 @@ const meta = computed(() => agentStandingMeta(props.agent));
 const busy = computed(() => props.pending !== undefined);
 const clock = useCardClock(() => props.agent, () => turnWorking(props.agent));
 const landing = computed(() => props.pending === `land` || props.agent.status === `landing`);
-const { canReview, canShip } = useRole();
+const { canReview, canShip } = useTier();
 const landPresses = computed(() => (props.agent.status === `ready` || props.agent.status === `landing`) && (canShip.value || canReview.value));
 const diff = computed(() => {
     const changed = props.agent.diff;

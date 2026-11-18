@@ -8,7 +8,7 @@ import { StatePlanSchema } from "@intentic/sandbox-contract/schemas/state-plan";
 import { membersDocument } from "./auth/auth.js";
 import { passkeysDocument } from "./auth/passkeys/passkey-store.js";
 import { heldWakesDocument } from "./automations/held-wakes-store.js";
-import { ownerGrantsDocument } from "./personas/owner-grants.js";
+import { ownerGrantsDocument } from "./roles/owner-grants.js";
 import { authRootOf } from "./state-paths.js";
 import { conversionDigest, engineEpoch } from "./store/evolution/documents.js";
 import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";

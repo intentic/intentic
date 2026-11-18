@@ -296,7 +296,7 @@ export const WebchatPendingSchema = z.object({
 export type WebchatPending = z.infer<typeof WebchatPendingSchema>;
 // Who may talk to a listener automation, and as whom. Matched on the ids a provider vouches for (a Discord user id, a
 // Slack member id, a WhatsApp number, an e-mail address) or the groups it reports (Discord role ids), never on a display
-// name, which the sender chooses. A rule's `actsAs` means exactly what the automation's does: absent is no persona,
+// name, which the sender chooses. A rule's `actsAs` means exactly what the automation's does: absent is no role,
 // the full toolbox reaching no account, which is the whole agent an owner talks to themselves.
 export const SenderRuleSchema = z
     .object({
@@ -307,7 +307,7 @@ export const SenderRuleSchema = z
             .max(50)
             .optional()
             .describe("Group ids the service reports on a sender, a Discord role. Only for a source whose messages carry them."),
-        actsAs: entryId.optional().describe("Which persona their wakes speak as. Absent is no persona: the full toolbox, reaching no account."),
+        actsAs: entryId.optional().describe("Which role their wakes speak as. Absent is no role: the full toolbox, reaching no account."),
         // The service (schemas/services.ts) their wakes act as, in place of the automation's own: a narrower one for
         // strangers, a wider one for people the owner trusts. Never more than that service's steward may.
         runAs: entryId
@@ -375,8 +375,8 @@ export const AutomationSchema = z.object({
     issues: IssuesConfigSchema.optional().describe(
         "Settings for the bug reporter, for an automation that takes crash reports from your own sites and apps.",
     ),
-    // Narrows this job's toolbox further than its persona allows; the composer enforces that it can only remove, never
-    // restore, a shelf the persona switched off.
+    // Narrows this job's toolbox further than its role allows; the composer enforces that it can only remove, never
+    // restore, a shelf the role switched off.
     allowedTools: z
         .array(z.string().min(1))
         .optional()
@@ -403,18 +403,18 @@ export const AutomationSchema = z.object({
     account: z.string().optional().describe("Which account pays for it."),
     // Absent means the wake reaches no logged-in account at all, the strictest default here, since nobody is at the
     // composer when it fires. Posture only: what the wake may reach is `runAs`'s (docs/architecture/access.md).
-    actsAs: entryId.optional().describe("Which persona it speaks as. An unwatched turn naming none reaches no signed-in account at all."),
+    actsAs: entryId.optional().describe("Which role it speaks as. An unwatched turn naming none reaches no signed-in account at all."),
     // Who its wakes act for (schemas/services.ts): that service's steward, held to the service's access profile. Absent
-    // keeps what a wake always did: it acts for the sandbox's owner with no profile, its persona the only narrowing.
+    // keeps what a wake always did: it acts for the sandbox's owner with no profile, its role the only narrowing.
     runAs: entryId
         .optional()
         .describe(
-            "Which service it acts as: whose authority its wakes use, held to that service's access profile. Absent means the sandbox's owner, limited only by its persona.",
+            "Which service it acts as: whose authority its wakes use, held to that service's access profile. Absent means the sandbox's owner, limited only by its role.",
         ),
     // Listener triggers on a source that identifies senders only (TriggerSource.sender); refused elsewhere at upsert.
     // Absent means everyone the filters admit, wearing `actsAs`.
     senders: SendersSchema.optional().describe(
-        "Who may talk to it, and as whom: rules by sender id or group, each naming the persona those people get, plus what everyone else gets. Absent admits everyone the trigger's filters do.",
+        "Who may talk to it, and as whom: rules by sender id or group, each naming the role those people get, plus what everyone else gets. Absent admits everyone the trigger's filters do.",
     ),
     // Held in the approvals queue rather than run; only a person releases it.
     requireApproval: z.boolean().optional().describe("Hold every fire for a person instead of running it. Only a person can release one of those."),
@@ -427,7 +427,7 @@ export const AutomationSchema = z.object({
         .boolean()
         .optional()
         .describe("This automation is a maintenance job, which is what files it under chores rather than among ordinary automations."),
-    // Pure filing, like `chore`: the daemon never reads it. Absent, the panel files it by its persona instead, so a set
+    // Pure filing, like `chore`: the daemon never reads it. Absent, the panel files it by its role instead, so a set
     // of jobs one role runs reads as one shelf without anybody naming it.
     group: z
         .string()
@@ -435,7 +435,7 @@ export const AutomationSchema = z.object({
         .max(40)
         .optional()
         .describe(
-            "Which shelf of the Automations panel it is filed on, like 'Marketing' or 'Releases'. Automations naming the same group are listed together. Absent files it under its persona, or with the code chores.",
+            "Which shelf of the Automations panel it is filed on, like 'Marketing' or 'Releases'. Automations naming the same group are listed together. Absent files it under its role, or with the code chores.",
         ),
     enabled: z.boolean().describe("Whether it fires at all."),
     // Stamped by the sandbox on its first save (automation-save.ts), whatever a request sends: who its notices are for.
@@ -476,12 +476,12 @@ export const AutomationApprovalSchema = z.object({
         ),
     sessionId: z.string().optional().describe("The provider session that thread last ran on."),
     // The thread-sessions key the message arrived on, so the approved run settles the same thread; not derivable from
-    // `origin`, since a thread is also keyed by the persona the sender's lane resolved to.
+    // `origin`, since a thread is also keyed by the role the sender's lane resolved to.
     thread: z.string().optional().describe("Which inbound thread this belongs to, so the approved run continues that thread's memory rather than a fresh one."),
-    // The persona the fire resolved to (a sender rule's, or the automation's), snapshotted at hold time and worn by the
+    // The role the fire resolved to (a sender rule's, or the automation's), snapshotted at hold time and worn by the
     // approved run; also what a project-scoped board files the wake under.
-    actsAs: entryId.optional().describe("Which persona the approved run speaks as, decided when it was held."),
-    // The service the fire resolved to (a sender rule's, or the automation's), snapshotted beside the persona.
+    actsAs: entryId.optional().describe("Which role the approved run speaks as, decided when it was held."),
+    // The service the fire resolved to (a sender rule's, or the automation's), snapshotted beside the role.
     runAs: entryId.optional().describe("Which service the approved run acts as, decided when it was held."),
     createdAt: z.number().describe("When it started waiting, in milliseconds."),
     // When the daemon may run this itself, for a `holdForSeconds` hold; absent for a `requireApproval` hold, which only

@@ -45,7 +45,7 @@ silence them like any other app's.
 ## Other people
 
 **Sandbox ▸ Access** (`/sandbox/access`) has six tabs: **People**, **Profiles**, **Areas**, **Sign-in**, **Programs**
-and **Allowed**, each at its own `?section=` (`people`, `profiles`, `areas`, `sign-in`, `programs`, `allowed`). **People** (the first) shows everyone as tiles, the way Personas and Models do: the owner first,
+and **Allowed**, each at its own `?section=` (`people`, `profiles`, `areas`, `sign-in`, `programs`, `allowed`). **People** (the first) shows everyone as tiles, the way Roles and Models do: the owner first,
 then one tile per person with a word for what they can do (Can see, Runs agents, Edits, Chats, Manages) and a dot while
 their invite is out. **Add person** asks for an email address alone. The person starts read-only: they see the
 workspace, run no agents and may use no connection or secret, and the invite goes out at once. Their panel then opens
@@ -82,7 +82,7 @@ access (say, Interns) for people and unattended work, and **Areas** are the fold
 signed-in browsers with **Sign out everywhere**. **Programs** (`?section=programs`) holds API tokens (**New token**),
 linked sandboxes (**New link**, and the Allow or Decline of a task one handed over, counted on the tab), and a count
 of the other ways in (webhooks, gated workflows, CI, paired machines). **Allowed** (`?section=allowed`) lists what
-conversations were allowed past their persona or area and the sandbox-wide yeses, each with its own Revoke, counted
+conversations were allowed past their role or area and the sandbox-wide yeses, each with its own Revoke, counted
 on the tab. A member below maintainer sees People and Sign-in only.
 
 ## Private conversations

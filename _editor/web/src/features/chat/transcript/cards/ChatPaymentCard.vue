@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import ChatAgentCase from "../../../../components/card/ChatAgentCase.vue";
@@ -18,7 +18,7 @@ const card = computed(() => props.message.paymentOffer!);
 const pending = computed(() => card.value.status === `pending`);
 // The wallet that pays is the owner's, and the sandbox takes a payment's answer from the owner alone
 // (wallet/payment-offer.ts), so anyone else is told whose click it waits for instead of offered one it refuses.
-const { isOwner } = useRole();
+const { isOwner } = useTier();
 
 // Where the money goes and how much of the day's cap is already spent, as facts in one column. The endpoint and the payee
 // are shown whole: a truncated host is exactly how a lookalike endpoint gets paid.

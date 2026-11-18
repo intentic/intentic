@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileConversationGrants } from "../personas/conversation-grants.js";
+import { fileConversationGrants } from "../roles/conversation-grants.js";
 import { createCredentialGrants } from "../secrets/credential-grants.js";
 import { revokeGrant, standingGrants } from "./standing-grants.js";
 import { standingDeps } from "./standing-grants.testing.js";
@@ -28,9 +28,6 @@ test("a rule's pass outlasts the store that heard it, is listed, and taken back 
     expect((await standingGrants(deps)).conversations).toEqual([
         {
             conversationId: "conv-1",
-            capabilities: [],
-            folders: [],
-            shelves: [],
             installs: false,
             secrets: [],
             everything: false,
@@ -54,7 +51,7 @@ test("forgetting a conversation takes its rule passes with the rest of its grant
     const path = await grantsFile();
     const grants = fileConversationGrants(path, () => 100);
     await grants.allowRule("conv-1", github, undefined);
-    await grants.add("conv-1", { subject: "folder", what: "docs" }, undefined);
+    await grants.add("conv-1", { subject: "secret", what: "docs/token" }, undefined);
     await grants.allowRule("conv-2", github, undefined);
 
     await grants.forget("conv-1");
@@ -64,14 +61,13 @@ test("forgetting a conversation takes its rule passes with the rest of its grant
     expect(await after.ruleAllowed("conv-2", "github", github.rule)).toBe(true);
 });
 
-test("a file written before rule passes existed still reads, with none", async () => {
+// A file from before 2026-11-18 also held what a card lifted past the conversation's role: those yeses no longer
+// widen anything (a role's limits are access), so they read as gone and the rest stands.
+test("a file written before rule passes existed still reads, with none, and without the role grants retired since", async () => {
     const path = await grantsFile();
-    await writeFile(path, JSON.stringify({ "conv-1": { capabilities: ["github"], folders: [], shelves: [], updatedAt: 5 } }));
+    await writeFile(path, JSON.stringify({ "conv-1": { capabilities: ["github"], folders: ["docs"], shelves: ["shell"], updatedAt: 5 } }));
     const grants = fileConversationGrants(path);
     expect(await grants.of("conv-1")).toEqual({
-        capabilities: ["github"],
-        folders: [],
-        shelves: [],
         installs: false,
         secrets: [],
         everything: false,

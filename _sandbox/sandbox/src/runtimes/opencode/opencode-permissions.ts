@@ -1,5 +1,5 @@
 import type { OpenCodeClient, OpenCodeEvent, PermissionRule } from "@opencode/client";
-import { type PolicyTurn, personaRefusal } from "../daemon-tools/policy-gate.js";
+import { type PolicyTurn, roleRefusal } from "../daemon-tools/policy-gate.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { displayNameOf } from "@intentic/agent-context/tool-calls";
 import type { CommandGuard } from "../../guard/command-guard.js";
@@ -28,9 +28,9 @@ export interface SessionJudge {
     // The turn's tool list. Its session's rules already offer only the listed tools (allowlist/opencode-allowlist.ts); what they
     // cannot read is a shell entry narrowed to a command, so every command is asked about and checked here.
     readonly allowedTools?: readonly string[];
-    // What the persona withholds and its folders (policy-gate.ts personaRefusal): an ask for a withheld tool, or for a file
+    // What the role withholds and its folders (policy-gate.ts roleRefusal): an ask for a withheld tool, or for a file
     // outside the folders, is refused before the rulebook or a person is asked.
-    readonly persona?: Pick<PolicyTurn, "deniedTools" | "scope">;
+    readonly role?: Pick<PolicyTurn, "deniedTools" | "scope">;
     // How the turn's sessions' shell commands run once allowed: in its terminal pane, secrets resolved, output masked
     // (shell/opencode-shell.ts). Absent, the daemon's shell script runs them as written.
     readonly shell?: ShellRoute;
@@ -101,7 +101,7 @@ const listRefusal = (judge: SessionJudge | undefined, ask: PermissionAsk, progra
     return program !== undefined && toolAllowed(list, call) ? undefined : allowlistRefusal(call, list);
 };
 
-// OpenCode's permission actions as the one tool vocabulary names them, for the persona's check. A file action's resources
+// OpenCode's permission actions as the one tool vocabulary names them, for the role's check. A file action's resources
 // are the paths it touches.
 const ASK_TOOLS: ReadonlyMap<string, string> = new Map([
     ["shell", "Bash"],
@@ -114,14 +114,14 @@ const ASK_TOOLS: ReadonlyMap<string, string> = new Map([
     ["subagent", "Task"],
 ]);
 
-// The persona's refusal for an ask: a tool it withholds, or a read or edit of a path outside its folders.
-const askPersonaRefusal = (judge: SessionJudge | undefined, ask: PermissionAsk): string | undefined => {
+// The role's refusal for an ask: a tool it withholds, or a read or edit of a path outside its folders.
+const askRoleRefusal = (judge: SessionJudge | undefined, ask: PermissionAsk): string | undefined => {
     const tool = ASK_TOOLS.get(ask.kind);
-    if (judge?.persona === undefined || tool === undefined) {
+    if (judge?.role === undefined || tool === undefined) {
         return undefined;
     }
     const paths = ask.kind === "read" || ask.kind === "edit" ? ask.resources : [];
-    return personaRefusal(judge.persona, { tool, input: {}, paths });
+    return roleRefusal(judge.role, { tool, input: {}, paths });
 };
 
 /**
@@ -133,7 +133,7 @@ const askPersonaRefusal = (judge: SessionJudge | undefined, ask: PermissionAsk):
  */
 export const answerPermission = async (client: OpenCodeClient, judge: SessionJudge | undefined, ask: PermissionAsk): Promise<void> => {
     const program = ask.kind === RULEBOOK_READS ? ask.program : undefined;
-    const listed = listRefusal(judge, ask, program) ?? askPersonaRefusal(judge, ask);
+    const listed = listRefusal(judge, ask, program) ?? askRoleRefusal(judge, ask);
     if (listed !== undefined) {
         await client.permission.reply({ sessionID: ask.sessionID, requestID: ask.id, decision: "reject", message: listed });
         return;

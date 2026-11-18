@@ -3,15 +3,15 @@ import { deskEdition } from "../mode";
 import { DESK_FEATURED_ID, DESK_FEATURED_SESSION, DESK_FEATURED_TITLE } from "./desk";
 import { FEATURED_AGENT_ID } from "./fleet";
 
-// Tabs the recording opens holding: the featured run focused, plus one chat per persona so the Personas rail isn't
-// three empty rows. Personas do non-code work only (a support queue, a launch thread, a payouts reconciliation). Seeded
+// Tabs the recording opens holding: the featured run focused, plus one chat per role so the Roles rail isn't
+// three empty rows. Roles do non-code work only (a support queue, a launch thread, a payouts reconciliation). Seeded
 // into the real tab snapshot the app restores from, not bypassed.
 
 export const MAYA_CHAT_ID = `cnv_maya_support`;
 export const OWEN_CHAT_ID = `cnv_owen_launch`;
 export const PRIYA_CHAT_ID = `cnv_priya_payouts`;
 
-// Every seeded tab has the same ordinary shape (registered, shared tree, nothing typed); only id, title and persona
+// Every seeded tab has the same ordinary shape (registered, shared tree, nothing typed); only id, title and role
 // differ.
 const tab = (conversationId: string, title: string, sessionId: string, actsAs?: string): StoredTab => ({
     conversationId,
@@ -38,7 +38,7 @@ const OPEN_TABS: readonly StoredTab[] = [
     tab(PRIYA_CHAT_ID, `August payouts reconciliation`, `ses_01j9priya`, `priya-ops`),
 ];
 
-// The desk opens holding one chat: a person with an assistant, not a team with personas.
+// The desk opens holding one chat: a person with an assistant, not a team with roles.
 const DESK_TABS: readonly StoredTab[] = [tab(DESK_FEATURED_ID, DESK_FEATURED_TITLE, DESK_FEATURED_SESSION)];
 
 // Strip opens with four tabs, the featured run focused, in the app's ordinary single-column layout.

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { ParkedRequest } from "@intentic/sandbox-contract/events/requests";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { RESTART_LOSSES, RESUME_NOTES, withResumeNote, withoutResumeNote } from "@intentic/sandbox-contract/events/resume";
 import { RETRY_LADDER_MS, RETRY_LADDER_TRIES } from "@intentic/sandbox-contract/schemas/turn-break";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
@@ -311,18 +311,18 @@ test("a turn that names its own model keeps it", async () => {
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5" });
 });
 
-// Injects a persona store the base fixture lacks; a turn that names no persona never reaches it.
-const withPersonas = (services: Services, cards: readonly Persona[]): Services => ({
+// Injects a role store the base fixture lacks; a turn that names no role never reaches it.
+const withRoles = (services: Services, cards: readonly Role[]): Services => ({
     ...services,
-    personas: unstubbed<Services["personas"]>("personas", { get: async (id) => cards.find((card) => card.id === id) }),
+    roles: unstubbed<Services["roles"]>("roles", { get: async (id) => cards.find((card) => card.id === id) }),
 });
 
 const ranAs = async (
-    cards: readonly Persona[],
+    cards: readonly Role[],
     settings: Partial<SandboxSettings>,
     turn: AgentTurn & { conversationId: string },
 ): Promise<AgentTurn> => {
-    const services = withPersonas(withProviders(fakeServices(mkdtempSync(join(tmpdir(), "agent-run-model-"))), ["claude", "codex", "gemini"]), cards);
+    const services = withRoles(withProviders(fakeServices(mkdtempSync(join(tmpdir(), "agent-run-model-"))), ["claude", "codex", "gemini"]), cards);
     await services.sandboxSettings.set({ ...SandboxSettingsSchema.parse({}), ...settings });
     const seen: AgentTurn[] = [];
     await startConversationTurn(
@@ -337,20 +337,20 @@ const ranAs = async (
     return seen[0]!;
 };
 
-test("the persona's own ladder outranks the role's list, and brings its knobs", async () => {
+test("the role's own ladder outranks the role's list, and brings its knobs", async () => {
     const ran = await ranAs(
         [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5", effort: "max" }] }],
         setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "low" }] }),
-        { prompt: "fix CI", conversationId: "ar-persona", runRole: ROLE, actsAs: "backend" },
+        { prompt: "fix CI", conversationId: "ar-role", runRole: ROLE, actsAs: "backend" },
     );
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5", effort: "max" });
 });
 
-test("a persona with no ladder, or none reachable, leaves the question to the role", async () => {
+test("a role with no ladder, or none reachable, leaves the question to the role", async () => {
     const roles = setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] });
     const silent = await ranAs([{ id: "quiet", capabilities: [] }], roles, {
         prompt: "fix CI",
-        conversationId: "ar-persona-silent",
+        conversationId: "ar-role-silent",
         runRole: ROLE,
         actsAs: "quiet",
     });
@@ -358,26 +358,26 @@ test("a persona with no ladder, or none reachable, leaves the question to the ro
     // Kimi isn't connected in this fixture.
     const unreachable = await ranAs([{ id: "far", capabilities: [], models: [{ provider: "kimi", model: "k2" }] }], roles, {
         prompt: "fix CI",
-        conversationId: "ar-persona-far",
+        conversationId: "ar-role-far",
         runRole: ROLE,
         actsAs: "far",
     });
     expect(unreachable).toMatchObject({ agent: "codex", model: "gpt-5.6" });
-    // A persona nobody has behaves like an empty ladder.
-    const missing = await ranAs([], roles, { prompt: "fix CI", conversationId: "ar-persona-missing", runRole: ROLE, actsAs: "gone" });
+    // A role nobody has behaves like an empty ladder.
+    const missing = await ranAs([], roles, { prompt: "fix CI", conversationId: "ar-role-missing", runRole: ROLE, actsAs: "gone" });
     expect(missing).toMatchObject({ agent: "codex", model: "gpt-5.6" });
 });
 
-test("a turn that names its own model keeps it over the persona's ladder too", async () => {
+test("a turn that names its own model keeps it over the role's ladder too", async () => {
     const ran = await ranAs(
         [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5" }] }],
         {},
-        { prompt: "fix CI", conversationId: "ar-persona-explicit", runRole: ROLE, actsAs: "backend", agent: "codex", model: "gpt-5.6" },
+        { prompt: "fix CI", conversationId: "ar-role-explicit", runRole: ROLE, actsAs: "backend", agent: "codex", model: "gpt-5.6" },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6" });
 });
 
-test("a chat naming neither role nor persona is left alone", async () => {
+test("a chat naming neither role nor role is left alone", async () => {
     // Carrying no pin source is what gates this: a chat whose catalog hadn't loaded also sends no model, and no role
     // list may answer for it.
     const ran = await ranWith(setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] }), { prompt: "hello", conversationId: "ar-chat" });
@@ -423,9 +423,9 @@ const throughDoors = async (
     settings: Partial<SandboxSettings>,
     turn: AgentTurn,
     connected: readonly string[] = ["claude", "codex", "gemini"],
-    cards: readonly Persona[] = [],
+    cards: readonly Role[] = [],
 ): Promise<Record<DoorName, AgentTurn>> => {
-    const services = withPersonas(withProviders(fakeServices(mkdtempSync(join(tmpdir(), "door-routing-"))), connected), cards);
+    const services = withRoles(withProviders(fakeServices(mkdtempSync(join(tmpdir(), "door-routing-"))), connected), cards);
     await services.sandboxSettings.set({ ...SandboxSettingsSchema.parse({}), ...settings });
     const seen = new Map<string, AgentTurn>();
     const doors = drivenBy(services, async function* (input) {
@@ -449,7 +449,7 @@ test("every door gives a turn naming a run role the model that role pins, with i
     }
 });
 
-test("every door gives a persona's own ladder precedence over the run role's list", async () => {
+test("every door gives a role's own ladder precedence over the run role's list", async () => {
     const ran = await throughDoors(
         setupsFromRoleLists({ "extension-review": [{ provider: "codex", model: "gpt-5.6" }] }),
         { prompt: "read the diff", runRole: "extension-review", actsAs: "backend" },
@@ -471,10 +471,10 @@ test("every door opens an unpinned run role on the provider this sandbox has con
 });
 
 // An automation's fire walks its own model ladder and a runner's dispatched turn names what the parent chose; naming
-// either one is the answer, and no role or persona pin moves it, on any door.
+// either one is the answer, and no role or role pin moves it, on any door.
 test("every door leaves a turn that already names its model or provider as it came", async () => {
     const settings = setupsFromRoleLists({ "loop-iteration": [{ provider: "codex", model: "gpt-5.6", effort: "high" }] });
-    const cards: readonly Persona[] = [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5" }] }];
+    const cards: readonly Role[] = [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5" }] }];
     const named: readonly [string, AgentTurn][] = [
         ["a walked ladder's rung", { prompt: "go", runRole: "loop-iteration", actsAs: "backend", agent: "gemini", model: "gemini-3-pro", effort: "low" }],
         ["a dispatched provider and loop", { prompt: "go", runRole: "loop-iteration", actsAs: "backend", agent: "gemini", harness: "native" }],
@@ -579,7 +579,7 @@ test("the run door leaves the session a turn names alone unless asked to continu
     expect([turn?.agent, turn?.sessionId]).toEqual(["claude", "sess-named"]);
 });
 
-test("every door leaves a turn naming neither role nor persona on the wire's defaults", async () => {
+test("every door leaves a turn naming neither role nor role on the wire's defaults", async () => {
     const ran = await throughDoors(setupsFromRoleLists({ "loop-iteration": [{ provider: "codex", model: "gpt-5.6" }] }), { prompt: "hello" });
     for (const door of DOORS) {
         expect([door, ran[door].agent, ran[door].model, ran[door].harness]).toEqual([door, "claude", undefined, "native"]);
@@ -1675,9 +1675,9 @@ test("a restored credential card takes its answer only from the people it names,
     await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     await cardsUp(observed, "credential_offer");
 
-    const stranger: Caller = { email: "someone@example.com", role: "collaborator" };
+    const stranger: Caller = { email: "someone@example.com", tier: "collaborator" };
     expect(services.cards.resolve({ kind: "credential_offer", requestId: "r-cred", approve: true }, stranger)).toEqual({ refused: expect.stringContaining("ops@example.com") });
-    const approver: Caller = { email: "ops@example.com", role: "collaborator" };
+    const approver: Caller = { email: "ops@example.com", tier: "collaborator" };
     expect(services.cards.resolve({ kind: "credential_offer", requestId: "r-cred", approve: true }, approver)).toBe("settled");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain('ops@example.com released "DATABASE_URL"');

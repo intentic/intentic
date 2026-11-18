@@ -84,7 +84,7 @@ export const CONVERSATIONS_STEPS: readonly SqliteStep[] = [
         up: (db) => db.exec("ALTER TABLE turn_journal ADD COLUMN run TEXT CHECK (run IS NULL OR json_valid(run))"),
     },
     {
-        // The sender's lane, thread and provider session of a fire in flight, so a restart's re-fire wears the persona its
+        // The sender's lane, thread and provider session of a fire in flight, so a restart's re-fire wears the role its
         // sender was given and continues the thread it belonged to (turn-journal.ts). Null on every row written before.
         describe: "adds fire_journal.lane, fire_journal.thread and fire_journal.session_id",
         up: (db) =>

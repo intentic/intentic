@@ -4,24 +4,24 @@ import { HISTORY_ROOT } from "@intentic/constants";
 import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
 import { namespaceTargetOf, nsenterArgv } from "../workload/namespace-entry.js";
 import { inWorktree } from "../workload/worktree-paths.js";
-import type { TurnPersona } from "../personas/personas.js";
+import type { TurnRole } from "../roles/roles.js";
 import { runCheck } from "../workload/run-check.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 
 // Second way a turn runs code, beside the shell; Node's permission model makes the read/write/spawn fence real rather
-// than advisory, gated per persona power. Network is the one ungated hole: `fetch` always works whatever the persona's
+// than advisory, gated per role power. Network is the one ungated hole: `fetch` always works whatever the role's
 // grant. Runs as the daemon's child, not the agent's, so escaping via child_process still needs `shell`.
 
-// Resolved at plan time from the persona's card, carried as `jsExecution` on the request rather than the tool-server
+// Resolved at plan time from the role's card, carried as `jsExecution` on the request rather than the tool-server
 // bag. Paths are the agent's view; placedPlan maps them to the subprocess's actual location.
 export interface JsExecutionPlan {
-    // Where the script runs: the persona's start folder when the card names one, else the turn's root.
+    // Where the script runs: the role's start folder when the card names one, else the turn's root.
     readonly cwd: string;
-    // Same environment the shell gets: persona-filtered connector credentials, the extension PATH.
+    // Same environment the shell gets: role-filtered connector credentials, the extension PATH.
     readonly env: Readonly<Record<string, string>>;
-    // Directory roots reads are granted under; empty means no filesystem at all (persona files "none").
+    // Directory roots reads are granted under; empty means no filesystem at all (role files "none").
     readonly readRoots: readonly string[];
-    // Directory roots writes are granted under; empty means nothing on disk changes (persona files "read"/"none").
+    // Directory roots writes are granted under; empty means nothing on disk changes (role files "read"/"none").
     readonly writeRoots: readonly string[];
     // Whether the script may start other programs; granted only with `shell`.
     readonly allowSpawn: boolean;
@@ -36,25 +36,25 @@ export const RECORD_READ_ROOTS: readonly string[] = [join(HISTORY_ROOT, "logs"),
 // Undefined when this turn has no JS backend: absence, not mounted-and-refused. Folders resolve like the file-tool
 // fence, an escaping one dropped; tmpdir is readable whenever anything is, writable only with full file power.
 export const jsExecutionPlanOf = (
-    persona: TurnPersona,
-    // The turn's root (folders resolve against it) and the cwd scripts actually run in (the persona's start folder).
+    role: TurnRole,
+    // The turn's root (folders resolve against it) and the cwd scripts actually run in (the role's start folder).
     tree: { readonly root: string; readonly cwd: string },
     env: Readonly<Record<string, string>>,
 ): JsExecutionPlan | undefined => {
-    const powers = persona.powers;
+    const powers = role.powers;
     if (!powers.code) {
         return undefined;
     }
-    const folders = (persona.fence ?? [])
+    const folders = (role.fence ?? [])
         .map((folder) => resolveWithin(tree.root, folder))
         .filter((folder): folder is string => folder !== undefined);
     // Undefined fence is the whole tree; a fence that resolved to nothing is a real answer and stays empty, or a
     // member fenced to a folder this checkout doesn't hold would get the workspace root instead.
-    const roots = persona.fence === undefined ? [tree.root] : folders;
+    const roots = role.fence === undefined ? [tree.root] : folders;
     return {
         cwd: tree.cwd,
         env,
-        readRoots: powers.files === "none" ? [] : [...roots, tmpdir(), ...(powers.shell && persona.fence === undefined ? RECORD_READ_ROOTS : [])],
+        readRoots: powers.files === "none" ? [] : [...roots, tmpdir(), ...(powers.shell && role.fence === undefined ? RECORD_READ_ROOTS : [])],
         writeRoots: powers.files === "write" ? roots : [],
         allowSpawn: powers.shell,
     };
@@ -115,7 +115,7 @@ export const runJs = async (
     const ran = await runCheck({
         argv: [invocation.command, ...invocation.args],
         ...(anchor === undefined ? { cwd: placed.cwd } : {}),
-        // Same environment the agent's shell gets: the container's, plus the turn's persona-filtered credentials.
+        // Same environment the agent's shell gets: the container's, plus the turn's role-filtered credentials.
         env: { ...process.env, ...placed.env },
         timeoutMs: options.timeoutMs,
         signal: options.signal,

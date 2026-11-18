@@ -99,7 +99,7 @@ const ok = <T extends object>(value: T | LinkRefusal): T => {
     return value;
 };
 
-test("a task starts at once, unattended, isolated, in the link's persona, as a program's words that carry outside content", async () => {
+test("a task starts at once, unattended, isolated, in the link's role, as a program's words that carry outside content", async () => {
     const { deps, link, said } = await setup({ actsAs: "ops" });
     const status = ok(await askTask(deps, link, asked("r1", { tainted: "a Slack message" })));
     expect(status).toMatchObject({ state: "running", title: "check r1" });

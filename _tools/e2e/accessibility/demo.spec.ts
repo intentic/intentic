@@ -86,7 +86,7 @@ const SCREEN_PATHS = {
     sandbox: demoPage(pages.sandboxSettings()),
     "sandbox/access": demoPage(pages.sandboxSettings(`access`)),
     "sandbox/access?section=areas": demoPage(pages.sandboxSettings(`access`, { query: { section: `areas` } })),
-    "sandbox/personas": demoPage(pages.sandboxSettings(`personas`)),
+    "sandbox/roles": demoPage(pages.sandboxSettings(`roles`)),
     "sandbox/data-protection": demoPage(pages.sandboxSettings(`data-protection`)),
     // The audit log is a part of Activity now (legacy.ts says since when).
     "sandbox/audit": demoPage(pages.sandboxSettings(`activity`, { query: { section: `audit` } })),
@@ -403,7 +403,7 @@ test(`agent cards expose independent native buttons`, async ({ page }) => {
     expect(await page.locator(`.session-card [role="button"] button, .session-card button button`).count()).toBe(0);
 });
 
-test(`area disclosure and persona routing have names and keyboard actions`, async ({ page }) => {
+test(`area disclosure and role routing have names and keyboard actions`, async ({ page }) => {
     await open(page, `sandbox/access?section=areas`);
     const disclosure = page.getByRole(`button`, { name: /^Toggle details for / }).first();
     await expect(disclosure).toHaveAttribute(`aria-expanded`, `false`);
@@ -411,7 +411,7 @@ test(`area disclosure and persona routing have names and keyboard actions`, asyn
     await page.keyboard.press(`Enter`);
     await expect(disclosure).toHaveAttribute(`aria-expanded`, `true`);
     await clean(page);
-    await open(page, `sandbox/personas`);
+    await open(page, `sandbox/roles`);
     await expect(page.getByRole(`switch`, { name: /Match new chats/ })).toBeVisible();
 });
 

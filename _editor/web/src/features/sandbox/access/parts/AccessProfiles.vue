@@ -10,23 +10,25 @@ import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { idFromName } from "../../../../lib/idFromName";
 import { draftProblem } from "../accessGrant";
-import { usePersonaReach } from "../usePersonaReach";
-import { useAccessProfiles } from "../profiles/useAccessProfiles";
+import { useRoleReach } from "../useRoleReach";
+import { useAccessProfiles } from "../../../../models/sandbox/access/useAccessProfiles";
 import { useServices } from "../profiles/useServices";
 import ProfileAnswers from "../profiles/ProfileAnswers.vue";
+import { useRoles } from "../../../../models/sandbox/roles/useRoles";
 const t = useT();
 // Whoever runs people and access writes the sandbox's profiles; below Full access, never the one their own access comes
 // from, which the daemon refuses (access-profiles.routes.ts), since that would let them widen it.
-const { holds, role } = useAccess();
+const { holds, tier } = useAccess();
 const self = selfMember();
 const runsPeople = computed(() => holds(`people`));
-const ownProfile = computed(() => (role.value === `owner` || role.value === `maintainer` ? undefined : self.value?.profile));
+const ownProfile = computed(() => (tier.value === `owner` || tier.value === `maintainer` ? undefined : self.value?.profile));
 const editable = (profile: AccessProfileEntry): boolean => runsPeople.value && profile.origin !== `org` && profile.id !== ownProfile.value;
 const readOnlyLine = ref(``);
 const { profiles, loaded, save, remove } = useAccessProfiles();
 const { services } = useServices();
 const { members } = useMembers();
-const { namesOf } = usePersonaReach();
+const { roles } = useRoles();
+const { namesOf } = useRoleReach();
 const draft = ref<AccessProfile>();
 const existing = ref(false);
 const readonly = ref(false);
@@ -36,6 +38,9 @@ const holders = (id: string): string =>
     [
         ...members.value.filter((person) => person.profile === id).map((person) => person.email),
         ...services.value.filter((service) => service.profile === id).map((service) => service.label ?? service.id),
+        ...roles.value
+            .filter((role) => profiles.value.find((profile) => profile.id === id)?.roles?.includes(role.id) === true)
+            .map((role) => t(`sandbox.accessProfiles.heldRole`, { name: role.label ?? role.id })),
     ].join(`, `) || t(`sandbox.accessProfiles.noHolders`);
 const start = (profile?: AccessProfileEntry): void => {
     notice.value = undefined;

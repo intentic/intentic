@@ -6,7 +6,7 @@ import {
     AssistantFace,
     assistantFace,
     FACE_SIZES,
-    personaAccessory,
+    roleAccessory,
     SectionHeader,
     ui,
 } from "@intentic/ui";
@@ -15,16 +15,16 @@ import { computed, ref } from "vue";
 const animated = ref(true);
 const name = ref(`UX Expert`);
 
-// What the name box stands for: a persona made from that name, its id slugged the way the Personas page slugs one.
+// What the name box stands for: a role made from that name, its id slugged the way the Roles page slugs one.
 const typed = computed(() => {
-    const label = name.value.trim() || `Persona`;
-    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, `-`).replace(/^-+|-+$/g, ``) || `persona`;
+    const label = name.value.trim() || `Role`;
+    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, `-`).replace(/^-+|-+$/g, ``) || `role`;
     return { id, label };
 });
-const typedAccessory = computed(() => ASSISTANT_ACCESSORIES[personaAccessory(typed.value)]);
+const typedAccessory = computed(() => ASSISTANT_ACCESSORIES[roleAccessory(typed.value)]);
 const typedColor = computed(() => assistantFace(typed.value.id).color);
 
-// A roster that shows every rule: a project persona named after its repository, head nouns read from the right, a
+// A roster that shows every rule: a project role named after its repository, head nouns read from the right, a
 // generic title yielding to a specialty, and a plain name falling back to code.
 const ROSTER = [
     { id: `project-intentic`, label: `intentic` },
@@ -49,7 +49,7 @@ const accessories = Object.entries(ASSISTANT_ACCESSORIES) as [AssistantAccessory
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-col gap-1">
                 <SectionHeader label="Little guardians" :heading="2" id="assistants-title" />
-                <p class="text-sm text-muted">One clay companion. Its color comes from the persona's id, the prop it holds from its name.</p>
+                <p class="text-sm text-muted">One clay companion. Its color comes from the role's id, the prop it holds from its name.</p>
             </div>
             <label class="flex cursor-pointer items-center gap-2 text-xs text-muted">
                 <input v-model="animated" type="checkbox" class="accent-primary-600" />
@@ -58,25 +58,25 @@ const accessories = Object.entries(ASSISTANT_ACCESSORIES) as [AssistantAccessory
         </div>
 
         <div class="flex flex-wrap items-center gap-x-8 gap-y-5 rounded-xl bg-card shadow-sm px-6 py-5">
-            <AssistantFace :seed="typed.id" :label="typed.label" :accessory="personaAccessory(typed)" :size="160" :animated />
+            <AssistantFace :seed="typed.id" :label="typed.label" :accessory="roleAccessory(typed)" :size="160" :animated />
             <div class="flex min-w-0 flex-col gap-2">
-                <label for="assistant-name" class="text-xs text-muted">Persona name</label>
+                <label for="assistant-name" class="text-xs text-muted">Role name</label>
                 <input id="assistant-name" v-model="name" :class="ui.input(`w-56`)" placeholder="UX Expert" />
                 <p class="text-xs text-muted">{{ typedAccessory.label }} · {{ typedAccessory.object }} · {{ typedColor.label }}</p>
             </div>
             <div class="ml-auto flex items-end gap-6" role="group" aria-label="Actual interface sizes">
                 <div v-for="(size, surface) in FACE_SIZES" :key="surface" class="flex flex-col items-center gap-2">
-                    <AssistantFace :seed="typed.id" :label="`${typed.label}, ${size} pixels`" :accessory="personaAccessory(typed)" :size :animated />
+                    <AssistantFace :seed="typed.id" :label="`${typed.label}, ${size} pixels`" :accessory="roleAccessory(typed)" :size :animated />
                     <span class="text-2xs tabular-nums text-muted">{{ size }} px</span>
                 </div>
             </div>
         </div>
 
         <div class="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2" role="list" aria-label="Names and what they hold">
-            <div v-for="persona in ROSTER" :key="persona.id" role="listitem" class="flex flex-col items-center gap-1.5 rounded-xl bg-card shadow-sm px-2 py-3">
-                <AssistantFace :seed="persona.id" :label="persona.label" :accessory="personaAccessory(persona)" :size="FACE_SIZES.card" :animated />
-                <span class="text-center text-xs font-medium text-content">{{ persona.label }}</span>
-                <span class="text-center text-2xs text-muted">{{ ASSISTANT_ACCESSORIES[personaAccessory(persona)].label }}</span>
+            <div v-for="role in ROSTER" :key="role.id" role="listitem" class="flex flex-col items-center gap-1.5 rounded-xl bg-card shadow-sm px-2 py-3">
+                <AssistantFace :seed="role.id" :label="role.label" :accessory="roleAccessory(role)" :size="FACE_SIZES.card" :animated />
+                <span class="text-center text-xs font-medium text-content">{{ role.label }}</span>
+                <span class="text-center text-2xs text-muted">{{ ASSISTANT_ACCESSORIES[roleAccessory(role)].label }}</span>
             </div>
         </div>
 

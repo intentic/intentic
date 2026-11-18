@@ -18,7 +18,7 @@ type JournalledFire = Extract<JournalEntry, { kind: "automation" }>;
 const queued = (entry: JournalledFire): boolean => entry.state === "queued";
 
 // What the re-fire is handed of the fire it replaces: the trigger inputs it was snapshotted with, and the lane its
-// sender's rule decided, so a stranger put on a narrow persona comes back on that persona rather than the automation's.
+// sender's rule decided, so a stranger put on a narrow role comes back on that role rather than the automation's.
 // An interrupted fire's lane approval was answered when it first ran, so its re-fire asks for none; a queued one's was not.
 const refireOptions = (entry: JournalledFire): ThreadFireOptions => {
     const attempts = queued(entry) ? entry.attempts : entry.attempts + 1;

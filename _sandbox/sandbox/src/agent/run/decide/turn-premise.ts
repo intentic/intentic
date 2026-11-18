@@ -1,14 +1,14 @@
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentHarness, AgentProvider, AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
-import type { ConversationGrant } from "@intentic/sandbox-contract/schemas/needs";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { AccessProfile } from "@intentic/sandbox-contract/schemas/access-profiles";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { conversationFence } from "../../../areas/area-scope.js";
 import { parentOfActor } from "../../../auth/principal.js";
 import { compactedSinceLastTurn, type PersistedAgent } from "../../../conversations/registry/agents-store.js";
-import { capPersona, type TurnPersona, turnPersona, widenPersona } from "../../../personas/personas.js";
+import { capRole, roleFence, type TurnRole, turnRole } from "../../../roles/roles.js";
 import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { type TurnBriefing, briefingOf } from "../../prompt/turn-briefing.js";
 import { armOf, EXPERIMENTS } from "./experiments.js";
@@ -40,16 +40,17 @@ export const turnRuntime = (input: RoutedAgentTurn, entry: ConversationEntry | u
 export interface PremiseFacts {
     readonly entry: ConversationEntry | undefined;
     readonly settings: SandboxSettings;
-    readonly personas: readonly Persona[];
+    readonly roles: readonly Role[];
     readonly areas: readonly Area[];
-    // What a person allowed this conversation beyond its persona (personas/conversation-grants.ts), if anything.
-    readonly grant?: ConversationGrant | undefined;
-    // The most its tools may be, as everyone it acts for is held to (access/principal-chain.ts); undefined is no ceiling.
+    // The access profiles, for the areas the role's own fence it to (roles.ts roleFence).
+    readonly profiles?: readonly Pick<AccessProfile, "areas" | "roles">[] | undefined;
+    // The most its tools may be, as everything it acts for is held to, the role it wears included
+    // (access/principal-chain.ts); undefined is no ceiling.
     readonly ceiling?: ToolCeiling | undefined;
 }
 
 export interface TurnPremise {
-    readonly persona: TurnPersona;
+    readonly role: TurnRole;
     // Which of the sandbox's own preamble notes the card still wants; all of them for a turn wearing no card.
     readonly briefing: TurnBriefing;
     // Each experiment's arm for this conversation; undefined where it is not measuring (armOf).
@@ -102,20 +103,18 @@ const toolSearchReaches = (runtime: TurnRuntime): boolean => runtime.provider ==
 export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRuntime): TurnPremise => {
     const { settings, entry } = facts;
     // The fence goes through the area manifest every turn, not frozen at birth, so editing an area moves its conversations.
-    // The card is posture: grants widen what it withheld, and then the principals' ceiling holds both (access.md).
-    const persona = capPersona(
-        widenPersona(
-            turnPersona({
-                personas: facts.personas,
-                actsAs: input.actsAs,
-                unattended: input.unattended === true,
-                fence: conversationFence(facts.areas, entry?.identity),
-            }),
-            facts.grant,
-        ),
+    // The card decides its accounts; everything else is the ceiling of everything the turn acts for (access.md).
+    const role = capRole(
+        turnRole({
+            roles: facts.roles,
+            actsAs: input.actsAs,
+            unattended: input.unattended === true,
+            fence: conversationFence(facts.areas, entry?.identity),
+            roleFence: roleFence(input.actsAs, facts.profiles ?? [], facts.areas),
+        }),
         facts.ceiling,
     );
-    const briefing = briefingOf(persona.persona);
+    const briefing = briefingOf(role.role);
     // A conversation the map never reaches is out of the experiment, not in its control group.
     const sendsMap = mapped(briefing, entry);
     const map = sendsMap ? armOf(EXPERIMENTS.workspaceMap, settings, input.conversationId) : undefined;
@@ -125,7 +124,7 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
     const loop = runtime.capabilities.runtime === "claude-code";
     const stableArm = loop ? armOf(EXPERIMENTS.stablePrompt, settings, input.conversationId) : undefined;
     return {
-        persona,
+        role,
         briefing,
         arms: {
             map,
@@ -134,7 +133,7 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
         },
         toolSearch: reaches ? (toolSearchArm ?? EXPERIMENTS.toolSearch.on(settings)) : undefined,
         stablePrompt: loop ? (stableArm ?? EXPERIMENTS.stablePrompt.on(settings)) : undefined,
-        startIn: persona.workspace?.startIn ?? entry?.identity.startIn ?? input.startIn,
+        startIn: role.workspace?.startIn ?? entry?.identity.startIn ?? input.startIn,
         send: {
             map: sendsMap && mapDue(settings, map, input, runtime.conversationTurns),
             landingChecks: briefing.sends("checks") && landingChecksDue(input, entry, runtime.conversationTurns),

@@ -1,19 +1,19 @@
 import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
 import { aiAccountAllowed } from "@intentic/sandbox-contract/schemas/members";
-import { isBuiltInPersona } from "@intentic/sandbox-contract/schemas/personas";
+import { isBuiltInRole } from "@intentic/sandbox-contract/schemas/roles";
 import { ORPCError } from "@orpc/server";
 import { type ChainLimit, serviceLimits } from "./principal-chain.js";
 import type { Services } from "../composition.js";
 
 /* AN AUTOMATION'S SERVICE, CHECKED AS IT IS SAVED (docs/architecture/access.md). Every `runAs` it names, its own and each
    sender rule's, must be a service this sandbox has, and what it pairs with that service must be something the service
-   could ever run with: a persona speaking through an account the service may not use, or a model ladder with no rung on
+   could ever run with: a role speaking through an account the service may not use, or a model ladder with no rung on
    an AI account it may use, would fail on every fire. Refused here, where the person choosing can still pick another;
    what changes later (a profile narrowed, a steward re-graded) is answered at fire time instead. */
 
-export type AutomationServiceDeps = Pick<Services, "services" | "accessProfiles" | "members" | "ownerEmail" | "personas">;
+export type AutomationServiceDeps = Pick<Services, "services" | "accessProfiles" | "members" | "ownerEmail" | "roles">;
 
-// Each persona and the service its wakes act as: the automation's own pair, and each sender rule's, a rule naming no
+// Each role and the service its wakes act as: the automation's own pair, and each sender rule's, a rule naming no
 // service acting as the automation's.
 const pairsOf = (automation: Automation): { readonly actsAs: string | undefined; readonly runAs: string }[] => [
     ...(automation.runAs === undefined ? [] : [{ actsAs: automation.actsAs, runAs: automation.runAs }]),
@@ -46,7 +46,7 @@ const modelsRefusal = (automation: Automation, limits: readonly ChainLimit[], na
     return undefined;
 };
 
-const personaRefusal = (accounts: readonly string[], limits: readonly ChainLimit[], persona: string, name: string): string | undefined => {
+const roleRefusal = (accounts: readonly string[], limits: readonly ChainLimit[], role: string, name: string): string | undefined => {
     for (const limit of limits) {
         if (limit.credentials === "all") {
             continue;
@@ -54,24 +54,24 @@ const personaRefusal = (accounts: readonly string[], limits: readonly ChainLimit
         const allowed = limit.credentials.capabilities;
         const missing = accounts.find((account) => !allowed.includes(account));
         if (missing !== undefined) {
-            return `the persona "${persona}" speaks through "${missing}", which ${name} may not use, so it could never use it there`;
+            return `the role "${role}" speaks through "${missing}", which ${name} may not use, so it could never use it there`;
         }
     }
     return undefined;
 };
 
-/** Refuses an automation whose service is missing, or that pairs it with a persona or models the service could never run with. */
+/** Refuses an automation whose service is missing, or that pairs it with a role or models the service could never run with. */
 export const refuseServiceMismatch = async (services: AutomationServiceDeps, automation: Automation): Promise<void> => {
     const pairs = pairsOf(automation);
     if (pairs.length === 0) {
         return;
     }
-    const [stored, profiles, roster, owner, personas] = await Promise.all([
+    const [stored, profiles, roster, owner, roles] = await Promise.all([
         services.services.list(),
         services.accessProfiles.list(),
         services.members.list(),
         services.ownerEmail(),
-        services.personas.list(),
+        services.roles.list(),
     ]);
     for (const { actsAs, runAs } of pairs) {
         const service = stored.find((entry) => entry.id === runAs);
@@ -80,8 +80,8 @@ export const refuseServiceMismatch = async (services: AutomationServiceDeps, aut
         }
         const name = `the service "${service.label ?? service.id}"`;
         const limits = serviceLimits(runAs, service, profiles, roster, owner);
-        const card = actsAs === undefined || isBuiltInPersona(actsAs) ? undefined : personas.find((persona) => persona.id === actsAs);
-        const refused = modelsRefusal(automation, limits, name) ?? (card === undefined ? undefined : personaRefusal(card.capabilities, limits, card.label ?? card.id, name));
+        const card = actsAs === undefined || isBuiltInRole(actsAs) ? undefined : roles.find((role) => role.id === actsAs);
+        const refused = modelsRefusal(automation, limits, name) ?? (card === undefined ? undefined : roleRefusal(card.capabilities, limits, card.label ?? card.id, name));
         if (refused !== undefined) {
             throw new ORPCError("BAD_REQUEST", { message: refused });
         }

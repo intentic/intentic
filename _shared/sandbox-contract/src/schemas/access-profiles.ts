@@ -9,16 +9,19 @@ import {
     EditScopeSchema,
     type MemberAccess,
 } from "./members.js";
-import { GrantedRoleSchema } from "./shared.js";
+import { GrantedTierSchema, withLegacyTier } from "./shared.js";
 import { ToolCeilingSchema } from "./tool-ceiling.js";
 
-// AN ACCESS PROFILE: the hard half of access, named and reusable (docs/architecture/access.md). One shape serves every
-// kind of principal: a person holds one instead of answers of their own, and a service (schemas/services.ts) holds one
-// to narrow what it does for its steward. So an intern and the marketing bot can be pointed at the same thing, and
-// widening what both may spend is one edit.
+// AN ACCESS PROFILE: every limit there is, named and reusable (docs/architecture/access.md). One shape serves every
+// kind of holder: a person holds one instead of answers of their own, a service (schemas/services.ts) holds one to
+// narrow what it does for its steward, and a role card is held to every profile whose `roles` lists it. So an intern,
+// the marketing bot and the Reviewer card can be pointed at the same thing, and widening what all three may spend is one
+// edit. The card-to-profile link lives here, off the workspace, rather than on the card in the tracked roles.json:
+// a conversation that could edit the file bounding it would be held to nothing.
 // Every answer means what the same field on a roster row means (schemas/members.ts), absent included: absent areas is
 // the whole workspace, absent credentials every one, absent AI accounts every one, absent tools no limit. `agents`,
-// `edit`, `lands` and `assistants` are a person's answers and mean nothing for a service, which drives no editor.
+// `edit`, `lands` and `assistants` are a person's answers and mean nothing for a service or a card, which drive no
+// editor.
 // A profile cannot make a maintainer: that tier holds the owner's operating authority and is granted to a person,
 // never through something shared.
 export const AccessProfileSchema = z.object({
@@ -46,12 +49,20 @@ export const AccessProfileSchema = z.object({
         .max(500)
         .optional()
         .describe("The AI accounts its holders' turns may run on, `provider:account` or a provider alone. Absent means every one."),
-    tools: ToolCeilingSchema.optional().describe("The most its holders' turns' tools may be; a persona only narrows inside it. Absent means no limit."),
+    tools: ToolCeilingSchema.optional().describe("The most its holders' turns' tools may be. Absent means no limit."),
     assistants: z
         .array(entryId)
         .max(50)
         .optional()
         .describe("For a guest who chats: which assistants working in their areas they may talk to. Absent means every one that works there."),
+    // Added 2026-11-18, optional: the limits a card held on itself (its shelves, connector lists and folders) moved here.
+    roles: z
+        .array(entryId)
+        .max(100)
+        .optional()
+        .describe(
+            "The role cards held to it: a conversation wearing one reaches no more than this profile allows, whoever it acts for. A card listed by several profiles is held to all of them. Absent holds no card.",
+        ),
 });
 export type AccessProfile = z.infer<typeof AccessProfileSchema>;
 
@@ -76,11 +87,11 @@ export const AccessProfileIdParamSchema = z.object({ id: entryId.describe("Which
 // bring the platform's copy of their tier along (the daemon only enforces its own).
 export const AccessProfileHolderSchema = z.object({
     email: z.string().describe("Who holds it, lowercased."),
-    role: GrantedRoleSchema.exclude(["maintainer"]).describe("The tier the profile makes for them now."),
+    tier: GrantedTierSchema.exclude(["maintainer"]).describe("The tier the profile makes for them now."),
 });
 export const AccessProfileSavedSchema = z.object({
     ok: z.literal(true),
-    holders: z.array(AccessProfileHolderSchema).describe("The people whose rows were rewritten, with the tier each now holds."),
+    holders: z.array(withLegacyTier(AccessProfileHolderSchema)).describe("The people whose rows were rewritten, with the tier each now holds."),
 });
 export type AccessProfileSaved = z.infer<typeof AccessProfileSavedSchema>;
 

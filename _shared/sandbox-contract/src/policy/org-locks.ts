@@ -93,7 +93,8 @@ export const ORG_SECTION_ROUTES = {
         ],
     },
     areas: { changes: ["areas.save", "areas.remove"] },
-    personas: { changes: ["personas.save", "personas.remove", "personas.savePrompt", "personas.saveSkill", "personas.removeSkill"] },
+    // The Roles section, under the id it had as Personas (organisation.ts ORG_SECTIONS).
+    personas: { changes: ["roles.save", "roles.remove", "roles.savePrompt", "roles.saveSkill", "roles.removeSkill"] },
     updates: { changes: ["system.autoUpdate", "system.skipUpdate"] },
 } as const satisfies Readonly<Record<OrgSection, SectionRoutes>>;
 

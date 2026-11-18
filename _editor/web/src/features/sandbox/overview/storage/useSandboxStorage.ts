@@ -12,7 +12,7 @@ import { queryClient } from "../../../../lib/queryPersistence";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { useOperation } from "../../../../workbench/operations/operations";
 import { afterPress } from "./checkoutsView";
@@ -38,7 +38,7 @@ const pressingWhat = (press: CheckoutPress, name: string): string => {
 };
 
 export function useSandboxStorage() {
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     // Maintainer-floored at the daemon, and absent from a daemon older than the card.
     const available = computed(() => canShip.value && supportsRoute(`system.storage`));
     const read = rpcQuery(`system.storage`, undefined, { unpersisted: true });

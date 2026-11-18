@@ -171,7 +171,7 @@ describe(`sandbox routes`, () => {
 
         const summary = await call(sandboxRoutes.update, { sandboxId: `s1`, name: `renamed` }, { context: context({ prisma }) });
         expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { name: `renamed` }, include: { hosted: true } });
-        expect(summary).toMatchObject({ id: `s1`, name: `renamed`, image: logo, role: `owner` });
+        expect(summary).toMatchObject({ id: `s1`, name: `renamed`, image: logo, tier: `owner` });
 
         await call(sandboxRoutes.update, { sandboxId: `s1`, image: logo }, { context: context({ prisma }) });
         expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { image: logo }, include: { hosted: true } });
@@ -182,18 +182,18 @@ describe(`sandbox routes`, () => {
     });
 
     // The name and the logo are Full access's to change too; anyone below it, or not yet accepted, finds no sandbox.
-    it(`update admits Full access, answers with its own role, and 404s anyone else`, async () => {
+    it(`update admits Full access, answers with its own tier, and 404s anyone else`, async () => {
         const update = jest.fn().mockResolvedValue({ ...sandboxRow, name: `renamed` });
         const member = jest.fn().mockResolvedValue({ sandboxId: `s1` });
         const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue(null), update }, sandboxMember: { findFirst: member } });
 
         const summary = await call(sandboxRoutes.update, { sandboxId: `s1`, name: `renamed` }, { context: context({ prisma }) });
         expect(member).toHaveBeenCalledWith({
-            where: { sandboxId: `s1`, email: user.email.toLowerCase(), acceptedAt: { not: null }, role: `maintainer` },
+            where: { sandboxId: `s1`, email: user.email.toLowerCase(), acceptedAt: { not: null }, tier: `maintainer` },
             select: { sandboxId: true },
         });
         expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { name: `renamed` }, include: { hosted: true } });
-        expect(summary).toMatchObject({ name: `renamed`, role: `maintainer` });
+        expect(summary).toMatchObject({ name: `renamed`, tier: `maintainer` });
 
         member.mockResolvedValue(null);
         update.mockClear();
@@ -399,7 +399,7 @@ describe(`sandbox routes`, () => {
         const create = jest.fn().mockResolvedValue({ ...sandboxRow, id: `s2` });
         const prisma = fakePrisma({ sandbox: { create } });
         const summary = await call(sandboxRoutes.create, { name: `second` }, { context: context({ prisma }) });
-        expect(summary).toMatchObject({ id: `s2`, role: `owner` });
+        expect(summary).toMatchObject({ id: `s2`, tier: `owner` });
     });
 
     it(`reuses a cloud-start request's identity and token on retry`, async () => {
@@ -645,13 +645,13 @@ describe(`sandbox.list and the connect token`, () => {
             sandboxMember: {
                 findMany: jest
                     .fn()
-                    .mockResolvedValue([{ role: `viewer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, token: `theirs`, hosted: null } }]),
+                    .mockResolvedValue([{ tier: `viewer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, token: `theirs`, hosted: null } }]),
             },
         });
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
-        expect(sandboxes.map(({ id, role, token }) => ({ id, role, token }))).toEqual([
-            { id: `s1`, role: `owner`, token: `tok` },
-            { id: `s2`, role: `viewer`, token: null },
+        expect(sandboxes.map(({ id, tier, token }) => ({ id, tier, token }))).toEqual([
+            { id: `s1`, tier: `owner`, token: `tok` },
+            { id: `s2`, tier: `viewer`, token: null },
         ]);
     });
 });
@@ -966,18 +966,18 @@ describe(`sandbox.list and the host report`, () => {
             sandboxMember: { findMany: jest.fn().mockResolvedValue(shared) },
         });
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
-        return sandboxes.map(({ id, role, hostReport }) => ({ id, role, hostReport }));
+        return sandboxes.map(({ id, tier, hostReport }) => ({ id, tier, hostReport }));
     };
 
     it(`shows the report on the owner's row and null on a member's`, async () => {
         expect(
             await listed(
                 [{ ...sandboxRow, hostReport: report, hosted: null }],
-                [{ role: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, hostReport: report, hosted: null } }],
+                [{ tier: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, hostReport: report, hosted: null } }],
             ),
         ).toEqual([
-            { id: `s1`, role: `owner`, hostReport: report },
-            { id: `s2`, role: `writer`, hostReport: null },
+            { id: `s1`, tier: `owner`, hostReport: report },
+            { id: `s2`, tier: `writer`, hostReport: null },
         ]);
     });
 
@@ -990,9 +990,9 @@ describe(`sandbox.list and the host report`, () => {
                 { ...sandboxRow, id: `s3`, hostReport: report, hosted },
             ]),
         ).toEqual([
-            { id: `s1`, role: `owner`, hostReport: null },
-            { id: `s2`, role: `owner`, hostReport: null },
-            { id: `s3`, role: `owner`, hostReport: null },
+            { id: `s1`, tier: `owner`, hostReport: null },
+            { id: `s2`, tier: `owner`, hostReport: null },
+            { id: `s3`, tier: `owner`, hostReport: null },
         ]);
     });
 
@@ -1005,7 +1005,7 @@ describe(`sandbox.list and the host report`, () => {
             sandboxMember: {
                 findMany: jest
                     .fn()
-                    .mockResolvedValue([{ role: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, hostReport: stored, hosted: null } }]),
+                    .mockResolvedValue([{ tier: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, hostReport: stored, hosted: null } }]),
             },
         });
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
@@ -1027,7 +1027,7 @@ describe(`sandbox.list and a sleeping sandbox`, () => {
             sandbox: {
                 findMany: jest.fn().mockResolvedValue([row, { ...row, id: `s3`, hosted: { region: `iad`, warm: false, previousImage: null } }]),
             },
-            sandboxMember: { findMany: jest.fn().mockResolvedValue([{ role: `viewer`, sandbox: { ...row, id: `s2`, ownerId: `u2` } }]) },
+            sandboxMember: { findMany: jest.fn().mockResolvedValue([{ tier: `viewer`, sandbox: { ...row, id: `s2`, ownerId: `u2` } }]) },
         });
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
         expect(sandboxes.map(({ id, sleep, hostReport }) => ({ id, sleep, reported: hostReport !== null }))).toEqual([
@@ -1054,7 +1054,7 @@ describe(`sandbox.list and two copies of one sandbox`, () => {
                 findMany: jest
                     .fn()
                     .mockResolvedValue([
-                        { role: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, seenInstances, duplicateSince, hosted: null } },
+                        { tier: `writer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, seenInstances, duplicateSince, hosted: null } },
                     ]),
             },
         });

@@ -28,4 +28,6 @@
 // by picking an existing connection, `keyValue` draws one as name and value rows, `keyRequest` has the sandbox keep a
 // private key and show its certificate request, `probe.oauth` takes the `client_credentials` grant too, and `probe.ok`
 // names where a 200 answer says it worked. Additive. The recorded surface grows the manifest schema.
-export const extensionApiVersion = "2.42.0";
+// 2.43.0 names the signed-in user's trust tier `api.sandbox.tier()`. `role()` answers the same and is deprecated until
+// 3.0.0: personas were renamed roles. Additive. The recorded surface grows `sandboxApi`.
+export const extensionApiVersion = "2.43.0";

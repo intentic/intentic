@@ -707,7 +707,7 @@ test("the versioned state slice is checked out in the worktree and follows a reb
     expect(await sh(work, "status", "--short")).toBe("");
 });
 
-// A selection is the repositories a conversation carries when its persona card names them; root is always included, a
+// A selection is the repositories a conversation carries when its role card names them; root is always included, a
 // nested repo only when named.
 test("a selection creates worktrees for root and the named repositories only", async () => {
     const { worktrees } = await setup();

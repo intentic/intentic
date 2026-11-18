@@ -28,7 +28,7 @@ import { offloadSamples } from "./offload.samples.ts";
 import { orgSamples } from "./org.samples.ts";
 import { pagesSamples } from "./pages.samples.ts";
 import { panelsSamples } from "./panels.samples.ts";
-import { personasSamples } from "./personas.samples.ts";
+import { rolesSamples } from "./roles.samples.ts";
 import { portsSamples } from "./ports.samples.ts";
 import { privacySamples } from "./privacy.samples.ts";
 import { providersSamples } from "./providers.samples.ts";
@@ -80,7 +80,7 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
         loops: loopsSamples(context),
         capabilities: capabilitiesSamples(context),
         skills: skillsSamples(context),
-        personas: personasSamples(context),
+        roles: rolesSamples(context),
         audit: auditSamples(context),
         org: orgSamples(context),
         areas: areasSamples(context),

@@ -26,7 +26,7 @@ import { parseJsonOr } from "@intentic/base/json";
 // Each turn's process is started with what the daemon decided for it (PiLaunch): its instructions as Pi's own system
 // prompt flags (`--system-prompt` replaces Pi's base, `--append-system-prompt` adds to it) with `--no-context-files`,
 // since the daemon composes AGENTS.md itself and Pi would load it a second time; its skills as `--skill` paths with
-// Pi's own discovery off (`--no-skills`), so the persona's filter is the whole list; and the daemon's own extension
+// Pi's own discovery off (`--no-skills`), so the role's filter is the whole list; and the daemon's own extension
 // (pi-extension.ts, `-e`), which gives Pi an ask tool, mounts the turn's MCP servers on a Pi that has built-in MCP, and
 // puts every tool call and result to the turn's hook socket (pi-hooks.ts). `-e` loads it even where the card's command
 // turns Pi's own extension discovery off (`--no-extensions`). Every file handed over is written to a per-turn directory the process can read at the same path (an anchored turn's

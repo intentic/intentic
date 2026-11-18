@@ -10,7 +10,7 @@ import { type DesktopStatus, useDesktopView } from "./useDesktopView";
 import type { DesktopPointerAction } from "./desktopInput";
 import { useDesktopQuery } from "./desktopQuery";
 import { useSandbox } from "../../client/sandbox/useSandbox";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { useAudience } from "../../app/useAudience";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { useBusySince, useLineWithElapsed } from "../../components/progress/useProgress";
@@ -77,7 +77,7 @@ const messageLine = useLineWithElapsed(message, useBusySince(() => view.status.v
 const desk = useDesktopQuery();
 const empty = computed(() => windowId === undefined && view.status.value === undefined && desk.windows.value === 0);
 // The do-it-yourself half is a shell's, so it goes to whoever has the rail's terminal (ShellDesktop.vue).
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { maker } = useAudience();
 const terminal = useTerminalPanel();
 const exportLine = computed(() => (desk.state.value?.display === undefined ? undefined : `export DISPLAY=${desk.state.value.display}`));

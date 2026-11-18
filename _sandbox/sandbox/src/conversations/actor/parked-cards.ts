@@ -43,7 +43,7 @@ export interface RequestOptions {
 }
 
 // "Allow everything in this conversation", answered on any permission card and kept per conversation
-// (personas/conversation-grants.ts): while it stands, every permission card raised there that a person could have
+// (roles/conversation-grants.ts): while it stands, every permission card raised there that a person could have
 // allowed once settles at once as `everything`, the card still drawn and frozen in the transcript so what ran is on
 // record. It never answers a card addressed to a named person or one that always asks, and it never turns a refusal
 // into a yes, since a refused call raises no card.

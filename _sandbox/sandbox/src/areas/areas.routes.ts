@@ -22,7 +22,7 @@ const refuseUnlessPeople = (context: OrpcContext, id: string): void => {
     if (!holdsRight(identity, "people")) {
         throw new ORPCError("FORBIDDEN", { message: "only someone who runs people and access decides who sees which folders" });
     }
-    if (identity.role !== "owner" && identity.role !== "maintainer" && identity.areas?.includes(id) === true) {
+    if (identity.tier !== "owner" && identity.tier !== "maintainer" && identity.areas?.includes(id) === true) {
         throw new ORPCError("FORBIDDEN", { message: `"${id}" is an area you are fenced to: the owner or someone with Full access changes it` });
     }
 };

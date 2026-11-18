@@ -6,7 +6,7 @@ import { ref } from "vue";
 const active = ref<{ token?: string } | undefined>({ token: `connect-here` });
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
 const daemonUrl = ref<string | undefined>(`https://here.test`);
-const sandboxes = ref<{ id: string; daemonUrl: string | null; token: string; hosted?: { region: string; warm: boolean }; role?: string }[]>([]);
+const sandboxes = ref<{ id: string; daemonUrl: string | null; token: string; hosted?: { region: string; warm: boolean }; tier?: string }[]>([]);
 jest.mock("../useSandbox", () => ({ useSandbox: () => ({ active, activeSandboxId, daemonUrl, sandboxes }) }));
 
 // The real useEndpoint runs on this mock: with no loopback resolved, daemonBase falls to daemonUrl.
@@ -34,8 +34,8 @@ describe("targetFor", () => {
 
     it("offers the owner ticket only for a hosted machine its owner reads", () => {
         sandboxes.value = [
-            { id: `sbx-hosted`, daemonUrl: `https://hosted.test`, token: `connect-hosted`, hosted: { region: `iad`, warm: true }, role: `owner` },
-            { id: `sbx-shared`, daemonUrl: `https://shared.test`, token: `connect-shared`, hosted: { region: `iad`, warm: true }, role: `collaborator` },
+            { id: `sbx-hosted`, daemonUrl: `https://hosted.test`, token: `connect-hosted`, hosted: { region: `iad`, warm: true }, tier: `owner` },
+            { id: `sbx-shared`, daemonUrl: `https://shared.test`, token: `connect-shared`, hosted: { region: `iad`, warm: true }, tier: `collaborator` },
         ];
         expect([targetFor(`sbx-hosted`)?.platformVouch, targetFor(`sbx-shared`)?.platformVouch]).toEqual([{ ownerTicket: true }, { ownerTicket: false }]);
     });

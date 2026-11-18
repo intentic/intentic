@@ -5,7 +5,7 @@ import { computed, type MaybeRefOrGetter, type Ref, toValue, watch } from "vue";
 import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../client/sandbox/useDaemonRoutes";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { rpcKey } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
@@ -62,7 +62,7 @@ export interface TakeView {
  * nothing and never asks, and neither does a sandbox too old to have it.
  */
 export const useConnectionHub = (relevant: MaybeRefOrGetter<boolean> = true, wire: HubWire = SANDBOX_HUB_WIRE) => {
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     const enabled = computed(() => toValue(relevant) && canShip.value && supportsRoute(`hub.state`));
     const saves = useOperations<HubSaved>(SAVES);
     const takes = useOperations<HubTaken>(TAKES);

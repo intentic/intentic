@@ -48,6 +48,11 @@ const chatEntry = async (to: RouteLocationNormalized): Promise<boolean | RouteLo
 // terminal and puts the menu's contents on the rail, so a desktop hit lands on the workspace of the same frame instead.
 const mobileOnly = (to: RouteLocationNormalized): boolean | RouteLocationRaw => (useDevice().mobile.value ? true : here(page.workspace(), to));
 
+// The Roles section was called Personas until 2026-11-18: an address from before (a bookmark, a daemon's message, an
+// extension's link) still opens it.
+const formerSection = (to: RouteLocationNormalized): boolean | RouteLocationRaw =>
+    to.params[`tab`] === `personas` ? { name: to.name ?? undefined, params: { ...to.params, tab: `roles` }, query: to.query, hash: to.hash } : true;
+
 // In-shell routes wrap in asyncView so a click never blocks on a chunk download; only first-paint entry routes (login,
 // setup, invite, the shell) stay bare lazy imports. `mobile` ranks a view in a phone's idle prefetch: `first` where its
 // next tap goes (an agent's page from the board, the menu), `skip` for the two surfaces a phone never draws.
@@ -100,6 +105,7 @@ const SANDBOX_VIEWS = {
     // hub retitles itself with the sandbox's name once mounted; the outline just says what the page is.
     sandboxSettings: {
         title: () => t(`shared.sandboxHub`),
+        beforeEnter: [formerSection],
         component: asyncView(
             () => import(`../features/sandbox/SandboxHub.vue`),
             hubOutline(

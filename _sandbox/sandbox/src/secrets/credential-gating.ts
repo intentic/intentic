@@ -48,7 +48,7 @@ export const gatedCapabilities = (
     return { capabilities: kept, withheld };
 };
 
-// The shell environment with gated connectors' variables removed by suffix, mirroring personaCliEnv. Driven by a denied
+// The shell environment with gated connectors' variables removed by suffix, mirroring roleCliEnv. Driven by a denied
 // set, not an allowlist, since the environment also carries PATH and other settings an allowlist would strip. A card
 // whose credential the gateway holds keeps its variables: none of them is a credential, and its gate is enforced where
 // the credential is attached, on the request itself (broker/broker-gateway.ts), which asks the named approvers then.

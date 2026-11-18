@@ -9,8 +9,8 @@ import { homeOpening, refuseUnlessHome } from "./home-conversation.js";
 
 // Who may speak into a home conversation, and what the turn opening it latches: the door's rules, apart from the route.
 
-const as = (email: string, role: "owner" | "maintainer" | "collaborator"): Pick<OrpcContext, "identity"> => ({
-    identity: { email, role, methods: ["google"] },
+const as = (email: string, tier: "owner" | "maintainer" | "collaborator"): Pick<OrpcContext, "identity"> => ({
+    identity: { email, tier, methods: ["google"] },
 });
 
 const services = (entries: Record<string, PersistedAgent> = {}, auth = true): Pick<Services, "auth" | "agents"> => ({
@@ -55,7 +55,7 @@ test("a program has none; the loopback owner has one", () => {
 // by itself exactly when they may land it (`landsHere`), so the person and the agent never answer differently.
 describe("a home-only member", () => {
     const homeOnly = (lands: boolean): Pick<OrpcContext, "identity"> => {
-        const identity = { email: "bo@example.com", role: "guest", agents: "home", methods: ["google"] } as const;
+        const identity = { email: "bo@example.com", tier: "guest", agents: "home", methods: ["google"] } as const;
         return { identity: lands ? { ...identity, lands: true } : identity };
     };
     const BO = homeConversationId("bo@example.com");
@@ -88,10 +88,10 @@ describe("homeOwnerLands", () => {
 
     test("the sandbox's owner, a maintainer and a home-only member granted it land; anyone else asks", async () => {
         const members: Member[] = [
-            { email: "mai@example.com", role: "maintainer" },
-            { email: "bo@example.com", role: "guest", agents: "home", lands: true },
-            { email: "cy@example.com", role: "guest", agents: "home" },
-            { email: "di@example.com", role: "collaborator" },
+            { email: "mai@example.com", tier: "maintainer" },
+            { email: "bo@example.com", tier: "guest", agents: "home", lands: true },
+            { email: "cy@example.com", tier: "guest", agents: "home" },
+            { email: "di@example.com", tier: "collaborator" },
         ];
         const lands = async (email: string | undefined): Promise<boolean> => await homeOwnerLands(roster(members), email);
         expect(await lands("Own@Example.com")).toBe(true);

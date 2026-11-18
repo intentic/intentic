@@ -3,7 +3,7 @@ import { SkillBodySchema, SkillDraftSchema, SkillIdSchema, SkillRemoveSchema, Sk
 import { OkSchema } from "../schemas/shared.js";
 
 // What the agent knows and which half the owner controls; `list` joins every source (the owner's own, the settings,
-// connections, plugin checkouts, extension folders, persona kits). A baked tool's switch rides settings' `skills`
+// connections, plugin checkouts, extension folders, role kits). A baked tool's switch rides settings' `skills`
 // array; an own skill is on while the agent's copy of it exists, which `switch` moves and `save`/`remove` write
 // together with the text. `read` takes the id in the query, since an id can name an owner and won't fit a path
 // template.
@@ -14,7 +14,7 @@ export const skillsContract = {
             path: "/skills",
             summary: "What the agent knows how to do",
             description:
-                "Every skill available here and whether it is switched on, joined from all the places they come from: the owner's own, the settings, plugins a connection installed, folders inside extensions, and persona kits.",
+                "Every skill available here and whether it is switched on, joined from all the places they come from: the owner's own, the settings, plugins a connection installed, folders inside extensions, and role kits.",
         })
         .output(SkillsListSchema),
     read: procedure

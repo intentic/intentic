@@ -8,7 +8,7 @@ import MapGroupCard from "./MapGroupCard.vue";
 import MapPrincipalRow from "./MapPrincipalRow.vue";
 import { drawMap } from "./mapEdges";
 import type { Flow } from "./mapGeometry";
-import type { PersonaName } from "./mapWords";
+import type { RoleName } from "./mapWords";
 import type { Focus, Lighting } from "./reachLighting";
 import type { GroupKey, Principal, PrincipalKind, ReachMap } from "./reachModel";
 import { useMapLayout } from "./useMapLayout";
@@ -28,7 +28,7 @@ const {
     focus,
     pinned,
     name,
-    personaName,
+    roleName,
     compact = false,
 } = defineProps<{
     map: ReachMap;
@@ -36,7 +36,7 @@ const {
     focus: Focus | undefined;
     pinned: Focus | undefined;
     name: string;
-    personaName: PersonaName;
+    roleName: RoleName;
     /** One line per way in, one block per group, the secrets folded: the drawing without its fine print. */
     compact?: boolean;
 }>();
@@ -148,7 +148,7 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
                             :principal
                             :lit="principalLit(principal)"
                             :pinned="pinned?.id === principal.id"
-                            :persona-name
+                            :role-name
                             :compact
                             @point="(on) => emit(`point`, on ? principalFocus(principal) : undefined)"
                             @press="emit(`press`, principalFocus(principal))"

@@ -12,7 +12,7 @@ import type { CapabilityHandler } from "../capability.js";
 // is that sandbox's terms, read back here only to say them.
 
 const termsLine = (hello: LinkHello): string => {
-    const wears = hello.terms.persona === undefined ? "no persona, so no signed-in account" : `the persona "${hello.terms.persona}"`;
+    const wears = hello.terms.role === undefined ? "no role, so no signed-in account" : `the role "${hello.terms.role}"`;
     const waits = hello.terms.approve ? "each one waits for its owner to allow it" : "each one starts at once";
     return `Its tasks wear ${wears}; ${waits}; it takes up to ${hello.terms.turnsPerHour} turns an hour.`;
 };

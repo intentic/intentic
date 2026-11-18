@@ -1,4 +1,4 @@
-<!-- What single conversations may do beyond their persona or area, still standing: one row per conversation, saying which
+<!-- What single conversations may do beyond their role or area, still standing: one row per conversation, saying which
      one it is, whether it can still use any of it (an archived one cannot until it is brought back) and where to open it,
      with each thing it may do under it in plain words and taken back with one press. A turn already running keeps what it
      mounted; the conversation's next use runs without it. Above them, the yeses that name no conversation: policy lines
@@ -38,16 +38,13 @@ interface Item {
 const whoOf = (who: string): string => (who.toLowerCase() === user.value?.email?.toLowerCase() ? t(`needs.grants.you`) : who);
 
 // Each yes as what the conversation may now do, in the order a person scans for the risky ones: everything at once,
-// accounts, folders, whole shelves, unasked installs, secrets past their host guard, credential requests that stopped
-// asking, released secrets.
+// unasked installs, secrets past their host guard, credential requests that stopped asking, released secrets. None of
+// them widens access: what a role withholds a conversation gets only by being switched to another role.
 const itemsOf = (conversation: StandingConversation): readonly Item[] => {
     const at = (kind: ConversationGrantRevoke["kind"], what: string): ConversationGrantRevoke => ({ conversationId: conversation.conversationId, kind, what });
     return [
         // Any permission card's "Allow everything in this conversation": the widest yes there is, so it leads.
         ...(conversation.everything ? [{ grant: at(`everything`, ``), icon: `unlock` as const, label: t(`needs.grants.everything`), wide: true }] : []),
-        ...conversation.capabilities.map((what) => ({ grant: at(`capability`, what), icon: `link` as const, label: t(`needs.grants.capability`, { what }) })),
-        ...conversation.folders.map((what) => ({ grant: at(`folder`, what), icon: `folder` as const, label: t(`needs.grants.folder`, { what }) })),
-        ...conversation.shelves.map((what) => ({ grant: at(`shelf`, what), icon: `wrench` as const, label: t(`needs.grants.shelf`, { what }) })),
         // An install card's "Allow installs for this conversation": the one yes that names no single thing.
         ...(conversation.installs ? [{ grant: at(`install`, ``), icon: `box` as const, label: t(`needs.grants.installs`) }] : []),
         // A host guard card's "Allow <secret> anywhere in this conversation".

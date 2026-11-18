@@ -49,7 +49,7 @@ const memMembers = (initial: Member[] = []): MembersStore => {
 };
 
 // Most tests only care that an email is on the list; the role rides along.
-const granted = (...emails: string[]): Member[] => emails.map((email) => ({ email, role: "collaborator" as const }));
+const granted = (...emails: string[]): Member[] => emails.map((email) => ({ email, tier: "collaborator" as const }));
 
 // A fake verifier mapping a token to an email; an unknown token throws, standing in for a failed verify.
 const verifierFor =
@@ -87,9 +87,9 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
     test("binds the first authenticated email as owner, then accepts only that owner", async () => {
         const owner = memOwner();
         const authz = createAuthorizer({ verify: verifierFor({ "tok-a": "a@x.com", "tok-b": "b@x.com" }), owner, members: memMembers() });
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"] });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["google"] });
         expect(await owner.read()).toBe("a@x.com");
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"] });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["google"] });
         await expect(authz.authorize("tok-b", undefined)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
@@ -99,7 +99,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers(granted("m@x.com")),
         });
-        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator", agents: "run", edits: "none", methods: ["google"] });
+        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", tier: "collaborator", agents: "run", edits: "none", methods: ["google"] });
         await expect(authz.authorize("tok-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
@@ -109,11 +109,11 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         const authz = createAuthorizer({
             verify: verifierFor({ "tok-d": "d@x.com", "tok-m": "m@x.com" }),
             owner: memOwner("a@x.com"),
-            members: memMembers([{ email: "d@x.com", role: "guest", areas: ["support", "sales"] }, ...granted("m@x.com")]),
+            members: memMembers([{ email: "d@x.com", tier: "guest", areas: ["support", "sales"] }, ...granted("m@x.com")]),
         });
         await expect(authz.authorize("tok-d", undefined)).resolves.toEqual({
             email: "d@x.com",
-            role: "guest",
+            tier: "guest",
             agents: "chat",
             edits: "none",
             areas: ["support", "sales"],
@@ -129,12 +129,12 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             verify: verifierFor({ "tok-m": "m@x.com", "tok-w": "w@x.com" }),
             owner: memOwner("a@x.com"),
             members: memMembers([
-                { email: "m@x.com", role: "maintainer", areas: ["support"] },
-                { email: "w@x.com", role: "writer", areas: ["support"] },
+                { email: "m@x.com", tier: "maintainer", areas: ["support"] },
+                { email: "w@x.com", tier: "writer", areas: ["support"] },
             ]),
         });
-        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "maintainer", agents: "run", edits: "all", methods: ["google"] });
-        await expect(authz.authorize("tok-w", undefined)).resolves.toEqual({ email: "w@x.com", role: "writer", agents: "run", edits: ["support"], areas: ["support"], methods: ["google"] });
+        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", tier: "maintainer", agents: "run", edits: "all", methods: ["google"] });
+        await expect(authz.authorize("tok-w", undefined)).resolves.toEqual({ email: "w@x.com", tier: "writer", agents: "run", edits: ["support"], areas: ["support"], methods: ["google"] });
     });
 
     test("a granted member is recognised whatever case the claim carries", async () => {
@@ -143,7 +143,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers(granted("alice@corp.com")),
         });
-        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "Alice@Corp.com", role: "collaborator", agents: "run", edits: "none", methods: ["google"] });
+        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "Alice@Corp.com", tier: "collaborator", agents: "run", edits: "none", methods: ["google"] });
     });
 
     test("the owner is recognised whatever case the claim carries, on every owner-only gate", async () => {
@@ -152,7 +152,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             owner: memOwner("ada@corp.com"),
             members: memMembers(),
         });
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "Ada@Corp.com", role: "owner", methods: ["google"] });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "Ada@Corp.com", tier: "owner", methods: ["google"] });
         await expect(authz.authorizeOwner("tok-a")).resolves.toBeUndefined();
         await expect(authz.authorizeRetirement("tok-a")).resolves.toBeUndefined();
     });
@@ -174,7 +174,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             email: "a@x.com",
             name: "Ada",
             picture: "https://p/a.png",
-            role: "owner",
+            tier: "owner",
             methods: ["google"],
         });
     });
@@ -201,7 +201,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         expect(await owner.read()).toBeUndefined();
         await authz.authorize("tok-a", "secret");
         expect(await owner.read()).toBe("a@x.com");
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"] });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["google"] });
     });
 
     test("with an expectedOwner, only that identity may first-bind (mismatch is Forbidden, case-insensitive)", async () => {
@@ -256,8 +256,8 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             verify: verifierFor({ "tok-a": "a@x.com", "tok-m": "m@x.com", "tok-c": "c@x.com" }),
             owner: memOwner("a@x.com"),
             members: memMembers([
-                { email: "m@x.com", role: "maintainer" },
-                { email: "c@x.com", role: "collaborator" },
+                { email: "m@x.com", tier: "maintainer" },
+                { email: "c@x.com", tier: "collaborator" },
             ]),
         });
         await expect(authorizeMaintainer(authz, "tok-a")).resolves.toBeUndefined();
@@ -291,8 +291,8 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers(granted("m@x.com")),
         });
-        await expect(authz.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"], renewal: true });
-        await expect(authz.authorize("sess-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator", agents: "run", edits: "none", methods: ["google"], renewal: true });
+        await expect(authz.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["google"], renewal: true });
+        await expect(authz.authorize("sess-m", undefined)).resolves.toEqual({ email: "m@x.com", tier: "collaborator", agents: "run", edits: "none", methods: ["google"], renewal: true });
         // A verified session is still subject to per-request membership: revoking a member kills live sessions.
         await expect(authz.authorize("sess-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
         await expect(authz.authorizeOwner("sess-a")).resolves.toBeUndefined();
@@ -306,7 +306,7 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers(),
         });
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"] });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["google"] });
         await expect(authz.authorize("bogus", undefined)).rejects.toThrow(/invalid token/);
     });
 
@@ -320,7 +320,7 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
         });
         await expect(authz.authorize("sess-a", undefined)).rejects.toThrow(/invalid token/);
         expect(await owner.read()).toBeUndefined();
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"] });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["google"] });
         expect(await owner.read()).toBe("a@x.com");
     });
 });
@@ -345,10 +345,10 @@ describe("owner ticket", () => {
             expectedOwner: "a@x.com",
             ownerTicket: ownerTicketVerifier(publicPem, "0123456789ab"),
         });
-        await expect(authz.authorize(ticketFor("A@x.com"), undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["ticket"] });
+        await expect(authz.authorize(ticketFor("A@x.com"), undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["ticket"] });
         expect(await owner.read()).toBe("a@x.com");
         // Bound: a later ticket for the owner is the owner; one for a stranger is refused by the roster.
-        await expect(authz.authorize(ticketFor("a@x.com"), undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["ticket"] });
+        await expect(authz.authorize(ticketFor("a@x.com"), undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["ticket"] });
         await expect(authz.authorize(ticketFor("b@x.com"), undefined)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
@@ -413,10 +413,10 @@ describe("identity assertion", () => {
         });
         await expect(authz.authorize(assertionFor("ada@example.org"), undefined)).rejects.toThrow("first-bind requires the connection token");
         expect(await owner.read()).toBeUndefined();
-        await expect(authz.authorize(assertionFor("ada@example.org"), "secret")).resolves.toEqual({ email: "ada@example.org", role: "owner", methods: ["email"] });
+        await expect(authz.authorize(assertionFor("ada@example.org"), "secret")).resolves.toEqual({ email: "ada@example.org", tier: "owner", methods: ["email"] });
         expect(await owner.emailSignIn?.()).toBe(true);
         // Bound: the owner keeps coming in on the platform's word; a stranger's assertion is refused by the roster.
-        await expect(authz.authorize(assertionFor("ada@example.org"), undefined)).resolves.toEqual({ email: "ada@example.org", role: "owner", methods: ["email"] });
+        await expect(authz.authorize(assertionFor("ada@example.org"), undefined)).resolves.toEqual({ email: "ada@example.org", tier: "owner", methods: ["email"] });
         await expect(authz.authorize(assertionFor("eve@example.org"), undefined)).rejects.toThrow("not authorized for this sandbox");
     });
 
@@ -439,13 +439,13 @@ describe("identity assertion", () => {
         expect(await reasonOf(authz.authorizeRetirement(assertionFor("ada@example.org")))).toBe(EMAIL_SIGN_IN_OFF);
         expect(await reasonOf(authz.authorizeRecovery(assertionFor("ada@example.org")))).toBe(EMAIL_SIGN_IN_OFF);
         // Google still opens it, as it always did.
-        await expect(authz.authorize("google-ada", undefined)).resolves.toEqual({ email: "ada@example.org", role: "owner", methods: ["google"] });
+        await expect(authz.authorize("google-ada", undefined)).resolves.toEqual({ email: "ada@example.org", tier: "owner", methods: ["google"] });
     });
 
     test("opens it for a member only when the owner opted them in, and re-reads the opt-in on every request", async () => {
         const members = memMembers([
-            { email: "bo@example.org", role: "collaborator", emailSignIn: true },
-            { email: "cy@example.org", role: "viewer" },
+            { email: "bo@example.org", tier: "collaborator", emailSignIn: true },
+            { email: "cy@example.org", tier: "viewer" },
         ]);
         const authz = createAuthorizer({
             verify: verifierFor({}),
@@ -454,11 +454,11 @@ describe("identity assertion", () => {
             members,
             identityAssertion: verifier(),
         });
-        await expect(authz.authorize(assertionFor("bo@example.org"), undefined)).resolves.toEqual({ email: "bo@example.org", role: "collaborator", agents: "run", edits: "none", methods: ["email"] });
+        await expect(authz.authorize(assertionFor("bo@example.org"), undefined)).resolves.toEqual({ email: "bo@example.org", tier: "collaborator", agents: "run", edits: "none", methods: ["email"] });
         expect(await reasonOf(authz.authorize(assertionFor("cy@example.org"), undefined))).toBe(EMAIL_SIGN_IN_OFF);
         await expect(authz.authorize("sess-bo", undefined)).resolves.toMatchObject({ email: "bo@example.org", methods: ["email"] });
         // The owner takes it back: the session minted from the platform's word stops at its next request.
-        await members.add("bo@example.org", { role: "collaborator", emailSignIn: false });
+        await members.add("bo@example.org", { tier: "collaborator", emailSignIn: false });
         expect(await reasonOf(authz.authorize("sess-bo", undefined))).toBe(EMAIL_SIGN_IN_OFF);
     });
 
@@ -467,10 +467,10 @@ describe("identity assertion", () => {
             verify: verifierFor({}),
             session: sessionFor({ "sess-cy": "cy@example.org" }, ["email", "passkey"]),
             owner: memOwner("ada@example.org"),
-            members: memMembers([{ email: "cy@example.org", role: "viewer" }]),
+            members: memMembers([{ email: "cy@example.org", tier: "viewer" }]),
             identityAssertion: verifier(),
         });
-        await expect(authz.authorize("sess-cy", undefined)).resolves.toEqual({ email: "cy@example.org", role: "viewer", agents: "off", edits: "none", methods: ["email", "passkey"], renewal: true });
+        await expect(authz.authorize("sess-cy", undefined)).resolves.toEqual({ email: "cy@example.org", tier: "viewer", agents: "off", edits: "none", methods: ["email", "passkey"], renewal: true });
     });
 
     test("on a hosted machine opens it for anyone on the roster and binds without the connect token, as the owner ticket does", async () => {
@@ -478,14 +478,14 @@ describe("identity assertion", () => {
         const authz = createAuthorizer({
             verify: verifierFor({}),
             owner,
-            members: memMembers([{ email: "cy@example.org", role: "viewer" }]),
+            members: memMembers([{ email: "cy@example.org", tier: "viewer" }]),
             connectToken: "secret",
             expectedOwner: "ada@example.org",
             identityAssertion: verifier(),
             assertionsForAnyone: true,
         });
-        await expect(authz.authorize(assertionFor("ada@example.org"), undefined)).resolves.toEqual({ email: "ada@example.org", role: "owner", methods: ["email"] });
-        await expect(authz.authorize(assertionFor("cy@example.org"), undefined)).resolves.toEqual({ email: "cy@example.org", role: "viewer", agents: "off", edits: "none", methods: ["email"] });
+        await expect(authz.authorize(assertionFor("ada@example.org"), undefined)).resolves.toEqual({ email: "ada@example.org", tier: "owner", methods: ["email"] });
+        await expect(authz.authorize(assertionFor("cy@example.org"), undefined)).resolves.toEqual({ email: "cy@example.org", tier: "viewer", agents: "off", edits: "none", methods: ["email"] });
     });
 
     test("spends each assertion once, and refuses another sandbox's, another key's, and any without a verifier, never asking Google", async () => {
@@ -497,7 +497,7 @@ describe("identity assertion", () => {
         };
         const authz = createAuthorizer({ verify, owner: memOwner("ada@example.org", true), members: memMembers(), identityAssertion: verifier() });
         const once = assertionFor("ada@example.org");
-        await expect(authz.authorize(once, undefined)).resolves.toMatchObject({ role: "owner" });
+        await expect(authz.authorize(once, undefined)).resolves.toMatchObject({ tier: "owner" });
         await expect(authz.authorize(once, undefined)).rejects.toThrow("identity assertion refused: already spent");
         await expect(authz.authorize(assertionFor("ada@example.org", "ffffffffffff"), undefined)).rejects.toThrow("identity assertion refused: not for this sandbox");
         await expect(authz.authorize(assertionFor("ada@example.org", SANDBOX, otherKey), undefined)).rejects.toThrow("identity assertion refused: not for this sandbox");
@@ -519,19 +519,19 @@ describe("identity assertion", () => {
 
 describe("memberRow", () => {
     test("keeps a person's email sign-in through a re-grade that does not mention it, and drops it when told", () => {
-        const previous: Member = { email: "bo@example.org", role: "viewer", emailSignIn: true };
-        expect(memberRow("bo@example.org", { role: "collaborator" }, previous)).toEqual({ email: "bo@example.org", role: "collaborator", emailSignIn: true });
-        expect(memberRow("bo@example.org", { role: "collaborator", emailSignIn: false }, previous)).toEqual({ email: "bo@example.org", role: "collaborator" });
-        expect(memberRow("bo@example.org", { role: "viewer", emailSignIn: true })).toEqual({ email: "bo@example.org", role: "viewer", emailSignIn: true });
+        const previous: Member = { email: "bo@example.org", tier: "viewer", emailSignIn: true };
+        expect(memberRow("bo@example.org", { tier: "collaborator" }, previous)).toEqual({ email: "bo@example.org", tier: "collaborator", emailSignIn: true });
+        expect(memberRow("bo@example.org", { tier: "collaborator", emailSignIn: false }, previous)).toEqual({ email: "bo@example.org", tier: "collaborator" });
+        expect(memberRow("bo@example.org", { tier: "viewer", emailSignIn: true })).toEqual({ email: "bo@example.org", tier: "viewer", emailSignIn: true });
     });
 
     test("writes a home-only person's answer to landing as granted, and never keeps it through a grant that leaves it out", () => {
-        const previous: Member = { email: "bo@example.org", role: "guest", agents: "home", lands: true };
-        expect(memberRow("bo@example.org", { role: "guest", agents: "home", lands: true })).toEqual(previous);
-        expect(memberRow("bo@example.org", { role: "guest", agents: "home" }, previous)).toEqual({ email: "bo@example.org", role: "guest", agents: "home" });
-        expect(memberRow("bo@example.org", { role: "collaborator", agents: "run", lands: true }, previous)).toEqual({
+        const previous: Member = { email: "bo@example.org", tier: "guest", agents: "home", lands: true };
+        expect(memberRow("bo@example.org", { tier: "guest", agents: "home", lands: true })).toEqual(previous);
+        expect(memberRow("bo@example.org", { tier: "guest", agents: "home" }, previous)).toEqual({ email: "bo@example.org", tier: "guest", agents: "home" });
+        expect(memberRow("bo@example.org", { tier: "collaborator", agents: "run", lands: true }, previous)).toEqual({
             email: "bo@example.org",
-            role: "collaborator",
+            tier: "collaborator",
             agents: "run",
         });
     });
@@ -561,7 +561,7 @@ describe("require-passkey policy", () => {
 
     test("off: a Google proof opens every route, as before", async () => {
         const authz = withPolicy(policy(false, ["a@x.com"]), {});
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"] });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["google"] });
     });
 
     test("on: a Google proof is refused with 428's error, saying whether the caller holds a passkey to answer with", async () => {
@@ -577,7 +577,7 @@ describe("require-passkey policy", () => {
         // Holding none yet: the Google proof may register the first.
         await expect(authz.authorize("tok-m", undefined, { enrolment: true })).resolves.toEqual({
             email: "m@x.com",
-            role: "collaborator",
+            tier: "collaborator",
             agents: "run",
             edits: "none",
             methods: ["google"],
@@ -588,9 +588,9 @@ describe("require-passkey policy", () => {
 
     test("on: a session proven by a passkey or a recovery code passes; the hosted owner ticket alone does not", async () => {
         const passkey = withPolicy(policy(true, ["a@x.com"]), { "sess-a": "a@x.com" }, ["passkey"]);
-        await expect(passkey.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["passkey"], renewal: true });
+        await expect(passkey.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["passkey"], renewal: true });
         const recovered = withPolicy(policy(true, ["a@x.com"]), { "sess-a": "a@x.com" }, ["google", "recovery"]);
-        await expect(recovered.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google", "recovery"], renewal: true });
+        await expect(recovered.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["google", "recovery"], renewal: true });
 
         const pair = generateKeyPairSync("ed25519");
         const ticketed = createAuthorizer({
@@ -620,11 +620,11 @@ describe("require-passkey policy", () => {
         const authz = withPolicy(policy(true, ["a@x.com"]), {});
         await expect(authz.authorizeProven({ email: "A@x.com", methods: ["passkey"], credentialId: "c" })).resolves.toEqual({
             email: "A@x.com",
-            role: "owner",
+            tier: "owner",
             methods: ["passkey"],
             credentialId: "c",
         });
-        await expect(authz.authorizeProven({ email: "m@x.com", methods: ["passkey"] })).resolves.toMatchObject({ role: "collaborator" });
+        await expect(authz.authorizeProven({ email: "m@x.com", methods: ["passkey"] })).resolves.toMatchObject({ tier: "collaborator" });
         await expect(authz.authorizeProven({ email: "x@x.com", methods: ["passkey"] })).rejects.toBeInstanceOf(ForbiddenError);
         const unbound = createAuthorizer({ verify: verifierFor({}), owner: memOwner(), members: memMembers() });
         await expect(unbound.authorizeProven({ email: "a@x.com", methods: ["passkey"] })).rejects.toThrow(/no owner yet/);
@@ -632,7 +632,7 @@ describe("require-passkey policy", () => {
 
     test("the recovery and retirement doors take the owner's Google proof with the policy on, and nobody else's", async () => {
         const authz = withPolicy(policy(true, ["a@x.com"]), {});
-        await expect(authz.authorizeRecovery("tok-a")).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"] });
+        await expect(authz.authorizeRecovery("tok-a")).resolves.toEqual({ email: "a@x.com", tier: "owner", methods: ["google"] });
         await expect(authz.authorizeRecovery("tok-m")).rejects.toBeInstanceOf(ForbiddenError);
         await expect(authz.authorizeRecovery("")).rejects.toThrow(/missing bearer/);
         await expect(authz.authorizeRetirement("tok-a")).resolves.toBeUndefined();

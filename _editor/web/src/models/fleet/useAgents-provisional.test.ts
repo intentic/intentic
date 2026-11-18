@@ -16,7 +16,7 @@ jest.mock("../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc
 jest.mock("../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
 // The rail's Attention count asks whether the reader runs the sandbox (useAgents-fleet.ts); an owner hears every card.
 jest.mock("../../client/sandbox/access/useAccess", () => ({
-    useAccess: () => ({ known: { value: true }, role: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
+    useAccess: () => ({ known: { value: true }, tier: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
 }));
 jest.mock("../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));
 

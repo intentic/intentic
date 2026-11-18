@@ -171,7 +171,7 @@ export const openEntries = <D extends AnyDocument<"entries", false>, E = Documen
     return jsonEntries<E>(path, { ...rest, entry, document: spec });
 };
 
-// A list of entries keyed by `id`, edited one entry at a time (personas, areas, capabilities).
+// A list of entries keyed by `id`, edited one entry at a time (roles, areas, capabilities).
 export const openIdList = <D extends AnyDocument<"entries", false>>(
     spec: D,
     path: string,

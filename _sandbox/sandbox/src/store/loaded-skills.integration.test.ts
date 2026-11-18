@@ -80,7 +80,7 @@ test("the prompt catalogue lists every skill name-ordered and reflects rewrites"
 });
 
 // A withheld account's skill stays on disk; offered in the catalogue, it reads as an invitation (2026-10-25: an X-only
-// persona was offered `chrome` and asked the owner's own browser for x.com).
+// role was offered `chrome` and asked the owner's own browser for x.com).
 test("the prompt catalogue leaves out the skills the turn may not use, and says nothing when none is left", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
     await writeLoadedSkill(FILES, root, "x", "---\nname: x\ndescription: X.\n---\n\nX.\n", "owner");

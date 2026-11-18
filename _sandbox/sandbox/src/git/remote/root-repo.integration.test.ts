@@ -64,7 +64,7 @@ test("the baseline commits the config slice and still refuses every credential a
     await mkdir(join(work, `${STATE_DIR}`, "records", "approvals"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "identity"), { recursive: true });
     // Config files: expected to end up tracked.
-    await writeFile(join(work, `${STATE_DIR}`, "config", "personas.json"), `[{"id":"work","capabilities":["reddit-work"]}]\n`);
+    await writeFile(join(work, `${STATE_DIR}`, "config", "roles.json"), `[{"id":"work","capabilities":["reddit-work"]}]\n`);
     await writeFile(join(work, `${STATE_DIR}`, "config", "settings.json"), "{}\n");
     await writeFile(join(work, `${STATE_DIR}`, "config", "automations.json"), "[]\n");
     await writeFile(join(work, `${STATE_DIR}`, "config", "environment.custom.Dockerfile"), "RUN echo hi\n");
@@ -98,7 +98,7 @@ test("the baseline commits the config slice and still refuses every credential a
         ".intentic/config/capabilities.json",
         ".intentic/config/environment.custom.Dockerfile",
         ".intentic/config/environment.d/rust.Dockerfile",
-        ".intentic/config/personas.json",
+        ".intentic/config/roles.json",
         ".intentic/config/settings.json",
         ".intentic/config/workspace-extensions/rail-demo/extension.js",
         ".intentic/config/workspace-extensions/rail-demo/intentic-extension.json",

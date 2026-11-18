@@ -173,7 +173,7 @@ test("the browsers are told apart, and a site with a sandbox account goes to tha
         expect(text).toContain("login wall that says nothing about the account");
         expect(text).toContain("It is NOT for a site the sandbox holds its own signed-in account on");
     }
-    // A persona without the browser shelf has only the accounts' server, and is not told of a `web` it lacks.
+    // A role without the browser shelf has only the accounts' server, and is not told of a `web` it lacks.
     const accountsOnly = guidanceBlock({ ...OTHER_MOUNTED, anonymousBrowser: false });
     expect(accountsOnly).not.toContain("mcp__web__");
     expect(accountsOnly).toContain("mcp__browser__browser_navigate");

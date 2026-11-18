@@ -109,7 +109,7 @@ const notice = (issue: DependencyIssue, names: readonly string[], canInstall: bo
                 : canInstall
                   ? `This project has never been set up: run its install yourself (a conversation in its own worktree installs ` +
                     `into its own copy of the tree), or call \`mcp__deps__install\` to have the daemon install it in the main tree and wait. `
-                  : `This project has never been set up and this persona cannot change it; ask the owner to install it. `
+                  : `This project has never been set up and this role cannot change it; ask the owner to install it. `
         }Everything ` +
         `already installed checks normally in the meantime: call \`mcp__deps__status\` for which projects those are.`
     );

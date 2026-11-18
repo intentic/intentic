@@ -14,10 +14,11 @@ import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { usePanels } from "../../../models/extensions/usePanels";
-import { personaStartDirs } from "../../../models/sandbox/personas/personaRules";
-import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import { roleStartDirs } from "../../../models/sandbox/roles/roleRules";
+import { useRoles } from "../../../models/sandbox/roles/useRoles";
 import { useRepoChecks } from "../../../models/sandbox/environment/useRepoChecks";
-import { lensPersonaId, reachOf, reachTip } from "../directory-ui/personaReach";
+import { lensRoleId } from "../directory-ui/roleReach";
+import { useLensTip } from "../directory-ui/useRoleAccess";
 import { isShared, scopeKey, workspaceDir, workspaceView } from "../../../app/workspaceScope";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
@@ -56,7 +57,7 @@ import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
 import { useRunTargets } from "../../../models/runs/useRunTargets";
 import { runViewLink } from "../../../models/runs/runView";
 import { RouterLink, useRouter } from "vue-router";
-import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
+import DirectoryRoles from "../directory-ui/DirectoryRoles.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
@@ -286,11 +287,11 @@ const manageableDirs = computed(
             ),
         ),
 );
-// Personas whose sessions start in each folder, computed once per render rather than re-filtered per row.
-const { personas } = usePersonas();
-const personaDirs = computed(() => personaStartDirs(personas.value));
-// Folder whose personas are open in the quick panel; undefined means closed.
-const personaDir = ref<string | undefined>(undefined);
+// Roles whose sessions start in each folder, computed once per render rather than re-filtered per row.
+const { roles } = useRoles();
+const roleDirs = computed(() => roleStartDirs(roles.value));
+// Folder whose roles are open in the quick panel; undefined means closed.
+const roleDir = ref<string | undefined>(undefined);
 
 // Repositories carrying their own checks, keyed by repo id, which is also the tree path for every repo but the
 // workspace root (which has no row of its own).
@@ -321,17 +322,17 @@ const runDirs = computed(() => {
 // The workspace root's own count, for the toolbar's ▷: the root has no row to carry it.
 const rootRuns = computed(() => runDirs.value.get(`root`) ?? 0);
 
-// What each directory row offers beside its name (documents, personas, checks, management). Composed here, where the
+// What each directory row offers beside its name (documents, roles, checks, management). Composed here, where the
 // openers live; passed as a function so only on-screen rows are asked.
 const rowActions = (dir: string): readonly RowAction[] =>
     rowActionsFor(dir, {
         plain: maker.value,
         manageableDirs: manageableDirs.value,
-        personaDirs: personaDirs.value,
+        roleDirs: roleDirs.value,
         checkDirs: checkDirs.value,
         openDirectory,
-        openPersonas: (target: string): void => {
-            personaDir.value = target;
+        openRoles: (target: string): void => {
+            roleDir.value = target;
         },
         openChecks: (target: string): void => {
             checksDir.value = target;
@@ -410,11 +411,11 @@ const sidebarSeamWidth = computed<number>({
     set: (px) => layout.setSidebarWidth(toAppPx(px)),
 });
 
-// The workspace's own rows in the search bar's funnel (ExplorerSearchBar.vue): the persona lens filters the list to what
-// a persona's own reach would show, checked against the real tree rather than the card's text. A radio group (one at a
+// The workspace's own rows in the search bar's funnel (ExplorerSearchBar.vue): the role lens filters the list to what
+// a role's own reach would show, checked against the real tree rather than the card's text. A radio group (one at a
 // time); "Nobody" is the off state.
-const personaLensItems = computed<MenuItem[]>(() =>
-    personas.value.length === 0
+const roleLensItems = computed<MenuItem[]>(() =>
+    roles.value.length === 0
         ? []
         : [
               {
@@ -422,13 +423,13 @@ const personaLensItems = computed<MenuItem[]>(() =>
                   items: [
                       {
                           label: t(`workspace.workspaceDesktop.nobody`),
-                          checked: lensPersonaId.value === undefined,
-                          command: () => (lensPersonaId.value = undefined),
+                          checked: lensRoleId.value === undefined,
+                          command: () => (lensRoleId.value = undefined),
                       },
-                      ...personas.value.map((persona) => ({
-                          label: persona.label ?? persona.id,
-                          checked: lensPersonaId.value === persona.id,
-                          command: () => (lensPersonaId.value = persona.id),
+                      ...roles.value.map((role) => ({
+                          label: role.label ?? role.id,
+                          checked: lensRoleId.value === role.id,
+                          command: () => (lensRoleId.value = role.id),
                       })),
                   ],
               },
@@ -437,10 +438,8 @@ const personaLensItems = computed<MenuItem[]>(() =>
 
 // The lens's folder list rides a tooltip on the already-lit funnel, not a separate stripe (whose folder names
 // wrapped to two lines).
-const lensCard = computed(() => personas.value.find((persona) => persona.id === lensPersonaId.value));
-const lensTip = computed(() =>
-    lensCard.value === undefined ? undefined : reachTip(lensCard.value.label ?? lensCard.value.id, reachOf(lensCard.value)),
-);
+const lensCard = computed(() => roles.value.find((role) => role.id === lensRoleId.value));
+const lensTip = useLensTip(lensCard);
 
 // This view's root, where a clipboard write targets the visible window, not the opener's (see clipboardOf).
 const rootEl = ref<HTMLElement>();
@@ -719,8 +718,8 @@ const homeTooltip = computed((): Tip => ({
                     v-if="layout.sidebarPanel.value === 'files'"
                     ref="searchBar"
                     :search="explorerSearch"
-                    :tree-filters="personaLensItems"
-                    :tree-filtered="lensPersonaId !== undefined"
+                    :tree-filters="roleLensItems"
+                    :tree-filtered="lensRoleId !== undefined"
                     :filter-tip="lensTip"
                 >
                     <template #tools>
@@ -915,7 +914,7 @@ const homeTooltip = computed((): Tip => ({
         <CloseGuardDialog :open="askingToClose" :question="closeQuestion" @cancel="keepOpen" @confirm="closeAnyway" />
         <BringProjectModal @pick="fileInput?.click()" />
         <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
-        <DirectoryPersonas v-model="personaDir" />
+        <DirectoryRoles v-model="roleDir" />
         <DirectoryChecks v-model="checksDir" />
         <!-- The pill a row or tile becomes while the pointer carries it, over either surface. -->
         <EntryDragGhost />

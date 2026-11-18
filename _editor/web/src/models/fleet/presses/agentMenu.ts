@@ -19,7 +19,7 @@ import { canArchive, type FleetAgent } from "../useAgents-fleet";
 export interface AgentMenuFacts {
     // The agent is this sandbox's, so writes through the active daemon's roster reach it.
     readonly here: boolean;
-    // The reader is a maintainer, whom the daemon lets land (useRole.canShip).
+    // The reader is a maintainer, whom the daemon lets land (useTier.canShip).
     readonly canShip: boolean;
 }
 

@@ -15,7 +15,7 @@ const { pushedKeys } = await import("../../lib/queryKeys");
 const EXTENSIONS_ROOT = join(repoRoot(import.meta.url), `_extensions`);
 
 // Every `.key("name")` call an extension's sources register, and every contract read it keys by procedure
-// (`.readKey("personas.list")`), which a pushed name reaches through the registry's PUSHED_READS; found by scanning
+// (`.readKey("roles.list")`), which a pushed name reaches through the registry's PUSHED_READS; found by scanning
 // source text, so a key built another way is not detected.
 const registeredKeys = (dir: string): Set<string> => {
     const walk = (from: string): string[] =>

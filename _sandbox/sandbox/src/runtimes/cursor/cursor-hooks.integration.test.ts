@@ -129,12 +129,12 @@ test("a registered turn receives its exact capability environment", async () => 
     const { service: hooks, dir } = await started();
     hooks.register({
         conversationId: "agent-1",
-        cliEnv: { DISCORD_BOT_TOKEN_DISCORD: "fake-token", INTENTIC_PERSONA: "release-editor" },
+        cliEnv: { DISCORD_BOT_TOKEN_DISCORD: "fake-token", INTENTIC_ROLE: "release-editor" },
         gate: allowing(),
         push: () => {},
     });
     expect(await askSessionEnv(dir, { conversation_id: "agent-1" })).toEqual({
-        env: { DISCORD_BOT_TOKEN_DISCORD: "fake-token", INTENTIC_PERSONA: "release-editor" },
+        env: { DISCORD_BOT_TOKEN_DISCORD: "fake-token", INTENTIC_ROLE: "release-editor" },
     });
 });
 
@@ -152,7 +152,7 @@ test("retiring a turn removes its capability environment", async () => {
     expect(await askSessionEnv(dir, { conversation_id: "agent-1" })).toEqual({ env: {} });
 });
 
-// The runtime's only system seam: without this hook the persona note, the workspace's standing instructions and the
+// The runtime's only system seam: without this hook the role note, the workspace's standing instructions and the
 // owner's own prompt are composed by turn-plan and then reach nothing.
 test("a registered turn's standing instructions ride beforeSubmitPrompt as added context", async () => {
     const { service: hooks, dir } = await started();
@@ -161,7 +161,7 @@ test("a registered turn's standing instructions ride beforeSubmitPrompt as added
     expect(await askPrompt(dir, { conversation_id: "agent-1", prompt: "ship it" })).toEqual({ continue: true, additional_context: append });
 });
 
-// Same rule as the environment above, and for the same reason: the append names the persona and quotes the workspace's
+// Same rule as the environment above, and for the same reason: the append names the role and quotes the workspace's
 // own rules, so it may never reach a Cursor process this daemon did not start.
 test("added context requires an exact conversation id even with one turn running", async () => {
     const { service: hooks, dir } = await started();

@@ -16,10 +16,10 @@ import type { DemoHandler } from "./transport";
 export const demoSelf = (): MemberSelf => {
     // The owner and Full access run every part of the sandbox, as the daemon answers them.
     if (demoTier === `owner`) {
-        return { role: `owner`, agents: `run`, edit: `all`, manages: [...MANAGE_RIGHTS] };
+        return { tier: `owner`, agents: `run`, edit: `all`, manages: [...MANAGE_RIGHTS] };
     }
-    const access = memberAccess({ role: demoTier, manages: demoTier === `maintainer` ? undefined : demoManages });
-    const self: MemberSelf = { role: demoTier, agents: access.agents, edit: access.edit === `all` || access.edit === `none` ? access.edit : [...access.edit] };
+    const access = memberAccess({ tier: demoTier, manages: demoTier === `maintainer` ? undefined : demoManages });
+    const self: MemberSelf = { tier: demoTier, agents: access.agents, edit: access.edit === `all` || access.edit === `none` ? access.edit : [...access.edit] };
     const manages = demoTier === `maintainer` ? MANAGE_RIGHTS : (access.manages ?? []);
     if (manages.length > 0) {
         self.manages = [...manages];
@@ -46,7 +46,7 @@ export const withFloors =
         }
         const self = demoSelf();
         const refusal = memberRefusal(
-            { role: self.role, agents: self.agents, areas: self.areas, manages: self.manages },
+            { tier: self.tier, agents: self.agents, areas: self.areas, manages: self.manages },
             request.method,
             url.pathname,
             url.searchParams.get(`path`) ?? undefined,

@@ -18,7 +18,7 @@ const KEY = [`account`, `projects`];
 
 const claims = useQuery({ queryKey: KEY, queryFn: async (): Promise<ProjectClaim[]> => (await apiClient.projects.list()).claims });
 const { sandboxes } = useSandbox();
-const owned = computed(() => sandboxes.value.filter((sandbox) => sandbox.role === `owner`));
+const owned = computed(() => sandboxes.value.filter((sandbox) => sandbox.tier === `owner`));
 
 const project = ref(``);
 const sandboxId = ref(``);

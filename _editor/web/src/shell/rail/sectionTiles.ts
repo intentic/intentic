@@ -3,7 +3,7 @@ import type { IconName } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, watch } from "vue";
 import { SHARED_SCOPE } from "../../app/workspaceScope";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { extensionsLoaded } from "../../extension-host/loader";
 import { devicesWorking } from "../../features/sandbox/devices/runners/deviceWork";
 import { pushBadge } from "../../features/workspace/push/pushBadge";
@@ -124,7 +124,7 @@ export function useSectionTiles(leading: () => readonly SectionTile[] = () => []
     const { panels, loaded: panelsRead } = usePanels();
     const { capabilities, loaded: capabilitiesRead } = useCapabilities();
     // Devices is ship-tier only: the hub withholds the section below maintainer, where the daemon refuses what it is for.
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     // The audience's words for the core tiles that have maker names (Files); Agents keeps its own.
     const words = useVocabulary();
     const workspaceBadge = useWorkspaceBadge();

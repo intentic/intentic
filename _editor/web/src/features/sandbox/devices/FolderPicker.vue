@@ -7,7 +7,7 @@ import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { useT } from "@intentic/ui/i18n";
 
-// Folder picker as a tree, not a text field, so a typo can't fence a persona to a nonexistent folder.
+// Folder picker as a tree, not a text field, so a typo can't fence a role to a nonexistent folder.
 // Directories only; ignored ones (node_modules, .git, gitignored) are excluded. Shows what is stored, not what
 // resolves — an absent folder keeps its chip — and keeps its own expansion state, separate from the explorer's.
 

@@ -10,7 +10,7 @@ const attention = ref(0);
 const fleet = ref<unknown[]>([]);
 jest.mock("../useAgents", () => ({ useAgents: () => ({ attention, fleet, heldWakes: ref([]) }) }));
 // Read by the tile's own watch, which this test mounts outside any sandbox or session.
-jest.mock("../../sandbox/personas/usePersonas", () => ({ usePersonas: () => ({ personas: ref([]) }) }));
+jest.mock("../../sandbox/roles/useRoles", () => ({ useRoles: () => ({ roles: ref([]) }) }));
 jest.mock("../../../client/auth/useAuth", () => ({ useAuth: () => ({ user: ref(null) }) }));
 
 // The read-marker watch is fleetScope's own, tested there; here it is a spy.

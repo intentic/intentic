@@ -1,4 +1,4 @@
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { type Component, computed, type ComputedRef, defineComponent, h } from "vue";
 import type { AccessReason } from "../client/sandbox/access/accessReason";
 import { type AccessRoute, useAccess } from "../client/sandbox/access/useAccess";
@@ -21,10 +21,10 @@ export interface HeldPlace {
 
 export const useHeldPlace = (route?: AccessRoute): HeldPlace => {
     const access = useAccess();
-    const maintainer = computed(() => access.role.value !== undefined && roleAtLeast(access.role.value, `maintainer`));
+    const maintainer = computed(() => access.tier.value !== undefined && tierAtLeast(access.tier.value, `maintainer`));
     const refused = computed<AccessReason | undefined>(() => {
-        const role = access.role.value;
-        if (role === undefined || role === `guest`) {
+        const tier = access.tier.value;
+        if (tier === undefined || tier === `guest`) {
             return undefined;
         }
         const said = route === undefined ? undefined : access.refusal(route);
@@ -62,7 +62,7 @@ export const heldView = (view: Component, place: () => string, route?: AccessRou
 export const useHeldDoor = (route?: AccessRoute): ComputedRef<boolean> => {
     const access = useAccess();
     const { refused } = useHeldPlace(route);
-    return computed(() => access.role.value !== `guest` && refused.value === undefined);
+    return computed(() => access.tier.value !== `guest` && refused.value === undefined);
 };
 
 /**
@@ -71,6 +71,6 @@ export const useHeldDoor = (route?: AccessRoute): ComputedRef<boolean> => {
  * (sandbox terminal/terminal-plan.ts), which no route's floor says.
  */
 export const belowMaintainer = (): boolean => {
-    const role = useAccess().role.value;
-    return role !== undefined && !roleAtLeast(role, `maintainer`);
+    const tier = useAccess().tier.value;
+    return tier !== undefined && !tierAtLeast(tier, `maintainer`);
 };

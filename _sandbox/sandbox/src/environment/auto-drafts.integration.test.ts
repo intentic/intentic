@@ -87,7 +87,7 @@ test.each([String.raw`tool\name`, "tool[", "tool(foo)", "tool|other", "tool.*", 
     },
 );
 
-test("a tool name cannot impersonate another installed package", () => {
+test("a tool name cannot imrolete another installed package", () => {
     expect(named("RUN install toolname", String.raw`tool\name`)).toBe(false);
     expect(named("RUN install other", "tool|other")).toBe(false);
     expect(named("RUN install toolZZ", "tool.*")).toBe(false);

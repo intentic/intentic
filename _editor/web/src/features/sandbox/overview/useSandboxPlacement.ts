@@ -26,5 +26,5 @@ export function useSandboxPlacement(): ComputedRef<SandboxPlacement | undefined>
 
 // Any other row in a list of sandboxes: the platform row, plus this browser's memory of having reached it over
 // loopback, so a sandbox on this computer says so whether or not it is the one selected.
-export const rowPlacement = (sandbox: Pick<SandboxSummary, "id" | "hosted" | "role" | "daemonUrl">): SandboxPlacement =>
+export const rowPlacement = (sandbox: Pick<SandboxSummary, "id" | "hosted" | "tier" | "daemonUrl">): SandboxPlacement =>
     placementOf(sandbox, { onThisComputer: seenOnThisComputer(sandbox.id) });

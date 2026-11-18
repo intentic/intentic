@@ -123,7 +123,7 @@ export const requireRootAgentExecution = (context: AgentExecutionContext, operat
 };
 
 // armPlan may replace words/model fields, but not choose a different execution view or namespace by replacing spec.
-// The cwd check is containment, not equality: a persona's startIn resolves to a subfolder of the admitted root
+// The cwd check is containment, not equality: a role's startIn resolves to a subfolder of the admitted root
 // (honoured.ts), which is still inside the view the turn was admitted into. Plan and anchor stay exact identity, and an
 // absent isolation is a claim too: every runtime spawns through `spec.isolation?.anchor` (agent.ts runtimeSpawn, the
 // Pi/Cursor/Codex loops), so a spec that dropped it would launch outside the anchored namespace. A request that holds

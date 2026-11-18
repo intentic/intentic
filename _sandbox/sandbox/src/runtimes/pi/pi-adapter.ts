@@ -19,12 +19,12 @@ import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
-import { personaSkillsRoot } from "../../personas/persona-kit.js";
+import { roleSkillsRoot } from "../../roles/role-kit.js";
 import { skillFolderNames } from "../../skill-file.js";
 import { loadedSkillsRoot } from "../../store/loaded-skills.js";
 import { requireRootAgentExecution } from "../../workload/agent-execution.js";
 import { turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
-import { turnPersona } from "../../personas/personas.js";
+import { turnRole } from "../../roles/roles.js";
 import { type DaemonServersDeps, daemonServersFor } from "../daemon-tools/daemon-servers.js";
 
 // The Pi row: the reserved `pi` agent-kind capability, served over Pi's own RPC protocol. A plain adapter rather than a
@@ -38,21 +38,21 @@ export type PiAdapterDeps = TurnToolsDeps &
     Pick<Services, "capabilities" | "piAgent" | "probePiAgent" | "sandboxSettings" | "workspace">;
 
 // The skills a Pi turn loads (`--skill`, with Pi's own discovery off): the workspace's loaded skills and the image's own
-// less those the persona or a credential gate denies (TurnPolicy.disallowedTools names them `Skill(<name>)`, as the
-// Claude Code loop is told), a workspace skill standing in for a built-in of its name, and the worn persona's own kit.
+// less those the role or a credential gate denies (TurnPolicy.disallowedTools names them `Skill(<name>)`, as the
+// Claude Code loop is told), a workspace skill standing in for a built-in of its name, and the worn role's own kit.
 // Listed off the conversation's tree as the daemon sees it, named as Pi sees it, so an isolated turn loads its
 // worktree's copies (AgentCapabilities.skillDiscovery: every origin).
-export const piSkillsOf = async (context: Pick<TurnContext, "localCwd" | "effectiveCwd" | "base" | "persona">, builtInRoot: string): Promise<string[]> => {
+export const piSkillsOf = async (context: Pick<TurnContext, "localCwd" | "effectiveCwd" | "base" | "role">, builtInRoot: string): Promise<string[]> => {
     const denied = new Set(context.base.policy.disallowedTools ?? []);
     const names = (await skillFolderNames(loadedSkillsRoot(context.localCwd))).filter((name) => !denied.has(`Skill(${name})`));
     const baked = builtInRoot === "" ? [] : await skillFolderNames(builtInRoot);
     const builtIn = baked.filter((name) => !denied.has(`Skill(${name})`) && !names.includes(name));
     const loaded = [...names.map((name) => join(loadedSkillsRoot(context.effectiveCwd), name)), ...builtIn.map((name) => join(builtInRoot, name))];
-    const persona = context.persona?.persona?.id;
+    const role = context.role?.role?.id;
     const kit =
-        persona === undefined || (await skillFolderNames(personaSkillsRoot(context.localCwd, persona))).length === 0
+        role === undefined || (await skillFolderNames(roleSkillsRoot(context.localCwd, role))).length === 0
             ? []
-            : [personaSkillsRoot(context.effectiveCwd, persona)];
+            : [roleSkillsRoot(context.effectiveCwd, role)];
     return [...loaded, ...kit];
 };
 
@@ -74,18 +74,18 @@ export const planPiTurn = async (
     }
     const mounted = await turnToolsOf(services, granted, {
         conversationId: input.conversationId,
-        anonymousBrowser: context.persona?.powers.browser ?? true,
-        shell: context.persona?.powers.shell ?? true,
-        extensions: context.persona?.powers.extensions,
+        anonymousBrowser: context.role?.powers.browser ?? true,
+        shell: context.role?.powers.shell ?? true,
+        extensions: context.role?.powers.extensions,
     });
     const skills = await piSkillsOf(context, services.config.builtInSkillsDir);
-    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    const role = context.role ?? turnRole({ roles: [], actsAs: undefined, unattended: false });
     const settings = context.settings ?? (await services.sandboxSettings.get());
     // One secret seam for the turn: what its shell lines resolve, its results are masked against, and its typist uses.
     const secrets = context.base.tools.secrets ?? turnSecretAccess(services, input, context.base.signal);
     const withSecrets: TurnContext = { ...context, base: { ...context.base, tools: { ...context.base.tools, secrets } } };
     // Pi's own hook socket stands in front of every tool (pi-hooks.ts), so the gate server would only be three more tools.
-    const daemon = daemonServersFor(services, { input, context: withSecrets, persona, granted, settings, mounted, gate: false });
+    const daemon = daemonServersFor(services, { input, context: withSecrets, role, granted, settings, mounted, gate: false });
     const tools = [...mounted.tools, ...daemon.tools];
     const sealedAtDoor = daemon.tools.map((tool) => tool.name);
     return armPlan(

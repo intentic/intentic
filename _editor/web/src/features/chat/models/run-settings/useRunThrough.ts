@@ -215,7 +215,7 @@ export const useRunThrough = (
                 conversation.value.loopId.value = undefined;
             }
         },
-        // Same errand as the persona menu's Manage; the only door left to the long loop form. That form is the Workflows
+        // Same errand as the role menu's Manage; the only door left to the long loop form. That form is the Workflows
         // extension's page, a listed extension: where it isn't installed or is off, the door is where to set it up.
         manage: (): void => {
             open.value = false;

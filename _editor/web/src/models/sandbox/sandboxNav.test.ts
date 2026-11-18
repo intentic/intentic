@@ -15,7 +15,7 @@ it(`files what is set about data and what happened as two rows, after everything
     expect(filing()).toEqual([
         [`box`, [`overview`, `usage`]],
         [`configuration`, [`models`, `agent`, `environment`, `secrets`, `extensions`]],
-        [`reach`, [`access`, `personas`, `map`]],
+        [`reach`, [`access`, `roles`, `map`]],
         [`oversight`, [`privacy`, `activity`]],
     ]);
 });

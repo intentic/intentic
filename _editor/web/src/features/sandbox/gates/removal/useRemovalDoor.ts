@@ -22,7 +22,7 @@ export interface RemovalDoorReading {
 
 // Only an owner's own-machine row has a container a press could reach; a hosted one is the platform's to stop.
 const ownMachineRow = (row: SandboxSummary | undefined): string | undefined =>
-    row !== undefined && row.role === `owner` && row.hosted === null ? row.id : undefined;
+    row !== undefined && row.tier === `owner` && row.hosted === null ? row.id : undefined;
 
 // FROM A LOCAL WINDOW, the one machine its page can reach is the one it runs on, through the app: the daemons that relay a
 // press from the workspace refuse this page's origin. So the door is this computer, when its engine holds the sandbox,

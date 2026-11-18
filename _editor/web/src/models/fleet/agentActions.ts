@@ -17,7 +17,7 @@ import { transcriptShown } from "../conversations/run/useChat-sessions";
 import { composingConversation, draftConversation } from "../conversations/panel/useChat-reveal";
 import { queryClient } from "../../lib/queryPersistence";
 import { projectScope } from "../../app/projectScope";
-import { ensureProjectPersona, projectPersonaId } from "../sandbox/personas/projectPersona";
+import { ensureProjectRole, projectRoleId } from "../sandbox/roles/projectRole";
 import { navigation } from "../../workbench/navigation/navigation";
 import { here, page } from "../../lib/routes/links";
 import { otherBoxes, refreshAcross } from "../sandbox/live/fleetAcross";
@@ -83,14 +83,14 @@ export const startAgent = (
     // "New agent", as one action across every surface (board button, chat strip's +, mobile +): summon the tab in every
     // window, put the caret in its composer, and on mobile navigate to it. A press over an untouched draft reuses it
     // instead of minting a second one.
-    // A conversation started while a project is open belongs to it: opened there, and, when no persona was named,
-    // wearing the project's own (projectPersona.ts), which fences it to the project rather than only starting it
-    // there. A named persona is the caller's choice and stands.
+    // A conversation started while a project is open belongs to it: opened there, and, when no role was named,
+    // wearing the project's own (projectRole.ts), which fences it to the project rather than only starting it
+    // there. A named role is the caller's choice and stands.
     const project = projectScope.value;
-    const fitted = actsAs === undefined && project !== undefined ? ensureProjectPersona(project) : undefined;
+    const fitted = actsAs === undefined && project !== undefined ? ensureProjectRole(project) : undefined;
     conversation.selection.apply({
         kind: `set`,
-        picks: { actsAs: actsAs ?? (project === undefined ? undefined : projectPersonaId(project)), startIn: project },
+        picks: { actsAs: actsAs ?? (project === undefined ? undefined : projectRoleId(project)), startIn: project },
     });
     // The prompt rides the summons, so the turn runs in the window drawing the chat rather than whichever one was
     // clicked (summonTurn).
@@ -104,12 +104,12 @@ export const startAgent = (
     if (fitted === undefined) {
         return conversation.conversationId;
     }
-    // The card exists before the first prompt goes, or the daemon would answer an unknown persona with an ordinary
+    // The card exists before the first prompt goes, or the daemon would answer an unknown role with an ordinary
     // chat; a daemon that refuses the card leaves the conversation unpinned rather than pinned to nothing.
     void fitted
         .catch((error: unknown) => {
             // The turn still goes, unfenced: the one trace of why is this line.
-            console.warn(`startAgent: project persona for ${project} was refused; the conversation runs unfenced`, error);
+            console.warn(`startAgent: project role for ${project} was refused; the conversation runs unfenced`, error);
             conversation.selection.apply({ kind: `set`, picks: { actsAs: undefined } });
         })
         .then(() => (prompt === undefined ? undefined : summonTurn(conversation, prompt, opening?.files, openingBooking(conversation))));

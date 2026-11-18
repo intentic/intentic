@@ -103,7 +103,7 @@
         "enabledIn": "enabled in {where}",
         "filesPinned": "The approval also covers these files, byte for byte:",
         "fromExtension": "brought by an extension",
-        "fromPersona": "a persona's kit",
+        "fromRole": "a role's kit",
         "fromPlugin": "a plugin connection",
         "fromProjectSettings": "workspace .claude/settings.json",
         "fromSkills": "a plugin folder among the skills",

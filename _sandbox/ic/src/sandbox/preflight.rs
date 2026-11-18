@@ -408,7 +408,7 @@ mod tests {
                         "upgrades the conversations database schema"
                     ),
                     entry(
-                        ".intentic/config/personas.json",
+                        ".intentic/config/roles.json",
                         "moves it from .intentic/identities.json"
                     ),
                 ],

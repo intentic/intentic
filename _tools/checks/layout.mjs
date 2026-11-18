@@ -151,7 +151,12 @@ const wireGroups = new Set(
     tracked.filter((path) => /\/contracts\/[^/]+\.contract\.ts$/.test(path)).map((path) => basename(path).replace(/\.contract\.ts$/, "")),
 );
 // Pairs excluded for a reason other than the wire; each entry names a deliberate exception.
-const TOLERATED_TWINS = new Map();
+const TOLERATED_TWINS = new Map([
+    [
+        "_sandbox/sandbox/src: roles/rules",
+        "both are the product's own words: roles (what a conversation wears, the `roles` wire group, personas until 2026-11-18) and rules (the settings' rules a turn runs under); neither has a truer name",
+    ],
+]);
 const oneApart = (a, b) => {
     if (a.length === b.length) {
         return a.split("").filter((c, i) => c !== b[i]).length === 1;

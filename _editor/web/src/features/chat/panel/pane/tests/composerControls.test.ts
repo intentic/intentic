@@ -42,7 +42,7 @@ const rowOf = () => {
     const pills = {
         mode: ref<HTMLElement>(document.createElement(`button`)),
         placement: ref<HTMLElement>(document.createElement(`button`)),
-        persona: ref<HTMLElement>(),
+        role: ref<HTMLElement>(),
         runThrough: ref<HTMLElement>(),
         more: ref<HTMLElement>(document.createElement(`button`)),
     };
@@ -84,20 +84,20 @@ afterEach(() => {
 describe(`the row and its overflow`, () => {
     it(`keeps each control in the overflow at this chat's default, and brings a set one into the row`, () => {
         const { chat, mode, runState, row } = rowOf();
-        expect(keys(row)).toEqual([`mode`, `startFrom`, `persona`, `runThrough`, `land`]);
-        expect(row.inRow.value).toEqual({ mode: false, placement: false, startFrom: false, persona: false, runThrough: false, voice: false, land: false });
+        expect(keys(row)).toEqual([`mode`, `startFrom`, `role`, `runThrough`, `land`]);
+        expect(row.inRow.value).toEqual({ mode: false, placement: false, startFrom: false, role: false, runThrough: false, voice: false, land: false });
         expect(row.laterOffered.value).toBe(true);
 
         mode.value = `plan`;
         chat.selection.apply({ kind: `set`, picks: { actsAs: `backend` } });
         chat.autoLandDraft.value = true;
         expect(keys(row)).toEqual([`startFrom`, `runThrough`]);
-        expect(row.inRow.value).toEqual({ mode: true, placement: false, startFrom: false, persona: true, runThrough: false, voice: false, land: true });
+        expect(row.inRow.value).toEqual({ mode: true, placement: false, startFrom: false, role: true, runThrough: false, voice: false, land: true });
 
         // A loop takes the send somewhere a booking cannot follow: the send's caret offers no later then.
         runState.value = `loop`;
         expect(keys(row)).toEqual([`startFrom`]);
-        expect(row.inRow.value).toEqual({ mode: true, placement: false, startFrom: false, persona: true, runThrough: true, voice: false, land: true });
+        expect(row.inRow.value).toEqual({ mode: true, placement: false, startFrom: false, role: true, runThrough: true, voice: false, land: true });
         expect(row.laterOffered.value).toBe(false);
     });
 
@@ -107,18 +107,18 @@ describe(`the row and its overflow`, () => {
 
         // On the roster: the daemon has an entry to place into, whatever this tab has latched.
         rostered.value = [`c1`];
-        expect(keys(row)).toEqual([`mode`, `startFrom`, `persona`, `runThrough`, `voice`, `land`]);
+        expect(keys(row)).toEqual([`mode`, `startFrom`, `role`, `runThrough`, `voice`, `land`]);
 
         // Registered, landing is the card's to answer: with no card on its branch in this window, it is not offered.
         rostered.value = [];
         chat.registered.value = true;
-        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `voice`]);
+        expect(keys(row)).toEqual([`mode`, `role`, `runThrough`, `voice`]);
 
         row.voiceAgent.value = true;
         expect(row.inRow.value.voice).toBe(true);
     });
 
-    it(`offers no persona to a chat living in another box`, () => {
+    it(`offers no role to a chat living in another box`, () => {
         const { chat, row } = rowOf();
 
         chat.box.value = `box-2`;
@@ -129,7 +129,7 @@ describe(`the row and its overflow`, () => {
 
     it(`hands a row to the picker that owns it, closing itself first; the voice and landing rows are the press`, () => {
         const { chat, runThrough, startFrom, row } = rowOf();
-        const picks = [`mode`, `placement`, `startFrom`, `persona`, `runThrough`, `voice`, `land`] as const;
+        const picks = [`mode`, `placement`, `startFrom`, `role`, `runThrough`, `voice`, `land`] as const;
         for (const control of picks) {
             row.moreOpen.value = true;
             row.openFromMore(control);
@@ -139,7 +139,7 @@ describe(`the row and its overflow`, () => {
         expect(row.modeOpen.value).toBe(true);
         expect(row.placementOpen.value).toBe(true);
         expect(startFrom.open.value).toBe(true);
-        expect(row.personaOpen.value).toBe(true);
+        expect(row.roleOpen.value).toBe(true);
         expect(runThrough.open.value).toBe(true);
         expect(row.voiceAgent.value).toBe(true);
         // Unregistered, the chat holds its own answer until its opening message carries it.
@@ -204,14 +204,14 @@ describe(`what Send means`, () => {
 
     it(`gives a workflow badge the composer: the voice disarms and the panels its greyed pills open close`, async () => {
         const { steered, row } = rowOf();
-        for (const open of [row.voiceAgent, row.modelOpen, row.modeOpen, row.personaOpen, row.laterOpen, row.moreOpen, row.placementOpen]) {
+        for (const open of [row.voiceAgent, row.modelOpen, row.modeOpen, row.roleOpen, row.laterOpen, row.moreOpen, row.placementOpen]) {
             open.value = true;
         }
 
         steered.value = true;
         await nextTick();
 
-        expect([row.voiceAgent, row.modelOpen, row.modeOpen, row.personaOpen, row.laterOpen, row.moreOpen].map((open) => open.value)).toEqual([
+        expect([row.voiceAgent, row.modelOpen, row.modeOpen, row.roleOpen, row.laterOpen, row.moreOpen].map((open) => open.value)).toEqual([
             false,
             false,
             false,
@@ -252,7 +252,7 @@ describe(`where the chat runs`, () => {
 
         runners.value = [RunnerSummarySchema.parse({ id: `r1`, online: true, parity: `unknown` })];
 
-        expect(keys(row)).toEqual([`mode`, `placement`, `startFrom`, `persona`, `runThrough`, `land`]);
+        expect(keys(row)).toEqual([`mode`, `placement`, `startFrom`, `role`, `runThrough`, `land`]);
         expect(row.inRow.value.placement).toBe(false);
         expect(row.moreRows.value.find((entry) => entry.key === `placement`)).toMatchObject({ label: `Where this runs`, value: `This sandbox` });
         expect(row.placementAnchor.value).toBe(pills.more.value);

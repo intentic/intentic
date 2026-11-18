@@ -40,7 +40,7 @@ export interface GateHooks {
     // The tool's name as the turn's tool list spells it (Codex's `apply_patch` is the list's `Edit` or `Write`).
     readonly listName?: (call: GateCall) => string;
     // The files a call touches, where the input names them in a shape the gate cannot read (a Codex patch), for the
-    // persona's folder fence.
+    // role's folder fence.
     readonly paths?: (call: GateCall) => readonly string[] | undefined;
     // Runs after the policy answered, on its verdict: the loop's own rewrite of a call the rules let through (its shell
     // wrapper, a secret resolved), and its record of what was answered. `asked` says a card went to a person on the way.

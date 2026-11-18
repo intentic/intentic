@@ -14,7 +14,7 @@ export const useOutageDetails = (clock: { readonly elapsed: ComputedRef<number> 
         outageDetails({
             connection: connection.value,
             evidence: diagnosisEvidence.value,
-            report: active.value?.role === `owner` ? active.value.hostReport : undefined,
+            report: active.value?.tier === `owner` ? active.value.hostReport : undefined,
             diagnosis: diagnosis.value,
             now: now.value,
         }),

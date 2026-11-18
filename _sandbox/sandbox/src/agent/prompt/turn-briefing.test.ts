@@ -1,7 +1,7 @@
-import { type Persona, type TurnBriefingNoteId, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract/schemas/personas";
+import { type Role, type TurnBriefingNoteId, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract/schemas/roles";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/workspace-setup.js";
-import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
+import { ROLE_NOTE_TITLE } from "../../roles/roles.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";
 import { BRIEFING_NOTE_TITLES, briefingLabelMismatches, briefingOf } from "./turn-briefing.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
@@ -10,7 +10,7 @@ import { LANDING_CHECKS_NOTE_TITLE } from "../../sessions/vocabulary/prompt-enve
 // The card's deny list is matched against note titles, so the two claims this file holds are the ones types cannot:
 // that the editor's words are the transcript's words, and that a note nobody may drop stays put.
 
-const cardOmitting = (...omit: readonly TurnBriefingNoteId[]): Persona => ({ id: "lean", capabilities: [], briefing: { omit: [...omit] } });
+const cardOmitting = (...omit: readonly TurnBriefingNoteId[]): Role => ({ id: "lean", capabilities: [], briefing: { omit: [...omit] } });
 
 const titled = (...titles: readonly string[]): TurnNote[] => titles.map((title) => ({ title, text: `${title} body` }));
 
@@ -50,5 +50,5 @@ test("dropping the dependency notice drops both of its wordings, since they are 
 test("a note with no id at all passes even the most trimmed card untouched", () => {
     const briefing = briefingOf(cardOmitting(...TURN_BRIEFING_NOTES.map((note) => note.id)));
 
-    expect(briefing.keep(titled(PERSONA_NOTE_TITLE))).toEqual(titled(PERSONA_NOTE_TITLE));
+    expect(briefing.keep(titled(ROLE_NOTE_TITLE))).toEqual(titled(ROLE_NOTE_TITLE));
 });

@@ -135,7 +135,7 @@ it(`keeps them through a hello from the same workspace`, () => {
 });
 
 it(`starts presence, the fleet and the archive over on a switch`, async () => {
-    setPresenceUsers([{ clientId: `c-2`, email: `maya@example.com`, name: `Maya`, role: `writer`, idle: false }]);
+    setPresenceUsers([{ clientId: `c-2`, email: `maya@example.com`, name: `Maya`, tier: `writer`, idle: false }]);
     setAgents([agent(`a1`)], 1);
     archived.value = [{ ...agent(`old`), open: false, unread: false, unsent: false }];
     const filled = {

@@ -201,11 +201,11 @@ export const HookModuleSchema = z.object({
 export type HookModule = z.infer<typeof HookModuleSchema>;
 
 export const HookPluginSchema = z.object({
-    name: z.string().describe("The plugin, as the sandbox lists it: the connection, extension or persona that brought it, or the name settings enable it under."),
+    name: z.string().describe("The plugin, as the sandbox lists it: the connection, extension or role that brought it, or the name settings enable it under."),
     from: z
-        .enum(["plugin", "extension", "persona", "skills", "settings"])
+        .enum(["plugin", "extension", "role", "skills", "settings"])
         .describe(
-            "What brought it into the turn: a plugin connection, an extension, a persona's kit, a plugin folder among Claude Code's skills, or Claude Code's own settings enabling it.",
+            "What brought it into the turn: a plugin connection, an extension, a role's kit, a plugin folder among Claude Code's skills, or Claude Code's own settings enabling it.",
         ),
     source: z
         .enum(["user", "project"])

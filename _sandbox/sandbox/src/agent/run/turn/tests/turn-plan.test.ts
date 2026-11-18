@@ -1,7 +1,8 @@
 import { openCodeMounts } from "../../../../runtimes/opencode/opencode-mcp.js";
 import { tmpdir } from "node:os";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../../../../composition.js";
 import { unstubbed } from "@intentic/testing";
@@ -9,7 +10,7 @@ import { conversationAfter } from "../../../../conversations/registry/agents-sto
 import { testConfig } from "../../../../env.config.testing.js";
 import { FIRST_RECHECK_MS } from "../../../providers/claude/claude-seat-check.js";
 import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../../providers/claude/claude-seat-check.testing.js";
-import { UNATTENDED_ACCOUNTS_TITLE } from "../../../../personas/personas.js";
+import { UNATTENDED_ACCOUNTS_TITLE } from "../../../../roles/roles.js";
 import { LANDING_CHECKS_NOTE } from "../../../prompt/checks-note.js";
 import type { AgentRequest, TurnPolicy, TurnSpec } from "../../../providers/agent-request.js";
 import { composeWirePrompt, ownCheckoutNote, sharedTreeNote } from "../../../prompt/turn-preamble.js";
@@ -346,7 +347,7 @@ test("an unattended turn is told which signed-in accounts it cannot reach", asyn
     const npmjs = { id: "npmjs", kind: "browser" as const, config: { platform: "npmjs" } };
     const services = harnessServices({
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [npmjs] }),
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [] }),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
     });
 
@@ -365,7 +366,7 @@ test("a turn somebody started keeps the account, and is told nothing about a fen
     const npmjs = { id: "npmjs", kind: "browser" as const, config: { platform: "npmjs" } };
     const services = harnessServices({
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [npmjs] }),
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [] }),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
     });
 
@@ -379,12 +380,8 @@ test("a turn somebody started keeps the account, and is told nothing about a fen
     expect(wire(plan)).not.toContain("signed-in accounts are not loaded into it");
 });
 
-test("Codex receives the connected browser granted to its persona, and no other account", async () => {
-    const writer: Persona = {
-        id: "reddit-writer",
-        capabilities: ["reddit-radarsuspam"],
-        powers: PersonaPowersSchema.parse({}),
-    };
+test("Codex receives the connected browser granted to its role, and no other account", async () => {
+    const writer: Role = { id: "reddit-writer", capabilities: ["reddit-radarsuspam"] };
     const reddit = { id: "reddit-radarsuspam", kind: "browser" as const, config: { platform: "reddit" } };
     const other = { id: "reddit-other", kind: "browser" as const, config: { platform: "reddit" } };
     const routed = { name: "browser", url: "http://127.0.0.1:1/mcp/browser", token: "conversation-bearer", timeoutMs: 120_000 };
@@ -396,7 +393,7 @@ test("Codex receives the connected browser granted to its persona, and no other 
     });
     const services = codexServices({
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [reddit, other] }),
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [writer] }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [writer] }),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
     });
 
@@ -429,10 +426,10 @@ test("Codex receives the connected browser granted to its persona, and no other 
     expect(request.spec.systemAppend).not.toContain("AskUserQuestion");
 });
 
-// OpenCode takes the same remote list now: the connected browser granted to the persona reaches a Grok turn as it
+// OpenCode takes the same remote list now: the connected browser granted to the role reaches a Grok turn as it
 // reaches Codex's, and no other account does.
-test("Grok receives the connected browser granted to its persona, and no other account", async () => {
-    const writer: Persona = { id: "reddit-writer", capabilities: ["reddit-radarsuspam"], powers: PersonaPowersSchema.parse({}) };
+test("Grok receives the connected browser granted to its role, and no other account", async () => {
+    const writer: Role = { id: "reddit-writer", capabilities: ["reddit-radarsuspam"] };
     const reddit = { id: "reddit-radarsuspam", kind: "browser" as const, config: { platform: "reddit" } };
     const other = { id: "reddit-other", kind: "browser" as const, config: { platform: "reddit" } };
     const routed = { name: "browser", url: "http://127.0.0.1:1/mcp/browser", token: "conversation-bearer", timeoutMs: 120_000 };
@@ -444,7 +441,7 @@ test("Grok receives the connected browser granted to its persona, and no other a
     });
     const services = servicesWith({
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [reddit, other] }),
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [writer] }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [writer] }),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
         openCode: unstubbed<Services["openCode"]>("openCode", {
             shielded: async () => true,
@@ -545,8 +542,8 @@ test("a compaction three turns back does not earn the note on every turn since",
 });
 
 test("a card that drops the checks note is never told it, even on its opening message", async () => {
-    const quiet: Persona = { id: "quiet", capabilities: [], powers: PersonaPowersSchema.parse({}), briefing: { omit: ["checks"] } };
-    const services = harnessServices({ personas: unstubbed<Services["personas"]>("personas", { list: async () => [quiet] }) });
+    const quiet: Role = { id: "quiet", capabilities: [], briefing: { omit: ["checks"] } };
+    const services = harnessServices({ roles: unstubbed<Services["roles"]>("roles", { list: async () => [quiet] }) });
 
     const plan = await planTurn(services, turn({ actsAs: "quiet" }), context);
 
@@ -916,13 +913,23 @@ test("a Claude turn carries the JS backend's plan, the turn tree, spawn beside i
 });
 
 // Code-only and shell-only are independent switches, not one control under two names: turning off shell still mounts
-// the JS backend, and turning off code still keeps Bash.
-test("a card decides each backend on its own: code-only, and shell-only, both plan exactly what they say", async () => {
-    const cards: Persona[] = [
-        { id: "code-only", capabilities: [], powers: PersonaPowersSchema.parse({ shell: false }) },
-        { id: "shell-only", capabilities: [], powers: PersonaPowersSchema.parse({ code: false }) },
+// the JS backend, and turning off code still keeps Bash. Each card's shelves are its access: the ceiling an access
+// profile listing it holds the turn to, which the chain answers per role.
+test("a card's access decides each backend on its own: code-only, and shell-only, both plan exactly what they say", async () => {
+    const cards: Role[] = [
+        { id: "code-only", capabilities: [] },
+        { id: "shell-only", capabilities: [] },
     ];
-    const services = harnessServices({ personas: unstubbed<Services["personas"]>("personas", { list: async () => cards }) });
+    const heldTo = (role: string | undefined): ToolCeiling | undefined => {
+        if (role === "code-only") {
+            return { shell: false };
+        }
+        return role === "shell-only" ? { code: false } : undefined;
+    };
+    const services = harnessServices({
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => cards }),
+        toolCeiling: async (_conversation, _people, _services, role) => heldTo(role?.id),
+    });
 
     const codeOnly = (await planTurn(services, turn({ actsAs: "code-only" }), context)) as { request: AgentRequest };
     expect(codeOnly.request.tools.jsExecution).toMatchObject({ allowSpawn: false });
@@ -1107,7 +1114,7 @@ test("a rebased branch says nothing to any runtime", async () => {
 
 // the turn's standing instructions, on every runtime that will take them
 
-// A turn on Codex, Grok or Gemini could silently run without the owner's system prompt or persona note, with nothing on
+// A turn on Codex, Grok or Gemini could silently run without the owner's system prompt or role note, with nothing on
 // screen saying so. Asserts which field each runtime gets, not the wording (system-prompt.test.ts's subject).
 const CUSTOM_PROMPT = "You write release notes.";
 const customSettings = (): SandboxSettings => SandboxSettingsSchema.parse({ systemPromptMode: "custom", systemPrompt: CUSTOM_PROMPT });

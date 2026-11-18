@@ -24,7 +24,7 @@ const laptopRow = (): SandboxSummary => ({
     id: LAPTOP_SANDBOX.id,
     name: LAPTOP_SANDBOX.name,
     daemonUrl: LAPTOP_SANDBOX.origin,
-    role: `owner`,
+    tier: `owner`,
     hosted: null,
     hostReport: null,
 });
@@ -78,7 +78,7 @@ const blankRow = (id: string, name: string, image: string | null = null): Sandbo
     removedAt: null,
     removedBy: null,
     token: `demo-connect-${hex(16)}`,
-    role: `owner`,
+    tier: `owner`,
     providedAddress: false,
     localHostname: null,
     hosted: null,
@@ -126,13 +126,13 @@ export const deleteRow = (id: string): boolean => {
 };
 
 /**
- * invite.accept: someone else's sandbox joins the list under the role the invite granted. Already running and already
+ * invite.accept: someone else's sandbox joins the list under the tier the invite granted. Already running and already
  * full of its owner's work, so it is not one of the rows made on this page; a member's row carries no connect token.
  */
-export const joinRow = (name: string, role: SandboxSummary[`role`]): SandboxSummary => {
+export const joinRow = (name: string, tier: SandboxSummary[`tier`]): SandboxSummary => {
     const row: SandboxSummary = {
         ...blankRow(`sbx-${hex(10)}`, name),
-        role,
+        tier,
         token: null,
         daemonUrl: `https://${sandboxHostname()}`,
         lastSeenAt: new Date().toISOString(),
@@ -144,7 +144,7 @@ export const joinRow = (name: string, role: SandboxSummary[`role`]): SandboxSumm
 
 /** sandbox.leave: a member's row goes from their list; the sandbox itself is untouched. */
 export const leaveRow = (id: string): void => {
-    const index = rows.findIndex((row) => row.id === id && row.role !== `owner`);
+    const index = rows.findIndex((row) => row.id === id && row.tier !== `owner`);
     if (index >= 0) {
         rows.splice(index, 1);
     }

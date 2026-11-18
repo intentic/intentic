@@ -172,17 +172,17 @@ describe("createPolicyGate: placing a call in its turn", () => {
     });
 });
 
-// 2026-10-25: a persona's withheld tools and folders bound only the Claude Code loop; every runtime's gate reads them now.
-describe("the persona's limits, on every runtime's gate", () => {
+// 2026-10-25: a role's withheld tools and folders bound only the Claude Code loop; every runtime's gate reads them now.
+describe("the role's limits, on every runtime's gate", () => {
     const allowAll = gateAnswering({ allow: true });
     const scope = { cwd: "/w", fence: ["notes"], sandbox: false } as const;
 
-    test("a tool the persona withholds is refused in the one vocabulary, a skill entry is never a tool call", async () => {
+    test("a tool the role withholds is refused in the one vocabulary, a skill entry is never a tool call", async () => {
         const turn = turnWith(allowAll, { deniedTools: ["Edit", "Write", "Bash", "Skill(x)"] });
         expect(await consultPolicy(turn, { tool: "Edit", input: { file_path: "/w/notes/a.md" } })).toMatchObject({ decision: "deny" });
         expect(await consultPolicy(turn, { tool: "Bash", input: { command: "ls" } })).toMatchObject({
             decision: "deny",
-            reason: expect.stringContaining("not available to the persona"),
+            reason: expect.stringContaining("not available to the role"),
         });
         expect(await consultPolicy(turn, { tool: "Read", input: { file_path: "/w/notes/a.md" } })).toEqual({ decision: "allow" });
         expect(await consultPolicy(turn, { tool: "Skill", input: {} })).toEqual({ decision: "allow" });

@@ -1,6 +1,6 @@
 import { createWsTickets, redeemTicket } from "./ws-tickets.js";
 
-const IDENTITY = { email: "owner@x.com", role: "owner" as const };
+const IDENTITY = { email: "owner@x.com", tier: "owner" as const };
 const queryWith = (ticket: string): URLSearchParams => new URLSearchParams({ ticket, session: "web-1" });
 
 test("a ticket redeems once, for the identity it was minted for", () => {
@@ -54,11 +54,11 @@ test("redeemTicket throws on a bad ticket and passes a good one", () => {
 /* The role floor at redemption: a ticket carries the tier it was minted under, and each socket names the tier. */
 test("redeemTicket holds the ticket to the socket's floor, and a refused ticket is still spent", () => {
     const services = { auth: {}, wsTickets: createWsTickets() };
-    const collaborator = { email: "c@x.com", role: "collaborator" as const };
+    const collaborator = { email: "c@x.com", tier: "collaborator" as const };
     const ticket = services.wsTickets.mint(collaborator);
     expect(() => redeemTicket(services, queryWith(ticket), "maintainer")).toThrow(/maintainer access required/);
     expect(() => redeemTicket(services, queryWith(ticket), "viewer")).toThrow(/invalid or expired/);
-    const maintainer = { email: "m@x.com", role: "maintainer" as const };
+    const maintainer = { email: "m@x.com", tier: "maintainer" as const };
     expect(() => redeemTicket(services, queryWith(services.wsTickets.mint(maintainer)), "maintainer")).not.toThrow();
 });
 
@@ -70,8 +70,8 @@ test("redeemTicket is a no-op without an authorizer", () => {
 
 test("revocation drops matching unspent tickets, or every ticket for the sandbox", () => {
     const tickets = createWsTickets();
-    const member = tickets.mint({ email: "member@example.com", role: "maintainer" });
-    const other = tickets.mint({ email: "other@example.com", role: "maintainer" });
+    const member = tickets.mint({ email: "member@example.com", tier: "maintainer" });
+    const other = tickets.mint({ email: "other@example.com", tier: "maintainer" });
     tickets.revoke("MEMBER@example.com");
     expect(tickets.redeem(member)).toBeUndefined();
     expect(tickets.redeem(other)?.email).toBe("other@example.com");

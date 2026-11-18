@@ -216,7 +216,7 @@ const AREA_ICONS: Readonly<Record<string, IconName>> = {
     agent: `robot`,
     extensions: `extensions`,
     access: `shield`,
-    personas: `user`,
+    roles: `user`,
     devices: `desktop`,
     // A local folder's way to a sandbox of its own (the desktop app's folder windows): the box it goes into.
     "sandbox-setup": `box`,

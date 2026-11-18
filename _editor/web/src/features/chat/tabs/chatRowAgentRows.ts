@@ -2,7 +2,7 @@ import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import type { Ref } from "vue";
 import { useRouter } from "vue-router";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { here, page } from "../../../lib/routes/links";
 import { changesToRead } from "../../../models/agent-status/agentStatus-attention";
 import type { Conversation } from "../../../models/conversations/session/conversation";
@@ -43,7 +43,7 @@ const NONE: ChatRowAgentRows = { review: [], fresh: [], name: [], watch: [], fil
 /** The agent rows for a chat's menu; `anchor` is the row pressed, whose own document the clipboard is asked of. */
 export const useChatRowAgentRows = (anchor: Ref<Element | undefined>) => {
     const { agentById, archive, restore, stopWatching } = useAgents();
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     const router = useRouter();
     const act: AgentMenuActions = {
         land: (agent, chosen) => void landFromMenu(agent, chosen),

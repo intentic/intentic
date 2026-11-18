@@ -2,7 +2,7 @@
 import { AnchoredOverlay, SectionHeader, ui, useHoverIntent } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { foldStamps, type Stamp, stampMark, stampTone } from "../../models/fleet/board/stamps";
 import { canStartFresh, draftFreshSession } from "../../models/fleet/freshSession";
 import { useAgents } from "../../models/fleet/useAgents";
@@ -76,7 +76,7 @@ const label = computed(() =>
 );
 
 const { agentById, open: openAgent } = useAgents();
-const { canReview } = useRole();
+const { canReview } = useTier();
 // A fresh session can be cut from this work now, by a reader who may start one. Offered on a check the work has moved
 // past or one that didn't finish; the agent's own check is its next turn's to run.
 const again = computed(() => props.agent !== undefined && canReview.value && canStartFresh(props.agent));

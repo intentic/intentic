@@ -26,7 +26,7 @@ jest.mock(`../../../../client/sandbox/sandboxRpc`, () => ({
 }));
 const role = ref<`owner` | `maintainer` | `writer`>(`owner`);
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({
-    useSandbox: () => ({ active: computed(() => ({ id: `s1`, name: `work`, role: role.value })), activeSandboxId: ref(`s1`), reachable: ref(true) }),
+    useSandbox: () => ({ active: computed(() => ({ id: `s1`, name: `work`, tier: role.value })), activeSandboxId: ref(`s1`), reachable: ref(true) }),
 }));
 
 const { default: PreviewGuardSection } = await import("./PreviewGuardSection.vue");

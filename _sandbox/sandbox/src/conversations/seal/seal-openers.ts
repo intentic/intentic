@@ -1,6 +1,6 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { SealApprove, SealOpenRequest } from "@intentic/sandbox-contract/schemas/seal";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { ORPCError } from "@orpc/server";
 import type { Caller } from "../../auth/auth.js";
 import { pendingOpen, readVia } from "../../auth/seal-scope.js";
@@ -14,7 +14,7 @@ import { answeredOpen, newOpen, withOpen } from "./seal-open.js";
  * second person with Full access agrees before anything can be read. Every step leaves an audit line. */
 
 const ownerOnly = (caller: Caller): void => {
-    if (caller.role !== "owner") {
+    if (caller.tier !== "owner") {
         throw new ORPCError("FORBIDDEN", { message: "only the sandbox's owner may open a private conversation without asking" });
     }
 };
@@ -37,7 +37,7 @@ export const openWithoutAsking = async (kit: SealKit, caller: Caller, input: Sea
         await kit.tell(author.email, said, root.id, open.reason);
     }
     if (open.pending === true) {
-        for (const member of (await kit.services.members.list()).filter((held) => roleAtLeast(held.role, "maintainer"))) {
+        for (const member of (await kit.services.members.list()).filter((held) => tierAtLeast(held.tier, "maintainer"))) {
             await kit.tell(member.email, `${who} asks you to agree to opening a private conversation`, root.id, open.reason);
         }
     }
@@ -52,7 +52,7 @@ export const approveOpen = async (kit: SealKit, caller: Caller, input: SealAppro
     if (open === undefined) {
         throw new ORPCError("NOT_FOUND", { message: "no opening of that id waits on a second person" });
     }
-    if (same(open.email, caller.email) || caller.role === "owner") {
+    if (same(open.email, caller.email) || caller.tier === "owner") {
         throw new ORPCError("FORBIDDEN", { message: "the second person must be someone other than the owner who asked" });
     }
     const answered = answeredOpen(open, caller, input.agree, Date.now());

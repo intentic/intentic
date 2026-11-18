@@ -80,7 +80,7 @@ export interface AgentWorktrees {
         base?: readonly { repo: string; base: string }[],
         // Whether the turn enters a namespace (mirror form follows); absent means the container's own answer.
         namespaced?: boolean,
-        // Which repos the conversation carries (persona card's `context`); absent means every live repo.
+        // Which repos the conversation carries (role card's `context`); absent means every live repo.
         // - a named repo not yet recorded joins (fresh checkout, or its parked branch back)
         // - a recorded repo not named here leaves (remainder committed onto agent/<id>, branch parked)
         // - a name with no live repository is ignored

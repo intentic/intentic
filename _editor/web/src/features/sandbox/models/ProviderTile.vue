@@ -9,7 +9,7 @@ import { isFreeTile, LOCAL_TILE, type TileKey, type TileTone } from "./providerG
 
 // One tile of Sandbox ▸ Models' grid: a provider's mark (or this machine's), its name, and a status line only while
 // something is happening with it. Pressing it opens its panel below the grid,
-// as a persona's tile opens its editor; pressing the open one closes it.
+// as a role's tile opens its editor; pressing the open one closes it.
 
 const t = useT();
 

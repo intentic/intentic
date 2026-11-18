@@ -1,0 +1,27 @@
+import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
+import { fenceHoldsRole } from "@intentic/sandbox-contract/policy/role-home";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
+import { useAreas } from "../../../models/sandbox/access/useAreas";
+import { useRoles } from "../../../models/sandbox/roles/useRoles";
+
+// Which assistants a fence hands over — the same derivation the daemon refuses on (roles/role-reach.ts). An
+// assistant lives where it starts, and a person's areas either cover that folder or they do not; nobody picks
+// assistants per person any more. Read by the picker that chooses the fence and by the rows that report it, so what
+// the screen promises is what the daemon will accept.
+
+export function useRoleReach() {
+    const { roles } = useRoles();
+    const { areas } = useAreas();
+
+    // Undefined stays undefined: no area named is the whole workspace, not a fence that happens to hold no folder.
+    const fenceOf = (held: readonly string[] | undefined): Fence =>
+        held === undefined ? undefined : [...new Set(held.flatMap((id) => areas.value.find((area) => area.id === id)?.folders ?? []))];
+
+    const reach = (held: readonly string[] | undefined): Role[] => roles.value.filter((card) => fenceHoldsRole(fenceOf(held), card));
+
+    return {
+        reach,
+        // How the assistants are named wherever this is reported, in the order the roster holds them.
+        namesOf: (held: readonly string[] | undefined): string[] => reach(held).map((card) => card.label ?? card.id),
+    };
+}

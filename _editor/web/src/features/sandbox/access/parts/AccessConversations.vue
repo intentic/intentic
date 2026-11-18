@@ -9,13 +9,13 @@ import { Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { useSealHouse } from "../../../../models/conversations/seal/useSealHouse";
 
 const t = useT();
 
 const { house, setMode } = useSealHouse();
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 const MODES: readonly SealMode[] = [`everyone`, `chooses`, `private`];
 const label = (mode: SealMode): string => t(`sandbox.sealHouse.mode.${mode}`);

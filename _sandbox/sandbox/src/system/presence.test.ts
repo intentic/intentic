@@ -10,9 +10,9 @@ describe("presence registry", () => {
         const unsubscribe = subscribePresence((users) => frames.push(users));
         expect(frames).toHaveLength(1);
 
-        const unregister = registerPresence("c1", { email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "owner" });
+        const unregister = registerPresence("c1", { email: "a@x.com", name: "Ada", picture: "https://p/a.png", tier: "owner" });
         const joined = frames.at(-1)?.find((user) => user.clientId === "c1");
-        expect(joined).toEqual({ clientId: "c1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "owner", idle: false });
+        expect(joined).toEqual({ clientId: "c1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", tier: "owner", idle: false });
 
         unregister();
         expect(frames.at(-1)?.some((user) => user.clientId === "c1")).toBe(false);
@@ -20,7 +20,7 @@ describe("presence registry", () => {
     });
 
     test("update full-replaces the activity fields and broadcasts", () => {
-        const unregister = registerPresence("c2", { email: "a@x.com", role: "collaborator" });
+        const unregister = registerPresence("c2", { email: "a@x.com", tier: "collaborator" });
         const frames: PresenceUser[][] = [];
         const unsubscribe = subscribePresence((users) => frames.push(users));
 
@@ -32,7 +32,7 @@ describe("presence registry", () => {
         expect(frames.at(-1)?.find((user) => user.clientId === "c2")).toEqual({
             clientId: "c2",
             email: "a@x.com",
-            role: "collaborator",
+            tier: "collaborator",
             idle: true,
             view: "automations",
         });
@@ -41,7 +41,7 @@ describe("presence registry", () => {
     });
 
     test("ignores an update for an unknown clientId or from a different member", () => {
-        const unregister = registerPresence("c3", { email: "a@x.com", role: "collaborator" });
+        const unregister = registerPresence("c3", { email: "a@x.com", tier: "collaborator" });
         const frames: PresenceUser[][] = [];
         const unsubscribe = subscribePresence((users) => frames.push(users));
 
@@ -57,10 +57,10 @@ describe("presence registry", () => {
     // What push reads to skip a member's own devices (push/push.ts): who has a tab in use, by lowercased address.
     test("present members are the ones with a tab in use, for as long as it stays connected", () => {
         const leave = [
-            registerPresence("p1", { email: "Ada@X.com", role: "owner" }),
-            registerPresence("p2", { email: "bo@x.com", role: "collaborator" }),
-            registerPresence("p3", { email: "bo@x.com", role: "collaborator" }),
-            registerPresence("p4", { email: "cy@x.com", role: "viewer" }),
+            registerPresence("p1", { email: "Ada@X.com", tier: "owner" }),
+            registerPresence("p2", { email: "bo@x.com", tier: "collaborator" }),
+            registerPresence("p3", { email: "bo@x.com", tier: "collaborator" }),
+            registerPresence("p4", { email: "cy@x.com", tier: "viewer" }),
         ];
         updatePresence({ email: "bo@x.com" }, { clientId: "p2", idle: true });
         updatePresence({ email: "cy@x.com" }, { clientId: "p4", idle: true });

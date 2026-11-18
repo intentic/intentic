@@ -462,7 +462,7 @@ export const accountsServer =
                     "Who this sandbox is online: every identity you can act as, the accounts each already holds (site, what it was opened for, when, and whether it is signed in), and which identities hold nothing yet. Read this BEFORE opening an account anywhere, signing in to one that exists beats minting another, and an identity with no accounts is the one to spend on a site that should not be tied to the others. Derived from the live manifest, so it is never out of date.",
                     {},
                     async () => {
-                        // Scoped to this turn's accounts like every tool here: a narrowed persona must not see the
+                        // Scoped to this turn's accounts like every tool here: a narrowed role must not see the
                         // other entries.
                         const entries = (await Promise.all(deps.accounts.map((id) => deps.capabilities.get(id)))).filter(
                             (capability): capability is Capability => capability !== undefined,

@@ -1,6 +1,6 @@
 import type { ExtensionContext, IntenticApi, ViewBadge } from "@intentic/extension-api";
 import { sandboxPoll } from "@intentic/extension-api";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { owedBadge, type QueueSnapshot } from "./owed";
 import { bindHost, host } from "./host";
 import { approvalsQuery } from "./useApprovals";
@@ -27,7 +27,7 @@ export const approvalsAttention = sandboxPoll<QueueSnapshot | undefined>({
             api.sandbox.fetch({ ...approvalsQuery(), staleTime: 0 }),
             // Refused below maintainer, where there is no yes to give. Above it, a failed read fails the poll, which then
             // keeps what it last saw rather than dropping the waiting hook sets.
-            roleAtLeast(api.sandbox.role(), `maintainer`) ? api.sandbox.fetch({ ...hookRequestsQuery(), staleTime: 0 }) : undefined,
+            tierAtLeast(api.sandbox.role(), `maintainer`) ? api.sandbox.fetch({ ...hookRequestsQuery(), staleTime: 0 }) : undefined,
         ]);
         return { list, hooks };
     },
@@ -35,7 +35,7 @@ export const approvalsAttention = sandboxPoll<QueueSnapshot | undefined>({
 
 // Below maintainer the queue is read-only (the daemon floors every press), so nothing here is that reader's to answer.
 export const queueBadge = (): ViewBadge | undefined =>
-    roleAtLeast(host().sandbox.role(), `maintainer`) ? owedBadge(approvalsAttention.state.value) : undefined;
+    tierAtLeast(host().sandbox.role(), `maintainer`) ? owedBadge(approvalsAttention.state.value) : undefined;
 
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     bindHost(api);
@@ -49,7 +49,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             badge: queueBadge,
             // The reads the badge already made, so the page opens on the queue rather than on a spinner; hook sets only
             // for a reader the daemon answers them for.
-            warm: () => [approvalsQuery(), heldWakesQuery(), ...(roleAtLeast(host().sandbox.role(), `maintainer`) ? [hookRequestsQuery()] : [])],
+            warm: () => [approvalsQuery(), heldWakesQuery(), ...(tierAtLeast(host().sandbox.role(), `maintainer`) ? [hookRequestsQuery()] : [])],
             view: async () => (await import(`./ApprovalsView.vue`)).default,
         }),
     );

@@ -279,21 +279,21 @@ test("an interrupted episode of the same build resumes: it keeps the original pr
 
 test("a moved document is copied into place, and the earlier copy is removed only after the grace window", async () => {
     const roots = await volumes();
-    const moved = defineDocument({ path: "evolution/personas.json", schema: z.array(z.unknown()), movedFrom: ["evolution/identities.json"] });
+    const moved = defineDocument({ path: "evolution/roles.json", schema: z.array(z.unknown()), movedFrom: ["evolution/identities.json"] });
     const old = join(roots.workspace, "evolution/identities.json");
     await put(old, [{ id: "a" }]);
     const start = 1_000_000;
 
     const first = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [moved], steps: [], now: () => start });
-    expect(first.plan?.steps).toEqual([{ document: "evolution/personas.json", change: "moves it from evolution/identities.json" }]);
-    expect(await json(join(roots.workspace, "evolution/personas.json"))).toEqual([{ id: "a" }]);
+    expect(first.plan?.steps).toEqual([{ document: "evolution/roles.json", change: "moves it from evolution/identities.json" }]);
+    expect(await json(join(roots.workspace, "evolution/roles.json"))).toEqual([{ id: "a" }]);
     expect(await json(old)).toEqual([{ id: "a" }]);
     await commitState(roots, start);
 
     const early = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [moved], steps: [], now: () => start + 1000 });
     expect(early.plan?.writes.size).toBe(0);
     const late = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [moved], steps: [], now: () => start + GRACE_MS + 2000 });
-    expect(late.plan?.steps).toEqual([{ document: "evolution/personas.json", change: "removes the copy left at evolution/identities.json" }]);
+    expect(late.plan?.steps).toEqual([{ document: "evolution/roles.json", change: "removes the copy left at evolution/identities.json" }]);
     await expect(readFile(old, "utf8")).rejects.toThrow("ENOENT");
 });
 

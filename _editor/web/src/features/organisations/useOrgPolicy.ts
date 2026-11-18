@@ -29,6 +29,8 @@ const HELD_WITH: ReadonlyMap<string, OrgSection> = new Map([
     [`privacy-shield`, `agent`],
     [`guardrails`, `agent`],
     [`retention`, `agent`],
+    // The Roles page, whose organisation section keeps the id it had as Personas (organisation.ts ORG_SECTIONS).
+    [`roles`, `personas`],
 ]);
 const orgSectionOf = (slug: string): OrgSection | undefined => HELD_WITH.get(slug) ?? (isOrgSection(slug) ? slug : undefined);
 

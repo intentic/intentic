@@ -301,7 +301,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
         const state = conversation.value.selection.servingState.value;
         return state !== undefined ? reopensAtOf(state) : undefined;
     }),
-    // The persona this chat acts as; undefined means anyone, keeping every connected account reachable. Resolved per
+    // The role this chat acts as; undefined means anyone, keeping every connected account reachable. Resolved per
     // turn by the daemon, so a switch lands on the next message without a fresh chat.
     actsAs: computed<string | undefined>({
         get: () => conversation.value.selection.actsAs.value,

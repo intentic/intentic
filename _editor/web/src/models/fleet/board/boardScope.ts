@@ -1,5 +1,5 @@
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, watch } from "vue";
@@ -78,7 +78,7 @@ export interface ScopeHost {
     };
     // Every run the ledger holds, archived ones included.
     readonly runs: Readonly<Ref<readonly WorkflowRun[]>>;
-    readonly personas: Readonly<Ref<readonly Persona[]>>;
+    readonly roles: Readonly<Ref<readonly Role[]>>;
     readonly me: Readonly<Ref<string | undefined>>;
     // Anyone but the reader can hold work here; without it, Everyone and Mine say the same thing.
     readonly sharedAccess: Readonly<Ref<boolean>>;
@@ -86,21 +86,21 @@ export interface ScopeHost {
 
 // The board's cards, held wakes and runs as the scope leaves them, and the header's controls that choose it.
 export const useBoardScope = (host: ScopeHost) => {
-    const { agents, personas } = host;
+    const { agents, roles } = host;
     const fleet = agents.fleet;
     const scopedFleet = computed(() =>
-        scopeFleet(fleet.value, { project: projectScope.value, owner: ownerFilter.value, me: host.me.value, personas: personas.value }),
+        scopeFleet(fleet.value, { project: projectScope.value, owner: ownerFilter.value, me: host.me.value, roles: roles.value }),
     );
     // Held wakes and runs narrow by the project's evidence alone, since nobody owns them yet.
     const scopedHeld = computed<readonly AutomationApproval[]>(() => {
         const project = projectScope.value;
         return project === undefined
             ? agents.heldWakes.value
-            : agents.heldWakes.value.filter((wake) => heldWakeInProject(wake, project, personas.value, fleet.value));
+            : agents.heldWakes.value.filter((wake) => heldWakeInProject(wake, project, roles.value, fleet.value));
     });
     const scopedRuns = computed<readonly WorkflowRun[]>(() => {
         const project = projectScope.value;
-        return project === undefined ? host.runs.value : host.runs.value.filter((run) => runInProject(run, project, personas.value, fleet.value));
+        return project === undefined ? host.runs.value : host.runs.value.filter((run) => runInProject(run, project, roles.value, fleet.value));
     });
     // An archived run is off the board like an archived agent, in Finished's archive instead.
     const boardRunRows = computed(() => scopedRuns.value.filter((run) => run.archivedAt === undefined));
@@ -121,7 +121,7 @@ export const useBoardScope = (host: ScopeHost) => {
     );
     // Items needing the reader that the open project keeps off the board, for the Attention lane to offer.
     const attentionElsewhere = computed(() =>
-        attentionHidden({ fleet: agents.fleet.value, held: agents.heldWakes.value, personas: personas.value, project: projectScope.value, owner: undefined, me: host.me.value }),
+        attentionHidden({ fleet: agents.fleet.value, held: agents.heldWakes.value, roles: roles.value, project: projectScope.value, owner: undefined, me: host.me.value }),
     );
     // The store's own grouping while nothing narrows the board.
     const scopedLanes = computed<Record<FleetLane, FleetAgent[]>>(() =>

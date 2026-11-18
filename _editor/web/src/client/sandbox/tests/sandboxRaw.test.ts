@@ -49,10 +49,10 @@ describe(`sandboxRaw`, () => {
 
     it(`sends a JSON input under its content type, beside any header the route reads by name`, async () => {
         sandboxJson.mockResolvedValue({ members: [] });
-        await sandboxRaw(`POST /members`, { input: { email: `a@example.com`, role: `viewer` }, headers: { "x-intentic-base-hash": `abc` } });
+        await sandboxRaw(`POST /members`, { input: { email: `a@example.com`, tier: `viewer` }, headers: { "x-intentic-base-hash": `abc` } });
         expect(sent()).toEqual([
             `/members`,
-            { method: `POST`, headers: { "content-type": `application/json`, "x-intentic-base-hash": `abc` }, body: JSON.stringify({ email: `a@example.com`, role: `viewer` }) },
+            { method: `POST`, headers: { "content-type": `application/json`, "x-intentic-base-hash": `abc` }, body: JSON.stringify({ email: `a@example.com`, tier: `viewer` }) },
         ]);
     });
 

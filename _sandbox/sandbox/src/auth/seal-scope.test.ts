@@ -8,10 +8,10 @@ import { provesOwner, turnProof } from "../seams/workload-stamp.js";
 // it lasts, and nobody else whatever their role; and what everyone else it is listed to is shown instead.
 
 const NOW = 1_800_000_000_000;
-const anna: ProvenCaller = { email: "anna@example.com", role: "collaborator", methods: ["google"] };
-const ola: ProvenCaller = { email: "ola@example.com", role: "collaborator", methods: ["google"] };
-const owner: ProvenCaller = { email: "radek@example.com", role: "owner", methods: ["google"] };
-const full: ProvenCaller = { email: "max@example.com", role: "maintainer", methods: ["google"] };
+const anna: ProvenCaller = { email: "anna@example.com", tier: "collaborator", methods: ["google"] };
+const ola: ProvenCaller = { email: "ola@example.com", tier: "collaborator", methods: ["google"] };
+const owner: ProvenCaller = { email: "radek@example.com", tier: "owner", methods: ["google"] };
+const full: ProvenCaller = { email: "max@example.com", tier: "maintainer", methods: ["google"] };
 
 const seal = {
     readers: [{ email: "anna@example.com", name: "Anna" }],

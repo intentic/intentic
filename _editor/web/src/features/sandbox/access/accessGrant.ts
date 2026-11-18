@@ -10,7 +10,7 @@ import {
     memberAccess,
     tierOf,
 } from "@intentic/sandbox-contract/schemas/members";
-import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { GrantedTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { googleMailbox } from "../../../client/auth/signInMethods";
 
@@ -55,11 +55,11 @@ export const newPerson = (email: string): AccessDraft => ({
 });
 
 /** What the daemon holds for a person, or the platform's tier alone for a row the daemon never wrote. */
-export const draftOf = (row: Member | undefined, recorded: GrantedRole): AccessDraft => ({
+export const draftOf = (row: Member | undefined, recorded: GrantedTier): AccessDraft => ({
     profile: row?.profile,
     tools: row?.tools,
     assistants: row?.assistants,
-    ...memberAccess(row ?? { role: recorded }),
+    ...memberAccess(row ?? { tier: recorded }),
     emailSignIn: row?.emailSignIn === true,
     credentials: row?.credentials ?? `all`,
     aiAccounts: row?.aiAccounts ?? `all`,
@@ -87,14 +87,14 @@ export const rightsOffered = (agents: AgentAccess): readonly ManageRight[] => {
 export const rightsFor = (agents: AgentAccess, manages: readonly ManageRight[] | undefined): ManageRight[] =>
     rightsOffered(agents).filter((right) => manages?.includes(right) === true);
 
-// The daemon's `/members` body. The role is the tier the access makes; a maintainer carries only what its conversations
+// The daemon's `/members` body. The tier is the one the access makes; a maintainer carries only what its conversations
 // may spend besides, since that tier is every other answer, every right included. An area list's ABSENCE is the whole
 // workspace, so it is omitted rather than sent empty. Agents, edit and rights are always sent, so the row says what the
-// panel decided instead of what a role used to mean or what the row held before; rights ride beside a profile too, since
+// panel decided instead of what a tier used to mean or what the row held before; rights ride beside a profile too, since
 // a profile never carries them.
 export const draftGrant = (email: string, draft: AccessDraft): MemberGrant => {
-    const role = tierOf(draft);
-    const body: MemberGrant = { email, role, emailSignIn: draft.emailSignIn };
+    const tier = tierOf(draft);
+    const body: MemberGrant = { email, tier, emailSignIn: draft.emailSignIn };
     if (draft.manage) {
         return { ...body, ...spendOf(draft) };
     }

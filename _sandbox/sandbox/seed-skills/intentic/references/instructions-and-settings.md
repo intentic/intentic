@@ -6,7 +6,7 @@
 AGENTS.md". Edited on Sandbox ▸ Agent ▸ Instructions, **Memory** (`/sandbox/agent?section=instructions`; **Open
 file** opens `/workspace/AGENTS.md`), or as any file. **Bring memory over from another assistant** on the same page
 merges an export from another AI into a marked block of that file. The daemon reads it itself, plus an `AGENTS.md`
-in each folder on the way down to where the turn starts (a persona's **Starts in**), root first, and composes them
+in each folder on the way down to where the turn starts (a role's **Starts in**), root first, and composes them
 into the turn's instructions under "Standing instructions for this workspace" on every runtime; no loop's own file
 discovery decides. The whole block is capped at 20,000 characters: a file that would cross it is left out whole and
 named. An `AGENTS.md` inside a repository is that repository's own, added only for turns that start inside it.
@@ -18,21 +18,21 @@ settings.json):
 - **Claude**: Claude Code's own prompt, read from the CLI installed in the sandbox.
 - **Custom**: the owner's text (`systemPrompt`, at most 20,000 characters) is the whole prompt. Both built-in bases
   go, and so does the product's own guidance, including what drives the chat's question cards, checklist panel
-  and browser tools, and the note naming the persona a turn acts as. The owner's `AGENTS.md`
+  and browser tools, and the note naming the role a turn acts as. The owner's `AGENTS.md`
   still rides with it.
 
 Runtimes take it differently: Claude Code, Codex and OpenCode (Grok, Gemini) replace their base prompt with it;
 Cursor can only add, so it is appended to its own; Pi and ACP have no system prompt seam, so a custom prompt is not
-applied there, and the persona note and `AGENTS.md` go with the message instead.
+applied there, and the role note and `AGENTS.md` go with the message instead.
 
-**A persona's own prompt**: `.intentic/config/personas/<id>/PROMPT.md`, used when the persona's **What it is told**
-is **Its own** (`systemPromptMode: "custom"` on its card). It replaces the sandbox's prompt on that persona's turns,
+**A role's own prompt**: `.intentic/config/roles/<id>/PROMPT.md`, used when the role's **What it is told**
+is **Its own** (`systemPromptMode: "custom"` on its card). It replaces the sandbox's prompt on that role's turns,
 exactly as a custom sandbox prompt does; empty or missing falls back to the sandbox's. See
-`/root/.claude/skills/intentic/references/personas-and-models.md`.
+`/root/.claude/skills/intentic/references/roles-and-models.md`.
 
 **Skills.** The owner's own are stored in `.intentic/config/skills/` and switched on as copies in
 `/work/.agents/skills/` (Claude reads them through `/work/.claude/skills`, one link to that folder), managed on
-Sandbox ▸ Agent ▸ Instructions, **Skills**. A persona's own are in its kit, `personas/<id>/skills/`. The
+Sandbox ▸ Agent ▸ Instructions, **Skills**. A role's own are in its kit, `roles/<id>/skills/`. The
 image-baked ones, this skill among them, are in `/root/.claude/skills/`, which only the Claude Code loop loads.
 
 ## When a change reaches agents
@@ -41,9 +41,10 @@ No restart is needed for any of these. Each is read when a turn is planned, so a
 of every conversation, including ones already open; a turn already running keeps what it started with.
 
 - `settings.json` (the settings on Sandbox ▸ Agent), read from the live main tree.
-- Personas: the card, its fence and shelves, its `PROMPT.md`. Its **Runs on** list is applied when the persona is
+- Roles: the card and its `PROMPT.md`; the access profiles holding it are read the same way. Its **Runs on** list is applied when the role is
   picked, and to jobs that name no model, so an open chat keeps the model its pill shows.
-- Areas and grants: a grant given to or taken from one conversation applies from its next turn.
+- Areas and grants: a grant given to or taken from one conversation applies from its next turn, and so does a switch
+  to another role from a grant card.
 - The checks each repository declares (`.intentic/checks.json`), read every turn.
 - `AGENTS.md`, with one catch below.
 

@@ -61,12 +61,12 @@ export const adminUserDetail = async (
                 bootReport: true,
                 announceRefusal: true,
                 hosted: { select: { region: true, appName: true, wokeAt: true, idleWarnedAt: true } },
-                members: { select: { email: true, role: true, acceptedAt: true } },
+                members: { select: { email: true, tier: true, acceptedAt: true } },
             },
         }),
         prisma.sandboxMember.findMany({
             where: { email: memberEmail },
-            select: { role: true, acceptedAt: true, sandbox: { select: { name: true, owner: { select: { email: true } } } } },
+            select: { tier: true, acceptedAt: true, sandbox: { select: { name: true, owner: { select: { email: true } } } } },
         }),
         prisma.hostedStrike.findMany({
             where: { userId: user.id },
@@ -137,12 +137,12 @@ export const adminUserDetail = async (
                       idleWarnedAt: sandbox.hosted.idleWarnedAt?.toISOString() ?? null,
                   }
                 : null,
-            members: sandbox.members.map((member) => ({ email: member.email, role: member.role, accepted: member.acceptedAt !== null })),
+            members: sandbox.members.map((member) => ({ email: member.email, tier: member.tier, accepted: member.acceptedAt !== null })),
         })),
         memberOf: memberships.map((row) => ({
             sandboxName: row.sandbox.name,
             ownerEmail: row.sandbox.owner.email,
-            role: row.role,
+            tier: row.tier,
             accepted: row.acceptedAt !== null,
         })),
     };

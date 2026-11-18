@@ -3,7 +3,7 @@ import { computed, onScopeDispose, ref, watch } from "vue";
 import { laneOf } from "../../models/agent-status/agentStatus-lanes";
 import { callsFor, heardBy, type Reader } from "../../models/agent-status/notifyAudience";
 import { useAuth } from "../../client/auth/useAuth";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { type AgentStanding, turnWorking } from "../../models/agent-status/agentStatus-standing";
 import { agentsAttention } from "../../models/fleet/board/agentsTile";
 import { parentOf } from "../../models/agent-status/ownership";
@@ -108,7 +108,7 @@ export const startBrowserTab = (): void => {
     );
 
     const { user } = useAuth();
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     const frame = computed(() => frameOf({ email: user.value?.email, operates: canShip.value }));
     watch(frame, (after, before) => {
         // An ask answered from the phone takes its notification down wherever the reader is.

@@ -74,7 +74,7 @@ export const definitionNow = (): DefinitionExport => {
         ...capabilityTables().flatMap((table) => [table, ``]),
         `[settings]`,
         `timezone = "Europe/Warsaw"`,
-        `personaRouting = true`,
+        `roleRouting = true`,
         ``,
     ].join(`\n`);
     const omitted: NeedsAction[] = repos

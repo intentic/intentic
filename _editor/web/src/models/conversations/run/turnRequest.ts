@@ -32,7 +32,7 @@ export interface TurnSettings {
     // `account` is a hand pick no turn has run on yet (Selection.accountPicked), so the turn names it even where the
     // daemon's record already does (accountIntent).
     readonly accountPicked?: boolean;
-    // Persona id the turn acts as; undefined means an ordinary chat with every connected account reachable.
+    // Role id the turn acts as; undefined means an ordinary chat with every connected account reachable.
     readonly actsAs: string | undefined;
     // The folder the conversation opens in (the project it belongs to); undefined means the workspace root. The daemon
     // latches the first turn's answer.
@@ -163,7 +163,7 @@ export const turnRequestBody = (input: {
     // Not a wire field: the address this body is posted to (Conversation.box). Fields scoped to one daemon's own
     // store must not cross to another box:
     //   account – a key in the box's credential store; omitted, that box picks by serviceability.
-    //   actsAs – a persona card in the box's record; unresolved names send an ordinary chat.
+    //   actsAs – a role card in the box's record; unresolved names send an ordinary chat.
     //   editorContext – a path in this workspace, meaningless on another box.
     // Model and provider do cross: the target daemon resolves the model against its own catalog.
     readonly box?: string | undefined;
@@ -218,7 +218,7 @@ export const turnRequestBody = (input: {
         // Omitted when this body targets another box, since that daemon holds no such selection, and wherever the turn
         // continues the conversation on the account it already runs on (accountIntent); a hand pick says so (pickedByHand).
         ...accountFields(input, here),
-        // Omitted rather than empty: an unresolved persona card gets an ordinary chat, not an error.
+        // Omitted rather than empty: an unresolved role card gets an ordinary chat, not an error.
         ...(here && input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
         // Omitted for another box, whose projects are its own.
         ...(here && input.settings.startIn !== undefined ? { startIn: input.settings.startIn } : {}),

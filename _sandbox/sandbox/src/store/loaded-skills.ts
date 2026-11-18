@@ -44,8 +44,8 @@ export const loadedSkillCatalog = async (localRoot: string, agentRoot: string): 
     }));
 
 // Catalogue for a runtime without a skill loader: names and descriptions now, full SKILL.md only when a task matches.
-// `omit` is the skills this turn may not use (its persona's withheld accounts, a gate, what its people were not given):
-// listed, a withheld skill reads as an invitation. 2026-10-25: an X-only persona's runs were offered `chrome` ("when
+// `omit` is the skills this turn may not use (its role's withheld accounts, a gate, what its people were not given):
+// listed, a withheld skill reads as an invitation. 2026-10-25: an X-only role's runs were offered `chrome` ("when
 // they name a site they are signed into") and two of them asked the owner's Brave for x.com. Empty means no note.
 export const skillCatalogNoteOf = (skills: readonly CatalogSkill[], omit: ReadonlySet<string> = new Set()): string | undefined => {
     const listed = skills.filter((skill) => !omit.has(skill.name));

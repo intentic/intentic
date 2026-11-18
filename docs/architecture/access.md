@@ -1,6 +1,6 @@
 # Access
 
-Every turn acts for someone, and what it may reach is decided by who that is: the people who wrote in its conversation, or the service an unattended run acts as, each held to an access profile. A persona only shapes how the turn behaves inside that.
+Every turn acts for someone, and what it may reach is decided by who that is and what it wears: the people who wrote in its conversation, or the service an unattended run acts as, each held to an access profile, and the role it wears, held to every access profile that lists it. A role otherwise only shapes who the turn speaks as and how it behaves.
 
 ```mermaid
 flowchart TB
@@ -13,11 +13,12 @@ flowchart TB
     steward --> hard
     services -->|"held to"| profile["its access profile"]
     profile --> hard
+    role["the role it wears"] -->|"held to"| roleProfile["every profile listing it in roles"]
+    roleProfile --> hard
     org["organisation ceiling<br/>tools · AI accounts"] --> hard
-    hard["Hard reach = intersection of every limit<br/>credentials · AI accounts · tools · fence"]
-    hard --> persona["persona narrows<br/>posture: may only remove"]
-    persona --> grants["conversation grants lift persona narrowing,<br/>never above hard reach"]
-    grants --> gates["credential gates: an approver's click,<br/>inside reach"]
+    hard["Reach = intersection of every limit<br/>credentials · AI accounts · tools · fence"]
+    hard --> accounts["role picks the signed-in accounts<br/>it speaks through, inside reach"]
+    accounts --> gates["credential gates: an approver's click,<br/>inside reach"]
     gates --> turn(["turn"])
 ```
 
@@ -25,8 +26,8 @@ flowchart TB
 
 - **A principal** is who a turn acts for. A *person* is the owner or someone on the roster ([`members.ts`](../../_shared/sandbox-contract/src/schemas/members.ts)). A *service* ([`services.ts`](../../_shared/sandbox-contract/src/schemas/services.ts)) is a named non-human, such as "Marketing bot" or "Nightly fixer", that a person stewards. Automations, sender rules, inbound links and control tokens run as a service by naming it in `runAs`.
 - **An access profile** ([`access-profiles.ts`](../../_shared/sandbox-contract/src/schemas/access-profiles.ts)) is the hard layer: the areas a holder sees and edits, whether their conversations run agents, the connections and secrets they may spend, the AI accounts their turns may run on, a ceiling on tools, and which assistants a guest talks to. It is named and reusable, and one shape serves both kinds of principal, so an intern and the marketing bot can hold the same one. A person holds one profile or answers of their own written on their row. A service holds one profile or none.
-- **A persona** is posture: prompt, skills, briefing, preferred models, starting folder and the accounts it speaks through. It can narrow what a turn reaches (a read-only reviewer, a card that only posts as `reddit-work`), and it never widens it.
-- **An assistant** is how someone reaches an agent. A guest's assistants are the personas their profile lists, or every persona that works in their areas. An outward assistant (a website chat, a Discord bot) is a listener automation: its persona, the service it runs as, and its sender rules.
+- **A role** is the job a conversation does: prompt, skills, briefing, preferred models, starting folder and the signed-in accounts it speaks through. Everything else it may reach is access: the access profiles that list the card in `roles` join the chain below, so a read-only Reviewer is a card listed by a read-only profile. The link lives on the profile, off the workspace, because the card sits in the tracked `roles.json` where a conversation could edit it. A role never widens what the people or service a turn acts for may reach.
+- **An assistant** is how someone reaches an agent. A guest's assistants are the roles their profile lists, or every role that works in their areas. An outward assistant (a website chat, a Discord bot) is a listener automation: its role, the service it runs as, and its sender rules.
 
 ## How a turn's reach is worked out
 
@@ -36,22 +37,25 @@ The conversation latches who it acts for as its turns begin ([`identity-latch.ts
 | --- | --- |
 | A person | their roster row: the owner every answer, anyone on the roster what their row says (a maintainer runs every tool but may be held to some AI accounts, connections and secrets), someone no longer on the roster nothing. An AI account a person connected themselves is always in their list |
 | A service | its steward, as a person above, intersected with its profile. A service, steward or profile that no longer exists reaches nothing |
+| The role it wears | every access profile whose `roles` lists the card, read for the role the turn names (or, for an exit mid-turn, the one the conversation's last turn wore). A built-in is listed by none. Each such limit is marked as the role's, the one kind a person can get past, by switching the conversation to another role |
 | The organisation | the ceiling a bound sandbox's policy carries, on tools and AI accounts |
 
 That intersection decides four things, each where the daemon already enforced it for people:
 
 - **Credentials**: a capability outside it is never mounted, its variables and skill are left out, and every exit that spends a secret refuses it ([`credential-reach.ts`](../../_sandbox/sandbox/src/secrets/credential-reach.ts)).
 - **AI accounts**: a turn naming an account outside it is refused, one left to the sandbox's pick runs inside it, and a conversation remembering one outside it is moved ([`account-reach.ts`](../../_sandbox/sandbox/src/agent/run/decide/account-reach.ts)). The editor reads the same list off `GET /members/self` and applies the same rule ([`aiReach.ts`](../../_editor/web/src/models/providers/aiReach.ts)), so nothing is found out at Send. A provider none of whose accounts the person may use is "not shared with you": the model picker folds it behind one row and refuses its rows, with no Connect beside them. A new chat opens on a model they may use. A chat sitting on a model they may not use says so above the composer, offering another model, or a request to the owner when nothing is theirs. A model counts as spent when the person's own accounts are. The editor reads the person's own row only: an organisation's ceiling and the other people in a shared conversation are held by the daemon alone.
-- **Tools**: the ceiling caps the persona's shelves after conversation grants are laid over them, so neither a card nor a grant lifts a shelf the chain withholds ([`turn-premise.ts`](../../_sandbox/sandbox/src/agent/run/decide/turn-premise.ts)). An agent asking for such a shelf with `grants request` is refused rather than shown a card, since no answer could open it.
-- **The fence**: a conversation is born inside its starter's areas. A service's run is born inside its steward's areas intersected with its profile's, as area ids.
+- **Tools**: a turn's shelves are the full toolbox under the ceiling of every limit ([`turn-premise.ts`](../../_sandbox/sandbox/src/agent/run/decide/turn-premise.ts)). No card lifts a shelf. An agent asking for one with `grants request` is shown a card offering the roles that have it when only its role's profile withholds it, and refused when the people or service it acts for are held back, since no role has more than they do ([`grant-need.ts`](../../_sandbox/sandbox/src/needs/kinds/grant-need.ts)).
+- **The fence**: a conversation is born inside its starter's areas. A service's run is born inside its steward's areas intersected with its profile's, as area ids. Each turn is narrowed further to the areas of the profiles listing its role ([`roles.ts`](../../_sandbox/sandbox/src/roles/roles.ts) `roleFence`).
+
+Deleting a profile that lists a role is refused like one a person or a service holds: taking it away would widen every conversation wearing that role.
 
 ## Services
 
 A service always acts for its steward, so the oldest rule here still holds for unattended work: an agent never holds more than the person it acts for. A steward is the owner or someone on the roster who runs agents here. The profile narrows that further, and naming one is how unattended work stops reaching everything its steward can.
 
 - Before a fire starts a turn, the daemon checks the service still stands ([`service-standing.ts`](../../_sandbox/sandbox/src/access/service-standing.ts)). One whose steward left the roster, or whose service or profile was deleted, is recorded as skipped with that reason rather than run on nothing.
-- An automation save is refused when its persona speaks through an account its service's profile leaves out, or when none of the models it may run on is an AI account the service may use: the run could only fail.
-- `runAs` left out keeps what unattended work always did: it acts for the sandbox's owner with no profile, and the No accounts posture keeps signed-in accounts away from it.
+- An automation save is refused when its role speaks through an account its service's profile leaves out, or when none of the models it may run on is an AI account the service may use: the run could only fail.
+- `runAs` left out keeps what unattended work always did: it acts for the sandbox's owner with no profile, and the No accounts role keeps signed-in accounts away from it.
 
 ## Profiles on a person
 
@@ -112,7 +116,7 @@ so the declaration tells the truth.
 A conversation's words can be sealed to the people its author names ([`seal.ts`](../../_shared/sandbox-contract/src/schemas/seal.ts)). Its work cannot: the diff stays on the board for whoever lands it, and what lands is the team's. Someone who may not read a private conversation sees it the way a shared calendar shows somebody else's private event: whose it is, which lane it stands in, and its diff once there is work to land. They never see its title.
 
 - **The house rule** is the sandbox's (Access ▸ People), and an organisation's policy can fix it (`conversations.mode`). `everyone` is how the sandbox behaved before this existed. `chooses` leaves it to each author. `private` starts every new conversation private. Changing the rule never opens a conversation that is already private: only its author shares one again. Under any rule but `everyone`, each person's home conversation is private to them. The rule and each person's default live on the history volume beside the roster ([`seal-house.ts`](../../_sandbox/sandbox/src/auth/members/seal-house.ts)), out of reach of any workspace write.
-- **Who reads one** is decided by one rule for every door ([`seal-scope.ts`](../../_sandbox/sandbox/src/auth/seal-scope.ts)): its readers, someone its author let in for a day, and an opening without asking while it lasts. No role reads past a seal, the owner and Full access included. A program (a panel, a control token, an agent with no proof of its turn) reads nothing sealed. `visibleTo` in [`fleet-scope.ts`](../../_sandbox/sandbox/src/auth/fleet-scope.ts) means "may read its words" and applies the seal. `listedTo` means "is shown its card" and does not, and the routes that act on work alone (review, land, archive) ask that one ([`agent-lookups.ts`](../../_sandbox/sandbox/src/conversations/agent-lookups.ts)). Every summary leaves the daemon framed for its reader (`framedSummary`), as a sealed card for anyone else.
+- **Who reads one** is decided by one rule for every door ([`seal-scope.ts`](../../_sandbox/sandbox/src/auth/seal-scope.ts)): its readers, someone its author let in for a day, and an opening without asking while it lasts. No tier reads past a seal, the owner and Full access included. A program (a panel, a control token, an agent with no proof of its turn) reads nothing sealed. `visibleTo` in [`fleet-scope.ts`](../../_sandbox/sandbox/src/auth/fleet-scope.ts) means "may read its words" and applies the seal. `listedTo` means "is shown its card" and does not, and the routes that act on work alone (review, land, archive) ask that one ([`agent-lookups.ts`](../../_sandbox/sandbox/src/conversations/agent-lookups.ts)). Every summary leaves the daemon framed for its reader (`framedSummary`), as a sealed card for anyone else.
 - **A family shares one seal.** A subagent, a review or test opened on its work, and a fork all carry its words at one remove, so each is born with the root's seal ([`seal-birth.ts`](../../_sandbox/sandbox/src/conversations/seal/seal-birth.ts)), and a change to the root is written onto all of them ([`seal-family.ts`](../../_sandbox/sandbox/src/conversations/seal/seal-family.ts)).
 - **Opening one without asking** is the sandbox owner's alone. Full access cannot. It needs a written reason, which its author reads ([`seal-open.ts`](../../_sandbox/sandbox/src/conversations/seal/seal-open.ts)). No passkey: the route takes only a signed-in person, never an agent, a panel or a control token, and the owner's role is the gate. It is read-only for a day. Its author is told at once. The opening stays on the conversation for as long as the conversation is private: no route removes one, and sharing the conversation again is the author's own act. The audit trail keeps every opening for good (`conversation.unseal`). An organisation can ask for a second person with Full access to agree first (`conversations.twoPerson`).
 - **A turn reads the fleet as its people** ([`turn-reader.ts`](../../_sandbox/sandbox/src/auth/scope/turn-reader.ts)). Before this, an agent's CLI calls came in with no identity and read every conversation. Now each turn's environment carries an HMAC of its conversation id under a key the daemon holds only in memory (`INTENTIC_TURN_PROOF`, [`workload-stamp.ts`](../../_sandbox/sandbox/src/seams/workload-stamp.ts)). A fleet read counts as that conversation's people only with a valid proof. Without one, the call reads nothing that is a home or private.
@@ -128,12 +132,14 @@ A bound sandbox's policy may carry profiles of its own and a ceiling ([`organisa
 
 ## Decisions
 
-- **Posture and access are two things** (2026-10-26). Before this, a persona was soft for a watched chat and the only boundary for an unattended one, since a run with no person in its conversation reached every credential and every AI account. The same card meant two things depending on whether anyone was watching, and an automation had no owner to answer for it.
+- **Posture and access are two things** (2026-10-26). Before this, a role was soft for a watched chat and the only boundary for an unattended one, since a run with no person in its conversation reached every credential and every AI account. The same card meant two things depending on whether anyone was watching, and an automation had no owner to answer for it.
 - **A service acts for a person** (2026-10-26). The alternative was a service with authority of its own. Tying it to a steward keeps one rule for all work, makes a leaver's automations stop by construction, and gives spending and audit a person to name.
 - **One profile per principal** (2026-10-26), not a union of several: `agents` (off, chat, run, home) has no union that means anything. Sharing one profile between holders is the reuse.
 - **Written onto the row** (2026-10-26). Reading a member's profile live at every request was the alternative. Every reader of the roster, the platform's copy of the tier included, would then have had to learn profiles at once, and a profile edit would have moved tiers with nothing telling the platform.
 - **Off the workspace** (2026-10-26), unlike areas, which are tracked so their edits show up in review. A profile bounds unattended runs, and a run that could edit the file bounding it would hold nothing; the roster left the workspace on 2026-10-06 for the same reason.
-- **The built-in personas stay, as postures** (2026-10-26). The first sketch removed Full access and No accounts. Automations and links already name them, and once the ceiling comes from the chain they are exactly the two postures worth having built in.
+- **The built-in roles stay, as postures** (2026-10-26). The first sketch removed Full access and No accounts. Automations and links already name them, and once the ceiling comes from the chain they are exactly the two postures worth having built in. (2026-11-18: Full access is labelled All accounts, since the Full access tier of a person's access shares the name; its stored id stays `full-access`.)
+- **Personas are roles, and a member's access level is a tier** (2026-11-18). "Persona" suggested a personality, and hid that it is the unit a person picks per task: the job a conversation does. Once a role's limits were access, the card was a role in every sense the word has, so it took the name. "Role" then stopped naming a member's access level, which became the tier the docs already called it. What older sandboxes, editors and organisations store or send under the old words is read on purpose: `personas.json` moves to `roles.json` (`roles-store.ts` `movedFrom`) and its kits to `roles/` (`roles-folder-step.ts`), the role routes keep their `/personas` paths, the Roles organisation section keeps the id `personas`, and a chat route asks and answers under both names for a release ([COMPATIBILITY.md](../../COMPATIBILITY.md)).
+- **A role's limits are access** (2026-11-18). A card used to carry shelves, connector lists and folders of its own, a second permission system on top of access that a person could lift for one conversation from a card. A refusal then had two possible sources on two screens, one liftable and one not. Those limits moved into access profiles that list the card (`role-access-step.ts` carried every card's into a profile and an area), so every limit is one vocabulary, read in one chain, and a conversation needing more is switched to a role that has it. The link is on the profile rather than the card, for the reason profiles are off the workspace. What a profile cannot say came out of the move as the connections standing that day: a card's connector list meant "these, and nothing of this kind connected later".
 - **Access is a state, not an error** (2026-10-26). Before this the editor asked first and drew whatever came back: a
   viewer met red "maintainer access required" notices with a Try again that could never work, a composer that looked
   live, cards saying "Waiting on you" for answers the daemon refused them, hub links that bounced to Overview without a
@@ -166,14 +172,14 @@ A bound sandbox's policy may carry profiles of its own and a ceiling ([`organisa
   signature against the keys it pinned for the sandbox. An owner with no passkey adds one under Access ▸ Sign-in, or
   changes the fence on the machine itself with `ic sandbox egress`.
 - **Previews follow the roster** (2026-10-27). With the preview guard on, a pass goes to the owner and to anyone on the roster above a guest, checked when the editor asks for one. A guest reaches its assistants, not the workspace's apps. A pass does not name its holder, so a change that takes someone's previews away replaces the key, and every member's browser fetches a new pass with its next preview. The alternative was netd asking the daemon about each request, which would have put the daemon on the path of every byte a preview loads ([sandbox.md](sandbox.md#the-process)).
-- **No separate assistant record** (2026-10-26). An outward assistant is already a listener automation (persona, `runAs`, sender rules), and an inward one is a persona a profile lists. A third record would have said the same thing twice. Under a guest's own authority the guest's fence still has to hold an assistant's starting folder, so a listed assistant must work in the guest's areas.
+- **No separate assistant record** (2026-10-26). An outward assistant is already a listener automation (role, `runAs`, sender rules), and an inward one is a role a profile lists. A third record would have said the same thing twice. Under a guest's own authority the guest's fence still has to hold an assistant's starting folder, so a listed assistant must work in the guest's areas.
 
 - **Words are private, work is shared** (2026-11-04). Hiding a private conversation's diff too was the alternative. Then a private conversation's work could not land, since the person landing it has to read what they apply, and the code would be in the shared repository's branches anyway. A seal therefore covers what a conversation said: title, transcript, prompts, subagents' reports. It does not cover what it changed.
 - **The owner is held to a seal too, with one door that leaves a mark** (2026-11-04). Exempting the sandbox's owner was the alternative, since they own the machine. The people who asked for private conversations wanted them private from the owner as well. Pretending nobody could ever open one would have been a promise the machine cannot keep. Opening without asking is the explicit, recorded and told version of what root could do quietly. It is the owner's alone, never Full access's, and never an agent's.
 
 ## Key files
 
-- [access-profiles.ts](../../_shared/sandbox-contract/src/schemas/access-profiles.ts): the profile, its tool ceiling and how it caps a persona's shelves.
+- [access-profiles.ts](../../_shared/sandbox-contract/src/schemas/access-profiles.ts): the profile, its tool ceiling, and the roles it holds.
 - [services.ts](../../_shared/sandbox-contract/src/schemas/services.ts): the service principal.
 - [principal-chain.ts](../../_sandbox/sandbox/src/access/principal-chain.ts): who a conversation acts for, resolved to limits.
 - [credential-reach.ts](../../_sandbox/sandbox/src/secrets/credential-reach.ts): credentials and AI accounts within the chain.

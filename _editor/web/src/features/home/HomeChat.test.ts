@@ -21,7 +21,7 @@ jest.mock(`../../parts/sandbox/SandboxOutdatedNotice.vue`, () => ({
     default: defineComponent({ props: { missing: { type: String, required: true } }, setup: (props) => () => h(`div`, { "data-outdated": `` }, props.missing) }),
 }));
 
-const box = { id: `box-1`, name: `workspace`, lastSeenAt: `2026-10-27T00:00:00Z`, role: `owner` };
+const box = { id: `box-1`, name: `workspace`, lastSeenAt: `2026-10-27T00:00:00Z`, tier: `owner` };
 const sandboxes = ref([box]);
 const activeSandboxId = ref<string | undefined>(box.id);
 const reachable = ref(true);
@@ -37,7 +37,7 @@ jest.mock(`../../models/home/homeChat`, () => ({
 }));
 jest.mock(`../../models/fleet/useAgents-registry`, () => ({ registry: ref([]) }));
 jest.mock(`../../models/home/homeFacts`, () => ({ workLedger: () => [] }));
-jest.mock(`../../client/sandbox/useRole`, () => ({ useRole: () => ({ canLandHome: computed(() => true) }) }));
+jest.mock(`../../client/sandbox/useTier`, () => ({ useTier: () => ({ canLandHome: computed(() => true) }) }));
 jest.mock(`../../models/workspace/tree/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({ hasSnapshot: ref(true) }) }));
 jest.mock(`../sandbox/overview/useSandboxAvailability`, () => ({ useSandboxAvailability: () => computed(() => `ready`) }));
 jest.mock(`../../models/sandbox/sandboxScreen`, () => ({ sandboxEntryPath: (id: string) => `/agents?in=${id}` }));

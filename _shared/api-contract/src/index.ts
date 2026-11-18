@@ -1,5 +1,5 @@
 import { HOSTED_TIER_IDS, PROFILE_IDS, SANDBOX_MODES, SANDBOX_NAME_MAX } from "@intentic/constants";
-import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
+import { GrantedTierSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { ManageRightSchema } from "@intentic/sandbox-contract/schemas/members";
 import { isProjectDirName } from "@intentic/sandbox-contract/ids/project-dir";
 import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
@@ -195,17 +195,24 @@ export const sandboxRegistryContract = {
 // Delivery is separate from the grant, already in place; the daemon's list is pushed by the manager's own browser.
 // `manages` on a grant replaces the row's rights; absent keeps what it has (none for a new invite).
 const sandboxEmailInput = z.object({ sandboxId: z.string(), email: z.email() });
-const sandboxGrantInput = z.object({
+const grantFields = {
     sandboxId: z.string(),
     email: z.email(),
-    role: GrantedRoleSchema,
     manages: z.array(ManageRightSchema).max(10).optional(),
-});
+};
+// The tier a grant makes. An editor from before 2026-11-18 sends it as `role` (its name until "role" came to mean a
+// role card), which reads as `tier` for one release.
+const sandboxGrantInput = z.union([
+    z.object({ ...grantFields, tier: GrantedTierSchema }),
+    z.object({ ...grantFields, role: GrantedTierSchema }).transform(({ role, ...rest }) => ({ ...rest, tier: role })),
+]);
 const tokenInput = z.object({ token: z.string() });
 export const inviteContract = {
     list: oc.route({ method: "POST", path: "/invite/list" }).input(sandboxIdInput).output(InviteListSchema),
     create: oc.route({ method: "POST", path: "/invite/create" }).input(sandboxGrantInput).output(InviteSentSchema),
     resend: oc.route({ method: "POST", path: "/invite/resend" }).input(sandboxEmailInput).output(InviteSentSchema),
+    setTier: oc.route({ method: "POST", path: "/invite/tier" }).input(sandboxGrantInput).output(InviteListSchema),
+    // The same as setTier under its name before 2026-11-18, kept for one release for an editor from before.
     setRole: oc.route({ method: "POST", path: "/invite/role" }).input(sandboxGrantInput).output(InviteListSchema),
     revoke: oc.route({ method: "POST", path: "/invite/revoke" }).input(sandboxEmailInput).output(InviteListSchema),
     preview: oc.route({ method: "POST", path: "/invite/preview" }).input(tokenInput).output(InvitePreviewSchema),
@@ -294,7 +301,7 @@ export const pushRelayContract = {
     send: oc.route({ method: "POST", path: "/push/send" }).input(PushSendSchema).output(PushSentSchema),
 };
 
-// Operator's read of the deployment, gated by the ADMIN_EMAILS allowlist (requireAdmin), not a role row.
+// Operator's read of the deployment, gated by the ADMIN_EMAILS allowlist (requireAdmin), not a member's tier.
 // Read-only until the admin extension is a pinned install; a mutation added later stays behind the same guard.
 export const adminContract = {
     overview: oc.route({ method: "GET", path: "/admin/overview" }).output(AdminOverviewSchema),

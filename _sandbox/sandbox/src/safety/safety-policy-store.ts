@@ -8,7 +8,7 @@ import { DEFAULT_SAFETY_POLICY, type SafetyPolicy } from "@intentic/sandbox-cont
 // a diff against the shipped default.
 //
 // What the judge reads is that file PLUS the lines the owner allowed with Always on permission cards. Those are owner-wide
-// grants (personas/owner-grants.ts), kept off the workspace, listed and taken back under Access, and rendered here, after
+// grants (roles/owner-grants.ts), kept off the workspace, listed and taken back under Access, and rendered here, after
 // the owner's own text, in a form that depends on nothing but the lines. They are never written into the file: an agent
 // edits it as freely as its owner, so a yes kept there was a yes anyone could add or erase.
 
@@ -27,7 +27,7 @@ export const GRANTED_HEADING = `## Allowed with Always on permission cards`;
 const GRANTED_NOTE = `Lines the owner allowed with Always on a card, oldest first. They hold in every conversation until the owner takes one back under Access.`;
 
 // The legacy heading and blurb a release before the owner-wide grants appended card-accepted lines under, into the
-// owner's own file. Read only by the step that carries them out (personas/safety-card-lines.ts).
+// owner's own file. Read only by the step that carries them out (roles/safety-card-lines.ts).
 export const LEGACY_ADDED_HEADING = `## Added from permission cards`;
 export const LEGACY_ADDED_NOTE = `Lines you accepted on a card, newest last. Edit or delete them like anything else here.`;
 

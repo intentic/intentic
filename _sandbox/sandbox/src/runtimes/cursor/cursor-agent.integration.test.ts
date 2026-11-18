@@ -959,8 +959,8 @@ describe("a turn carrying a tool list", () => {
     });
 });
 
-// The worn persona's own skills are handed to Cursor's loader as a second workspace root, gone once the turn ends.
-test("a persona's kit rides as a workspace root of the turn's own, removed when the turn ends", async () => {
+// The worn role's own skills are handed to Cursor's loader as a second workspace root, gone once the turn ends.
+test("a role's kit rides as a workspace root of the turn's own, removed when the turn ends", async () => {
     create.mockResolvedValue({ agentId: `agent-kit`, send: async () => ({ wait: async () => ({ status: `success` }), cancel }), close: () => {} });
     const kit = join(mkdtempSync(join(tmpdir(), `cursor-kit-`)), `review-checklist`);
     mkdirSync(kit);

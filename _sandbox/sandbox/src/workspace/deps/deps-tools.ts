@@ -68,7 +68,7 @@ const line = (status: ProjectSetupStatus, canInstall: boolean, isolated: boolean
             return canInstall
                 ? `${where(status)}: never installed. Run \`${status.recipe.command}\` in it (${yourselfClause(isolated)}), or call ` +
                       `\`mcp__deps__install\` to have the daemon install it in the main tree and wait for it.`
-                : `${where(status)}, never installed. This persona cannot change the workspace, so ask the owner to install it.`;
+                : `${where(status)}, never installed. This role cannot change the workspace, so ask the owner to install it.`;
         case "unsupported":
             return `${where(status)}: never installed, and \`${status.recipe.manager}\` is not in this sandbox. Nothing here can fix that; say so if it blocks the task.`;
     }
@@ -78,7 +78,7 @@ const standingRule = (canInstall: boolean, isolated: boolean): string =>
     canInstall
         ? `You may run a project's own install or add command yourself (\`pnpm add\`, \`npm install\`, \`uv sync\`): ${yourselfClause(isolated)}. ` +
           `The manifest and lockfile it changes land with the rest of your work, and the owner's review lists every dependency it adds.`
-        : "This persona cannot install dependencies; ask the owner.";
+        : "This role cannot install dependencies; ask the owner.";
 
 // Projects that exist only on this conversation's branch, by the name `mcp__deps__status` would give them.
 const branchOnly = async (worktree: string | undefined, known: readonly ProjectSetupStatus[]): Promise<WorkspaceProject[]> => {
@@ -251,7 +251,7 @@ export const installTool = (deps: DepsToolDeps) => {
     );
 };
 
-// `install` is withheld from a persona that cannot change the workspace; `status` says why in its description.
+// `install` is withheld from a role that cannot change the workspace; `status` says why in its description.
 export const depsTools = (deps: DepsToolDeps) => (deps.canInstall ? [statusTool(deps), installTool(deps)] : [statusTool(deps)]);
 
 export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInstance =>

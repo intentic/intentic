@@ -1,7 +1,7 @@
 import { refuse } from "@intentic/contract-serve";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { SEAL_OPEN_HOURS, type Seal, type SealOpen } from "@intentic/sandbox-contract/schemas/seal";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { demoTier } from "../../mode";
 import { agentAnswer, boardAgents, broadcastRoster, roster } from "../board/roster";
 import type { Doors } from "../doors";
@@ -117,7 +117,7 @@ export const sealDoors = {
         known(id);
         const seal = sealOf(id);
         const open = seal?.opens?.find((each) => each.id === openId && each.pending === true);
-        if (seal === undefined || open === undefined || !roleAtLeast(demoTier, `maintainer`) || open.email === caller().email) {
+        if (seal === undefined || open === undefined || !tierAtLeast(demoTier, `maintainer`) || open.email === caller().email) {
             return refuse(`Only someone with Full access who did not ask for it agrees to an opening.`);
         }
         const at = Date.now();

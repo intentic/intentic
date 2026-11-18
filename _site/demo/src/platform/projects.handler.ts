@@ -9,7 +9,7 @@ const claimsOf = () => ({
     claims: [...claims.values()]
         .flatMap((claim) => {
             const sandbox = rowOf(claim.sandboxId);
-            return sandbox?.role === `owner` ? [{ ...claim, sandboxName: sandbox.name }] : [];
+            return sandbox?.tier === `owner` ? [{ ...claim, sandboxName: sandbox.name }] : [];
         })
         .sort((a, b) => a.project.localeCompare(b.project)),
 });
@@ -21,7 +21,7 @@ export const projectsAnswers = {
     claim: ({ sandboxId, project: raw }) => {
         const project = projectOf(raw);
         const sandbox = rowOf(sandboxId);
-        if (sandbox?.role !== `owner`) {
+        if (sandbox?.tier !== `owner`) {
             return refusePlatform(`No sandbox ${sandboxId} on this account.`, 404);
         }
         claims.set(project, { project, sandboxId, createdAt: claims.get(project)?.createdAt ?? new Date().toISOString() });

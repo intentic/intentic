@@ -45,7 +45,7 @@ describe(`staleQueryKeys`, () => {
         expect(carries.toSorted()).toEqual([
             `.intentic/config/areas.json`,
             `.intentic/config/capabilities.json`,
-            `.intentic/config/personas.json`,
+            `.intentic/config/roles.json`,
             `.intentic/config/settings.json`,
         ]);
     });
@@ -397,9 +397,9 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             // What a home conversation reviews, merges and asks a person about; same reason as the safety policy.
             `${STATE_DIR}/config/home.md`,
             `${STATE_DIR}/config/loop-designs.json`,
-            `${STATE_DIR}/config/personas.json`,
-            // A persona's prompt and reachable skills: the text that decides how it behaves, same reason as its card.
-            `${STATE_DIR}/config/personas/`,
+            `${STATE_DIR}/config/roles.json`,
+            // A role's prompt and reachable skills: the text that decides how it behaves, same reason as its card.
+            `${STATE_DIR}/config/roles/`,
             // Prose deciding when the agent stops to ask; the standing answer to "since when did we allow this".
             `${STATE_DIR}/config/safety.md`,
             `${STATE_DIR}/config/settings.json`,
@@ -470,7 +470,7 @@ describe(`state groups`, () => {
     });
 
     it(`sorts the entries a browsing owner would recognise`, () => {
-        expect(stateGroupPaths(`config`)).toContain(`.intentic/config/personas/`);
+        expect(stateGroupPaths(`config`)).toContain(`.intentic/config/roles/`);
         expect(stateGroupPaths(`config`)).toContain(`.intentic/config/approvals/`);
         expect(stateGroupPaths(`records`)).toContain(`.intentic/records/sessions/claude/`);
         expect(stateGroupPaths(`records`)).toContain(`.intentic/records/artifacts/`);

@@ -65,13 +65,13 @@ const grantMember = async ({ request }: RawContext): Promise<Response> => {
     if (refused !== undefined) {
         return refuse(refused, 400);
     }
-    if (tierOf(access) !== grant.role) {
-        return refuse(`the role does not match the access granted, which makes a ${tierOf(access)}`, 400);
+    if (tierOf(access) !== grant.tier) {
+        return refuse(`the tier does not match the access granted, which makes a ${tierOf(access)}`, 400);
     }
-    if (grant.role === `maintainer` && grant.areas !== undefined) {
+    if (grant.tier === `maintainer` && grant.areas !== undefined) {
         return refuse(`a maintainer holds the owner's operating authority and cannot be fenced to part of the workspace`, 400);
     }
-    grantAccess(grant.email, grant.role, grant.areas, grant.credentials, {
+    grantAccess(grant.email, grant.tier, grant.areas, grant.credentials, {
         agents: grant.agents,
         edit: grant.edit,
         emailSignIn: grant.emailSignIn,
@@ -90,7 +90,7 @@ const revokeMember = async ({ request }: RawContext): Promise<Response> => {
 
 // The demo's reader asking the owner for more, as the tier it is read as (`?as=`); the owner holds every access already.
 const askForAccess = async ({ request }: RawContext): Promise<Response> => {
-    if (demoSelf().role === `owner`) {
+    if (demoSelf().tier === `owner`) {
         return refuse(`the owner already holds every access here`, 400);
     }
     const asked = AccessAskSchema.safeParse(await request.json());

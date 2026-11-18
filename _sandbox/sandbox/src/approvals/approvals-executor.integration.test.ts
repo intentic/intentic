@@ -40,7 +40,7 @@ const { createApprovalsExecutor, nextDueAt } = await import("./approvals-executo
 
 const NOW = 1_700_000_000_000;
 
-// `actsAs` defaults on since a browser post with no persona is its own failure case, tested separately below.
+// `actsAs` defaults on since a browser post with no role is its own failure case, tested separately below.
 const post = (overrides: Partial<PostApprovalSummary> & { id: string }): PostApprovalSummary => ({
     kind: "post",
     platform: "reddit",
@@ -80,8 +80,8 @@ const servicesWith = async (...seed: ApprovalSummary[]) => {
             upsert: async (entry: ApprovalSummary) => void rows.set(entry.id, entry),
             remove: async (id: string) => rows.delete(id),
         },
-        // The cast the executor checks `actsAs` against: the default face plus the ones the multi-persona tests use.
-        personas: {
+        // The cast the executor checks `actsAs` against: the default face plus the ones the multi-role tests use.
+        roles: {
             list: async () => [
                 { id: "poster", capabilities: [] },
                 { id: "alice", capabilities: [] },
@@ -156,7 +156,7 @@ test("a browser-only platform gets one turn for the whole batch", async () => {
     expect(services.rows.get("r1")?.status).toBe("running");
 });
 
-test("a browser post that names no persona is failed unsent, with a reason the owner can act on", async () => {
+test("a browser post that names no role is failed unsent, with a reason the owner can act on", async () => {
     const services = await servicesWith(post({ id: "orphan", actsAs: undefined, status: "approved", scheduledAt: NOW - 1 }));
     await createApprovalsExecutor(services).runDue(NOW);
     // No turn at all: waking one with no account would report a missing login, the wrong message to show the owner.
@@ -165,8 +165,8 @@ test("a browser post that names no persona is failed unsent, with a reason the o
     expect(services.rows.get("orphan")?.error).toContain("actsAs");
 });
 
-test("a persona no card carries is failed unsent too, and named in the reason", async () => {
-    // A card renamed on one side, or cloned before personas committed, is the same failure as naming nobody.
+test("a role no card carries is failed unsent too, and named in the reason", async () => {
+    // A card renamed on one side, or cloned before roles committed, is the same failure as naming nobody.
     const services = await servicesWith(post({ id: "ghost", actsAs: "deleted-card", status: "approved", scheduledAt: NOW - 1 }));
     await createApprovalsExecutor(services).runDue(NOW);
     expect(startTurn).not.toHaveBeenCalled();
@@ -192,7 +192,7 @@ test("two faces are two turns, each carrying only its own posts", async () => {
     expect(turnOf(0).conversationId).not.toBe(turnOf(1).conversationId);
 });
 
-test("a Discord post needs no persona: the daemon sends it through the gateway's bot, not a browser", async () => {
+test("a Discord post needs no role: the daemon sends it through the gateway's bot, not a browser", async () => {
     const services = await servicesWith(
         post({ id: "d", platform: "discord", actsAs: undefined, target: "123456789", status: "approved", scheduledAt: NOW - 1 }),
     );
@@ -273,7 +273,7 @@ test("an action naming nobody runs with no accounts rather than failing: not eve
     expect(services.rows.get("chore")?.status).toBe("running");
 });
 
-test("an action naming a persona nobody carries is failed like a post would be", async () => {
+test("an action naming a role nobody carries is failed like a post would be", async () => {
     const services = await servicesWith(action({ id: "ghost", actsAs: "nobody" }));
     await createApprovalsExecutor(services).runDue(NOW);
     expect(startTurn).not.toHaveBeenCalled();

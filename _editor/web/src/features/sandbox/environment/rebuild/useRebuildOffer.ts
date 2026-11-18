@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../../models/fleet/useAgents";
@@ -14,7 +14,7 @@ import { useHostedRebuildStart } from "./hostedRebuildStart";
 // built without it), and no agent mid-turn (the swap at the end restarts the sandbox under it). Anywhere else the
 // banner's link to the Environment card's own step is the way (rebuildAnchor.ts).
 export function useRebuildOffer() {
-    const { isOwner } = useRole();
+    const { isOwner } = useTier();
     const { pending, proposal } = useEnvironment();
     const { active } = useSandbox();
     const hosted = computed(() => (active.value?.hosted ? active.value.id : undefined));

@@ -14,7 +14,7 @@ export const sandboxSummary = (over: Partial<SandboxSummary> & Pick<SandboxSumma
     removedAt: null,
     removedBy: null,
     token: `token-${over.id}`,
-    role: `owner`,
+    tier: `owner`,
     providedAddress: false,
     localHostname: null,
     hosted: null,

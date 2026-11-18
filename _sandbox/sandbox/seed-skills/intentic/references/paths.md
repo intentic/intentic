@@ -6,8 +6,8 @@
 /work/public/                        outbox: every file in it is on the public internet
 /work/AGENTS.md                      the owner's standing instructions (memory), composed into every turn
 /work/.intentic/config/settings.json this sandbox's agent settings (systemPromptMode, systemPrompt, modelSetups,
-                                     roleSetups, personaRouting, actionRules, skills, subagent limits, rules…)
-/work/.intentic/config/              capabilities.json, personas.json (the cards) and personas/<id>/ (each
+                                     roleSetups, roleRouting, actionRules, skills, subagent limits, rules…)
+/work/.intentic/config/              capabilities.json, roles.json (the cards) and roles/<id>/ (each
                                      one's kit: PROMPT.md, skills/), automations.json, workflows.json, areas.json,
                                      environment.custom.Dockerfile (the owner-approved part of the overlay;
                                      environment.d/ and environment.Dockerfile hold steps proposed and not yet

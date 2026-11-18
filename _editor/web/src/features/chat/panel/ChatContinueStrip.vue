@@ -31,7 +31,7 @@ import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 import { useAccessWall } from "../../../models/conversations/endings/accessWall";
 import { modelsHref } from "../../../lib/routes/modelsPath";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { shortModelLabel } from "../../../models/providers/shortModelLabel";
 
 // One card for every ending that leaves work behind a live session (a dead turn, an outage, a spent allowance), and it
@@ -106,7 +106,7 @@ const wallStatus = computed(() => {
 });
 // Connecting is Full access's, and that of someone given AI accounts of their own (the daemon refuses anyone else's
 // sign-in): anyone else's card says who can.
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { holds } = useAccess();
 const mayConnect = computed(() => canShip.value || holds(`ownAccounts`));
 const connectTo = computed(() => modelsHref({ open: accessWall.value?.provider }));

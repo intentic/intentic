@@ -221,8 +221,8 @@ test("a secrets.set overlapping a secrets.remove does not resurrect the removed 
 // be written about. Revealing the value is releasing it to a person, so the gate holds there too: the operating tier
 // reads every ungated value, and a gated one only when it is among the approvers.
 test("secrets.reveal holds a gated credential to its approvers, and inventory says who may", async () => {
-    const as = (email: string, role: "owner" | "maintainer") => {
-        const svc = services({ auth: { authorize: async () => proven(email, role), authorizeOwner: rejectForbidden } });
+    const as = (email: string, tier: "owner" | "maintainer") => {
+        const svc = services({ auth: { authorize: async () => proven(email, tier), authorizeOwner: rejectForbidden } });
         return { svc, client: clientFor(createApp(svc), { bearer: email }) };
     };
     const seed = async (svc: ReturnType<typeof services>): Promise<void> => {

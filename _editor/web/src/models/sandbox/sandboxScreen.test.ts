@@ -37,7 +37,7 @@ const activeSandboxId = ref<string | undefined>(`sb1`);
 jest.mock("../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId }) }));
 // The person's standing in the sandbox switched to: a guest's first screen is its chat, everyone else's the board.
 const guest = ref(false);
-jest.mock("../../client/sandbox/useRole", () => ({ useRole: () => ({ isGuest: guest, homeOnly: ref(false) }) }));
+jest.mock("../../client/sandbox/useTier", () => ({ useTier: () => ({ isGuest: guest, homeOnly: ref(false) }) }));
 
 const view = { render: () => null };
 const frames = [

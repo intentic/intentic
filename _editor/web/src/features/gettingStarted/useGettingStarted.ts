@@ -3,7 +3,7 @@ import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-spe
 import { sandboxRef } from "@intentic/extension-api";
 import { computed, effectScope, type Ref, watch } from "vue";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { archived, loadArchived, registry, rosterHeard } from "../../models/fleet/useAgents-registry";
 import { pastFirstDays, workLanded } from "../../models/fleet/fleetHistory";
@@ -64,7 +64,7 @@ const timingFacts = () => ({
 
 const create = (): GettingStarted => {
     const { choices, heard, hide, show, skip } = useGettingStartedChoices();
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     // The shared tree, under the very entry the explorer reads it through, so this asks nothing the workspace does not.
     const { query: tree } = useSandboxQuery({ queryKey: sharedWorkspaceTreeKey(), queryFn: treeRead(() => sandboxRpc.workspace.tree({})) });
 

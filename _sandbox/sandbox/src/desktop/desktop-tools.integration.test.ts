@@ -90,8 +90,8 @@ describe.skipIf(!x11.runs)(x11.title("the sandbox's desktop"), () => {
 });
 
 // `open` starts any program with any arguments, and typing into a window it started is a shell: the desktop is a shell
-// by another name, so a persona whose `shell` shelf is shut must not be handed it because its `browser` shelf is open.
-// (`sh -c touch${IFS}/tmp/x` through `open` ran, measured with the persona-less desktop tool.)
+// by another name, so a role whose `shell` shelf is shut must not be handed it because its `browser` shelf is open.
+// (`sh -c touch${IFS}/tmp/x` through `open` ran, measured with the role-less desktop tool.)
 describe.skipIf(!x11.runs)(x11.title("who is handed the sandbox's desktop"), () => {
     const mounted = (powers: { readonly browser: boolean; readonly shell: boolean }): string[] => {
         const opened: string[] = [];
@@ -104,11 +104,11 @@ describe.skipIf(!x11.runs)(x11.title("who is handed the sandbox's desktop"), () 
         return opened;
     };
 
-    test("a persona with a browser and a shell is handed it", () => {
+    test("a role with a browser and a shell is handed it", () => {
         expect(mounted({ browser: true, shell: true })).toEqual(["desktop"]);
     });
 
-    test("a persona with a browser and no shell is not, and neither is one with a shell and no browser", () => {
+    test("a role with a browser and no shell is not, and neither is one with a shell and no browser", () => {
         expect(mounted({ browser: true, shell: false })).toEqual([]);
         expect(mounted({ browser: false, shell: true })).toEqual([]);
         expect(mounted({ browser: false, shell: false })).toEqual([]);

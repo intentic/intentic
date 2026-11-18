@@ -112,7 +112,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
     // release.
     const releasableBy = async (): Promise<readonly string[]> => {
         const [owner, members] = await Promise.all([services.ownerEmail(), services.members.list()]);
-        return [...(owner !== undefined ? [owner.toLowerCase()] : []), ...members.filter((member) => member.role !== "guest").map((member) => member.email.toLowerCase())];
+        return [...(owner !== undefined ? [owner.toLowerCase()] : []), ...members.filter((member) => member.tier !== "guest").map((member) => member.email.toLowerCase())];
     };
     // Refuses a gate naming somebody off the roster; compared lowercased since roster writes normalize case but a
     // Google claim may not.

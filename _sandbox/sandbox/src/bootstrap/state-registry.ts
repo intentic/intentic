@@ -69,10 +69,6 @@ import { commandProfilesDocument } from "../offload/command-profiles.js";
 import { syncEnrollmentsDocument } from "../peers/desktop-sync.js";
 import { hostEnrollmentsDocument, hostPairConsumedDocument, phoneEnrollmentsDocument, phonePairConsumedDocument, runnerEnrollmentsDocument, runnerPairConsumedDocument, syncPairConsumedDocument, webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
 import { peerToolsDocument } from "../peers/peer-tool-memory.js";
-import { conversationGrantsDocument } from "../personas/conversation-grants.js";
-import { ownerGrantsDocument } from "../personas/owner-grants.js";
-import { personasDocument } from "../personas/personas-store.js";
-import { safetyCardLinesStep } from "../personas/safety-card-lines.js";
 import { phonePairingsDocument } from "../phones/phone-pairings.js";
 import { phoneWakeDocument } from "../phones/phone-wake.js";
 import { bundleManifestDocument } from "../portability/bundle-arrival.js";
@@ -82,6 +78,12 @@ import { privacyShieldDocument } from "../privacy/privacy-policy.js";
 import { privacyVaultDocument } from "../privacy/privacy-vault.js";
 import { panelRecordsDocument } from "../processes/panel-records.js";
 import { pushDocument } from "../push/push-store.js";
+import { conversationGrantsDocument } from "../roles/conversation-grants.js";
+import { ownerGrantsDocument } from "../roles/owner-grants.js";
+import { roleAccessStep } from "../roles/role-access-step.js";
+import { roleKitsFolderStep } from "../roles/roles-folder-step.js";
+import { rolesDocument } from "../roles/roles-store.js";
+import { safetyCardLinesStep } from "../roles/safety-card-lines.js";
 import { ruleFiringsDocument } from "../rules/rule-firings.js";
 import { runnerIdentityDocument } from "../runners/runner-identity.js";
 import { safetyLogDocument } from "../safety/safety-log.js";
@@ -222,9 +224,6 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     webextEnrollmentsDocument,
     webextPairConsumedDocument,
     peerToolsDocument,
-    conversationGrantsDocument,
-    ownerGrantsDocument,
-    personasDocument,
     phonePairingsDocument,
     phoneWakeDocument,
     bundleManifestDocument,
@@ -234,6 +233,9 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     privacyVaultDocument,
     panelRecordsDocument,
     pushDocument,
+    conversationGrantsDocument,
+    ownerGrantsDocument,
+    rolesDocument,
     ruleFiringsDocument,
     runnerIdentityDocument,
     safetyLogDocument,
@@ -304,6 +306,8 @@ export const stateSteps = (): readonly StructuralStep[] =>
         automationsRelocationStep,
         heldWakesOffWorkspaceStep,
         pre1308ImportStep,
+        roleAccessStep,
+        roleKitsFolderStep,
         safetyCardLinesStep,
         earlierDefaultsStep,
         conversationsSchemaStep,

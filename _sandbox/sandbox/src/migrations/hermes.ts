@@ -113,7 +113,7 @@ export const planHermes = (files: Files): SourcePlan => {
                 id: "memory:soul",
                 group: "memory",
                 label: "Personality, SOUL.md",
-                detail: "Merged into the agent's memory files as standing context. Make it a persona later if the agent should act as this character.",
+                detail: "Merged into the agent's memory files as standing context. Make it a role later if the agent should act as this character.",
                 recommended: true,
                 secrets: [],
             },

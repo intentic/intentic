@@ -2,13 +2,13 @@ import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { type Capability, CapabilitySchema, type CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
 import type { Need } from "@intentic/sandbox-contract/schemas/needs";
-import { PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import { RolePowersSchema } from "@intentic/sandbox-contract/schemas/roles";
 import type { TurnStanding } from "../../conversations/actor/turn-standing.js";
 import type { AskContext, Resolved } from "../need-kinds.js";
 import { capabilityNeed, hostOf, servesTarget } from "./capability-need.js";
 
 // The capability ask answered for the asking turn. Three of its answers were once all "already connected, use it"
-// (docs/architecture/needs.md): a connection for another site, one the persona withholds, one whose credential is
+// (docs/architecture/needs.md): a connection for another site, one the role withholds, one whose credential is
 // refused. Each has a case of its own here, taken from the session that met it.
 
 const WEBSITE: CapabilityCatalogEntry = {
@@ -54,13 +54,13 @@ const docker = (gpu: "on" | "off"): Capability => CapabilitySchema.parse({ id: "
 const standing = (over: Partial<TurnStanding> = {}): TurnStanding => ({
     at: 0,
     unattended: false,
-    persona: undefined,
+    role: undefined,
     granted: [],
-    withheldByPersona: [],
+    withheldByRole: [],
     withheldByGate: [],
     withheldByReach: [],
     fence: undefined,
-    powers: PersonaPowersSchema.parse({}),
+    powers: RolePowersSchema.parse({}),
     runtime: "claude-code",
     secrets: "masked",
     ...over,
@@ -145,16 +145,16 @@ describe("capability need", () => {
         });
     });
 
-    // 2026-08-16: Reddit was connected for another chat's persona; the ask said "use it" to a turn that could not.
-    it("asks for a grant when the connection exists but this conversation's persona leaves it out", async () => {
+    // 2026-08-16: Reddit was connected for another chat's role; the ask said "use it" to a turn that could not.
+    it("asks for a grant when the connection exists but this conversation's role leaves it out", async () => {
         const answer = await kind(world({ capabilities: [browser("reddit-radarsuspam", "https://www.reddit.com/")] })).resolve(
             { kind: "capability", entry: "reddit-radarsuspam" },
-            asked({ standing: standing({ withheldByPersona: ["reddit-radarsuspam"], persona: { id: "research", name: "Research" } }) }),
+            asked({ standing: standing({ withheldByRole: ["reddit-radarsuspam"], role: { id: "research", name: "Research" } }) }),
         );
         expect(answer).toEqual({
             kind: "raise",
             title: 'Let this conversation use "reddit-radarsuspam"',
-            subject: { kind: "grant", subject: "capability", what: "reddit-radarsuspam", label: '"reddit-radarsuspam" (Browser session)', persona: "Research" },
+            subject: { kind: "grant", subject: "capability", what: "reddit-radarsuspam", label: '"reddit-radarsuspam" (Browser session)', role: "Research" },
         });
     });
 

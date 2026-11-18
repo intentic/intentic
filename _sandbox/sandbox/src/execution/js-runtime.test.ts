@@ -1,22 +1,28 @@
 import { tmpdir } from "node:os";
-import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
-import { turnPersona } from "../personas/personas.js";
+import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
+import { capRole, turnRole } from "../roles/roles.js";
 import { jsExecutionPlanOf, nodeArgs, RECORD_READ_ROOTS } from "./js-runtime.js";
 
-/* The PURE half of the backend: the plan a card yields (every powers combination is a table row) and the argv a plan means. */
+/* The PURE half of the backend: the plan a card's access yields (every ceiling combination is a table row) and the argv a
+   plan means. The ceiling and the folders are what an access profile listing the card holds it to. */
 
-const personaWith = (powers: Record<string, unknown>, extra: Partial<Persona> = {}) =>
-    turnPersona({
-        personas: [{ id: "card", capabilities: [], powers: PersonaPowersSchema.parse(powers), ...extra }],
-        actsAs: "card",
-        unattended: false,
-    });
+const roleWith = (ceiling: ToolCeiling, roleFence?: Fence) =>
+    capRole(
+        turnRole({
+            roles: [{ id: "card", capabilities: [] }],
+            actsAs: "card",
+            unattended: false,
+            roleFence,
+        }),
+        ceiling,
+    );
 
 const TREE = { root: "/work", cwd: "/work/app" };
 const ENV = { GITHUB_TOKEN_GITHUB: "t" };
 
 test("a full-powers card gets the whole turn tree, writable, spawn allowed, and tmp and the daemon's records readable", () => {
-    const plan = jsExecutionPlanOf(personaWith({}), TREE, ENV);
+    const plan = jsExecutionPlanOf(roleWith({}), TREE, ENV);
     expect(plan).toEqual({
         cwd: "/work/app",
         env: ENV,
@@ -27,37 +33,37 @@ test("a full-powers card gets the whole turn tree, writable, spawn allowed, and 
 });
 
 test("the code shelf off means no plan at all: absence, not refusal", () => {
-    expect(jsExecutionPlanOf(personaWith({ code: false }), TREE, ENV)).toBeUndefined();
+    expect(jsExecutionPlanOf(roleWith({ code: false }), TREE, ENV)).toBeUndefined();
     // And so does a named-but-missing card, whose resolver answers every shelf shut.
-    const missing = turnPersona({ personas: [], actsAs: "gone", unattended: false });
+    const missing = turnRole({ roles: [], actsAs: "gone", unattended: false });
     expect(jsExecutionPlanOf(missing, TREE, ENV)).toBeUndefined();
 });
 
 test("the files answer scopes the filesystem: read loses writes, none loses the filesystem entirely", () => {
-    const read = jsExecutionPlanOf(personaWith({ files: "read" }), TREE, ENV);
+    const read = jsExecutionPlanOf(roleWith({ files: "read" }), TREE, ENV);
     expect(read?.readRoots).toEqual(["/work", tmpdir(), ...RECORD_READ_ROOTS]);
     expect(read?.writeRoots).toEqual([]);
-    const none = jsExecutionPlanOf(personaWith({ files: "none" }), TREE, ENV);
+    const none = jsExecutionPlanOf(roleWith({ files: "none" }), TREE, ENV);
     expect(none?.readRoots).toEqual([]);
     expect(none?.writeRoots).toEqual([]);
 });
 
 test("no shell means no spawning: code-without-bash cannot become bash", () => {
-    expect(jsExecutionPlanOf(personaWith({ shell: false }), TREE, ENV)?.allowSpawn).toBe(false);
+    expect(jsExecutionPlanOf(roleWith({ shell: false }), TREE, ENV)?.allowSpawn).toBe(false);
 });
 
-// The records are readable by a shell already; a card without one, or fenced to folders, gains no reach through code.
+// The records are readable by a shell already; a card held without one, or fenced to folders, gains no reach through code.
 test("the daemon's records are read-only, and only for an unfenced card that has a shell", () => {
     expect(RECORD_READ_ROOTS.some((root) => root.endsWith("/agent-auth") || root.endsWith("/translator"))).toBe(false);
-    const full = jsExecutionPlanOf(personaWith({}), TREE, ENV);
+    const full = jsExecutionPlanOf(roleWith({}), TREE, ENV);
     expect(full?.writeRoots.some((root) => RECORD_READ_ROOTS.includes(root))).toBe(false);
-    expect(jsExecutionPlanOf(personaWith({ shell: false }), TREE, ENV)?.readRoots).toEqual(["/work", tmpdir()]);
-    const fenced = jsExecutionPlanOf(personaWith({}, { workspace: { folders: ["app"] } }), TREE, ENV);
+    expect(jsExecutionPlanOf(roleWith({ shell: false }), TREE, ENV)?.readRoots).toEqual(["/work", tmpdir()]);
+    const fenced = jsExecutionPlanOf(roleWith({}, ["app"]), TREE, ENV);
     expect(fenced?.readRoots).toEqual(["/work/app", tmpdir()]);
 });
 
-test("the card's folders become the roots, resolved against the turn root, escapers dropped", () => {
-    const plan = jsExecutionPlanOf(personaWith({}, { workspace: { folders: ["app", "../outside", "libs/shared"] } }), TREE, ENV);
+test("the folders the card's access fences it to become the roots, resolved against the turn root, escapers dropped", () => {
+    const plan = jsExecutionPlanOf(roleWith({}, ["app", "../outside", "libs/shared"]), TREE, ENV);
     expect(plan?.readRoots).toEqual(["/work/app", "/work/libs/shared", tmpdir()]);
     expect(plan?.writeRoots).toEqual(["/work/app", "/work/libs/shared"]);
 });

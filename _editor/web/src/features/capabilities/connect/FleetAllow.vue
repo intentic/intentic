@@ -9,7 +9,7 @@ import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { apiClient } from "../../../lib/useApi";
 import { allowFleet, fleetTokenLabel } from "../model/fleetAllow";
@@ -30,7 +30,7 @@ const emit = defineEmits<{
 
 const { user } = useAuth();
 const { active } = useSandbox();
-const { isOwner } = useRole();
+const { isOwner } = useTier();
 const allowing = ref(false);
 
 // A token the card minted (it carries the platform's id), a token pasted by hand, or one the platform no longer takes.

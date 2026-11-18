@@ -1,5 +1,5 @@
 import { sandboxRef } from "@intentic/extension-api";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { computed, type Ref, ref, watch } from "vue";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { ownerFilter } from "../../agent-status/ownership";
@@ -11,13 +11,13 @@ import { attentionHidden } from "./scopeFleet";
 // than the lane it points at, and clicking it on the board did nothing at all. This is what the narrowing hides, so
 // the tile can say so, the Attention lane can offer it, and a press on the tile can widen it.
 
-// What the shell hands over from where it can read them (the personas are a sandbox query, the address the session's).
-const personasNow = sandboxRef<readonly Persona[]>(() => []);
+// What the shell hands over from where it can read them (the roles are a sandbox query, the address the session's).
+const rolesNow = sandboxRef<readonly Role[]>(() => []);
 // allow(module-state): the signed-in session's address is shared across sandboxes, even while their queries change
 const meNow = ref<string | undefined>(undefined);
 // Called from a component's setup, so the copies follow the sources for as long as the shell is up.
-export const trackScopeInputs = (personas: Readonly<Ref<readonly Persona[]>>, me: Readonly<Ref<string | undefined>>): void => {
-    watch(personas, (next) => (personasNow.value = next), { immediate: true });
+export const trackScopeInputs = (roles: Readonly<Ref<readonly Role[]>>, me: Readonly<Ref<string | undefined>>): void => {
+    watch(roles, (next) => (rolesNow.value = next), { immediate: true });
     watch(me, (next) => (meNow.value = next), { immediate: true });
 };
 
@@ -26,7 +26,7 @@ const hiddenNow = (project: string | undefined, owner: string | undefined): numb
     return attentionHidden({
         fleet: agents.fleet.value,
         held: agents.heldWakes.value,
-        personas: personasNow.value,
+        roles: rolesNow.value,
         project,
         owner,
         me: meNow.value,

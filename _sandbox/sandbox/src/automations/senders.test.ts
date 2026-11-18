@@ -14,12 +14,12 @@ const mark = { id: "u-mark", name: "Mark" };
 const martha = { id: "u-martha", name: "Martha" };
 const bob = { id: "u-bob", name: "Bob", groups: ["r-staff"] };
 
-test("no sender rules admits everyone, wearing the automation's own persona", () => {
+test("no sender rules admits everyone, wearing the automation's own role", () => {
     expect(senderLane(automation({ actsAs: "customer-service" }), bob)).toEqual({ actsAs: "customer-service", requireApproval: false });
     expect(senderLane(automation(), bob)).toEqual({ actsAs: undefined, requireApproval: false });
 });
 
-test("the first rule naming the sender decides, and an absent actsAs is no persona at all", () => {
+test("the first rule naming the sender decides, and an absent actsAs is no role at all", () => {
     const guest = automation({
         actsAs: "customer-service",
         senders: {
@@ -27,7 +27,7 @@ test("the first rule naming the sender decides, and an absent actsAs is no perso
             others: "ignore",
         },
     });
-    // Mark is named by both; the first rule wins and gives him the unpinned agent, not the guest's persona.
+    // Mark is named by both; the first rule wins and gives him the unpinned agent, not the guest's role.
     expect(senderLane(guest, mark)).toEqual({ actsAs: undefined, requireApproval: false });
     expect(senderLane(guest, martha)).toEqual({ actsAs: "customer-service", requireApproval: false });
 });

@@ -188,7 +188,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         // Both halves are asserted: presence alone would also pass for an appended prompt, so the stock prompt's
         // absence is checked across the whole request.
         test("a custom system prompt REPLACES Codex's base prompt rather than joining it", async () => {
-            const OWN_PROMPT = "You are the conformance persona. Say only what you are told.";
+            const OWN_PROMPT = "You are the conformance role. Say only what you are told.";
 
             const plain = await runTurn(MODEL, [{ text: "ok" }]);
             const stock = systemInstructions(plain.requests[0]!);

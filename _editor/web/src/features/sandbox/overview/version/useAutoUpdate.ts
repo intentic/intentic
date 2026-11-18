@@ -4,7 +4,7 @@ import { rpcPrefix } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { useAuth } from "../../../../client/auth/useAuth";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { NOT_NOW_MS, notTodayUntil } from "./autoUpdate";
 import { useSandboxVersion } from "../../../../models/sandbox/useSandboxVersion";
@@ -16,7 +16,7 @@ export function useAutoUpdate() {
     const { info } = useSandboxVersion();
     const { user } = useAuth();
     // Maintainer-floored at the daemon, like the update itself; anyone else reads the state and changes nothing.
-    const { canShip } = useRole();
+    const { canShip } = useTier();
 
     const auto = computed(() => info.value?.autoUpdate);
     // Present on /info only where this sandbox can update itself, and only from a daemon that serves the route.

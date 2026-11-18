@@ -1,7 +1,7 @@
 import { type Fence, fenceAllows } from "@intentic/sandbox-contract/policy/fence-paths";
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import type { MemberSelf } from "@intentic/sandbox-contract/schemas/members";
-import { type MemberRole, roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { type MemberTier, tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 
 // WHERE THE SIGNED-IN PERSON MAY CHANGE FILES BY HAND, as folders: the daemon's own answer (the sandbox's
 // areas/area-scope.ts `callerEditFence`) over the same facts, so a write verb is offered exactly where it will be taken.
@@ -12,11 +12,11 @@ import { type MemberRole, roleAtLeast } from "@intentic/sandbox-contract/schemas
  * The edit fence for a tier, the person's own access answer, and the areas manifest. Anything not known yet answers
  * nowhere, so a write verb stays out until it is: a writer's answer still on its way, or the manifest its areas name.
  */
-export const editFenceOf = (role: MemberRole, self: Pick<MemberSelf, "edit"> | undefined, areas: readonly Area[] | undefined): Fence => {
-    if (roleAtLeast(role, `maintainer`)) {
+export const editFenceOf = (tier: MemberTier, self: Pick<MemberSelf, "edit"> | undefined, areas: readonly Area[] | undefined): Fence => {
+    if (tierAtLeast(tier, `maintainer`)) {
         return undefined;
     }
-    if (!roleAtLeast(role, `writer`) || self === undefined || self.edit === `none`) {
+    if (!tierAtLeast(tier, `writer`) || self === undefined || self.edit === `none`) {
         return [];
     }
     if (self.edit === `all`) {

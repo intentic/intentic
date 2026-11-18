@@ -163,11 +163,11 @@ test("diff: a generated file's hunks fold to a count, the source file beside it 
         "--- a/_shared/sandbox-contract/contract.lock.json",
         "+++ b/_shared/sandbox-contract/contract.lock.json",
         "@@ -1,3 +1,3 @@",
-        `-  "PersonasListSchema": {"properties":{"personas":{"type":"array"}}}`,
-        `+  "PersonasListSchema": {"properties":{"personas":{"type":"array"},"connected":{"type":"array"}}}`,
-        "diff --git a/src/personas.ts b/src/personas.ts",
+        `-  "RolesListSchema": {"properties":{"roles":{"type":"array"}}}`,
+        `+  "RolesListSchema": {"properties":{"roles":{"type":"array"},"connected":{"type":"array"}}}`,
+        "diff --git a/src/roles.ts b/src/roles.ts",
         "@@ -10,2 +10,3 @@",
-        " const personas = load();",
+        " const roles = load();",
         "+const connected = accounts();",
     ];
     const out = cleanLines(lines, { command: "git diff", exitCode: "0", enabled: new Set(CLEANERS) }).lines;

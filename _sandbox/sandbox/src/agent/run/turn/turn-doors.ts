@@ -70,7 +70,7 @@ const stopTurn = async (
 };
 
 // `services` is read per call, since the port is composed into the very object it reads. Every turn is routed as it comes
-// in, by the one preamble (routeTurn): its persona or run role has the chance to name provider, model and knobs, then
+// in, by the one preamble (routeTurn): its role or run role has the chance to name provider, model and knobs, then
 // provider and loop are named once, never defaulted again downstream. A turn that names its model or provider keeps it, so
 // one that walked its own ladder (an automation's fire, a runner's dispatched turn) is not re-pinned.
 export const turnDoors = (services: () => Services, body: TurnStarter["stream"]): TurnStarter => {

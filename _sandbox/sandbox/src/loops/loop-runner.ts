@@ -196,7 +196,7 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
             const turn: AgentTurn & { conversationId: string } = {
                 prompt: briefForIteration(record, iteration),
                 conversationId,
-                // The loop's own pick of runtime, persona and placement, the same for every round.
+                // The loop's own pick of runtime, role and placement, the same for every round.
                 ...profileOf(record),
                 // Marks that nobody is at a composer for this turn (AgentTurn.unattended): changes model defaults and
                 // skips interactive prompt decorations.

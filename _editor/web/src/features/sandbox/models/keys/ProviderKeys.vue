@@ -5,7 +5,7 @@ import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useAccess } from "../../../../client/sandbox/access/useAccess";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { cleanName, nameError } from "../../../../models/capabilities/form";
 import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
 import { refreshConnections } from "../../../../models/conversations/accounts/useChat-accounts";
@@ -32,7 +32,7 @@ const { provider, offer } = defineProps<{
 const emit = defineEmits<{ added: [endpoint: AgentProvider, label: string] }>();
 
 const { capabilities, remove, rename } = useCapabilities();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { can } = useAccess();
 const mayRemove = computed(() => canShip.value || can(`capabilities.remove`));
 const mayRename = computed(() => canShip.value || can(`capabilities.rename`));

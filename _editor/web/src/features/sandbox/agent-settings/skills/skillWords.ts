@@ -8,8 +8,8 @@ import { t } from "@intentic/ui/i18n";
 const chips = (): Record<SkillOrigin, string> =>
     ({
         own: t(`sandbox.skillWords.own`),
-        // Named for the persona card, not the owner: it applies to that persona's turns only, not every chat.
-        persona: t(`sandbox.skillWords.persona`),
+        // Named for the role card, not the owner: it applies to that role's turns only, not every chat.
+        role: t(`sandbox.skillWords.role`),
         builtin: t(`sandbox.skillWords.builtin`),
         capability: t(`sandbox.skillWords.capability`),
         extension: t(`sandbox.skillWords.extension`),

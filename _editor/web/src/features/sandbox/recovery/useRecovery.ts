@@ -84,7 +84,7 @@ export const useRecovery = (deps: RecoveryDeps) => {
             deps.forget(entry);
             drop(entry);
         } else {
-            set(entry, entry.role === `owner` ? { kind: `recoverable`, sandboxId } : { kind: `shared` });
+            set(entry, entry.tier === `owner` ? { kind: `recoverable`, sandboxId } : { kind: `shared` });
         }
     };
 

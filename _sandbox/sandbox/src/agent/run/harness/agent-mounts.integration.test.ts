@@ -3,14 +3,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { extensionDir } from "../../../capabilities/extension-dirs.js";
 import { pluginDir } from "../../../capabilities/plugin-dirs.js";
 import type { Services } from "../../../composition.js";
-import { personaKitDir, writePersonaSkill } from "../../../personas/persona-kit.js";
-import { turnPersona } from "../../../personas/personas.js";
+import { roleKitDir, writeRoleSkill } from "../../../roles/role-kit.js";
+import { capRole, turnRole } from "../../../roles/roles.js";
 import { skillInventory } from "../../../settings/skill-inventory.js";
 import { scanSkillFolders, SKILL_FILE } from "../../../skill-file.js";
 import { testConfig } from "../../../env.config.testing.js";
@@ -51,14 +51,14 @@ const workspaceWithEveryMount = async () => {
     const manifest = { publisher: "acme", name: "knowledge", version: "1.0.0", engines: { intentic: "^2.1.0" }, contributes: { agent: { path: "plugin" } } };
     await writeFile(join(checkout, "intentic-extension.json"), JSON.stringify(manifest));
     await writeSkill(join(checkout, "plugin", "skills"), "knowledge", "Use when the user asks about their notes.");
-    const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
-    await writePersonaSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
+    const studio: Role = { id: "studio", label: "Studio", capabilities: [] };
+    await writeRoleSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
     const services = harnessServices({
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
         config: { ...testConfig, webqPluginDir },
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [plugin, extension] }),
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [studio] }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [studio] }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
     });
     return { root, services, plugin, studio, webqPluginDir, checkout };
@@ -74,11 +74,11 @@ const mountedPlugins = (plan: TurnArmPlan): readonly string[] => {
 
 test("the Skills list names exactly the skills under the plugin dirs a turn mounts", async () => {
     const { root, services, plugin, studio, webqPluginDir, checkout } = await workspaceWithEveryMount();
-    const wearing = turnPersona({ personas: [studio], actsAs: "studio", unattended: false });
+    const wearing = turnRole({ roles: [studio], actsAs: "studio", unattended: false });
 
-    const plan = await planHarnessTurn(services, turn(), { ...context, persona: wearing }, [plugin]);
+    const plan = await planHarnessTurn(services, turn(), { ...context, role: wearing }, [plugin]);
     const mounted = mountedPlugins(plan);
-    expect(mounted).toEqual([webqPluginDir, pluginDir(root, "my-pack"), join(checkout, "plugin"), personaKitDir(root, "studio")]);
+    expect(mounted).toEqual([webqPluginDir, pluginDir(root, "my-pack"), join(checkout, "plugin"), roleKitDir(root, "studio")]);
 
     const loaded = await Promise.all(mounted.map((dir) => scanSkillFolders(join(dir, "skills"), readWorkspaceFile)));
     const listed = (await skillInventory(services)).filter((row) => row.id.includes(":"));
@@ -91,26 +91,27 @@ test("the Skills list names exactly the skills under the plugin dirs a turn moun
     expect(listed.map((row) => row.id)).toEqual([
         "builtin:webq:webq",
         "plugin:my-pack:review",
-        "persona:studio:voice",
+        "role:studio:voice",
         "extension:ext-1:knowledge",
     ]);
 });
 
-// An extension's agent plugin loads into a turn only when the persona it wears is granted that extension: its
-// `extensions` shelf, absent meaning every one, naming the extension, or empty meaning none.
-test("a turn loads an extension's agent plugin only when its persona's extensions shelf grants that extension", async () => {
+// An extension's agent plugin loads into a turn only when the access it runs under grants that extension: the ceiling's
+// `extensions` list (an access profile listing its role, say), absent meaning every one, naming the extension, or
+// empty meaning none.
+test("a turn loads an extension's agent plugin only when its access grants that extension", async () => {
     const { root, services, plugin, webqPluginDir, checkout } = await workspaceWithEveryMount();
     const pluginsWearing = async (extensions: readonly string[]): Promise<readonly string[]> => {
-        const persona: Persona = { id: "narrow", label: "Narrow", capabilities: [], powers: { ...turnPersona({ personas: [], actsAs: undefined, unattended: false }).powers, extensions: [...extensions] } };
-        const wearing = turnPersona({ personas: [persona], actsAs: "narrow", unattended: false });
-        const plan = await planHarnessTurn(services, turn(), { ...context, persona: wearing }, [plugin]);
+        const role: Role = { id: "narrow", label: "Narrow", capabilities: [] };
+        const wearing = capRole(turnRole({ roles: [role], actsAs: "narrow", unattended: false }), { extensions: [...extensions] });
+        const plan = await planHarnessTurn(services, turn(), { ...context, role: wearing }, [plugin]);
         return mountedPlugins(plan);
     };
     expect(await pluginsWearing([])).toEqual([webqPluginDir, pluginDir(root, "my-pack")]);
     expect(await pluginsWearing(["someone.else"])).toEqual([webqPluginDir, pluginDir(root, "my-pack")]);
     expect(await pluginsWearing(["ext-1"])).toEqual([webqPluginDir, pluginDir(root, "my-pack"), join(checkout, "plugin")]);
-    // A persona named but missing gets nothing at all, this included.
-    const missing = turnPersona({ personas: [], actsAs: "gone", unattended: false });
-    const refused = await planHarnessTurn(services, turn(), { ...context, persona: missing }, []);
+    // A role named but missing gets nothing at all, this included.
+    const missing = turnRole({ roles: [], actsAs: "gone", unattended: false });
+    const refused = await planHarnessTurn(services, turn(), { ...context, role: missing }, []);
     expect(mountedPlugins(refused)).not.toContain(join(checkout, "plugin"));
 });

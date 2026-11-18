@@ -9,7 +9,7 @@ import { type App, computed, createApp, h, nextTick, ref } from "vue";
 const active = ref<{ hosted: { region: string } | null } | undefined>({ hosted: null });
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 const canShip = ref(true);
-jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ canShip }) }));
+jest.mock(`../../../client/sandbox/useTier`, () => ({ useTier: () => ({ canShip }) }));
 // The schema's defaults with the one field this row reads; undefined is a daemon whose settings predate it.
 const defaults = SandboxSettingsSchema.parse({});
 const sleepWhenUnused = ref<boolean | undefined>(true);

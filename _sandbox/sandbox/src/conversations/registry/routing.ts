@@ -66,7 +66,7 @@ export const sameLoop = (profile: RoutingProfile, harness: AgentHarness): boolea
  * worked out itself, which this ignores. Only a conversation not on record yet takes the one it names, since a past
  * session resumed from the history menu has no record.
  *
- * Asked of the routing the turn will RUN on, so a turn whose provider is chosen after the caller builds it (a persona's
+ * Asked of the routing the turn will RUN on, so a turn whose provider is chosen after the caller builds it (a role's
  * or a run role's pin, turn-routing.ts) is judged on that one, not on the default it would have had. A caller that cannot
  * wait for the pin asks the door to decide (`continuing`, turn-doors.ts).
  */

@@ -9,7 +9,7 @@ import { useAuth } from "../../../client/auth/useAuth";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useMembers } from "../../../client/sandbox/useMembers";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
@@ -29,11 +29,12 @@ import { HOST_DOOR, PHONE_DOOR, usePeerConnect, WEBEXT_DOOR } from "../../../mod
 import { useDevices } from "../../../models/sandbox/devices/useDevices";
 import { usePorts } from "../../../models/sandbox/environment/usePorts";
 import type { ModelSource, ModelSourceStanding } from "../models/modelSources";
-import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import { useRoles } from "../../../models/sandbox/roles/useRoles";
+import { useAccessProfiles } from "../../../models/sandbox/access/useAccessProfiles";
 import { buildReachMap, type NodeTone, type ReachCapability, type ReachInput, type ReachModelSource } from "./reachModel";
 
 // EVERY READ THE MAP IS DRAWN FROM, gathered into the one input reachModel.ts works over. Each is a cache entry its own
-// page already holds (the capabilities board, Access, Areas, Personas, Secrets, Models, Browsers), so opening the map
+// page already holds (the capabilities board, Access, Areas, Roles, Secrets, Models, Browsers), so opening the map
 // costs the reads nobody made yet and nothing else; the three of its own (tokens, links, invites) are keyed apart from
 // the Access tab's lists, which that tab mints into and revokes from.
 //
@@ -106,7 +107,7 @@ const reachCapabilities = (
 // `models` comes from the hub, which already holds them for its Models row: reading them here would tie this section to
 // the Models section, and through it back to the hub.
 export function useReachMap(models: () => readonly ModelSource[]) {
-    const { canShip, role } = useRole();
+    const { canShip, tier } = useTier();
     const { holds } = useAccess();
     const managesPeople = computed(() => holds(`people`));
     const { user } = useAuth();
@@ -114,7 +115,7 @@ export function useReachMap(models: () => readonly ModelSource[]) {
 
     // The areas procedure's own cache entry, the one Access ▸ Areas reads and writes.
     const areas = useSandboxQuery({ ...rpcQuery(`areas.list`), select: (answer) => answer.areas });
-    const { personas } = usePersonas();
+    const { roles } = useRoles();
     const { capabilities, loaded: capabilitiesRead } = useCapabilities();
     const { enabled: enabledExtensions } = useExtensions();
     const { inventory } = useSecretInventory();
@@ -148,6 +149,7 @@ export function useReachMap(models: () => readonly ModelSource[]) {
         queryClient,
     );
 
+    const profilesRead = useAccessProfiles();
     const input = computed<ReachInput>(() => {
         const sources: ConnectionSources = {
             host: hosts.peerFor,
@@ -164,7 +166,9 @@ export function useReachMap(models: () => readonly ModelSource[]) {
         const email = user.value?.email;
         return {
             areas: areas.query.data.value ?? [],
-            personas: personas.value,
+            roles: roles.value,
+            // What each card may reach; a reader who may not list profiles draws every card by its accounts alone.
+            profiles: profilesRead.available.value ? profilesRead.profiles.value : undefined,
             capabilities: connections,
             secrets: inventory.value.filter((entry) => entry.kind === `env` && entry.status === `set`).map((entry) => entry.key),
             // Subscriptions and the trial; an endpoint or a local model is a connection, and stands as one.
@@ -184,7 +188,7 @@ export function useReachMap(models: () => readonly ModelSource[]) {
             expired: new Set(records.filter((record) => record.status === `expired`).map((record) => record.email.toLowerCase())),
             tokens: canShip.value ? tokens.query.data.value : undefined,
             inbound: canShip.value ? inbound.query.data.value : undefined,
-            self: email === undefined ? undefined : { email, role: role.value },
+            self: email === undefined ? undefined : { email, tier: tier.value },
             liveAccounts: new Set(running.map((session) => session.server).filter((server) => known.has(server))),
             anonymousBrowser: running.some((session) => !known.has(session.server)),
             publicPorts: forwarded.value.map((port) => ({ port: port.port, title: port.title })),

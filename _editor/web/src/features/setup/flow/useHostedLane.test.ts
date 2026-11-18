@@ -142,7 +142,7 @@ describe(`starting a machine`, () => {
     it(`starts nothing without a row of the owner's, or while the lane is busy`, async () => {
         const { sandbox, row, hosted } = stage();
         expect(await hosted.provisionHosted()).toBe(false);
-        row.created.value = sandboxSummary({ id: `shared`, token: null, role: `writer` });
+        row.created.value = sandboxSummary({ id: `shared`, token: null, tier: `writer` });
         expect(await hosted.provisionHosted()).toBe(false);
         row.created.value = draft;
         hosted.machine.value = `hosted`;

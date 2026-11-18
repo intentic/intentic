@@ -5,7 +5,7 @@ import { useAgents } from "../../../models/fleet/useAgents";
 import { landsByDefault } from "../../../models/sandbox/environment/rules";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { pressAutoLand } from "../../../models/fleet/presses/autoLandPress";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 
@@ -40,7 +40,7 @@ export const homeLandingOf = (
 export const useComposerLanding = (conversation: () => Conversation) => {
     const { agentById } = useAgents();
     const { settings } = useSandboxSettings();
-    const { canShip, canLandHome } = useRole();
+    const { canShip, canLandHome } = useTier();
     const sandboxLands = computed(() => landsByDefault(settings.value?.rules ?? []));
     const registered = computed(() => conversation().registered.value);
     const card = computed(() => (registered.value ? agentById(conversation().conversationId) : undefined));

@@ -233,7 +233,7 @@ const seed = (now: number): AutomationSummary[] => [
         enabled: false,
         runs: [{ at: now - hours(26), outcome: `error`, detail: `the turn ended without reaching a verdict` }],
     },
-    // Growth's jobs, filed on its shelf by the persona they run as rather than by a group anybody typed. Their notes open
+    // Growth's jobs, filed on its shelf by the role they run as rather than by a group anybody typed. Their notes open
     // with "Growth:", which the row drops under a heading that already says it.
     {
         id: `weekly-newsletter`,

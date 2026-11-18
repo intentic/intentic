@@ -6,7 +6,7 @@ import type { SettingEntry } from "../../workbench/hub/hubSearch";
 // the card it names, prefixed by its page, and hubSearch.test.ts holds the two to each other, so a card renamed, moved
 // or removed here is refused there rather than found by a search that lands on nothing.
 //
-// A card is listed when it is a setting someone comes looking for. A list (every secret, member, persona, area) is its
+// A card is listed when it is a setting someone comes looking for. A list (every secret, member, role, area) is its
 // page's, found by the page's name and words; a card drawn only in a passing state (a backup to make, an update to take)
 // is the page's news, not a place. The page gates what a reader may open (sandboxSections); `shown` repeats a card's own
 // `v-if` where it turns on something the search can know (hubSearch.ts HubReader).
@@ -22,7 +22,7 @@ export const sandboxPageTerms = () =>
         secrets: t(`sandbox.search.pages.secrets`),
         extensions: t(`sandbox.search.pages.extensions`),
         access: t(`sandbox.search.pages.access`),
-        personas: t(`sandbox.search.pages.personas`),
+        roles: t(`sandbox.search.pages.roles`),
         map: t(`sandbox.search.pages.map`),
         "data-protection": t(`sandbox.search.pages.dataProtection`),
         "privacy-shield": t(`sandbox.search.pages.privacyShield`),
@@ -469,12 +469,12 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         shown: (reader) => reader.canShip,
     },
 
-    // Personas: whether a new chat is matched to one. The personas themselves are the page's list.
+    // Roles: whether a new chat is matched to one. The roles themselves are the page's list.
     {
-        id: `personas-new-chats`,
-        slug: `personas`,
-        title: () => t(`sandbox.sandboxPersonas.newChats`),
-        terms: () => [t(`sandbox.sandboxPersonas.matchNewChatsTo`), t(`sandbox.search.personasNewChats`)],
+        id: `roles-new-chats`,
+        slug: `roles`,
+        title: () => t(`sandbox.sandboxRoles.newChats`),
+        terms: () => [t(`sandbox.sandboxRoles.matchNewChatsTo`), t(`sandbox.search.rolesNewChats`)],
     },
 
     // Privacy & safety ▸ Data protection: a stepped page whose first two steps are lists the daemon's report decides, so

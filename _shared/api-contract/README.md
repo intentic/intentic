@@ -47,7 +47,7 @@ flowchart LR
 - `src/schemas.ts` holds the platform's own shapes: users, hosted plans, invites, tokens; `src/admin.ts` the admin reads. It
   re-exports nothing of the daemon's: a daemon wire shape is imported from `@intentic/sandbox-contract`, so which
   contract a type belongs to is read off its import. A platform shape may still be built from a daemon one (a member's
-  `GrantedRole`, a push's `PushNotification`).
+  `GrantedTier`, a push's `PushNotification`).
 - A field the platform adds is optional on both sides, so an older editor and an older platform keep talking to a newer
   one. A capability the editor acts on is announced rather than inferred: `hostedOffer.projects` says the platform
   reads `hostedProvision`'s `project` (a folder name held to sandbox-contract's `isProjectDirName`), and an editor

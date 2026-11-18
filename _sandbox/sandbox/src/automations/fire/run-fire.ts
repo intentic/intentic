@@ -150,7 +150,7 @@ const notifyWakeSettled = (services: Services, automation: AutomationRecord, con
 };
 
 // What a held wake keeps of the fire that was stopped, so an approved run replays it: the payload and origin, the
-// conversation and thread to continue, the persona it resolved to. Every field absent rather than undefined, so the
+// conversation and thread to continue, the role it resolved to. Every field absent rather than undefined, so the
 // snapshot only carries what the fire itself did.
 const heldWakeSnapshot = (
     automationId: string,
@@ -301,7 +301,7 @@ export const runFire = async (
         let observed = replayedObservation;
         let observedOutside = replayedObservation === undefined ? undefined : conditionOutside(automation);
         let observedValue: string | undefined = admissionEntry?.observedValue;
-        // The persona this fire wears and the service it acts as: the sender's lane when someone sent it, else the
+        // The role this fire wears and the service it acts as: the sender's lane when someone sent it, else the
         // automation's own. Resolved once here so the hold snapshot and the turn cannot disagree.
         const { actsAs, runAs } = lane ?? automation;
         const standing = await standingOrSkip(services, automation.id, runAs, stream);
@@ -419,7 +419,7 @@ export const runFire = async (
             return {};
         }
         // Journals the fire's trigger inputs, not the resolved turn, so a re-fire re-reads a prompt since fixed. The
-        // sender's lane, thread and session ride along: without them a stranger a sender rule put on a narrow persona
+        // sender's lane, thread and session ride along: without them a stranger a sender rule put on a narrow role
         // would come back after a restart wearing the automation's own, on a conversation its thread no longer knows.
         const conversationId = resumedConversationId ?? admissionEntry?.conversationId ?? mintConversationId(automation.id, Date.now());
         journalled = admissionEntry?.id ?? conversationId;

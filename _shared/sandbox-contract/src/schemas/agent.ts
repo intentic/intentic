@@ -149,7 +149,7 @@ const AgentTurnFieldsSchema = z.object({
         ),
     // Distinct from `account` (who pays): whose name the turn posts as; absent means something different for each
     // mode.
-    actsAs: entryId.optional().describe("Which persona the turn speaks as out in the world. Not the same as which account pays for it."),
+    actsAs: entryId.optional().describe("Which role the turn speaks as out in the world. Not the same as which account pays for it."),
     sessionId: z.string().optional().describe("Resume this provider session instead of starting a fresh one."),
     // Stable id surviving provider/account/harness switches; keys the registry entry, the turn run, and the
     // worktree when isolated.
@@ -164,13 +164,13 @@ const AgentTurnFieldsSchema = z.object({
         .describe(
             "Work in this conversation's own private copy of the repos rather than the shared tree, so several agents can work at once. Needs a conversation id.",
         ),
-    // Decided like `isolated`: the first turn's choice, latched. A persona's own start folder wins over it.
+    // Decided like `isolated`: the first turn's choice, latched. A role's own start folder wins over it.
     startIn: z
         .string()
         .max(200)
         .optional()
         .describe(
-            "Which folder the conversation opens in, relative to the workspace root; the project it belongs to. Decided on the first turn. A persona that names its own start folder wins.",
+            "Which folder the conversation opens in, relative to the workspace root; the project it belongs to. Decided on the first turn. A role that names its own start folder wins.",
         ),
     // Decided like `isolated`: the request's choice on the first turn, the registry's after. `runner` implies
     // isolation; absent means local.
@@ -220,7 +220,7 @@ const AgentTurnFieldsSchema = z.object({
         .boolean()
         .optional()
         .describe(
-            "Nobody is watching this turn: a schedule, a queue or another agent started it and no chat is open on it. A card that needs a person is refused rather than raised, plan mode and the terminal hand-off are withheld, and the sandbox's signed-in accounts stay out of it unless a persona carries them.",
+            "Nobody is watching this turn: a schedule, a queue or another agent started it and no chat is open on it. A card that needs a person is refused rather than raised, plan mode and the terminal hand-off are withheld, and the sandbox's signed-in accounts stay out of it unless a role carries them.",
         ),
     // Outside content caused this turn, naming the source; distinct from `unattended` (whether anyone is watching).
     outsideWake: z

@@ -27,7 +27,7 @@ export interface DemoMode {
     readonly extensions?: readonly string[];
     /** Whether a second member is in the workspace. */
     readonly teammate: boolean;
-    // Whether the window opens holding chats: the featured run plus one per persona.
+    // Whether the window opens holding chats: the featured run plus one per role.
     readonly openChats: boolean;
     /** Served quiet (see `demoQuiet` below) whatever the session asks. */
     readonly quiet?: true;

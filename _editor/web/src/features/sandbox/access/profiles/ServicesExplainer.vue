@@ -22,7 +22,7 @@ const STARTERS = computed(
         ] as const,
 );
 
-// One facet tile's frame and its heading, as the Personas explainer draws them.
+// One facet tile's frame and its heading, as the Roles explainer draws them.
 const TILE = `flex min-w-0 flex-col gap-1.5 rounded-md border border-line-subtle bg-canvas/60 p-1.5`;
 const TILE_HEAD = `flex items-center gap-1 text-[0.625rem] font-medium leading-none text-subtle`;
 // A legend swatch: the circle it names, drawn small.

@@ -36,22 +36,22 @@ const EDIT_NEEDS = ["Edit", "Write"] as const;
 // server allows that (opencode-config.ts); the session's wildcard deny would take it back from a listed file tool.
 const FILE_ACTIONS: ReadonlySet<string> = new Set(["read", "edit", "glob", "grep"]);
 
-// What a persona withholds, as session rules appended after everything else (the last match wins): each withheld tool's
-// action denied, so OpenCode never offers it; and, for a persona held to folders, every read and edit asked about, so the
-// fence reads its path (opencode-permissions.ts) before it runs. 2026-10-25: a read-only or fenced persona on OpenCode
+// What a role withholds, as session rules appended after everything else (the last match wins): each withheld tool's
+// action denied, so OpenCode never offers it; and, for a role held to folders, every read and edit asked about, so the
+// fence reads its path (opencode-permissions.ts) before it runs. 2026-10-25: a read-only or fenced role on OpenCode
 // edited and ran anything, since only the Claude Code loop read either.
-export const personaRules = (persona: { readonly deniedTools?: readonly string[] | undefined; readonly scope?: unknown } | undefined): PermissionRule[] => {
+export const roleRules = (role: { readonly deniedTools?: readonly string[] | undefined; readonly scope?: unknown } | undefined): PermissionRule[] => {
     const denied = new Set<string>();
-    for (const entry of persona?.deniedTools ?? []) {
+    for (const entry of role?.deniedTools ?? []) {
         const name = entry.trim();
-        const action = ACTIONS.get(name) ?? PERSONA_ACTIONS.get(name);
+        const action = ACTIONS.get(name) ?? ROLE_ACTIONS.get(name);
         if (action !== undefined) {
             denied.add(action);
         }
     }
-    const asks = persona?.scope === undefined ? [] : ["read", "edit"].filter((action) => !denied.has(action));
+    const asks = role?.scope === undefined ? [] : ["read", "edit"].filter((action) => !denied.has(action));
     // A withheld skill (`Skill(<name>)`) by its name, the resource OpenCode's skill action is asked under.
-    const skills = (persona?.deniedTools ?? []).flatMap((entry) => /^Skill\((.+)\)$/u.exec(entry.trim())?.slice(1, 2) ?? []);
+    const skills = (role?.deniedTools ?? []).flatMap((entry) => /^Skill\((.+)\)$/u.exec(entry.trim())?.slice(1, 2) ?? []);
     return [
         ...[...denied].map((action) => ({ action, resource: "*", effect: "deny" as const })),
         ...skills.map((name) => ({ action: "skill", resource: name, effect: "deny" as const })),
@@ -59,8 +59,8 @@ export const personaRules = (persona: { readonly deniedTools?: readonly string[]
     ];
 };
 
-// A persona's shell and notebook powers name tools OpenCode has under its shell and read actions.
-const PERSONA_ACTIONS: ReadonlyMap<string, string> = new Map([
+// A role's shell and notebook powers name tools OpenCode has under its shell and read actions.
+const ROLE_ACTIONS: ReadonlyMap<string, string> = new Map([
     ["Edit", "edit"],
     ["Write", "edit"],
     ["NotebookEdit", "edit"],

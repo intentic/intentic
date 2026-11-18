@@ -204,7 +204,7 @@ test("the turn is told up front which folders no checkout can carry, and why", a
     const services = unstubbed<Services>("services", {
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: work }),
-        personas: unstubbed<Services["personas"]>("personas", {}),
+        roles: unstubbed<Services["roles"]>("roles", {}),
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [] }),
     });
 

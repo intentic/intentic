@@ -1,7 +1,7 @@
 import { parseJsonWith } from "@intentic/base/json";
 import { type SandboxSummary, type User, UserSchema } from "@intentic/api-contract";
 import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
-import { MemberRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
+import { MemberTierSchema, withLegacyTier } from "@intentic/sandbox-contract/schemas/shared";
 import { ref } from "vue";
 import { z } from "zod";
 import { storedValue, storeValue } from "../../app/storage/browserStorage";
@@ -26,7 +26,8 @@ const RememberedSandboxSchema = z.object({
     image: z.string().nullable(),
     // Normalized (setupAttach.ts), the key a remembered sandbox is matched by across rows and databases.
     daemonUrl: z.string(),
-    role: MemberRoleSchema,
+    // `role` until 2026-11-18: an entry remembered before reads as its tier (withLegacyTier below).
+    tier: MemberTierSchema,
     hosted: z.boolean(),
     lastSeenAt: z.string().nullable(),
     // ISO, when a list first came back without it; absent while it is listed.
@@ -53,7 +54,7 @@ const RememberedAccountSchema = z.object({
     // once nothing is missing any more.
     resetSince: z.string().optional(),
     savedAt: z.string(),
-    sandboxes: z.array(RememberedSandboxSchema),
+    sandboxes: z.array(withLegacyTier(RememberedSandboxSchema)),
 });
 export type RememberedAccount = z.infer<typeof RememberedAccountSchema>;
 
@@ -106,7 +107,7 @@ const rememberedOf = (row: SandboxSummary & { readonly daemonUrl: string }, loca
         name: row.name,
         image: row.image,
         daemonUrl: row.daemonUrl,
-        role: row.role,
+        tier: row.tier,
         hosted: row.hosted !== null,
         lastSeenAt: row.lastSeenAt,
     };
@@ -194,7 +195,7 @@ export const missingSandboxes = (email: string): readonly RememberedSandbox[] =>
 
 // Whether a list that offers nothing to open should send this account to recovery rather than onboarding: it owns a
 // sandbox this device remembers and the list lacks. A share that left the list is the owner's to bring back.
-export const ownsMissingSandboxes = (email: string): boolean => missingSandboxes(email).some((entry) => entry.role === `owner`);
+export const ownsMissingSandboxes = (email: string): boolean => missingSandboxes(email).some((entry) => entry.tier === `owner`);
 
 // Rewrites one remembered sandbox of one account, by address; nothing for an address it does not hold.
 const update = (email: string, daemonUrl: string, change: (entry: RememberedSandbox) => RememberedSandbox | undefined): void => {

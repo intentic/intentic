@@ -1,7 +1,7 @@
 <!-- One row inside a <RowGroup> or <NavRail>: `#lead`, title + description, a `#meta` cluster of facts, and a `#control` cluster of actions. -->
 <script setup lang="ts">
 import { computed, useSlots } from "vue";
-import { FACE_SIZES } from "../brand/personaFace.js";
+import { FACE_SIZES } from "../brand/roleFace.js";
 import type { IconName } from "../../icons/iconSets.js";
 import Icon from "../primitives/Icon.vue";
 import { vTooltip } from "../../lib/tooltip.js";

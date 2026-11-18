@@ -78,9 +78,14 @@ const advertisedFor = (name: string): ReadonlySet<string> | undefined =>
     isRawRoute(name) && !folderSurface.value ? advertisedRaw.value : advertised.value;
 
 // An unknown daemon or route answers true; a feature only hides on positive evidence it's missing.
+// A route a daemon from before a rename advertises under its old name, at the same address: personas became roles on
+// 2026-11-18 (roles.contract.ts keeps the paths), so `roles.list` is served by a daemon that says `personas.list`.
+const formerNameOf = (name: string): string | undefined => (name.startsWith(`roles.`) ? `personas.${name.slice(`roles.`.length)}` : undefined);
+
 export const supportsRoute = (name: string): boolean => {
     const known = advertisedFor(name);
-    return known === undefined || known.has(name);
+    const former = formerNameOf(name);
+    return known === undefined || known.has(name) || (former !== undefined && known.has(former));
 };
 
 // How many calls each side names, which is what makes a drift count mean anything: "7 disagree" out of a surface

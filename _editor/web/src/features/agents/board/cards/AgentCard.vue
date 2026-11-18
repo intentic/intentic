@@ -15,7 +15,7 @@ import {
 } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, ref, useTemplateRef } from "vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { useAudience } from "../../../../app/useAudience";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import OriginMark from "../../../../parts/fleet/OriginMark.vue";
@@ -291,7 +291,7 @@ const landing = computed(() => props.pending === `land` || props.agent.status ==
 // Maintainers get Land now; collaborators get Request land instead, since the daemon floors landing at maintainer;
 // viewers get neither.
 // The request is sent here rather than emitted, since the board is only one of this card's several hosts.
-const { canReview, canShip } = useRole();
+const { canReview, canShip } = useTier();
 const landPresses = computed(() => canShip.value ? landable.value || shipping.value : canReview.value && landable.value);
 // The audience's words for the verbs on this card; a maker also loses the branch and runner chips, which name nothing
 // they chose.

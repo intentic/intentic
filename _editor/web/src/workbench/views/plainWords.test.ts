@@ -27,7 +27,7 @@ const DEVELOPER_WORDS: readonly DeveloperWord[] = [
     { word: `repo`, pattern: whole(`repo\\p{L}*`) },
     { word: `token`, pattern: whole(`token\\p{L}*`) },
     { word: `MCP`, pattern: whole(`MCP`) },
-    { word: `persona`, pattern: whole(`person(?:a|as|y|ę|ie|ą|om|ami)`) },
+    { word: `role`, pattern: whole(`person(?:a|as|y|ę|ie|ą|om|ami)`) },
     { word: `workflow`, pattern: whole(`workflow\\p{L}*`) },
     { word: `sandbox`, pattern: whole(`sandbox\\p{L}*`) },
     { word: `Claude Code`, pattern: whole(`Claude Code`) },

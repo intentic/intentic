@@ -156,7 +156,7 @@ const stubSends = (refusals: Record<string, number>): void => {
 
 const sample = { title: "intentic", body: "done", tag: "t" };
 // These devices name no member, so they are the owner's own tools' and hear the sandbox's own news (push.ts).
-const ownersTools = async () => ({ callerOf: (email: string) => ({ email, role: "owner" as const }) });
+const ownersTools = async () => ({ callerOf: (email: string) => ({ email, tier: "owner" as const }) });
 
 test("a 403 drops the subscription: a recreated sandbox's stale endpoints must not be retried forever", async () => {
     const path = await storePath();

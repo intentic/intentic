@@ -154,7 +154,7 @@ export const startInstall = async (
 
 // Where an install the turn ran itself would write. `own-copy`: an isolated turn in a namespace, whose dependency
 // folders are overlays of its own. `main-tree`: a turn in the main tree. `ask-owner`: a turn that must not install,
-// because its persona cannot or because its dependency folders are links into the main tree (a cwd-only runtime).
+// because its role cannot or because its dependency folders are links into the main tree (a cwd-only runtime).
 export type InstallReach = "own-copy" | "main-tree" | "ask-owner";
 
 // Fixed openings stripTurnPreamble anchors on to recognize an injected note in a stored message. The stale notice has its

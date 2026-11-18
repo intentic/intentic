@@ -13,7 +13,7 @@ import { runDiagnosticsQuery } from "./diagnostics-queries.js";
 // answer the `diagnostics` tools give a Claude turn, for every runtime with a shell and for a person in a terminal. With
 // `on`, the same query of a linked sandbox's records, relayed through its link (links/link-records-relay.ts).
 
-// The turn a shell call is for, when it proves which: the tools are withheld from a turn whose persona keeps it off the
+// The turn a shell call is for, when it proves which: the tools are withheld from a turn whose role keeps it off the
 // sandbox's files (harness-servers.ts), and the command is held to the same.
 const provenTurn = (services: Pick<Services, "conversations">, c: Context<AppEnv>): string | undefined => {
     const named = c.req.header("x-intentic-conversation");
@@ -35,7 +35,7 @@ export const diagnosticsRawRoutes = defineRawRoutes((services: Services) => ({
         }
         const turn = c.get("identity") === undefined ? provenTurn(services, c) : undefined;
         if (turn !== undefined && turnStandingOf(services.conversations, turn)?.powers.files === "none") {
-            return c.json({ ok: false, message: "This turn's persona keeps it off the sandbox's files, and its records with them." }, 403);
+            return c.json({ ok: false, message: "This turn's role keeps it off the sandbox's files, and its records with them." }, 403);
         }
         return c.json({ text: await runDiagnosticsQuery({ historyRoot: services.config.historyRoot, usage: services.usage }, query) });
     },

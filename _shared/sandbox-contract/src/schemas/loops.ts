@@ -144,7 +144,7 @@ export const LoopSchema = z.object({
     actsAs: entryId
         .optional()
         .describe(
-            "Which persona the rounds act as. It matters here: every round is unwatched, and an unwatched turn naming no persona reaches no signed-in account at all, so pinning one is how a loop gets hands.",
+            "Which role the rounds act as. It matters here: every round is unwatched, and an unwatched turn naming no role reaches no signed-in account at all, so pinning one is how a loop gets hands.",
         ),
     // Also stops a later iteration from inheriting the sandbox's global auto-land posture.
     worktreeBase: z

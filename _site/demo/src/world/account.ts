@@ -29,7 +29,7 @@ export const DEMO_SANDBOX: SandboxSummary = {
     // The owner's alone, as the platform hands it out (sandbox.routes.ts `connectTokenFor`): null on a member's row, so
     // a surface that would print it for a member shows here the way it does for them.
     token: demoTier === `owner` ? `demo-connect-token` : null,
-    role: demoTier,
+    tier: demoTier,
     providedAddress: false,
     // Null: no real container or CA-signed cert to offer a loopback shortcut from.
     localHostname: null,

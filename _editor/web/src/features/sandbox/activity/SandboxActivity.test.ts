@@ -10,7 +10,7 @@ import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 
 const canShip = ref(true);
 const hiddenAgent = ref(false);
-jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ canShip: computed(() => canShip.value) }) }));
+jest.mock(`../../../client/sandbox/useTier`, () => ({ useTier: () => ({ canShip: computed(() => canShip.value) }) }));
 jest.mock(`../../organisations/useOrgPolicy`, () => ({
     useOrgPolicy: () => ({ modeOf: (slug: string) => (hiddenAgent.value && slug !== `activity` ? `hidden` : `open`) }),
 }));

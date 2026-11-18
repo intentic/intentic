@@ -23,7 +23,7 @@ import { dropHint, pendingOf } from "./laneDrop";
 import { useAgentDrag } from "./useAgentDrag";
 import { useAgentFilter } from "./useAgentFilter";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
-import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import { useRoles } from "../../../models/sandbox/roles/useRoles";
 import { useAuth } from "../../../client/auth/useAuth";
 import { foreignShare } from "../../../models/fleet/presses/foreignPress";
 import { presenceOthers } from "../../../workbench/presence/usePresence";
@@ -112,12 +112,12 @@ const { query, needle, matchCase, active: filtering, snippetOf, idMatchOf, sessi
 const filterField = ref<InstanceType<typeof SearchBar> | undefined>(undefined);
 const { view, move } = useBoardView(needle);
 const workflows = useWorkflowRuns();
-const { personas } = usePersonas();
+const { roles } = useRoles();
 const { user } = useAuth();
 // How much of the archive is other people's, for the one press that deletes all of it (the purge confirm below).
 const othersArchived = computed(() => foreignShare(archived.value, user.value?.email, presenceOthers.value));
 const { sharedAccess } = useSandboxSharedAccess();
-const scope = useBoardScope({ agents, runs: workflows.runs, personas, me: computed(() => user.value?.email), sharedAccess });
+const scope = useBoardScope({ agents, runs: workflows.runs, roles, me: computed(() => user.value?.email), sharedAccess });
 const { ownerOptions, ownerScope, projectHidden, attentionElsewhere, scopedHeld } = scope;
 const ring = useCardRing({ mobile, strip: chatStrip, wide: chatWide, runs: workflows.runs });
 const { highlightId, inPane, peeked } = ring;

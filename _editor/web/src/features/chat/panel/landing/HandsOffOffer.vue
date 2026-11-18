@@ -9,13 +9,13 @@ import { Button, type Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useAudience } from "../../../../app/useAudience";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useSandboxMode } from "../../../../models/sandbox/mode/useSandboxMode";
 import { offerDismissed, offersHandsOff } from "./handsOffOffer";
 
 const t = useT();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { mode, override, setAudience } = useAudience();
 const { switchTo, saving } = useSandboxMode();
 const sandbox = useSandbox();

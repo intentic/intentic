@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { AgentSummarySchema } from "../schemas/agents.js";
 import { AccountUsageSchema, type ProviderRefusal, ProviderRefusalSchema } from "../schemas/providers/plan-limits.js";
-import { MemberRoleSchema } from "../schemas/shared.js";
+import { MemberTierSchema, withLegacyTier } from "../schemas/shared.js";
 import { SwitchOffsSchema } from "../schemas/providers/refusals.js";
 import { WorkspaceTreeDeltaSchema } from "../schemas/workspace/workspace-tree.js";
 
@@ -166,8 +166,9 @@ export const PresenceUserSchema = z.object({
     email: z.string(),
     name: z.string().optional(),
     picture: z.string().optional(),
-    // The caller's trust tier, resolved at connection time; on the roster so a tab can also read its own role.
-    role: MemberRoleSchema,
+    // The caller's trust tier, resolved at connection time; on the roster so a tab can also read its own. Sent as `role`
+    // until 2026-11-18 (schemas/members.ts legacyTier), which an older daemon still does.
+    tier: MemberTierSchema,
     idle: z.boolean(),
     // On screen, but untouched for several minutes (PresenceReport's `away`); absent reads as not away.
     away: z.boolean().optional(),
@@ -182,7 +183,7 @@ export type PresenceUser = z.infer<typeof PresenceUserSchema>;
 
 // The full roster of connected members, broadcast on every change; snapshot not diff, so a reconnecting browser is
 // consistent from its first frame.
-export const PresenceSchema = z.object({ kind: z.literal("presence"), users: z.array(PresenceUserSchema) });
+export const PresenceSchema = z.object({ kind: z.literal("presence"), users: z.array(withLegacyTier(PresenceUserSchema)) });
 export type Presence = z.infer<typeof PresenceSchema>;
 
 // The full fleet roster, snapshot per change; unlike presence, not last-frame-wins: the browser applies a frame only if

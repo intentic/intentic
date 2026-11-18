@@ -171,7 +171,7 @@
     "_editor/desktop-app/src/onScreen.ts": "standing when the check arrived (2026-10-16)",
     "_editor/desktop-app/src/setupPlan.ts": "standing when the check arrived (2026-10-16)",
     "_editor/ui/src/components/brand/assistants/modular/preview.mjs": "standing when the check arrived (2026-10-16)",
-    "_editor/ui/src/components/brand/personaAccessory.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/ui/src/components/brand/roleAccessory.ts": "standing when the check arrived (2026-10-16)",
     "_editor/web/src/app/clientDiagnostics.ts": {
         "count": 3,
         "why": "standing when the check arrived (2026-10-16)"
@@ -664,7 +664,7 @@
     },
     "_sandbox/sandbox/src/peers/peer-store.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/peers/redeem-codes.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/sandbox/src/personas/persona-kit.ts": {
+    "_sandbox/sandbox/src/roles/role-kit.ts": {
         "count": 2,
         "why": "standing when the check arrived (2026-10-16)"
     },

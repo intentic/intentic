@@ -1,6 +1,6 @@
 import { insidePath, isSandboxPage, legacyTarget, topPath } from "@intentic/sandbox-contract/app-routes";
 import { channelId, type PushNotification, type PushSentNotification } from "@intentic/sandbox-contract/schemas/push";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { Logger } from "pino";
 import type { Caller } from "../auth/auth.js";
 import { visibleTo } from "../auth/fleet-scope.js";
@@ -72,7 +72,7 @@ const reachedBy = (to: Audience, roster: PushRoster): ((channel: StoredChannel) 
         if (caller === undefined) {
             return false;
         }
-        const theirs = named === undefined ? roleAtLeast(caller.role, "maintainer") : named.has(channel.member.toLowerCase());
+        const theirs = named === undefined ? tierAtLeast(caller.tier, "maintainer") : named.has(channel.member.toLowerCase());
         return theirs && (to.about === undefined || visibleTo(caller, to.about));
     };
 };

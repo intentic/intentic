@@ -86,7 +86,7 @@ export interface FileVerbsOptions {
     readonly focusLead: () => Promise<void>;
     // A file just created opens straight into editing.
     readonly openCreated: (path: string) => void;
-    // A folder's own rows (documents, personas, checks, management), none when the surface supplied no source.
+    // A folder's own rows (documents, roles, checks, management), none when the surface supplied no source.
     readonly rowActions: (dir: string) => readonly RowAction[];
     // The surface's own rows around the verbs: the home's Open first, the tree's Collapse Folders last.
     readonly frame: TreeMenuHost["frame"];

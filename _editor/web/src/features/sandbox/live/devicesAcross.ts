@@ -23,7 +23,7 @@ const store = createAcrossStore<BoxDevices>({
     unreachable: (previous) => ({ devices: previous?.devices ?? [] }),
     // Only the owner's own sandboxes manage the owner's machines; a shared one is not asked.
     read: async (sandbox) =>
-        sandbox.role === `owner` ? { devices: (await sandboxRpc.system.devices(undefined, { context: { at: sandbox.id, background: true } })).devices } : { devices: [] },
+        sandbox.tier === `owner` ? { devices: (await sandboxRpc.system.devices(undefined, { context: { at: sandbox.id, background: true } })).devices } : { devices: [] },
 });
 
 export const subscribeDevicesAcross = store.subscribe;

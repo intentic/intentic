@@ -1,5 +1,5 @@
 import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
@@ -38,7 +38,7 @@ test("a held turn reads nothing past the memory gate", async () => {
 });
 
 // A card that sends every note but the one about checks after landing.
-const QUIET: Persona = { id: "quiet", capabilities: [], briefing: { omit: ["checks"] } };
+const QUIET: Role = { id: "quiet", capabilities: [], briefing: { omit: ["checks"] } };
 
 const resumed: TurnContext = { ...context, base: { ...base, spec: { ...base.spec, sessionId: "session-1" } } };
 const routed: TurnContext = { ...context, settings: SandboxSettingsSchema.parse({}) };
@@ -54,7 +54,7 @@ test.each([
             "turn.plan.window",
             "turn.plan.privacy",
             "turn.plan.capabilities",
-            "turn.plan.personas",
+            "turn.plan.roles",
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
@@ -65,7 +65,7 @@ test.each([
         { agent: "claude" },
         routed,
         {},
-        ["turn.plan.window", "turn.plan.privacy", "turn.plan.capabilities", "turn.plan.personas", "turn.plan.areas", "turn.plan.context", "turn.plan.repo-checks"],
+        ["turn.plan.window", "turn.plan.privacy", "turn.plan.capabilities", "turn.plan.roles", "turn.plan.areas", "turn.plan.context", "turn.plan.repo-checks"],
     ],
     [
         "native Codex, told of the tree's dependencies in prose and of the skills its loader does not read",
@@ -78,7 +78,7 @@ test.each([
             "turn.plan.privacy",
             "turn.plan.capabilities",
             "turn.plan.deps",
-            "turn.plan.personas",
+            "turn.plan.roles",
             "turn.plan.areas",
             "turn.plan.skills",
             "turn.plan.context",
@@ -95,7 +95,7 @@ test.each([
             "turn.plan.window",
             "turn.plan.privacy",
             "turn.plan.capabilities",
-            "turn.plan.personas",
+            "turn.plan.roles",
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
@@ -112,7 +112,7 @@ test.each([
             "turn.plan.privacy",
             "turn.plan.capabilities",
             "turn.plan.deps",
-            "turn.plan.personas",
+            "turn.plan.roles",
             "turn.plan.areas",
             "turn.plan.skills",
             "turn.plan.context",
@@ -129,7 +129,7 @@ test.each([
             "turn.plan.window",
             "turn.plan.privacy",
             "turn.plan.capabilities",
-            "turn.plan.personas",
+            "turn.plan.roles",
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
@@ -139,13 +139,13 @@ test.each([
         "a card that drops the checks note, which is never read for it",
         { agent: "claude", actsAs: "quiet" },
         context,
-        { personas: unstubbed<Services["personas"]>("personas", { list: async () => [QUIET] }) },
+        { roles: unstubbed<Services["roles"]>("roles", { list: async () => [QUIET] }) },
         [
             "turn.plan.settings",
             "turn.plan.window",
             "turn.plan.privacy",
             "turn.plan.capabilities",
-            "turn.plan.personas",
+            "turn.plan.roles",
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",

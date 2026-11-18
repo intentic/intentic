@@ -2,7 +2,7 @@
 // listed only if something reads it: a gate, a control, or limitationsOf. This file is the bottom of the provider graph
 // and imports nothing from the rest of the contract, so the arrow points one way.
 
-// An execution backend: one way a turn runs its own work, named for AgentCapabilities.execution and the persona switch
+// An execution backend: one way a turn runs its own work, named for AgentCapabilities.execution and the role switch
 // that grants it.
 export type ExecutionBackend = "shell" | "js";
 
@@ -55,7 +55,7 @@ export interface AgentCapabilities {
     // session opens with (the sandbox's agent/run/decide/turn-skills.ts), less the ones the turn may not use:
     // workspace - the workspace's loaded skills (.agents/skills, or the .claude/skills projection of them);
     // builtIn - the product's own skills the image bakes (/root/.claude/skills);
-    // kit - the worn persona's own skills, which the daemon hands the loader per turn.
+    // kit - the worn role's own skills, which the daemon hands the loader per turn.
     readonly skillDiscovery: SkillDiscovery;
     // Whether the owner's safety policy reaches this runtime, and how:
     // hooks - its own pre-execution hook can park a call and wait for a card (Claude Code only).
@@ -152,7 +152,7 @@ export const CODEX: AgentCapabilities = {
     // thread/start's own fields: baseInstructions replaces Codex's base prompt, developerInstructions adds a developer
     // message.
     instructions: "replace",
-    // Codex reads the workspace's `.agents/skills` itself; the built-ins and a persona's kit are named in the note.
+    // Codex reads the workspace's `.agents/skills` itself; the built-ins and a role's kit are named in the note.
     skillDiscovery: { workspace: true, builtIn: false, kit: false },
     // A per-thread PreToolUse hook puts every function tool (the shell, apply_patch, every MCP tool, spawn_agent) to the
     // door's gate before it runs, which may park it on a card (codex-hooks.ts). Codex fails a hook open, so the gate is
@@ -219,7 +219,7 @@ export const OPENCODE: AgentCapabilities = {
     // A prompt that replaces the base (the owner's own under `custom`, a small window's paragraph) runs on the daemon's
     // twin agents, whose base is blank, so it is the whole system text; anything else is added to OpenCode's own base.
     instructions: "replace",
-    // The server's skill roots are the workspace's loaded skills and the built-ins (opencode.ts serverConfig); a persona's
+    // The server's skill roots are the workspace's loaded skills and the built-ins (opencode.ts serverConfig); a role's
     // kit, which changes per turn on a server shared by every turn, is named in the note.
     skillDiscovery: { workspace: true, builtIn: true, kit: false },
     // OpenCode raises its permission asks for every shell command, a subagent's included (the server's own rules ask about
@@ -283,7 +283,7 @@ export const ACP: AgentCapabilities = {
     // (turn-watchdog.ts expiredFrame), so a turn the provider dropped is re-run once it is back, as every loop's is.
     recovery: true,
     warm: false,
-    // ACP's calls carry no system field: the agent owns its instructions, the persona note rides the message.
+    // ACP's calls carry no system field: the agent owns its instructions, the role note rides the message.
     instructions: "none",
     skillDiscovery: NO_SKILL_LOADER,
     // In the protocol floor, so every agent has it; which calls it asks about is entirely its own choice. A terminal the
@@ -366,7 +366,7 @@ export const PI: AgentCapabilities = {
     // `--system-prompt` replaces Pi's base and `--append-system-prompt` adds to it, both per process; `--no-context-files`
     // keeps Pi from loading AGENTS.md a second time beside the daemon's own note.
     instructions: "replace",
-    // `--skill` per loaded skill, the persona's filter applied, with Pi's own discovery off (`--no-skills`).
+    // `--skill` per loaded skill, the role's filter applied, with Pi's own discovery off (`--no-skills`).
     // Pi's own discovery is off, and every skill the turn may use is handed to it by path (`--skill`, pi-adapter.ts).
     skillDiscovery: EVERY_SKILL,
     // The daemon's extension, loaded with `-e` ahead of any other and whatever the card's command says of discovery, puts
@@ -431,9 +431,9 @@ export const CURSOR: AgentCapabilities = {
     // (cursor-agent.ts); everything else the daemon adds always rides that append.
     instructions: "replace",
     // Cursor's own loader reads every SKILL.md under `.agents/skills/` of each workspace root it is given: the cwd holds
-    // the loaded skills, and the worn persona's kit is laid out as a second root (`local.dirs`); a skill the persona
+    // the loaded skills, and the worn role's kit is laid out as a second root (`local.dirs`); a skill the role
     // withholds is refused at the read tool, the seam the Claude loop's `Skill(<name>)` denial is (cursor-skills.ts).
-    // The workspace's skills from the turn's own tree and the persona's kit as a projected root (cursor-skills.ts); the
+    // The workspace's skills from the turn's own tree and the role's kit as a projected root (cursor-skills.ts); the
     // built-ins, outside every root it is given, are named in the note.
     skillDiscovery: { workspace: true, builtIn: false, kit: true },
     // The full hook tier, the only foreign runtime to reach it: a hold parks since the vendor waits on the hook.

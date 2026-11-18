@@ -93,9 +93,9 @@ test("mediaTicket mints a pass bound to a stored page that streams video, and to
 test("mediaTicket refuses a page whose manifest the daemon did not sign, and a caller who may not see the conversation that showed it", async () => {
     const root = await pagesWorkspace();
     expect(await errorCode(client(root).mediaTicket({ page: `${PAGES_DIR}conv/forged.html` }))).toBe("NOT_FOUND");
-    const guest: ProvenCaller = { email: "dee@example.com", role: "guest", methods: ["google"] };
+    const guest: ProvenCaller = { email: "dee@example.com", tier: "guest", methods: ["google"] };
     expect(await errorCode(client(root, createMediaTickets(), guest).mediaTicket({ page: `${PAGES_DIR}conv/takes.html` }))).toBe("FORBIDDEN");
-    const owner: ProvenCaller = { email: "ada@example.com", role: "guest", methods: ["google"] };
+    const owner: ProvenCaller = { email: "ada@example.com", tier: "guest", methods: ["google"] };
     const tickets = createMediaTickets();
     const { ticket } = await client(root, tickets, owner).mediaTicket({ page: `${PAGES_DIR}conv/takes.html` });
     expect(tickets.bound(ticket)).toBe(pageMediaBinding(`${PAGES_DIR}conv/takes.html`));

@@ -1,4 +1,5 @@
 import { isOpenNeed, type Need, NeedSchema, type NeedsFile } from "@intentic/sandbox-contract/schemas/needs";
+import { at, rename } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
@@ -11,6 +12,8 @@ export const needsDocument = defineDocument({
     path: stateRelPath(".intentic/records/needs.json"),
     schema: NeedSchema,
     granularity: "record",
+    // 2026-11-18: personas were renamed roles; a grant need named the one withholding it as `persona`.
+    history: [at("subject", rename("persona", "role"))],
 });
 
 // Closed needs kept, newest first: enough for a card reopened days later to still say how it ended, bounded so a busy

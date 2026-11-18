@@ -3,7 +3,7 @@ import { Notice, SegmentedControl } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useOrgPolicy } from "../../organisations/useOrgPolicy";
 import AgentSafetyLog from "../guardrails/AgentSafetyLog.vue";
 import PrivacyShieldRecord from "../privacy-shield/PrivacyShieldRecord.vue";
@@ -31,7 +31,7 @@ const { turns } = defineProps<{ turns: boolean }>();
 const t = useT();
 const route = useRoute();
 const router = useRouter();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { modeOf } = useOrgPolicy();
 
 const LABELS = computed<Record<ActivityPart, string>>(() => ({

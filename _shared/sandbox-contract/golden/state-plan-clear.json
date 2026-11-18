@@ -12,18 +12,18 @@
       "change": "upgrades the conversations database schema"
     },
     {
-      "document": ".intentic/config/personas.json",
+      "document": ".intentic/config/roles.json",
       "change": "moves it from .intentic/identities.json"
     }
   ],
   "converts": [
     {
       "document": ".intentic/config/settings.json",
-      "change": "converts personaRouting from its old values",
+      "change": "converts roleRouting from its old values",
       "detail": "\"suggest\" became true"
     }
   ],
   "files": [
-    ".intentic/config/personas.json"
+    ".intentic/config/roles.json"
   ]
 }

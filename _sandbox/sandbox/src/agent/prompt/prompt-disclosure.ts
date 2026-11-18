@@ -1,7 +1,7 @@
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { PromptBase, PromptSection, PromptSectionSource, SystemPromptDisclosure } from "@intentic/sandbox-contract/schemas/system-prompt";
 import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
-import { PERSONA_NOTE_HEADER, PERSONA_NOTE_TITLE } from "../../personas/personas.js";
+import { ROLE_NOTE_HEADER, ROLE_NOTE_TITLE } from "../../roles/roles.js";
 import { tmuxRunEnabled } from "../tools/agent-terminals.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
 import { presetSystemPrompt } from "./preset-prompt.js";
@@ -14,7 +14,7 @@ import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "../../sessions/vocabulary
 // Each piece is found by the header it opens with, the same anchors sessions/vocabulary/prompt-envelope.ts splits at.
 const APPENDED: readonly { readonly header: string; readonly title: string; readonly source: PromptSectionSource }[] = [
     { header: GUIDANCE_HEADER, title: GUIDANCE_TITLE, source: "guidance" },
-    { header: PERSONA_NOTE_HEADER, title: PERSONA_NOTE_TITLE, source: "persona" },
+    { header: ROLE_NOTE_HEADER, title: ROLE_NOTE_TITLE, source: "role" },
     { header: MEMORY_NOTE_HEADER, title: MEMORY_NOTE_TITLE, source: "memory" },
 ];
 

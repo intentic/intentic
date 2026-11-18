@@ -70,7 +70,7 @@ it(`remembers where an owned sandbox answers on its own computer, read off its t
 });
 
 it(`reads a loopback id off an owner's row only: none for a member's, none for a machine we run`, async () => {
-    const member = sandboxSummary({ id: `s4`, role: `writer`, token: null, daemonUrl: notes.daemonUrl });
+    const member = sandboxSummary({ id: `s4`, tier: `writer`, token: null, daemonUrl: notes.daemonUrl });
     const hosted = sandboxSummary({ id: `s5`, hosted: { state: `awake`, region: `ams`, warm: true } });
     expect([...(await localIdsOf([intentic, member, hosted])).entries()]).toEqual([[`s1`, await sandboxIdOf(`token-s1`)]]);
 });

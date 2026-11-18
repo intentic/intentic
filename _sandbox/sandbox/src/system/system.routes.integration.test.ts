@@ -251,7 +251,7 @@ test("presence: an /events connection joins the roster and a /system/presence re
     };
     // The subscribe-time snapshot: this connection's own entry, identity from the verified token.
     expect(await nextPresence()).toEqual([
-        { clientId: "seam-1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "maintainer", idle: false },
+        { clientId: "seam-1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", tier: "maintainer", idle: false },
     ]);
     await client.system.presence({ clientId: "seam-1", idle: true, view: "workspace", path: "src/app.ts" });
     expect(await nextPresence()).toEqual([
@@ -260,7 +260,7 @@ test("presence: an /events connection joins the roster and a /system/presence re
             email: "a@x.com",
             name: "Ada",
             picture: "https://p/a.png",
-            role: "maintainer",
+            tier: "maintainer",
             idle: true,
             view: "workspace",
             path: "src/app.ts",

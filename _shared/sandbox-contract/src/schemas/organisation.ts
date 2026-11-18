@@ -22,6 +22,8 @@ export const ORG_SECTIONS = [
     "extensions",
     "access",
     "areas",
+    // The Roles section. Its id predates the name (personas were renamed roles on 2026-11-18) and stays: organisations'
+    // stored policies name it, and a daemon from before reads a section it does not know as a broken policy.
     "personas",
     "updates",
 ] as const;

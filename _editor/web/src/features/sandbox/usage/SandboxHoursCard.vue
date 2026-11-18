@@ -22,7 +22,7 @@ const { state: plan, offered } = useHostedPlan();
 // The platform runs machines at all: its plan state carries a hosted half only where it does.
 const lane = computed(() => plan.value?.hosted !== undefined);
 const onOurMachine = computed(() => (active.value?.hosted ?? null) !== null);
-const owner = computed(() => active.value?.role === `owner`);
+const owner = computed(() => active.value?.tier === `owner`);
 const machine = computed(() => plan.value?.hosted?.machines.find((row) => row.sandboxId === active.value?.id));
 const hours = computed(() => (machine.value === undefined ? undefined : machineHours(plan.value, machine.value)));
 

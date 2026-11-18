@@ -7,10 +7,10 @@ import { bundleId, type Focus, type Lighting } from "./reachLighting";
 import type { MapNode, ReachHow, ReachMap } from "./reachModel";
 
 // THE SANDBOX ITSELF, drawn as the box the map is about: the ground its workspace is split into (areas, and whatever no
-// area names), the personas that live on that ground, and the secrets it keeps. Everything that gets in arrives at its
+// area names), the roles that live on that ground, and the secrets it keeps. Everything that gets in arrives at its
 // left edge and everything it reaches leaves from its right, so what lights up inside it is where a principal lands.
 //
-// Compact, the ground and the personas stay (they are what a person's access is made of), as chips rather than tiles,
+// Compact, the ground and the roles stay (they are what a person's access is made of), as chips rather than tiles,
 // and the secrets fold into one chip that counts them, and how many the focus reaches; a press opens it.
 
 const t = useT();
@@ -89,11 +89,11 @@ const secretsEdge = computed(() => {
             </div>
         </section>
 
-        <section v-if="map.personas.length > 0" class="flex flex-col gap-1.5">
-            <h3 class="text-2xs font-medium text-muted">{{ t(`sandbox.sandboxMap.personas`) }}</h3>
+        <section v-if="map.roles.length > 0" class="flex flex-col gap-1.5">
+            <h3 class="text-2xs font-medium text-muted">{{ t(`sandbox.sandboxMap.roles`) }}</h3>
             <div class="flex flex-wrap gap-1.5">
                 <MapNodeButton
-                    v-for="node in map.personas"
+                    v-for="node in map.roles"
                     :key="node.id"
                     :node
                     variant="chip"

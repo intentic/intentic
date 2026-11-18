@@ -14,7 +14,7 @@ export const setupRedirect = (sandboxes: readonly SandboxSummary[]): RouteLocati
         return undefined;
     }
     // Only the owner's unfinished sandbox is resumed; a member can't mint a setup code for someone else's.
-    const unfinished = sandboxes.find((entry) => entry.role === `owner`);
+    const unfinished = sandboxes.find((entry) => entry.tier === `owner`);
     return unfinished === undefined ? SETUP : { path: SETUP, query: { sandbox: unfinished.id } };
 };
 

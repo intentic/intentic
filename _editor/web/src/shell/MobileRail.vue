@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { here, page, routeShows } from "../lib/routes/links";
 import { useAudience } from "../app/useAudience";
-import { useRole } from "../client/sandbox/useRole";
+import { useTier } from "../client/sandbox/useTier";
 import { useHeldDoor } from "../components/heldPlace";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import TileMark from "../components/TileMark.vue";
@@ -45,7 +45,7 @@ import { type SectionTile, tileLabel, useSectionTiles } from "./rail/sectionTile
 const t = useT();
 const { user } = useAuth();
 const route = useRoute();
-const { canShip, isGuest } = useRole();
+const { canShip, isGuest } = useTier();
 const { maker } = useAudience();
 // Capabilities is a maintainer's page: below that the + is no door (components/heldPlace.ts).
 const connects = useHeldDoor(`capabilities.list`);

@@ -5,7 +5,7 @@ import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { WORKSPACE_MAP_NOTE_HEADER } from "@intentic/agent-context/workspace-map";
 import { REPO_SYNC_NOTE_HEADER } from "../../workspace/layout/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
-import { PERSONA_NOTE_HEADER } from "../../personas/personas.js";
+import { ROLE_NOTE_HEADER } from "../../roles/roles.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { opt } from "../../opt.js";
 import { parseRuntimeHistory, RUNTIME_HISTORY_HEADER, type RuntimeHistoryMessage } from "./runtime-history.js";
@@ -59,7 +59,7 @@ export const INJECTED: readonly { readonly header: string; readonly title: strin
     { header: LEGACY_SPAWN_NOTE_HEADER, title: LEGACY_SPAWN_NOTE_TITLE },
     // Reaches the user message only on a runtime with no system prompt (ACP); the one note whose absence would hide
     // WHY a turn refused to touch something.
-    { header: PERSONA_NOTE_HEADER, title: "Who this turn is acting as" },
+    { header: ROLE_NOTE_HEADER, title: "Who this turn is acting as" },
     // The same runtime: the owner's standing instructions have no system seam to ride there.
     { header: MEMORY_NOTE_HEADER, title: MEMORY_NOTE_TITLE },
     { header: SETUP_NOTICE_HEADER, title: "Dependencies aren't installed yet" },

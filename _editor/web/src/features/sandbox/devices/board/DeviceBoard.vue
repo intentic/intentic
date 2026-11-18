@@ -66,7 +66,7 @@ const inDesktopApp = desktopApp() !== undefined;
         </template>
     </PageHeader>
 
-    <!-- Same `gap-6` rhythm as other sandbox views (Extensions, Personas, …): one band per RowGroup, not nested in the fleet grid's `gap-3`. -->
+    <!-- Same `gap-6` rhythm as other sandbox views (Extensions, Roles, …): one band per RowGroup, not nested in the fleet grid's `gap-3`. -->
     <div class="flex flex-col gap-6">
         <!-- The cards bring their own surfaces: nothing is drawn around them. -->
         <div class="flex flex-col gap-3">

@@ -9,8 +9,8 @@ import { compactedSinceLastTurn, type PersistedAgent } from "../registry/agents-
 // merges, and the little it asks a person. Its owner never reviews here, so this is the review. The owner may rewrite it in
 // `.intentic/config/home.md`, tracked and versioned like the safety policy, since it governs what lands unasked; absent,
 // this default stands. It rides the turn as a note, on the opening turn, the one after a compaction and any that opens a
-// fresh session, as the fresh session's does (agent/context/fresh-session.ts), since history carries it between: a policy rather than a persona,
-// because a persona card holds its accounts by naming them, and a home must keep its owner's.
+// fresh session, as the fresh session's does (agent/context/fresh-session.ts), since history carries it between: a policy rather than a role,
+// because a role card holds its accounts by naming them, and a home must keep its owner's.
 
 export const DEFAULT_HOME_POLICY = `You are the home conversation of the person you are talking with: the one long-running chat they keep with this sandbox, from a view that shows every sandbox they have. They do not review code here and will not press Land. You orchestrate: you decide what to delegate, how to judge what comes back, what to accept, and you land it.
 

@@ -68,7 +68,7 @@ jest.mock(`../../../client/session/passkeySignIn`, () => ({
 jest.mock(`../../../client/session/sandboxSession`, () => ({ useSandboxSession: () => ({ adoptSession: (...args: unknown[]) => state.adopted.push(args) }) }));
 jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 const role = ref<`owner` | `viewer`>(`owner`);
-jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ id: `s1`, name: `work`, role: role.value })) }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ id: `s1`, name: `work`, tier: role.value })) }) }));
 
 const { default: PasskeysSection } = await import("./PasskeysSection.vue");
 const { forgetOperations } = await import("../../../workbench/operations/operations");

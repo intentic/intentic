@@ -1,9 +1,9 @@
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
 import { type Member, type MembersStore, memberRow } from "../auth/auth.js";
 import type { AutomationRecord } from "../automations/automations-store.js";
-import type { PersonasStore } from "../personas/personas-store.js";
+import type { RolesStore } from "../roles/roles-store.js";
 import type { AreasStore } from "../areas/areas-store.js";
 import type { SshKeyStore } from "../capabilities/ssh-key-store.js";
 import type { AccessProfile, AccessProfileEntry } from "@intentic/sandbox-contract/schemas/access-profiles";
@@ -15,19 +15,19 @@ import type { ServicesStore } from "../auth/principals/services-store.js";
 // state and read back what a route wrote without touching the filesystem. A store a slice holds lives beside that
 // slice's fake instead (`<slice>.testing.ts`); these are the rest.
 
-// An in-memory personas store, the sandbox's named personas, without the fs.
-export const memoryPersonasStore = (initial: Persona[] = []): PersonasStore => {
-    let personas = [...initial];
+// An in-memory roles store, the sandbox's named roles, without the fs.
+export const memoryRolesStore = (initial: Role[] = []): RolesStore => {
+    let roles = [...initial];
     return {
-        list: async () => personas,
-        get: async (id) => personas.find((persona) => persona.id === id),
-        upsert: async (persona) => {
-            personas = [...personas.filter((existing) => existing.id !== persona.id), persona];
+        list: async () => roles,
+        get: async (id) => roles.find((role) => role.id === id),
+        upsert: async (role) => {
+            roles = [...roles.filter((existing) => existing.id !== role.id), role];
         },
         remove: async (id) => {
-            const next = personas.filter((persona) => persona.id !== id);
-            const existed = next.length !== personas.length;
-            personas = next;
+            const next = roles.filter((role) => role.id !== id);
+            const existed = next.length !== roles.length;
+            roles = next;
             return existed;
         },
     };

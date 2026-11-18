@@ -4,25 +4,25 @@ import type { ChatRoute, ChatRouteAsk, ModelPick } from "@intentic/sandbox-contr
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 import { type ModelOffer, offerLines, type ParsedPick, parseModelPick, replyFields } from "@intentic/sandbox-contract/models/model-offer";
 import { modelPinKey } from "@intentic/sandbox-contract/models/model-pins";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { Services } from "../../composition.js";
-import { reachablePersonas } from "../../personas/persona-reach.js";
+import { reachableRoles } from "../../roles/role-reach.js";
 import { autoOffer } from "../models/auto-offer.js";
 import type { RoleAnswer } from "../../engines/role-answer.js";
 import { askRoleModel, roleModelIsSet } from "../models/role-model.js";
 import { AgentDomainRefusedError, withAgentExecution } from "../../workload/agent-execution.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 
-// What a new chat opens on, read once from the message it opens with: which persona handles it, and which model,
+// What a new chat opens on, read once from the message it opens with: which role handles it, and which model,
 // effort and account it runs on. Two questions, one classification each over a list this sandbox supplies, and ONE
 // reading for both — a chat wanting both answers pays for one call, not two, and a chat wanting one is asked only
-// that one (`ask.model` / `ask.persona`, the two settings as this chat sees them).
+// that one (`ask.model` / `ask.role`, the two settings as this chat sees them).
 //
 // It runs once per chat and never again, so the cost is amortised over every turn that follows, and the user owns both
 // answers from turn two. The only place either is chosen on the user's behalf: it runs before the conversation has,
 // chooses across providers, efforts and accounts, and reads live allowances no prompt-only scorer could infer.
 //
-// Unattended wakes are never routed: a wake names its own persona, and a model's guess must not hand it accounts
+// Unattended wakes are never routed: a wake names its own role, and a model's guess must not hand it accounts
 // nobody named for it.
 
 // Opening message front-loads the ask; a long message's tail only dilutes the question it opens with.
@@ -32,15 +32,15 @@ const MESSAGE_MAX_CHARS = 600;
 const ROUTE_DEADLINE_MS = 5_000;
 const NONE = "none";
 
-type PersonaVerdict = NonNullable<ChatRoute["persona"]>;
+type RoleVerdict = NonNullable<ChatRoute["role"]>;
 type ModelVerdict = NonNullable<ChatRoute["model"]>;
 
 // What is left for a model to answer once each half has answered what it can on its own. A half that settled itself —
-// the only runnable model, a folder naming one persona — is absent here, so it is never put to the judge, and a half
+// the only runnable model, a folder naming one role — is absent here, so it is never put to the judge, and a half
 // the chat never asked about is absent for the same reason.
 export interface Asked {
     readonly offer?: ModelOffer;
-    readonly personas?: readonly Persona[];
+    readonly roles?: readonly Role[];
 }
 
 const excerpt = (text: string): string => {
@@ -48,32 +48,32 @@ const excerpt = (text: string): string => {
     return clean.length <= MESSAGE_MAX_CHARS ? clean : `${clean.slice(0, MESSAGE_MAX_CHARS)}\n… (truncated)`;
 };
 
-// One line per persona: its own brief, then what it carries, where it starts, and which sites it speaks through — words a
+// One line per role: its own brief, then what it carries, where it starts, and which sites it speaks through — words a
 // message could echo. Account ids are excluded; only their sites are (`reddit`, not `reddit-work`).
-export const candidateLine = (persona: Persona, siteOf: (capability: string) => string | undefined): string => {
+export const candidateLine = (role: Role, siteOf: (capability: string) => string | undefined): string => {
     const facts = [
-        ...(persona.brief === undefined ? [] : [persona.brief.trim().replace(/\.$/u, "")]),
-        ...(persona.context === undefined
+        ...(role.brief === undefined ? [] : [role.brief.trim().replace(/\.$/u, "")]),
+        ...(role.context === undefined
             ? []
-            : [`Carries: ${persona.context.repos.length === 0 ? "the workspace repository only" : persona.context.repos.join(", ")}`]),
-        ...(persona.workspace?.startIn === undefined ? [] : [`Starts in: ${persona.workspace.startIn}`]),
-        ...(persona.capabilities.length === 0 ? [] : [`Speaks through: ${[...new Set(persona.capabilities.map((id) => siteOf(id) ?? id))].join(", ")}`]),
+            : [`Carries: ${role.context.repos.length === 0 ? "the workspace repository only" : role.context.repos.join(", ")}`]),
+        ...(role.workspace?.startIn === undefined ? [] : [`Starts in: ${role.workspace.startIn}`]),
+        ...(role.capabilities.length === 0 ? [] : [`Speaks through: ${[...new Set(role.capabilities.map((id) => siteOf(id) ?? id))].join(", ")}`]),
     ];
-    const name = persona.label === undefined || persona.label === persona.id ? persona.id : `${persona.id} (${persona.label})`;
+    const name = role.label === undefined || role.label === role.id ? role.id : `${role.id} (${role.label})`;
     return `- ${name}${facts.length === 0 ? "" : `: ${facts.join(". ")}.`}`;
 };
 
-// What a persona is, and why `none` costs nothing. Only shown to a reading that is choosing one.
-const personaAdvice = (personas: readonly Persona[] | undefined, siteOf: (capability: string) => string | undefined): readonly string[] =>
-    personas === undefined
+// What a role is, and why `none` costs nothing. Only shown to a reading that is choosing one.
+const roleAdvice = (roles: readonly Role[] | undefined, siteOf: (capability: string) => string | undefined): readonly string[] =>
+    roles === undefined
         ? []
         : [
               ``,
-              `A persona is a working posture: what it is for, the repositories its sessions carry, the folder it starts in, the sites it speaks through. Pick the one whose line the message belongs to.`,
-              `\`${NONE}\` is the right answer when the message is general or fits no line clearly better than the rest: a chat with no persona reaches everything, so \`${NONE}\` costs nothing, while a wrong persona hides the repositories the work needs.`,
+              `A role is a working posture: what it is for, the repositories its sessions carry, the folder it starts in, the sites it speaks through. Pick the one whose line the message belongs to.`,
+              `\`${NONE}\` is the right answer when the message is general or fits no line clearly better than the rest: a chat with no role reaches everything, so \`${NONE}\` costs nothing, while a wrong role hides the repositories the work needs.`,
               ``,
-              `Personas:`,
-              ...personas.map((persona) => candidateLine(persona, siteOf)),
+              `Roles:`,
+              ...roles.map((role) => candidateLine(role, siteOf)),
           ];
 
 // The owner's own standing preferences, from settings (`autoModelGuidance`). Their text, not a visitor's, so it is
@@ -102,14 +102,14 @@ const modelAdvice = (offer: ModelOffer | undefined, now: number, guidance: strin
           ];
 
 // Facts the words alone cannot carry, and which move the answer: a message naming twenty files is a different job from
-// the same sentence naming none, and the folder a chat was opened in is ground a persona works on. Each fact is shown
+// the same sentence naming none, and the folder a chat was opened in is ground a role works on. Each fact is shown
 // only to a reading that can use it, and only when true, so an ordinary chat's prompt stays short.
 const chatFacts = (ask: ChatRouteAsk, asked: Asked): readonly string[] => {
-    const forPersona = asked.personas !== undefined;
+    const forRole = asked.roles !== undefined;
     const forModel = asked.offer !== undefined;
     const files = ask.paths.map((path: string) => `\`${path}\``).join(`, `);
     const facts = [
-        ...(forPersona && ask.folder !== undefined ? [`- Opened in the folder \`${ask.folder}\`.`] : []),
+        ...(forRole && ask.folder !== undefined ? [`- Opened in the folder \`${ask.folder}\`.`] : []),
         ...(ask.paths.length === 0 ? [] : [`- The message names ${ask.paths.length} file${ask.paths.length === 1 ? `` : `s`}: ${files}.`]),
         ...(forModel && ask.editorContext === true ? [`- It carries a file and selection the user pointed at, so it is about real code in front of them.`] : []),
         ...(forModel && ask.planMode === true ? [`- The chat opens in plan mode: it is being asked to think the work through before touching anything.`] : []),
@@ -119,18 +119,18 @@ const chatFacts = (ask: ChatRouteAsk, asked: Asked): readonly string[] => {
 
 // The opening sentence names exactly what is being asked for, so a reading of one half never reads as a reading of two.
 const headline = (asked: Asked): string => {
-    if (asked.personas === undefined) {
+    if (asked.roles === undefined) {
         return `Choose the model a new chat should run on, reading the message it opens with.`;
     }
     return asked.offer === undefined
-        ? `Choose which persona should handle a new chat, reading the message it opens with.`
-        : `Choose what a new chat opens on, reading the message it opens with: which persona should handle it, and which model it should run on.`;
+        ? `Choose which role should handle a new chat, reading the message it opens with.`
+        : `Choose what a new chat opens on, reading the message it opens with: which role should handle it, and which model it should run on.`;
 };
 
 // The keyed lines the reply must carry, one per thing being chosen, and nothing for a half that isn't.
 const replyContract = (asked: Asked): readonly string[] => {
     const lines = [
-        ...(asked.personas === undefined ? [] : [`persona: <one persona id from the list above, or \`${NONE}\`>`]),
+        ...(asked.roles === undefined ? [] : [`role: <one role id from the list above, or \`${NONE}\`>`]),
         ...(asked.offer === undefined
             ? []
             : [
@@ -151,7 +151,7 @@ export const routerPrompt = (
 ): string =>
     [
         headline(asked),
-        ...personaAdvice(asked.personas, siteOf),
+        ...roleAdvice(asked.roles, siteOf),
         ...modelAdvice(asked.offer, now, guidance),
         ...chatFacts(ask, asked),
         ``,
@@ -160,15 +160,15 @@ export const routerPrompt = (
         ...replyContract(asked),
     ].join(`\n`);
 
-// What one reply was read as. Each half is undefined when it wasn't asked for; inside the persona half, an undefined
+// What one reply was read as. Each half is undefined when it wasn't asked for; inside the role half, an undefined
 // `id` is a deliberate `none` rather than a failure.
 export interface RouteVerdict {
     readonly model?: ParsedPick;
-    readonly persona?: { readonly id: string | undefined; readonly token: string };
+    readonly role?: { readonly id: string | undefined; readonly token: string };
 }
 
 // Wrapper words a model reaches for anyway around a bare id: a fence, a label, a bullet, quotes, a trailing period.
-const LABEL = /^(?:persona|id|answer)\s*:\s*/iu;
+const LABEL = /^(?:role|id|answer)\s*:\s*/iu;
 
 const firstWord = (reply: string): string => {
     const first =
@@ -189,27 +189,27 @@ const firstWord = (reply: string): string => {
     );
 };
 
-// The persona the reply names: its own keyed line, else the bare word a one-question reply is allowed to be. A keyed
+// The role the reply names: its own keyed line, else the bare word a one-question reply is allowed to be. A keyed
 // reply that answered the model and skipped this line reads as `none` — the safe answer — rather than as a rung that
 // ignored the list it was given.
-const personaToken = (reply: string): string => {
-    const fields = replyFields(reply, [`persona`, `id`, `answer`, `model`, `effort`, `account`]);
-    const named = fields.get(`persona`) ?? fields.get(`id`) ?? fields.get(`answer`);
+const roleToken = (reply: string): string => {
+    const fields = replyFields(reply, [`role`, `id`, `answer`, `model`, `effort`, `account`]);
+    const named = fields.get(`role`) ?? fields.get(`id`) ?? fields.get(`answer`);
     if (named !== undefined) {
         return named.split(/\s+/u)[0] ?? ``;
     }
     return fields.size === 0 ? firstWord(reply) : NONE;
 };
 
-// Why this reply is unusable, or undefined when it answered what it was asked. A model not on the list and a persona
-// that is no persona here are both a rung ignoring its list, stepped over so the next one answers rather than the chat
+// Why this reply is unusable, or undefined when it answered what it was asked. A model not on the list and a role
+// that is no role here are both a rung ignoring its list, stepped over so the next one answers rather than the chat
 // running an id no provider has or acting as somebody nobody made.
 const wrongAnswers = (verdict: RouteVerdict): readonly string[] => {
-    const { model, persona } = verdict;
-    const badPersona = persona !== undefined && persona.id === undefined && persona.token.toLowerCase() !== NONE;
+    const { model, role } = verdict;
+    const badRole = role !== undefined && role.id === undefined && role.token.toLowerCase() !== NONE;
     const badModel = model !== undefined && model.pick === undefined;
     return [
-        ...(badPersona ? [`named "${persona.token}", which is no persona here`] : []),
+        ...(badRole ? [`named "${role.token}", which is no role here`] : []),
         ...(badModel ? [model.token === `` ? `named no model at all` : `named "${model.token}", which is not on the list it was given`] : []),
     ];
 };
@@ -217,16 +217,16 @@ const wrongAnswers = (verdict: RouteVerdict): readonly string[] => {
 // Matched case-insensitively; the lists themselves are the authority on spelling.
 export const routeAnswer = (asked: Asked): RoleAnswer<RouteVerdict> => {
     const offer = asked.offer;
-    const personas = asked.personas;
-    const byLower = new Map((personas ?? []).map((persona) => [persona.id.toLowerCase(), persona.id]));
-    const wants = [...(personas === undefined ? [] : [`a persona id or ${NONE}`]), ...(offer === undefined ? [] : [`a model from the list`])];
+    const roles = asked.roles;
+    const byLower = new Map((roles ?? []).map((role) => [role.id.toLowerCase(), role.id]));
+    const wants = [...(roles === undefined ? [] : [`a role id or ${NONE}`]), ...(offer === undefined ? [] : [`a model from the list`])];
     return {
         what: wants.join(` and `),
         read: (reply) => {
-            const token = personas === undefined ? undefined : personaToken(reply);
+            const token = roles === undefined ? undefined : roleToken(reply);
             return {
                 ...(offer === undefined ? {} : { model: parseModelPick(reply, offer) }),
-                ...(token === undefined ? {} : { persona: { id: byLower.get(token.toLowerCase()), token } }),
+                ...(token === undefined ? {} : { role: { id: byLower.get(token.toLowerCase()), token } }),
             };
         },
         unusable: (verdict) => {
@@ -257,11 +257,11 @@ const siteLookup = (
     return (id) => sites.get(id);
 };
 
-// Personas whose folder the chat was opened in: those that start there or carry it as a repository.
-const homedIn = (personas: readonly Persona[], folder: string): readonly Persona[] =>
-    personas.filter((persona) => persona.workspace?.startIn === folder || persona.context?.repos.includes(folder) === true);
+// Roles whose folder the chat was opened in: those that start there or carry it as a repository.
+const homedIn = (roles: readonly Role[], folder: string): readonly Role[] =>
+    roles.filter((role) => role.workspace?.startIn === folder || role.context?.repos.includes(folder) === true);
 
-const nameOf = (persona: Persona): string => persona.label ?? persona.id;
+const nameOf = (role: Role): string => role.label ?? role.id;
 
 // One half's state before any model is asked: the verdict it reached on its own, or the list it needs a reading for.
 interface Half<T, V> {
@@ -280,20 +280,20 @@ const modelHalf = (offer: ModelOffer | undefined): Half<ModelOffer, ModelVerdict
         : { settled: { pick: { provider: only.provider, model: only.model }, reason: `${only.label} is the only model with allowance left.` } };
 };
 
-// The one deterministic shortcut, taken before any model is asked: a chat opened in a folder exactly one persona works
-// in is that persona's chat.
-const personaHalf = (personas: readonly Persona[], folder: string | undefined): Half<readonly Persona[], PersonaVerdict> => {
-    if (personas.length === 0) {
-        return { settled: { reason: `No personas to route onto.` } };
+// The one deterministic shortcut, taken before any model is asked: a chat opened in a folder exactly one role works
+// in is that role's chat.
+const roleHalf = (roles: readonly Role[], folder: string | undefined): Half<readonly Role[], RoleVerdict> => {
+    if (roles.length === 0) {
+        return { settled: { reason: `No roles to route onto.` } };
     }
-    const homed = folder === undefined ? [] : homedIn(personas, folder);
+    const homed = folder === undefined ? [] : homedIn(roles, folder);
     const home = homed.length === 1 ? homed[0] : undefined;
-    return home === undefined ? { ask: personas } : { settled: { id: home.id, reason: `Opened in ${folder}, which ${nameOf(home)} works in.` } };
+    return home === undefined ? { ask: roles } : { settled: { id: home.id, reason: `Opened in ${folder}, which ${nameOf(home)} works in.` } };
 };
 
-const personaVerdict = (named: string | undefined, personas: readonly Persona[]): PersonaVerdict => {
-    const persona = personas.find((entry) => entry.id === named);
-    return persona === undefined ? { reason: `No persona fits this message.` } : { id: persona.id, reason: `The message reads like ${nameOf(persona)}'s work.` };
+const roleVerdict = (named: string | undefined, roles: readonly Role[]): RoleVerdict => {
+    const role = roles.find((entry) => entry.id === named);
+    return role === undefined ? { reason: `No role fits this message.` } : { id: role.id, reason: `The message reads like ${nameOf(role)}'s work.` };
 };
 
 const modelVerdict = (pick: ModelPick | undefined, offer: ModelOffer): ModelVerdict => {
@@ -305,41 +305,44 @@ const modelVerdict = (pick: ModelPick | undefined, offer: ModelOffer): ModelVerd
 };
 
 // The reply, as the two verdicts a chat can show. Only halves that were asked for are answered.
-const verdicts = (verdict: RouteVerdict, asked: Asked): Partial<Pick<ChatRoute, "persona" | "model">> => ({
-    ...(asked.personas === undefined ? {} : { persona: personaVerdict(verdict.persona?.id, asked.personas) }),
+const verdicts = (verdict: RouteVerdict, asked: Asked): Partial<Pick<ChatRoute, "role" | "model">> => ({
+    ...(asked.roles === undefined ? {} : { role: roleVerdict(verdict.role?.id, asked.roles) }),
     ...(asked.offer === undefined ? {} : { model: modelVerdict(verdict.model?.pick, asked.offer) }),
 });
 
 // A spent chain, an unset role, or the deadline: every half that was being read says why it has no answer. Whatever
 // settled itself without a model still stands, and is merged over this by the caller.
-const unread = (asked: Asked, why: string): Partial<Pick<ChatRoute, "persona" | "model">> => ({
-    ...(asked.personas === undefined ? {} : { persona: { reason: `Couldn't read which persona this chat belongs to: ${why}` } }),
+const unread = (asked: Asked, why: string): Partial<Pick<ChatRoute, "role" | "model">> => ({
+    ...(asked.roles === undefined ? {} : { role: { reason: `Couldn't read which role this chat belongs to: ${why}` } }),
     ...(asked.offer === undefined ? {} : { model: { reason: `Couldn't choose a model: ${why}` } }),
 });
 
-// New chat routing has no model set, which is how it is turned off. A chat nobody asked to route onto a persona hears
-// nothing about personas; one set to Auto is told which job picks its model, since it asked for exactly that.
-const routingOff = (asked: Asked): Partial<Pick<ChatRoute, "persona" | "model">> =>
+// New chat routing has no model set, which is how it is turned off. A chat nobody asked to route onto a role hears
+// nothing about roles; one set to Auto is told which job picks its model, since it asked for exactly that.
+const routingOff = (asked: Asked): Partial<Pick<ChatRoute, "role" | "model">> =>
     asked.offer === undefined
         ? {}
         : { model: { reason: `Auto picks a model only when "New chat routing" has one in Sandbox ▸ Agent ▸ Models, so this chat keeps the model it had.` } };
+
+// Whether the ask wants the role half: `role`, else what an editor from before personas were renamed roles sent.
+const asksRole = (ask: ChatRouteAsk): boolean => ask.role ?? ask.persona ?? false;
 
 // Each half's own answer and what it still owes a model, from the lists this ask paid to have read.
 const halves = (
     ask: ChatRouteAsk,
     offer: ModelOffer | undefined,
-    personas: readonly Persona[],
-): { readonly asked: Asked; readonly settled: Partial<Pick<ChatRoute, "persona" | "model">> } => {
+    roles: readonly Role[],
+): { readonly asked: Asked; readonly settled: Partial<Pick<ChatRoute, "role" | "model">> } => {
     const model = ask.model ? modelHalf(offer) : {};
-    const persona = ask.persona ? personaHalf(personas, ask.folder) : {};
+    const role = asksRole(ask) ? roleHalf(roles, ask.folder) : {};
     return {
-        asked: { ...(model.ask === undefined ? {} : { offer: model.ask }), ...(persona.ask === undefined ? {} : { personas: persona.ask }) },
-        settled: { ...(persona.settled === undefined ? {} : { persona: persona.settled }), ...(model.settled === undefined ? {} : { model: model.settled }) },
+        asked: { ...(model.ask === undefined ? {} : { offer: model.ask }), ...(role.ask === undefined ? {} : { roles: role.ask }) },
+        settled: { ...(role.settled === undefined ? {} : { role: role.settled }), ...(model.settled === undefined ? {} : { model: model.settled }) },
     };
 };
 
-// `held` is the asker's areas, undefined for an unfenced one: the persona half picks only from personas that person may
-// actually wear, since routing onto one they cannot use would open the chat on a persona every message is refused by.
+// `held` is the asker's areas, undefined for an unfenced one: the role half picks only from roles that person may
+// actually wear, since routing onto one they cannot use would open the chat on a role every message is refused by.
 // `asker` is the signed-in person's email, undefined for the owner's own tools: the model half picks only from the AI
 // accounts that person may spend (Access ▸ People), since their turn is held to exactly those (account-reach.ts).
 export const routeChat = async (
@@ -351,18 +354,18 @@ export const routeChat = async (
     asker?: string,
 ): Promise<ChatRoute> => {
     // Read together, and only what this ask is paying for: an offer costs live allowance readings, which a chat that
-    // only wants a persona must not be charged for.
-    const [offer, personas, settings] = await Promise.all([
+    // only wants a role must not be charged for.
+    const [offer, roles, settings] = await Promise.all([
         ask.model ? services.accountReach(undefined, asker === undefined ? [] : [asker]).then((reach) => autoOffer(services, undefined, reach)) : undefined,
-        ask.persona ? reachablePersonas(services, held, assistants) : [],
+        asksRole(ask) ? reachableRoles(services, held, assistants) : [],
         services.sandboxSettings.get(),
     ]);
     // What each half answered on its own; a reading, if one is still owed, is merged over it below.
-    const { asked, settled } = halves(ask, offer, personas);
-    if (asked.offer === undefined && asked.personas === undefined) {
+    const { asked, settled } = halves(ask, offer, roles);
+    if (asked.offer === undefined && asked.roles === undefined) {
         return settled;
     }
-    const siteOf = asked.personas === undefined ? undefined : siteLookup(await services.capabilities.list());
+    const siteOf = asked.roles === undefined ? undefined : siteLookup(await services.capabilities.list());
     const deadline = AbortSignal.any([...(signal === undefined ? [] : [signal]), AbortSignal.timeout(ROUTE_DEADLINE_MS)]);
     try {
         if (!(await roleModelIsSet(services, "model-router"))) {
@@ -382,7 +385,7 @@ export const routeChat = async (
     } catch (error: unknown) {
         if (error instanceof AgentDomainRefusedError) { throw error; }
         // Routing simply switched off (no model for the job) is a setting, not a failure: nothing is said about the
-        // persona, and the model half, asked for only by a chat set to Auto, gets a plain note naming the job.
+        // role, and the model half, asked for only by a chat set to Auto, gets a plain note naming the job.
         if (error instanceof RoleModelUnsetError) {
             return { ...settled, ...routingOff(asked) };
         }

@@ -24,8 +24,8 @@ export function useBrowserAccounts() {
     const { capabilities } = useCapabilities();
     const { contributionOf } = useExtensions();
 
-    // The owner's own browser (a `webext` card) is listed beside the site accounts: a persona reaches it only by naming
-    // it, the way it names an account (policy/persona-capability.ts), so the picker has to offer it.
+    // The owner's own browser (a `webext` card) is listed beside the site accounts: a role reaches it only by naming
+    // it, the way it names an account (policy/role-capability.ts), so the picker has to offer it.
     const accounts = computed<BrowserAccount[]>(() =>
         capabilities.value
             .filter((capability) => capability.kind === `browser` || capability.kind === `webext`)

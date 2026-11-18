@@ -213,7 +213,7 @@ export const gatherFacts = async (services: FactsServices): Promise<ComplianceFa
         pushChannels: channels.length,
         members: {
             total: members.length,
-            guests: members.filter((member) => member.role === "guest").length,
+            guests: members.filter((member) => member.tier === "guest").length,
             fenced: members.filter((member) => member.areas !== undefined).length,
             emailSignIn: members.filter((member) => member.emailSignIn === true).length,
         },

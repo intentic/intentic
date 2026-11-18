@@ -137,7 +137,7 @@ test("a captured replay never makes its released original request a new authorit
     expect(turn.read).not.toHaveBeenCalled();
 });
 
-test("a refresh retains a persona's subfolder inside its admitted view", async () => {
+test("a refresh retains a role's subfolder inside its admitted view", async () => {
     const sent: HarnessRequest[] = [];
     const turn = await fixture({
         cwd: `${VIEW}/child`,

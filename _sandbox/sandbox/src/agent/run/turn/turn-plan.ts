@@ -1,5 +1,5 @@
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { builtInPersona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import { builtInRole, RolePowersSchema } from "@intentic/sandbox-contract/schemas/roles";
 import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
@@ -72,29 +72,30 @@ const movedNotice = (move: AccountMove): AccountMoved => {
 };
 
 // Who the turn acts as, named for whoever reads its standing: its card, or the built-in it wears (a child inherits this).
-// Absent only for a name no card carries, and for a turn planned with no persona at all.
-const standingPersona = (persona: TurnDecision["context"]["persona"]): TurnStanding["persona"] => {
-    if (persona?.persona !== undefined) {
-        return { id: persona.persona.id, name: persona.persona.label ?? persona.persona.id };
+// Absent only for a name no card carries, and for a turn planned with no role at all.
+const standingRole = (role: TurnDecision["context"]["role"]): TurnStanding["role"] => {
+    if (role?.role !== undefined) {
+        return { id: role.role.id, name: role.role.label ?? role.role.id };
     }
-    return persona?.builtIn === undefined ? undefined : { id: persona.builtIn, name: builtInPersona(persona.builtIn).label };
+    return role?.builtIn === undefined ? undefined : { id: role.builtIn, name: builtInRole(role.builtIn).label };
 };
 
-// The turn's standing as its decision settled it: what it mounted, what its persona and the gates withheld, and how its
+// The turn's standing as its decision settled it: what it mounted, what its role and the gates withheld, and how its
 // runtime treats a secret reference.
 const standingOf = (decision: TurnDecision, input: TurnInput): TurnStanding => {
-    const { persona } = decision.context;
+    const { role } = decision.context;
     const runtime = capabilitiesOf(decision.provider, decision.harness);
     return {
         at: Date.now(),
         unattended: input.unattended === true,
-        persona: standingPersona(persona),
+        role: standingRole(role),
         granted: decision.granted.map((capability) => capability.id),
-        withheldByPersona: decision.withheldByPersona,
+        withheldByRole: decision.withheldByRole,
         withheldByGate: decision.withheldByGate,
         withheldByReach: decision.withheldByReach,
-        fence: persona?.fence,
-        powers: persona?.powers ?? PersonaPowersSchema.parse({}),
+        fence: role?.fence,
+        accessFence: decision.accessFence,
+        powers: role?.powers ?? RolePowersSchema.parse({}),
         ...opt("ceiling", decision.ceiling),
         runtime: runtime.runtime,
         secrets: runtime.secrets,
@@ -110,7 +111,7 @@ export const planTurn = async (services: Services, sent: TurnInput, context: Tur
     for (const { fields, message } of decision.warnings) {
         services.logger.warn(fields, message);
     }
-    // children.routes.ts reads this arming as its gate, so a turn whose persona may not delegate never records one.
+    // children.routes.ts reads this arming as its gate, so a turn whose role may not delegate never records one.
     if (decision.spawn && context.children !== undefined && input.conversationId !== undefined) {
         armSupervisor(services.conversations, input.conversationId, context.children);
     }

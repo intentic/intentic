@@ -2,7 +2,7 @@ import { LOCAL_MODEL_WINDOW_DEFAULT } from "@intentic/sandbox-contract/schemas/c
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { applyTrim, trimFrame, trimState, type TurnTrim, turnTrim } from "./context-trim.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../../store/loaded-skills.js";
-import { PERSONA_NOTE_TITLE } from "../../../personas/personas.js";
+import { ROLE_NOTE_TITLE } from "../../../roles/roles.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "../handoff-state.js";
 import { GUIDANCE_TITLE } from "../guidance.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
@@ -46,11 +46,11 @@ test("a runtime that cannot replace its base keeps it whatever the window says",
 const started = (trim: TurnTrim | undefined, system = { guidance: false }) =>
     trim === undefined ? undefined : trimState(trim, system);
 
-// The set a small window may take is exactly the set a persona card may take. Anything outside it either keeps the
+// The set a small window may take is exactly the set a role card may take. Anything outside it either keeps the
 // turn on its own branch or explains a missing capability, and a small window is not a reason to become unsafe.
 test("the notes no card may drop are the notes a window may not drop either", () => {
     const composed = [
-        note(PERSONA_NOTE_TITLE),
+        note(ROLE_NOTE_TITLE),
         note(WORKTREE_NOTE_TITLE),
         note(WORKSPACE_MAP_NOTE_TITLE),
         note(SKILL_CATALOG_NOTE_TITLE),
@@ -59,12 +59,12 @@ test("the notes no card may drop are the notes a window may not drop either", ()
 
     const { notes, state } = applyTrim(started(turnTrim(16_384, "replace")), composed);
 
-    expect(notes.map((kept) => kept.title)).toEqual([PERSONA_NOTE_TITLE, WORKTREE_NOTE_TITLE, MEMORY_NOTE_TITLE]);
+    expect(notes.map((kept) => kept.title)).toEqual([ROLE_NOTE_TITLE, WORKTREE_NOTE_TITLE, MEMORY_NOTE_TITLE]);
     expect(state?.omitted).toEqual([WORKSPACE_MAP_NOTE_TITLE, SKILL_CATALOG_NOTE_TITLE]);
 });
 
 test("no trim leaves the composed list exactly as it was", () => {
-    const composed = [note(WORKSPACE_MAP_NOTE_TITLE), note(PERSONA_NOTE_TITLE)];
+    const composed = [note(WORKSPACE_MAP_NOTE_TITLE), note(ROLE_NOTE_TITLE)];
 
     expect(applyTrim(undefined, composed).notes).toEqual(composed);
     expect(trimFrame(applyTrim(undefined, composed).state)).toBeUndefined();

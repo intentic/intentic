@@ -29,7 +29,7 @@ describe(`what a list leaves remembered`, () => {
                     name: `intentic`,
                     image: null,
                     daemonUrl: `https://sandbox-82789f4106b4.sbx.intentic.dev`,
-                    role: `owner`,
+                    tier: `owner`,
                     hosted: false,
                     lastSeenAt: `2026-10-01T18:00:09.479Z`,
                 },
@@ -122,7 +122,7 @@ describe(`the device's memory`, () => {
 
     it(`offers an account's own missing sandboxes for recovery, and a share alone for nothing`, async () => {
         const directory = await load();
-        const shared = sandboxSummary({ id: `s3`, role: `writer`, daemonUrl: `https://sandbox-1ea6479e2362.sbx.intentic.dev`, lastSeenAt: `2026-10-01T00:00:00.000Z` });
+        const shared = sandboxSummary({ id: `s3`, tier: `writer`, daemonUrl: `https://sandbox-1ea6479e2362.sbx.intentic.dev`, lastSeenAt: `2026-10-01T00:00:00.000Z` });
         directory.rememberListed(user, [listed, shared], `id-1`, NOW);
         directory.rememberListed(user, [listed], `id-1`, NOW);
         expect(directory.ownsMissingSandboxes(`owner@example.com`)).toBe(false);

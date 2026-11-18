@@ -65,7 +65,7 @@ What that leaves you:
    everything at once instead of being interrupted step by step. Check `capabilities list` first.
 2. **Say what you know.** `--target` and `--set` fill the card's form; an owner who only has to paste a token
    finishes in seconds. A credential never goes in `--set`: the card collects it.
-3. **"Already connected" is checked against this turn.** A connection your persona leaves out, one for a
+3. **"Already connected" is checked against this turn.** A connection your role leaves out, one for a
    different host, or one whose credential is refused is not "use it": the answer says which, and the next
    step (`grants request capability <id>`, a new connection for that host, `--reconnect`).
 4. **Removing is an ask too.** When a task is done with a connection it made (a test link, a throwaway

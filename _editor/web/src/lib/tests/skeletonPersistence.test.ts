@@ -16,7 +16,7 @@ describe(`outgrown`, () => {
         const held = [
             imprint(`sandbox.secrets`, 1),
             imprint(`diff:a.ts`, 5),
-            imprint(`sandbox.personas`, 3),
+            imprint(`sandbox.roles`, 3),
             imprint(`diff:b.ts`, 6),
             imprint(`diff:c.ts`, 2),
             imprint(`sandbox.areas`, 4),
@@ -24,7 +24,7 @@ describe(`outgrown`, () => {
 
         const { kept, dropped } = outgrown(held, 2);
 
-        expect(kept.map((entry) => entry.name)).toEqual([`sandbox.areas`, `sandbox.personas`, `diff:b.ts`, `diff:a.ts`]);
+        expect(kept.map((entry) => entry.name)).toEqual([`sandbox.areas`, `sandbox.roles`, `diff:b.ts`, `diff:a.ts`]);
         expect(dropped.map((entry) => entry.name)).toEqual([`sandbox.secrets`, `diff:c.ts`]);
     });
 

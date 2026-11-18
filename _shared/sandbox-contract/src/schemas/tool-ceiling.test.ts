@@ -1,9 +1,9 @@
-import { PersonaPowersSchema } from "./personas.js";
+import { RolePowersSchema } from "./roles.js";
 import { capPowers, ceilingLimits, ceilingWithholds, ceilingWords, intersectCeilings } from "./tool-ceiling.js";
 
 // A ceiling is an upper bound per shelf: an answer left out limits nothing, and two held together keep the lower of each.
 
-const FULL = PersonaPowersSchema.parse({});
+const FULL = RolePowersSchema.parse({});
 
 describe(`intersectCeilings`, () => {
     it(`keeps the lower answer of each shelf`, () => {
@@ -23,22 +23,28 @@ describe(`intersectCeilings`, () => {
 });
 
 describe(`capPowers`, () => {
-    it(`lowers a persona's shelves to the ceiling and keeps its connector lists`, () => {
-        const powers = { ...FULL, connectors: [`github`] };
-        expect(capPowers(powers, { files: `read`, shell: false, delegate: false })).toEqual({
-            ...powers,
+    it(`lowers a turn's shelves to the ceiling`, () => {
+        expect(capPowers(FULL, { files: `read`, shell: false, delegate: false })).toEqual({
+            ...FULL,
             files: `read`,
             shell: false,
             delegate: false,
         });
     });
 
-    it(`never raises a shelf the persona switched off`, () => {
+    it(`keeps only the extensions both the shelves and the ceiling allow`, () => {
+        expect(capPowers(FULL, { extensions: [`acme.crm`] }).extensions).toEqual([`acme.crm`]);
+        expect(capPowers({ ...FULL, extensions: [`acme.crm`, `acme.mail`] }, { extensions: [`acme.mail`] }).extensions).toEqual([`acme.mail`]);
+        expect(intersectCeilings({ extensions: [`a`, `b`] }, { extensions: [`b`, `c`] })).toEqual({ extensions: [`b`] });
+        expect(ceilingLimits({ extensions: [] })).toBe(true);
+    });
+
+    it(`never raises a shelf already off`, () => {
         const readOnly = { ...FULL, files: `read` as const, shell: false };
         expect(capPowers(readOnly, { files: `write`, shell: true })).toEqual(readOnly);
     });
 
-    it(`returns the persona's own shelves when the ceiling limits nothing`, () => {
+    it(`returns the shelves as they were when the ceiling limits nothing`, () => {
         expect(capPowers(FULL, undefined)).toBe(FULL);
         expect(capPowers(FULL, { files: `write`, web: true })).toBe(FULL);
     });

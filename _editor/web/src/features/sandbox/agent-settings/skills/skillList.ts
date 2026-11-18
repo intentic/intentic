@@ -11,8 +11,8 @@ export const isTunable = (skill: SkillSummary): boolean => skill.switchable || s
 // Editorial, not alphabetical: own skills first, then unclaimed files and built-ins; installed before connected.
 const ORIGIN_ORDER = {
     own: 0,
-    // Directly under the reader's own: also their words, just scoped to one persona's turns.
-    persona: 1,
+    // Directly under the reader's own: also their words, just scoped to one role's turns.
+    role: 1,
     dropped: 2,
     builtin: 3,
     extension: 4,

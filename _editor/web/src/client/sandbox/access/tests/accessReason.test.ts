@@ -7,7 +7,7 @@ import { accessReasonOf, foreseenRefusal, reasonOfRefusal } from "../accessReaso
 const refusal = (status: number, body: unknown): SandboxHttpError => new SandboxHttpError(status, `refused`, wordsOf(body));
 
 describe(`accessReasonOf`, () => {
-    it(`reads the role floor's refusal as the tier it wanted`, () => {
+    it(`reads the tier floor's refusal as the tier it wanted`, () => {
         expect(accessReasonOf(refusal(403, { error: `maintainer access required`, floor: `maintainer`, reason: `floor` }))).toEqual({
             kind: `tier`,
             floor: `maintainer`,

@@ -39,18 +39,18 @@ export interface LinkRoutesDeps extends LinkTaskDeps {
     readonly auth: Services["auth"];
     // What this sandbox calls itself, told to the asking side so its agent can name where the work went.
     readonly sandboxName: () => string;
-    // The personas a link's tasks may wear, by id, with the name each is shown by.
-    readonly personas: () => Promise<readonly { readonly id: string; readonly label?: string | undefined }[]>;
+    // The roles a link's tasks may wear, by id, with the name each is shown by.
+    readonly roles: () => Promise<readonly { readonly id: string; readonly label?: string | undefined }[]>;
     // The services a link's tasks may act as, by id (docs/architecture/access.md).
     readonly serviceIds?: () => Promise<readonly string[]>;
 }
 
 /** The routes' deps, read off the daemon's services. */
-const linkRoutesDepsOf = (services: LinkServices & Pick<Services, "auth" | "info" | "personas">): LinkRoutesDeps => ({
+const linkRoutesDepsOf = (services: LinkServices & Pick<Services, "auth" | "info" | "roles">): LinkRoutesDeps => ({
     ...linkTaskDepsOf(services),
     auth: services.auth,
     sandboxName: () => services.info?.name ?? "this sandbox",
-    personas: async () => (await services.personas.list()).map((persona) => ({ id: persona.id, label: persona.label })),
+    roles: async () => (await services.roles.list()).map((role) => ({ id: role.id, label: role.label })),
     serviceIds: async () => (await services.services?.list())?.map((service) => service.id) ?? [],
 });
 
@@ -58,14 +58,14 @@ const refused = (c: Context<AppEnv>, refusal: LinkRefusal): Response => c.json({
 
 const isRefusal = <T extends object>(value: T | LinkRefusal): value is LinkRefusal => "refused" in value;
 
-// A persona the terms name must exist: an unknown one would deny every task everything (personas.ts turnPersona), which
+// A role the terms name must exist: an unknown one would deny every task everything (roles.ts turnRole), which
 // reads to the asking side as a link that silently does nothing.
-const unknownPersona = async (deps: LinkRoutesDeps, actsAs: string | undefined): Promise<string | undefined> => {
+const unknownRole = async (deps: LinkRoutesDeps, actsAs: string | undefined): Promise<string | undefined> => {
     if (actsAs === undefined) {
         return undefined;
     }
-    const cast = await deps.personas();
-    return cast.some((persona) => persona.id === actsAs) ? undefined : `no persona here is called "${actsAs}"`;
+    const cast = await deps.roles();
+    return cast.some((role) => role.id === actsAs) ? undefined : `no role here is called "${actsAs}"`;
 };
 
 // A service the terms name must exist: tasks acting as one that does not would each be refused (link-tasks.ts).
@@ -77,16 +77,16 @@ const unknownService = async (deps: LinkRoutesDeps, runAs: string | null | undef
     return known.includes(runAs) ? undefined : `no service here is called "${runAs}"`;
 };
 
-// What GET /link answers: the link still works, and the terms it is held to, the persona by the name it is shown by.
+// What GET /link answers: the link still works, and the terms it is held to, the role by the name it is shown by.
 const helloOf = async (deps: LinkRoutesDeps, link: ResolvedLink): Promise<LinkHello> => {
-    const persona = link.terms.actsAs === undefined ? undefined : (await deps.personas()).find((candidate) => candidate.id === link.terms.actsAs);
+    const role = link.terms.actsAs === undefined ? undefined : (await deps.roles()).find((candidate) => candidate.id === link.terms.actsAs);
     return {
         sandbox: deps.sandboxName(),
         link: { id: link.id, label: link.label },
         terms: {
             approve: link.terms.approve,
             turnsPerHour: link.terms.turnsPerHour,
-            ...opt("persona", persona === undefined ? undefined : (persona.label ?? persona.id)),
+            ...opt("role", role === undefined ? undefined : (role.label ?? role.id)),
             tasks: link.terms.tasks,
             records: link.terms.records,
             operate: link.terms.operate,
@@ -119,7 +119,7 @@ export const createLinkRoutes = (deps: LinkRoutesDeps) => {
             if (!body.ok) {
                 return body.response;
             }
-            const missing = (await unknownPersona(deps, body.value.terms?.actsAs)) ?? (await unknownService(deps, body.value.terms?.runAs));
+            const missing = (await unknownRole(deps, body.value.terms?.actsAs)) ?? (await unknownService(deps, body.value.terms?.runAs));
             if (missing !== undefined) {
                 return c.json({ error: missing }, 400);
             }
@@ -139,7 +139,7 @@ export const createLinkRoutes = (deps: LinkRoutesDeps) => {
             if (!body.ok) {
                 return body.response;
             }
-            const missing = (await unknownPersona(deps, body.value.actsAs ?? undefined)) ?? (await unknownService(deps, body.value.runAs));
+            const missing = (await unknownRole(deps, body.value.actsAs ?? undefined)) ?? (await unknownService(deps, body.value.runAs));
             if (missing !== undefined) {
                 return c.json({ error: missing }, 400);
             }

@@ -14,7 +14,7 @@ import { type ConversationReader, conversationReader, registryProvenance } from 
  * A person's own request (a bearer, `identity` set) reads as that person, as it always did. */
 
 // Nobody in particular: reads a conversation only where no rule narrows it, so never a home but one's own (none) and never a private one.
-const NOBODY: Caller = { email: "", role: "collaborator" };
+const NOBODY: Caller = { email: "", tier: "collaborator" };
 
 const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 
@@ -31,10 +31,10 @@ const chainOf = async (services: Pick<Services, "agents" | "members" | "ownerEma
     const members = await services.members.list();
     return named.map((email): Caller => {
         if (owner !== undefined && same(email, owner)) {
-            return { email, role: "owner" };
+            return { email, tier: "owner" };
         }
         const member = members.find((held) => same(held.email, email));
-        return member === undefined ? NOBODY : { email, role: member.role, ...(member.areas === undefined ? {} : { areas: member.areas }) };
+        return member === undefined ? NOBODY : { email, tier: member.tier, ...(member.areas === undefined ? {} : { areas: member.areas }) };
     });
 };
 

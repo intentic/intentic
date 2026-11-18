@@ -1,6 +1,6 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { Seal, SealHouse, SealMode, SealOpen, SealPerson, SealVia, SealView } from "@intentic/sandbox-contract/schemas/seal";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { API_MAIN_FIXER_ID, CONFLICT_AGENT_ID, HELD_AGENT_ID, LATENCY_AGENT_ID, REVIEW_AGENT_ID, WEB_MAIN_FIXER_ID } from "../../fixture/fleet";
 import { demoMode, demoTier } from "../../mode";
 import { DEMO_SANDBOX, DEMO_USER } from "../../platform";
@@ -120,7 +120,7 @@ const SEALED_KEEPS = [
 const sealedCard = (agent: AgentSummary, seal: Seal): AgentSummary => {
     const pending = pendingOf(seal);
     const opener = pending !== undefined && same(pending.email, ADA.email);
-    const approver = pending !== undefined && !opener && roleAtLeast(demoTier, `maintainer`);
+    const approver = pending !== undefined && !opener && tierAtLeast(demoTier, `maintainer`);
     const view: SealView = { sealed: true, readers: seal.readers.slice(0, 1) };
     if (seal.asks?.some((ask) => same(ask.email, ADA.email)) === true) {
         view.asked = true;
@@ -160,7 +160,7 @@ export const framedForCaller = (agent: AgentSummary): AgentSummary => {
         }
     }
     const pending = pendingOf(seal);
-    if (pending !== undefined && !same(pending.email, ADA.email) && roleAtLeast(demoTier, `maintainer`)) {
+    if (pending !== undefined && !same(pending.email, ADA.email) && tierAtLeast(demoTier, `maintainer`)) {
         view.canApprove = true;
     }
     return { ...agent, seal: view };

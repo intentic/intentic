@@ -1,7 +1,7 @@
 import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { aiAccountKey } from "@intentic/sandbox-contract/schemas/members";
 import type { LoginStart, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { ORPCError } from "@orpc/server";
 import type { ProvenCaller } from "../../auth/auth.js";
 import type { Services } from "../../composition.js";
@@ -142,7 +142,7 @@ export const createAccountAttribution = (deps: AttributionDeps): AccountAttribut
             return accounts.map((account) => connectedBy(account, known.get(aiAccountKey(provider, account.id))));
         },
         ensureOwn: async (identity, provider, id) => {
-            if (identity === undefined || roleAtLeast(identity.role, "maintainer")) {
+            if (identity === undefined || tierAtLeast(identity.tier, "maintainer")) {
                 return;
             }
             let by: string | undefined;

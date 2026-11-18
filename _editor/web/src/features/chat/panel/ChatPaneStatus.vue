@@ -15,7 +15,7 @@ import { formatRemaining, formatReset, planHeadroom, remainingFigure, usageStatu
 import { balanceLabel, balanceLow, balanceTip, useKeyBalance } from "../../../models/conversations/accounts/keyBalance";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { readsAsContinuing } from "../../../models/conversations/run/turnRequest";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useAudience } from "../../../app/useAudience";
 import { here, page } from "../../../lib/routes/links";
 import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
@@ -41,7 +41,7 @@ const { block, hint } = defineProps<{
     hint: string;
 }>();
 
-const { isGuest, homeOnly, canShip } = useRole();
+const { isGuest, homeOnly, canShip } = useTier();
 // A maker's strip keeps the one reading they can act on, how much of the allowance is left, said as that; the context
 // window and the prompt cache's clock are a developer's instruments and stay off it.
 const { maker } = useAudience();

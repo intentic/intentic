@@ -12,7 +12,7 @@ import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { opensAsFolder } from "../files/archiveEntries";
 import { readFileWindow } from "../files/fileWindow";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { selfMember } from "../../../client/sandbox/useMembers";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { editFenceOf, fenceWrites, writesSomewhere } from "./editScope";
@@ -197,12 +197,12 @@ export function useWorkspaceTree() {
     // Where this member may change files by hand (editScope.ts): everywhere for the tiers that manage the sandbox,
     // nowhere below writer, and a writer's own edit areas otherwise, resolved to folders the way the daemon resolves
     // them. Every write verb is offered only where `canWriteAt` says yes, so nothing is drawn that would be refused.
-    const { role } = useRole();
+    const { tier } = useTier();
     const self = selfMember();
     // The manifest only matters for a writer whose edit names areas; everyone else's answer needs none of it.
-    const namesAreas = computed(() => role.value === `writer` && Array.isArray(self.value?.edit));
+    const namesAreas = computed(() => tier.value === `writer` && Array.isArray(self.value?.edit));
     const { query: areasQuery } = useSandboxQuery({ ...rpcQuery(`areas.list`), enabled: namesAreas });
-    const editFence = computed(() => editFenceOf(role.value, self.value, areasQuery.data.value?.areas));
+    const editFence = computed(() => editFenceOf(tier.value, self.value, areasQuery.data.value?.areas));
     // Whether the member may change `path` (a file, or a folder and what goes in it).
     const canWriteAt = (path: string, view: ViewScope = workspaceView.value): boolean =>
         fenceWrites(editFence.value, path) && (view.branch === undefined || view.repo === `root` || path === view.repo || path.startsWith(`${view.repo}/`));

@@ -38,10 +38,10 @@ describe("a card put back after a restart", () => {
             "c-1",
         );
         const settled = card.wait(new AbortController().signal);
-        expect(cards.resolve({ kind: "credential_offer", requestId: "cred", approve: true }, { email: "someone@example.com", role: "collaborator" })).toEqual({
+        expect(cards.resolve({ kind: "credential_offer", requestId: "cred", approve: true }, { email: "someone@example.com", tier: "collaborator" })).toEqual({
             refused: 'Only ops@example.com can release "GitHub".',
         });
-        expect(cards.resolve({ kind: "credential_offer", requestId: "cred", approve: true }, { email: "ops@example.com", role: "collaborator" })).toBe("settled");
+        expect(cards.resolve({ kind: "credential_offer", requestId: "cred", approve: true }, { email: "ops@example.com", tier: "collaborator" })).toBe("settled");
         expect((await settled).reply).toMatchObject({ approve: true });
     });
 });

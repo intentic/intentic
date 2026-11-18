@@ -20,15 +20,15 @@ describe(`mentionQueryAt`, () => {
 
 describe(`parseMentionToken`, () => {
     it(`reads an exact kind keyword before the colon as a drill`, () => {
-        expect(parseMentionToken(`persona:`)).toEqual({ kind: `persona`, query: `` });
+        expect(parseMentionToken(`role:`)).toEqual({ kind: `role`, query: `` });
         expect(parseMentionToken(`model:son`)).toEqual({ kind: `model`, query: `son` });
         expect(parseMentionToken(`sandbox:om`)).toEqual({ kind: `sandbox`, query: `om` });
         expect(parseMentionToken(`effort:hi`)).toEqual({ kind: `effort`, query: `hi` });
     });
 
     it(`treats anything else as a plain search, colon or not`, () => {
-        expect(parseMentionToken(`personas`)).toEqual({ kind: undefined, query: `personas` });
-        expect(parseMentionToken(`persona`)).toEqual({ kind: undefined, query: `persona` });
+        expect(parseMentionToken(`roles`)).toEqual({ kind: undefined, query: `roles` });
+        expect(parseMentionToken(`role`)).toEqual({ kind: undefined, query: `role` });
         expect(parseMentionToken(`Model:x`)).toEqual({ kind: undefined, query: `Model:x` });
         expect(parseMentionToken(`src/app.ts`)).toEqual({ kind: undefined, query: `src/app.ts` });
         expect(parseMentionToken(`scope/pkg:test:`)).toEqual({ kind: undefined, query: `scope/pkg:test:` });

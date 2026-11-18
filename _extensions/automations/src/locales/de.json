@@ -81,9 +81,9 @@
         "onlyAllowedSitesDaily": "Es bleiben nur die erlaubten Websites und das Tageslimit.",
         "onlyRepoOptional": "Nur dieses Repo (optional)",
         "peopleRuleNames": "Namen für Personenregel {index}",
-        "persona": "Spricht als",
-        "personaAutomationRuns": "Spricht als",
-        "personaRuleAnswers": "Persona-Regel {index} antwortet als",
+        "role": "Spricht als",
+        "roleAutomationRuns": "Spricht als",
+        "roleRuleAnswers": "Rollenregel {index} antwortet als",
         "pickAtLeastOne": "Wählen Sie mindestens einen Tag.",
         "pickModel": "Ein Modell wählen",
         "readGrepGlob": "Read, Grep, Glob",
@@ -108,12 +108,12 @@
         "standard5FieldCron": "Standard-Cron mit 5 Feldern: Minute Stunde Tag Monat Wochentag.",
         "starter": "Starter aus {recipeNote}.",
         "staysInSandboxOnly": "Bleibt in Ihrer Sandbox: nur der Site-Key geht je an den Browser eines Besuchers.",
-        "strangersWritePromptsSaving": "Fremde schreiben diese Prompts, deshalb fügt das Speichern Ihren Personas einen Nur-Lese-Empfang hinzu.",
+        "strangersWritePromptsSaving": "Fremde schreiben diese Prompts, deshalb fügt das Speichern Ihren Rollen einen Nur-Lese-Empfang hinzu.",
         "sun": "So",
         "then": "Dann",
         "theyTalkTo": "Spricht als",
         "thu": "Do",
-        "toolNamesCommaSeparated": "Werkzeugnamen, durch Komma getrennt. Leer lässt die eigene Liste der Persona unangetastet.",
+        "toolNamesCommaSeparated": "Werkzeugnamen, durch Komma getrennt. Leer lässt die eigene Liste der Rolle unangetastet.",
         "toolNamesJobMay": "Werkzeugnamen, die dieser Job aufrufen darf",
         "tue": "Di",
         "turnSettles": "Ein Zug kommt zur Ruhe",
@@ -136,8 +136,8 @@
         "retired": "eingestellt",
         "retiredNeverFires": "Das sendet nichts mehr: Die Prüfung, die nach jeder Landung lief, gibt es nicht mehr, also löst diese Automation nie aus. Wählen Sie einen der Momente oben, oder lassen Sie sie stattdessen von einer fehlgeschlagenen CI-Pipeline wecken.",
         "othersCaption": {
-            "allow": "Wer nicht genannt ist, bekommt eine Antwort als die Persona oben — so hat diese Automation gearbeitet, bevor sie Regeln hatte.",
-            "hold": "Wer nicht genannt ist, wartet in den Genehmigungen auf Sie und läuft als die Persona oben, sobald Sie zustimmen.",
+            "allow": "Wer nicht genannt ist, bekommt eine Antwort als die Rolle oben — so hat diese Automation gearbeitet, bevor sie Regeln hatte.",
+            "hold": "Wer nicht genannt ist, wartet in den Genehmigungen auf Sie und läuft als die Rolle oben, sobald Sie zustimmen.",
             "ignore": "Wer nicht genannt ist, bekommt keine Antwort. Diese Personen erscheinen weiterhin unter „kürzlich gesehen“, sie später zu nennen ist also ein Klick."
         },
         "kindCaption": {
@@ -217,7 +217,7 @@
         "aiDisclosure": "Besucher über KI-Antworten informieren",
         "aiDisclosureText": "Eigener Hinweis (optional)",
         "aiDisclosureDefault": "Die Antworten stammen von einem KI-Assistenten und können Fehler enthalten.",
-        "personaGoneHint": "Diese Persona existiert nicht mehr, daher liefen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere."
+        "roleGoneHint": "Diese Rolle existiert nicht mehr, daher liefen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere."
     },
     "automationRow": {
         "alreadyFired": "Bereits ausgelöst",
@@ -295,10 +295,10 @@
         "lastSaw": "Was sie zuletzt gesehen hat",
         "lastSawSince": "Was sie zuletzt gesehen hat, unverändert seit {when}",
         "checkedAt": "Geprüft {at}",
-        "personaMissing": "Persona fehlt",
-        "personaMissingNote": "{ids} existiert nicht mehr, daher laufen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere Persona.",
+        "roleMissing": "Rolle fehlt",
+        "roleMissingNote": "{ids} existiert nicht mehr, daher laufen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere Rolle.",
         "noAccounts": "Keine Konten",
-        "noAccountsNote": "Die Weckrufe haben jedes Werkzeug, aber keines Ihrer angemeldeten Konten. Wählen Sie Vollzugriff oder eine Persona, wenn sie als Sie posten oder surfen soll."
+        "noAccountsNote": "Die Weckrufe erreichen keines Ihrer angemeldeten Konten. Wählen Sie Alle Konten oder eine Rolle, wenn sie als Sie posten oder surfen soll."
     },
     "automationsView": {
         "addAutomation": "Eine Automation hinzufügen",
@@ -466,7 +466,7 @@
         "failing": "Fehlschlagend",
         "group": "Gruppe",
         "groups": "Gruppen",
-        "howFiled": "Eingeordnet nach der Gruppe, die jede nennt, sonst nach der Persona, als die sie läuft.",
+        "howFiled": "Eingeordnet nach der Gruppe, die jede nennt, sonst nach der Rolle, als die sie läuft.",
         "on": "An",
         "show": "Anzeigen",
         "total": "Gesamt"
@@ -489,15 +489,15 @@
     },
     "automationLabels": {
         "group": "Gruppe",
-        "groupHint": "Automationen einer Gruppe stehen zusammen. Leer ordnet sie nach ihrer Persona ein.",
+        "groupHint": "Automationen einer Gruppe stehen zusammen. Leer ordnet sie nach ihrer Rolle ein.",
         "groupOptional": "Gruppe (optional)",
         "groupPlaceholder": "Marketing"
     },
-    "builtInPersonas": {
-        "fullAccess": "Vollzugriff",
-        "fullAccessNote": "jedes Werkzeug und jedes angemeldete Konto",
+    "builtInRoles": {
+        "fullAccess": "Alle Konten",
+        "fullAccessNote": "jedes angemeldete Konto",
         "noAccounts": "Keine Konten",
-        "noAccountsNote": "jedes Werkzeug, kein angemeldetes Konto"
+        "noAccountsNote": "kein angemeldetes Konto"
     },
     "scheduleWords": {
         "daysAt": "Jeden {days} um {times}",
@@ -524,7 +524,7 @@
         "schedule": "Zeitplan",
         "trigger": "Startet bei"
     },
-    "personaProperty": {
+    "roleProperty": {
         "runsAs": "Spricht als"
     },
     "modelProperty": {
@@ -552,10 +552,10 @@
     "groupProperty": {
         "byChore": "Eine Code-Aufgabe",
         "byNothing": "Noch keine Gruppe",
-        "byPersona": "Nach ihrer Persona",
+        "byRole": "Nach ihrer Rolle",
         "change": "Gruppe ändern: {now}",
         "group": "Gruppe",
-        "hint": "Leer lassen, um sie nach ihrer Persona einzuordnen.",
+        "hint": "Leer lassen, um sie nach ihrer Rolle einzuordnen.",
         "placeholder": "Marketing"
     },
     "instructionsSection": {
@@ -579,8 +579,8 @@
     },
     "service": {
         "runsAs": "Läuft als",
-        "owner": "Eigentümer (nur durch seine Persona begrenzt)",
-        "authority": "Befugnisse: Zugriff der verantwortlichen Person, begrenzt durch das Profil. Personas schränken ihn weiter ein.",
+        "owner": "Eigentümer (nur durch seine Rolle begrenzt)",
+        "authority": "Befugnisse: Zugriff der verantwortlichen Person, begrenzt durch das Profil. Rollen schränken ihn weiter ein.",
         "inherit": "Wie die Automation",
         "steward": "Verantwortlich: {email}",
         "stewardLimits": "Gesamter Zugriff der verantwortlichen Person",

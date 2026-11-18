@@ -29,7 +29,7 @@ export interface HomeActionsContext {
     readonly openCreated: (path: string) => void;
     // Reads a file's name in every folder in place of the tiles (homeCover.ts): the file right-clicked is the example.
     readonly cover: (name: string) => void;
-    // A folder's own rows (documents, personas, checks, management), composed by the page.
+    // A folder's own rows (documents, roles, checks, management), composed by the page.
     readonly dirActions: (dir: string) => readonly RowAction[];
 }
 

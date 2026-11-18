@@ -33,7 +33,7 @@ const intentic: RememberedSandbox = {
     name: `intentic`,
     image: null,
     daemonUrl: `https://sandbox-82789f4106b4.radarsu.com`,
-    role: `owner`,
+    tier: `owner`,
     hosted: false,
     lastSeenAt: `2026-10-01T18:00:09.479Z`,
     missingSince: `2026-10-02T12:00:00.000Z`,

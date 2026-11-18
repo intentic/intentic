@@ -39,7 +39,7 @@ import { useAgentChanges } from "./useAgentChanges";
 import { asksFirst } from "../../../models/fleet/presses/foreignPress";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useChat } from "../../../models/conversations/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
@@ -266,7 +266,7 @@ const confirmForceLand = async (): Promise<void> => {
 };
 
 // Role split on the primary action: maintainers land, collaborators ask (the daemon enforces the floor itself).
-const { canDrive, canShip } = useRole();
+const { canDrive, canShip } = useTier();
 const { maker } = useAudience();
 // In plain words a document git ignores, or one the land would set aside as scratch, still waits on Accept, since that
 // press carries the conversation's documents with it (landAgent); for a developer it stays out, as git says.

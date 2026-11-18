@@ -219,8 +219,8 @@ describe(`reading a tab snapshot`, () => {
         expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ model: `claude-sonnet-4-5-20250929`, effort: `medium`, thinking: false });
     });
 
-    // The debt a thin catalog left (ComposerSelection.displacedModel) and the persona the tab acts as survive a reload.
-    it(`restores the model a catalog moved the tab off and the persona it acts as`, () => {
+    // The debt a thin catalog left (ComposerSelection.displacedModel) and the role the tab acts as survive a reload.
+    it(`restores the model a catalog moved the tab off and the role it acts as`, () => {
         session.set(
             KEY,
             blob(`a`, [{ ...tab(`a`), provider: `gemini`, model: `gemini-3.1-pro-low`, displacedModel: `claude-opus-4-6-thinking`, actsAs: `work` }]),

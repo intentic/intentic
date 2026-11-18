@@ -7,8 +7,8 @@ import { CONTEXT_NOTE_HEADER, CONTEXT_NOTE_TITLE } from "../../sessions/vocabula
 // a compaction, not the stable system prefix, since those are the only moments history can't carry it.
 
 export interface ContextNoteInput {
-    // Label (or id) of the persona card the composition read from; absent if set without one.
-    readonly persona: string | undefined;
+    // Label (or id) of the role card the composition read from; absent if set without one.
+    readonly role: string | undefined;
     // Repository ids the conversation carries, in composition order. Root is implied and not listed.
     readonly carried: readonly string[];
     // Live repository ids the conversation does not carry.
@@ -21,7 +21,7 @@ const list = (ids: readonly string[]): string => ids.map((id) => `\`${id}\``).jo
 const repositories = (count: number): string => (count === 1 ? "repository" : "repositories");
 
 export const contextNote = (input: ContextNoteInput): TurnNote => {
-    const from = input.persona === undefined ? "" : ` (wearing the \`${input.persona}\` persona)`;
+    const from = input.role === undefined ? "" : ` (wearing the \`${input.role}\` role)`;
     const carried =
         input.carried.length === 0
             ? "the workspace root and none of its nested repositories"
@@ -36,7 +36,7 @@ export const contextNote = (input: ContextNoteInput): TurnNote => {
         );
     }
     if (input.missing.length > 0) {
-        lines.push("", `Named by the persona but not in this workspace: ${list(input.missing)}.`);
+        lines.push("", `Named by the role but not in this workspace: ${list(input.missing)}.`);
     }
     return { title: CONTEXT_NOTE_TITLE, text: lines.join("\n") };
 };

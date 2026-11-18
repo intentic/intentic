@@ -10,7 +10,7 @@ import { browsersPath } from "../../workbench/browsers/browsersPaths";
 import { here, page, toHome } from "../../lib/routes/links";
 import { sandboxKeyAllowed, sandboxSectionPath, sandboxSections } from "../../models/sandbox/sandboxNav";
 import { useHeldDoor } from "../../components/heldPlace";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { useAccess } from "../../client/sandbox/access/useAccess";
 import { useOrgPolicy } from "../../features/organisations/useOrgPolicy";
 import { useHostedPlan } from "../../models/hosted-plan/useHostedPlan";
@@ -69,7 +69,7 @@ export function useNavigationCommands(): void {
     const { capabilities } = useCapabilities();
     // Maintainer-and-up rows: the sandbox hub hides the rest, and the daemon refuses them anyway. A guest keeps the two
     // tiles its rail has, and a home-only guest neither: its one conversation is the master view's.
-    const { canShip, isGuest, homeOnly } = useRole();
+    const { canShip, isGuest, homeOnly } = useTier();
     const { offered: planOffered } = useHostedPlan();
     const { hidden: orgHidden } = useOrgPolicy();
     const requestAddSandbox = useRequestAddSandbox();

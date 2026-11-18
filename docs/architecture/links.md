@@ -9,7 +9,7 @@ flowchart LR
       children --> client["link client<br/>link card's token"]
     end
     subgraph B["Taking sandbox"]
-      doors["link doors<br/>/link/*"] --> tasks(["task<br/>persona · approval · limits"])
+      doors["link doors<br/>/link/*"] --> tasks(["task<br/>role · approval · limits"])
       tasks --> turn["unattended turn<br/>own worktree, lands here"]
     end
     editor["Owner's editor<br/>signed in to both"] -. "pairs once" .-> client
@@ -19,14 +19,14 @@ flowchart LR
 
 ## The two halves
 
-- **The taking side** holds an *inbound link* ([`inbound-links.ts`](../../_sandbox/sandbox/src/links/inbound-links.ts)): an `ilk_` token stored as its hash, the label of the sandbox that holds it, and its terms. The terms are the persona every task wears, whether each new task waits for the owner (`approve`), and how many turns an hour the link may start. The owner mints, re-terms and revokes links on Sandbox ▸ Access ▸ Programs, and answers tasks that wait there; the tab counts them.
+- **The taking side** holds an *inbound link* ([`inbound-links.ts`](../../_sandbox/sandbox/src/links/inbound-links.ts)): an `ilk_` token stored as its hash, the label of the sandbox that holds it, and its terms. The terms are the role every task wears, whether each new task waits for the owner (`approve`), and how many turns an hour the link may start. The owner mints, re-terms and revokes links on Sandbox ▸ Access ▸ Programs, and answers tasks that wait there; the tab counts them.
 - **The link doors** ([`links.routes.ts`](../../_sandbox/sandbox/src/links/links.routes.ts), `/link/*`) check the token themselves. They answer only for the conversations their own link opened: the link's task list is the whole of its reach. The doors cannot read files, list other conversations or change settings, and they can never land.
-- **A task** ([`link-tasks.ts`](../../_sandbox/sandbox/src/links/link-tasks.ts)) opens a conversation named `link-…`. Its turns are unattended, isolated in their own worktree, wear the link's persona, and are drawn as a program's words (`<label> (linked sandbox)`). They also carry `outside` content, so the guard treats them as somebody else's words. A card such a turn raises waits for the taking sandbox's owner, except a plain question, which the asking agent may answer. The closing message of each turn is the task's report. A task keeps its opening words until its first turn is said; one a restart cut between filing and starting is started at boot from them, under the first try's message id, so a turn that did start is not started again (`startUnstartedTasks`). The link's hourly allowance is kept on the history volume, so a restart does not reset it.
+- **A task** ([`link-tasks.ts`](../../_sandbox/sandbox/src/links/link-tasks.ts)) opens a conversation named `link-…`. Its turns are unattended, isolated in their own worktree, wear the link's role, and are drawn as a program's words (`<label> (linked sandbox)`). They also carry `outside` content, so the guard treats them as somebody else's words. A card such a turn raises waits for the taking sandbox's owner, except a plain question, which the asking agent may answer. The closing message of each turn is the task's report. A task keeps its opening words until its first turn is said; one a restart cut between filing and starting is started at boot from them, under the first try's message id, so a turn that did start is not started again (`startUnstartedTasks`). The link's hourly allowance is kept on the history volume, so a restart does not reset it.
 - **The asking side** holds a `link` capability card under Your devices: the far address and the token, kept by the daemon and never put in the agent's environment. Each granted card is mounted on the turn's lease as a tool server named after it ([`link-mounts.ts`](../../_sandbox/sandbox/src/links/link-mounts.ts)): `mcp__<card>__delegate` and `mcp__<card>__about`, reaching every runtime the same way. A hand-over ([`linked-children.ts`](../../_sandbox/sandbox/src/links/linked-children.ts)) files the task as a `linked` subagent on the parent's roster. `wait`, `send`, `answer` and `cancel` reach it there like any child. A follower long-polls the far side (`GET /link/conversations/{id}?after=<version>&wait=25`) and moves the record. The ending wakes the parent the way a spawned child's report does, marked as outside content, since it is another sandbox's agent's account. The follower list is on the history volume, so a restart picks it up again. A hand-over is filed there before the far side is asked, with the ask kept until it is answered: a restart in between asks again under the same request id, which the far side answers with the task it already took, so nothing over there is orphaned and nothing runs twice. A settled task keeps its report on file (the newest 50), so a `wait` after a restart still hands it.
 
 ## What a task costs
 
-A task opens a conversation, and its first turn carries the taking sandbox's whole turn context: the project map, the instructions, the skills and the tools. The spike on 2026-10-13 drove this sandbox from outside, through its public address, with a control token: authenticate 0.43 s, start 0.30 s, the whole turn about 7 s. Its one-word answer (`pong`) ran on a 98,747-token context, nearly all of it written to the prompt cache on that first turn. So a link is for work worth a turn of its own, not for one-line lookups: batch small questions into one task, and a persona with a lean prompt makes every task through its link cheaper.
+A task opens a conversation, and its first turn carries the taking sandbox's whole turn context: the project map, the instructions, the skills and the tools. The spike on 2026-10-13 drove this sandbox from outside, through its public address, with a control token: authenticate 0.43 s, start 0.30 s, the whole turn about 7 s. Its one-word answer (`pong`) ran on a 98,747-token context, nearly all of it written to the prompt cache on that first turn. So a link is for work worth a turn of its own, not for one-line lookups: batch small questions into one task, and a role with a lean prompt makes every task through its link cheaper.
 
 ## Decisions
 
@@ -35,10 +35,10 @@ A task opens a conversation, and its first turn carries the taking sandbox's who
 - **A waiting task points at its Allow** (2026-10-15). A task that waits for the taking sandbox's owner has no conversation to read yet, so its row on the asking side opens the Linked sandboxes section of that sandbox's Access ▸ Programs ([`linkedSubagent.ts`](../../_editor/web/src/models/fleet/linkedSubagent.ts)), switched to it, rather than an empty transcript.
 - **A link of its own, not a control token.** A `drive` control token would reach the taking sandbox's whole fleet, every transcript and every file. Its prompts would also read as the owner's own words. A link reaches only what it opened, and its words are always marked as outside content.
 - **Not a runner.** A runner is the asking sandbox's own container: the conversation, credentials and landing stay with its parent, and runner mode rewrites `/work` from the parent. A linked task is the other way round. It belongs to the taking sandbox, and only its report comes back.
-- **Device-like, not a device** (2026-10-13). To the owner, another sandbox is another place their agent can act, held to what that side allows, as a computer is. So it sits under Your devices and on the Devices page, a persona picks it on the same devices list, and its tools are named after it. It is not the `device` kind: a device dials in and enforces shell and screen switches on its own machine, while a link is dialled out to, and its terms are a persona, an approval and an hourly limit. The first cut was a `delegate(to)` tool in the subagents server, gated by the delegate shelf alone; the owner asked for this instead.
+- **Device-like, not a device** (2026-10-13). To the owner, another sandbox is another place their agent can act, held to what that side allows, as a computer is. So it sits under Your devices and on the Devices page, a role picks it on the same devices list, and its tools are named after it. It is not the `device` kind: a device dials in and enforces shell and screen switches on its own machine, while a link is dialled out to, and its terms are a role, an approval and an hourly limit. The first cut was a `delegate(to)` tool in the subagents server, gated by the delegate shelf alone; the owner asked for this instead.
 - **Not `spawn`.** `spawn` promises the child's work comes back into the parent's checkout. A linked task's work never does, so it gets its own verb (`delegate`) and its own row kind (`linked`). It shares the lifecycle verbs because supervising it is the same job.
-- **No model setting of its own.** A task runs on the model the link's persona names, else the taking sandbox's default. Everything about what a link's tasks are is set on the link, on Sandbox ▸ Access ▸ Programs, not on a second page.
-- **Unattended on purpose.** Nobody on the taking side is watching, so the task gets no signed-in account unless the link's persona carries one, and anything needing consent waits for that sandbox's owner.
+- **No model setting of its own.** A task runs on the model the link's role names, else the taking sandbox's default. Everything about what a link's tasks are is set on the link, on Sandbox ▸ Access ▸ Programs, not on a second page.
+- **Unattended on purpose.** Nobody on the taking side is watching, so the task gets no signed-in account unless the link's role carries one, and anything needing consent waits for that sandbox's owner.
 - **Two hops at most** (`LINK_MAX_HOPS`). A task that came in over a link may be handed on once more. Past that, both sides refuse, so two sandboxes cannot pass one task back and forth for ever. The asking side counts hops from the root of the parent's family.
 - **Speaker, not schema.** A linked task is drawn as the existing `program` speaker, not a new speaker kind. A newer daemon would otherwise send a speaker kind an older editor cannot parse, and the whole transcript would fail with it.
 
@@ -70,7 +70,7 @@ already reach.
 On the asking side the agent reads them with `--on <link>` on those commands, which its daemon relays with the card's
 token ([`link-records-relay.ts`](../../_sandbox/sandbox/src/links/link-records-relay.ts)), or with the link's tool server
 (`conversations`, `conversation`, `diagnostics`). A turn reaches only the cards it was granted, the rule a delegated task
-is held to, so a persona that leaves a link out leaves its records out too.
+is held to, so a role that leaves a link out leaves its records out too.
 
 Two other ways in, for a sandbox not linked: on one of the owner's computers, the machine agent's `inspect_sandbox` runs
 the sandbox's own `agents` and `diagnostics` read-only through `ic sandbox inspect`, which refuses every other command;
@@ -97,7 +97,7 @@ the commands it started.
 
 On the asking side the link's tool server carries `run_command`, `read_file` and `write_file`
 ([`link-operate-tools.ts`](../../_sandbox/sandbox/src/links/link-operate-tools.ts)). Only a turn that may hand work on may
-use them: a turn started by outside content, or one whose persona does not delegate, is refused before anything is asked.
+use them: a turn started by outside content, or one whose role does not delegate, is refused before anything is asked.
 `delegate`'s own description sends an agent there when the work is the sandbox itself.
 
 A door a far sandbox's build does not have yet is refused by its sign-in check as a bare "unauthorized". The asking side

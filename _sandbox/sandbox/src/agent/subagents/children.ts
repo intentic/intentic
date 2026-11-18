@@ -112,7 +112,7 @@ export interface ChildSpawnSpec {
     readonly run?: { readonly id: string };
     // A review or test session on the work of a subagent this parent spawned (child-gates.ts freshGate), reporting to it.
     readonly freshOf?: FreshOf;
-    // Its parent's persona, set by spawnChild over whatever was asked (child-spec.ts wearingParent).
+    // Its parent's role, set by spawnChild over whatever was asked (child-spec.ts wearingParent).
     readonly actsAs?: string;
 }
 

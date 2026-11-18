@@ -2,7 +2,7 @@ import { type AccessProfile, profileAccess } from "@intentic/sandbox-contract/sc
 import { accessRefusal, tierOf } from "@intentic/sandbox-contract/schemas/members";
 import type { Services } from "../composition.js";
 import type { MemberGrant } from "../auth/auth.js";
-import { assistantsRefusal, reachablePersonas } from "../personas/persona-reach.js";
+import { assistantsRefusal, reachableRoles } from "../roles/role-reach.js";
 
 /* A PROFILE ON A PERSON'S ROW (docs/architecture/access.md). A row holding a profile carries that profile's answers written
    out, so every reader of the roster (the authorizer, the route floors, the platform's copy of the tier, the presence
@@ -13,7 +13,7 @@ import { assistantsRefusal, reachablePersonas } from "../personas/persona-reach.
 export const profileGrant = (profile: AccessProfile): MemberGrant => {
     const access = profileAccess(profile);
     return {
-        role: tierOf(access),
+        tier: tierOf(access),
         areas: profile.areas,
         agents: access.agents,
         edit: access.edit === "none" ? undefined : access.edit === "all" ? "all" : [...access.edit],
@@ -26,7 +26,7 @@ export const profileGrant = (profile: AccessProfile): MemberGrant => {
     };
 };
 
-export type ProfileCheckDeps = Pick<Services, "areas" | "personas">;
+export type ProfileCheckDeps = Pick<Services, "areas" | "roles">;
 
 /**
  * Why a profile cannot be held, or undefined when it can: an access no grant could make, an area this workspace lacks, a
@@ -52,7 +52,7 @@ export const profileRefusal = async (services: ProfileCheckDeps, profile: Access
     if (assistants !== undefined) {
         return assistants;
     }
-    if (access.agents === "chat" && (await reachablePersonas(services, profile.areas, profile.assistants)).length === 0) {
+    if (access.agents === "chat" && (await reachableRoles(services, profile.areas, profile.assistants)).length === 0) {
         return "no assistant works in its areas, so a guest holding it would have nobody to talk to; give an assistant a starting folder inside one of them";
     }
     return undefined;

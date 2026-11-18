@@ -593,7 +593,7 @@ describe("the automations command speaks the automations and needs contracts", (
         expect(modelless.stdout).toContain("needs at least one --model");
     });
 
-    it("propose --on asks for a listener that starts a new agent, its senders wearing the persona it names", async () => {
+    it("propose --on asks for a listener that starts a new agent, its senders wearing the role it names", async () => {
         server.answer = raised({ state: "open", message: "Asked.", need: OPEN_NEED });
         const result = await run(server.port, "automations", [
             "propose",

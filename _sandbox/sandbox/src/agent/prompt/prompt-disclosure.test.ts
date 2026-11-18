@@ -10,7 +10,7 @@ import { tmuxRunEnabled } from "../tools/agent-terminals.js";
 
 const CLAUDE = capabilitiesOf("claude", "native");
 const CODEX = capabilitiesOf("codex", "native");
-const PERSONA = "## Who this turn is acting as\n\nYou are acting as Studio.";
+const ROLE = "## Who this turn is acting as\n\nYou are acting as Studio.";
 const MEMORY = "## Standing instructions for this workspace\n\n### AGENTS.md\n\nNo legacy support.";
 const AT = 1_700_000_000_000;
 
@@ -45,7 +45,7 @@ const disclosureOf = (capabilities: typeof CLAUDE, mode: "intentic" | "claude" |
         capabilities,
         mode,
         systemPrompt,
-        personaNote: PERSONA,
+        roleNote: ROLE,
         memoryNote: MEMORY,
     });
     return promptDisclosure({
@@ -60,9 +60,9 @@ const textOf = (disclosure: ReturnType<typeof disclosureOf>, source: string): st
 
 test("each composed piece is read back whole, under its own source", () => {
     const disclosure = disclosureOf(CLAUDE, "intentic");
-    expect(disclosure.sections.map((section) => section.source)).toEqual(["guidance", "persona", "memory"]);
+    expect(disclosure.sections.map((section) => section.source)).toEqual(["guidance", "role", "memory"]);
     // Whole, not merely present: a split at the wrong place would leave one piece holding the next one's words.
-    expect(textOf(disclosure, "persona")).toBe(PERSONA);
+    expect(textOf(disclosure, "role")).toBe(ROLE);
     expect(textOf(disclosure, "memory")).toBe(MEMORY);
 });
 
@@ -73,10 +73,10 @@ test("the sections are in the order they were sent", () => {
         capabilities: CLAUDE,
         mode: "intentic",
         systemPrompt: "",
-        personaNote: PERSONA,
+        roleNote: ROLE,
         memoryNote: MEMORY,
     });
-    expect(systemAppend.indexOf(PERSONA)).toBeLessThan(systemAppend.indexOf(MEMORY));
+    expect(systemAppend.indexOf(ROLE)).toBeLessThan(systemAppend.indexOf(MEMORY));
 });
 
 // The Claude Code loop's own paragraphs never ride the append (sdkSystemPrompt adds them), so a disclosure that only

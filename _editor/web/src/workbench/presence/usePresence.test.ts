@@ -13,7 +13,7 @@ const { presenceOthers, presenceStreamOpened, reportOpenPath, reportView, clearP
 
 const tab = (overrides: Partial<PresenceUser> & { clientId: string; email: string }): PresenceUser => ({
     idle: false,
-    role: `collaborator`,
+    tier: `collaborator`,
     ...overrides,
 });
 

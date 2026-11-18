@@ -9,7 +9,7 @@ import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { apiClient } from "../../../../lib/useApi";
 import { type RunOptions, useOperation } from "../../../../workbench/operations/operations";
 import { type AccessDraft, draftGrant, draftProblem } from "../accessGrant";
-import { usePersonaReach } from "../usePersonaReach";
+import { useRoleReach } from "../useRoleReach";
 
 // THE ROSTER WRITES ARE THE SANDBOX'S, NOT THE PEOPLE TAB'S. An invite, a resend, a re-grade and a revoke are each two
 // writes (the daemon's enforced list, then the platform's record), one at a time, and they live in the operations ledger:
@@ -180,7 +180,7 @@ const rosterList = (writes: Writes, members: Ref<InviteRecord[]>, localNotice: R
 interface WriteContext extends RosterWritesDeps {
     readonly writes: Writes;
     readonly sandboxId: () => string | undefined;
-    readonly namesOf: ReturnType<typeof usePersonaReach>[`namesOf`];
+    readonly namesOf: ReturnType<typeof useRoleReach>[`namesOf`];
     readonly localNotice: Ref<NoticeModel | undefined>;
     readonly clearNotice: () => void;
 }
@@ -201,7 +201,7 @@ const inviteWrites = ({ writes, sandboxId, namesOf, clearNotice }: WriteContext)
             keep: true,
             task: async () => {
                 await grantOnDaemon(grant, t(`sandbox.sandboxAccess.couldntGrantAccess`));
-                const result = await apiClient.invite.create({ sandboxId: id, email: value, role: grant.role, manages: grant.manages });
+                const result = await apiClient.invite.create({ sandboxId: id, email: value, tier: grant.tier, manages: grant.manages });
                 return { members: result.members, delivery: result };
             },
         });
@@ -252,10 +252,10 @@ const saveWrite =
             task: async () => {
                 // Same split as the invite: only the first of the two writes can be a sandbox that isn't answering.
                 await grantOnDaemon(grant, t(`sandbox.sandboxAccess.couldntChangeRole`));
-                if (recorded?.role === grant.role && sameRights(recorded.manages, grant.manages)) {
+                if (recorded?.tier === grant.tier && sameRights(recorded.manages, grant.manages)) {
                     return {};
                 }
-                const result = await apiClient.invite.setRole({ sandboxId: id, email: target, role: grant.role, manages: grant.manages });
+                const result = await apiClient.invite.setTier({ sandboxId: id, email: target, tier: grant.tier, manages: grant.manages });
                 return { members: result.members };
             },
         });
@@ -295,7 +295,7 @@ export function useRosterWrites(deps: RosterWritesDeps) {
     const sandbox = useSandbox();
     const sandboxId = (): string | undefined => sandbox.activeSandboxId.value;
     // Which assistants a fence hands over: derived from where each card works, never picked per person.
-    const { namesOf } = usePersonaReach();
+    const { namesOf } = useRoleReach();
     const writes = useOperation<RosterWrite, RosterRefusal>(`access/members/write`);
     const notices = rosterNotices(writes);
     const context: WriteContext = { ...deps, writes, sandboxId, namesOf, localNotice: notices.localNotice, clearNotice: notices.clearNotice };

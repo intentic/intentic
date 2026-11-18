@@ -32,7 +32,7 @@ export const conversationFence = (areas: readonly Area[], entry: { readonly area
     foldersOf(areas, entry?.areas);
 
 /**
- * Whether one fence covers another, in folders: what a checkout may be cut to, and what a persona's own folders may
+ * Whether one fence covers another, in folders: what a checkout may be cut to, and what a role's own folders may
  * narrow to. The id-level question — who may see or be handed a conversation — is `areasCover` in auth/fleet-scope.ts,
  * which has to answer synchronously and so cannot read the manifest.
  */

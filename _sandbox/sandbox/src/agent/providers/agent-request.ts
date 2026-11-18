@@ -16,7 +16,7 @@ import type { JsExecutionPlan } from "../../execution/js-runtime.js";
 import type { CommandGuardOptions } from "../../guard/command-guard.js";
 import type { MountedPlugin } from "../../guard/settings-hooks.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
-import type { PersonaScope } from "../../personas/persona-scope.js";
+import type { RoleScope } from "../../roles/role-scope.js";
 import type { TurnShield } from "../../privacy/privacy-shield.js";
 import type { HeavyCommands } from "../../workload/heavy-commands.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
@@ -110,8 +110,8 @@ export interface TurnPolicy {
     readonly allowedTools?: readonly string[];
     // Built-in tool names removed from context, e.g. Edit/Write when hashlineEdits routes through MCP tools instead.
     readonly disallowedTools?: readonly string[];
-    // Where this persona's file tools may point, when its card limits them; absent wires no hook.
-    readonly personaScope?: PersonaScope;
+    // Where this role's file tools may point, when its card limits them; absent wires no hook.
+    readonly roleScope?: RoleScope;
     // Sniffer's rulebook, verdicts per outbound call, enforced by the PreToolUse gate; empty wires no gate.
     readonly actionRules?: Readonly<Record<string, AdmissionRule>>;
     // Owner's safety policy the judge applies to a flagged command; absent uses the shipped default, always wired.
@@ -128,7 +128,7 @@ export interface TurnPolicy {
     // The owner's night hours, where they were in force as the turn was planned (agent/night): the prompt tells the turn
     // not to stop and ask. A card raised later is judged again as it is raised (parked-cards.ts), whatever this says.
     readonly night?: NightNow;
-    // Whether the persona may install a missing dependency itself, read by the install-steering and deps hooks.
+    // Whether the role may install a missing dependency itself, read by the install-steering and deps hooks.
     readonly dependencyInstallAllowed?: boolean;
     // What the settings-hook gate found (guard/hook-approvals.ts): `held` runs the turn with every hook off; otherwise
     // `digest` names the approved set, absent when there is none, and a mid-turn edit may not move it. `plugins` are the
@@ -178,7 +178,7 @@ export interface TurnTools {
     readonly heavyCommands?: () => Promise<HeavyCommands>;
     // Which heavy rules' lines run on a runner instead (settings `offload.commands`), read fresh per Bash command too.
     readonly offloadCommands?: () => Promise<Readonly<Record<string, string>>>;
-    // Whether the diagnostics server is mounted; withheld from a persona whose `files` power is `none`.
+    // Whether the diagnostics server is mounted; withheld from a role whose `files` power is `none`.
     readonly diagnostics?: boolean;
     // What this runtime's tool list puts ahead of `<server>_<tool>` for the turn's MCP tools, where it is not
     // `mcp__<server>__<tool>`: OpenCode's per-conversation prefix (runtimes/opencode/opencode-mcp.ts). Set by the arm that

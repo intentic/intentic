@@ -1,6 +1,6 @@
 # intentic: Messaging
 
-What we say, in which words, everywhere. Pairs with [positioning.md](positioning.md) (personas +
+What we say, in which words, everywhere. Pairs with [positioning.md](positioning.md) (roles +
 pains, P1–P7) and [landing-blueprint.md](landing-blueprint.md) (section placement). The product
 being sold is **intentic-app** (app.intentic.dev): **a machine of their own for your agents**:
 co-piloted agents living in **sandboxes**, still running when you look away,

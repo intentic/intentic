@@ -42,7 +42,7 @@ import { toolResultHooks } from "../../tools/tool-result-hooks.js";
 import { secretCommandHooks } from "../../tools/agent-secrets.js";
 import { commandGateHooks } from "../../../guard/command-guard.js";
 import { createTurnTaint, publishTurnTaint } from "../../../guard/turn-taint.js";
-import { personaScopeHooks } from "../../../personas/persona-scope.js";
+import { roleScopeHooks } from "../../../roles/role-scope.js";
 import { toolAllowlistHooks } from "../../tools/tool-allowlist.js";
 import { coinedTokenHooks } from "../../../privacy/gateway/coined-calls.js";
 import { jsExecutionServer } from "../../../execution/js-tool.js";
@@ -420,16 +420,16 @@ const reasoningOptions = (request: HarnessRequest): { effort?: EffortLevel; thin
     };
 };
 
-// The turn policy's own boundaries, each the only layer between an unattended wake and what it must not do: the persona's
+// The turn policy's own boundaries, each the only layer between an unattended wake and what it must not do: the role's
 // folder limit and config-edit permission, and the turn's tool list, a call off which is refused before it runs.
-const policyBoundaryHooks = (policy: HarnessRequest["policy"]): ReturnType<typeof personaScopeHooks>[] => [
-    policy.personaScope === undefined ? {} : namedHooks("persona-scope", personaScopeHooks(policy.personaScope)),
+const policyBoundaryHooks = (policy: HarnessRequest["policy"]): ReturnType<typeof roleScopeHooks>[] => [
+    policy.roleScope === undefined ? {} : namedHooks("role-scope", roleScopeHooks(policy.roleScope)),
     policy.allowedTools === undefined ? {} : namedHooks("tool-allowlist", toolAllowlistHooks(policy.allowedTools)),
 ];
 
 // Asked before anything else: plan approval, and behind the privacy shield's gateway a call holding a token the model
 // made up rather than was given, refused so `⟦PERSON_25⟧` never lands in a file as it is (privacy/gateway/coined-calls.ts).
-const firstHooks = (request: HarnessRequest, approval: PlanApprovalContext): ReturnType<typeof personaScopeHooks>[] => [
+const firstHooks = (request: HarnessRequest, approval: PlanApprovalContext): ReturnType<typeof roleScopeHooks>[] => [
     namedHooks("plan-approval", approval.hooks),
     request.credential.gateway === undefined ? {} : namedHooks("privacy-coined", coinedTokenHooks()),
 ];

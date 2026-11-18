@@ -13,7 +13,7 @@ jest.mock("../../app/storage/activeSandbox", () => ({ activeSandboxId: ref<strin
 jest.mock("../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
 // The rail's Attention count asks whether the reader runs the sandbox (useAgents-fleet.ts); an owner hears every card.
 jest.mock("../../client/sandbox/access/useAccess", () => ({
-    useAccess: () => ({ known: { value: true }, role: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
+    useAccess: () => ({ known: { value: true }, tier: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
 }));
 // The fleet's daemon calls, one mock per procedure a case can reach. resetDaemon handles them as the one seam they used
 // to be: reset together, each answering `answer` until a case queues its own.

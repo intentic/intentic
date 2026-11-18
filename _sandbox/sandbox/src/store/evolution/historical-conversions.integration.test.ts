@@ -64,7 +64,8 @@ test("a flat state dir from before the regroup comes up grouped, config copied a
     const outcome = await converge(roots, [], [stateRegroupStep]);
 
     expect(await json(join(roots.workspace, stateRelPath(".intentic/config/settings.json")))).toEqual({ hashlineEdits: true });
-    expect(await json(join(roots.workspace, stateRelPath(".intentic/config/personas.json")))).toEqual([{ id: "writer", label: "Writer" }]);
+    // Where the regroup put the cards; the next boot moves the file on to roles.json (roles-store.ts movedFrom).
+    expect(await json(join(roots.workspace, STATE_DIR, "config", "personas.json"))).toEqual([{ id: "writer", label: "Writer" }]);
     expect(await json(join(roots.workspace, stateRelPath(".intentic/identity/control-tokens.json")))).toEqual({ tokens: [] });
     expect(await readdir(join(roots.workspace, stateRelPath(".intentic/config/approvals/")))).toEqual(["post.json"]);
     expect(await readdir(join(roots.workspace, stateRelPath(".intentic/records/sessions/claude/")))).toEqual(["one.jsonl"]);
@@ -91,7 +92,7 @@ test("the grouped address wins when the owner set things up again, and a directo
     expect((await readdir(join(roots.workspace, stateRelPath(".intentic/config/skills/")))).toSorted()).toEqual(["new", "old"]);
 });
 
-test("settings a withdrawn rule once made unreadable read again, the rule gone and personaRouting a boolean", async () => {
+test("settings a withdrawn rule once made unreadable read again, the rule gone and roleRouting a boolean", async () => {
     const roots = await volumes();
     const path = join(roots.workspace, settingsDocument.path);
     await put(path, {
@@ -105,13 +106,14 @@ test("settings a withdrawn rule once made unreadable read again, the rule gone a
     // Read before converging: the store converts on read, so the file is usable at once.
     const settings = await fileSandboxSettingsStore(path).load();
     expect(settings.unreadable).toBe(false);
-    expect(settings.settings.personaRouting).toBe(true);
+    expect(settings.settings.roleRouting).toBe(true);
     expect(settings.settings.rules.map((rule) => rule.id)).toEqual(["land"]);
 
     const outcome = await converge(roots, [settingsDocument], []);
     expect(outcome.plan?.steps).toEqual([]);
     expect(outcome.plan?.converts).toEqual([
         { document: settingsDocument.path, change: "drops rules at a withdrawn moment or with a withdrawn action (push.starting, instruct, three built-in checks)" },
+        { document: settingsDocument.path, change: "renames personaRouting to roleRouting" },
         // A file from before the project map turned on for new sandboxes (2026-11-04) keeps it off.
         { document: settingsDocument.path, change: "keeps the earlier default for workspaceMap" },
         { document: settingsDocument.path, change: "converts personaRouting from its old values", detail: '"suggest" became true' },
@@ -120,7 +122,7 @@ test("settings a withdrawn rule once made unreadable read again, the rule gone a
     expect(await json(path)).toMatchObject({ personaRouting: "suggest" });
     const store = fileSandboxSettingsStore(path);
     await store.set({ ...(await store.get()), hashlineEdits: true });
-    expect(await json(path)).toMatchObject({ personaRouting: true, rules: [{ id: "land" }], hashlineEdits: true });
+    expect(await json(path)).toMatchObject({ roleRouting: true, rules: [{ id: "land" }], hashlineEdits: true });
 });
 
 test("a capability of the kind device was once called becomes a device, and withdrawn connections are retired", async () => {

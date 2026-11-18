@@ -1,4 +1,4 @@
-import { GrantedRoleSchema, MemberRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
+import { GrantedTierSchema, MemberTierSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { PushNotificationSchema } from "@intentic/sandbox-contract/schemas/push";
 import { ManageRightSchema } from "@intentic/sandbox-contract/schemas/members";
 import { WalletNetworkSchema } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -218,7 +218,7 @@ export const SandboxHostedSchema = z.object({
 });
 export type SandboxHosted = z.infer<typeof SandboxHostedSchema>;
 
-/* A SANDBOX ASLEEP ON ITS OWN MACHINE (2026-10-29), on every role's row. `ic`'s keeper stops a quiet sandbox and says so
+/* A SANDBOX ASLEEP ON ITS OWN MACHINE (2026-10-29), on every tier's row. `ic`'s keeper stops a quiet sandbox and says so
  * in a host report, which only the owner's row carries (`hostReport`), so a member, and every surface reading the
  * account's other sandboxes, took a sleeping box for a broken one. While anything sleeps on a machine, that machine's
  * keeper asks the platform every few seconds whether somebody wants it back (POST /host-report/wakes), and that ask is
@@ -307,16 +307,19 @@ export const SandboxSummarySchema = z.object({
     removedBy: z.string().nullable(),
     /* THE CONNECT TOKEN, on the OWNER's row only; null on a member's. */
     token: z.string().nullable(),
-    // The caller's trust tier on this sandbox: `owner` for their own, the invite's granted role for a shared
+    // The caller's trust tier on this sandbox: `owner` for their own, the invite's granted tier for a shared
     // one. What the web gates its affordances on; the daemon independently enforces the same tier as route
     // floors, so this is a rendering fact, never the security boundary.
-    role: MemberRoleSchema,
+    tier: MemberTierSchema,
+    // 2026-11-18: the tier's name before personas were renamed roles, sent beside it for one release so an
+    // editor from before still reads it. Read `tier`.
+    role: MemberTierSchema.optional().describe("Deprecated: the same value as `tier`, for an editor from before the rename. Read `tier`."),
     providedAddress: z.boolean(),
     // Loopback listener's certified name, or null; server-computed, since it's a different zone from the sandbox.
     localHostname: z.string().nullable(),
     // The hosted lane's machine placement, null off-platform. An asleep machine wakes when selected or retried.
     hosted: SandboxHostedSchema.nullable(),
-    // (2026-10-29) Asleep on its own machine, and whether that machine can wake it (`SandboxSleepSchema`), on every role's
+    // (2026-10-29) Asleep on its own machine, and whether that machine can wake it (`SandboxSleepSchema`), on every tier's
     // row; null while awake and for a hosted sandbox, absent from an older platform.
     sleep: SandboxSleepSchema.nullable().optional(),
     // The version the sandbox's daemon named in its last check-in, which is what the platform knows it runs even
@@ -396,7 +399,9 @@ export type InviteStatus = z.infer<typeof InviteStatusSchema>;
 export const InviteRecordSchema = z.object({
     email: z.string(),
     // The trust tier granted (never owner); the daemon's list is the enforced copy, this is what re-grades from.
-    role: GrantedRoleSchema,
+    tier: GrantedTierSchema,
+    // Sent beside `tier` for one release (2026-11-18), for an editor from before the rename.
+    role: GrantedTierSchema.optional().describe("Deprecated: the same value as `tier`, for an editor from before the rename. Read `tier`."),
     // The parts of the sandbox the person runs besides their own work; absent is none.
     manages: z.array(ManageRightSchema).optional(),
     status: InviteStatusSchema,
@@ -427,7 +432,9 @@ export const InvitePreviewSchema = z.object({
     sandboxName: z.string().optional(),
     invitedEmail: z.string().optional(),
     // The tier the link carries, so the accept page can say what's being accepted; absent on an invalid token.
-    role: GrantedRoleSchema.optional(),
+    tier: GrantedTierSchema.optional(),
+    // Sent beside `tier` for one release (2026-11-18), for an accept page from before the rename.
+    role: GrantedTierSchema.optional().describe("Deprecated: the same value as `tier`, for a page from before the rename. Read `tier`."),
 });
 export type InvitePreview = z.infer<typeof InvitePreviewSchema>;
 

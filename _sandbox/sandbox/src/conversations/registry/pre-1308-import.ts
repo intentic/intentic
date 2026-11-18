@@ -89,7 +89,7 @@ const OldAgentSchema = z.object({
             absorbed: z.number().optional(),
         }),
     ),
-    composition: z.object({ persona: z.string().optional(), repos: z.array(z.string()) }).optional(),
+    composition: z.object({ role: z.string().optional(), repos: z.array(z.string()) }).optional(),
     landedSubject: z.string().optional(),
     landedNote: z.string().optional(),
     landedBreaking: z.string().optional(),

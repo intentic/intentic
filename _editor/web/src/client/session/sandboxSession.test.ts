@@ -836,7 +836,7 @@ it(`retires an email account's access through a session the assertion opens`, as
     );
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
-    const sandbox = sandboxSummary({ id: `sb-9`, name: `notes`, role: `collaborator`, daemonUrl: `https://notes.test/`, token: null });
+    const sandbox = sandboxSummary({ id: `sb-9`, name: `notes`, tier: `collaborator`, daemonUrl: `https://notes.test/`, token: null });
 
     await useSandboxSession().retireAccountAccess([sandbox]);
 

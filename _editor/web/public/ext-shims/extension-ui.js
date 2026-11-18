@@ -53,6 +53,7 @@ export const RepoPicker = m["RepoPicker"];
 export const RepoRail = m["RepoRail"];
 export const ResizeSeam = m["ResizeSeam"];
 export const ResponsiveOverlay = m["ResponsiveOverlay"];
+export const RoleFace = m["RoleFace"];
 export const Row = m["Row"];
 export const RowGroup = m["RowGroup"];
 export const RowNote = m["RowNote"];

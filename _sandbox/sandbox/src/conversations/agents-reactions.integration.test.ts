@@ -1,5 +1,5 @@
 import type { ContractRouterClient } from "@orpc/contract";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { sandboxContract } from "@intentic/sandbox-contract";
 
 import { createApp } from "../app.js";
@@ -14,7 +14,7 @@ import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 // One daemon whose verified caller this suite can change between calls, which is how two people mark one card.
 const board = (): {
     readonly client: ContractRouterClient<typeof sandboxContract>;
-    readonly actAs: (email: string, role?: MemberRole, name?: string) => void;
+    readonly actAs: (email: string, role?: MemberTier, name?: string) => void;
 } => {
     let caller = proven(`ada@example.com`, `maintainer`);
     const app = createApp(

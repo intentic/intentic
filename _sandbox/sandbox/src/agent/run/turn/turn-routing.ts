@@ -2,12 +2,12 @@ import { type AgentTurn, type ModelPin, withRuntimeDefaults } from "@intentic/sa
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
-import { personaRunModel, runRoleModel, unpinnedRunProvider } from "../../models/run-role-model.js";
+import { roleRunModel, runRoleModel, unpinnedRunProvider } from "../../models/run-role-model.js";
 import { sessionFor } from "../../../conversations/registry/routing.js";
 
 // Which provider, model and loop a turn runs on, decided once for every turn the daemon starts, whichever door it comes
 // through (turn-doors.ts: `start`, `run`, `stream`). Resolved before the turn is journaled, so a restart keeps the model
-// it started on rather than a changed setting. The persona's ladder is asked before the role's; if neither answers, the
+// it started on rather than a changed setting. The role's ladder is asked before the role's; if neither answers, the
 // turn keeps no pin.
 
 // Each knob fills only where the turn is silent about it, since these can arrive independently of the model (a surface
@@ -30,7 +30,7 @@ const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): 
         return turn;
     }
     const pinned =
-        (await personaRunModel(services, turn.actsAs)) ?? (turn.runRole === undefined ? undefined : await runRoleModel(services, turn.runRole));
+        (await roleRunModel(services, turn.actsAs)) ?? (turn.runRole === undefined ? undefined : await runRoleModel(services, turn.runRole));
     if (pinned === undefined) {
         // A job the sandbox started with no pin runs on a provider that can serve it, never on one nobody connected.
         const fallback = turn.runRole === undefined ? undefined : await unpinnedRunProvider(services);
@@ -40,7 +40,7 @@ const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): 
     return { ...turn, agent: pinned.provider, model: pinned.model, ...pinnedKnobs(turn, pinned) };
 };
 
-// The one preamble every door applies as a turn comes in: the persona or run role has the chance to name the provider,
+// The one preamble every door applies as a turn comes in: the role or run role has the chance to name the provider,
 // model and knobs, then whatever is still unnamed takes the wire's defaults (withRuntimeDefaults). Idempotent, so a door
 // downstream of another may route again.
 export const routeTurn = async <T extends AgentTurn>(services: Services, sent: T) => withRuntimeDefaults(await withRoleModel(services, sent));

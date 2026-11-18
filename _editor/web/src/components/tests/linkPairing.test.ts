@@ -53,11 +53,11 @@ describe(`farSandboxNote`, () => {
 describe(`pairableSandboxes`, () => {
     it(`keeps the reader's others they own or maintain, with an address, and never this one`, () => {
         const rows = [
-            { id: `here`, role: `owner`, daemonUrl: `https://here.test` },
-            { id: `mine`, role: `owner`, daemonUrl: `https://mine.test` },
-            { id: `ops`, role: `maintainer`, daemonUrl: `https://ops.test` },
-            { id: `shared`, role: `collaborator`, daemonUrl: `https://shared.test` },
-            { id: `unfinished`, role: `owner`, daemonUrl: null },
+            { id: `here`, tier: `owner`, daemonUrl: `https://here.test` },
+            { id: `mine`, tier: `owner`, daemonUrl: `https://mine.test` },
+            { id: `ops`, tier: `maintainer`, daemonUrl: `https://ops.test` },
+            { id: `shared`, tier: `collaborator`, daemonUrl: `https://shared.test` },
+            { id: `unfinished`, tier: `owner`, daemonUrl: null },
         ];
         expect(pairableSandboxes(rows, `here`).map((row) => row.id)).toEqual([`mine`, `ops`]);
     });

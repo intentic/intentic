@@ -206,7 +206,7 @@ const restoredPicks = (tab: StoredTab, isolated: boolean): Partial<Picks> => ({
     // Auto is this chat's unanswered question, not re-derivable from a draft.
     ...(tab.auto === undefined ? {} : { auto: tab.auto }),
     ...(tab.effort === undefined ? {} : { effortPick: tab.effort }),
-    // Persona restores per tab; nothing else remembers it, so a drop would silently hand back every account.
+    // Role restores per tab; nothing else remembers it, so a drop would silently hand back every account.
     ...(tab.actsAs === undefined ? {} : { actsAs: tab.actsAs }),
 });
 

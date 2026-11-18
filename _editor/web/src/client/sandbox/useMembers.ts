@@ -57,7 +57,7 @@ export const revokeMember = async (email: string): Promise<MembersList> => adopt
 // conversation (sandbox-contract `memberAccess`); and WHICH AI ACCOUNTS their turns may run on, which anyone but the
 // owner may have been held to, a maintainer included (managing the sandbox and spending all of it are separate answers).
 // So the read is made for every tier but the owner's. One query for the whole app, made once in its own scope, since
-// `useRole` is read from plain functions as well as components and a per-call query would need a component to belong to.
+// `useTier` is read from plain functions as well as components and a per-call query would need a component to belong to.
 
 interface SelfRead {
     readonly answer: ComputedRef<MemberSelf | undefined>;
@@ -76,13 +76,13 @@ const selfRead = (): SelfRead => {
                 queryKey: SANDBOX_SELF_ACCESS.of(),
                 queryFn: () => sandboxRaw(`GET /members/self`),
                 enabled: computed(() => {
-                    const role = active.value?.role;
-                    return role !== undefined && role !== `owner`;
+                    const tier = active.value?.tier;
+                    return tier !== undefined && tier !== `owner`;
                 }),
             });
             return {
                 answer: computed(() => query.data.value),
-                settled: computed(() => active.value?.role === `owner` || query.data.value !== undefined || query.isError.value),
+                settled: computed(() => active.value?.tier === `owner` || query.data.value !== undefined || query.isError.value),
             };
         });
     }

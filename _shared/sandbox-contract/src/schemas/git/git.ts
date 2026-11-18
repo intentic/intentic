@@ -471,7 +471,7 @@ export const OutsideCheckoutSchema = z.object({
     reason: z
         .enum(["unborn", "unreadable", "not-carried"])
         .describe(
-            "Why the copy does not carry it: `unborn` has no commit yet to start from, and is taken in on the conversation's next turn once it has one; `unreadable` is a repository git cannot read; `not-carried` is one the conversation was set up without, such as a persona that names other repositories.",
+            "Why the copy does not carry it: `unborn` has no commit yet to start from, and is taken in on the conversation's next turn once it has one; `unreadable` is a repository git cannot read; `not-carried` is one the conversation was set up without, such as a role that names other repositories.",
         ),
     files: z.number().describe("How many files the copy holds at its path. A floor past a thousand, which is where the count stops."),
 });

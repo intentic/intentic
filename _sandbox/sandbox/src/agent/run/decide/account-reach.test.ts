@@ -34,7 +34,7 @@ const ROOMY = { home: reading(10), work: reading(40), team: reading(20) };
 const services = deps({ claude: THREE, usage: ROOMY });
 
 const OWNER = "owner@example.com";
-const bob = (aiAccounts?: readonly string[]): Member => ({ email: "bob@example.com", role: "collaborator", ...opt("aiAccounts", aiAccounts) });
+const bob = (aiAccounts?: readonly string[]): Member => ({ email: "bob@example.com", tier: "collaborator", ...opt("aiAccounts", aiAccounts) });
 const reachOf = (rows: readonly Member[], people: readonly string[] = ["bob@example.com"]): AccountReach => accountReachOfPeople(people, rows, OWNER);
 
 const turn = (over: Partial<ReachTurn> = {}): ReachTurn => ({ provider: "claude", named: undefined, remembered: undefined, model: undefined, free: false, ...over });
@@ -85,7 +85,7 @@ test("a provider with no accounts of its own is judged by its own key, and a loc
 });
 
 test("a conversation runs only where every person in it may: a provider key and one account of it narrow to that account", async () => {
-    const rows = [bob(["claude"]), { email: "carol@example.com", role: "collaborator", aiAccounts: ["claude:work"] } satisfies Member];
+    const rows = [bob(["claude"]), { email: "carol@example.com", tier: "collaborator", aiAccounts: ["claude:work"] } satisfies Member];
     const reach = reachOf(rows, ["bob@example.com", "carol@example.com"]);
     expect(await routeWithinReach(services, reach, turn(), KEEP)).toEqual({ kind: "pin", to: "work" });
     expect(await routeWithinReach(services, reach, turn({ named: "home" }), KEEP)).toMatchObject({ kind: "refused" });

@@ -20,7 +20,7 @@ import HostRecreate from "../../../capabilities/connect/hosts/HostRecreate.vue";
 import { turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { expectRestart, type RestartQuiet } from "../../../../models/sandbox/live/sandboxRestart";
 import HostedRollbackDialog from "./HostedRollbackDialog.vue";
 import RunCommand from "../../../../components/RunCommand.vue";
@@ -89,7 +89,7 @@ const composeOffer = useComposeOffer(() => hosted.value !== undefined);
 // Both are the platform's, and it restarts or rolls back a machine it runs for the sandbox's owner alone
 // (sandbox.routes.ts `ownedHostedMachine`): a maintainer pressing either was answered "sandbox not found". They are told
 // whose press it is instead. A sandbox on somebody's own machine updates through that machine, which a maintainer reaches.
-const { isOwner } = useRole();
+const { isOwner } = useTier();
 // The restart is this sandbox's, not this card's: in the operations ledger, so the card opened again during the half
 // minute the sandbox is down holds its button and keeps any refusal, and the ledger marks the hub row meanwhile.
 const restartOp = useOperation(`sandbox/update/hosted-restart`);

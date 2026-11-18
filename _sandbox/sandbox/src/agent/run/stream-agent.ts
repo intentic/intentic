@@ -172,7 +172,7 @@ const runnerOf = (existing: PersistedAgent | undefined, input: RoutedTurn): stri
 };
 
 // A runner is isolated by construction; otherwise a fresh conversation takes the request's placement and later turns
-// follow the registry. The persona no longer chooses: every caller already asks for isolation now.
+// follow the registry. The role no longer chooses: every caller already asks for isolation now.
 const isolatedOf = (existing: PersistedAgent | undefined, input: RoutedTurn, runner: string | undefined): boolean => {
     if (runner !== undefined) {
         return true;
@@ -930,7 +930,7 @@ async function* runTurn(
         yield* runPreparedTurn(services, prepared.asked, signal, worktree, prepared, reach);
     } catch (error) {
         if (!(error instanceof AgentDomainRefusedError)) { throw error; }
-        // Log once per refusal with the structured check that failed, so a repeating persona/startIn mismatch is diagnosable.
+        // Log once per refusal with the structured check that failed, so a repeating role/startIn mismatch is diagnosable.
         services.logger.warn({ err: error, conversationId: input.conversationId, check: error.check, startIn: input.startIn }, "agent-domain-refused: turn refused before it ran");
         yield refusalFrame({ code: error.code, message: error.message }, input.unattended === true);
         yield { kind: "done" };

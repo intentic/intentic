@@ -58,7 +58,7 @@ export const DEMO_SYSTEM_PROMPT: ConversationPrompt = {
                 text: "## Working in this sandbox\n\nYou run inside Intentic, a sandbox serving one workspace from a browser editor. For anything about Intentic itself, load the `intentic` skill before answering.\n\nSearch code with `rg`, never `grep -r`, which walks node_modules.\n\nThe owner lands uncommitted work; commit only when asked.",
             },
             {
-                source: `persona`,
+                source: `role`,
                 title: `Who this turn is acting as`,
                 text: "## Who this turn is acting as\n\nYou are acting as **Studio**, which may read and write files and run commands, and reaches the `github` account alone.",
             },

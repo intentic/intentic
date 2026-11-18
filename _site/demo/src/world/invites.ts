@@ -18,7 +18,7 @@ export const previewInvite = (token: string): InvitePreview => ({
     status: accepted.has(token) ? `accepted` : `pending`,
     sandboxName: INVITED_TO,
     invitedEmail: DEMO_USER.email,
-    role: INVITED_AS,
+    tier: INVITED_AS,
 });
 
 /** invite.accept: the sandbox joins the list, once; a second accept answers the same sandbox. */

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // `docs/marketing/landing-blueprint.md` records both halves of one rule: the four product nouns (machine, sandbox,
-// persona, project) are explained in ONE picture, that picture is reached from the docs, and the home page never
+// role, project) are explained in ONE picture, that picture is reached from the docs, and the home page never
 // carries it — a page that has to land one claim on a stranger cannot also teach four definitions. The rule survived
 // as prose for exactly as long as nobody edited it, so it is read here instead.
 //
@@ -14,7 +14,7 @@ import { finish } from "./lib/report.mjs";
 import { byName, root, trackedFiles, untrackedFiles } from "./lib/repo.mjs";
 
 /** The nouns the picture exists to define. A scene naming all four is the picture, wherever it lives. */
-const PART_IDS = ["machine", "sandbox", "persona", "project"];
+const PART_IDS = ["machine", "sandbox", "role", "project"];
 const ASTRO = /\.astro$/;
 const SOURCE = /\.(astro|[cm]?ts|[cm]?js)$/;
 const IMPORT = /(?:^|\n)\s*import\s[^;'"]*?from\s*["']([^"']+)["']/g;
@@ -119,12 +119,12 @@ const promoted = reachingPages.filter((path) => HOME.test(path));
 finish(
     [
         [
-            "the four nouns (machine, sandbox, persona, project) are defined nowhere: the docs spend two of them\n" +
-                "  (persona, project) with no other page defining either (docs/marketing/landing-blueprint.md)",
+            "the four nouns (machine, sandbox, role, project) are defined nowhere: the docs spend two of them\n" +
+                "  (role, project) with no other page defining either (docs/marketing/landing-blueprint.md)",
             scenes.length === 0 ? ["no module lists all four as the parts of one scene"] : [],
         ],
         [
-            "the four nouns are defined twice, so two pictures can disagree about what a persona is\n" +
+            "the four nouns are defined twice, so two pictures can disagree about what a role is\n" +
                 "  (docs/marketing/landing-blueprint.md: one picture, on one page)",
             scenes.length > 1 ? scenes : [],
         ],

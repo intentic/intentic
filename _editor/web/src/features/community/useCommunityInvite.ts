@@ -4,7 +4,7 @@ import { z } from "zod";
 import { track } from "../../app/analytics";
 import { deviceKey, storedJson, storeJson } from "../../app/storage/browserStorage";
 import { useAccount } from "../../client/auth/useAccount";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { pastFirstDays, workLanded } from "../../models/fleet/fleetHistory";
 import { registry } from "../../models/fleet/useAgents-registry";
 import {
@@ -55,7 +55,7 @@ let instance: CommunityInvite | undefined;
 
 const create = (): CommunityInvite => {
     const { user } = useAccount();
-    const { canShip } = useRole();
+    const { canShip } = useTier();
 
     // A local window's placeholder account has no id, only the address it was signed in with.
     const account = computed(() => {

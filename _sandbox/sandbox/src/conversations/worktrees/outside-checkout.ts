@@ -11,7 +11,7 @@ import type { AgentWorktrees } from "./worktrees.js";
 // WORK WRITTEN WHERE NO CHECKOUT OF THIS CONVERSATION STANDS. Every workspace repo the conversation does not carry is a
 // hole in its root checkout: the root excludes the path as it excludes every repo, so what a turn writes there reaches
 // no branch, no review and no land, and the review used to read as an agent that wrote nothing. Listed here, per repo,
-// only where the hole actually holds files: a repo merely not carried is the composition's business (persona and area
+// only where the hole actually holds files: a repo merely not carried is the composition's business (role and area
 // notes say that), and naming it would put every repo outside a fence on a fenced conversation's review.
 
 // Files counted per hole before the count stops; the review reads this on every refresh.
@@ -45,7 +45,7 @@ const filesUnder = async (dir: string, room: number): Promise<number> => {
 };
 
 // Why a repo is not in the checkout: it has no commit to branch from, git cannot read it, or the composition leaves it
-// out (a persona's chosen repos, or one the conversation has not met a turn since).
+// out (a role's chosen repos, or one the conversation has not met a turn since).
 const reasonOf = async (main: string, git: GitRunner): Promise<OutsideCheckout["reason"]> => {
     try {
         return (await headSha(main, git)) === undefined ? "unborn" : "not-carried";

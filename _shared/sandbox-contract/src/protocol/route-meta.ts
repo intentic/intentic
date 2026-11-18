@@ -1,10 +1,10 @@
 import { oc } from "@orpc/contract";
 import type { ManageRight } from "../schemas/members.js";
-import type { MemberRole } from "../schemas/shared.js";
+import type { MemberTier } from "../schemas/shared.js";
 
 // Every route's policy, declared beside it: how a request authenticates, which member tier and which machine
 // credentials reach it, and how the daemon's outer middleware treats it. Each field has a default, so most routes
-// declare nothing; the daemon's bearer, boot, timer, role-floor and grant decisions all derive from this.
+// declare nothing; the daemon's bearer, boot, timer, tier-floor and grant decisions all derive from this.
 
 // How far a control token reaches a route beyond what its floor alone gives the `read`/`drive` rungs.
 // `never`: no rung; `editor`: the editor slice too; `read`: the read rung and the editor slice, though no GET (watching
@@ -20,8 +20,8 @@ export interface RouteMeta {
     readonly beforeBoot?: true;
     // Held open by design, so the request timer leaves it out.
     readonly stream?: true;
-    // The lowest member role that may call it. Absent: viewer for a read (GET, HEAD), maintainer for anything else.
-    readonly floor?: MemberRole;
+    // The lowest member tier that may call it. Absent: viewer for a read (GET, HEAD), maintainer for anything else.
+    readonly floor?: MemberTier;
     // The part of the sandbox it runs (members.ts `ManageRightSchema`): a person below the floor who was given that part
     // reaches it too. The handler holds anything finer (members.ts `peopleChangeRefusal`).
     readonly right?: ManageRight;
@@ -31,7 +31,7 @@ export interface RouteMeta {
     // (`landsHere`): `land` is the press on their own home conversation, the one conversation the handler then admits.
     readonly home?: "land";
     // The floor an upload aimed inside ATTACHMENTS_DIR gets instead, one a guest may also make.
-    readonly attachmentFloor?: MemberRole;
+    readonly attachmentFloor?: MemberTier;
     // A passkey-registration door: a proof with no passkey yet may pass the require-passkey policy.
     readonly enrolment?: true;
     // The agent token, which the CLIs on the agent's PATH carry, reaches it.
@@ -50,7 +50,7 @@ export interface RouteMeta {
 
 // The floor a route gets when it declares none: a read (GET, HEAD) floors at viewer, anything else (`ALL` included) at
 // maintainer, so a route nobody classified can under-serve, never over-grant.
-export const defaultFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
+export const defaultFloor = (method: string): MemberTier => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
 
 // The fields that say how a request travels, not who may send it; every other RouteMeta field decides reach.
 type TransportField = "lane" | "netd";

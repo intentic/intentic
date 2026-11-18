@@ -6,7 +6,7 @@
 //! `/health` reports and its session tokens are bound to: the platform maps one to the other.
 
 use super::endpoint::Endpoint;
-use super::session::MemberRole;
+use super::session::MemberTier;
 use serde::{Deserialize, Serialize};
 
 /// The signed-in account, or JSON `null` without a session: the cheap way to ask whether the cookie still holds.
@@ -83,7 +83,13 @@ pub struct SandboxSummary {
     /// The connect token, on the owner's row only: the `x-intentic-connect` header of the owner's first sign-in.
     pub token: Option<String>,
     /// The account's tier here; the daemon enforces the same tier on its own, so this only shapes what is offered.
-    pub role: MemberRole,
+    /// Named `role` on the wire until 2026-11-18: a platform from before sends only that, and today's sends both for one
+    /// release, so each is read on its own (an alias would refuse the two together) and [`SandboxSummary::tier`] takes
+    /// whichever came.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<MemberTier>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<MemberTier>,
     /// The owner asserted the address (`sandbox.attach`) rather than the daemon announcing it.
     pub provided_address: bool,
     /// The loopback listener's certified name, for reaching a sandbox on this same machine.
@@ -239,4 +245,12 @@ pub struct RpcError {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+}
+
+impl SandboxSummary {
+    /// The account's tier here, under either of its names; a row naming neither reads as the least that still sees the
+    /// sandbox, a viewer.
+    pub fn tier(&self) -> MemberTier {
+        self.tier.clone().or_else(|| self.role.clone()).unwrap_or(MemberTier::Viewer)
+    }
 }

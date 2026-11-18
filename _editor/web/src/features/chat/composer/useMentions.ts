@@ -30,7 +30,7 @@ export const mentionQueryAt = (text: string, caret: number): MentionQuery | unde
 // The settings the token can drill into; each is the keyword typed before the colon (`@model:son`). The last two are
 // about when the work moves rather than how it is done: when the message goes (`@send:tomorrow`, `@send:auth` for after
 // that agent lands), and whether its finished work lands by itself (`@land:`).
-export const QUICK_KINDS = [`persona`, `sandbox`, `model`, `effort`, `send`, `land`] as const;
+export const QUICK_KINDS = [`role`, `sandbox`, `model`, `effort`, `send`, `land`] as const;
 export type QuickKind = (typeof QUICK_KINDS)[number];
 
 export interface MentionToken {
@@ -40,13 +40,15 @@ export interface MentionToken {
     readonly query: string;
 }
 
-// Reads the drill prefix off a token. Exact keyword plus colon only: `personas` is a search, `persona:` is a drill.
+// Reads the drill prefix off a token. Exact keyword plus colon only: `roles` is a search, `role:` is a drill.
 export const parseMentionToken = (token: string): MentionToken => {
     const colon = token.indexOf(`:`);
     if (colon === -1) {
         return { kind: undefined, query: token };
     }
-    const kind = QUICK_KINDS.find((candidate) => candidate === token.slice(0, colon));
+    // `persona:` is how a role was drilled into before personas were renamed roles (2026-11-18); fingers remember it.
+    const keyword = token.slice(0, colon) === `persona` ? `role` : token.slice(0, colon);
+    const kind = QUICK_KINDS.find((candidate) => candidate === keyword);
     return kind === undefined ? { kind: undefined, query: token } : { kind, query: token.slice(colon + 1) };
 };
 

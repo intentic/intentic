@@ -1164,7 +1164,7 @@ test("a schedule fire carries the automation's allowedTools into the turn, read 
 });
 
 // A restart's re-fire used to come back without the sender's lane, thread and session: a stranger a sender rule put on
-// a narrow persona came back wearing the automation's own, on a conversation its thread no longer knew.
+// a narrow role came back wearing the automation's own, on a conversation its thread no longer knew.
 test("a journalled fire keeps its lane, thread and session, and the re-fire restores them and settles the thread", async () => {
     const root = mkdtempSync(join(tmpdir(), "sched-"));
     const services = fakeServices(root, { autoResumeOnRestart: true });

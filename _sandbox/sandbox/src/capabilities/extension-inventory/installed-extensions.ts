@@ -197,7 +197,7 @@ export const installedExtensions = async (services: ExtensionHost): Promise<Inst
 export const enabledExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> =>
     (await installedExtensions(services)).filter((extension) => extension.enabled);
 
-// Whether a turn gets what an extension brings of its own (its card-less tool servers, its agent plugin): the persona's
+// Whether a turn gets what an extension brings of its own (its card-less tool servers, its agent plugin): the role's
 // `extensions` shelf, absent meaning every one. One predicate for the MCP mounts and the plugin dirs alike.
 export const extensionGranted = (shelf: readonly string[] | undefined, extensionId: string): boolean => shelf === undefined || shelf.includes(extensionId);
 

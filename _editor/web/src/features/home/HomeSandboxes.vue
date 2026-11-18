@@ -6,7 +6,7 @@ import { Beacon, ContextMenu, SandboxLogo, ui } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../client/sandbox/useSandbox";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { tileAction } from "../../models/home/homeFacts";
 import { arrangedSandboxes, sandboxOrder } from "../../models/home/sandboxOrder";
 import { movedOrder, useSortableDrag } from "../../components/sortable/sortableDrag";
@@ -40,7 +40,7 @@ const t = useT();
 const router = useRouter();
 const route = useRoute();
 const sandbox = useSandbox();
-const { homeOnly } = useRole();
+const { homeOnly } = useTier();
 const { user } = useAuth();
 // The switcher's own list in the switcher's own order (sandboxOrder.ts `arrangedSandboxes`), never the account's raw
 // rows: a setup never finished has no daemon to open a home conversation on, and a desktop folder window's own row is no
@@ -77,7 +77,7 @@ const openSettings = (id: string): void => {
         return;
     }
     seenReady(id);
-    void router.push(toHome(id, page.sandboxSettings(box.role === `guest` ? GUEST_SECTION : undefined)));
+    void router.push(toHome(id, page.sandboxSettings(box.tier === `guest` ? GUEST_SECTION : undefined)));
 };
 // THE RAIL FOLDED ONTO A SANDBOX: its sections come back out of the bookmark and the other sandboxes fold away under its
 // switcher (shell/rail/railMorph.ts), the page on screen staying as it is (sandboxScreen.ts `foldedPath`). A press on the

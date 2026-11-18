@@ -11,7 +11,7 @@ export interface PromptReach {
     // Providers that keep their own prompt and take this as an addition to it.
     readonly adds: string[];
     // Providers whose runtime takes no system prompt at all (an ACP agent owns its instructions): the setting never
-    // reaches them, only the persona and memory notes riding the message do.
+    // reaches them, only the role and memory notes riding the message do.
     readonly ignores: string[];
 }
 

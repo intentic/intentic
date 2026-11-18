@@ -1,6 +1,6 @@
 import type { ManageRight } from "@intentic/sandbox-contract/schemas/members";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { call } from "@orpc/server";
 import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";
@@ -12,7 +12,7 @@ import {
     memoryAccessProfiles,
     memoryAreasStore,
     memoryMembersStore,
-    memoryPersonasStore,
+    memoryRolesStore,
     memoryServicesStore,
 } from "../harness/route-stores.testing.js";
 import { createAccessProfilesRoutes } from "./access-profiles.routes.js";
@@ -20,14 +20,14 @@ import { createAccessProfilesRoutes } from "./access-profiles.routes.js";
 // A profile is a grant several people share: saving it writes every holder's row again and closes what they hold, and
 // answers with the tier each now has. Whoever runs people and access writes one, never an organisation's.
 
-const contextAs = (role: MemberRole, manages: readonly ManageRight[] = [], email = role === "owner" ? "owner@example.com" : "max@example.com"): OrpcContext => ({
+const contextAs = (role: MemberTier, manages: readonly ManageRight[] = [], email = role === "owner" ? "owner@example.com" : "max@example.com"): OrpcContext => ({
     headers: new Headers(),
     method: "POST",
     url: "/access/profiles",
-    identity: { email, role, methods: ["google"], manages },
+    identity: { email, tier: role, methods: ["google"], manages },
 });
 
-const PERSONAS: Persona[] = [{ id: "helper", capabilities: [], workspace: { startIn: "support" } }];
+const ROLES: Role[] = [{ id: "helper", capabilities: [], workspace: { startIn: "support" } }];
 
 const routes = () => {
     const connections = createAuthConnections();
@@ -37,11 +37,11 @@ const routes = () => {
         accessProfiles: memoryAccessProfiles([{ id: "readers", agents: "off" }], [{ id: "clerk", agents: "run", tools: { shell: false } }]),
         services: memoryServicesStore([{ id: "bot", steward: "owner@example.com", profile: "readers" }]),
         members: memoryMembersStore([
-            { email: "fay@example.com", role: "viewer", agents: "off", profile: "readers" },
-            { email: "vic@example.com", role: "viewer" },
+            { email: "fay@example.com", tier: "viewer", agents: "off", profile: "readers" },
+            { email: "vic@example.com", tier: "viewer" },
         ]),
         areas: memoryAreasStore([{ id: "support", folders: ["support"] }]),
-        personas: memoryPersonasStore(PERSONAS),
+        roles: memoryRolesStore(ROLES),
         auth: unstubbed<NonNullable<Services["auth"]>>("auth", { connections }),
         wsTickets: createWsTickets(),
         mediaTickets: createMediaTickets(),
@@ -52,11 +52,11 @@ const routes = () => {
 test("saving a profile rewrites its holders' rows, closes their connections and answers their new tier", async () => {
     const { profiles, revoked, services } = routes();
     const saved = await call(profiles.save, { id: "readers", agents: "run", tools: { web: false } }, { context: contextAs("owner") });
-    expect(saved).toEqual({ ok: true, holders: [{ email: "fay@example.com", role: "collaborator" }] });
+    expect(saved).toEqual({ ok: true, holders: [{ email: "fay@example.com", tier: "collaborator" }] });
     expect(revoked).toEqual(["fay@example.com"]);
     expect((await services.members.list()).find((member) => member.email === "fay@example.com")).toEqual({
         email: "fay@example.com",
-        role: "collaborator",
+        tier: "collaborator",
         agents: "run",
         tools: { web: false },
         profile: "readers",
@@ -94,7 +94,7 @@ test("a profile still held by a person or a service is not deleted, and says by 
     await expect(call(profiles.remove, { id: "readers" }, { context: contextAs("owner") })).rejects.toThrow(
         `still held by fay@example.com, the service "bot"; move them off it first`,
     );
-    await services.members.add("fay@example.com", { role: "viewer", agents: "off" });
+    await services.members.add("fay@example.com", { tier: "viewer", agents: "off" });
     await services.services.upsert({ id: "bot", steward: "owner@example.com" });
     await expect(call(profiles.remove, { id: "readers" }, { context: contextAs("owner") })).resolves.toEqual({ ok: true });
 });

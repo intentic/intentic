@@ -8,9 +8,9 @@ import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { browsersPath, parseTabKey, tabKey, type LiveTab } from "./browsersPaths";
 
 const SANDBOX = `sbx-1`;
-// The active sandbox's row, whose `role` decides whether the reader may see the view at all. A ref, as the real row is:
+// The active sandbox's row, whose `tier` decides whether the reader may see the view at all. A ref, as the real row is:
 // the reader's access is one answer for the page, which follows the row rather than reading it once.
-const active = ref<{ role: string } | undefined>(undefined);
+const active = ref<{ tier: string } | undefined>(undefined);
 
 jest.mock(`../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: { value: SANDBOX }, active }) }));
 
@@ -197,7 +197,7 @@ describe(`a running app someone points at, with the side panel in the window`, (
     });
 
     it(`goes to /browsers, as before, for a reader the view is closed to`, async () => {
-        active.value = { role: `guest` };
+        active.value = { tier: `guest` };
         const { openPreviewBeside } = await load();
         openPreviewBeside(router, `port:5173`);
 

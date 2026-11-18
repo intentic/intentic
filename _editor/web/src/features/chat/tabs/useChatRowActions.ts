@@ -17,7 +17,7 @@ import type { OpenChat } from "./cardView";
 import { allTabs, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 
 // Every verb an open chat's row answers to, owned once per list host (ChatTabList) and shared by both cuts of it, so a
-// row under a persona and the same row under a lane can never offer different things. The host draws the one menu,
+// row under a role and the same row under a lane can never offer different things. The host draws the one menu,
 // hover card, share dialog and rename error; the rows (ChatRowList) reach all of it through `injectChatRowActions`.
 
 export interface ChatRowHost {

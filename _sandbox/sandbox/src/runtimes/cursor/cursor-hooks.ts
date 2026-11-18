@@ -15,9 +15,9 @@ import { AskFieldsSchema, builtInAsk, type CursorOwner, mcpAsk } from "./turn/cu
 import { GATE_SCRIPT_NAME, gateScript, hooksJson, LIVE_TURNS_NAME, shieldedCommand, unshieldedCommand, wrappedCommand } from "./cursor-hook-script.js";
 import { type CursorSecrets, secretReadRefusal, secretWriteRefusal } from "./turn/cursor-secrets.js";
 import { type CursorTerminal, paneCommand } from "./turn/cursor-terminal.js";
-import { CUSTOM_TOOLS_SERVER, hookPersonaRefusal, hookToolRefusal, mcpToolRefusal } from "./turn/cursor-tool-list.js";
+import { CUSTOM_TOOLS_SERVER, hookRoleRefusal, hookToolRefusal, mcpToolRefusal } from "./turn/cursor-tool-list.js";
 import type { EditedRequest, GateRequest, McpRequest, ReadRequest, ShellCommandRequest, ShellOutputRequest, ToolRequest, TurnScopedRequest } from "./turn/cursor-hook-requests.js";
-import type { PersonaScope } from "../../personas/persona-scope.js";
+import type { RoleScope } from "../../roles/role-scope.js";
 import { writeFileAtomic } from "@intentic/base/fs";
 
 // Owner's command rulebook enforced inside Cursor's own loop via beforeShellExecution, the owner's standing
@@ -71,9 +71,9 @@ type CursorHookToolInput = Parameters<CursorHookShield["toolCall"]>[0]["input"];
 export interface CursorGateTurn {
     // Cursor's id for this turn's agent; the correlation key the hook payload carries back.
     readonly conversationId: string;
-    // Capability credentials and persona values for this turn, never the daemon's ambient env.
+    // Capability credentials and role values for this turn, never the daemon's ambient env.
     readonly cliEnv?: Record<string, string>;
-    // What the daemon adds to Cursor's own base prompt (AgentRequest.systemAppend): product guidance, the persona note,
+    // What the daemon adds to Cursor's own base prompt (AgentRequest.systemAppend): product guidance, the role note,
     // the workspace's standing instructions. It rides beforeSubmitPrompt's additional_context, the seam every account
     // reaches; the owner's replacement prompt goes to AgentOptions.systemPrompt instead where the account is entitled to
     // replace the base, and folds in here where it is not (cursor-agent.ts).
@@ -91,13 +91,13 @@ export interface CursorGateTurn {
     readonly terminal?: CursorTerminal | undefined;
     // The person a `default`-mode turn puts each call to (cursor-approvals.ts); absent in every other mode.
     readonly owner?: CursorOwner | undefined;
-    // Skills the persona or a credential gate withholds from this turn: the read tool refuses their files, the seam the
+    // Skills the role or a credential gate withholds from this turn: the read tool refuses their files, the seam the
     // Claude Code loop's `Skill(<name>)` denial stands in (cursor-skills.ts).
     readonly deniedSkills?: readonly string[] | undefined;
-    // What the persona withholds and the folders it works in (TurnPolicy.disallowedTools, personaScope), checked on every
-    // call a hook sees in the one tool vocabulary (runtimes/daemon-tools/policy-gate.ts personaRefusal).
+    // What the role withholds and the folders it works in (TurnPolicy.disallowedTools, roleScope), checked on every
+    // call a hook sees in the one tool vocabulary (runtimes/daemon-tools/policy-gate.ts roleRefusal).
     readonly deniedTools?: readonly string[] | undefined;
-    readonly scope?: PersonaScope | undefined;
+    readonly scope?: RoleScope | undefined;
 }
 
 export interface CursorHookService {
@@ -182,7 +182,7 @@ const SKILL_DIRS = ["/.agents/skills/", "/.claude/skills/", "/.cursor/skills/"] 
 // The refusal for a read of a withheld skill's files, or undefined.
 const deniedSkillRefusal = (path: string, withheld: readonly string[] | undefined): string | undefined => {
     const name = withheld?.find((skill) => SKILL_DIRS.some((dir) => path.includes(`${dir}${skill}/`)));
-    return name === undefined ? undefined : `The ${name} skill is not available to this conversation: its persona or an approval gate withholds it. Carry on without it.`;
+    return name === undefined ? undefined : `The ${name} skill is not available to this conversation: its role or an approval gate withholds it. Carry on without it.`;
 };
 
 // The handlers behind the socket's endpoints, each reading the payload shape its own hook sends.
@@ -376,9 +376,9 @@ const resolveHeld = async (registry: TurnRegistry, turn: CursorGateTurn, held: {
     return undefined;
 };
 
-// A shell command the turn's list or its persona does not allow: the refusal, else undefined.
+// A shell command the turn's list or its role does not allow: the refusal, else undefined.
 const shellRefusal = (turn: CursorGateTurn, said: string): string | undefined =>
-    (turn.allowedTools === undefined ? undefined : hookToolRefusal(turn.allowedTools, "Shell", said)) ?? hookPersonaRefusal(turn, "Shell", {});
+    (turn.allowedTools === undefined ? undefined : hookToolRefusal(turn.allowedTools, "Shell", said)) ?? hookRoleRefusal(turn, "Shell", {});
 
 // beforeShellExecution: the tool list's narrowing, the owner's rules, the person in `default` mode, and then the
 // command's secrets, in that order.
@@ -394,7 +394,7 @@ const gateHandler =
             return denied(placed.refused);
         }
         const { turn } = placed;
-        // Again here, as well as in preToolUse: a call whose preToolUse never ran is still held to the list and the persona.
+        // Again here, as well as in preToolUse: a call whose preToolUse never ran is still held to the list and the role.
         const listed = shellRefusal(turn, said);
         if (listed !== undefined) {
             return denied(listed);
@@ -462,7 +462,7 @@ const readHandler =
         for (const turn of placed === undefined ? registry.turns.values() : [placed]) {
             const refusal =
                 deniedSkillRefusal(path, turn.deniedSkills) ??
-                hookPersonaRefusal(turn, "Read", { file_path: path }) ??
+                hookRoleRefusal(turn, "Read", { file_path: path }) ??
                 ((await turn.secrets?.holds(path, content)) === true ? secretReadRefusal(path) : undefined);
             if (refusal !== undefined) {
                 return { permission: "deny", user_message: refusal };
@@ -487,7 +487,7 @@ const readHandler =
 // stored value, whose result would echo it. An MCP call is checked in beforeMCPExecution, which names its server.
 const preToolRefusal = async (turn: CursorGateTurn, tool: string, said: string | undefined, payload: ToolRequest): Promise<string | undefined> => {
     const listed = tool.startsWith("MCP:") || turn.allowedTools === undefined ? undefined : hookToolRefusal(turn.allowedTools, tool, said);
-    const withheld = listed ?? (tool.startsWith("MCP:") ? undefined : hookPersonaRefusal(turn, tool, payload.tool_input));
+    const withheld = listed ?? (tool.startsWith("MCP:") ? undefined : hookRoleRefusal(turn, tool, payload.tool_input));
     if (withheld !== undefined) {
         return withheld;
     }
@@ -616,7 +616,7 @@ const environmentHandler =
     };
 
 // Exact id only, for the same reason as the environment above: the append carries the workspace's own standing
-// instructions and the persona this turn acts as, neither of which belongs in a Cursor process this daemon didn't start.
+// instructions and the role this turn acts as, neither of which belongs in a Cursor process this daemon didn't start.
 // An empty append is omitted rather than sent blank, so Cursor's own prompt is left exactly as it was. `continue` is
 // stated rather than left unset: false is how this hook family blocks a prompt outright, and no answer of ours ever means
 // that.

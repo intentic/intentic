@@ -1,5 +1,5 @@
 import type { ContractRouterClient } from "@orpc/contract";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { sandboxContract } from "@intentic/sandbox-contract";
 
 import { createApp } from "../app.js";
@@ -13,7 +13,7 @@ import { runAgentTurn } from "../harness/route-turns.testing.js";
 
 const board = (): {
     readonly client: ContractRouterClient<typeof sandboxContract>;
-    readonly actAs: (email: string, role?: MemberRole, name?: string) => void;
+    readonly actAs: (email: string, role?: MemberTier, name?: string) => void;
 } => {
     let caller = proven(`ada@example.com`, `owner`);
     const app = createApp(
@@ -22,8 +22,8 @@ const board = (): {
             ownerEmail: async () => `ada@example.com`,
             members: {
                 list: async () => [
-                    { email: `bob@example.com`, role: `collaborator` },
-                    { email: `cy@example.com`, role: `maintainer` },
+                    { email: `bob@example.com`, tier: `collaborator` },
+                    { email: `cy@example.com`, tier: `maintainer` },
                 ],
                 add: async () => {},
                 remove: async () => {},

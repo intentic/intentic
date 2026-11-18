@@ -32,7 +32,7 @@ import { offloadContract } from "./contracts/offload.contract.js";
 import { orgContract } from "./contracts/org.contract.js";
 import { pagesContract } from "./contracts/pages.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
-import { personasContract } from "./contracts/personas.contract.js";
+import { rolesContract } from "./contracts/roles.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
 import { privacyContract } from "./contracts/privacy.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
@@ -89,7 +89,7 @@ export const sandboxContract: {
     org: typeof orgContract;
     pages: typeof pagesContract;
     panels: typeof panelsContract;
-    personas: typeof personasContract;
+    roles: typeof rolesContract;
     ports: typeof portsContract;
     privacy: typeof privacyContract;
     providers: typeof providersContract;
@@ -140,7 +140,7 @@ export const sandboxContract: {
     org: orgContract,
     pages: pagesContract,
     panels: panelsContract,
-    personas: personasContract,
+    roles: rolesContract,
     ports: portsContract,
     privacy: privacyContract,
     providers: providersContract,

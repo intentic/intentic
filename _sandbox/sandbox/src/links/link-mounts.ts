@@ -17,7 +17,7 @@ import { operateTools } from "./link-operate-tools.js";
 
 // EACH LINKED SANDBOX AS A TURN SEES IT: a tool server named after its card, mounted on the turn's lease the way a
 // connected computer's is (peers/peer-tools.ts), so every runtime reaches `mcp__<link>__delegate` and
-// `mcp__<link>__about` beside `mcp__<computer>__run_command`, and a persona grants it on the same devices list. What the
+// `mcp__<link>__about` beside `mcp__<computer>__run_command`, and a role grants it on the same devices list. What the
 // task does over there is that sandbox's terms; supervising it once handed over is the subagents tools' job (wait, send,
 // answer, cancel), since it is a `linked` child of the conversation. Its records tools read that sandbox's conversations
 // and diagnostics while its owner shares them (link-records.ts), the granted card being the whole gate on this side. Its
@@ -38,7 +38,7 @@ type ToolAnswer = { content: { type: "text"; text: string }[] };
 
 const answer = <Payload extends object>(payload: Payload): ToolAnswer => ({ content: [{ type: "text", text: JSON.stringify(payload) }] });
 
-// Handing work on is spawning's sibling: a turn its persona or an outside wake kept from spawning (no supervisor armed
+// Handing work on is spawning's sibling: a turn its role or an outside wake kept from spawning (no supervisor armed
 // at planning, children.ts) may not hand work to another sandbox either.
 const supervising = (deps: LinkMountDeps, conversationId: string | undefined): ChildSupervisor | undefined =>
     conversationId === undefined ? undefined : supervisorFor(deps.conversations, conversationId);
@@ -109,7 +109,7 @@ const recordsTools = (card: LinkCard, sandbox: string) => {
 };
 
 const NOT_HERE =
-    "This turn may not hand work on: it was started by outside content, or its persona does not delegate. Do the work here, or say what you left undone.";
+    "This turn may not hand work on: it was started by outside content, or its role does not delegate. Do the work here, or say what you left undone.";
 
 const linkServer = (deps: LinkMountDeps, card: LinkCard, conversationId: string | undefined) => {
     const sandbox = card.config.name ?? card.id;
@@ -145,7 +145,7 @@ const linkServer = (deps: LinkMountDeps, card: LinkCard, conversationId: string 
             ),
             sdk().tool(
                 "about",
-                `Whether the linked sandbox "${sandbox}" answers right now, and the terms it holds tasks to: the persona they ` +
+                `Whether the linked sandbox "${sandbox}" answers right now, and the terms it holds tasks to: the role they ` +
                     "wear there, whether each waits for its owner to allow it, how many turns an hour it takes, whether its owner " +
                     "shares its records (`records`) and whether this link may operate it (`operate`: run_command, read_file, write_file).",
                 {},

@@ -565,7 +565,7 @@ impl Client {
             .map(|sandbox| SandboxRow {
                 id: sandbox.id.clone(),
                 name: sandbox.name.clone(),
-                role: sandbox.role.as_str().to_owned(),
+                role: sandbox.tier().as_str().to_owned(),
                 asleep: sandbox
                     .hosted
                     .as_ref()

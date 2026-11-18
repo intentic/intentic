@@ -11,7 +11,7 @@ import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { ENVIRONMENT, rpcKey } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 
 // The sandbox's unified capability manifest (.intentic/config/capabilities.json), read/written via the daemon's
 // /capabilities routes. `add` streams its apply, like the provision flow.
@@ -87,7 +87,7 @@ const NONE_READABLE: Loaded<Awaited<ReturnType<typeof fetchCapabilities>>> = {
 
 export function useCapabilities() {
     const queryClient = useQueryClient();
-    const { canShip } = useRole();
+    const { canShip } = useTier();
 
     const { query, error, loaded: read } = useSandboxQuery({
         queryKey: capabilitiesKey,

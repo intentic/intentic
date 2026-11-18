@@ -6,7 +6,7 @@ import type { GroupKey, PrincipalKind, ReachHow, ReachMap } from "./reachModel";
 // THE MAP'S LINES, FROM WHERE ITS CARDS LANDED. Every way in runs to a door on the box's leading edge, one door per kind
 // of principal; everything reached runs from a port on its trailing edge, one port per group, so each side reads as a
 // few bundles rather than a tangle. A focus lights the lines it reaches, dashes the ones it reaches only through a
-// persona, and draws threads from a focused node to what it is tied to. Pure: the layout is measured elsewhere.
+// role, and draws threads from a focused node to what it is tied to. Pure: the layout is measured elsewhere.
 
 export type EdgeState = `rest` | `on` | `off`;
 
@@ -15,7 +15,7 @@ export interface Edge {
     readonly d: string;
     readonly kind: `entry` | `reach` | `thread`;
     readonly state: EdgeState;
-    /** Reached only through something narrower (a persona, one conversation), or a way in not taken up yet. */
+    /** Reached only through something narrower (a role, one conversation), or a way in not taken up yet. */
     readonly dashed: boolean;
     /** A way in that holds nothing now. */
     readonly faint: boolean;

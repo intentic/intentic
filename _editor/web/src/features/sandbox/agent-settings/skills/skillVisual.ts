@@ -101,8 +101,8 @@ const GLYPHS: Readonly<Record<string, string>> = {
 // The last tier: what kind of thing put this skill here, used when nothing else recognizes anything.
 const ORIGIN_ICONS = {
     own: `pencil`,
-    // Same glyph as persona rows and the composer's chip, so it reads as belonging to that card.
-    persona: `user`,
+    // Same glyph as role rows and the composer's chip, so it reads as belonging to that card.
+    role: `user`,
     builtin: `box`,
     capability: `link`,
     extension: `sliders-h`,

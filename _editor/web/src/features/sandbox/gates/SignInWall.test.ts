@@ -25,7 +25,7 @@ const cancelSignIn = jest.fn();
 jest.mock(`../../../client/auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ needsSignIn, renderButton, cancelSignIn }) }));
 jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 // A sandbox still being set up unless a test says it has answered before (`lastSeenAt`).
-const activeSandbox = ref<{ role: string; lastSeenAt?: string | null; removedAt?: string | null } | undefined>({ role: `owner` });
+const activeSandbox = ref<{ tier: string; lastSeenAt?: string | null; removedAt?: string | null } | undefined>({ tier: `owner` });
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: activeSandbox }) }));
 
 const signInThroughBrowser = jest.fn();
@@ -80,7 +80,7 @@ beforeEach(() => {
     push.mockReset();
     cancelSignIn.mockReset();
     needsSignIn.value = true;
-    activeSandbox.value = { role: `owner` };
+    activeSandbox.value = { tier: `owner` };
     renderButton.mockClear().mockResolvedValue(true);
     signInThroughBrowser.mockReset();
     desktopVersion.mockReset().mockReturnValue(undefined);
@@ -195,7 +195,7 @@ it(`a refused ceremony is said on the card and the prompt stands, so the person 
 
 it(`only the owner is offered a recovery code, and it is spent under the proof that was taken`, async () => {
     needsSignIn.value = false;
-    activeSandbox.value = { role: `collaborator` };
+    activeSandbox.value = { tier: `collaborator` };
     void raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: sameBearer(`google-proof`) });
     let el = await mount();
     expect(el.textContent).not.toContain(`recovery code`);
@@ -203,7 +203,7 @@ it(`only the owner is offered a recovery code, and it is spent under the proof t
     app?.unmount();
     document.body.innerHTML = ``;
 
-    activeSandbox.value = { role: `owner` };
+    activeSandbox.value = { tier: `owner` };
     const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: sameBearer(`google-proof`) });
     el = await mount();
     expect(el.textContent).toContain(`recovery code`);
@@ -234,7 +234,7 @@ it(`back to setup settles both roads with nothing`, async () => {
 // saying its container was cleaned up. A working sandbox's reader is offered "Not now" and stays where they are.
 describe(`the way out of the wall`, () => {
     it(`is "Not now" on a sandbox that has answered before, and goes nowhere`, async () => {
-        activeSandbox.value = { role: `owner`, lastSeenAt: `2026-09-28T08:44:00Z`, removedAt: null };
+        activeSandbox.value = { tier: `owner`, lastSeenAt: `2026-09-28T08:44:00Z`, removedAt: null };
         await mount();
 
         expect(buttonSaying(`Back to setup`)).toBeUndefined();
@@ -246,7 +246,7 @@ describe(`the way out of the wall`, () => {
     });
 
     it(`is "Back to setup" on a sandbox that never answered`, async () => {
-        activeSandbox.value = { role: `owner`, lastSeenAt: null, removedAt: null };
+        activeSandbox.value = { tier: `owner`, lastSeenAt: null, removedAt: null };
         await mount();
 
         expect(buttonSaying(`Not now`)).toBeUndefined();
@@ -260,7 +260,7 @@ describe(`the way out of the wall`, () => {
 // The desktop window used to stay exactly as it was while the sign-in ran in the browser.
 it(`shows one browser instruction after handoff, with a quiet browser link and one way out`, async () => {
     desktopVersion.mockReturnValue(`1.2.3`);
-    activeSandbox.value = { role: `owner`, lastSeenAt: `2026-09-28T08:44:00Z`, removedAt: null };
+    activeSandbox.value = { tier: `owner`, lastSeenAt: `2026-09-28T08:44:00Z`, removedAt: null };
     const outcome = raiseSignIn({ kind: `choose`, target: TARGET, passkey: true });
     const el = await mount();
 
@@ -359,7 +359,7 @@ describe(`an account that signs in by email`, () => {
 
     // app-plane.md: an older path is never taken silently. The gap is named, with who closes it.
     it(`names a daemon too old for email sign-in, and who can update it`, async () => {
-        activeSandbox.value = { role: `collaborator`, lastSeenAt: `2026-10-01T12:00:00.000Z` };
+        activeSandbox.value = { tier: `collaborator`, lastSeenAt: `2026-10-01T12:00:00.000Z` };
         void raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: { kind: `outdated`, address: `ana@corp.example` } });
         const el = await mount();
 

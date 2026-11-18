@@ -19,7 +19,7 @@ const save = jest.fn<(area: Area) => Promise<unknown>>().mockImplementation(asyn
 });
 const remove = jest.fn<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
 
-jest.mock(`./useAreas`, () => ({
+jest.mock(`../../../models/sandbox/access/useAreas`, () => ({
     useAreas: () => ({
         areas,
         labelOf: (id: string) => id,
@@ -31,15 +31,15 @@ jest.mock(`./useAreas`, () => ({
 
 // The cards the rows report: an area hands over the assistants homed inside its folders, which the page derives
 // rather than stores, so the suite needs the roster the derivation reads.
-const personas = ref([
+const roles = ref([
     { id: `support-bot`, label: `Support bot`, capabilities: [], workspace: { startIn: `web/support` } },
     { id: `scribe`, label: `Scribe`, capabilities: [], workspace: { startIn: `docs` } },
 ]);
-jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
+jest.mock(`../../../models/sandbox/roles/useRoles`, () => ({ useRoles: () => ({ roles, connected: ref([]), isConnected: () => false }) }));
 
 const role = ref<string>(`owner`);
 // Read live: the reader's access is one for the page, built once from the active sandbox, as in the app.
-jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ role: role.value })) }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ tier: role.value })) }) }));
 // What the reader's own answer says they run and where they are fenced, below the owner.
 const self = ref<MemberSelf | undefined>(undefined);
 const realMembers = { ...(await import("../../../client/sandbox/useMembers")) };
@@ -263,7 +263,7 @@ it(`shows a member the areas and none of the controls`, async () => {
 // with the owner and Full access, as the daemon holds it (areas.routes.ts).
 it(`lets someone given People & access edit every area but the ones they are fenced to`, async () => {
     role.value = `collaborator`;
-    self.value = { role: `collaborator`, agents: `run`, edit: `none`, areas: [`support`], manages: [`people`] };
+    self.value = { tier: `collaborator`, agents: `run`, edit: `none`, areas: [`support`], manages: [`people`] };
     areas.value = [
         { id: `support`, label: `Support desk`, folders: [`web/support`] },
         { id: `docs`, label: `Docs`, folders: [`docs`] },

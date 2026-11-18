@@ -37,6 +37,6 @@ export const hookTurn = (input: {
         ...opt("owner", input.owner),
         ...opt("deniedSkills", skills === undefined || skills.denied.length === 0 ? undefined : skills.denied),
         deniedTools: request.policy.disallowedTools,
-        scope: request.policy.personaScope,
+        scope: request.policy.roleScope,
     };
 };

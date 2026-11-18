@@ -4,11 +4,11 @@
 // themselves and the names already on a gate, enough to name oneself and to take somebody off.
 import { type ManageRight, holdsRight, type MembersRoster } from "@intentic/sandbox-contract/schemas/members";
 import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import * as vueQueryOriginal from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 
-const caller = ref<{ role: MemberRole; manages?: ManageRight[] }>({ role: `owner` });
+const caller = ref<{ tier: MemberTier; manages?: ManageRight[] }>({ tier: `owner` });
 const roster = ref<MembersRoster | undefined>(undefined);
 const gates = ref<CredentialGate[]>([]);
 const reader = ref<string | undefined>(`owner@x.com`);
@@ -37,13 +37,13 @@ const GATE: CredentialGate = { subject: `DATABASE_URL`, kind: `secret`, approver
 const ROSTER: MembersRoster = {
     owner: `owner@x.com`,
     members: [
-        { email: `bob@x.com`, role: `maintainer` },
-        { email: `helper@x.com`, role: `collaborator`, manages: [`secrets`] },
+        { email: `bob@x.com`, tier: `maintainer` },
+        { email: `helper@x.com`, tier: `collaborator`, manages: [`secrets`] },
     ],
 };
 
 beforeEach(() => {
-    caller.value = { role: `owner` };
+    caller.value = { tier: `owner` };
     roster.value = ROSTER;
     gates.value = [];
     reader.value = `owner@x.com`;
@@ -71,7 +71,7 @@ describe(`useCredentialGates`, () => {
     });
 
     it(`lets Full access do the same`, () => {
-        caller.value = { role: `maintainer` };
+        caller.value = { tier: `maintainer` };
         reader.value = `bob@x.com`;
         const gate = useCredentialGates();
         expect(gate.runsSecrets.value).toBe(true);
@@ -79,7 +79,7 @@ describe(`useCredentialGates`, () => {
     });
 
     it(`lets someone given Secrets change the rules, offering themselves and the names already on a gate, never asking for the roster`, () => {
-        caller.value = { role: `collaborator`, manages: [`secrets`] };
+        caller.value = { tier: `collaborator`, manages: [`secrets`] };
         reader.value = `Helper@X.com`;
         gates.value = [GATE];
         const gate = useCredentialGates();
@@ -90,17 +90,17 @@ describe(`useCredentialGates`, () => {
     });
 
     it(`leaves a plain collaborator, and someone given only the privacy shield, reading the rules`, () => {
-        caller.value = { role: `collaborator` };
+        caller.value = { tier: `collaborator` };
         expect(useCredentialGates().runsSecrets.value).toBe(false);
-        caller.value = { role: `collaborator`, manages: [`privacy`] };
+        caller.value = { tier: `collaborator`, manages: [`privacy`] };
         expect(useCredentialGates().runsSecrets.value).toBe(false);
     });
 
     it(`follows a right given or taken while the page is open`, () => {
-        caller.value = { role: `collaborator` };
+        caller.value = { tier: `collaborator` };
         const gate = useCredentialGates();
         expect(gate.runsSecrets.value).toBe(false);
-        caller.value = { role: `collaborator`, manages: [`secrets`, `people`] };
+        caller.value = { tier: `collaborator`, manages: [`secrets`, `people`] };
         expect(gate.runsSecrets.value).toBe(true);
         expect(gate.namesEveryone.value).toBe(true);
     });

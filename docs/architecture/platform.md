@@ -135,4 +135,4 @@ Background jobs started in [`main.ts`](../../_platform/api/src/main.ts) reap orp
 ## What it does not do
 
 - It does not relay or inspect agent turns. The one exception is the optional free trial ([`trial`](../../_platform/api/src/trial)), whose turns use platform-owned model accounts.
-- It holds no credential that drives a sandbox the owner runs. Its identity assertion opens such a sandbox only for the people its owner opted in to email sign-in, and only with the role the owner gave them. It can power, resize and destroy only the machines it hosts.
+- It holds no credential that drives a sandbox the owner runs. Its identity assertion opens such a sandbox only for the people its owner opted in to email sign-in, and only with the tier the owner gave them. It can power, resize and destroy only the machines it hosts.

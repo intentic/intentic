@@ -13,23 +13,23 @@ describe("fileMembersStore: email sign-in", () => {
     test("an opt-in round-trips, survives a re-grade that does not mention it, and goes when the owner takes it back", async () => {
         const path = await storePath();
         const store = fileMembersStore(path);
-        await store.add("bo@example.org", { role: "viewer", emailSignIn: true });
-        await expect(store.list()).resolves.toEqual([{ email: "bo@example.org", role: "viewer", emailSignIn: true }]);
-        await store.add("bo@example.org", { role: "collaborator" });
-        await expect(store.list()).resolves.toEqual([{ email: "bo@example.org", role: "collaborator", emailSignIn: true }]);
-        await store.add("bo@example.org", { role: "collaborator", emailSignIn: false });
-        await expect(store.list()).resolves.toEqual([{ email: "bo@example.org", role: "collaborator" }]);
-        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ members: [{ email: "bo@example.org", role: "collaborator" }] });
+        await store.add("bo@example.org", { tier: "viewer", emailSignIn: true });
+        await expect(store.list()).resolves.toEqual([{ email: "bo@example.org", tier: "viewer", emailSignIn: true }]);
+        await store.add("bo@example.org", { tier: "collaborator" });
+        await expect(store.list()).resolves.toEqual([{ email: "bo@example.org", tier: "collaborator", emailSignIn: true }]);
+        await store.add("bo@example.org", { tier: "collaborator", emailSignIn: false });
+        await expect(store.list()).resolves.toEqual([{ email: "bo@example.org", tier: "collaborator" }]);
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ members: [{ email: "bo@example.org", tier: "collaborator" }] });
     });
 });
 
 describe("fileMembersStore: guests", () => {
     test("a guest grant round-trips its fence, and a re-grade keeps it, since areas ride on every tier", async () => {
         const store = fileMembersStore(await storePath());
-        await store.add("d@x.com", { role: "guest", areas: ["support"] });
-        await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "guest", areas: ["support"] }]);
-        await store.add("d@x.com", { role: "viewer", areas: ["support"] });
-        await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "viewer", areas: ["support"] }]);
+        await store.add("d@x.com", { tier: "guest", areas: ["support"] });
+        await expect(store.list()).resolves.toEqual([{ email: "d@x.com", tier: "guest", areas: ["support"] }]);
+        await store.add("d@x.com", { tier: "viewer", areas: ["support"] });
+        await expect(store.list()).resolves.toEqual([{ email: "d@x.com", tier: "viewer", areas: ["support"] }]);
     });
 
     // An unfenced guest would reach every assistant in the workspace, since that absent list is what the whole of it
@@ -40,21 +40,21 @@ describe("fileMembersStore: guests", () => {
             path,
             JSON.stringify({
                 members: [
-                    { email: "d@x.com", role: "guest" },
-                    { email: "e@x.com", role: "guest", areas: [] },
-                    { email: "v@x.com", role: "viewer" },
+                    { email: "d@x.com", tier: "guest" },
+                    { email: "e@x.com", tier: "guest", areas: [] },
+                    { email: "v@x.com", tier: "viewer" },
                 ],
             }),
         );
-        await expect(fileMembersStore(path).list()).resolves.toEqual([{ email: "v@x.com", role: "viewer" }]);
+        await expect(fileMembersStore(path).list()).resolves.toEqual([{ email: "v@x.com", tier: "viewer" }]);
     });
 });
 
 describe("fileMembersStore: writers", () => {
     test("a writer grant round-trips the areas it may change", async () => {
         const store = fileMembersStore(await storePath());
-        await store.add("w@x.com", { role: "writer", areas: ["support"] });
-        await expect(store.list()).resolves.toEqual([{ email: "w@x.com", role: "writer", areas: ["support"] }]);
+        await store.add("w@x.com", { tier: "writer", areas: ["support"] });
+        await expect(store.list()).resolves.toEqual([{ email: "w@x.com", tier: "writer", areas: ["support"] }]);
     });
 
     // The one row that must never be read leniently: an absent area list is the WHOLE workspace, so a writer row
@@ -65,13 +65,13 @@ describe("fileMembersStore: writers", () => {
             path,
             JSON.stringify({
                 members: [
-                    { email: "w@x.com", role: "writer" },
-                    { email: "e@x.com", role: "writer", areas: [] },
-                    { email: "v@x.com", role: "viewer" },
+                    { email: "w@x.com", tier: "writer" },
+                    { email: "e@x.com", tier: "writer", areas: [] },
+                    { email: "v@x.com", tier: "viewer" },
                 ],
             }),
         );
-        await expect(fileMembersStore(path).list()).resolves.toEqual([{ email: "v@x.com", role: "viewer" }]);
+        await expect(fileMembersStore(path).list()).resolves.toEqual([{ email: "v@x.com", tier: "viewer" }]);
     });
 });
 
@@ -79,10 +79,10 @@ describe("fileMembersStore: writers", () => {
 // else for good. Refused instead: the file stays as it was for a person to fix, and nobody is granted or removed.
 test("a roster this build cannot read refuses a grant and a removal, and stays as it was", async () => {
     const path = await storePath();
-    await writeFile(path, `{"members": [{"email": "ada@example.com", "role": "viewer"}`, "utf8");
+    await writeFile(path, `{"members": [{"email": "ada@example.com", "tier": "viewer"}`, "utf8");
     const store = fileMembersStore(path);
-    await expect(store.add("grace@example.com", { role: "viewer" })).rejects.toBeInstanceOf(ManifestUnreadableError);
+    await expect(store.add("grace@example.com", { tier: "viewer" })).rejects.toBeInstanceOf(ManifestUnreadableError);
     await expect(store.remove("ada@example.com")).rejects.toBeInstanceOf(ManifestUnreadableError);
-    expect(await readFile(path, "utf8")).toBe(`{"members": [{"email": "ada@example.com", "role": "viewer"}`);
+    expect(await readFile(path, "utf8")).toBe(`{"members": [{"email": "ada@example.com", "tier": "viewer"}`);
     expect(existsSync(`${path}.corrupt`)).toBe(false);
 });

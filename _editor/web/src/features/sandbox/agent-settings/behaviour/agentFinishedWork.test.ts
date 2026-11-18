@@ -15,7 +15,7 @@ const get = jest.fn<SandboxRpc[`settings`][`get`]>();
 const set = jest.fn<SandboxRpc[`settings`][`set`]>();
 jest.mock(`../../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ settings: { get, set } }) }));
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
-jest.mock(`../../../../client/sandbox/useRole`, () => ({ useRole: () => ({ canShip: ref(true) }) }));
+jest.mock(`../../../../client/sandbox/useTier`, () => ({ useTier: () => ({ canShip: ref(true) }) }));
 // A switch of mode reads the words again; nothing here reads them.
 jest.mock(`../../../../client/sandbox/audienceSync`, () => ({ refreshSandboxWords: async () => undefined }));
 

@@ -1,6 +1,6 @@
-import { type Persona, type TurnBriefingNoteId, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract/schemas/personas";
+import { type Role, type TurnBriefingNoteId, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract/schemas/roles";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
-import { PERSONA_NOTE_TITLE, UNATTENDED_ACCOUNTS_TITLE } from "../../personas/personas.js";
+import { ROLE_NOTE_TITLE, UNATTENDED_ACCOUNTS_TITLE } from "../../roles/roles.js";
 import { GATED_CREDENTIALS_TITLE } from "../../secrets/credential-gating.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { REPO_SYNC_NOTE_TITLE } from "../../workspace/layout/sync-repos.js";
@@ -40,7 +40,7 @@ export interface TurnBriefing {
 // Nothing dropped: an unpinned turn, a card with no briefing block, and a card that named nothing all read the same.
 const FULL_BRIEFING: TurnBriefing = { sends: () => true, keep: (notes) => [...notes] };
 
-export const briefingOf = (card: Persona | undefined): TurnBriefing => {
+export const briefingOf = (card: Role | undefined): TurnBriefing => {
     const omit = card?.briefing?.omit ?? [];
     if (omit.length === 0) {
         return FULL_BRIEFING;
@@ -58,7 +58,7 @@ export const briefingOf = (card: Persona | undefined): TurnBriefing => {
 // way nothing else would catch.
 const FIXTURE_TITLES: ReadonlySet<string> = new Set([
     WORKTREE_NOTE_TITLE,
-    PERSONA_NOTE_TITLE,
+    ROLE_NOTE_TITLE,
     MEMORY_NOTE_TITLE,
     GATED_CREDENTIALS_TITLE,
     UNATTENDED_ACCOUNTS_TITLE,

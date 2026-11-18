@@ -7,7 +7,7 @@ import { loopOf } from "@intentic/sandbox-contract/models/agent-catalog";
 
 const published = new Map<AgentProvider, readonly AgentCommand[]>();
 // What a probe session (model discovery) answered before any turn ran. Missing what a turn mounts for itself (plugins,
-// a persona's skills), so it may say a command exists, never that one does not: the unknown-command guard reads only
+// a role's skills), so it may say a command exists, never that one does not: the unknown-command guard reads only
 // what a turn published.
 const probed = new Map<AgentProvider, readonly AgentCommand[]>();
 

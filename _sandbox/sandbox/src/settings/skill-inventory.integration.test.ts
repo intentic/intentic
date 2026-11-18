@@ -3,14 +3,14 @@ import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { SandboxSettings, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { readSkillText, RETIRED_OWNER, SANDBOX_OWNER, skillInventory } from "./skill-inventory.js";
 import { stampSkill } from "../store/loaded-skills.js";
-import { personaSkillsRoot, writePersonaSkill } from "../personas/persona-kit.js";
+import { roleSkillsRoot, writeRoleSkill } from "../roles/role-kit.js";
 import { scanSkillFolders, SKILL_FILE } from "../skill-file.js";
 import { reconcileBakedSkills, switchOwnSkill, writeOwnSkill } from "./skills.js";
 
@@ -26,7 +26,7 @@ const stubServices = (
     root: string,
     capabilities: readonly Capability[],
     settings: SandboxSettings,
-    personas: readonly Persona[] = [],
+    roles: readonly Role[] = [],
     baked: BakedPlugins = { webqPluginDir: "" },
 ): Services =>
     unstubbed<Services>("services", {
@@ -44,9 +44,9 @@ const stubServices = (
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [...capabilities] }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings }),
         config: unstubbed<Services["config"]>("config", { extensionsDir: "", ...baked }),
-        // Read on every listing: a persona's kit skills are part of what the agent knows (the `persona` origin). Empty
+        // Read on every listing: a role's kit skills are part of what the agent knows (the `role` origin). Empty
         // is the default most cases here want.
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [...personas] }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [...roles] }),
     });
 
 const settingsWith = (skills: readonly string[]): SandboxSettings => SandboxSettingsSchema.parse({ skills: [...skills] });
@@ -219,12 +219,12 @@ test("a skill already accounted for is not listed a second time from the loaded 
 test("every id the list mints reads back the right skill", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const plugin: Capability = { id: "my-pack", kind: "plugin", config: { url: "https://example.com/pack.git" } };
-    const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
+    const studio: Role = { id: "studio", label: "Studio", capabilities: [] };
     const baked = { webqPluginDir: join(root, "webq-plugin") };
     const services = stubServices(root, [plugin], SandboxSettingsSchema.parse({}), [studio], baked);
     await writeOwnSkill(services, { name: "notes", description: "Use it.", body: "Stored body." });
     await writeSkill(join(root, ".intentic", "records", "plugins", "my-pack", "skills"), "review", "Use when reviewing.", "Plugin body.");
-    await writePersonaSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
+    await writeRoleSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
     await writeSkill(join(baked.webqPluginDir, "skills"), "webq", "Web pages as markdown.", "Web body.");
 
     for (const row of await skillInventory(services)) {
@@ -235,8 +235,8 @@ test("every id the list mints reads back the right skill", async () => {
     expect((await readSkillText(services, "notes"))?.text).toContain("Stored body.");
     expect((await readSkillText(services, "lsp"))?.text).toContain("Rename a TypeScript");
     expect((await readSkillText(services, "plugin:my-pack:review"))?.text).toContain("Plugin body.");
-    // A kit skill's id carries the persona id; its row shows the label instead, which is not a key.
-    expect((await readSkillText(services, "persona:studio:voice"))?.text).toContain("Kit body.");
+    // A kit skill's id carries the role id; its row shows the label instead, which is not a key.
+    expect((await readSkillText(services, "role:studio:voice"))?.text).toContain("Kit body.");
     // A plugin the image ships reads from its own dir, never from a loaded or stored skill of the same name.
     expect((await readSkillText(services, "builtin:webq:webq"))?.text).toContain("Web body.");
 });
@@ -254,16 +254,16 @@ test("the image's webq plugin lists its skills", async () => {
     ]);
 });
 
-// A turn mounts a persona's kit only once its manifest exists, so skills in a folder without one are nothing a turn loads.
-test("a persona's skills list only once its kit has the manifest a turn mounts it by", async () => {
+// A turn mounts a role's kit only once its manifest exists, so skills in a folder without one are nothing a turn loads.
+test("a role's skills list only once its kit has the manifest a turn mounts it by", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
-    const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
+    const studio: Role = { id: "studio", label: "Studio", capabilities: [] };
     const services = stubServices(root, [], settingsWith([]), [studio]);
-    await writeSkill(personaSkillsRoot(root, "studio"), "voice", "How we write.");
-    expect((await skillInventory(services)).filter((row) => row.origin === "persona")).toEqual([]);
+    await writeSkill(roleSkillsRoot(root, "studio"), "voice", "How we write.");
+    expect((await skillInventory(services)).filter((row) => row.origin === "role")).toEqual([]);
 
-    await writePersonaSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
-    expect((await skillInventory(services)).filter((row) => row.origin === "persona").map((row) => row.id)).toEqual(["persona:studio:voice"]);
+    await writeRoleSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
+    expect((await skillInventory(services)).filter((row) => row.origin === "role").map((row) => row.id)).toEqual(["role:studio:voice"]);
 });
 
 // The one scan every skills folder goes through: the owner's store, a kit, a mounted plugin, the loaded folder.
@@ -298,18 +298,18 @@ describe("scanSkillFolders", () => {
 });
 
 // A kit skill lists, but narrowly: it must not read as available to every chat, and offers no switch since nothing here
-// can turn it off, only the persona can.
-test("a persona's own skill lists under its card, with no switch", async () => {
+// can turn it off, only the role can.
+test("a role's own skill lists under its card, with no switch", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
-    const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
+    const studio: Role = { id: "studio", label: "Studio", capabilities: [] };
     const services = stubServices(root, [], settingsWith([]), [studio]);
-    await writePersonaSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
+    await writeRoleSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
 
-    const row = rowFor(await skillInventory(services), "persona:studio:voice");
+    const row = rowFor(await skillInventory(services), "role:studio:voice");
 
-    expect(row).toMatchObject({ name: "voice", description: "How we write.", origin: "persona", owner: "Studio", enabled: true });
+    expect(row).toMatchObject({ name: "voice", description: "How we write.", origin: "role", owner: "Studio", enabled: true });
     expect(row.switchable).toBe(false);
-    // Edited on the persona's card, like a plugin's skill is edited where it lives, not from this list.
+    // Edited on the role's card, like a plugin's skill is edited where it lives, not from this list.
     expect(row.editable).toBe(false);
     expect(row.removable).toBe(false);
 });

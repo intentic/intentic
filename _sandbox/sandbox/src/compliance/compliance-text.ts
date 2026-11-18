@@ -344,7 +344,7 @@ const EN: Words = {
         },
         "member-roles": {
             name: "User roles and permissions",
-            what: "Each person has a role (owner, maintainer, collaborator, writer, viewer, guest) limiting what they can see and do.",
+            what: "Each person has an access tier (owner, maintainer, collaborator, writer, viewer, guest) limiting what they can see and do.",
             where: "Sandbox ▸ Access",
         },
         areas: {

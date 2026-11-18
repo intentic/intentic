@@ -1,5 +1,5 @@
 import type { McpServerConfig as CursorMcpServer, SDKCustomTool, ToolName } from "@cursor/sdk";
-import { type PolicyCall, type PolicyTurn, personaRefusal } from "../../daemon-tools/policy-gate.js";
+import { type PolicyCall, type PolicyTurn, roleRefusal } from "../../daemon-tools/policy-gate.js";
 import { allowlistRefusal, toolAllowed } from "../../../agent/tools/tool-allowlist.js";
 import { JS_TOOL_NAME } from "../../../seams/js-tool-names.js";
 
@@ -114,12 +114,12 @@ export const hookToolRefusal = (list: readonly string[], tool: string, command: 
 };
 
 /**
- * The persona's refusal for a built-in call, in the vocabulary its gate reads (a tool it withholds under any of the Claude
+ * The role's refusal for a built-in call, in the vocabulary its gate reads (a tool it withholds under any of the Claude
  * names Cursor's executor stands for, or a path outside its folders), or undefined.
  */
-export const hookPersonaRefusal = (turn: Pick<PolicyTurn, "deniedTools" | "scope">, tool: string, input: PolicyCall["input"]): string | undefined => {
+export const hookRoleRefusal = (turn: Pick<PolicyTurn, "deniedTools" | "scope">, tool: string, input: PolicyCall["input"]): string | undefined => {
     for (const name of HOOK_TOOLS.get(tool) ?? [tool]) {
-        const refused = personaRefusal(turn, { tool: name, input });
+        const refused = roleRefusal(turn, { tool: name, input });
         if (refused !== undefined) {
             return refused;
         }

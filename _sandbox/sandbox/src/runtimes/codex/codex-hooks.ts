@@ -125,7 +125,7 @@ export const codexListName = (call: Pick<GateCall, "tool" | "input">): string =>
     return files.added.length > 0 && files.changed.length === 0 && files.deleted.length === 0 ? "Write" : "Edit";
 };
 
-// A patch names its files in its own text; the persona's folder fence reads every one of them. Any other call's path is
+// A patch names its files in its own text; the role's folder fence reads every one of them. Any other call's path is
 // the gate's own to read off its input.
 const codexPaths = (call: Pick<GateCall, "tool" | "input">): readonly string[] | undefined =>
     call.tool === "apply_patch" ? Object.values(patchFiles(call.input)).flat() : undefined;

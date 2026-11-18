@@ -19,7 +19,7 @@ export const registerPresence = (clientId: string, identity: Caller): (() => voi
     entries.set(clientId, {
         clientId,
         email: identity.email,
-        role: identity.role,
+        tier: identity.tier,
         idle: false,
         ...(identity.name !== undefined ? { name: identity.name } : {}),
         ...(identity.picture !== undefined ? { picture: identity.picture } : {}),
@@ -41,7 +41,7 @@ export const updatePresence = (identity: VerifiedIdentity, report: PresenceRepor
     entries.set(report.clientId, {
         clientId: entry.clientId,
         email: entry.email,
-        role: entry.role,
+        tier: entry.tier,
         idle: report.idle,
         ...(report.away === true ? { away: true } : {}),
         ...(entry.name !== undefined ? { name: entry.name } : {}),

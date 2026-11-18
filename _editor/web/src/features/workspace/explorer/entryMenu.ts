@@ -89,7 +89,7 @@ export interface EntryMenuInput {
     readonly clipboardCopied?: boolean;
     // The keys drawn beside the verbs; none drawn without them.
     readonly keys?: EntryKeys;
-    // The surface's own rows: first of all (the home's Open), after New Folder (a folder's documents, personas,
+    // The surface's own rows: first of all (the home's Open), after New Folder (a folder's documents, roles,
     // checks, management), and last (the tree's Collapse Folders). The read-only menu keeps the readable ones.
     readonly head?: readonly MenuItem[];
     readonly lead?: readonly MenuItem[];

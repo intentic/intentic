@@ -386,9 +386,10 @@ export const createExtensionApi = (
                 const base = useSandbox().daemonUrl.value;
                 return base === undefined || base === `` ? undefined : base;
             },
-            // The same optimistic default useRole makes (`owner` until the platform summary loads); this gates
+            // The same optimistic default useTier makes (`owner` until the platform summary loads); this gates
             // affordances, the daemon gates acts.
-            role: () => useSandbox().active.value?.role ?? `owner`,
+            tier: () => useSandbox().active.value?.tier ?? `owner`,
+            role: () => useSandbox().active.value?.tier ?? `owner`, // `tier`'s alias for extensions built before 2.43.0
             previewAddress: (url) => previewAddress(url),
         },
         workspace: {

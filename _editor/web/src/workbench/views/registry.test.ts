@@ -8,7 +8,7 @@ import { useAudience } from "../../app/useAudience";
 
 // The reader's tier, switched by the guest tests below; everyone else is read as the owner the app defaults to.
 const guestReader = { isGuest: false, homeOnly: false };
-jest.mock(`../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest: ref(guestReader.isGuest), homeOnly: ref(guestReader.homeOnly) }) }));
+jest.mock(`../../client/sandbox/useTier`, () => ({ useTier: () => ({ isGuest: ref(guestReader.isGuest), homeOnly: ref(guestReader.homeOnly) }) }));
 import {
     activationBadge,
     sectionReachable,

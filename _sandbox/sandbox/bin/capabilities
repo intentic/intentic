@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The in-sandbox capability command: what this sandbox can be connected to, and the ask that puts a card in the
 // owner's chat to connect one, change one, or take one away (docs/architecture/needs.md). The ASK is the whole of it: the daemon answers for THIS
-// turn, not for the sandbox, so a connection for a different site, one this conversation's persona or a gate
+// turn, not for the sandbox, so a connection for a different site, one this conversation's role or a gate
 // withholds, and one whose credential is being refused each get their own answer and their own card, rather than the
 // "already connected, use it" that once came back for all three. The agent never connects anything itself and never
 // sees a credential: the person does the setup, in the card, and the command resumes when it is live.

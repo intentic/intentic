@@ -12,7 +12,7 @@
             "GET /automations/catalog",
             "GET /automations/senders/*",
             "GET /agents",
-            "GET /personas",
+            "GET /roles",
             "GET /access/services",
             "GET /access/profiles",
             "GET /settings",
@@ -32,7 +32,7 @@
             { "path": ".intentic/config/automations.json", "invalidates": ["automations"] },
             { "path": ".intentic/records/automation-runs.json", "invalidates": ["automations"] },
             { "path": ".intentic/records/automation-watch.json", "invalidates": ["automations"] },
-            { "path": ".intentic/config/personas.json", "invalidates": ["personas"] }
+            { "path": ".intentic/config/roles.json", "invalidates": ["roles"] }
         ]
     }
 }

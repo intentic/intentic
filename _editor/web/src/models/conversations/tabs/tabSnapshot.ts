@@ -51,7 +51,7 @@ export interface StoredTab {
     // Chat is on Auto with its model still unchosen. Per tab, since it describes this chat's unanswered question, and
     // a reload without it would show a model the owner never picked as though they had.
     readonly auto?: boolean;
-    // Persona this tab acts as, per tab only: a narrowing must never follow the user into their next chat.
+    // Role this tab acts as, per tab only: a narrowing must never follow the user into their next chat.
     readonly actsAs?: string;
     // Session's full binding; may lag the tab's pick until the next send, so a reload can't fake the gap.
     readonly session?: SessionRef;

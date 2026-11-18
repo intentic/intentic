@@ -27,7 +27,7 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import type { ConversationsDb } from "../../store/conversations-db.js";
 import { readDocument } from "@intentic/sandbox-contract/documents";
-import { at, CHECK_SETTLES, drop, type JsonObject, mapValue, transform } from "../../store/evolution/conversions.js";
+import { at, CHECK_SETTLES, drop, type JsonObject, mapValue, rename, transform } from "../../store/evolution/conversions.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "../../store/manifest/manifest-problems.js";
 import { TurnQueueSchema } from "../actor/conversation-queue.js";
@@ -57,10 +57,10 @@ const RepoRecordSchema = z.object({
 });
 export type RepoRecord = z.infer<typeof RepoRecordSchema>;
 
-// Nested repos a conversation's checkout holds (root is always included, never listed) plus the persona card it was
+// Nested repos a conversation's checkout holds (root is always included, never listed) plus the role card it was
 // read off, so the preamble can name it. Daemon-local; nothing outside this process reads it.
 export const CompositionSchema = z.object({
-    persona: z.string().optional(),
+    role: z.string().optional(),
     repos: z.array(z.string()),
 });
 export type Composition = z.infer<typeof CompositionSchema>;
@@ -72,8 +72,8 @@ const WorktreePlacementSchema = z.object({
     branch: z.string(),
     runner: z.string().optional(),
     repos: z.array(RepoRecordSchema),
-    // What the checkout should carry, copied from the opening turn's persona card; absent means everything. A later
-    // persona edit never moves an existing conversation.
+    // What the checkout should carry, copied from the opening turn's role card; absent means everything. A later
+    // role edit never moves an existing conversation.
     composition: CompositionSchema.optional(),
     // The conversation whose checkout the branch was cut from and is rebased onto: a spawned child branched from its
     // parent's work (land-target.ts), whose `base` rows then name commits of the parent's, not of the main line. Absent
@@ -131,8 +131,9 @@ const ProfileSchema = z.object({
     // kept while the cache is cold, where an unpinned one is re-placed on the account the sandbox's pick prefers; either one is
     // moved off when it can no longer serve (account-placement.ts). Added 2026-10-28, optional: no row before it was pinned.
     accountPin: z.object({ account: z.string(), at: z.number() }).optional(),
-    // The persona the last turn ran as: the turn's own, never carried from the one before, since the daemon runs each turn
-    // under the persona it names (turn-premise.ts). Absent for an ordinary chat, and in rows written before it existed.
+    // The role the last turn ran as: the turn's own, never carried from the one before, since the daemon runs each turn
+    // under the role it names (turn-premise.ts), or the one a person switched the conversation to on a card since
+    // (agents-registry.ts wearRole). Absent for an ordinary chat, and in rows written before it existed.
     actsAs: z.string().optional(),
 });
 export type StoredProfile = z.infer<typeof ProfileSchema>;
@@ -321,6 +322,8 @@ export const conversationRecordDocument = defineDocument({
     boot: false,
     schema: PersistedAgentSchema,
     history: [
+        // 2026-11-18: personas were renamed roles; a checkout's composition named the card it was read off `persona`.
+        at("placement.composition", rename("persona", "role")),
         // The pre-push fix's model role, retired with the push checks on 2026-09-28: a turn queued on it runs on the
         // nearest role that remains, the pipeline fix, which likewise starts only when somebody presses for it.
         at("queue.items.*.turn", mapValue("runRole", { "pre-push-fix": "pipeline-fix" })),
@@ -390,7 +393,8 @@ export const conversationProfile = (entry: PersistedAgent): TurnProfile =>
         effort: entry.profile.effort,
         thinking: entry.profile.thinking,
         fast: entry.profile.fast,
-        actsAs: entry.identity.actsAs,
+        // The role it wears now: its last turn's, or the one a person switched it to; else the one it started on.
+        actsAs: entry.profile.actsAs ?? entry.identity.actsAs,
     });
 
 export interface AgentsStore {

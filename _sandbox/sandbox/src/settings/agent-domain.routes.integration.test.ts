@@ -16,7 +16,7 @@ const fixture = (authenticated: boolean, initial: "root" | "unprivileged" = "roo
             authorize: async (bearer) => {
                 const role = ({ "owner-bearer": "owner", "full-bearer": "maintainer", "member-bearer": "collaborator" } as const)[bearer];
                 if (role === undefined) { throw new Error("not a member"); }
-                return { email: `${role}@example.com`, methods: ["google"], role };
+                return { email: `${role}@example.com`, methods: ["google"], tier: role };
             },
         }) : undefined,
         agentDomainPolicy: {

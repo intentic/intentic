@@ -24,7 +24,7 @@ import { withAttachments } from "../../sessions/vocabulary/attachment-note.js";
 import { type ProviderModule, translatorAccountEntries, translatorReady } from "../../agent/providers/provider-module.js";
 import { connectedTranslatorProviders } from "../../agent/providers/translator.js";
 import type { Services } from "../../composition.js";
-import { turnPersona } from "../../personas/personas.js";
+import { turnRole } from "../../roles/roles.js";
 import { engineReady } from "../../engines/engine-resolve.js";
 import { turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
 import { daemonServersFor, type DaemonServersDeps } from "../daemon-tools/daemon-servers.js";
@@ -184,7 +184,7 @@ export const planCodexTurn = async (
     }
     // A hosted route named its model already; for ChatGPT an empty model resolves the catalog default (discovery, never
     // empty), and an explicit one rides through as-is.
-    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    const role = context.role ?? turnRole({ roles: [], actsAs: undefined, unattended: false });
     const [model, mounted, settings] = await Promise.all([
         route.model !== undefined
             ? Promise.resolve(route.model)
@@ -194,9 +194,9 @@ export const planCodexTurn = async (
         // Plan emulation restarts app-server between review and execution; a fresh process rereads the same manifest.
         turnToolsOf(services, granted, {
             conversationId: input.conversationId,
-            anonymousBrowser: persona.powers.browser,
-            shell: persona.powers.shell,
-            extensions: persona.powers.extensions,
+            anonymousBrowser: role.powers.browser,
+            shell: role.powers.shell,
+            extensions: role.powers.extensions,
         }),
         context.settings === undefined ? services.sandboxSettings.get() : Promise.resolve(context.settings),
     ]);
@@ -205,7 +205,7 @@ export const planCodexTurn = async (
     const secrets = context.base.tools.secrets ?? turnSecretAccess(services, input, context.base.signal);
     const withSecrets: TurnContext = { ...context, base: { ...context.base, tools: { ...context.base.tools, secrets } } };
     // `gate` on: the thread's own PreToolUse, PostToolUse and Stop hooks call it (codex-hooks.ts).
-    const daemon = daemonServersFor(services, { input, context: withSecrets, persona, granted, settings, mounted, gate: true });
+    const daemon = daemonServersFor(services, { input, context: withSecrets, role, granted, settings, mounted, gate: true });
     const remote = [...mounted.tools, ...daemon.tools];
     const request: AgentRequest<CodexCredential> = {
         ...context.base,

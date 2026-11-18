@@ -39,15 +39,22 @@ describe(`inviteAcceptDecision`, () => {
 describe(`toInviteRecord`, () => {
     it(`shapes the row for the wire, dropping expiry to undefined when absent`, () => {
         const record = toInviteRecord(
-            { email: `a@b.com`, role: `maintainer`, manages: [], acceptedAt: past, inviteExpiresAt: null, createdAt: past },
+            { email: `a@b.com`, tier: `maintainer`, manages: [], acceptedAt: past, inviteExpiresAt: null, createdAt: past },
             now,
         );
-        expect(record).toEqual({ email: `a@b.com`, role: `maintainer`, status: `accepted`, invitedAt: past.toISOString(), expiresAt: undefined });
+        expect(record).toEqual({
+            email: `a@b.com`,
+            tier: `maintainer`,
+            role: `maintainer`,
+            status: `accepted`,
+            invitedAt: past.toISOString(),
+            expiresAt: undefined,
+        });
     });
 
-    // A right this build does not know stays off the wire, as an unknown role degrades, rather than failing the roster.
+    // A right this build does not know stays off the wire, as an unknown tier degrades, rather than failing the roster.
     it(`carries the rights a row runs, and only the ones this build knows`, () => {
-        const row = { email: `a@b.com`, role: `writer`, manages: [`people`, `someday`], acceptedAt: past, inviteExpiresAt: null, createdAt: past };
+        const row = { email: `a@b.com`, tier: `writer`, manages: [`people`, `someday`], acceptedAt: past, inviteExpiresAt: null, createdAt: past };
         expect(toInviteRecord(row, now).manages).toEqual([`people`]);
     });
 });

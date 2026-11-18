@@ -4,7 +4,7 @@ import type {
     AccessHow,
     AccessMapScene,
     AccessNodeId,
-    AccessPersonaId,
+    AccessRoleId,
     AccessPrincipal,
 } from "@intentic/site-content/access-map";
 
@@ -12,9 +12,9 @@ import type {
 // reaches it and what it is tied to. `AccessMapFigure.astro` embeds the result, and its script only switches which one
 // shows, so the figure's lighting can be read and tested here rather than in a browser.
 
-/** What a lit thing wears: how it is reached, the thing pointed at itself, or a tie to it (a persona's home, its connections). */
+/** What a lit thing wears: how it is reached, the thing pointed at itself, or a tie to it (a role's home, its connections). */
 export type Lit = AccessHow | "focus" | "tie";
-/** A lit wire: solid where the reach is direct, dashed where it is only as a persona. */
+/** A lit wire: solid where the reach is direct, dashed where it is only as a role. */
 export type Wire = "on" | "through";
 /** `p:<principal>` a way in's line to the wall, `c:<cluster>` its gate, `g:<group>` a port and the line out to a group. */
 export type WireKey = `p:${string}` | `c:${AccessClusterKey}` | `g:${AccessGroupKey}`;
@@ -43,7 +43,7 @@ export const principalKey = (principal: Pick<AccessPrincipal, "id">): string => 
 /** Every thing on the map, inside the box and out, in the order the drawing stands them. */
 export const nodeIdsOf = (scene: AccessMapScene): AccessNodeId[] => [
     ...scene.areas.map((area) => area.id),
-    ...scene.personas.map((persona) => persona.id),
+    ...scene.roles.map((role) => role.id),
     "secrets",
     ...scene.groups.flatMap((group) => group.items.map((item) => item.id)),
 ];
@@ -52,16 +52,16 @@ export const accessLightings = (scene: AccessMapScene): Map<string, Lighting> =>
     const nodeIds = nodeIdsOf(scene);
     const areaIds = new Set<AccessNodeId>(scene.areas.map((area) => area.id));
     const outwardIds = new Set<AccessNodeId>(scene.groups.flatMap((group) => group.items.map((item) => item.id)));
-    const personaName = (id: AccessPersonaId | undefined): string | undefined => scene.personas.find((persona) => persona.id === id)?.name;
+    const roleName = (id: AccessRoleId | undefined): string | undefined => scene.roles.find((role) => role.id === id)?.name;
 
     // Tagged where the drawing has room for a word: the rooms and the vault.
-    const tagFor = (how: AccessHow, actsAs: AccessPersonaId | undefined): string => {
-        const persona = how === "through" ? personaName(actsAs) : undefined;
-        return persona === undefined ? scene.tags[how] : `as ${persona}`;
+    const tagFor = (how: AccessHow, actsAs: AccessRoleId | undefined): string => {
+        const role = how === "through" ? roleName(actsAs) : undefined;
+        return role === undefined ? scene.tags[how] : `as ${role}`;
     };
 
     // The lines out of the east wall: one per group something lit stands in, dashed when all of it is reached only as a
-    // persona (or, `only`, as the caller says).
+    // role (or, `only`, as the caller says).
     const groupWires = (nodes: Lighting["nodes"], only?: Wire): Map<WireKey, Wire> => {
         const wires = new Map<WireKey, Wire>();
         for (const group of scene.groups) {
@@ -107,17 +107,17 @@ export const accessLightings = (scene: AccessMapScene): Map<string, Lighting> =>
         };
     };
 
-    // What a thing is tied to: a persona to its home and its connections, an area to the personas homed there, a
-    // connection to the personas that carry it.
+    // What a thing is tied to: a role to its home and its connections, an area to the roles homed there, a
+    // connection to the roles that carry it.
     const tiesOf = (id: AccessNodeId): AccessNodeId[] => {
-        const persona = scene.personas.find((card) => card.id === id);
-        if (persona !== undefined) {
-            return [persona.home, ...persona.allows];
+        const role = scene.roles.find((card) => card.id === id);
+        if (role !== undefined) {
+            return [role.home, ...role.allows];
         }
         if (areaIds.has(id)) {
-            return scene.personas.filter((card) => card.home === id).map((card) => card.id);
+            return scene.roles.filter((card) => card.home === id).map((card) => card.id);
         }
-        return scene.personas.filter((card) => card.allows.some((allowed) => allowed === id)).map((card) => card.id);
+        return scene.roles.filter((card) => card.allows.some((allowed) => allowed === id)).map((card) => card.id);
     };
 
     // A thing: who reaches it, and what it is tied to.
@@ -134,7 +134,7 @@ export const accessLightings = (scene: AccessMapScene): Map<string, Lighting> =>
             tags: {},
             wires: Object.fromEntries([
                 ...gateWires(reachers, (principal) => (principal.reach[id] === "through" ? "through" : "on")),
-                // The thing's own group is reached directly; a group lit only by a tie is reached through that persona.
+                // The thing's own group is reached directly; a group lit only by a tie is reached through that role.
                 ...groupWires(outward, outwardIds.has(id) ? "on" : "through"),
             ]),
             counts: {},

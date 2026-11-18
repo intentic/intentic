@@ -4,7 +4,7 @@ import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceilin
 import { tierOf } from "@intentic/sandbox-contract/schemas/members";
 import type { InviteRecord } from "@intentic/api-contract";
 import type { AccessAsk, AccessRequest, AgentAccess, CredentialReach, EditScope, ManageRight } from "@intentic/sandbox-contract/schemas/members";
-import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { GrantedTier } from "@intentic/sandbox-contract/schemas/shared";
 import { demoManages, demoQuiet, demoTier } from "../mode";
 import { DEMO_USER } from "../world/account";
 
@@ -21,9 +21,9 @@ export interface DemoGrant {
     tools?: ToolCeiling;
     assistants?: string[];
     email: string;
-    role: GrantedRole;
+    tier: GrantedTier;
     areas?: string[];
-    // Whether they run agents and where they edit by hand; absent, what the role meant (sandbox-contract memberAccess).
+    // Whether they run agents and where they edit by hand; absent, what the tier meant (sandbox-contract memberAccess).
     agents?: AgentAccess;
     edit?: EditScope;
     // Whether an emailed code opens the sandbox for them; absent is no, and a grant silent about it keeps the row's.
@@ -44,9 +44,9 @@ interface DemoMember extends DemoGrant {
 const ago = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString();
 
 // The reader's own row, when the demo is read below the owner: the tier it is read as and the rights it was given.
-const readerRow = (role: GrantedRole): DemoMember => {
-    const row: DemoMember = { email: DEMO_USER.email, role, status: `accepted`, invitedAt: ago(60) };
-    if (role !== `maintainer` && demoManages.length > 0) {
+const readerRow = (tier: GrantedTier): DemoMember => {
+    const row: DemoMember = { email: DEMO_USER.email, tier, status: `accepted`, invitedAt: ago(60) };
+    if (tier !== `maintainer` && demoManages.length > 0) {
         row.manages = [...demoManages];
     }
     return row;
@@ -54,23 +54,23 @@ const readerRow = (role: GrantedRole): DemoMember => {
 
 // Three states worth seeing at once: an accepted collaborator, a guest fenced to the one area Maya works in, and an
 // invite still out. A quiet recording (mode.ts `demoQuiet`) is the ordinary team without the fenced guest, whose row
-// carries a fence, an area chip and the persona she talks to: a teammate and an invite are the whole of what sharing is.
+// carries a fence, an area chip and the role she talks to: a teammate and an invite are the whole of what sharing is.
 // Jo's assistants are held to the code host and the error tracker, and Jo's turns to the second Claude subscription: the
 // row says so in its line, and the panel opens on those ticked.
 const roster: DemoMember[] = [
     {
         email: `jo@acme.dev`,
         profile: `engineering`,
-        role: `collaborator`,
+        tier: `collaborator`,
         credentials: { capabilities: [`github`, `sentry`], secrets: [`SENTRY_DSN`] },
         aiAccounts: [`claude:acc_claude_demo_2`],
         status: `accepted`,
         invitedAt: ago(26),
     },
-    ...(demoQuiet() ? [] : [{ email: `sam@acme.dev`, role: `guest` as const, areas: [`support`], status: `accepted` as const, invitedAt: ago(9) }]),
-    { email: `rin@acme.dev`, role: `viewer`, status: `pending`, invitedAt: ago(1) },
+    ...(demoQuiet() ? [] : [{ email: `sam@acme.dev`, tier: `guest` as const, areas: [`support`], status: `accepted` as const, invitedAt: ago(9) }]),
+    { email: `rin@acme.dev`, tier: `viewer`, status: `pending`, invitedAt: ago(1) },
     // Someone the owner made a co-admin, whose access only the owner or Full access changes.
-    ...(demoQuiet() ? [] : [{ email: `max@acme.dev`, role: `maintainer` as const, status: `accepted` as const, invitedAt: ago(40) }]),
+    ...(demoQuiet() ? [] : [{ email: `max@acme.dev`, tier: `maintainer` as const, status: `accepted` as const, invitedAt: ago(40) }]),
     // The reader themselves, when the demo is read below the owner (`?as=`): the roster holds their row too, with the
     // parts of the sandbox they were given (`?manages=`).
     ...(demoTier === `owner` ? [] : [readerRow(demoTier)]),
@@ -102,8 +102,8 @@ export const settleAccess = (email: string): void => {
 
 /** The platform's copy: tier and invite state, never the fence. */
 export const inviteRecords = (): InviteRecord[] =>
-    roster.map(({ email, role, status, invitedAt, manages }) => {
-        const record: InviteRecord = { email, role, status, invitedAt };
+    roster.map(({ email, tier, status, invitedAt, manages }) => {
+        const record: InviteRecord = { email, tier, status, invitedAt };
         if (manages !== undefined) {
             record.manages = [...manages];
         }
@@ -117,7 +117,7 @@ export const grants = (): DemoGrant[] => roster.map(({ status: _status, invitedA
 // The answers a grant leaves on the row, as the real store writes them: sign-in kept when the grant is silent, and no
 // agents or edit answer on a maintainer, whose tier is every answer.
 const answersOf = (
-    role: GrantedRole,
+    tier: GrantedTier,
     answers: { readonly agents?: AgentAccess | undefined; readonly edit?: EditScope | undefined; readonly emailSignIn?: boolean | undefined },
     held: DemoMember | undefined,
 ): Partial<Pick<DemoMember, "agents" | "edit" | "emailSignIn">> => {
@@ -125,7 +125,7 @@ const answersOf = (
     if (answers.emailSignIn ?? held?.emailSignIn === true) {
         kept.emailSignIn = true;
     }
-    if (role === `maintainer`) {
+    if (tier === `maintainer`) {
         return kept;
     }
     if (answers.agents !== undefined) {
@@ -138,8 +138,8 @@ const answersOf = (
 };
 
 // Rights as a grant reads them: a list sets them, absent keeps the row's, and a maintainer stores none.
-const rightsOf = (role: GrantedRole, asked: readonly ManageRight[] | undefined, held: DemoMember | undefined): Pick<DemoMember, "manages"> => {
-    const manages = role === `maintainer` ? [] : (asked ?? held?.manages ?? []);
+const rightsOf = (tier: GrantedTier, asked: readonly ManageRight[] | undefined, held: DemoMember | undefined): Pick<DemoMember, "manages"> => {
+    const manages = tier === `maintainer` ? [] : (asked ?? held?.manages ?? []);
     return manages.length === 0 ? {} : { manages: [...manages] };
 };
 
@@ -148,7 +148,7 @@ const rightsOf = (role: GrantedRole, asked: readonly ManageRight[] | undefined, 
  *  (auth/members/member-row.ts). */
 export const grantAccess = (
     email: string,
-    role: GrantedRole,
+    tier: GrantedTier,
     areas: readonly string[] | undefined,
     credentials?: CredentialReach | `all`,
     answers: {
@@ -166,7 +166,7 @@ export const grantAccess = (
     const aiAccounts = answers.aiAccounts === `all` ? undefined : (answers.aiAccounts ?? held?.aiAccounts);
     const row: DemoMember = {
         email: address,
-        role,
+        tier,
         status: held?.status ?? `pending`,
         invitedAt: held?.invitedAt ?? new Date().toISOString(),
     };
@@ -179,8 +179,8 @@ export const grantAccess = (
     if (aiAccounts !== undefined) {
         row.aiAccounts = [...aiAccounts];
     }
-    Object.assign(row, answersOf(role, answers, held));
-    Object.assign(row, rightsOf(role, answers.manages, held));
+    Object.assign(row, answersOf(tier, answers, held));
+    Object.assign(row, rightsOf(tier, answers.manages, held));
     if (at === -1) {
         roster.push(row);
     } else {
@@ -200,6 +200,8 @@ const demoProfiles: AccessProfileEntry[] = [
     { id: `engineering`, label: `Engineering`, brief: `Build and review with the team’s code tools`, origin: `sandbox`, agents: `run`, credentials: { capabilities: [`github`, `sentry`], secrets: [`SENTRY_DSN`] }, aiAccounts: [`claude:acc_claude_demo_2`], tools: { sandbox: false } },
     { id: `support-chat`, label: `Support assistants`, brief: `Ask the assistants working in support`, origin: `sandbox`, agents: `chat`, areas: [`support`], credentials: { capabilities: [], secrets: [] } },
     { id: `org-reader`, label: `Organisation reader`, brief: `Read and search without commands`, origin: `org`, agents: `run`, tools: { files: `read`, shell: false, code: false } },
+    // What a role may reach is a profile listing it: Owen posts and reads the site, and runs no command.
+    { id: `growth-readonly`, label: `Growth (read-only)`, brief: `Post as the brand, read the marketing site`, origin: `sandbox`, areas: [`site`], tools: { files: `read`, shell: false }, roles: [`owen-growth`] },
 ];
 const demoServices: Service[] = [
     { id: `nightly-review`, label: `Nightly review`, brief: `Review changes overnight`, steward: `ada@acme.dev`, profile: `engineering` },
@@ -220,9 +222,9 @@ const saveDemoProfile = (profile: AccessProfile): AccessProfileSaved => {
     if (at === -1) { demoProfiles.push({ ...profile, origin: `sandbox` }); }
     else { demoProfiles[at] = { ...profile, origin: `sandbox` }; }
     // A profile never manages, so its tier is never a maintainer's; narrowed here rather than asserted.
-    const role = tierOf(profileAccess(profile));
-    if (role === `maintainer`) { return { ok: true, holders: [] }; }
-    const holders = roster.filter((member) => member.profile === profile.id).map((member) => ({ email: member.email, role }));
+    const tier = tierOf(profileAccess(profile));
+    if (tier === `maintainer`) { return { ok: true, holders: [] }; }
+    const holders = roster.filter((member) => member.profile === profile.id).map((member) => ({ email: member.email, tier }));
     for (const holder of holders) { grantProfile(holder.email, profile.id, roster[index(holder.email)]?.emailSignIn); }
     return { ok: true as const, holders };
 };

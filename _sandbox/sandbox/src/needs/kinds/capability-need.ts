@@ -6,7 +6,7 @@ import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.j
 
 // A connection the agent needs, or one it asks a person to take away (docs/architecture/needs.md): answered for the
 // asking turn, not for the sandbox. The three answers that used to come back as "already connected, use it" are each told apart here: a connection for a
-// different site, one this turn's persona or a gate withholds, and one whose credential is being refused.
+// different site, one this turn's role or a gate withholds, and one whose credential is being refused.
 
 export interface CapabilityNeedDeps {
     // Every connectable entry: the static catalog merged with enabled extensions' contributions.
@@ -178,7 +178,7 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
                 title: `Release "${capability.id}" to this conversation`,
             };
         }
-        if (standing !== undefined && standing.withheldByPersona.includes(capability.id)) {
+        if (standing !== undefined && standing.withheldByRole.includes(capability.id)) {
             return {
                 kind: "raise",
                 subject: {
@@ -186,7 +186,7 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
                     subject: "capability",
                     what: capability.id,
                     label: `"${capability.id}" (${entry.name})`,
-                    ...(standing.persona === undefined ? {} : { persona: standing.persona.name }),
+                    ...(standing.role === undefined ? {} : { role: standing.role.name }),
                 },
                 title: `Let this conversation use "${capability.id}"`,
             };

@@ -116,7 +116,7 @@ describe("retargetAs", () => {
         expect(() => retargetAs(personal!, "bo@example.com")).toThrow(/only works on a company/);
     });
 
-    // `gw drive get <id> --as md` was refused on a personal grant, and on a company one impersonated a user called "md".
+    // `gw drive get <id> --as md` was refused on a personal grant, and on a company one imroleted a user called "md".
     it("leaves a value that is no address to the command that reads it", () => {
         expect(retargetAs(personal!, "md")).toBe(personal!);
         expect(retargetAs(company!, "pdf")).toBe(company!);

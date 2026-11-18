@@ -27,9 +27,9 @@ import { useT } from "@intentic/ui/i18n";
 
 // Switcher for every open conversation, hosted by both the docked ChatTabs sheet and the floating rail. Card and
 // lane shell come from RailCard/RailLane; this file only decides which lanes exist, what goes in them, and what
-// each card shows, and emits verbs rather than writing state directly. Every open chat is listed, whatever persona it
-// wears: a persona is a posture a chat takes on, picked in its composer (or by routing), not someone the list is sorted
-// by. Removed (2026-10-13) the grid of persona tiles above the lanes, which scoped them to one persona.
+// each card shows, and emits verbs rather than writing state directly. Every open chat is listed, whatever role it
+// wears: a role is a posture a chat takes on, picked in its composer (or by routing), not someone the list is sorted
+// by. Removed (2026-10-13) the grid of role tiles above the lanes, which scoped them to one role.
 
 const t = useT();
 

@@ -22,7 +22,7 @@ import { badgeMeta } from "./catalog";
 import { shortModelLabel } from "../../../models/providers/shortModelLabel";
 import { type CatalogLoadState, providerDisplayLabel, providerModelsState } from "../../../models/providers/providerCatalog";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import {
     customEntryFor,
     filterEntries,
@@ -267,7 +267,7 @@ const isLocked = (entry: PickerEntry): boolean => !isLead(entry) && !providerRea
 const nothingConnected = computed(() => accessKnown.value && !anyProviderReady() && !nothingYours.value);
 
 // Connecting is Full access's, and that of someone given AI accounts of their own (ChatAccountPanel.vue says why).
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { holds } = useAccess();
 const mayConnect = computed(() => canShip.value || holds(`ownAccounts`));
 // The provider a search names that nothing of is connected yet ("gemini", "google"): its sign-in is what the reader is

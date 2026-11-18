@@ -13,7 +13,7 @@ const TIERS = [`maintainer`, `collaborator`, `viewer`, `guest`] as const;
 // Every screen the rail, the hub and the palette reach, the hub's sections included: a guest's fence and the hub send
 // the ones a tier may not see elsewhere, and that is part of what is checked. Each inside the demo's sandbox, but Home.
 const SANDBOX_TABS = [`usage`, `models`, `agent`, `environment`, `secrets`, `extensions`] as const;
-const LATER_TABS = [`access`, `personas`, `map`, `data-protection`, `activity`] as const;
+const LATER_TABS = [`access`, `roles`, `map`, `data-protection`, `activity`] as const;
 const SCREENS: readonly string[] = [
     demoPage(pages.chat()),
     demoHome(),

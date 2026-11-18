@@ -35,7 +35,7 @@ const sandbox = {
     active: ref<{ token: string } | undefined>({ token: `connect` }),
     activeSandboxId: ref<string | undefined>(`s1`),
     daemonUrl: ref<string | undefined>(`https://daemon.test`),
-    sandboxes: ref([{ id: `s2`, daemonUrl: `https://other.test`, token: `other-connect`, role: `member`, hosted: null }]),
+    sandboxes: ref([{ id: `s2`, daemonUrl: `https://other.test`, token: `other-connect`, tier: `collaborator`, hosted: null }]),
 };
 jest.mock("../useSandbox", () => ({ useSandbox: () => sandbox }));
 

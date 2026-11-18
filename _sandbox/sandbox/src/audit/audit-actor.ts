@@ -7,7 +7,7 @@ import type { Principal } from "../auth/principal.js";
 // is the sandbox's own credential acting, and is named as such rather than as a person.
 export const actorOfCaller = (identity: Caller | undefined, principal: Principal | undefined): AuditActor => {
     if (identity !== undefined) {
-        return { kind: "member", email: identity.email.toLowerCase(), role: identity.role };
+        return { kind: "member", email: identity.email.toLowerCase(), role: identity.tier };
     }
     if (principal !== undefined) {
         return { kind: "token", id: principal.id, label: principal.label };

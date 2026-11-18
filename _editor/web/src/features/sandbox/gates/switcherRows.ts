@@ -14,8 +14,8 @@ export interface RemovalTake {
     readonly note: string;
 }
 
-export const removalTakes = (role: string): readonly RemovalTake[] =>
-    role === `owner`
+export const removalTakes = (tier: string): readonly RemovalTake[] =>
+    tier === `owner`
         ? [
               { icon: `key`, label: t(`sandbox.removeAsk.accounts`), note: t(`sandbox.removeAsk.accountsNote`) },
               { icon: `cog`, label: t(`sandbox.removeAsk.settings`), note: t(`sandbox.removeAsk.settingsNote`) },

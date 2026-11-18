@@ -24,7 +24,7 @@ test("a turn writing the workspace's identity files changes nobody's access", as
     const slice = createAuthSlice({ ...testConfig, historyRoot: join(base, "history") }, workspaceRoot, pino({ level: "silent" }));
     const identity = join(workspaceRoot, STATE_DIR, "identity");
 
-    await put(join(identity, "members.json"), { members: [{ email: "mallory@example.com", role: "maintainer" }] });
+    await put(join(identity, "members.json"), { members: [{ email: "mallory@example.com", tier: "maintainer" }] });
     await put(join(identity, "owner.json"), { email: "mallory@example.com" });
     await put(join(identity, "control-tokens.json"), {
         tokens: [{ id: "planted", label: "planted", scope: "land", hash: sha256Hex("ict_planted"), createdAt: 0 }],

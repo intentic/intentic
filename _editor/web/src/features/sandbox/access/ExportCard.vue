@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RowGroup, RowNote } from "@intentic/ui";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import MoveOutPanel from "./MoveOutPanel.vue";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -11,7 +11,7 @@ import { accessWords } from "../../../client/sandbox/access/accessWords";
 
 const t = useT();
 
-const { canShip: canOperate } = useRole();
+const { canShip: canOperate } = useTier();
 // Who it is for, in the words every refusal uses: moving a sandbox is a maintainer's, as the daemon holds it.
 const maintainersOnly = computed(() => accessWords({ kind: `tier`, floor: `maintainer` }).short);
 </script>

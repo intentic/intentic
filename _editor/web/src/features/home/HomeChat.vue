@@ -14,7 +14,7 @@ import ChatPane from "../chat/panel/ChatPane.vue";
 import HomeChatSlot from "./HomeChatSlot.vue";
 import HomeDetour from "./HomeDetour.vue";
 import { homeViewOf } from "../../lib/routes/homeDetour";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
 import { useWorkspaceTree } from "../../models/workspace/tree/useWorkspaceTree";
@@ -81,8 +81,8 @@ const ledger = computed(() => (conversation.value === undefined ? [] : workLedge
 // What has not reached the workspace yet. Its person never lands anything (the daemon lands and commits whatever the home
 // merged, turn-landing.ts homeOverride), so this says why, and presses nothing: a clash the home is sent back to resolve
 // (`conflict`, the daemon's land/settle/resolve-conflict.ts), one only the person's own uncommitted edits make, which no rebase reaches, or work
-// held for a maintainer because its person may not land here (`ready`, useRole `canLandHome`).
-const { canLandHome } = useRole();
+// held for a maintainer because its person may not land here (`ready`, useTier `canLandHome`).
+const { canLandHome } = useTier();
 const homeCard = computed(() => registry.value.find((agent) => agent.id === conversation.value?.conversationId));
 const heldLine = computed((): string | undefined => {
     const card = homeCard.value;

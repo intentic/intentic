@@ -81,9 +81,9 @@
         "onlyAllowedSitesDaily": "Only the allowed sites and the daily limit are left.",
         "onlyRepoOptional": "Only this repo (optional)",
         "peopleRuleNames": "People rule {index} names",
-        "persona": "Speaks as",
-        "personaAutomationRuns": "Speaks as",
-        "personaRuleAnswers": "Persona rule {index} answers as",
+        "role": "Speaks as",
+        "roleAutomationRuns": "Speaks as",
+        "roleRuleAnswers": "Role rule {index} answers as",
         "pickAtLeastOne": "Pick at least one day.",
         "pickModel": "Pick a model",
         "readGrepGlob": "Read, Grep, Glob",
@@ -108,12 +108,12 @@
         "standard5FieldCron": "Standard 5-field cron: minute hour day month weekday.",
         "starter": "Starter from {recipeNote}.",
         "staysInSandboxOnly": "Stays in your sandbox: only the site key is ever sent to a visitor's browser.",
-        "strangersWritePromptsSaving": "Strangers write these prompts, so saving adds a read-only visitor chat to your personas.",
+        "strangersWritePromptsSaving": "Strangers write these prompts, so saving adds a read-only visitor chat to your roles.",
         "sun": "Sun",
         "then": "Then",
         "theyTalkTo": "Speaks as",
         "thu": "Thu",
-        "toolNamesCommaSeparated": "Tool names, comma-separated. Empty leaves the persona's own list alone.",
+        "toolNamesCommaSeparated": "Tool names, comma-separated. Empty leaves the role's own list alone.",
         "toolNamesJobMay": "Tool names this job may call",
         "tue": "Tue",
         "turnSettles": "A turn settles",
@@ -136,8 +136,8 @@
         "retired": "retired",
         "retiredNeverFires": "Nothing sends this any more: the check that ran after every land is gone, so this automation never fires. Pick one of the moments above, or wake on a failed CI pipeline instead.",
         "othersCaption": {
-            "allow": "Anyone not named is answered as the persona above, which is what this automation did before it had rules.",
-            "hold": "Anyone not named waits in Approvals for you, and runs as the persona above once you say so.",
+            "allow": "Anyone not named is answered as the role above, which is what this automation did before it had rules.",
+            "hold": "Anyone not named waits in Approvals for you, and runs as the role above once you say so.",
             "ignore": "Anyone not named gets no answer. They still show up under “seen recently”, so naming them later is a click."
         },
         "kindCaption": {
@@ -217,7 +217,7 @@
         "aiDisclosure": "Tell visitors replies come from AI",
         "aiDisclosureText": "Custom disclosure (optional)",
         "aiDisclosureDefault": "Replies are written by an AI assistant and may contain mistakes.",
-        "personaGoneHint": "That persona no longer exists, so its wakes would run with no tools and no accounts. Pick another."
+        "roleGoneHint": "That role no longer exists, so its wakes would run with no tools and no accounts. Pick another."
     },
     "automationRow": {
         "alreadyFired": "Already fired",
@@ -295,10 +295,10 @@
         "lastSaw": "What it saw last",
         "lastSawSince": "What it saw last, unchanged since {when}",
         "checkedAt": "Checked {at}",
-        "personaMissing": "Persona gone",
-        "personaMissingNote": "{ids} no longer exists, so its wakes run with no tools and no accounts. Pick another persona.",
+        "roleMissing": "Role gone",
+        "roleMissingNote": "{ids} no longer exists, so its wakes run with no tools and no accounts. Pick another role.",
         "noAccounts": "No accounts",
-        "noAccountsNote": "Its wakes have every tool but none of your signed-in accounts. Pick Full access or a persona if it has to post or browse as you."
+        "noAccountsNote": "Its wakes reach none of your signed-in accounts. Pick All accounts or a role if it has to post or browse as you."
     },
     "automationsView": {
         "addAutomation": "Add an automation",
@@ -466,7 +466,7 @@
         "failing": "Failing",
         "group": "Group",
         "groups": "Groups",
-        "howFiled": "Filed by the group each one names, else by the persona it runs as.",
+        "howFiled": "Filed by the group each one names, else by the role it runs as.",
         "on": "On",
         "show": "Show",
         "total": "Total"
@@ -489,15 +489,15 @@
     },
     "automationLabels": {
         "group": "Group",
-        "groupHint": "Automations in one group share a shelf. Blank files it by its persona.",
+        "groupHint": "Automations in one group share a shelf. Blank files it by its role.",
         "groupOptional": "Group (optional)",
         "groupPlaceholder": "Marketing"
     },
-    "builtInPersonas": {
-        "fullAccess": "Full access",
-        "fullAccessNote": "every tool and every signed-in account",
+    "builtInRoles": {
+        "fullAccess": "All accounts",
+        "fullAccessNote": "every signed-in account",
         "noAccounts": "No accounts",
-        "noAccountsNote": "every tool, no signed-in account"
+        "noAccountsNote": "no signed-in account"
     },
     "scheduleWords": {
         "daysAt": "Every {days} at {times}",
@@ -524,7 +524,7 @@
         "schedule": "Schedule",
         "trigger": "Starts on"
     },
-    "personaProperty": {
+    "roleProperty": {
         "runsAs": "Speaks as"
     },
     "modelProperty": {
@@ -552,10 +552,10 @@
     "groupProperty": {
         "byChore": "A code chore",
         "byNothing": "No group yet",
-        "byPersona": "From its persona",
+        "byRole": "From its role",
         "change": "Change group: {now}",
         "group": "Group",
-        "hint": "Leave blank to file it by its persona.",
+        "hint": "Leave blank to file it by its role.",
         "placeholder": "Marketing"
     },
     "instructionsSection": {
@@ -579,8 +579,8 @@
     },
     "service": {
         "runsAs": "Runs as",
-        "owner": "Owner (limited only by its persona)",
-        "authority": "Authority: the steward’s access, narrowed by its profile. Personas only narrow this further.",
+        "owner": "Owner (limited only by its role)",
+        "authority": "Authority: the steward’s access, narrowed by its profile. Roles only narrow this further.",
         "inherit": "Same as automation",
         "steward": "Steward: {email}",
         "stewardLimits": "All steward access",

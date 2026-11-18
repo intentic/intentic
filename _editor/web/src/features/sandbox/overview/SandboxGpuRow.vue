@@ -9,14 +9,14 @@ import { Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, useId } from "vue";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import OverviewSettingRow from "./OverviewSettingRow.vue";
 
 const t = useT();
 
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { settings, patch, refusal, save } = useSandboxSettings();
 const { capabilities } = useCapabilities();
 

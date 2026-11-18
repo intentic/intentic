@@ -26,7 +26,7 @@ afterEach(() => {
 
 // A connected tab of this member's, in use unless it has gone idle.
 const tab = (clientId: string, email: string, state: "in use" | "idle" = "in use"): void => {
-    leaving.push(registerPresence(clientId, { email, role: "collaborator" }));
+    leaving.push(registerPresence(clientId, { email, tier: "collaborator" }));
     if (state === "idle") {
         updatePresence({ email }, { clientId, idle: true });
     }
@@ -55,7 +55,7 @@ const stubSends = (): { readonly endpoint: string; readonly payload: string }[] 
 };
 
 // Everyone a test names is on the roster, unfenced, `own…` as the sandbox's owner; a test about who is narrows it.
-const EVERYONE_ON_IT: PushRoster = { callerOf: (email) => ({ email, role: email.startsWith("own") ? "owner" : "collaborator" }) };
+const EVERYONE_ON_IT: PushRoster = { callerOf: (email) => ({ email, tier: email.startsWith("own") ? "owner" : "collaborator" }) };
 const sender = (store: PushStore, roster: PushRoster = EVERYONE_ON_IT) => createPushSender(store, pino({ level: "silent" }), async () => roster);
 const ADA_AND_BOB: Audience = peopleAudience(["ada@example.com", "bob@example.com"]);
 const BOB: Audience = peopleAudience(["bob@example.com"]);
@@ -119,9 +119,9 @@ test("a conversation's news never reaches a guest, a member fenced away from it,
     const roster: PushRoster = {
         callerOf: (email) =>
             ({
-                "ada@example.com": { email, role: "collaborator" as const },
-                "guest@example.com": { email, role: "guest" as const, areas: ["support"] },
-                "fenced@example.com": { email, role: "writer" as const, areas: ["finance"] },
+                "ada@example.com": { email, tier: "collaborator" as const },
+                "guest@example.com": { email, tier: "guest" as const, areas: ["support"] },
+                "fenced@example.com": { email, tier: "writer" as const, areas: ["finance"] },
             })[email],
     };
     const store = storeOf(
@@ -140,7 +140,7 @@ test("a conversation's news never reaches a guest, a member fenced away from it,
 test("the sandbox's own news reaches its owner and maintainers, never a collaborator, and says why when nobody has a device", async () => {
     const reached = stubSends();
     const roster: PushRoster = {
-        callerOf: (email) => (email === "own@example.com" ? { email, role: "owner" } : email === "max@example.com" ? { email, role: "maintainer" } : { email, role: "collaborator" }),
+        callerOf: (email) => (email === "own@example.com" ? { email, tier: "owner" } : email === "max@example.com" ? { email, tier: "maintainer" } : { email, tier: "collaborator" }),
     };
     const store = storeOf(device("https://push.example/own", "own@example.com"), device("https://push.example/max", "max@example.com"), device("https://push.example/bob", "bob@example.com"));
     const disk = diskLow("critical", { level: "critical", freeBytes: 1, totalBytes: 100, measuredAt: 0, using: [] });

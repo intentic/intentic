@@ -12,7 +12,7 @@ import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // WHO MAY ACT ON ONE OF THE OWNER'S COMPUTERS FROM A SHELL IN THE SANDBOX: the `devices` command's routes (push a build,
 // start it, reach its ports). Two callers, one rule each:
-// - an agent's shell: the conversation it names must have a live turn that mounts that computer, so a persona that
+// - an agent's shell: the conversation it names must have a live turn that mounts that computer, so a role that
 //   withholds a computer withholds these too;
 // - a run the owner started from the editor (`runs.start`): its terminal carries a grant minted for that one computer,
 //   which ends with the run.

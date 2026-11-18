@@ -24,7 +24,7 @@ const slug = useServingSlug();
 
 // Minted only while this is on screen and only for the owner of a sandbox on their own machine: the code lets that
 // machine's run report back here.
-const wanted = computed(() => active.value?.role === `owner` && active.value.hosted === null);
+const wanted = computed(() => active.value?.tier === `owner` && active.value.hosted === null);
 const code = useFixCode(activeSandboxId, wanted);
 
 // The machine's own OS when it reported one, shown first; the shared preference otherwise.

@@ -129,7 +129,7 @@ export const createAgentsRoutes = (services: Services) => {
             const now = Date.now();
             const agents = services.agents.list().flatMap((agent) => framedSummary(caller, agent, now) ?? []);
             const reads = conversationReader(caller, registryProvenance(services.agents));
-            const held = caller?.role === "guest" ? [] : (await services.heldWakes.list()).filter((wake) => reads(wake.conversationId));
+            const held = caller?.tier === "guest" ? [] : (await services.heldWakes.list()).filter((wake) => reads(wake.conversationId));
             return { agents, rev: services.agents.revision(), held };
         }),
         // Off `list` by construction, pulled on demand since /events never carries it; newest-archived first
@@ -381,7 +381,7 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         seenAll: i.seenAll.handler(async ({ context }) => {
             const caller = context.identity;
-            if (caller?.role === "guest") {
+            if (caller?.tier === "guest") {
                 // Only its own: "all" for a guest is the roster it can see.
                 for (const agent of services.agents.list().filter((entry) => visibleTo(caller, entry))) {
                     await services.agents.markSeen(agent.id, Date.now());

@@ -130,7 +130,7 @@ const DREAMING_ID = "dreaming-session";
 // Threshold is sessions, not days: a quiet week undercounts and a busy day can meet it.
 const DREAMING_SESSIONS_FLOOR = 30;
 
-// Four levers: persona context, allowed reach, what's installed, what it's told.
+// Four levers: role context, allowed reach, what's installed, what it's told.
 const DREAMING_PROMPT =
     `Dream about how this sandbox works, and change one thing about it.\n\n` +
     `Under this brief is the list of sessions somebody has run here since you last did this: id, title, when, how ` +
@@ -139,9 +139,9 @@ const DREAMING_PROMPT =
     `than an anecdote: what this sandbox is actually asked for, where the same ground is covered from cold every time, ` +
     `and where the owner has had to correct the same thing more than once.\n\n` +
     `Then pick ONE improvement, the most substantial one available, in one of these four areas:\n` +
-    `- PERSONAS. A category of job that keeps coming back deserves a card that starts it with the right context, the ` +
+    `- ROLES. A category of job that keeps coming back deserves a card that starts it with the right context, the ` +
     `right accounts and the right corner of the workspace, instead of the whole toolbox and a cold read. Create one, ` +
-    `sharpen one, or delete one no session has needed (.intentic/config/personas.json, and the Personas page draws it).\n` +
+    `sharpen one, or delete one no session has needed (.intentic/config/roles.json, and the Roles page draws it).\n` +
     `- A CAPABILITY TO ASK FOR. Something you kept working around because this sandbox is not connected to it: a ` +
     `service, an account, one of the owner's own machines. Raise it with the \`capabilities\` skill, so it arrives as a ` +
     `card they can approve, and say which sessions it would have changed.\n` +

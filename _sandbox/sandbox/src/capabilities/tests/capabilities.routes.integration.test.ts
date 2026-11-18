@@ -17,7 +17,7 @@ import { tempWorkspace } from "../../harness/route-fakes.testing.js";
 import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspacePath } from "../../workspace/files/workspace-files.js";
 import { fakeFiles } from "../../workspace/workspace-slice.testing.js";
 import { services } from "../../harness/route-services.testing.js";
-import { memoryPersonasStore } from "../../harness/route-stores.testing.js";
+import { memoryRolesStore } from "../../harness/route-stores.testing.js";
 import { testConfig } from "../../env.config.testing.js";
 import { memoryCapabilitiesStore, memoryDismissalsStore } from "../capabilities-slice.testing.js";
 import { capabilitiesDocument, fileCapabilitiesStore } from "../capabilities-store.js";
@@ -67,12 +67,12 @@ test("capabilities.dismiss takes a recommendation off the catalog and records wh
 // Preserve the browser profile and its accounts across capability renames.
 test("capabilities.rename carries the browser profile and repoints everything that named the old id", async () => {
     const workspace = tempWorkspace([]);
-    const personas = memoryPersonasStore([{ id: "front", capabilities: ["me", "reddit"] }]);
+    const roles = memoryRolesStore([{ id: "front", capabilities: ["me", "reddit"] }]);
     const client = clientFor(
         createApp(
             services({
                 workspace,
-                personas,
+                roles,
                 capabilities: memoryCapabilitiesStore([
                     { id: "me", kind: "identity", config: { email: "ada@example.com", openAccounts: "off" } },
                     { id: "reddit", kind: "browser", config: { platform: "reddit", identity: "me" } },
@@ -88,9 +88,9 @@ test("capabilities.rename carries the browser profile and repoints everything th
 
     const { capabilities } = await client.capabilities.list();
     expect(capabilities.map((capability) => capability.id).toSorted()).toEqual(["ada", "reddit"]);
-    // The account still lives in that identity's browser, and the persona still speaks through both.
+    // The account still lives in that identity's browser, and the role still speaks through both.
     expect(capabilities.find((capability) => capability.id === "reddit")?.config["identity"]).toBe("ada");
-    expect((await personas.get("front"))?.capabilities).toEqual(["ada", "reddit"]);
+    expect((await roles.get("front"))?.capabilities).toEqual(["ada", "reddit"]);
     // Still signed in, under the new name: profile and marker both followed.
     expect(hasSession(workspace.root, "ada")).toBe(true);
     expect(hasSession(workspace.root, "me")).toBe(false);

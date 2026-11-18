@@ -14,7 +14,7 @@ const readable = (caller: Caller | undefined): (string | undefined)[] => {
     const reads = conversationReader(caller, (id) => conversations.get(id));
     return ids.filter((id) => reads(id));
 };
-const member = (role: Caller["role"]): Caller => ({ email: `${role}@example.com`, role });
+const member = (role: Caller["tier"]): Caller => ({ email: `${role}@example.com`, tier: role });
 
 test("the owner, a maintainer and the owner's own tools read every conversation, and words tied to none", () => {
     expect(readable(undefined)).toEqual(ids);
@@ -26,11 +26,11 @@ test("the owner, a maintainer and the owner's own tools read every conversation,
 test("anyone else reads only conversations the roster shows them, never words tied to none", () => {
     expect(readable(member("viewer"))).toEqual(["guest-own", "finance", "everywhere"]);
     expect(readable({ ...member("writer"), areas: ["finance"] })).toEqual(["guest-own", "finance"]);
-    expect(readable({ email: "gus@example.com", role: "guest", areas: ["finance"] })).toEqual(["guest-own"]);
+    expect(readable({ email: "gus@example.com", tier: "guest", areas: ["finance"] })).toEqual(["guest-own"]);
 });
 
 test("only an unfenced member who is not a guest sees the whole fleet", () => {
     expect(seesWholeFleet(member("viewer"))).toBe(true);
     expect(seesWholeFleet({ ...member("viewer"), areas: ["finance"] })).toBe(false);
-    expect(seesWholeFleet({ email: "gus@example.com", role: "guest", areas: ["finance"] })).toBe(false);
+    expect(seesWholeFleet({ email: "gus@example.com", tier: "guest", areas: ["finance"] })).toBe(false);
 });

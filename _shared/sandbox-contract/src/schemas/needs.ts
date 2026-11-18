@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { KeyringShareModeSchema } from "./keyring.js";
 import { AutomationSchema } from "./automations.js";
+import { entryId } from "./internal.js";
 
 // A need: something an agent cannot finish its task without that only a person can provide (a connection, a secret's
 // value, wider reach, a tool in the image). Unlike a parked card it outlives the turn that raised it: the sandbox keeps
@@ -92,7 +93,7 @@ export type SecretNeed = z.infer<typeof SecretNeedSchema>;
 export const GrantSubjectSchema = z
     .enum(["capability", "folder", "shelf", "site"])
     .describe(
-        "A connected capability the persona leaves out, a folder outside the conversation's reach, a whole shelf of tools, or a site in the person's own browser, which only their browser extension can allow.",
+        "A connected capability the conversation's role or access leaves out, a folder outside its reach, a whole shelf of tools, or a site in the person's own browser, which only their browser extension can allow.",
     );
 export type GrantSubject = z.infer<typeof GrantSubjectSchema>;
 
@@ -109,18 +110,36 @@ export const GRANT_SHELVES = ["files", "shell", "code", "web", "browser", "deleg
 export const GrantShelfSchema = z.enum(GRANT_SHELVES);
 export type GrantShelf = z.infer<typeof GrantShelfSchema>;
 
+// How far a yes went on a grant answered before 2026-11-18, when a card could lift what a role (then called a persona)
+// withheld. Kept so those needs still read, under the words they were stored with; nothing answers with it any more.
 export const GrantScopeSchema = z
     .enum(["conversation", "persona"])
-    .describe("How far a yes goes: this conversation only, or the persona itself, for every conversation that wears it.");
+    .describe("How far a yes went, on a need answered before a role's limits became access: this conversation only, or the role itself (stored as `persona`).");
 export type GrantScope = z.infer<typeof GrantScopeSchema>;
 
+// A role a grant need offers to switch the conversation to: one whose access allows what was asked for.
+export const GrantRoleSchema = z.object({
+    id: entryId.describe("The role's id, or a built-in's."),
+    label: z.string().describe("Its name on screen."),
+});
+export type GrantRole = z.infer<typeof GrantRoleSchema>;
+
+// What a role withholds is access (docs/architecture/access.md), and no card lifts access. What a card offers instead
+// is to switch the conversation to a role that has it: `roles` lists them, and the answer names one.
 export const GrantNeedSchema = z.object({
     kind: z.literal("grant"),
     subject: GrantSubjectSchema,
     what: z.string().min(1).describe("The capability's id, the folder, or the shelf."),
     label: z.string().describe("What it is, in the daemon's words: the account and its kind, the folder, the shelf's name."),
-    persona: z.string().optional().describe("The persona that withholds it, when one does."),
-    scope: GrantScopeSchema.optional().describe("How far the yes went, once there was one."),
+    // Stored as `persona` until 2026-11-18 (needs-store.ts converts it).
+    role: z.string().optional().describe("The role that withholds it, when one does."),
+    // Added 2026-11-18, optional: a need raised before offered a grant instead.
+    roles: z
+        .array(GrantRoleSchema)
+        .max(50)
+        .optional()
+        .describe("The roles whose access allows it, any of which the conversation may be switched to. Empty or absent for a site."),
+    scope: GrantScopeSchema.optional().describe("How far the yes went, on a need answered before roles were switched instead."),
 });
 export type GrantNeed = z.infer<typeof GrantNeedSchema>;
 
@@ -141,7 +160,7 @@ export type EnvironmentNeed = z.infer<typeof EnvironmentNeedSchema>;
 
 // What its check sees today, run once as the automation was proposed, so the person deciding reads the watch working
 // rather than a promise that it would. Absent for a guard command, which the agent ran itself before asking: run here
-// it would carry the proposed persona's credentials before anyone approved them.
+// it would carry the proposed role's credentials before anyone approved them.
 export const AutomationFirstCheckSchema = z.object({
     pass: z.boolean().describe("Whether the check passes today, which for a watch waiting on one thing means it would fire at once."),
     saw: z.string().describe("What it saw, or what it is still waiting for."),
@@ -195,7 +214,7 @@ export const NeedSchema = z.object({
 export type Need = z.infer<typeof NeedSchema>;
 
 // What an agent may send: the kind and what it can know about it. Names, titles and every other field the card shows are
-// the daemon's to fill in, from the catalog, the persona, the gate policy.
+// the daemon's to fill in, from the catalog, the role, the gate policy.
 export const NeedAskSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("capability"),
@@ -259,7 +278,8 @@ export const NeedAnswerSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("accept") }),
     // A change to a connected capability's settings, or its removal, applied as the card showed it.
     z.object({ kind: z.literal("apply") }),
-    z.object({ kind: z.literal("grant"), scope: GrantScopeSchema }),
+    // 2026-11-18: was `{ scope }`, a yes that lifted what the role withheld; now the role the conversation switches to.
+    z.object({ kind: z.literal("grant"), role: entryId.describe("Which of the need's roles the conversation switches to.") }),
     z.object({ kind: z.literal("release") }),
     z.object({ kind: z.literal("approve") }),
 ]);
@@ -335,12 +355,10 @@ export const BrokerRulePassSchema = z.object({
 });
 export type BrokerRulePass = z.infer<typeof BrokerRulePassSchema>;
 
-// What a person allowed one conversation beyond its persona and area, from a grant need's card
-// (personas/conversation-grants.ts). Honoured from that conversation's next turn on, and revocable on the Grants page.
+// What a person allowed one conversation (roles/conversation-grants.ts), revocable on the Grants page. Each is a
+// release inside its access, never a widening of it: until 2026-11-18 it also held capabilities, folders and shelves a
+// card lifted past the conversation's role, retired when a role's limits became access.
 export const ConversationGrantSchema = z.object({
-    capabilities: z.array(z.string()).default([]).describe("Connected capabilities it may use although its persona leaves them out."),
-    folders: z.array(z.string()).default([]).describe("Workspace folders its file tools may touch beyond its fence."),
-    shelves: z.array(GrantShelfSchema).default([]).describe("Shelves of tools opened for it."),
     // Answered on an install card's "Allow installs for this conversation", read live by the command gate, so it holds
     // from the install that asked onward, this turn included, and across restarts.
     installs: z
@@ -400,15 +418,12 @@ export const OwnerGrantSchema = z.discriminatedUnion("kind", [
 ]);
 export type OwnerGrant = z.infer<typeof OwnerGrantSchema>;
 
-// Every yes still standing, by conversation: what its grants widened past its persona or area, and which gated
-// credentials a named person released to it. Reviewed and taken back from Needs you.
+// Every yes still standing, by conversation, and which gated credentials a named person released to it. Reviewed and
+// taken back from Needs you.
 export const StandingGrantsSchema = z.object({
     conversations: z.array(
         z.object({
             conversationId: z.string(),
-            capabilities: z.array(z.string()).describe("Connected capabilities allowed although its persona leaves them out."),
-            folders: z.array(z.string()).describe("Workspace folders its file tools may touch beyond its fence."),
-            shelves: z.array(GrantShelfSchema).describe("Shelves of tools opened for it."),
             installs: z.boolean().default(false).describe("Whether its own dependency installs run without asking."),
             secrets: z.array(z.string()).default([]).describe("Secrets it may send past their host guard without asking."),
             everything: z.boolean().default(false).describe("Whether every request an allow-once could settle is allowed without asking."),
@@ -434,13 +449,11 @@ export type StandingGrants = z.infer<typeof StandingGrantsSchema>;
 export const ConversationGrantRevokeSchema = z.object({
     conversationId: z.string(),
     kind: z
-        .enum(["capability", "folder", "shelf", "release", "install", "secret", "everything", "rule"])
+        .enum(["release", "install", "secret", "everything", "rule"])
         .describe(
-            "Which kind of yes: a grant past the persona or area, a credential's release, letting its installs run unasked, a secret sent past its host guard, allowing everything, or a credential gateway rule that stopped asking.",
+            "Which kind of yes: a credential's release, letting its installs run unasked, a secret sent past its host guard, allowing everything, or a credential gateway rule that stopped asking.",
         ),
-    what: z
-        .string()
-        .describe("The capability id, folder, shelf, released credential or secret it named, or the rule's identity; empty for installs and everything."),
+    what: z.string().describe("The released credential or secret it named, or the rule's identity; empty for installs and everything."),
     capability: z.string().optional().describe("For a rule, the capability whose rule it is; a rule's identity alone does not say."),
 });
 export type ConversationGrantRevoke = z.infer<typeof ConversationGrantRevokeSchema>;

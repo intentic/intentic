@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import { unstubbed } from "@intentic/testing";
 import { createApp } from "../app.js";
 import type { ProvenCaller } from "../auth/auth.js";
@@ -39,7 +39,7 @@ const TREE = {
 const guest = async (): Promise<{
     readonly client: ReturnType<typeof clientFor>;
     readonly app: ReturnType<typeof createApp>;
-    readonly actAs: (role: MemberRole, areas?: readonly string[]) => void;
+    readonly actAs: (role: MemberTier, areas?: readonly string[]) => void;
     readonly setCaller: (caller: ProvenCaller) => void;
 }> => {
     let caller = proven(`ada@example.com`, `owner`);

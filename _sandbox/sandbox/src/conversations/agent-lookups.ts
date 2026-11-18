@@ -6,7 +6,7 @@ import type { Services } from "../composition.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
 
 /* How every route on the board addresses one conversation (agents.routes.ts): unknown is NOT_FOUND, and one the caller
- * may not reach is FORBIDDEN (auth/fleet-scope.ts). A route's role floor says what a caller may do, never to whose
+ * may not reach is FORBIDDEN (auth/fleet-scope.ts). A route's tier floor says what a caller may do, never to whose
  * conversation, so no route reads or acts on an id without one of these.
  *
  * Two reaches, since a private conversation's words are its readers' and its work is everyone's who is shown its card

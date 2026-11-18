@@ -90,7 +90,7 @@ describe(`the rows the editor lists`, () => {
             removedAt: null,
             removedBy: null,
             token: null,
-            role: `owner`,
+            tier: `owner`,
             providedAddress: false,
             localHostname: null,
             hosted: null,

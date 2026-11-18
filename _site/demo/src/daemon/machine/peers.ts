@@ -125,7 +125,7 @@ export const syncRunnerDefinition = async (id: string): Promise<RawJsonOutput<`P
     // Settings only: an overlay difference still needs a rebuild, so it stays listed.
     runner.drift = (runner.drift ?? []).filter((line) => !line.subject.startsWith(`Setting`));
     pushDomains(`runners`);
-    return { settings: [`timezone`, `skills`, `personaRouting`, `chatPages`] };
+    return { settings: [`timezone`, `skills`, `roleRouting`, `chatPages`] };
 };
 
 // Phones: none paired at first. Adding the Android card mints a pairing, and the recording's Pixel scans its code a

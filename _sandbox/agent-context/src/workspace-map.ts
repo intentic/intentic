@@ -338,7 +338,7 @@ const areaDirsOf = (projectRoot: string, tree: Tree): AreaDir[] => {
 export interface WorkspaceMapInput {
     // The workspace root, for the sibling line and as the floor of the climb.
     readonly root: string;
-    // Where this run actually starts, a persona's start folder, an isolated worktree, or the root.
+    // Where this run actually starts, a role's start folder, an isolated worktree, or the root.
     readonly cwd: string;
     // How the reader should find an exact path, as the note names it; the sandbox has rg on every PATH, a plain Claude
     // Code install may not.

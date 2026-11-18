@@ -53,11 +53,11 @@ test("a session name tmux could read as a flag is refused", () => {
 
 test("with auth, a maintainer's ticket opens for that member, and anything less is refused and logged", () => {
     const withAuth = deps({ auth: {} });
-    const ticket = withAuth.wsTickets.mint({ email: "Maintainer@Example.com", role: "maintainer" });
+    const ticket = withAuth.wsTickets.mint({ email: "Maintainer@Example.com", tier: "maintainer" });
     expect(planTerminal(withAuth, `ticket=${ticket}&session=web-1`)).toMatchObject({ member: "maintainer@example.com", plan: { plan: "session", name: "web-1" } });
     // Spent: the same ticket never opens a second socket.
     expect(planTerminal(withAuth, `ticket=${ticket}&session=web-1`).plan).toEqual({ plan: "refused", code: 1008, reason: "unauthorized" });
-    const collaborator = withAuth.wsTickets.mint({ email: "c@example.com", role: "collaborator" });
+    const collaborator = withAuth.wsTickets.mint({ email: "c@example.com", tier: "collaborator" });
     expect(planTerminal(withAuth, `ticket=${collaborator}&session=web-1`)).toEqual({
         answer: "terminal",
         plan: { plan: "refused", code: 1008, reason: "unauthorized" },

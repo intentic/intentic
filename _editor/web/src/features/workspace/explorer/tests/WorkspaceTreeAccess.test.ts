@@ -41,10 +41,10 @@ jest.mock("../../../../client/sandbox/sandboxRpc", () => {
 // Signed-in member's tier, switched per test; mocked directly since the subject is what the explorer does with it.
 // The tier that writes is `writer`, below the operating one: a collaborator is read-only in the tree.
 const role = { canWrite: false };
-jest.mock("../../../../client/sandbox/useRole", () => {
+jest.mock("../../../../client/sandbox/useTier", () => {
     return {
-        useRole: () => ({
-            role: computed(() => (role.canWrite ? `writer` : `collaborator`)),
+        useTier: () => ({
+            tier: computed(() => (role.canWrite ? `writer` : `collaborator`)),
             canDrive: computed(() => true),
             canWrite: computed(() => role.canWrite),
             canShip: computed(() => false),
@@ -58,7 +58,7 @@ const realMembers = { ...(await import("../../../../client/sandbox/useMembers"))
 jest.mock("../../../../client/sandbox/useMembers", () => ({
     ...realMembers,
     selfMember: () =>
-        computed(() => (role.canWrite ? { role: `writer`, agents: `off`, edit: `all` } : { role: `collaborator`, agents: `run`, edit: `none` })),
+        computed(() => (role.canWrite ? { tier: `writer`, agents: `off`, edit: `all` } : { tier: `collaborator`, agents: `run`, edit: `none` })),
 }));
 
 const { default: WorkspaceTree } = await import("../WorkspaceTree.vue");

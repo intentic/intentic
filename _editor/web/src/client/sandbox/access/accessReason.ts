@@ -1,4 +1,4 @@
-import { type MemberRole, MemberRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
+import { type MemberTier, MemberTierSchema } from "@intentic/sandbox-contract/schemas/shared";
 import type { MemberRefusal } from "@intentic/sandbox-contract/protocol/member-reach";
 import { readRefusalsWith } from "../../../lib/queryPersistence";
 import { type RefusalWords, SandboxHttpError } from "../sandboxHttpError";
@@ -10,7 +10,7 @@ import { type RefusalWords, SandboxHttpError } from "../sandboxHttpError";
 // organisation managing that part of the sandbox. One answer
 // whether the editor foresaw the refusal (access/useAccess.ts) or the daemon made it, so a view draws both alike.
 export type AccessReason =
-    | { readonly kind: `tier`; readonly floor: MemberRole }
+    | { readonly kind: `tier`; readonly floor: MemberTier }
     | { readonly kind: `agents-off` }
     | { readonly kind: `guest` }
     | { readonly kind: `area` }
@@ -48,7 +48,7 @@ export const reasonOfAnswer = (status: number, said: RefusalWords): AccessReason
     if (reason === `guest` || reason === `agents-off` || reason === `area` || reason === `sealed`) {
         return { kind: reason };
     }
-    const tier = MemberRoleSchema.safeParse(floor);
+    const tier = MemberTierSchema.safeParse(floor);
     return tier.success ? { kind: `tier`, floor: tier.data } : undefined;
 };
 

@@ -11,7 +11,7 @@ jest.mock(`@tanstack/vue-query`, () => ({
     useQueryClient: () => ({ invalidateQueries: async () => undefined }),
     useMutation: () => ({}),
 }));
-jest.mock(`../../client/sandbox/useRole`, () => ({ useRole: () => ({ canShip: computed(() => role.value === `owner` || role.value === `maintainer`) }) }));
+jest.mock(`../../client/sandbox/useTier`, () => ({ useTier: () => ({ canShip: computed(() => role.value === `owner` || role.value === `maintainer`) }) }));
 jest.mock(`../../client/sandbox/useSandboxQuery`, () => ({
     useSandboxQuery: (options: { enabled?: { value: boolean } }) => {
         asked.push(options);

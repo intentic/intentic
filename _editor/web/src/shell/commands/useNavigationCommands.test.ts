@@ -26,8 +26,8 @@ jest.mock(`../../models/extensions/usePanels`, () => {
 jest.mock(`../../models/capabilities/useCapabilities`, () => {
     return { useCapabilities: () => ({ capabilities: ref([]), loaded: ref({ state: `ready`, data: {}, refreshing: false, refreshError: undefined }) }) };
 });
-jest.mock(`../../client/sandbox/useRole`, () => {
-    return { useRole: () => ({ canShip: ref(state.canShip), isGuest: ref(false), homeOnly: ref(false) }) };
+jest.mock(`../../client/sandbox/useTier`, () => {
+    return { useTier: () => ({ canShip: ref(state.canShip), isGuest: ref(false), homeOnly: ref(false) }) };
 });
 jest.mock(`../../models/hosted-plan/useHostedPlan`, () => {
     return { useHostedPlan: () => ({ offered: ref(state.planOffered) }) };

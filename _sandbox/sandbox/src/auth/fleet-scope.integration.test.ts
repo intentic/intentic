@@ -1,5 +1,5 @@
 import type { ContractRouterClient } from "@orpc/contract";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { sandboxContract } from "@intentic/sandbox-contract";
 
 import { createApp } from "../app.js";
@@ -9,12 +9,12 @@ import { memoryAreasStore } from "../harness/route-stores.testing.js";
 import { runAgentTurn } from "../harness/route-turns.testing.js";
 
 // A guest over the daemon's own HTTP surface: it drives its own conversations through the cards its areas reach and is
-// shown nothing else. The rules are fleet-scope.test.ts and personas/persona-reach.test.ts; what is pinned here is
+// shown nothing else. The rules are fleet-scope.test.ts and roles/role-reach.test.ts; what is pinned here is
 // that every route a guest may reach applies them, reading the verified caller and never the body.
 
 const board = (): {
     readonly client: ContractRouterClient<typeof sandboxContract>;
-    readonly actAs: (email: string, role?: MemberRole, areas?: readonly string[]) => void;
+    readonly actAs: (email: string, role?: MemberTier, areas?: readonly string[]) => void;
 } => {
     let caller = proven(`ada@example.com`, `owner`);
     const app = createApp(
@@ -22,7 +22,7 @@ const board = (): {
             auth: { authorize: async () => caller, authorizeOwner: rejectForbidden },
             ownerEmail: async () => `ada@example.com`,
             members: {
-                list: async () => [{ email: `dee@example.com`, role: `guest`, areas: [`support`] }],
+                list: async () => [{ email: `dee@example.com`, tier: `guest`, areas: [`support`] }],
                 add: async () => {},
                 remove: async () => {},
             },
@@ -44,8 +44,8 @@ const board = (): {
 // areas, which is what hands it that card and nothing of the owner's work.
 const seeded = async (): Promise<ReturnType<typeof board>> => {
     const b = board();
-    await b.client.personas.save({ id: `support`, capabilities: [], workspace: { startIn: `support` } });
-    await b.client.personas.save({ id: `sales`, capabilities: [], workspace: { startIn: `sales` } });
+    await b.client.roles.save({ id: `support`, capabilities: [], workspace: { startIn: `support` } });
+    await b.client.roles.save({ id: `sales`, capabilities: [], workspace: { startIn: `sales` } });
     await runAgentTurn(b.client, { prompt: "owner's work", conversationId: "owners", isolated: true });
     b.actAs(`dee@example.com`, `guest`, [`support`]);
     return b;
@@ -77,9 +77,9 @@ test("a guest speaks only through a card its areas reach, and then owns what it 
 
 test("a guest is shown the cards its areas reach and no other", async () => {
     const { client, actAs } = await seeded();
-    expect((await client.personas.list()).personas.map((card) => card.id)).toEqual(["support"]);
+    expect((await client.roles.list()).roles.map((card) => card.id)).toEqual(["support"]);
     actAs(`ada@example.com`, `owner`);
-    expect((await client.personas.list()).personas.map((card) => card.id)).toEqual(["support", "sales"]);
+    expect((await client.roles.list()).roles.map((card) => card.id)).toEqual(["support", "sales"]);
 });
 
 // The fence the conversation was born with has to ride its summary, since that is the object the board filters: a

@@ -42,7 +42,7 @@ export interface Selection {
     readonly auto: boolean;
     // The next turn's model was chosen by Auto's reading; describes ONE turn, spent when that turn takes its settings.
     readonly autoPicked: boolean;
-    // Persona this chat acts as externally, or undefined for the ordinary chat with every account.
+    // Role this chat acts as externally, or undefined for the ordinary chat with every account.
     readonly actsAs: string | undefined;
     // The project the conversation was started under (app/projectScope.ts); sent with the first turn and latched there.
     readonly startIn: string | undefined;
@@ -136,7 +136,7 @@ export type PickAction =
     // One picker row is provider + model; the harness is its own axis, so a model pick keeps it. `account` is a credential
     // row picked across providers (an account of the sign-in a key is filed under, PickerAccounts): picked with it.
     | { readonly kind: `selectModel`; readonly pick: TurnPick; readonly account?: string }
-    // A persona's model as the CARD's choice, not the user's: nothing is remembered, and nothing owed back later.
+    // A role's model as the CARD's choice, not the user's: nothing is remembered, and nothing owed back later.
     | { readonly kind: `wearModel`; readonly pin: ModelPin }
     // The app's own swap off a model the provider no longer lists, owing it back (restoreModel).
     | { readonly kind: `displaceModel`; readonly model: string }
@@ -158,7 +158,7 @@ export type PickAction =
     | { readonly kind: `adopt`; readonly from: Selection }
     // A past Claude session from the history menu, resumed on the default account from the main tree's posture.
     | { readonly kind: `resumeHistory`; readonly sessionId: string }
-    // Picks written outright, with no rule of their own: a restored tab, a route's or a persona's answer. `seededModel`
+    // Picks written outright, with no rule of their own: a restored tab, a route's or a role's answer. `seededModel`
     // says the model written was a seed in the chat it came from (a restored draft nobody named one in), not a pick.
     | { readonly kind: `set`; readonly picks: Partial<Picks>; readonly seededModel?: boolean }
     // A turn went out, a held turn re-ran, a turn settled, a turn took its settings.
@@ -351,7 +351,7 @@ const REDUCERS: Reducers = {
         return {
             selection: {
                 ...moved.selection,
-                // Named, whoever named it: a persona's card or Auto's own reading answers the question Auto asks.
+                // Named, whoever named it: a role's card or Auto's own reading answers the question Auto asks.
                 auto: false,
                 model: pin.model,
                 modelSeeded: false,

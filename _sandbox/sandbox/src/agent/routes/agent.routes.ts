@@ -20,7 +20,7 @@ import { speakerOf, spokenBy } from "../../seams/turn-speaker.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { runToAttach } from "./next-run.js";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
-import { assistantsOf, refuseUnlessReachable } from "../../personas/persona-reach.js";
+import { assistantsOf, refuseUnlessReachable } from "../../roles/role-reach.js";
 import { opt } from "../../opt.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
 import { applyReply } from "../run/turn/turn-interactions.js";
@@ -375,9 +375,9 @@ export const createAgentRoutes = (services: Services) => {
             const [filed, switchOffs] = await Promise.all([services.providerRefusals.onFile(), services.providerRefusals.everySwitchOff()]);
             return { refusals: Object.fromEntries(Object.entries(filed).map(([provider, refusals]) => [provider, [...refusals]])), switchOffs };
         }),
-        // Never throws: no offer, no personas, no model, or a deadline are all "nothing chosen" with a reason; the
+        // Never throws: no offer, no roles, no model, or a deadline are all "nothing chosen" with a reason; the
         // composer waits on this before the first turn goes out, so a failure here must cost that turn nothing but a
-        // sentence. Read within the asker's own fence, so a persona it lands on is one they may actually send through.
+        // sentence. Read within the asker's own fence, so a role it lands on is one they may actually send through.
         routeChat: i.routeChat.handler(({ input, context, signal }) =>
             routeChat(services, input, context.identity?.areas, signal, assistantsOf(context.identity), context.identity?.email),
         ),

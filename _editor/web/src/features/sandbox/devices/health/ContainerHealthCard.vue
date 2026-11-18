@@ -9,7 +9,7 @@ import { containerNotices, offersReconnect, reconnectDoor } from "../../overview
 import { manageDeviceSandbox, useDevices } from "../../../../models/sandbox/devices/useDevices";
 import { deviceNotListing } from "../../../../models/sandbox/devices/deviceRows";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
 import { expectRestart } from "../../../../models/sandbox/live/sandboxRestart";
 import { doorsHolding, type MachineDoor } from "../../live/sandboxDoors";
@@ -20,7 +20,7 @@ import { finishOnHome } from "../../../../models/sandbox/finishOnHome";
 const t = useT();
 
 const { active, daemonUrl } = useSandbox();
-const { isOwner } = useRole();
+const { isOwner } = useTier();
 const { devices } = useDevices({ poll: false });
 
 const notices = computed(() => (active.value === undefined ? [] : containerNotices(active.value)));

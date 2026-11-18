@@ -1,18 +1,18 @@
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import { type AgentMount, agentMounts } from "../agent/run/harness/agent-mounts.js";
 import type { Services } from "../composition.js";
 import { accountGroupOf } from "../capabilities/account-skills.js";
-import { listPersonaSkills, readPersonaSkill } from "../personas/persona-kit.js";
+import { listRoleSkills, readRoleSkill } from "../roles/role-kit.js";
 import { loadedSkillsRoot, skillWriterOf } from "../store/loaded-skills.js";
 import { parseSkillFile, scanSkillFolders, SKILL_FILE, skillDocument } from "../skill-file.js";
 import { retiredSkillReason } from "./skill-retirement.js";
 import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir, ownSkillOn } from "./skills.js";
 
 // Reads everything the agent knows from six sources (baked tools, the owner's store, connections, plugins, extensions,
-// personas) directly off disk, not a config projection; an unclaimed file lists as `dropped` rather than being skipped.
+// roles) directly off disk, not a config projection; an unclaimed file lists as `dropped` rather than being skipped.
 // What a row may do follows strictly from its origin:
 // baked tools are switchable from the settings list, the owner's own from their loaded copy
 // only the owner's own are editable
@@ -63,14 +63,14 @@ const capabilityFor = (capabilities: readonly Capability[], name: string): Capab
     capabilities.find((capability) => capability.kind === "browser" && accountGroupOf(capability.config).name === name);
 
 // What a turn wearing any card may mount, from the call the turn itself makes; the list and the reader resolve ids by it.
-const listedMounts = (services: Services, capabilities: readonly Capability[], personas: readonly Persona[]) =>
-    agentMounts(services, { capabilities, personas, extensions: undefined });
+const listedMounts = (services: Services, capabilities: readonly Capability[], roles: readonly Role[]) =>
+    agentMounts(services, { capabilities, roles, extensions: undefined });
 
 // Where the SDK's loader finds a mounted plugin's skills.
 const skillsDirOf = (mount: AgentMount): string => join(mount.pluginDir, "skills");
 
 // The order the owner reads mounted skills in: what this image ships, what they added, their cards', extensions'.
-const MOUNT_ORIGINS = ["builtin", "plugin", "persona", "extension"] as const;
+const MOUNT_ORIGINS = ["builtin", "plugin", "role", "extension"] as const;
 
 const summary = (fields: Omit<SkillSummary, "switchable" | "editable" | "removable"> & Partial<SkillSummary>): SkillSummary => ({
     switchable: false,
@@ -83,13 +83,13 @@ const summary = (fields: Omit<SkillSummary, "switchable" | "editable" | "removab
 // they added, then loose files. `enabled` is read per origin, since each source means something different by "on".
 export const skillInventory = async (services: Services): Promise<SkillSummary[]> => {
     const root = services.workspace.root;
-    const [settings, own, capabilities, personas] = await Promise.all([
+    const [settings, own, capabilities, roles] = await Promise.all([
         services.sandboxSettings.get(),
         listOwnSkills(services),
         services.capabilities.list(),
-        services.personas.list(),
+        services.roles.list(),
     ]);
-    const mounts = await listedMounts(services, capabilities, personas);
+    const mounts = await listedMounts(services, capabilities, roles);
     const read = (path: string): Promise<string | undefined> => services.files.read(path);
     const enabled = (name: string): boolean => settings.skills.includes(name);
     const rows: SkillSummary[] = [];
@@ -119,7 +119,7 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
     // Read from each mount's own skills dir, so the list can't claim a skill the agent wouldn't find; a kit's is on while worn.
     for (const origin of MOUNT_ORIGINS) {
         for (const mount of mounts.filter((entry) => entry.origin === origin)) {
-            const skills = origin === "persona" ? await listPersonaSkills(root, mount.id) : await scanSkillFolders(skillsDirOf(mount), read);
+            const skills = origin === "role" ? await listRoleSkills(root, mount.id) : await scanSkillFolders(skillsDirOf(mount), read);
             for (const skill of skills) {
                 const id = `${origin}:${mount.id}:${skill.name}`;
                 rows.push(summary({ id, name: skill.name, description: skill.description, origin, owner: mount.owner, enabled: true }));
@@ -151,9 +151,9 @@ const bakedDescription = (name: string): string => parseSkillFile(bakedSkillText
 export const readSkillText = async (services: Services, id: string): Promise<{ readonly name: string; readonly text: string } | undefined> => {
     const root = services.workspace.root;
     const [scope, owner, name] = id.split(":");
-    // A kit skill's `owner` is the persona id the list's id carries; the row's label is prettier but not a key.
-    if (name !== undefined && owner !== undefined && scope === "persona") {
-        const skill = await readPersonaSkill(root, owner, name);
+    // A kit skill's `owner` is the role id the list's id carries; the row's label is prettier but not a key.
+    if (name !== undefined && owner !== undefined && scope === "role") {
+        const skill = await readRoleSkill(root, owner, name);
         return skill === undefined ? undefined : { name, text: skillDocument(skill.name, skill.description, skill.body) };
     }
     if (name !== undefined && owner !== undefined && (scope === "builtin" || scope === "plugin" || scope === "extension")) {

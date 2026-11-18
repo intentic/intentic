@@ -27,7 +27,7 @@ afterEach(async () => {
 });
 
 const Settings = z.object({ hashlineEdits: z.boolean().default(false), skills: z.array(z.string()).default([]) });
-// settings.json and personas.json are hand-edited files, which is what makes them reportable; manifestProblems only
+// settings.json and roles.json are hand-edited files, which is what makes them reportable; manifestProblems only
 // surfaces paths the contract's table lists, so the name matters here, not the schema.
 const manifestAt = (root: string, name: string) => {
     // Both live under state dir's config group, the hand-edited slice the notice is addressed to.
@@ -35,7 +35,7 @@ const manifestAt = (root: string, name: string) => {
     return { path, file: jsonFile(path, { parse: objectParse(Settings), fallback: () => Settings.parse({}) }) };
 };
 const settingsFile = (root: string) => manifestAt(root, "settings.json");
-const personasFile = (root: string) => manifestAt(root, "personas.json");
+const rolesFile = (root: string) => manifestAt(root, "roles.json");
 const write = async (path: string, text: string): Promise<void> => {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, text);
@@ -114,7 +114,7 @@ test("deleting a broken manifest clears it too, not just fixing it", async () =>
 test("one broken manifest does not implicate the others", async () => {
     const root = await workspace();
     const broken = settingsFile(root);
-    const healthy = personasFile(root);
+    const healthy = rolesFile(root);
 
     await write(broken.path, `{"skils": []}`);
     await write(healthy.path, `{"hashlineEdits": true}`);

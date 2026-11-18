@@ -56,16 +56,16 @@ const allowsBy = (entry: string, call: ToolCall): boolean => {
 export const toolAllowed = (list: readonly string[], call: ToolCall): boolean => list.some((entry) => allowsBy(entry, call));
 
 /**
- * Whether a deny list (TurnPolicy.disallowedTools: what the persona withholds, in the one tool vocabulary) names this
+ * Whether a deny list (TurnPolicy.disallowedTools: what the role withholds, in the one tool vocabulary) names this
  * call. `Skill(<id>)` entries name a skill, which the skill catalog and each runtime's skill loader keep out, never a
  * tool call, so they deny nothing here.
  */
 export const toolDenied = (denied: readonly string[], call: ToolCall): boolean => denied.some((entry) => !entry.trim().startsWith("Skill(") && allowsBy(entry, call));
 
-/** What the agent reads when a call is refused because the persona the turn acts as withholds the tool. */
+/** What the agent reads when a call is refused because the role the turn acts as withholds the tool. */
 export const denylistRefusal = (call: ToolCall): string =>
-    `${call.name} is not available to the persona this turn acts as. Do not retry it or reach the same thing another way: ` +
-    "say what you could not do, and that it needs a persona with that power (or `grants request shelf …`).";
+    `${call.name} is not available to the role this turn acts as. Do not retry it or reach the same thing another way: ` +
+    "say what you could not do, and that it needs a role with that power (or `grants request shelf …`).";
 
 /** What the agent reads when a call is refused: which list said no, and what to do instead of retrying. */
 export const allowlistRefusal = (call: ToolCall, list: readonly string[]): string =>

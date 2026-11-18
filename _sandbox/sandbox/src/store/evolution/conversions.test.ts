@@ -44,8 +44,8 @@ describe("the other conversions", () => {
     });
 
     test("mapValue replaces an old value and refuses a mapping that would map its own output again", () => {
-        expect(convertDocument([mapValue("personaRouting", { off: false, auto: true })], "object", { personaRouting: "auto" }).value).toEqual({
-            personaRouting: true,
+        expect(convertDocument([mapValue("roleRouting", { off: false, auto: true })], "object", { roleRouting: "auto" }).value).toEqual({
+            roleRouting: true,
         });
         expect(() => mapValue("mode", { a: "b", b: "c" })).toThrow("mapValue(mode) maps onto its own keys (b), so it would not settle");
     });

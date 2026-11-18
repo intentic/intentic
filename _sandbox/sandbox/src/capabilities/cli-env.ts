@@ -20,7 +20,7 @@ import { AGENT_COMMIT_EMAIL, AGENT_COMMIT_NAME } from "../git-identity.js";
 // filter (secrets/credential-gating.ts) that the card's gate is enforced on use, at the gateway, rather than by absence.
 export const GATEWAY_MARKER = "CREDENTIAL_GATEWAY";
 
-// One card's git rewrite, carried under the card's own suffix so the persona and approver filters drop it with the rest
+// One card's git rewrite, carried under the card's own suffix so the role and approver filters drop it with the rest
 // of the card; folded into git's `GIT_CONFIG_*` only once those filters have run (shellEnvOf).
 const GIT_REWRITE = "CREDENTIAL_GATEWAY_GIT";
 
@@ -65,7 +65,7 @@ export const gatewayHeld = (env: Readonly<Record<string, string>>, capability: s
 
 /**
  * The environment a turn's shell actually gets from its filtered cli env: every surviving card's git rewrite folded into
- * git's own `GIT_CONFIG_*`, and the identity its commits sign with (turn-env.ts) after them. Run after the persona and
+ * git's own `GIT_CONFIG_*`, and the identity its commits sign with (turn-env.ts) after them. Run after the role and
  * approver filters, so a card they removed rewrites nothing.
  */
 export const shellEnvOf = (cliEnv: Readonly<Record<string, string>>): Record<string, string> => {

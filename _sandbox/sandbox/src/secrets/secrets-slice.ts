@@ -7,7 +7,7 @@ import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import type { CardDeps } from "../guard/card-offers.js";
 import type { HoldDeps } from "../guard/held-asks.js";
 import type { HostHub } from "../hosts/host-peer.js";
-import type { ConversationGrants } from "../personas/conversation-grants.js";
+import type { ConversationGrants } from "../roles/conversation-grants.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { createDeviceSecrets, type DeviceSecretsService } from "./device/device-secrets.js";
 import type { SandboxKeyringKeys } from "./device/keyring-keys.js";
@@ -54,7 +54,7 @@ export interface SecretsSlice {
     // never runs on an account outside it (agent/run/decide/account-reach.ts).
     readonly accountReach: ConversationAccountReachOf;
     // The most a conversation's tools may be, from the same chain (access/principal-chain.ts): the turn's premise caps
-    // its persona's shelves with it, after conversation grants, so neither lifts a shelf the chain withholds.
+    // its role's shelves with it, after conversation grants, so neither lifts a shelf the chain withholds.
     readonly toolCeiling: ConversationCeilingOf;
     // Secrets a person keeps: pasted into a need's card, or added on the Secrets view.
     readonly sandboxSecrets: SandboxSecrets;
@@ -115,7 +115,7 @@ export interface SecretsDeps {
     // The services a conversation's runs act as, the access profiles that bound them, a bound organisation's ceiling,
     // and who connected each AI account (access/principal-chain.ts); absent in a composition that has none, where a
     // service named reaches nothing and nobody's own accounts widen their row.
-    readonly principals?: Pick<CredentialReachDeps, "services" | "profiles" | "org" | "connectors">;
+    readonly principals?: Pick<CredentialReachDeps, "services" | "profiles" | "org" | "connectors" | "roles">;
     // Where a release that could not be kept is said; the release itself still holds for this process.
     readonly warn: (message: string, error: unknown) => void;
     // The owner's computers, for their keyrings: the hub is composed after this slice, so it is read at each call.
@@ -128,13 +128,15 @@ export interface SecretsDeps {
 // Who a conversation can act for, as the auth slice keeps them: the owner, the roster, the services and the access
 // profiles, with a bound organisation's ceiling over all of them and the AI accounts each person connected
 // (access/principal-chain.ts).
+// `roles`, the cards, name a role's limits by the card's label, which is why composition opens that store before this slice.
 export const principalsOfAuth = (
     auth: Pick<AuthSlice, "ownerEmail" | "members" | "services" | "accessProfiles" | "accountConnectors">,
     org: NonNullable<CredentialReachDeps["org"]>,
+    roles?: CredentialReachDeps["roles"],
 ): Pick<SecretsDeps, "ownerEmail" | "members" | "principals"> => ({
     ownerEmail: auth.ownerEmail,
     members: auth.members,
-    principals: { services: auth.services, profiles: auth.accessProfiles, org, connectors: auth.accountConnectors },
+    principals: { services: auth.services, profiles: auth.accessProfiles, org, connectors: auth.accountConnectors, roles },
 });
 
 // Read the owner settings afresh on both paths; only enforcement may hydrate connector credentials.

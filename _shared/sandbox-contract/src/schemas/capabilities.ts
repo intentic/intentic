@@ -146,7 +146,7 @@ export const BrowserConfigSchema = z
     })
     .catchall(z.string());
 // One email identity the sandbox acts as online: one persisted Chromium profile, signed in once by the owner, that
-// every browser account naming it in `identity` shares. A capability, not a persona, since it holds live secrets (email
+// every browser account naming it in `identity` shares. A capability, not a role, since it holds live secrets (email
 // password, profile identity) that must never be committed to git. `mailbox` feeds the code-reading tool;
 // `openAccounts` is the explicit, off-by-default consent to sign up unattended.
 export const IdentityConfigSchema = z.object({

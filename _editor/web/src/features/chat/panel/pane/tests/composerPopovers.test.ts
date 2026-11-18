@@ -3,7 +3,7 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
 import type { LocalCommandName } from "../../../../../models/conversations/commands/slashCommands";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { computed, createApp, h, nextTick, ref } from "vue";
 import * as catalogOriginal from "../../../../../models/conversations/accounts/useChat-catalog";
@@ -28,7 +28,7 @@ const COMMANDS: AgentCommand[] = [
     { name: `review`, description: `Review the diff.` },
     { name: `release`, description: `Cut a release.` },
 ];
-const PERSONAS: Persona[] = [{ id: `backend`, label: `Backend`, capabilities: [] }];
+const ROLES: Role[] = [{ id: `backend`, label: `Backend`, capabilities: [] }];
 
 let unmount: (() => void) | undefined;
 // `ours` names the composer's own commands this reader is offered beside the provider's; none by default, so a suite
@@ -42,8 +42,8 @@ const composerOf = (ours: readonly LocalCommandName[] = []) => {
         commands: computed(() => slashRows(new Set(ours), view.availableCommands.value)),
         input,
         grow: jest.fn(),
-        personas: ref(PERSONAS),
-        pickPersona: jest.fn(),
+        roles: ref(ROLES),
+        pickRole: jest.fn(),
         placement: { remote: ref(false), shown: ref(true), runners: ref<RunnerSummary[]>([]) },
         steered: ref(false),
         isGuest: ref(false),
@@ -121,21 +121,21 @@ describe(`the @ list`, () => {
             Object.entries(lists.quickSources.value)
                 .filter(([, source]) => source !== undefined)
                 .map(([kind]) => kind);
-        expect(offered()).toEqual([`persona`, `sandbox`, `model`, `effort`, `send`, `land`]);
+        expect(offered()).toEqual([`role`, `sandbox`, `model`, `effort`, `send`, `land`]);
 
         // Auto owns the effort question, on the fresh chat whose first send it reads.
         chat.selection.apply({ kind: `set`, picks: { auto: true } });
-        expect(offered()).toEqual([`persona`, `sandbox`, `model`, `send`, `land`]);
+        expect(offered()).toEqual([`role`, `sandbox`, `model`, `send`, `land`]);
 
         // Placement latches with the branch once the board has seen the chat, and by then the chat has its model: Auto
         // has nothing left to answer, so effort is the reader's again (ComposerSelection.autoOpen).
         chat.registered.value = true;
-        expect(offered()).toEqual([`persona`, `model`, `effort`, `send`, `land`]);
+        expect(offered()).toEqual([`role`, `model`, `effort`, `send`, `land`]);
 
         // Booking and landing are offered where their pills are.
         host.later.offered.value = false;
         host.landing.offered.value = false;
-        expect(offered()).toEqual([`persona`, `model`, `effort`]);
+        expect(offered()).toEqual([`role`, `model`, `effort`]);
         host.later.offered.value = true;
         host.landing.offered.value = true;
 
@@ -144,7 +144,7 @@ describe(`the @ list`, () => {
         expect(offered()).toEqual([]);
         expect(lists.filesOffered.value).toBe(true);
 
-        // Another box's chat: its files and personas are that box's.
+        // Another box's chat: its files and roles are that box's.
         host.steered.value = false;
         host.placement.remote.value = true;
         expect(offered()).toEqual([`model`, `effort`]);
@@ -239,14 +239,14 @@ describe(`an @ pick`, () => {
         expect(lists.flashed.value).toBe(`land`);
     });
 
-    it(`picks a persona the way its pill does`, () => {
+    it(`picks a role the way its pill does`, () => {
         const { host, type, lists } = composerOf();
         type(`@back`);
 
-        lists.pickMention({ kind: `persona`, key: `persona:backend`, label: `Backend`, detail: undefined, id: `backend`, current: false });
+        lists.pickMention({ kind: `role`, key: `role:backend`, label: `Backend`, detail: undefined, id: `backend`, current: false });
 
-        expect(host.pickPersona.mock.calls).toEqual([[`backend`]]);
-        expect(lists.flashed.value).toBe(`persona`);
+        expect(host.pickRole.mock.calls).toEqual([[`backend`]]);
+        expect(lists.flashed.value).toBe(`role`);
     });
 });
 

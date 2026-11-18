@@ -3,7 +3,7 @@ import { CONTROL_SCOPES, type ControlScope } from "@intentic/sandbox-contract/po
 import type { ContractRoute } from "@intentic/sandbox-contract/protocol/routes";
 import { RAW_ROUTE_LIST } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { type RouteMeta, routeAccess } from "@intentic/sandbox-contract/protocol/route-meta";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { SANDBOX_ROUTES, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { ControlTokens } from "./tokens/control-tokens.js";
@@ -108,14 +108,14 @@ const declaredRowOf = (route: ContractRoute, intoAttachments: boolean): string =
     // `read` sees what a viewer sees, `drive` does what a collaborator does, `land` adds its own presses; the rungs read
     // the route's floor, never an attachment's.
     const read = control !== "never" && (control === "read" || (isRead(method) && floor === "viewer"));
-    const drive = read || (control !== "never" && roleAtLeast("collaborator", floor));
+    const drive = read || (control !== "never" && tierAtLeast("collaborator", floor));
     const rungs = { editor: control === "editor" || control === "read", read, drive, land: drive || control === "land" } satisfies Record<ControlScope, boolean>;
     return [
         meta.auth === "door" ? "door" : "bearer",
         meta.beforeBoot === true ? "early" : "waits",
         meta.stream === true ? "stream" : "timed",
         attachment ? meta.attachmentFloor : floor,
-        ...(meta.right !== undefined && !attachment && !roleAtLeast("viewer", floor) ? [`right:${meta.right}`] : []),
+        ...(meta.right !== undefined && !attachment && !tierAtLeast("viewer", floor) ? [`right:${meta.right}`] : []),
         ...(meta.guest === true || attachment ? ["guest"] : []),
         ...(meta.home === "land" ? ["home-land"] : []),
         ...(meta.embedded === true ? ["embedded"] : []),
@@ -129,7 +129,7 @@ const declaredRowOf = (route: ContractRoute, intoAttachments: boolean): string =
 
 // The rights that let a viewer who runs no agents past this request's floor, as the middleware's own check decides it.
 const rightsClearing = (method: string, path: string, target: string | undefined): string[] => {
-    const viewer = { role: "viewer" as const, agents: "off" as const };
+    const viewer = { tier: "viewer" as const, agents: "off" as const };
     if (memberRefusal(viewer, method, path, target) === undefined) {
         return [];
     }

@@ -214,7 +214,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                     listener: listenerOf((name) => c.req.header(name)),
                 });
                 c.set("identity", caller);
-                // The role floor (sandbox-contract protocol/member-reach.ts) applies here, after authentication, in one place: a member below
+                // The tier floor (sandbox-contract protocol/member-reach.ts) applies here, after authentication, in one place: a member below
                 // a route's tier gets a 403 naming the tier, and a guest gets one for any door off its own list.
                 // Owner-only routes still keep their own in-route gates besides; this floor only keeps a viewer
                 // read-only and a collaborator off ship controls.

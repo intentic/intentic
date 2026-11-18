@@ -29,7 +29,7 @@ import { linkTaskStatusMark, waitForLinkTaskStatus, wakeLinkTaskStatus } from ".
 
 // THE TAKING SIDE OF A LINK: a task another of the owner's sandboxes handed over becomes a conversation here, run the way
 // this sandbox's owner wrote on the link. The task is somebody else's words, never the owner's: it runs unattended (no
-// signed-in account unless the link's persona carries one), it is marked as carrying outside content, so the guard asks
+// signed-in account unless the link's role carries one), it is marked as carrying outside content, so the guard asks
 // before what it would ask of any wake, and its turns are drawn as the link's. Everything here answers for the link's own
 // conversations only.
 
@@ -152,11 +152,11 @@ const turnOf = (
     ...opt("title", task.title),
     ...opt("titleSource", task.title === undefined ? undefined : ("model" as const)),
     // Nobody here is watching: a card it raises waits for the owner, and no signed-in account reaches it unless the
-    // link's persona carries one.
+    // link's role carries one.
     unattended: true,
     // Its own worktree, landing the way this sandbox lands any conversation's work.
     isolated: true,
-    // No run role of its own: the link's persona names the model its tasks run on, else the sandbox's default does, so
+    // No run role of its own: the link's role names the model its tasks run on, else the sandbox's default does, so
     // everything about what a link's tasks are is set on the link (Sandbox ▸ Access), not on a second page.
     ...opt("actsAs", link.terms.actsAs),
     // Who it acts for: the link's service, its steward held to its profile, inside the fence they make together.

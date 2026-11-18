@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { personaSkillsRoot } from "../../personas/persona-kit.js";
+import { roleSkillsRoot } from "../../roles/role-kit.js";
 import { loadedSkillsRoot } from "../../store/loaded-skills.js";
 import { piSkillsOf } from "./pi-adapter.js";
 
@@ -21,14 +21,14 @@ afterEach(() => {
 });
 
 // A planned turn's context as piSkillsOf reads it: the tree on both sides, what the turn may not use, who it acts as.
-const context = (disallowedTools: string[], persona?: string) => ({
+const context = (disallowedTools: string[], role?: string) => ({
     localCwd: root,
     effectiveCwd: WORKSPACE_ROOT,
     base: { policy: { disallowedTools } },
-    persona: persona === undefined ? undefined : { persona: { id: persona } },
+    role: role === undefined ? undefined : { role: { id: role } },
 });
 
-test("a Pi turn loads every workspace skill the persona may use, named as Pi sees the tree, and the image's own", async () => {
+test("a Pi turn loads every workspace skill the role may use, named as Pi sees the tree, and the image's own", async () => {
     const baked = join(root, "baked");
     for (const name of ["github", "intentic"]) {
         mkdirSync(join(baked, name), { recursive: true });
@@ -41,11 +41,11 @@ test("a Pi turn loads every workspace skill the persona may use, named as Pi see
     ]);
 });
 
-test("the worn persona's own kit rides along when it holds any skill", async () => {
-    mkdirSync(join(personaSkillsRoot(root, "studio"), "voice"), { recursive: true });
+test("the worn role's own kit rides along when it holds any skill", async () => {
+    mkdirSync(join(roleSkillsRoot(root, "studio"), "voice"), { recursive: true });
     // SAFETY: piSkillsOf reads only the fields built here.
     const skills = await piSkillsOf(context([], "studio") as never, "");
-    expect(skills.at(-1)).toBe(personaSkillsRoot(WORKSPACE_ROOT, "studio"));
+    expect(skills.at(-1)).toBe(roleSkillsRoot(WORKSPACE_ROOT, "studio"));
     // SAFETY: as above.
     expect(await piSkillsOf(context([], "empty") as never, "")).toHaveLength(2);
 });

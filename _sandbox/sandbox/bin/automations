@@ -53,7 +53,7 @@ Options for propose:
                                   notify: only tell the owner, no model at all
                                   new: a new agent with the prompt; needs --model
   --model <provider>/<model>[:<effort>]   for --target new; repeat for a fallback ladder, best first
-  --as <persona>                  the persona its wakes act as: a card's id from .intentic/config/personas.json, or
+  --as <role>                  the role its wakes act as: a card's id from .intentic/config/roles.json, or
                                   full-access (every connected account) or no-accounts (connector credentials, such as
                                   a connected Gmail, but no signed-in site account). Absent means no-accounts.
   --note "…"                      one line on what it watches for, shown in notifications
@@ -383,9 +383,9 @@ const targetOf = (raw) => {
 
 const LISTENER_FLAGS = ["on", "event", "channel"];
 
-// A listener trigger and who may set it off, from --on and its narrowing flags. A sender rule wears the persona it names
+// A listener trigger and who may set it off, from --on and its narrowing flags. A sender rule wears the role it names
 // in place of the automation's own (src/automations/senders.ts), so --as is carried onto it: without that, the people
-// it admits would wake with no persona at all.
+// it admits would wake with no role at all.
 const listenerOf = (flags) => {
     const trigger = {
         kind: "listener",

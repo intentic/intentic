@@ -9,7 +9,7 @@ import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useT } from "@intentic/ui/i18n";
 
 // THE ONE PART OF A TURN THE TRANSCRIPT CANNOT SHOW. A preamble note rides the message and is drawn beside it; the
-// system prompt — this product's guidance, the persona, the workspace's standing rules —
+// system prompt — this product's guidance, the role, the workspace's standing rules —
 // reaches the model and leaves no trace in the chat, so without this an arriving AGENTS.md and a dropped one look
 // alike.
 //
@@ -56,8 +56,8 @@ interface Row {
 // Written as literal keys rather than a lookup table: the catalogs are checked by reading these call sites, and a key
 // reached through a variable reads there as a message nobody asks for.
 const whenceOf = (source: PromptSection["source"]): string =>
-    source === `persona`
-        ? t(`chat.chatSystemPrompt.whencePersona`)
+    source === `role`
+        ? t(`chat.chatSystemPrompt.whenceRole`)
         : source === `memory`
           ? t(`chat.chatSystemPrompt.whenceMemory`)
           : t(`chat.chatSystemPrompt.whenceGuidance`);
@@ -172,7 +172,7 @@ const shown = (text: string, title: string): string => {
                     </div>
                     <Notice v-else-if="error !== undefined" tone="danger" class="text-2xs">{{ error }}</Notice>
                     <Notice v-else-if="missing" tone="info" class="text-2xs">{{ t(`chat.chatSystemPrompt.nothing`) }}</Notice>
-                    <!-- Which turn this was, because a persona switch or an edited AGENTS.md changes it mid-conversation. -->
+                    <!-- Which turn this was, because a role switch or an edited AGENTS.md changes it mid-conversation. -->
                     <p v-else-if="disclosure !== undefined" class="text-2xs text-subtle">
                         {{ t(`chat.chatSystemPrompt.composed`, { runtime: disclosure.runtime, when: timeAgo(disclosure.at, { days: true }) }) }}
                     </p>

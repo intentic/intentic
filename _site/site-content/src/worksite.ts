@@ -8,7 +8,7 @@
 /** One labelled part: the product's noun, the part of the worksite it is drawn as, and what it is with no worksite in it. */
 export interface WorksitePart {
     /** The figure's highlight key, and the fragment its hotspot links to. */
-    id: "machine" | "sandbox" | "persona" | "project";
+    id: "machine" | "sandbox" | "role" | "project";
     /** The product's own word, as the docs and the app write it. */
     word: string;
     /** What it is drawn as. Goes in the hotspot's second line, never on its own. */
@@ -61,14 +61,14 @@ export const worksiteScene: WorksiteScene = {
             page: "Architecture",
         },
         {
-            id: "persona",
-            word: "A persona",
+            id: "role",
+            word: "A role",
             drawnAs: "the assignment",
             gloss: "The board a worker takes for a shift: which trade, whose keys, which building it reports to.",
             literal:
-                "A card you write that decides what a conversation is and may do: which tools are mounted, which accounts it signs in as, which folder it starts in, which instructions it runs on. What a persona withholds is not switched off somewhere the agent can see. It is simply not there that turn.",
+                "A card you write that decides what a conversation is and may do: which tools are mounted, which accounts it signs in as, which folder it starts in, which instructions it runs on. What a role withholds is not switched off somewhere the agent can see. It is simply not there that turn.",
             holds: ["Tools and accounts", "The folder it works in", "Its own instructions"],
-            href: "/docs/autonomous-employees/#another-sandbox-or-another-persona",
+            href: "/docs/autonomous-employees/#another-sandbox-or-another-role",
             page: "Autonomous employees",
         },
         {
@@ -104,7 +104,7 @@ export const worksiteScene: WorksiteScene = {
     label:
         "A carved relief of a building camp. The wall around it, the gate through it, the yard floor and the fire standing in the yard are the "
         + "machine your work runs on: ground, power and disk, deciding nothing. Inside the wall each sandbox is a worker in a bay of its own, with a "
-        + "locked kit at its feet that no other bay has a key to. The board hanging in each bay is its persona: the assignment written on it, the "
+        + "locked kit at its feet that no other bay has a key to. The board hanging in each bay is its role: the assignment written on it, the "
         + "tools it carries as filled pegs beside the empty ones it left off, and a line out to the building it reports to. The buildings rising "
         + "beyond the wall are your projects — one with two workers on it at once, one with nobody, and one still pegged out on the ground.",
 };

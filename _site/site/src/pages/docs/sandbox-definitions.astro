@@ -23,7 +23,7 @@ const example = [
     "[settings]",
     "workspaceMap = true",
     "",
-    "# The workspace itself: notes, skills, personas, automations, designs, drafts.",
+    "# The workspace itself: notes, skills, roles, automations, designs, drafts.",
     "[workspace]",
     'remote = "https://github.com/example/storefront-workspace.git"',
     'ref = "main"',
@@ -131,7 +131,7 @@ const contents = [
     <h2>The workspace itself</h2>
     <p>
         <code>/work</code> is a git repository. It tracks everything in the workspace that is not a project repository, reference material or
-        internal daemon state — which in practice is the sandbox's way of working: notes, authored skills, personas, automations, workflow
+        internal daemon state — which in practice is the sandbox's way of working: notes, authored skills, roles, automations, workflow
         and loop designs, drafts and workspace extensions. Credentials, browser profiles and provider sessions sit outside that repository by
         construction, which is what makes publishing it safe to offer.
     </p>
@@ -163,7 +163,7 @@ const contents = [
         during workspace checkout. They change only if their own item is selected. A malformed active manifest or a failed safety write fails
         the workspace item; the report never claims something was switched off when it was not.
     </p>
-    <p>Everything else — designs, drafts, personas, skills, notes — waits for a person to open it, so it lands as it is.</p>
+    <p>Everything else — designs, drafts, roles, skills, notes — waits for a person to open it, so it lands as it is.</p>
 
     <h2>Download, bring in, or compare</h2>
     <p>
@@ -208,7 +208,7 @@ const contents = [
         The sandbox run contract can seed an empty workspace from the TOML on first boot. The workspace is checked out, repositories are
         cloned, connection cards are created unauthenticated, settings are applied, and the overlay waits for its new owner. Replaying the
         same container environment on a later rebuild is inert because the workspace is no longer empty. That makes one reviewed definition a
-        fleet recipe — every sandbox in the fleet with the same skills, personas and designs, not merely the same code — without turning boot
+        fleet recipe — every sandbox in the fleet with the same skills, roles and designs, not merely the same code — without turning boot
         into an unreviewed configuration executor.
     </p>
     <p>

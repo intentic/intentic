@@ -40,7 +40,7 @@ export const definitionItems = async (services: Services, definition: SandboxDef
             id: "workspace",
             group: "workspace",
             label: "The workspace itself",
-            detail: `${workspace.remote}${workspace.ref === undefined ? "" : ` @ ${workspace.ref}`}; its notes, skills, personas, designs and approvals land in /work`,
+            detail: `${workspace.remote}${workspace.ref === undefined ? "" : ` @ ${workspace.ref}`}; its notes, skills, roles, designs and approvals land in /work`,
             applicable: published === undefined && pristine,
             ...(published !== undefined
                 ? { reason: `this workspace is already published at ${published}; a definition lands beside what is there, never over it` }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { profileAccess } from "@intentic/sandbox-contract/schemas/access-profiles";
 import ProfileAnswers from "./profiles/ProfileAnswers.vue";
-import { useAccessProfiles } from "./profiles/useAccessProfiles";
+import { useAccessProfiles } from "../../../models/sandbox/access/useAccessProfiles";
 import type { AgentAccess } from "@intentic/sandbox-contract/schemas/members";
 import { Button, Notice, type NoticeModel, Picker, Section, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -14,13 +14,13 @@ import AreaPicker from "./AreaPicker.vue";
 import EditPicker from "./EditPicker.vue";
 import PersonCard from "./PersonCard.vue";
 import ReachPicker from "./ReachPicker.vue";
-import { usePersonaReach } from "./usePersonaReach";
+import { useRoleReach } from "./useRoleReach";
 import { useT } from "@intentic/ui/i18n";
 
 // ONE PERSON'S ACCESS, opened under their tile: first whether they manage the sandbox (full access, every answer below at
 // once), else whether their conversations run agents, where they see and where they edit by hand; then, either way,
 // which AI accounts their turns run on and what their agents may spend; and how they sign in. Changes save as they are
-// made, like a persona's: a run of clicks is one write, and an answer the daemon would refuse (a chat with no area, a
+// made, like a role's: a run of clicks is one write, and an answer the daemon would refuse (a chat with no area, a
 // narrowed scope with nothing ticked) waits here, said, instead of being sent. Mounted once per person, so a draft never
 // carries from one to the next; one still waiting when the panel closes is sent on its way out.
 // Under custom access, the parts of the sandbox they may also run come last (PersonRights). Someone given People &
@@ -70,7 +70,7 @@ const set = (change: Partial<AccessDraft>): void => {
     draft.value = { ...draft.value, ...change };
 };
 
-const { namesOf } = usePersonaReach();
+const { namesOf } = useRoleReach();
 const problem = computed(() => draftProblem(draft.value, namesOf(draft.value.see).length));
 // Whether what is on screen is not yet what the daemon holds, compared as the grant each would send.
 const saved = ref(JSON.stringify(draftGrant(email, initial)));

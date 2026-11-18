@@ -1,4 +1,4 @@
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { computed, nextTick, type Ref, ref, watch } from "vue";
 import { otherBoxes } from "../../../../models/sandbox/live/fleetAcross";
@@ -24,7 +24,7 @@ import { placeConversation } from "./composerControls";
 
 // The pill whose value an `@` pick just changed, pulsed once: the token vanishes from the text, so the eye is sent to
 // where the setting now lives.
-export type FlashedControl = `persona` | `placement` | `model` | `effort` | `later` | `land`;
+export type FlashedControl = `role` | `placement` | `model` | `effort` | `later` | `land`;
 const FLASH_MS = 700;
 
 export interface PopoversHost {
@@ -33,8 +33,8 @@ export interface PopoversHost {
     readonly commands: Readonly<Ref<readonly SlashRow[]>>;
     readonly input: Readonly<Ref<HTMLTextAreaElement | null>>;
     readonly grow: () => void;
-    readonly personas: Readonly<Ref<readonly Persona[]>>;
-    readonly pickPersona: (id: string | undefined) => void;
+    readonly roles: Readonly<Ref<readonly Role[]>>;
+    readonly pickRole: (id: string | undefined) => void;
     // Where the chat may be placed: nowhere else while it lives in another box, or once the board has seen it.
     readonly placement: {
         readonly remote: Readonly<Ref<boolean>>;
@@ -66,7 +66,7 @@ const quickSourcesOf = (chat: Conversation, host: PopoversHost): QuickPickSource
     const { selection } = chat;
     const provider = selection.provider.value;
     return {
-        persona: steered || host.placement.remote.value ? undefined : { personas: host.personas.value, picked: selection.actsAs.value },
+        role: steered || host.placement.remote.value ? undefined : { roles: host.roles.value, picked: selection.actsAs.value },
         sandbox:
             !host.placement.shown.value || chat.registered.value
                 ? undefined
@@ -108,17 +108,17 @@ const effortSourceOf = (chat: Conversation): NonNullable<QuickPickSources[`effor
 };
 
 // A setting pick goes through the same setter its pill uses and leaves no text behind; which pill it changed.
-const applyQuickPick = (chat: Conversation, pick: QuickPick, host: Pick<PopoversHost, "pickPersona" | "later" | "landing">): FlashedControl | undefined => {
-    const { pickPersona } = host;
+const applyQuickPick = (chat: Conversation, pick: QuickPick, host: Pick<PopoversHost, "pickRole" | "later" | "landing">): FlashedControl | undefined => {
+    const { pickRole } = host;
     switch (pick.kind) {
         case `send`:
             return applySend(chat, pick.to, host.later.open);
         case `land`:
             host.landing.set(pick.on);
             return `land`;
-        case `persona`:
-            pickPersona(pick.id);
-            return `persona`;
+        case `role`:
+            pickRole(pick.id);
+            return `role`;
         case `sandbox`:
             placeConversation(chat, { box: pick.box, runner: pick.runner });
             return `placement`;

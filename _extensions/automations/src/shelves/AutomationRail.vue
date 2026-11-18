@@ -26,12 +26,12 @@ const { all, shelves } = defineProps<{
 
 const selected = defineModel<string>({ required: true });
 
-// What a shelf is filed by, as its glyph: a group somebody named, the code chores, a persona, or the remainder.
+// What a shelf is filed by, as its glyph: a group somebody named, the code chores, a role, or the remainder.
 const SHELF_ICON = {
     all: `automations`,
     group: `folder`,
     chores: `maintenance`,
-    persona: `user`,
+    role: `user`,
     other: `boxes`,
 } as const satisfies Record<RailShelf[`kind`], IconName>;
 

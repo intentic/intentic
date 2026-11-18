@@ -9,9 +9,9 @@ const byName = new Intl.Collator(undefined, { sensitivity: `base`, numeric: true
  * dragged them to, sandboxOrder.ts), that order wins outright; a sandbox it does not name yet, one made or shared since,
  * follows the arranged ones in the unarranged order, where the add tile that made it stands.
  */
-export const orderedSandboxes = <T extends { id: string; name: string; role: string }>(boxes: readonly T[], arranged: readonly string[] = []): T[] => {
+export const orderedSandboxes = <T extends { id: string; name: string; tier: string }>(boxes: readonly T[], arranged: readonly string[] = []): T[] => {
     const rank = new Map(arranged.map((id, index) => [id, index]));
-    const owned = (box: T): number => (box.role === `owner` ? 0 : 1);
+    const owned = (box: T): number => (box.tier === `owner` ? 0 : 1);
     return boxes.toSorted(
         (left, right) =>
             (rank.get(left.id) ?? Infinity) - (rank.get(right.id) ?? Infinity) ||

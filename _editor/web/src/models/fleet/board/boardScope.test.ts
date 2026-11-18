@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { t } from "@intentic/ui/i18n";
 import { type EffectScope, effectScope, nextTick, ref, shallowRef } from "vue";
@@ -55,7 +55,7 @@ afterEach(() => {
 
 describe(`which cards the scope keeps`, () => {
     const fleet = [inShop, elsewhere, draft];
-    const everything = { project: undefined, owner: undefined, me: ME, personas: [] };
+    const everything = { project: undefined, owner: undefined, me: ME, roles: [] };
 
     it(`keeps a project's own conversations and every unsent draft, opened under it with no record to say so`, () => {
         expect(scopeFleet(fleet, { ...everything, project: `shop` }).map((agent) => agent.id)).toEqual([`shop`, `draft`]);
@@ -137,13 +137,13 @@ describe(`the owner segments`, () => {
 });
 
 describe(`the board's scope`, () => {
-    const scopeOf = (fleet: FleetAgent[], over: { runs?: WorkflowRun[]; held?: AutomationApproval[]; personas?: Persona[] } = {}) => {
+    const scopeOf = (fleet: FleetAgent[], over: { runs?: WorkflowRun[]; held?: AutomationApproval[]; roles?: Role[] } = {}) => {
         const agents = { fleet: shallowRef(fleet), lanes: shallowRef(laneGroups(fleet)), heldWakes: shallowRef(over.held ?? []) };
         const sharedAccess = ref(true);
         const effects = effectScope();
         running.push(effects);
         const scope = effects.run(() =>
-            useBoardScope({ agents, runs: shallowRef(over.runs ?? []), personas: shallowRef(over.personas ?? []), me: ref(ME), sharedAccess }),
+            useBoardScope({ agents, runs: shallowRef(over.runs ?? []), roles: shallowRef(over.roles ?? []), me: ref(ME), sharedAccess }),
         )!;
         return { agents, sharedAccess, scope };
     };

@@ -162,8 +162,8 @@ describe("ending passes", () => {
 
     test("who may hold a pass: the owner and anyone on the roster above a guest", async () => {
         const roster: Member[] = [
-            { email: "viewer@example.com", role: "viewer" },
-            { email: "guest@example.com", role: "guest", areas: [] },
+            { email: "viewer@example.com", tier: "viewer" },
+            { email: "guest@example.com", tier: "guest", areas: [] },
         ];
         const may = opensPreviews(async () => "Owner@Example.com", { list: async () => roster });
         expect(await may("owner@example.com")).toBe(true);

@@ -13,7 +13,7 @@ export interface ControlScopeReach {
     readonly note: string;
 }
 
-// Derived in the daemon from the same role floors a member holds (read=viewer, drive=collaborator).
+// Derived in the daemon from the same tier floors a member holds (read=viewer, drive=collaborator).
 export const CONTROL_SCOPE_REACH: readonly ControlScopeReach[] = [
     {
         scope: "editor",

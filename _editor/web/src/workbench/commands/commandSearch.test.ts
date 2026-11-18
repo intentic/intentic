@@ -45,7 +45,7 @@ it(`reads an empty query as the whole registry: destinations first, then alphabe
 
 it(`scores a family-only match, so typing a family lists all of it`, () => {
     expect(nameScore(`Sandbox: Secrets`, `view.sandbox.secrets`, `sandbox`)).toBeGreaterThan(0);
-    expect(nameScore(`Sandbox: Secrets`, `view.sandbox.secrets`, `personas`)).toBeUndefined();
+    expect(nameScore(`Sandbox: Secrets`, `view.sandbox.secrets`, `roles`)).toBeUndefined();
 });
 
 // The palette lists four kinds of row at once and orders the kinds against each other by their best score, so every

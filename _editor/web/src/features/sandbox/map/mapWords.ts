@@ -1,5 +1,5 @@
 import type { ControlScope } from "@intentic/sandbox-contract/policy/control-scopes";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
@@ -53,14 +53,14 @@ export const nodeDetail = (node: MapNode): string | undefined => {
 };
 
 // Spelled as calls rather than a table of keys, so the catalog check sees every word the map uses.
-const ROLE_WORDS = {
+const TIER_WORDS = {
     owner: () => t(`sandbox.sandboxMap.roleOwner`),
     maintainer: () => t(`sandbox.sandboxMap.roleMaintainer`),
     writer: () => t(`sandbox.sandboxMap.roleWriter`),
     collaborator: () => t(`sandbox.sandboxMap.roleCollaborator`),
     guest: () => t(`sandbox.sandboxMap.roleGuest`),
     viewer: () => t(`sandbox.sandboxMap.roleViewer`),
-} as const satisfies Record<MemberRole, () => string>;
+} as const satisfies Record<MemberTier, () => string>;
 
 const SCOPE_WORDS = {
     read: () => t(`sandbox.sandboxMap.scopeRead`),
@@ -72,15 +72,15 @@ const SCOPE_WORDS = {
 const INERT_WORDS = {
     expired: () => t(`sandbox.sandboxMap.inertExpired`),
     minter: () => t(`sandbox.sandboxMap.inertMinter`),
-    persona: () => t(`sandbox.sandboxMap.inertPersona`),
+    role: () => t(`sandbox.sandboxMap.inertRole`),
     invite: () => t(`sandbox.sandboxMap.inertInvite`),
 } as const;
 
-/** The persona a link's tasks wear, by its name on the card. */
-export type PersonaName = (id: string) => string;
+/** The role a link's tasks wear, by its name on the card. */
+export type RoleName = (id: string) => string;
 
 /** The one line under a principal's name: what it may do, or why it holds nothing. */
-export const principalLine = (principal: Principal, personaName: PersonaName): string => {
+export const principalLine = (principal: Principal, roleName: RoleName): string => {
     if (principal.inert !== undefined) {
         return INERT_WORDS[principal.inert]();
     }
@@ -88,10 +88,10 @@ export const principalLine = (principal: Principal, personaName: PersonaName): s
         return SCOPE_WORDS[principal.scope ?? `read`]();
     }
     if (principal.kind === `link`) {
-        return principal.actsAs === undefined ? t(`sandbox.sandboxMap.noPersona`) : t(`sandbox.sandboxMap.asPersona`, { persona: personaName(principal.actsAs) });
+        return principal.actsAs === undefined ? t(`sandbox.sandboxMap.noRole`) : t(`sandbox.sandboxMap.asRole`, { role: roleName(principal.actsAs) });
     }
-    const role = ROLE_WORDS[principal.role ?? `viewer`]();
-    return principal.status === `invited` ? t(`sandbox.sandboxMap.invitedLine`, { role }) : role;
+    const tier = TIER_WORDS[principal.tier ?? `viewer`]();
+    return principal.status === `invited` ? t(`sandbox.sandboxMap.invitedLine`, { role: tier }) : tier;
 };
 
 /** A principal's name: the part of an address before the `@` reads as the person; a token or link by its label. */
@@ -112,8 +112,8 @@ export const editPath = (node: MapNode): string | undefined => {
         case `area`:
         case `rest`:
             return accessPath(`areas`);
-        case `persona`:
-            return here(page.sandboxSettings(`personas`, { query: { open: node.ref } }));
+        case `role`:
+            return here(page.sandboxSettings(`roles`, { query: { open: node.ref } }));
         case `secret`:
             return here(page.sandboxSettings(`secrets`));
         case `model`:
@@ -130,8 +130,8 @@ export const editWords = (node: MapNode): string => {
         case `area`:
         case `rest`:
             return t(`sandbox.sandboxMap.editAreas`);
-        case `persona`:
-            return t(`sandbox.sandboxMap.editPersona`);
+        case `role`:
+            return t(`sandbox.sandboxMap.editRole`);
         case `secret`:
             return t(`sandbox.sandboxMap.openSecrets`);
         case `model`:

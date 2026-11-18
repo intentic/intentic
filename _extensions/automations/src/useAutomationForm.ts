@@ -12,7 +12,7 @@ import type {
 } from "@intentic/sandbox-contract/schemas/automations";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { AutomationSchema, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
-import { unwatchedPick, VISITOR_CHAT_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
+import { unwatchedPick, VISITOR_CHAT_ROLE } from "@intentic/sandbox-contract/schemas/roles";
 import { asZone, type Zone } from "@intentic/sandbox-contract/time";
 import { computed, type ComputedRef, reactive, watch } from "vue";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
@@ -46,7 +46,7 @@ const patternProblem = (pattern: string): string | undefined => {
 };
 
 // One row of who may talk to a listener, as typed: ids and groups as comma-separated text split only at save, like
-// `allowedTools`; a blank `actsAs` is no persona, the full toolbox reaching no account, exactly as the automation's own.
+// `allowedTools`; a blank `actsAs` is no role, the full toolbox reaching no account, exactly as the automation's own.
 export interface SenderRuleDraft {
     label: string;
     ids: string;
@@ -109,7 +109,7 @@ export const triggerKey = (trigger: { readonly kind: TriggerKind; readonly provi
 // `Intl.DateTimeFormat()` here: the browser's zone is the reader's, and the reader is not necessarily where the
 // sandbox's chores are meant to happen.
 // The optional one-line texts the form holds as a box: absent reads as blank, and blank saves as absent, trimmed. `group`
-// is the panel shelf it is filed on, and blank files it by persona instead (grouping.ts).
+// is the panel shelf it is filed on, and blank files it by role instead (grouping.ts).
 const boxOf = (text: string | undefined): string => text ?? ``;
 const putLine = (automation: Automation, key: `note` | `group`, box: string): void => {
     const line = box.trim();
@@ -160,10 +160,10 @@ export function useAutomationForm(
         models: [] as ModelPin[],
         // Pinned account by its daemon-minted id; blank ⇒ absent ⇒ the provider's first account.
         account: ``,
-        // Persona this wake runs as; blank means no logged-in account but the full toolbox.
+        // Role this wake runs as; blank means no logged-in account but the full toolbox.
         actsAs: ``,
         runAs: ``,
-        // Comma-separated tool names narrowing the persona; held as typed string, not array, split only at save.
+        // Comma-separated tool names narrowing the role; held as typed string, not array, split only at save.
         allowedTools: ``,
         requireApproval: false,
         // Whether the automation decides per person who it answers; off means everyone the trigger's filters admit.
@@ -336,7 +336,7 @@ export function useAutomationForm(
         }
     });
 
-    // What "Check now" sends: only a complete source, never a guard, which runs here with a persona's credentials.
+    // What "Check now" sends: only a complete source, never a guard, which runs here with a role's credentials.
     const watchSource = computed<WatchSource | undefined>(() => (conditionError.value === undefined ? sourceOf() : undefined));
 
     // The end date as an instant, NaN for blank or half-typed; refused once past, since the daemon would switch it off
@@ -834,11 +834,11 @@ export function useAutomationForm(
         } else {
             automation.account = form.account;
         }
-        // Blank ⇒ absent ⇒ the owner's authority, limited only by the persona.
+        // Blank ⇒ absent ⇒ the owner's authority, limited only by the role.
         setOrDrop(automation, `runAs`, form.runAs);
         // Blank ⇒ absent ⇒ no outward accounts at all; the one field here whose default takes something away.
         setOrDrop(automation, `actsAs`, form.actsAs);
-        // Empty ⇒ absent ⇒ whatever the persona allows; a list here only narrows, never widens, the toolbox.
+        // Empty ⇒ absent ⇒ whatever the role allows; a list here only narrows, never widens, the toolbox.
         const narrowed = form.allowedTools
             .split(`,`)
             .map((name) => name.trim())
@@ -873,10 +873,10 @@ export function useAutomationForm(
         }
         if (isVisitorChat.value) {
             automation.webchat = webchatOf();
-            // A Visitor chat with no persona gets VISITOR_CHAT_PERSONA, written by the daemon on save if the workspace
-            // lacks one yet. Only fills a blank: an owner's own choice of a stronger persona stands.
+            // A Visitor chat with no role gets VISITOR_CHAT_ROLE, written by the daemon on save if the workspace
+            // lacks one yet. Only fills a blank: an owner's own choice of a stronger role stands.
             if (automation.actsAs === undefined) {
-                automation.actsAs = VISITOR_CHAT_PERSONA;
+                automation.actsAs = VISITOR_CHAT_ROLE;
             }
         } else {
             delete automation.webchat;

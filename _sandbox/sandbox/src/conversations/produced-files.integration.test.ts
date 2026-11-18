@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { unstubbed } from "@intentic/testing";
 import { defaultGit } from "@intentic/base/git";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
@@ -43,10 +43,10 @@ const deps = (agent: PersistedAgent) => ({
     transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => rows }),
     workspaceScope: { main, entry: () => agent, worktreeDir: () => copy, branches: unstubbed<Services["workspaceScope"]["branches"]>("branches", {}) },
 });
-const app = ({ email = guest, role = "guest", agent = entry }: { email?: string; role?: MemberRole; agent?: PersistedAgent } = {}) => {
+const app = ({ email = guest, tier = "guest", agent = entry }: { email?: string; tier?: MemberTier; agent?: PersistedAgent } = {}) => {
     const hono = new Hono<AppEnv>();
     hono.use("*", async (c, next) => {
-        c.set("identity", { email, role, methods: [] });
+        c.set("identity", { email, tier, methods: [] });
         await next();
     });
     hono.get("/agents/:id/documents/raw", createProducedFileRoute(deps(agent)));
@@ -84,7 +84,7 @@ test("a guest who started the conversation loses its files once it is handed to 
 });
 
 test("a member who may see the conversation downloads its results like its starter", async () => {
-    const response = await app({ email: "owner@example.test", role: "owner" }).request(url("report.odt"));
+    const response = await app({ email: "owner@example.test", tier: "owner" }).request(url("report.odt"));
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("conversation result");
 });

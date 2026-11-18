@@ -3,7 +3,7 @@
 The page that converts, section by section: selling **intentic-app** (app.intentic.dev). The one
 thing sold (a persistent **sandbox** per co-piloted specialized agent, with
 any browser as a **window** onto it), the voice rules, the glossary, and the objection bank live in
-[messaging.md](messaging.md); personas and pains (P1–P7) in [positioning.md](positioning.md).
+[messaging.md](messaging.md); roles and pains (P1–P7) in [positioning.md](positioning.md).
 
 **Core thesis (the spine):** you run a fleet of coding agents in parallel; the
 runs keep going when you look away, and any browser (or a phone) reopens onto the same fleet; and
@@ -145,9 +145,9 @@ first-time reader does not have. The building site says the same thing with thre
 already owns. If this band is ever redrawn, redraw the temple.
 
 **The camp lives in the docs, and only there (2026-09-15, recorded decision).** `/docs/worksite/` explains
-machine, sandbox, persona and project as a building camp: the camp is the machine, each worker in it is a
-sandbox, the board hanging in a worker's bay is its persona, and the buildings going up beyond the wall are
-the projects. Two of those four (**persona**, **project**) are defined nowhere else on the site, which is what
+machine, sandbox, role and project as a building camp: the camp is the machine, each worker in it is a
+sandbox, the board hanging in a worker's bay is its role, and the buildings going up beyond the wall are
+the projects. Two of those four (**role**, **project**) are defined nowhere else on the site, which is what
 the page is for. It was drawn as an octopus for a day — one body whose arms have brains of their own — and
 that was a second metaphor, allowed on the argument that a docs reader has already bought the claim and can
 afford the switch. The camp does not ask for the switch: it is this page's own building site at closer range,
@@ -370,7 +370,7 @@ Rules that keep them honest:
   with ≤60 words. Where a surface has no honest screenshot (isolation, the platform boundary), the block
   carries a DIAGRAM (`ProductFigure.astro`), never a mockup. **Automate is diagram-led**: there is no
   captured automations screen, so its hero is the `triggers` figure and its index card is a mini-diagram.
-  If an automations/personas screen becomes capturable, give it a real hero and demote the figure to a block.
+  If an automations/roles screen becomes capturable, give it a real hero and demote the figure to a block.
 - **No invented numbers.** The facts strip under each hero carries only things that are true by
   construction (three lanes, one branch per agent, two fields stored by the platform, 25 catalog
   entries). The repo has no benchmark worth quoting yet: the offline cleaner bench measures ~2% over a

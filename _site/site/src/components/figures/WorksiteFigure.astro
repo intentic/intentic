@@ -141,7 +141,7 @@ const pinnedTo: Record<WorksitePart["id"], Omit<Pin, "part">> = {
     machine: { anchor: [500, GROUND], at: [500, 516], align: "center" },
     /* The worker's plate sits below the board's, so the two leaders run in their own lanes instead of crossing. */
     sandbox: { anchor: [stations[0]!.worker, GROUND - 38], at: [180, 452], align: "end" },
-    persona: { anchor: [stations[0]!.board.x, BOARD.y + 13], at: [180, 392], align: "end" },
+    role: { anchor: [stations[0]!.board.x, BOARD.y + 13], at: [180, 392], align: "end" },
     project: { anchor: [plots[1]!.cx, topOf(plots[1]!)], at: [420, 96], align: "center" },
 };
 
@@ -289,7 +289,7 @@ const highlightCss = [
             </g>
 
             {/* One board per bay: the trade written on it, the tools it carries, and the building it reports to. */}
-            <g class="ws-part ws-p-persona">
+            <g class="ws-part ws-p-role">
                 {
                     stations.map((station) => (
                         <g class="ws-order">

@@ -1,5 +1,5 @@
 import type { HookRequest, HookRequests } from "@intentic/sandbox-contract/schemas/approvals";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { HostQuery } from "@intentic/extension-api";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -26,7 +26,7 @@ export function useHookRequests() {
     const { query, error } = api.sandbox.query({
         ...spec,
         // Floored at maintainer daemon-side: below it the read is refused, so it isn't asked.
-        enabled: computed(() => roleAtLeast(api.sandbox.role(), `maintainer`)),
+        enabled: computed(() => tierAtLeast(api.sandbox.role(), `maintainer`)),
     });
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: spec.queryKey });
 

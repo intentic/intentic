@@ -30,7 +30,7 @@ const stalledCount = (calls: ReadonlySet<WaitingCall>, now: number): number => {
     return stalled;
 };
 
-// Proxies /x/<id>/* verbatim to the backend host; the request already passed the boot gate, CORS and bearer role floor.
+// Proxies /x/<id>/* verbatim to the backend host; the request already passed the boot gate, CORS and bearer tier floor.
 // Credentials are stripped before forwarding, the backend authenticates only with its own scoped token; 503 during a
 // restart is the client's retry cue. An extension's declared MCP endpoint is refused here: it is reached only through the
 // daemon's MCP door, which checks that the calling turn was granted the card, never by a panel's or a member's bearer.

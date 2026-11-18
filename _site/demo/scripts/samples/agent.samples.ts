@@ -20,7 +20,7 @@ export const agentSamples: GroupSamples<`agent`> = ({ fleet, held, now }) => ({
     chooseHandoff: { conversationId: fleet.HELD_AGENT_ID, handoff: `trim` },
     resume: { conversationId: fleet.HELD_AGENT_ID },
     rewind: { conversationId: fleet.REVIEW_AGENT_ID, index: 0, messageId: `msg_${fleet.REVIEW_AGENT_ID}_0` },
-    routeChat: { prompt: `Reply to the refund ticket from Berlin`, paths: [], model: true, persona: true },
+    routeChat: { prompt: `Reply to the refund ticket from Berlin`, paths: [], model: true, role: true },
     commands: {},
     refusals: undefined,
 });

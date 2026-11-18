@@ -56,7 +56,7 @@ value import closing a cycle between two of them fails too (standing ones: `_too
 | Layer | Holds | Directories |
 | --- | --- | --- |
 | foundation | storage, ports and primitives every other layer stands on; they know no subsystem | `store/` `seams/` `http/` `offload/` `netd/` `fences/` `speech/` `areas/` `workload/` `safety/` `tunnel/` `image/` `retry/` |
-| host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `access/` `personas/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `activity/` `audit/` `org/` |
+| host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `access/` `roles/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `activity/` `audit/` `org/` |
 | connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `webchat/` `issues/` `definition/` |
 | agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
 | orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `portability/` `migrations/` `history/` `retention/` `hub/` |
@@ -288,7 +288,7 @@ flowchart LR
   copy, a main-tree one in the install lane. The command gate every runtime consults decides it (`guard/command-guard.ts`,
   `agent/providers/project-installs.ts`), from what `agent/run/turn/turn-safety.ts` set on the turn. Its judge reads
   the owner's own `.intentic/config/safety.md` and then the lines a person allowed with a card's Always
-  (`personas/owner-grants.ts`). Those lines live on the auth root, which a turn cannot write. They are listed under
+  (`roles/owner-grants.ts`). Those lines live on the auth root, which a turn cannot write. They are listed under
   Sandbox-wide permissions on Access ▸ Allowed and are never shipped in a definition export.
   For a command holding a secret reference, `secrets/secret-judge-facts.ts` tells the judge what the text cannot:
   that the reference is replaced by its value before the command runs, and for each named secret whether it exists,
@@ -504,10 +504,11 @@ flowchart LR
   home opened, so a re-grade holds the next land (`turn-landing.ts decideLanding`).
 - Who a turn acts for decides what it reaches (2026-10-26, [access.md](../../docs/architecture/access.md)). A
   conversation latches `people` and `services` (`conversations/actor/identity-latch.ts`); `access/principal-chain.ts`
-  turns each into limits (a roster row; a service's steward held to its access profile; a bound organisation's
-  ceiling), and credentials, AI accounts and the tool ceiling are the intersection of them all
-  (`secrets/credential-reach.ts`, capped onto the persona in `agent/run/decide/turn-premise.ts`). A persona only narrows
-  inside that. Automations, sender rules, inbound links and control tokens name a service in `runAs`; a fire or a link
+  turns each into limits (a roster row; a service's steward held to its access profile; every access profile listing
+  the role the turn wears; a bound organisation's ceiling), and credentials, AI accounts and the tool ceiling are
+  the intersection of them all (`secrets/credential-reach.ts`, capped onto the turn in
+  `agent/run/decide/turn-premise.ts`). A role card itself decides only the signed-in accounts it speaks through
+  (2026-11-18: its shelves and folders moved into profiles, `roles/role-access-step.ts`). Automations, sender rules, inbound links and control tokens name a service in `runAs`; a fire or a link
   task whose service can no longer act is skipped with the reason (`access/service-standing.ts`). Profiles and
   services live on the history volume beside the roster, and a person holding a profile carries its answers written on
   their row, rewritten whenever the profile is saved (`access/access-profiles.routes.ts`).
@@ -573,7 +574,7 @@ flowchart LR
 - Claude Code hooks the owner has not approved in their exact form never run (`guard/settings-hooks.ts`,
   `guard/hook-approvals.ts`, applied by `agent/run/harness/settings-hook-gate.ts`): a turn hashes the hooks in the
   user and project settings, in skill, subagent and command frontmatter, and in every plugin it loads that the image
-  does not ship (plugin connections, git-installed and workspace extensions, persona kits, plugin folders among the
+  does not ship (plugin connections, git-installed and workspace extensions, role kits, plugin folders among the
   skills, plugins the settings enable), with the bytes of every script a hook names and of all of a hooks module's
   code (`guard/plugin-hooks.ts`); the settings' `enabledPlugins` and `extraKnownMarketplaces` are in the digest too.
   A digest not in the approvals ledger runs the turn with `disableAllHooks`, which also keeps every plugin's hooks
@@ -630,7 +631,7 @@ flowchart LR
   and a router listing the kit is waited on 11 minutes a call, not 5; a client with a shorter ceiling gets the same
   shortened `wait` as through the extension (`webext-client-ceiling.ts`).
 - The sandbox has a desktop of its own (`desktop/`): one more virtual X display beside the browsers', 1280×800 with
-  openbox on it, for programs with a window and no other way in. A turn whose persona may drive a browser and run programs
+  openbox on it, for programs with a window and no other way in. A turn whose role may drive a browser and run programs
   (its `browser` and `shell` powers: `open` starts any program) mounts it as the `desktop` server beside the browser
   routers (`browserServersOf`), and drives it through
   [desktop-automation](../../_devices/desktop-automation)'s frames, the same code a connected machine's screenshots go
@@ -660,7 +661,7 @@ flowchart LR
   conversation's (`runtimes/opencode/opencode-mcp.ts`). (2026-09-29: rejected the spawn config, which is fixed at boot and cannot carry
   a turn's bearer, and per-turn names, which change the tool list every turn and throw away the provider's prompt
   cache.) An extension's card-less tool server and its
-  agent plugin reach a turn only when the persona's `extensions` list grants that extension (absent: every one). `agent/tools/turn-tools.ts` composes these mounts
+  agent plugin reach a turn only when the role's `extensions` list grants that extension (absent: every one). `agent/tools/turn-tools.ts` composes these mounts
   with the mcp-kind cards into one `remote` list, which every runtime projects the same way. An extension's tools are
   answered by the backend host from `api.tools.serve` on a route of its own (`extensions/backend/backend-tools.ts`),
   handed the card's settings by the door; `/x/*` refuses a backend's own MCP path, so tools are reached only through
@@ -902,7 +903,7 @@ flowchart LR
   answer to the turns, the automation fires and the loops and workflow runs. A loop or workflow run used to restart on
   every boot regardless; when the policy says no, it is now settled `stopped` with a detail saying the sandbox restarted
   while it ran. An automation fire's journal row also keeps the sender's lane, thread and provider session, so a
-  restart's re-fire runs on the persona the sender was given and settles the same thread.
+  restart's re-fire runs on the role the sender was given and settles the same thread.
 - Every automation fire runs inside the automation's own `allowedTools`, whichever door it came through (2026-10-12):
   `runFire` reads it off the record, so schedules, webhooks, channel listeners, approved holds and restart re-fires
   are bound the same as the Visitor chat and bug intake. The list is a boundary, not a permission hint: on the Claude
@@ -929,9 +930,9 @@ flowchart LR
   channel-level message) still runs alone, waiting for every fire of its automation and holding up every one after it.
   The fire journal holds a fire per conversation (`fire_journal_by_conversation`), so a restart re-fires each thread
   that was in flight on its own conversation.
-- A persona's folder fence and its `sandbox` power are judged by path segment, by the contract's `fenceAllows` and
+- A role's folder fence and its `sandbox` power are judged by path segment, by the contract's `fenceAllows` and
   `isSandboxPath`, and see every editing tool `rules/edit-tools.ts` lists, the hashline tools included
-  (`personas/persona-scope.ts`, 2026-10-12). The hashline tools check where a path really lands, through symlinks,
+  (`roles/role-scope.ts`, 2026-10-12). The hashline tools check where a path really lands, through symlinks,
   before they read or write (`hashline/hashline-tools.ts`).
   `/run/intentic/work.json` adds `bootedAt`, `previousBootAt`, `bootsInWindow`, `restartStorm` and `lastRestartAt`
   beside `liveTurns` and `at`, so the host's keeper sees the storm too.

@@ -40,7 +40,7 @@ jest.mock(`../../../models/conversations/panel/useChat-view`, () => ({
     }),
 }));
 // The active sandbox, for the hosted-hours strip: a hosted row its reader owns, or nothing.
-const active = ref<{ id: string; hosted: { region: string; warm: boolean } | null; role: string } | undefined>(undefined);
+const active = ref<{ id: string; hosted: { region: string; warm: boolean } | null; tier: string } | undefined>(undefined);
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable, active, activeSandboxId: ref<string | undefined>(undefined) }) }));
 // The plan state as the strip reads it: settable, so what counts as low is hostedHours.ts's own rule.
 const hostedPlan = ref<HostedPlanState | undefined>(undefined);
@@ -299,23 +299,23 @@ it(`hangs every action off one box, gives the words a floor to wrap against, and
 it(`warns a hosted sandbox's owner about its machine's last hours, and nobody else`, async () => {
     provider.value = `claude`;
     hostedPlan.value = spending(2_160);
-    active.value = { id: `s1`, hosted: { region: `arn`, warm: true }, role: `owner` };
+    active.value = { id: `s1`, hosted: { region: `arn`, warm: true }, tier: `owner` };
     const root = mount();
     await nextTick();
     expect(root.textContent).toContain(`Free hours · 4h of 40h left this month`);
     expect(root.textContent).toContain(`Billing`);
 
     // A guest on the same sandbox is told nothing: the hours are the owner's to buy back.
-    active.value = { id: `s1`, hosted: { region: `arn`, warm: true }, role: `maintainer` };
+    active.value = { id: `s1`, hosted: { region: `arn`, warm: true }, tier: `maintainer` };
     await nextTick();
     expect(root.textContent).not.toContain(`left this month`);
 
     // Nor is anyone on a sandbox on their own computer, whatever the account's hosted hours say, or while most of the
     // month remains.
-    active.value = { id: `local`, hosted: null, role: `owner` };
+    active.value = { id: `local`, hosted: null, tier: `owner` };
     await nextTick();
     expect(root.textContent).not.toContain(`left this month`);
-    active.value = { id: `s1`, hosted: { region: `arn`, warm: true }, role: `owner` };
+    active.value = { id: `s1`, hosted: { region: `arn`, warm: true }, tier: `owner` };
     hostedPlan.value = spending(600);
     await nextTick();
     expect(root.textContent).not.toContain(`left this month`);

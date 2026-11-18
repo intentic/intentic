@@ -8,17 +8,17 @@ import {
     type ManageRight,
     type MemberSelf,
     MANAGE_RIGHTS,
-    MemberGrantSchema,
+    MemberGrantInputSchema,
     memberAccess,
     peopleChangeRefusal,
     tierOf,
 } from "@intentic/sandbox-contract/schemas/members";
-import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { GrantedTier } from "@intentic/sandbox-contract/schemas/shared";
 import { orgMembersOnlyRefusal } from "@intentic/sandbox-contract/policy/org-locks";
 import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
-import { assistantsRefusal, type PersonaReachDeps, reachablePersonas } from "../../personas/persona-reach.js";
+import { assistantsRefusal, type RoleReachDeps, reachableRoles } from "../../roles/role-reach.js";
 import { profileGrant } from "../../access/profile-grant.js";
 import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { rightDenied, unavailableIfUnreadable } from "../owner-gates.js";
@@ -33,7 +33,7 @@ import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 // Run by whoever runs people and access: the owner, Full access, or a member given People & access, who changes anyone's
 // below Full access but their own and hands out only the rights they hold (sandbox-contract `peopleChangeRefusal`).
 
-export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "mediaTickets" | "personas" | "areas"> &
+export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "mediaTickets" | "roles" | "areas"> &
     Partial<Pick<Services, "orgPolicy" | "accessProfiles" | "accessRequests" | "accountConnectors">>;
 
 // A person's request for more access was answered or withdrawn: by a grant, a removal, or the owner dismissing it. The
@@ -52,25 +52,25 @@ const memberEmail = async (c: Context): Promise<string | undefined> => {
     return typeof body?.email === "string" ? body.email.toLowerCase() : undefined;
 };
 
-// A grant request's email + role + the areas it is fenced to (the contract's MemberGrantSchema), or undefined if any is
-// missing or malformed. Role is required: a grant is a role decision, and a default here would be a policy nobody
-// chose. Areas are optional, and their absence is the whole workspace — which is also every assistant, since which
-// cards a person may wear is read off their fence (personas/persona-reach.ts) rather than listed per person.
+// A grant request's email + tier + the areas it is fenced to (the contract's MemberGrantSchema), or undefined if any is
+// missing or malformed. Tier is required: a grant is a tier decision, and a default here would be a policy nobody
+// chose. An editor from before 2026-11-18 sends it as `role`, which reads as the tier (MemberGrantInputSchema). Areas are optional, and their absence is the whole workspace — which is also every assistant, since which
+// cards a person may wear is read off their fence (roles/role-reach.ts) rather than listed per person.
 // `emailSignIn` lets the platform's identity assertion open this sandbox for them; absent keeps what their row says.
 const memberGrant = async (c: Context): Promise<MemberGrantRequest | undefined> => {
-    const body = MemberGrantSchema.safeParse(await c.req.json().catch(() => undefined));
+    const body = MemberGrantInputSchema.safeParse(await c.req.json().catch(() => undefined));
     if (!body.success) {
         return undefined;
     }
-    const { email, role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts, tools, assistants, profile, manages } = body.data;
-    return { email: email.toLowerCase(), role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts, tools, assistants, profile, manages };
+    const { email, tier, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts, tools, assistants, profile, manages } = body.data;
+    return { email: email.toLowerCase(), tier, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts, tools, assistants, profile, manages };
 };
 
 // A grant as the route reads it: who, at what tier, fenced to what, whether email sign-in is theirs, what their
 // conversations may spend and which AI accounts they run on (absent: what their row already says).
 interface MemberGrantRequest {
     readonly email: string;
-    readonly role: GrantedRole;
+    readonly tier: GrantedTier;
     readonly areas?: readonly string[] | undefined;
     readonly agents?: AgentAccess | undefined;
     readonly edit?: EditScope | undefined;
@@ -86,8 +86,8 @@ interface MemberGrantRequest {
 
 // What the audit trail keeps of a grant: the tier it made and the one it replaced, and the shape of the fence (area ids
 // are the owner's own names, no personal data), never the credentials it lists.
-const grantDetails = (grant: MemberGrantRequest, previous: GrantedRole | undefined) => ({
-    role: grant.role,
+const grantDetails = (grant: MemberGrantRequest, previous: GrantedTier | undefined) => ({
+    tier: grant.tier,
     previousRole: previous ?? "none",
     areas: grant.areas ?? "all",
     ...opt("home", grant.agents === "home" ? (grant.lands === true ? "lands" : "asks") : undefined),
@@ -97,15 +97,15 @@ const grantDetails = (grant: MemberGrantRequest, previous: GrantedRole | undefin
 
 // The refusals an access makes on its face, in the order a reader fixes them: a writer named with nowhere to write (what
 // an editor that predates `edit` sends), an access no grant could make (chatting with no area, editing outside what they
-// see), and a role that is not the tier the access makes. For each, the grant is refused rather than one of its two
+// see), and a tier that is not the one the access makes. For each, the grant is refused rather than one of its two
 // answers guessed away: an absent area list resolves to the whole workspace, which is not a narrower grant of a tier
 // but a different one nobody chose.
 const accessRefused = (grant: MemberGrantRequest): string | undefined => {
     const access = memberAccess(grant);
-    if (grant.role === "writer" && access.edit === "none") {
+    if (grant.tier === "writer" && access.edit === "none") {
         return "a writer needs at least one area to write in";
     }
-    if (grant.role === "guest" && access.agents === "chat" && (grant.areas?.length ?? 0) === 0) {
+    if (grant.tier === "guest" && access.agents === "chat" && (grant.areas?.length ?? 0) === 0) {
         return "a guest needs at least one area: the assistants that work there are the ones it speaks through";
     }
     const refused = accessRefusal(access);
@@ -113,7 +113,7 @@ const accessRefused = (grant: MemberGrantRequest): string | undefined => {
         return refused;
     }
     const tier = tierOf(access);
-    return tier === grant.role ? undefined : `the role does not match the access granted, which makes a ${tier}`;
+    return tier === grant.tier ? undefined : `the tier does not match the access granted, which makes a ${tier}`;
 };
 
 // Why a fence cannot be written, or undefined when it can. Every area named exists, since a row pointing at an area
@@ -125,7 +125,7 @@ const areaRefusal = async (services: Pick<Services, "areas">, grant: MemberGrant
     if (grant.areas === undefined && editing.length === 0) {
         return undefined;
     }
-    if (grant.role === "maintainer") {
+    if (grant.tier === "maintainer") {
         return "a maintainer holds the owner's operating authority and cannot be fenced to part of the workspace";
     }
     const known = new Set((await services.areas.list()).map((area) => area.id));
@@ -138,8 +138,8 @@ const areaRefusal = async (services: Pick<Services, "areas">, grant: MemberGrant
 // and secrets its agents use may be narrowed like anyone's (docs/architecture/access.md), so a person can manage every
 // setting while paying only with the accounts they were given. Those lists hold every turn worked for them; a terminal,
 // which a maintainer keeps, still reaches the whole box, so they are a rule for people trusted to operate it.
-const reachRefusal = (grant: Pick<MemberGrantRequest, "role" | "tools" | "profile">): string | undefined => {
-    if (grant.role !== "maintainer") {
+const reachRefusal = (grant: Pick<MemberGrantRequest, "tier" | "tools" | "profile">): string | undefined => {
+    if (grant.tier !== "maintainer") {
         return undefined;
     }
     if (grant.profile !== undefined) {
@@ -151,13 +151,13 @@ const reachRefusal = (grant: Pick<MemberGrantRequest, "role" | "tools" | "profil
 };
 
 // A grant naming a profile, read as the grant that profile writes (access/profile-grant.ts): its answers replace the
-// ones sent beside it, so a row holding a profile always says what the profile says. The role sent must still be the
+// ones sent beside it, so a row holding a profile always says what the profile says. The tier sent must still be the
 // tier the profile makes, as any grant's must, so a client never grants a tier it did not mean.
 const resolvedGrant = async (
     services: MembersRoutesDeps,
     grant: MemberGrantRequest,
 ): Promise<{ readonly grant: MemberGrantRequest } | { readonly refusal: string }> => {
-    if (grant.profile === undefined || grant.role === "maintainer") {
+    if (grant.profile === undefined || grant.tier === "maintainer") {
         return { grant };
     }
     const profile = await services.accessProfiles?.get(grant.profile);
@@ -165,8 +165,8 @@ const resolvedGrant = async (
         return { refusal: `no such access profile: ${grant.profile}` };
     }
     const written = profileGrant(profile);
-    if (written.role !== grant.role) {
-        return { refusal: `the role does not match the access profile "${profile.label ?? profile.id}", which makes a ${written.role}` };
+    if (written.tier !== grant.tier) {
+        return { refusal: `the tier does not match the access profile "${profile.label ?? profile.id}", which makes a ${written.tier}` };
     }
     // Rights ride beside a profile, never in one, so the ones sent are kept.
     return { grant: { ...written, email: grant.email, emailSignIn: grant.emailSignIn, manages: grant.manages } };
@@ -176,16 +176,16 @@ const resolvedGrant = async (
 // reaches nothing but its assistants, so such a grant would sign somebody in to a chat that answers nothing.
 // Checked only for a chatting guest: every other tier, and a home-only guest whose home is the one it talks to, has
 // business in a workspace with no card homed in its folders.
-const guestReachRefusal = async (services: PersonaReachDeps, grant: MemberGrantRequest): Promise<string | undefined> => {
+const guestReachRefusal = async (services: RoleReachDeps, grant: MemberGrantRequest): Promise<string | undefined> => {
     const listed = grant.assistants === "all" ? undefined : grant.assistants;
     const assistants = await assistantsRefusal(services, grant.areas, listed);
     if (assistants !== undefined) {
         return assistants;
     }
-    if (grant.role !== "guest" || memberAccess(grant).agents !== "chat") {
+    if (grant.tier !== "guest" || memberAccess(grant).agents !== "chat") {
         return undefined;
     }
-    const reached = await reachablePersonas(services, grant.areas, listed);
+    const reached = await reachableRoles(services, grant.areas, listed);
     return reached.length > 0
         ? undefined
         : "no assistant works in those areas, so a guest fenced to them would have nobody to talk to; give an assistant a starting folder inside one, or fence the guest to an area that already has one";
@@ -218,13 +218,13 @@ const withRowFacts = (self: MemberSelf, row: RosterRow | undefined, connected: r
 // the editor draws "asked" rather than offering the ask again.
 const selfAccess = async (services: Pick<MembersRoutesDeps, "members" | "accessRequests" | "accountConnectors">, c: Context<AppEnv>): Promise<Response> => {
     const identity = c.get("identity");
-    if (identity === undefined || identity.role === "owner") {
-        return c.json({ role: identity?.role ?? "owner", agents: "run", edit: "all", lands: true, manages: [...MANAGE_RIGHTS] } satisfies MemberSelf);
+    if (identity === undefined || identity.tier === "owner") {
+        return c.json({ tier: identity?.tier ?? "owner", agents: "run", edit: "all", lands: true, manages: [...MANAGE_RIGHTS] } satisfies MemberSelf);
     }
     const edits = identity.edits ?? "all";
-    const self: MemberSelf = { role: identity.role, agents: identity.agents ?? "run", edit: edits === "all" || edits === "none" ? edits : [...edits] };
+    const self: MemberSelf = { tier: identity.tier, agents: identity.agents ?? "run", edit: edits === "all" || edits === "none" ? edits : [...edits] };
     // Full access runs every part of the sandbox, so it is said whole rather than left for the editor to infer.
-    const manages = identity.role === "maintainer" ? MANAGE_RIGHTS : identity.manages;
+    const manages = identity.tier === "maintainer" ? MANAGE_RIGHTS : identity.manages;
     if (manages !== undefined && manages.length > 0) {
         self.manages = [...manages];
     }
@@ -252,7 +252,7 @@ const selfAccess = async (services: Pick<MembersRoutesDeps, "members" | "accessR
 // is the owner's own tool; the gate in front already refused every machine credential.
 const managerOf = (c: Context<AppEnv>): Parameters<typeof peopleChangeRefusal>[0] => {
     const identity = c.get("identity");
-    return identity === undefined ? { email: "", role: "owner" } : { email: identity.email, role: identity.role, manages: identity.manages };
+    return identity === undefined ? { email: "", tier: "owner" } : { email: identity.email, tier: identity.tier, manages: identity.manages };
 };
 
 // A roster this build cannot read is refused rather than replaced (auth.ts `fileMembersStore`), so a grant or a removal
@@ -278,7 +278,7 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
         }
         const asked = await memberGrant(c);
         if (asked === undefined) {
-            return c.json({ error: "email and role required" }, 400);
+            return c.json({ error: "email and tier required" }, 400);
         }
         const resolved = await resolvedGrant(services, asked);
         if ("refusal" in resolved) {
@@ -298,15 +298,15 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
         }
         return unavailableIfUnreadable(c, async () => {
             const before = (await services.members.list()).find((member) => member.email === grant.email.toLowerCase());
-            const bounded = peopleChangeRefusal(managerOf(c), { email: grant.email, before, after: { role: grant.role, manages: grant.manages } });
+            const bounded = peopleChangeRefusal(managerOf(c), { email: grant.email, before, after: { tier: grant.tier, manages: grant.manages } });
             if (bounded !== undefined) {
                 return c.json({ error: bounded }, 403);
             }
             await services.members.add(grant.email, grant);
-            noteAudit({ target: grant.email.toLowerCase(), details: grantDetails(grant, before?.role) });
+            noteAudit({ target: grant.email.toLowerCase(), details: grantDetails(grant, before?.tier) });
             // Granting the person anything is the owner's answer to what they asked, whatever they asked.
             await settleRequest(services, grant.email);
-            // A role is frozen into an open socket/ticket; closing both re-enters the authorizer with the new tier. A media
+            // A tier is frozen into an open socket/ticket; closing both re-enters the authorizer with the new tier. A media
             // ticket names a file the new tier may no longer reach.
             revokeHeld(services, grant.email);
             return c.json({ members: await services.members.list() });
@@ -343,7 +343,7 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
         if (identity === undefined) {
             return c.json({ error: "verified member required" }, 401);
         }
-        if (identity.role === "owner") {
+        if (identity.tier === "owner") {
             return c.json({ error: "the owner must retire the sandbox instead" }, 400);
         }
         // Normalized: the roster holds lowercase, but identity carries Google's claim as sent; raw form hits no row.
@@ -365,7 +365,7 @@ const createRequestRoutes = (services: MembersRoutesDeps) => ({
         if (identity === undefined) {
             return c.json({ error: "verified member required" }, 401);
         }
-        if (identity.role === "owner") {
+        if (identity.tier === "owner") {
             return c.json({ error: "the owner already holds every access here" }, 400);
         }
         // allow(silent-catch): a body that is not JSON is refused below as one that says nothing, which it is.

@@ -5,7 +5,7 @@ import { contributionFor, contributionRegistry } from "../contributions.js";
 import type { ExtensionHost } from "../extension-inventory/installed-extensions.js";
 import type { CardDeps } from "../../guard/card-offers.js";
 import type { HoldDeps } from "../../guard/held-asks.js";
-import type { ConversationGrants } from "../../personas/conversation-grants.js";
+import type { ConversationGrants } from "../../roles/conversation-grants.js";
 import type { CredentialGate } from "../../secrets/gates/credential-gate.js";
 import type { SecretUsesStore } from "../../secrets/secret-uses.js";
 import { fileSshKeyStore, SSH_KEYS_DIR, type SshKeyStore } from "../ssh-key-store.js";

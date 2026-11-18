@@ -18,7 +18,7 @@ const { automations } = useAutomations();
 const { placeOf } = useShelves(automations);
 const shelf = computed(() => placeOf(props.automation));
 const why = computed<string | undefined>(() =>
-    ({ group: undefined, chores: t(`groupProperty.byChore`), persona: t(`groupProperty.byPersona`), other: t(`groupProperty.byNothing`) })[shelf.value.kind],
+    ({ group: undefined, chores: t(`groupProperty.byChore`), role: t(`groupProperty.byRole`), other: t(`groupProperty.byNothing`) })[shelf.value.kind],
 );
 
 // Every group already named, as one-press choices: filing two jobs together means the same word, and a near miss
@@ -40,7 +40,7 @@ const begin = (): void => {
     open.value = true;
 };
 
-// Blank files it by itself again (grouping.ts): by persona, or with the chores. Enter reaches this as directly as Save
+// Blank files it by itself again (grouping.ts): by role, or with the chores. Enter reaches this as directly as Save
 // does, so a held key must not write twice while the first write is out.
 const submitting = ref(false);
 const save = async (): Promise<void> => {

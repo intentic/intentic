@@ -24,13 +24,13 @@ export interface PairedLink {
     readonly sandboxId: string;
 }
 
-// The personas the far sandbox's tasks may wear, by id and name: all a pairing shows of them.
-const PersonasAnswerSchema = z.object({ personas: z.array(z.object({ id: z.string(), label: z.string().optional() })) });
-export type FarPersona = z.infer<typeof PersonasAnswerSchema>["personas"][number];
+// The roles the far sandbox's tasks may wear, by id and name: all a pairing shows of them.
+const RolesAnswerSchema = z.object({ roles: z.array(z.object({ id: z.string(), label: z.string().optional() })) });
+export type FarRole = z.infer<typeof RolesAnswerSchema>["roles"][number];
 
-/** The far sandbox's personas, read as the reader there. */
-export const personasAt = async (sandboxId: string): Promise<readonly FarPersona[]> =>
-    (await sandboxJsonAt(sandboxId, procedurePath((await loadContract()).sandboxContract.personas.list), PersonasAnswerSchema)).personas;
+/** The far sandbox's roles, read as the reader there. */
+export const rolesAt = async (sandboxId: string): Promise<readonly FarRole[]> =>
+    (await sandboxJsonAt(sandboxId, procedurePath((await loadContract()).sandboxContract.roles.list), RolesAnswerSchema)).roles;
 
 /** A card id from a sandbox's name: what the agent hands work `to`, within a capability id's alphabet. */
 export const linkCardId = (name: string): string => {
@@ -47,7 +47,7 @@ export const linkCardId = (name: string): string => {
  * The reader's other sandboxes a link may be minted on: one they operate (the far side's links are a maintainer's to
  * mint), with an address to reach it at, and not this one.
  */
-export const pairableSandboxes = <Candidate extends { readonly id: string; readonly daemonUrl: string | null; readonly role: string }>(
+export const pairableSandboxes = <Candidate extends { readonly id: string; readonly daemonUrl: string | null; readonly tier: string }>(
     candidates: readonly Candidate[],
     here: string | undefined,
 ): (Candidate & { readonly daemonUrl: string })[] =>
@@ -56,7 +56,7 @@ export const pairableSandboxes = <Candidate extends { readonly id: string; reado
             candidate.id !== here &&
             candidate.daemonUrl !== null &&
             candidate.daemonUrl !== `` &&
-            (candidate.role === `owner` || candidate.role === `maintainer`),
+            (candidate.tier === `owner` || candidate.tier === `maintainer`),
     );
 
 // The far sandbox an agent named when it asked for a link (`capabilities request link --target <it>`): by its name, the
@@ -81,7 +81,7 @@ export const preferredSandbox = <Candidate extends { readonly id: string; readon
 };
 
 // What the picker says beside one of the reader's sandboxes: the machine it runs on, and whether it answers now. Read off
-// the platform's row alone, since the far daemon is asked nothing until one is picked (its personas): a hosted machine
+// the platform's row alone, since the far daemon is asked nothing until one is picked (its roles): a hosted machine
 // says its own state, one on the reader's computer whether it sleeps there (and whether that computer can wake it), and
 // any other when it last checked in, which it does at least hourly while it runs.
 export type FarSandboxFacts = Pick<SandboxSummary, `hosted` | `hostReport` | `sleep` | `lastSeenAt`>;

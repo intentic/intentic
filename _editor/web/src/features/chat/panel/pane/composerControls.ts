@@ -27,7 +27,7 @@ import type { ChatMessage } from "../../../../models/conversations/transcript/tr
 export interface ControlPills {
     readonly mode: Readonly<Ref<HTMLElement | undefined>>;
     readonly placement: Readonly<Ref<HTMLElement | undefined>>;
-    readonly persona: Readonly<Ref<HTMLElement | undefined>>;
+    readonly role: Readonly<Ref<HTMLElement | undefined>>;
     readonly runThrough: Readonly<Ref<HTMLElement | undefined>>;
     readonly more: Readonly<Ref<HTMLElement | undefined>>;
 }
@@ -63,8 +63,8 @@ const openersOf = (flags: Record<Exclude<ComposerControl, `land`>, Ref<boolean>>
         startFrom: () => {
             flags.startFrom.value = true;
         },
-        persona: () => {
-            flags.persona.value = true;
+        role: () => {
+            flags.role.value = true;
         },
         runThrough: () => {
             flags.runThrough.value = true;
@@ -98,7 +98,7 @@ export const useComposerControls = (host: ControlsHost) => {
     // One open flag per picker menu (desktop panel or mobile sheet), not one per surface: they drifted apart once.
     const modelOpen = ref(false);
     const modeOpen = ref(false);
-    const personaOpen = ref(false);
+    const roleOpen = ref(false);
     const placementOpen = ref(false);
     // The send's caret menu: when the message goes (a time, another agent's land), and the ways around a spent allowance.
     const laterOpen = ref(false);
@@ -143,10 +143,10 @@ export const useComposerControls = (host: ControlsHost) => {
         placed: placedElsewhere(conversation()),
         placementFixed: conversation().registered.value,
         ...host.startFrom.situation.value,
-        persona: conversation().selection.actsAs.value,
+        role: conversation().selection.actsAs.value,
         runThrough: runThrough.state.value,
         voiceAgent: voiceAgent.value,
-        personaOffered: !remote.value,
+        roleOffered: !remote.value,
         voiceOffered: placeable.value,
         landOffered: landing.offered.value,
         lands: landing.lands.value,
@@ -163,7 +163,7 @@ export const useComposerControls = (host: ControlsHost) => {
     const anchorOf = (control: ComposerControl, own: Readonly<Ref<HTMLElement | undefined>>) =>
         computed(() => (inRow.value[control] ? own.value : host.pills.more.value));
 
-    const flags = { mode: modeOpen, placement: placementOpen, startFrom: host.startFrom.open, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent };
+    const flags = { mode: modeOpen, placement: placementOpen, startFrom: host.startFrom.open, role: roleOpen, runThrough: runThrough.open, voice: voiceAgent };
     const OPENERS = openersOf(flags, landing.toggle);
 
     // Only one answer to "what does send do" can hold, and an armed edit wins as the most specific act; cleared visibly
@@ -183,7 +183,7 @@ export const useComposerControls = (host: ControlsHost) => {
             return;
         }
         voiceAgent.value = false;
-        for (const open of [modelOpen, modeOpen, personaOpen, laterOpen, moreOpen, host.startFrom.open]) {
+        for (const open of [modelOpen, modeOpen, roleOpen, laterOpen, moreOpen, host.startFrom.open]) {
             open.value = false;
         }
     });
@@ -191,7 +191,7 @@ export const useComposerControls = (host: ControlsHost) => {
     return {
         modelOpen,
         modeOpen,
-        personaOpen,
+        roleOpen,
         placementOpen,
         laterOpen,
         moreOpen,
@@ -223,7 +223,7 @@ export const useComposerControls = (host: ControlsHost) => {
         ),
         modeAnchor: anchorOf(`mode`, host.pills.mode),
         placementAnchor: anchorOf(`placement`, host.pills.placement),
-        personaAnchor: anchorOf(`persona`, host.pills.persona),
+        roleAnchor: anchorOf(`role`, host.pills.role),
         runThroughAnchor: anchorOf(`runThrough`, host.pills.runThrough),
         // A row hands off to the control that owns the choice, closing the overflow first so the next panel's
         // dismissal never catches the same press; voice and landing have nothing to pick, so their rows are the press.

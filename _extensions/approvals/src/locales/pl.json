@@ -103,7 +103,7 @@
         "enabledIn": "włączona w {where}",
         "filesPinned": "Zatwierdzenie obejmuje też te pliki, bajt po bajcie:",
         "fromExtension": "z rozszerzenia",
-        "fromPersona": "zestaw persony",
+        "fromRole": "zestaw roli",
         "fromPlugin": "połączenie wtyczki",
         "fromProjectSettings": ".claude/settings.json przestrzeni roboczej",
         "fromSkills": "folder wtyczki wśród skilli",

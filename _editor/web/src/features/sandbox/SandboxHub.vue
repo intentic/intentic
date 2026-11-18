@@ -17,7 +17,7 @@ const SandboxActivity = lazySection(`SandboxActivity`, () => import("./activity/
 const SandboxEnvironment = lazySection(`SandboxEnvironment`, () => import("./environment/SandboxEnvironment.vue"));
 const SandboxMap = lazySection(`SandboxMap`, () => import("./map/SandboxMap.vue"));
 const SandboxAccess = lazySection(`SandboxAccess`, () => import("./access/SandboxAccess.vue"));
-const SandboxPersonas = lazySection(`SandboxPersonas`, () => import("./personas/SandboxPersonas.vue"));
+const SandboxRoles = lazySection(`SandboxRoles`, () => import("./roles/SandboxRoles.vue"));
 const SandboxModels = lazySection(`SandboxModels`, () => import("./models/SandboxModels.vue"));
 const SandboxAgent = lazySection(`SandboxAgent`, () => import("./overview/SandboxAgent.vue"));
 const SandboxExtensions = lazySection(`SandboxExtensions`, () => import("./extensions/SandboxExtensions.vue"));
@@ -35,7 +35,7 @@ const SECTIONS = new Map<string, Component>([
     [`environment`, SandboxEnvironment],
     [`map`, SandboxMap],
     [`access`, SandboxAccess],
-    [`personas`, SandboxPersonas],
+    [`roles`, SandboxRoles],
     [`models`, SandboxModels],
     [`agent`, SandboxAgent],
     [`extensions`, SandboxExtensions],
@@ -68,7 +68,7 @@ import { useHostedBuild } from "./secrets/useHostedBuild";
 import { useWants } from "./secrets/useWants";
 import { useAccess } from "../../client/sandbox/access/useAccess";
 import type { AccessReason } from "../../client/sandbox/access/accessReason";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { selfSettled } from "../../client/sandbox/useMembers";
 import AccessGate from "../../components/access/AccessGate.vue";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -99,9 +99,9 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const DEFAULT = SANDBOX_DEFAULT_SECTION;
-// A persona a link names (`?open=<id>`, the chat rail's Edit persona), handed to its page to land on open.
+// A role a link names (`?open=<id>`, the chat rail's Edit role), handed to its page to land on open.
 const route = useRoute();
-const openPersona = computed(() => (typeof route.query[`open`] === `string` ? route.query[`open`] : undefined));
+const openRole = computed(() => (typeof route.query[`open`] === `string` ? route.query[`open`] : undefined));
 
 // The route these sections live on, and half of the address their long-running work reports under.
 const HUB = `sandbox`;
@@ -157,7 +157,7 @@ const { hidden: orgHidden } = useOrgPolicy();
 // The hub's own sections, which an organisation's lock wraps; an extension's view is never one an organisation holds.
 const builtIn = computed(() => sandboxBuiltInSlugs());
 // Operating surfaces need the top revokable grant too; the daemon enforces it, this just keeps the index honest.
-const { canShip, isGuest } = useRole();
+const { canShip, isGuest } = useTier();
 // A guest's hub is one section, so it opens on it rather than on an overview the daemon would refuse.
 const defaultSlug = computed(() => (isGuest.value ? GUEST_SECTION : DEFAULT));
 
@@ -168,9 +168,9 @@ const defaultSlug = computed(() => (isGuest.value ? GUEST_SECTION : DEFAULT));
 // A part of the sandbox given to someone below (sandboxNav.ts `right`) opens its section for them, so their tier is not
 // known until their own answer, which names those parts, has landed.
 const MAINTAINERS: AccessReason = { kind: `tier`, floor: `maintainer` };
-const { role: knownRole, holds } = useAccess();
+const { tier: knownTier, holds } = useAccess();
 const settled = selfSettled();
-const tierKnown = computed(() => knownRole.value !== undefined && settled.value);
+const tierKnown = computed(() => knownTier.value !== undefined && settled.value);
 const held = (slug: string): boolean => sandboxSectionOf(slug)?.maintainer === true;
 const opens = (row: SandboxSection): boolean => sectionOpens(row, canShip.value, holds);
 const withheld = computed<readonly string[]>(() =>
@@ -325,8 +325,8 @@ useSectionWarmup(() => groups.value.flatMap((group) => group.items.flatMap(hubRo
                 </SandboxActivity>
                 <SandboxEnvironment v-else-if="slug === `environment`" />
                 <SandboxMap v-else-if="slug === `map`" :models="sources" />
-                <SandboxAccess v-else-if="slug === `access`" :open="openPersona" />
-                <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />
+                <SandboxAccess v-else-if="slug === `access`" :open="openRole" />
+                <SandboxRoles v-else-if="slug === `roles`" :open="openRole" />
                 <SandboxModels v-else-if="slug === `models`" />
                 <SandboxAgent v-else-if="slug === `agent`" />
                 <SandboxExtensions v-else-if="slug === `extensions`" />

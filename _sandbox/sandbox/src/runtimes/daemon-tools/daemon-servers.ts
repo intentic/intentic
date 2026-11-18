@@ -8,7 +8,7 @@ import { JS_SUBJECT } from "../../guard/command-guard.js";
 import { sealedDoor } from "../../guard/outside-results.js";
 import { GATE_SERVER, gateServer } from "./policy-gate-server.js";
 import { policyLimitsOf } from "./policy-gate.js";
-import type { TurnPersona } from "../../personas/personas.js";
+import type { TurnRole } from "../../roles/roles.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import type { TurnContext } from "../../agent/providers/adapter.js";
 import { checkHooksOf, type HarnessHooksDeps } from "../../agent/run/harness/harness-hooks.js";
@@ -38,7 +38,7 @@ import { deliverWake } from "../../seams/wake-delivery.js";
 import { pageMediaKeyPath } from "../../agent/pages/page-media.js";
 
 // The daemon's own tools for a runtime that is not the Claude Code loop: the same servers that loop mounts in-process
-// (harness-servers.ts, agent.ts), built for this turn, held to the same persona decisions, and served through the MCP door
+// (harness-servers.ts, agent.ts), built for this turn, held to the same role decisions, and served through the MCP door
 // on the turn's own lease (sdk-door.ts), so Codex, OpenCode, an ACP agent, Devin or Pi reach them as the HTTP MCP servers
 // they already read. What only exists once the loop runs (its stream, its watchdog, its gate) arrives through the turn's
 // relay (turn-relay.ts). DAEMON-TOOLS-WIRING.md is how a runtime takes them.
@@ -49,8 +49,8 @@ export interface DaemonServersTurn {
     readonly input: AgentTurn;
     readonly context: TurnContext;
     // Resolved by planTurn; the open fallback a planner already uses when absent is its own to pass.
-    readonly persona: TurnPersona;
-    // The persona's narrowed capability manifest, the same one turnToolsOf was given.
+    readonly role: TurnRole;
+    // The role's narrowed capability manifest, the same one turnToolsOf was given.
     readonly granted: readonly Capability[];
     // The owner's settings: `chatPages` offers the page tools, the rules give the turn's end-of-turn checks.
     readonly settings: SandboxSettings;
@@ -177,7 +177,7 @@ const codeServer = (turn: DaemonServersTurn, relay: TurnRelay, secrets: SecretAc
 const terminalServer = (turn: DaemonServersTurn, relay: TurnRelay): McpSdkServerConfigWithInstance | undefined => {
     const { hooks, signal } = turn.context.base;
     const conversationId = turn.input.conversationId;
-    return conversationId === undefined || !turn.persona.powers.shell || !tmuxRunEnabled()
+    return conversationId === undefined || !turn.role.powers.shell || !tmuxRunEnabled()
         ? undefined
         : terminalHelpServer({ session: () => ownedAgentSession(conversationId), conversationId, signal, push: relay.push, cards: hooks.cards });
 };

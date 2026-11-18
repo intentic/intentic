@@ -274,7 +274,7 @@ export interface RunOptions {
     readonly log?: (head: RunLogHead) => RunLog;
     // Side-channel prep that must precede the provider; its failure may cost persistence, never the turn itself.
     readonly before?: Promise<unknown>;
-    // Names the provider, model and knobs the turn's persona or run role pins (turn-routing.ts), asked of the turn as it was
+    // Names the provider, model and knobs the turn's role or run role pins (turn-routing.ts), asked of the turn as it was
     // sent after the run is claimed, so the door still answers at once and its starter reads the frames from the first one. The pump waits for
     // it; the provider runs the routed turn, and a journalled run's entry is written again with it. A failure to route is
     // the turn's own failure. Absent, the turn is already as it will run.

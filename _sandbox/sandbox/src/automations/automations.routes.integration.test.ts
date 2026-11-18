@@ -94,15 +94,15 @@ test("upsert refuses sender rules on a trigger nobody sends: a schedule", async 
 
 // A name nobody carries would run every fire with no tools and no accounts, silently: refused while it can still be
 // changed. A built-in is always there, and a card that exists is taken.
-test("upsert refuses a persona nobody carries, and takes a built-in or a card that exists", async () => {
+test("upsert refuses a role nobody carries, and takes a built-in or a card that exists", async () => {
     const root = mkdtempSync(join(tmpdir(), "routes-"));
     const services = unstubbed<Services>("services", {
         ...catalogServices(root),
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [{ id: "marketing", capabilities: [] }] }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [{ id: "marketing", capabilities: [] }] }),
     });
     const routes = createAutomationsRoutes(services);
     const nightly = automation("nightly", { kind: "schedule", cron: "0 3 * * *" });
-    await expect(call(routes.upsert, { ...nightly, actsAs: "reddit-writer" }, { context })).rejects.toThrow(/no persona is called "reddit-writer"/);
+    await expect(call(routes.upsert, { ...nightly, actsAs: "reddit-writer" }, { context })).rejects.toThrow(/no role is called "reddit-writer"/);
     expect(await services.automations.get("nightly")).toBeUndefined();
     for (const actsAs of ["full-access", "no-accounts", "marketing"]) {
         await call(routes.upsert, { ...nightly, actsAs }, { context });

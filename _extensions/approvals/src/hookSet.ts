@@ -48,8 +48,8 @@ export const pluginOrigin = (plugin: HookPlugin): string => {
             return t(`hookSetBody.fromSkills`);
         case `extension`:
             return t(`hookSetBody.fromExtension`);
-        case `persona`:
-            return t(`hookSetBody.fromPersona`);
+        case `role`:
+            return t(`hookSetBody.fromRole`);
         case `plugin`:
             return t(`hookSetBody.fromPlugin`);
     }

@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import { createApp } from "../../app.js";
 import { postJson, proven } from "../../harness/route-client.testing.js";
 import { services } from "../../harness/route-services.testing.js";
@@ -16,9 +16,9 @@ const sandbox = async () => {
     const dir = await mkdtemp(join(tmpdir(), "access-requests-"));
     const members = fileMembersStore(join(dir, "members.json"));
     const accessRequests = fileAccessRequests(dir);
-    await members.add("rin@example.com", { role: "viewer" });
+    await members.add("rin@example.com", { tier: "viewer" });
     // Each caller is the app as that person signs in to it: the owner, or a member at their tier.
-    const as = (email: string, role: MemberRole) =>
+    const as = (email: string, role: MemberTier) =>
         createApp(
             services({
                 auth: {
@@ -46,7 +46,7 @@ test("a member asks from where they were refused, and their own answer says they
     const { rin, accessRequests } = await sandbox();
     const asked = await postJson(rin, "/members/requests", { want: "maintainer", place: "Secrets" });
     expect(asked.status).toBe(200);
-    expect(await asked.json()).toEqual({ role: "viewer", agents: "run", edit: "all", askedAt: expect.any(Number) });
+    expect(await asked.json()).toEqual({ tier: "viewer", agents: "run", edit: "all", askedAt: expect.any(Number) });
     expect(await accessRequests.list()).toEqual([{ email: "rin@example.com", want: "maintainer", place: "Secrets", at: expect.any(Number) }]);
 
     // A later ask replaces theirs: one open request per person.
@@ -75,12 +75,12 @@ test("only the owner reads and dismisses the requests", async () => {
         body: JSON.stringify({ email: "Rin@Example.com" }),
     });
     expect(await dismissed.json()).toEqual({ requests: [] });
-    expect((await getJson(rin, "/members/self")).body).toEqual({ role: "viewer", agents: "run", edit: "all" });
+    expect((await getJson(rin, "/members/self")).body).toEqual({ tier: "viewer", agents: "run", edit: "all" });
 });
 
 test("granting the person anything answers what they asked", async () => {
     const { owner, rin, accessRequests } = await sandbox();
     await postJson(rin, "/members/requests", { want: "collaborator", place: "Chat" });
-    expect((await postJson(owner, "/members", { email: "rin@example.com", role: "collaborator" })).status).toBe(200);
+    expect((await postJson(owner, "/members", { email: "rin@example.com", tier: "collaborator" })).status).toBe(200);
     expect(await accessRequests.list()).toEqual([]);
 });

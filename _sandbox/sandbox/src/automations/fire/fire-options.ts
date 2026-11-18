@@ -42,7 +42,7 @@ export interface FireOptions {
     readonly sessionId?: string;
     // The thread-sessions key this fire belongs to, snapshotted on a hold so the approved run settles the same thread.
     readonly thread?: string;
-    // What the sender's rule decided (senders.ts): present, its persona replaces the automation's and its hold adds to
+    // What the sender's rule decided (senders.ts): present, its role replaces the automation's and its hold adds to
     // it. Absent for a fire nobody sent, a schedule or a webhook, which wears the automation's own.
     readonly lane?: SenderLane;
     // Replaces the automation's own `allowedTools` for this one fire. Every fire already carries the automation's list

@@ -21,7 +21,7 @@ import { type CardView, modelOrProvider } from "./cardView";
 import { isArchived, originOf, tabLabel, twinTitles } from "./tabs";
 import { timeAgo } from "@intentic/ui";
 import { useAudience } from "../../../app/useAudience";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { landFromMenu } from "../../../models/fleet/presses/landPress";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 
@@ -34,7 +34,7 @@ import { useVocabulary } from "../../../workbench/views/vocabulary";
 const t = useT();
 // Which model answers is a developer's fact: a maker's and a guest's rail row names the conversation, not the model.
 const { maker } = useAudience();
-const { isGuest, canShip } = useRole();
+const { isGuest, canShip } = useTier();
 const words = useVocabulary();
 const modelShown = computed(() => !maker.value && !isGuest.value);
 

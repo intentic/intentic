@@ -5,7 +5,7 @@ import { entryId } from "./internal.js";
 // LINKED SANDBOXES: one of the owner's sandboxes handing tasks to another. The sandbox that hands work over holds a
 // `link` capability card (schemas/capabilities.ts LinkConfigSchema); the one that takes it holds an inbound link, minted
 // by its owner, whose token is that card's credential. Everything the taking side does with a task is decided there, by
-// the terms on its own link: which persona the work wears, whether each task waits for its owner, how many turns an hour.
+// the terms on its own link: which role the work wears, whether each task waits for its owner, how many turns an hour.
 // The handing side only asks, reads and stops, and operates this sandbox only while its terms say it may (`operate`).
 
 // What a link token looks like: issuer-prefixed like a control token (`ict_`), and never the same credential.
@@ -50,13 +50,13 @@ export const LinkTermsSchema = z.object({
     actsAs: entryId
         .optional()
         .describe(
-            "The persona every task through this link wears: its accounts, its shelves, its folders, its model. Absent, the task runs with no signed-in account and the full toolbox, as any unattended wake does.",
+            "The role every task through this link wears: its accounts, its shelves, its folders, its model. Absent, the task runs with no signed-in account and the full toolbox, as any unattended wake does.",
         ),
-    // Who the link's tasks act for (schemas/services.ts), the hard half beside the persona's posture.
+    // Who the link's tasks act for (schemas/services.ts), the hard half beside the role's posture.
     runAs: entryId
         .optional()
         .describe(
-            "The service every task through this link acts as: whose authority it uses, held to that service's access profile. Absent means this sandbox's owner, limited only by the persona.",
+            "The service every task through this link acts as: whose authority it uses, held to that service's access profile. Absent means this sandbox's owner, limited only by the role.",
         ),
     approve: approveTerm.default(false),
     turnsPerHour: turnsPerHourTerm.default(LINK_TURNS_PER_HOUR_DEFAULT),
@@ -109,13 +109,13 @@ export type InboundLinkMint = z.infer<typeof InboundLinkMintSchema>;
 // The raw token, shown exactly once.
 export const InboundLinkMintedSchema = z.object({ id: z.string(), token: z.string() });
 export type InboundLinkMinted = z.infer<typeof InboundLinkMintedSchema>;
-// POST /system/links/{id}: new terms, whole fields replaced, the rest kept. `null` on the persona or the service takes it
+// POST /system/links/{id}: new terms, whole fields replaced, the rest kept. `null` on the role or the service takes it
 // off (2026-10-26): absence keeps a field, so before this neither could be cleared once set. Spelled field by field rather
 // than as LinkTermsSchema.partial(): zod still fills a partial's inner defaults, so a change naming one field would read
 // as `approve: false, turnsPerHour: 20, tasks: true` and quietly reset the rest (2026-10-29).
 export const InboundLinkTermsUpdateSchema = z.object({
     label: z.string().trim().min(1).max(60).optional(),
-    actsAs: entryId.nullable().optional().describe("The persona every task wears; null takes it off."),
+    actsAs: entryId.nullable().optional().describe("The role every task wears; null takes it off."),
     runAs: entryId.nullable().optional().describe("The service every task acts as; null takes it off, so tasks act for this sandbox's owner."),
     approve: approveTerm.optional(),
     turnsPerHour: turnsPerHourTerm.optional(),
@@ -137,7 +137,7 @@ export const LinkHelloSchema = z.object({
     terms: z.object({
         approve: z.boolean(),
         turnsPerHour: z.number().int(),
-        persona: z.string().optional().describe("The name of the persona its tasks wear, when they wear one."),
+        role: z.string().optional().describe("The name of the role its tasks wear, when they wear one."),
         // Absent from a sandbox older than 2026-10-29, which takes tasks.
         tasks: z.boolean().optional(),
         // Absent from a sandbox older than records over links, which shares none.

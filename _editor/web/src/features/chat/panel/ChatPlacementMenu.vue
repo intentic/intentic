@@ -18,7 +18,7 @@ import { loadLine, unfitWords } from "./fleet/fleetWords";
 // - A runner: a container on another of your computers, running this sandbox's workspace (only CPU/memory moves)
 // - Another sandbox: a different workspace and machine entirely (the work's address moves)
 //
-// A remote conversation doesn't carry this box's open file, mentions, personas or account pick (turnRequest.ts
+// A remote conversation doesn't carry this box's open file, mentions, roles or account pick (turnRequest.ts
 // spells out each omission); provider and model still cross. Offered only before the first turn, since placement
 // latches with the branch then (Conversation.registered) and that box is the only one that can continue it.
 // Offline runners and unreachable sandboxes are listed but not selectable.

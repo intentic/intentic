@@ -16,7 +16,7 @@ import { type CursorGateTurn, createCursorHookService, type CursorHookService, L
 import { cursorSecrets } from "./turn/cursor-secrets.js";
 
 // What every Cursor turn's hooks hold it to beyond the rulebook and the privacy shield: its tool list, its stored
-// secrets, the person a `default`-mode turn asks, its terminal, and the skills its persona withholds. The generated
+// secrets, the person a `default`-mode turn asks, its terminal, and the skills its role withholds. The generated
 // script runs as a real child process, as Cursor runs it.
 
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });

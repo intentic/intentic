@@ -79,7 +79,7 @@ export const tileCount = (facts: TileFacts): number | undefined => (facts.count 
 /**
  * The tile open on arrival. The provider a link named, the sign-in in flight or the one that just failed (it is the
  * reader's turn), else whatever needs a person; failing those, the first provider already connected, else the grid's
- * first tile. Some tile is always open, as every master/detail view here arrives with one selected (personas does the
+ * first tile. Some tile is always open, as every master/detail view here arrives with one selected (roles does the
  * same): a grid with an empty detail pane reads as a page that has not finished loading.
  */
 export const arrivalTile = (

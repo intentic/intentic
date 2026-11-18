@@ -14,7 +14,7 @@ import SecretFact from "./SecretFact.vue";
 import SecretPopover from "./SecretPopover.vue";
 import { EDITABLE_VALUE, FIXED_VALUE, VALUE_NOTE, VALUE_TEXT } from "./secretLook";
 
-// Approvers are an exact list, never a role floor ("only Bob"), so the owner is a choice here too rather than implied.
+// Approvers are an exact list, never a tier floor ("only Bob"), so the owner is a choice here too rather than implied.
 // Whoever runs secrets changes it (the daemon's rule); everybody else reads the same words with nothing to press.
 
 const t = useT();

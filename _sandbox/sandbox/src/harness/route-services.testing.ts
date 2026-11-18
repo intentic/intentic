@@ -36,8 +36,8 @@ import { mintedSliceFake } from "../runtimes/minted/minted-provider.testing.js";
 import { privacySliceFake } from "../privacy/privacy-slice.testing.js";
 import { translatorGatewayFake } from "../agent/providers/translator-gateway.testing.js";
 import { secretsSliceFake } from "../secrets/secrets-slice.testing.js";
-import { memoryConversationGrants } from "../personas/conversation-grants.js";
-import { memoryOwnerGrants } from "../personas/owner-grants.js";
+import { memoryConversationGrants } from "../roles/conversation-grants.js";
+import { memoryOwnerGrants } from "../roles/owner-grants.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import { sessionsSliceFake } from "../sessions/sessions-slice.testing.js";
 import { createAnnouncer } from "../system/boot/announce.js";
@@ -55,7 +55,7 @@ import { phonesSliceFake } from "../phones/phone-slice.testing.js";
 import { depsSliceFake } from "../workspace/deps/deps-slice.testing.js";
 import { workspaceSliceFake } from "../workspace/workspace-slice.testing.js";
 import { fakeHistory } from "./route-fakes.testing.js";
-import { memoryAreasStore, memoryPersonasStore, memorySshKeyStore } from "./route-stores.testing.js";
+import { memoryAreasStore, memoryRolesStore, memorySshKeyStore } from "./route-stores.testing.js";
 import type { SliceFakeContext } from "./slice-fake.testing.js";
 import { createAgentExecutionService } from "../workload/agent-execution.js";
 
@@ -130,7 +130,7 @@ const inertOwnMembers = () =>
         // The audit trail, in memory: what a request recorded is kept on `recorded`, reads are not recorded, and the trail
         // itself reads as empty. A suite asserting on records reads them there.
         audit: inertAudit(),
-        // No conversation widened past its persona until a suite answers a grant need; in memory, since every planned
+        // No conversation widened past its role until a suite answers a grant need; in memory, since every planned
         // turn reads it.
         conversationGrants: memoryConversationGrants(),
         // No line allowed with Always on a command card, in memory for the same reason.
@@ -208,9 +208,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // A personal sandbox: no policy held, and nowhere it could be fetched from. A suite about organisations builds
         // its own holder over a directory of its own.
         orgPolicy: createOrgPolicyHolder({ authRoot: join(tmpdir(), "route-services-no-org-policy"), logger: createLogger(testConfig) }),
-        // No personas by default: an unattended turn reaches no logged-in account, since an unpinned wake is denied
+        // No roles by default: an unattended turn reaches no logged-in account, since an unpinned wake is denied
         // rather than waved through. A suite wanting one builds the card and its browser capability.
-        personas: memoryPersonasStore(),
+        roles: memoryRolesStore(),
         // No areas by default: the unfenced workspace, which is what every member row without them already means.
         areas: memoryAreasStore(),
         // Not a runner, as a sandbox is until runner mode names its parent: its own words start its own turns

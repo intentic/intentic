@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import type { ModelOffer } from "@intentic/sandbox-contract/models/model-offer";
 import { modelPinKey } from "@intentic/sandbox-contract/models/model-pins";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import type { AccountReach } from "../../secrets/credential-reach.js";
@@ -67,7 +67,7 @@ const OFFER: ModelOffer = {
     accounts: { claude: [{ id: "work", label: "work", windows: [{ short: "5h", left: 62 }] }] },
 };
 
-const CARDS: readonly Persona[] = [
+const CARDS: readonly Role[] = [
     {
         id: "backend",
         label: "Backend",
@@ -80,18 +80,18 @@ const CARDS: readonly Persona[] = [
 ];
 
 const warn = jest.fn();
-// Named parts of the workspace, read only when the asker is fenced: the router picks from the personas their areas reach.
+// Named parts of the workspace, read only when the asker is fenced: the router picks from the roles their areas reach.
 const AREAS: readonly Area[] = [
     { id: "docs", folders: ["docs"] },
     { id: "finance", folders: ["finance"] },
 ];
 
 // The owner's standing preferences live in settings, so a router test states them the way the daemon reads them.
-const services = (over: { guidance?: string; cards?: readonly Persona[]; execution?: AgentExecutionService } = {}): Services =>
+const services = (over: { guidance?: string; cards?: readonly Role[]; execution?: AgentExecutionService } = {}): Services =>
     unstubbed<Services>("services", {
         agentExecution: over.execution ?? rootExecutionService(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [...(over.cards ?? CARDS)] }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [...(over.cards ?? CARDS)] }),
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [...AREAS] }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", {
             list: async () =>
@@ -112,9 +112,9 @@ const services = (over: { guidance?: string; cards?: readonly Persona[]; executi
     });
 
 // The three shapes an ask comes in, named the way the two settings produce them.
-const BOTH = { prompt: "the invoice totals are off in billing", paths: [] as string[], model: true, persona: true };
-const MODEL_ONLY = { ...BOTH, persona: false };
-const PERSONA_ONLY = { ...BOTH, model: false };
+const BOTH = { prompt: "the invoice totals are off in billing", paths: [] as string[], model: true, role: true };
+const MODEL_ONLY = { ...BOTH, role: false };
+const ROLE_ONLY = { ...BOTH, model: false };
 
 beforeEach(() => {
     ask.mockReset();
@@ -135,62 +135,62 @@ test("the model half is offered within the asker's own AI accounts, not the whol
     expect(offeredWithin).toHaveBeenCalledWith(MEMBER_REACH);
 });
 
-test("a chat that only wants a persona reads nobody's AI accounts", async () => {
-    ask.mockResolvedValue("persona: backend");
-    await routeChat(services(), PERSONA_ONLY, undefined, undefined, undefined, "ann@example.com");
+test("a chat that only wants a role reads nobody's AI accounts", async () => {
+    ask.mockResolvedValue("role: backend");
+    await routeChat(services(), ROLE_ONLY, undefined, undefined, undefined, "ann@example.com");
     expect(reachAsked).not.toHaveBeenCalled();
 });
 
-test("a persona is one line: its own sentence, then what it carries, where it starts, and the sites it speaks through", () => {
+test("a role is one line: its own sentence, then what it carries, where it starts, and the sites it speaks through", () => {
     const site = (id: string): string | undefined => ({ "reddit-work": "reddit", "x-work": "x" })[id];
     expect(candidateLine(CARDS[0]!, site)).toBe(
         "- backend (Backend): Backend work on the api and billing services. Carries: api, billing. Speaks through: github.",
     );
     expect(candidateLine(CARDS[1]!, site)).toBe("- social (Social): Posting and replying as the studio. Speaks through: reddit, x.");
-    // No brief, no context, no accounts: the line is the id and the one fact the persona has.
+    // No brief, no context, no accounts: the line is the id and the one fact the role has.
     expect(candidateLine(CARDS[2]!, site)).toBe("- docs: Starts in: docs.");
     expect(candidateLine({ id: "bare", capabilities: [] }, site)).toBe("- bare");
 });
 
 test("asked both questions, one prompt carries both lists and asks for four lines", () => {
-    const prompt = routerPrompt({ ...BOTH, paths: ["billing/src/totals.ts"] }, { offer: OFFER, personas: CARDS }, NOW);
+    const prompt = routerPrompt({ ...BOTH, paths: ["billing/src/totals.ts"] }, { offer: OFFER, roles: CARDS }, NOW);
     expect(prompt).toMatch(/^Choose what a new chat opens on/u);
     expect(prompt).toContain("- backend (Backend): Backend work on the api and billing services.");
     expect(prompt).toContain("- claude:claude-opus-5 — Opus 5. Effort: low, high.");
     expect(prompt).toContain("  - work — 5h: 62% left");
     expect(prompt).toContain("the invoice totals are off in billing");
     expect(prompt).toContain("- The message names 1 file: `billing/src/totals.ts`.");
-    expect(prompt).toContain("Reply with exactly these 4 lines and nothing else:\npersona: <one persona id from the list above, or `none`>\nmodel:");
+    expect(prompt).toContain("Reply with exactly these 4 lines and nothing else:\nrole: <one role id from the list above, or `none`>\nmodel:");
 });
 
-test("asked only about the model, the prompt says nothing about personas", () => {
+test("asked only about the model, the prompt says nothing about roles", () => {
     const prompt = routerPrompt(MODEL_ONLY, { offer: OFFER }, NOW);
     expect(prompt).toMatch(/^Choose the model a new chat should run on/u);
-    expect(prompt).not.toContain("persona");
+    expect(prompt).not.toContain("role");
     expect(prompt).toContain("Reply with exactly these 3 lines and nothing else:\nmodel:");
 });
 
-test("asked only about the persona, the prompt says nothing about models or allowances", () => {
-    const prompt = routerPrompt(PERSONA_ONLY, { personas: CARDS }, NOW);
-    expect(prompt).toMatch(/^Choose which persona should handle a new chat/u);
+test("asked only about the role, the prompt says nothing about models or allowances", () => {
+    const prompt = routerPrompt(ROLE_ONLY, { roles: CARDS }, NOW);
+    expect(prompt).toMatch(/^Choose which role should handle a new chat/u);
     expect(prompt).toContain("`none` is the right answer when the message is general");
     expect(prompt).not.toContain("Models you may choose:");
     expect(prompt).not.toContain("allowance");
     expect(
-        prompt.trimEnd().endsWith("Reply with exactly this line and nothing else:\npersona: <one persona id from the list above, or `none`>"),
+        prompt.trimEnd().endsWith("Reply with exactly this line and nothing else:\nrole: <one role id from the list above, or `none`>"),
     ).toBe(true);
 });
 
 test("each fact is shown only to the half that can use it, and only when the chat has it", () => {
     const facts = { ...BOTH, folder: "billing", editorContext: true, planMode: true };
-    const both = routerPrompt(facts, { offer: OFFER, personas: CARDS }, NOW);
+    const both = routerPrompt(facts, { offer: OFFER, roles: CARDS }, NOW);
     expect(both).toContain("- Opened in the folder `billing`.");
     expect(both).toContain("plan mode");
-    // The folder is ground a persona works on; with no persona to choose it is noise in a prompt about models.
+    // The folder is ground a role works on; with no role to choose it is noise in a prompt about models.
     expect(routerPrompt(facts, { offer: OFFER }, NOW)).not.toContain("Opened in the folder");
-    // Plan mode and a pointed-at selection say how hard the work is, which is not a question about personas.
-    expect(routerPrompt(facts, { personas: CARDS }, NOW)).not.toContain("plan mode");
-    expect(routerPrompt(BOTH, { offer: OFFER, personas: CARDS }, NOW)).not.toContain("Facts about the chat:");
+    // Plan mode and a pointed-at selection say how hard the work is, which is not a question about roles.
+    expect(routerPrompt(facts, { roles: CARDS }, NOW)).not.toContain("plan mode");
+    expect(routerPrompt(BOTH, { offer: OFFER, roles: CARDS }, NOW)).not.toContain("Facts about the chat:");
 });
 
 test("a long message is front-loaded: the tail only dilutes the question it opens with", () => {
@@ -200,7 +200,7 @@ test("a long message is front-loaded: the tail only dilutes the question it open
 });
 
 test("the owner's own preferences are folded in, ahead of the lists and the format they must be answered in", () => {
-    const prompt = routerPrompt(BOTH, { offer: OFFER, personas: CARDS }, NOW, "  Keep the work account for real work.  ");
+    const prompt = routerPrompt(BOTH, { offer: OFFER, roles: CARDS }, NOW, "  Keep the work account for real work.  ");
     expect(prompt).toContain("Where they disagree with the paragraphs above, follow the owner:\nKeep the work account for real work.");
     // Ahead of both, so the last thing read is the contract the reply is parsed against, whatever the owner wrote.
     expect(prompt.indexOf("Keep the work account")).toBeLessThan(prompt.indexOf("Models you may choose:"));
@@ -214,44 +214,44 @@ test("an owner who wrote nothing is not quoted as having written nothing", () =>
 });
 
 test("one reply answers both halves, each read against its own list", () => {
-    const answer = routeAnswer({ offer: OFFER, personas: CARDS });
-    expect(answer.read("persona: backend\nmodel: claude:claude-opus-5\neffort: high\naccount: work")).toEqual({
-        persona: { id: "backend", token: "backend" },
+    const answer = routeAnswer({ offer: OFFER, roles: CARDS });
+    expect(answer.read("role: backend\nmodel: claude:claude-opus-5\neffort: high\naccount: work")).toEqual({
+        role: { id: "backend", token: "backend" },
         model: { pick: { provider: "claude", model: "claude-opus-5", effort: "high", account: "work" }, token: "claude:claude-opus-5" },
     });
-    expect(answer.unusable(answer.read("persona: none\nmodel: claude:claude-opus-5"))).toBeUndefined();
-    // A keyed reply that answered the model and skipped the persona line means no persona, the safe answer, rather
+    expect(answer.unusable(answer.read("role: none\nmodel: claude:claude-opus-5"))).toBeUndefined();
+    // A keyed reply that answered the model and skipped the role line means no role, the safe answer, rather
     // than a rung that ignored its instructions and cost the model pick with it.
-    expect(answer.read("model: claude:claude-opus-5").persona).toEqual({ id: undefined, token: "none" });
+    expect(answer.read("model: claude:claude-opus-5").role).toEqual({ id: undefined, token: "none" });
     expect(answer.unusable(answer.read("model: claude:claude-opus-5"))).toBeUndefined();
 });
 
 test("an answer off either list is a rung that ignored it, not a softer answer", () => {
-    const answer = routeAnswer({ offer: OFFER, personas: CARDS });
-    expect(answer.unusable(answer.read("persona: frontend\nmodel: claude:claude-opus-5"))).toBe(`named "frontend", which is no persona here`);
-    expect(answer.unusable(answer.read("persona: backend\nmodel: openai:gpt-9"))).toBe(`named "openai:gpt-9", which is not on the list it was given`);
+    const answer = routeAnswer({ offer: OFFER, roles: CARDS });
+    expect(answer.unusable(answer.read("role: frontend\nmodel: claude:claude-opus-5"))).toBe(`named "frontend", which is no role here`);
+    expect(answer.unusable(answer.read("role: backend\nmodel: openai:gpt-9"))).toBe(`named "openai:gpt-9", which is not on the list it was given`);
     // Prose answers both questions badly at once, and both halves say so rather than one of them quietly passing.
-    expect(answer.unusable(answer.read("Opus, obviously"))).toBe(`named "Opus,", which is no persona here; named no model at all`);
+    expect(answer.unusable(answer.read("Opus, obviously"))).toBe(`named "Opus,", which is no role here; named no model at all`);
 });
 
-test("asked only about the persona, a bare id is a whole answer", () => {
-    const answer = routeAnswer({ personas: CARDS });
-    expect(answer.read("backend")).toEqual({ persona: { id: "backend", token: "backend" } });
-    expect(answer.read("`Social`.")).toEqual({ persona: { id: "social", token: "Social" } });
-    expect(answer.read("Persona: backend\nbecause it mentions billing")).toEqual({ persona: { id: "backend", token: "backend" } });
+test("asked only about the role, a bare id is a whole answer", () => {
+    const answer = routeAnswer({ roles: CARDS });
+    expect(answer.read("backend")).toEqual({ role: { id: "backend", token: "backend" } });
+    expect(answer.read("`Social`.")).toEqual({ role: { id: "social", token: "Social" } });
+    expect(answer.read("Role: backend\nbecause it mentions billing")).toEqual({ role: { id: "backend", token: "backend" } });
     expect(answer.unusable(answer.read("None."))).toBeUndefined();
-    expect(answer.unusable(answer.read("I think the backend persona fits"))).toBe(`named "I", which is no persona here`);
+    expect(answer.unusable(answer.read("I think the backend role fits"))).toBe(`named "I", which is no role here`);
     // Nothing about the model is read when nothing about it was asked.
     expect(answer.read("backend").model).toBeUndefined();
 });
 
 test("both settings on: one reading, one role, and both verdicts come back with the model that gave them", async () => {
-    ask.mockResolvedValue("persona: backend\nmodel: claude:claude-opus-5\neffort: high\naccount: work");
+    ask.mockResolvedValue("role: backend\nmodel: claude:claude-opus-5\neffort: high\naccount: work");
     const route = await routeChat(services(), { ...BOTH, paths: ["billing/src/totals.ts"] }, undefined);
     expect(roles).toEqual(["model-router"]);
     expect(ask).toHaveBeenCalledTimes(1);
     expect(route).toEqual({
-        persona: { id: "backend", reason: "The message reads like Backend's work." },
+        role: { id: "backend", reason: "The message reads like Backend's work." },
         model: {
             pick: { provider: "claude", model: "claude-opus-5", effort: "high", account: "work" },
             reason: "Read the opening message as work for Opus 5 at high effort on work.",
@@ -260,19 +260,19 @@ test("both settings on: one reading, one role, and both verdicts come back with 
     });
 });
 
-test("auto model on, persona matching off: the model is chosen and nothing is read about personas", async () => {
+test("auto model on, role matching off: the model is chosen and nothing is read about roles", async () => {
     ask.mockResolvedValue("model: claude:claude-opus-5");
     const route = await routeChat(services(), MODEL_ONLY, undefined);
-    expect(route.persona).toBeUndefined();
+    expect(route.role).toBeUndefined();
     expect(route.model?.pick).toEqual({ provider: "claude", model: "claude-opus-5" });
-    expect(ask.mock.calls[0]?.[0]).not.toContain("persona");
+    expect(ask.mock.calls[0]?.[0]).not.toContain("role");
 });
 
-test("persona matching on, auto model off: no allowance is read, and nothing is said about the model", async () => {
+test("role matching on, auto model off: no allowance is read, and nothing is said about the model", async () => {
     ask.mockResolvedValue("backend");
-    const route = await routeChat(services(), PERSONA_ONLY, undefined);
-    expect(route).toEqual({ persona: { id: "backend", reason: "The message reads like Backend's work." }, judge: RUNG_KEY });
-    // An offer costs live allowance readings; a chat that only wants a persona is not charged for them.
+    const route = await routeChat(services(), ROLE_ONLY, undefined);
+    expect(route).toEqual({ role: { id: "backend", reason: "The message reads like Backend's work." }, judge: RUNG_KEY });
+    // An offer costs live allowance readings; a chat that only wants a role is not charged for them.
     expect(offer).not.toHaveBeenCalled();
 });
 
@@ -299,55 +299,55 @@ test("one runnable model is not a choice, and no reading is spent confirming it"
 });
 
 test("a half that answers itself is not put to the model, and the other half still is", async () => {
-    // One runnable model, so only the persona is worth asking about; the prompt is the persona-only one.
+    // One runnable model, so only the role is worth asking about; the prompt is the role-only one.
     offer.mockReturnValue({ models: [OFFER.models[1]!], accounts: OFFER.accounts });
     ask.mockResolvedValue("backend");
     const route = await routeChat(services(), BOTH, undefined);
     expect(ask).toHaveBeenCalledTimes(1);
     expect(ask.mock.calls[0]?.[0]).not.toContain("Models you may choose:");
     expect(route.model?.pick).toEqual({ provider: "claude", model: "claude-haiku-4-5" });
-    expect(route.persona?.id).toBe("backend");
+    expect(route.role?.id).toBe("backend");
 });
 
-test("a chat opened in a folder exactly one persona works in is that persona's, and only the model is asked", async () => {
+test("a chat opened in a folder exactly one role works in is that role's, and only the model is asked", async () => {
     ask.mockResolvedValue("model: claude:claude-opus-5");
     const route = await routeChat(services(), { ...BOTH, folder: "docs" }, undefined);
-    expect(route.persona).toEqual({ id: "docs", reason: "Opened in docs, which docs works in." });
-    expect(ask.mock.calls[0]?.[0]).not.toContain("Personas:");
+    expect(route.role).toEqual({ id: "docs", reason: "Opened in docs, which docs works in." });
+    expect(ask.mock.calls[0]?.[0]).not.toContain("Roles:");
     // With nothing else to ask, a folder match spends no reading at all.
-    expect(await routeChat(services(), { ...PERSONA_ONLY, folder: "api" }, undefined)).toEqual({
-        persona: { id: "backend", reason: "Opened in api, which Backend works in." },
+    expect(await routeChat(services(), { ...ROLE_ONLY, folder: "api" }, undefined)).toEqual({
+        role: { id: "backend", reason: "Opened in api, which Backend works in." },
     });
     expect(ask).toHaveBeenCalledTimes(1);
 });
 
 test("a folder nobody works in falls through to the words", async () => {
     ask.mockResolvedValue("social");
-    const route = await routeChat(services(), { ...PERSONA_ONLY, folder: "marketing" }, undefined);
-    expect(route.persona).toEqual({ id: "social", reason: "The message reads like Social's work." });
+    const route = await routeChat(services(), { ...ROLE_ONLY, folder: "marketing" }, undefined);
+    expect(route.role).toEqual({ id: "social", reason: "The message reads like Social's work." });
     expect(ask.mock.calls[0]?.[0]).toContain("- Opened in the folder `marketing`.");
 });
 
 test("none is a real answer, said with the rung that gave it", async () => {
     ask.mockResolvedValue("none");
-    expect(await routeChat(services(), { ...PERSONA_ONLY, prompt: "what is a closure?" }, undefined)).toEqual({
-        persona: { reason: "No persona fits this message." },
+    expect(await routeChat(services(), { ...ROLE_ONLY, prompt: "what is a closure?" }, undefined)).toEqual({
+        role: { reason: "No role fits this message." },
         judge: RUNG_KEY,
     });
 });
 
-test("no personas means nothing to route onto, and no call", async () => {
-    expect(await routeChat(services({ cards: [] }), PERSONA_ONLY, undefined)).toEqual({ persona: { reason: "No personas to route onto." } });
+test("no roles means nothing to route onto, and no call", async () => {
+    expect(await routeChat(services({ cards: [] }), ROLE_ONLY, undefined)).toEqual({ role: { reason: "No roles to route onto." } });
     expect(ask).not.toHaveBeenCalled();
 });
 
-// Routing a fenced asker onto a persona they cannot wear would open the chat on one that refuses every message, so the
-// candidates are cut to their own areas first — and a fence holding none ends the persona half before any model is asked.
+// Routing a fenced asker onto a role they cannot wear would open the chat on one that refuses every message, so the
+// candidates are cut to their own areas first — and a fence holding none ends the role half before any model is asked.
 test("a fenced asker is routed only within their own areas, and none there means no call", async () => {
-    expect(await routeChat(services(), { ...PERSONA_ONLY, folder: "docs" }, ["docs"])).toEqual({
-        persona: { id: "docs", reason: "Opened in docs, which docs works in." },
+    expect(await routeChat(services(), { ...ROLE_ONLY, folder: "docs" }, ["docs"])).toEqual({
+        role: { id: "docs", reason: "Opened in docs, which docs works in." },
     });
-    expect(await routeChat(services(), PERSONA_ONLY, ["finance"])).toEqual({ persona: { reason: "No personas to route onto." } });
+    expect(await routeChat(services(), ROLE_ONLY, ["finance"])).toEqual({ role: { reason: "No roles to route onto." } });
     expect(ask).not.toHaveBeenCalled();
 });
 
@@ -356,16 +356,16 @@ test("a spent chain takes nothing with it: every half says why, and what settled
     const route = await routeChat(services(), { ...BOTH, folder: "docs" }, undefined);
     expect(route).toEqual({
         // Matched on the folder before any model was asked, so the failure below cannot take it away.
-        persona: { id: "docs", reason: "Opened in docs, which docs works in." },
+        role: { id: "docs", reason: "Opened in docs, which docs works in." },
         model: { reason: "Couldn't choose a model: every account is out of allowance" },
     });
     expect(warn).toHaveBeenCalledWith({ err: expect.any(Error) }, "chat router: no answer, the chat keeps what it had");
 });
 
 // Routing with no model is how it is switched off: a setting, which every chat used to open on as an error.
-test("routing switched off says nothing about personas, and tells an Auto chat which job picks its model", async () => {
+test("routing switched off says nothing about roles, and tells an Auto chat which job picks its model", async () => {
     ask.mockRejectedValue(new RoleModelUnsetError("model-router"));
-    expect(await routeChat(services(), PERSONA_ONLY, undefined)).toEqual({});
+    expect(await routeChat(services(), ROLE_ONLY, undefined)).toEqual({});
     expect(await routeChat(services(), BOTH, undefined)).toEqual({
         model: { reason: `Auto picks a model only when "New chat routing" has one in Sandbox ▸ Agent ▸ Models, so this chat keeps the model it had.` },
     });
@@ -380,7 +380,7 @@ test.each([false, true])("owns and releases independent router execution when th
     if (fails) { ask.mockRejectedValue(new Error("router unavailable")); }
     else { ask.mockResolvedValue("backend"); }
 
-    await routeChat(services({ execution: service }), PERSONA_ONLY, undefined);
+    await routeChat(services({ execution: service }), ROLE_ONLY, undefined);
 
     expect(executions).toHaveLength(1);
     expect(executions[0]?.cwd).toBe("/work");
@@ -397,7 +397,7 @@ test("an unplaced unprivileged router refuses rather than falling back to a mode
     const service = createAgentExecutionService(readProtectedPolicy, () => undefined);
     const close = jest.spyOn(service, "close");
 
-    await expect(routeChat(services({ execution: service }), PERSONA_ONLY, undefined)).rejects.toBeInstanceOf(AgentDomainRefusedError);
+    await expect(routeChat(services({ execution: service }), ROLE_ONLY, undefined)).rejects.toBeInstanceOf(AgentDomainRefusedError);
 
     expect(ask).not.toHaveBeenCalled();
     expect(warn).not.toHaveBeenCalled();
@@ -407,7 +407,7 @@ test("an unplaced unprivileged router refuses rather than falling back to a mode
 test("router model domain refusals survive fallback unchanged and release the helper", async () => {
     const refusal = new AgentDomainRefusedError("router context was released");
     ask.mockRejectedValue(refusal);
-    await expect(routeChat(services(), PERSONA_ONLY, undefined)).rejects.toBe(refusal);
+    await expect(routeChat(services(), ROLE_ONLY, undefined)).rejects.toBe(refusal);
     expect(warn).not.toHaveBeenCalled();
     expect(() => assertAgentExecutionContext(executions[0]!)).toThrow(AgentDomainRefusedError);
 });
@@ -416,16 +416,16 @@ test("an unset router and deterministic route never admit independent execution"
     const service = rootExecutionService();
     const admit = jest.spyOn(service, "admit");
     modelSet.mockReturnValue(false);
-    expect(await routeChat(services({ execution: service }), PERSONA_ONLY, undefined)).toEqual({});
-    expect(await routeChat(services({ execution: service }), { ...PERSONA_ONLY, folder: "api" }, undefined)).toEqual({
-        persona: { id: "backend", reason: "Opened in api, which Backend works in." },
+    expect(await routeChat(services({ execution: service }), ROLE_ONLY, undefined)).toEqual({});
+    expect(await routeChat(services({ execution: service }), { ...ROLE_ONLY, folder: "api" }, undefined)).toEqual({
+        role: { id: "backend", reason: "Opened in api, which Backend works in." },
     });
     expect(admit).not.toHaveBeenCalled();
     expect(ask).not.toHaveBeenCalled();
 });
 
 test("a chat with nothing left to ask spends nothing at all", async () => {
-    expect(await routeChat(services(), { ...BOTH, model: false, persona: false }, undefined)).toEqual({});
+    expect(await routeChat(services(), { ...BOTH, model: false, role: false }, undefined)).toEqual({});
     expect(ask).not.toHaveBeenCalled();
     expect(offer).not.toHaveBeenCalled();
 });

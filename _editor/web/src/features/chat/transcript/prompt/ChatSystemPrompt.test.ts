@@ -18,7 +18,7 @@ const PROMPT: ConversationPrompt = {
         base: { kind: `intentic`, text: `You are an Intentic agent.` },
         sections: [
             { source: `guidance`, title: `Working in this sandbox`, text: `## Working in this sandbox\n\nSearch code with rg.` },
-            { source: `persona`, title: `Who this turn is acting as`, text: `## Who this turn is acting as\n\nYou are acting as Studio.` },
+            { source: `role`, title: `Who this turn is acting as`, text: `## Who this turn is acting as\n\nYou are acting as Studio.` },
             {
                 source: `memory`,
                 title: `Standing instructions for this workspace`,
@@ -88,10 +88,10 @@ test("a section's own heading is dropped from the reading and kept in what is co
     mount();
     document.querySelector<HTMLButtonElement>(`button`)?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const persona = [...document.querySelectorAll<HTMLButtonElement>(`[role="dialog"] button[aria-expanded]`)].find((row) =>
+    const role = [...document.querySelectorAll<HTMLButtonElement>(`[role="dialog"] button[aria-expanded]`)].find((row) =>
         row.textContent?.includes(`Who this turn is acting as`),
     );
-    persona?.click();
+    role?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     const opened = document.querySelector(`[role="dialog"]`)?.textContent ?? ``;
     // The title is drawn once, by the row; the words under it are the section's own.

@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { CONTROL_SCOPES, type ControlScope, ControlScopeSchema } from "@intentic/sandbox-contract/policy/control-scopes";
 import type { ControlReach } from "@intentic/sandbox-contract/protocol/route-meta";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
@@ -205,7 +205,7 @@ const controlOf = (method: string, path: string): ControlReach | undefined => {
 const isRead = (method: string): boolean => method === "GET" || method === "HEAD";
 
 // The agent-conversation seam and nothing else: run a turn, answer a parked card, read transcripts, search the tree.
-// Declared route by route, since no member role corresponds to this ACP-bridge slice. Watching the turn it just started
+// Declared route by route, since no member tier corresponds to this ACP-bridge slice. Watching the turn it just started
 // (/agent/attach, the one read-shaped POST, declared `read`) is part of driving it: without it a bridge starts a turn
 // it can never see.
 const editorReach: ScopeReach = (method, path) => {
@@ -229,7 +229,7 @@ const driveReach: ScopeReach = (method, path) => {
     if (readReach(method, path)) {
         return true;
     }
-    return controlOf(method, path) !== "never" && roleAtLeast("collaborator", routeFloor(method, path));
+    return controlOf(method, path) !== "never" && tierAtLeast("collaborator", routeFloor(method, path));
 };
 
 // `drive` plus the irreversible half: merging a worktree in, or discarding one; kept separate since the usual split is

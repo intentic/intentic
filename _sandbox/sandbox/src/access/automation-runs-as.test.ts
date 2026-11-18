@@ -3,12 +3,12 @@ import {
     automationConfig,
     memoryAccessProfiles,
     memoryMembersStore,
-    memoryPersonasStore,
+    memoryRolesStore,
     memoryServicesStore,
 } from "../harness/route-stores.testing.js";
 import { refuseServiceMismatch } from "./automation-runs-as.js";
 
-// An automation's service is checked as it is saved: it must exist, and what it pairs with it (a persona's accounts, the
+// An automation's service is checked as it is saved: it must exist, and what it pairs with it (a role's accounts, the
 // models it may run on) must be something the service could ever use.
 
 const deps = {
@@ -19,7 +19,7 @@ const deps = {
     accessProfiles: memoryAccessProfiles([{ id: "marketing", credentials: { capabilities: ["reddit-work"], secrets: [] }, aiAccounts: ["claude:work"] }]),
     members: memoryMembersStore([]),
     ownerEmail: async () => "ada@example.com",
-    personas: memoryPersonasStore([
+    roles: memoryRolesStore([
         { id: "poster", label: "Poster", capabilities: ["reddit-work"] },
         { id: "tweeter", label: "Tweeter", capabilities: ["x-main"] },
     ]),
@@ -44,9 +44,9 @@ test("a service nobody wrote is refused, a sender rule's included", async () => 
     await expect(refuseServiceMismatch(deps, rule)).rejects.toThrow(`no service is called "ghost"`);
 });
 
-test("a persona speaking through an account the service may not use is refused", async () => {
+test("a role speaking through an account the service may not use is refused", async () => {
     await expect(refuseServiceMismatch(deps, automationConfig("x", { runAs: "bot", actsAs: "tweeter" }))).rejects.toThrow(
-        `the persona "Tweeter" speaks through "x-main", which the service "Marketing bot" may not use, so it could never use it there`,
+        `the role "Tweeter" speaks through "x-main", which the service "Marketing bot" may not use, so it could never use it there`,
     );
 });
 

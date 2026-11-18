@@ -12,7 +12,7 @@ const FILM = join(WORKSPACE_ROOT, "film.mp4");
 // hours and would otherwise keep fetching the file it names.
 test("signing every browser out drops every outstanding ws and media ticket", async () => {
     const services = { auth: undefined, wsTickets: createWsTickets(), mediaTickets: createMediaTickets() };
-    const ws = services.wsTickets.mint({ email: "ada@example.com", role: "owner" });
+    const ws = services.wsTickets.mint({ email: "ada@example.com", tier: "owner" });
     const media = services.mediaTickets.mint(FILM, undefined, "ada@example.com").ticket;
     const bundle = services.mediaTickets.mint("bundle:export.tar.gz", undefined, "ada@example.com").ticket;
     const app = new Hono<AppEnv>().post("/system/sessions/revoke", createAccessRoutes(services).revokeSessions);

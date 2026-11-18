@@ -29,7 +29,7 @@ const {
     // Already-taken entries stay visible but unpickable, so the list doesn't shift under you as you use it.
     taken?: readonly string[];
     // Whether the list feeds one-shot helper jobs only (commit messages, titles): the one place a model that cannot run
-    // a turn may be picked. A run job or a persona is a turn.
+    // a turn may be picked. A run job or a role is a turn.
     helperJobs?: boolean;
 }>();
 

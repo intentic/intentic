@@ -1,11 +1,18 @@
 import { z } from "zod";
-import type { PersonaPowers } from "./personas.js";
+import type { RolePowers } from "./roles.js";
 
-// THE MOST A TURN'S TOOLS MAY BE, as the principals it acts for are held to it (docs/architecture/access.md): one answer
-// per persona shelf, each an upper bound. A shelf left out is not limited. A persona's own shelves are posture and only
-// narrow inside this; a conversation grant lifts what a persona withheld and never what a ceiling did.
-// The same names and order as a persona's shelves (schemas/personas.ts PersonaPowersSchema), so one vocabulary covers
-// both, with no defaults: an absent answer here is "no limit", where an absent shelf on a card is "on".
+// THE MOST A TURN'S TOOLS MAY BE, as everything it acts for is held to it (docs/architecture/access.md): one answer
+// per shelf, each an upper bound. A shelf left out is not limited. Every limit on a turn's tools is one of these: a
+// person's, a service's, the role's (a profile listing it) and the organisation's, held together.
+// The same names and order as a turn's resolved shelves (schemas/roles.ts RolePowersSchema), with no defaults:
+// an absent answer here is "no limit", where an absent resolved shelf is "on".
+// An extension by its id (`publisher.name`, or a git install's card id).
+export const ExtensionIdSchema = z
+    .string()
+    .min(1)
+    .max(121)
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/);
+
 export const ToolCeilingSchema = z.object({
     files: z.enum(["none", "read", "write"]).optional().describe("The most it may do with files: nothing, look and search, or also create and change."),
     shell: z
@@ -17,6 +24,12 @@ export const ToolCeilingSchema = z.object({
     browser: z.boolean().optional().describe("False takes away the credential-free browser."),
     delegate: z.boolean().optional().describe("False takes away spawning subagents and running workflows."),
     sandbox: z.boolean().optional().describe("False takes away changing the sandbox's own settings, manifests and public outbox."),
+    // Added 2026-11-18, optional: until then a role card held this list itself.
+    extensions: z
+        .array(ExtensionIdSchema)
+        .max(100)
+        .optional()
+        .describe("Which extensions' own agent tools and agent plugin (skills, commands, subagents) its turns may get, by extension id. Absent means every enabled one; empty means none."),
 });
 export type ToolCeiling = z.infer<typeof ToolCeilingSchema>;
 
@@ -39,7 +52,16 @@ const lowerFiles = (left: FilesAnswer | undefined, right: FilesAnswer | undefine
 
 /** Whether a ceiling limits anything at all; undefined and an empty one do not. */
 export const ceilingLimits = (ceiling: ToolCeiling | undefined): boolean =>
-    ceiling !== undefined && ((ceiling.files !== undefined && ceiling.files !== "write") || CEILING_SWITCHES.some((shelf) => ceiling[shelf] === false));
+    ceiling !== undefined &&
+    ((ceiling.files !== undefined && ceiling.files !== "write") || CEILING_SWITCHES.some((shelf) => ceiling[shelf] === false) || ceiling.extensions !== undefined);
+
+// Two extension lists held together: undefined is every one, so the narrower list wins and two lists keep what both name.
+const lowerList = (left: readonly string[] | undefined, right: readonly string[] | undefined): string[] | undefined => {
+    if (left === undefined) {
+        return right === undefined ? undefined : [...right];
+    }
+    return right === undefined ? [...left] : left.filter((id) => right.includes(id));
+};
 
 /**
  * Two ceilings held together: the lower answer of each shelf, so a turn acting for several principals is held to what
@@ -53,7 +75,8 @@ export const intersectCeilings = (left: ToolCeiling | undefined, right: ToolCeil
         return left;
     }
     const files = lowerFiles(left.files, right.files);
-    const held: ToolCeiling = files === undefined ? {} : { files };
+    const extensions = lowerList(left.extensions, right.extensions);
+    const held: ToolCeiling = { ...(files === undefined ? {} : { files }), ...(extensions === undefined ? {} : { extensions }) };
     for (const shelf of CEILING_SWITCHES) {
         if (left[shelf] === false || right[shelf] === false) {
             held[shelf] = false;
@@ -62,12 +85,17 @@ export const intersectCeilings = (left: ToolCeiling | undefined, right: ToolCeil
     return held;
 };
 
-/** A persona's shelves held under a ceiling: each shelf the lower of the two, connector lists untouched. */
-export const capPowers = (powers: PersonaPowers, ceiling: ToolCeiling | undefined): PersonaPowers => {
+/** A turn's shelves held under a ceiling: each shelf the lower of the two, and only the extensions both allow. */
+export const capPowers = (powers: RolePowers, ceiling: ToolCeiling | undefined): RolePowers => {
     if (!ceilingLimits(ceiling) || ceiling === undefined) {
         return powers;
     }
-    const capped: PersonaPowers = { ...powers, files: lowerFiles(powers.files, ceiling.files) ?? powers.files };
+    const extensions = lowerList(powers.extensions, ceiling.extensions);
+    const capped: RolePowers = {
+        ...powers,
+        files: lowerFiles(powers.files, ceiling.files) ?? powers.files,
+        ...(extensions === undefined ? {} : { extensions }),
+    };
     for (const shelf of CEILING_SWITCHES) {
         if (ceiling[shelf] === false) {
             capped[shelf] = false;
@@ -108,6 +136,9 @@ export const ceilingWords = (ceiling: ToolCeiling | undefined): string[] => {
         if (ceiling[shelf] === false) {
             words.push(SWITCH_WORDS[shelf]);
         }
+    }
+    if (ceiling.extensions !== undefined) {
+        words.push(ceiling.extensions.length === 0 ? "no extension tools" : `only ${ceiling.extensions.length} extension${ceiling.extensions.length === 1 ? "" : "s"}' tools`);
     }
     return words;
 };

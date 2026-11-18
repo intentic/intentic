@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BrandMark, Icon, PersonaFace, toneDot, ui } from "@intentic/ui";
+import { BrandMark, Icon, RoleFace, toneDot, ui } from "@intentic/ui";
 import { isIconName } from "@intentic/ui/icons";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -8,9 +8,9 @@ import { nodeDetail, nodeLabel } from "./mapWords";
 import type { MapNode, ReachHow } from "./reachModel";
 
 // ONE THING ON THE MAP THE SANDBOX HOLDS OR REACHES, in the shape its place on the map wants: a `row` in an outward group,
-// a `tile` for a part of the workspace inside the box, a `chip` for a persona or a secret. All three light the same way,
+// a `tile` for a part of the workspace inside the box, a `chip` for a role or a secret. All three light the same way,
 // so a reader learns one language: dim is out of reach, a ring in the focus's ink is in reach, a dashed ring is only
-// through a persona, a pencil is edited by hand and an eye only read.
+// through a role, a pencil is edited by hand and an eye only read.
 
 const t = useT();
 
@@ -47,7 +47,7 @@ const edge = computed(() => {
 const plate = computed(() => (variant === `chip` ? (lit === `self` ? `bg-(--map-wash)` : ``) : lit === `self` ? `bg-(--map-wash)` : `bg-card`));
 const mark = computed(() => (lit === `edit` ? `pencil` : lit === `see` ? `eye` : undefined));
 const markTitle = computed(() => (lit === `edit` ? t(`sandbox.sandboxMap.legendEdits`) : t(`sandbox.sandboxMap.legendSees`)));
-const persona = computed(() => ({ id: node.ref ?? node.id, label: node.label }));
+const role = computed(() => ({ id: node.ref ?? node.id, label: node.label }));
 const glyph = computed(() => (node.icon !== undefined && isIconName(node.icon) ? node.icon : `folder`));
 // A row and a tile draw their own box; the chip is the kit's (its plate, radius, hover and touch target), opening on
 // its face or glyph plate, and the map only lays its ring over it.
@@ -76,7 +76,7 @@ const body = computed(() =>
         @blur="$emit(`point`, false)"
         @click="$emit(`press`)"
     >
-        <PersonaFace v-if="node.kind === `persona`" :persona="persona" :size="22" />
+        <RoleFace v-if="node.kind === `role`" :role="role" :size="22" />
         <span v-else-if="node.kind === `model` && node.provider !== undefined" class="flex size-4.5 shrink-0 items-center justify-center text-content">
             <ProviderLogo :provider="node.provider" />
         </span>

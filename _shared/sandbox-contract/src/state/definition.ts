@@ -19,7 +19,7 @@ export const DefinitionRepositorySchema = z.strictObject({
 });
 export type DefinitionRepository = z.infer<typeof DefinitionRepositorySchema>;
 
-// The /work git repo, by reference: tracks the owner's authored content (notes, skills, personas, automations, designs,
+// The /work git repo, by reference: tracks the owner's authored content (notes, skills, roles, automations, designs,
 // approvals). With a remote it's referenceable like any repo; without one it's omitted, not invented.
 export const DefinitionWorkspaceSchema = z.strictObject({
     // The clone URL, verbatim from the workspace repo's own remote.

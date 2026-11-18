@@ -1,12 +1,12 @@
 import type { AutomationSummary } from "@intentic/sandbox-contract/schemas/automations";
-import { unwatchedPick } from "@intentic/sandbox-contract/schemas/personas";
+import { unwatchedPick } from "@intentic/sandbox-contract/schemas/roles";
 
 // Which shelf an automation is filed on, so a page of fifty reads as a handful of named groups rather than two buckets.
-// In order: the group it names itself, then the code chores, then the persona it runs as (a set of jobs one role runs is
+// In order: the group it names itself, then the code chores, then the role it runs as (a set of jobs one role runs is
 // one shelf without anybody naming it), then everything else. Shelves are keyed by their label, folded, so a group
-// somebody named "Marketing" and the jobs the Marketing persona runs land on the one shelf rather than two of one name.
+// somebody named "Marketing" and the jobs the Marketing role runs land on the one shelf rather than two of one name.
 
-export type ShelfKind = `group` | `chores` | `persona` | `other`;
+export type ShelfKind = `group` | `chores` | `role` | `other`;
 
 export interface ShelfOf {
     readonly key: string;
@@ -26,8 +26,8 @@ const OTHER_KEY = `other`;
 export interface ShelfWords {
     readonly chores: string;
     readonly other: string;
-    // A persona's display name by id; undefined for one this sandbox does not hold (gone, or not read yet).
-    readonly personaLabel: (id: string) => string | undefined;
+    // A role's display name by id; undefined for one this sandbox does not hold (gone, or not read yet).
+    readonly roleLabel: (id: string) => string | undefined;
 }
 
 const keyOf = (label: string): string => label.trim().toLocaleLowerCase();
@@ -40,12 +40,12 @@ export const shelfOf = (automation: Pick<AutomationSummary, `group` | `chore` | 
     if (automation.chore === true) {
         return { key: keyOf(words.chores), label: words.chores, kind: `chores` };
     }
-    // A persona that is gone still names the shelf, by its id: the row already says the persona is missing, and filing it
+    // A role that is gone still names the shelf, by its id: the row already says the role is missing, and filing it
     // under "Other" would hide which jobs went with it. No accounts named outright is the same as naming none.
     const actsAs = unwatchedPick(automation.actsAs);
     if (actsAs !== undefined) {
-        const label = words.personaLabel(actsAs) ?? actsAs;
-        return { key: keyOf(label), label, kind: `persona` };
+        const label = words.roleLabel(actsAs) ?? actsAs;
+        return { key: keyOf(label), label, kind: `role` };
     }
     return { key: OTHER_KEY, label: words.other, kind: `other` };
 };
@@ -55,7 +55,7 @@ export const isFailing = (automation: Pick<AutomationSummary, `enabled` | `runs`
     automation.enabled && automation.runs[0]?.outcome === `error`;
 
 // The order shelves are read in: alphabetical, so a shelf never moves when a run lands, with the remainder last. A shelf
-// named by a group outranks a persona's label for how it is spelled, since somebody typed it.
+// named by a group outranks a role's label for how it is spelled, since somebody typed it.
 export const shelvesOf = (automations: readonly AutomationSummary[], words: ShelfWords): Shelf[] => {
     const byKey = new Map<string, { of: ShelfOf; automations: AutomationSummary[] }>();
     for (const automation of automations) {

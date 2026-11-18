@@ -18,10 +18,10 @@ import { titleOf } from "./fingerprint.js";
 // One outbox per daemon, shared with the drain the boot schedulers run (account-outbox.ts startAccountOutbox).
 
 // Reporting to another sandbox is handing something on, so it rides the same rule as delegating: a turn started by
-// outside content, or one whose persona does not delegate, has no supervisor armed (children.ts) and may not. A shell no
+// outside content, or one whose role does not delegate, has no supervisor armed (children.ts) and may not. A shell no
 // planned turn owns (a person's own terminal) may.
 const REFUSED =
-    "This turn may not report to another sandbox: it was started by outside content, or its persona does not delegate. " +
+    "This turn may not report to another sandbox: it was started by outside content, or its role does not delegate. " +
     "Nothing was sent; say what you saw in your reply instead.";
 
 // Who is asking: the conversation a report is filed from, or why this turn may not report at all.

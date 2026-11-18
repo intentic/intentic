@@ -25,7 +25,7 @@ const shared: SandboxSummary = {
     removedBy: null,
     hosted: null,
     token: null,
-    role: `collaborator`,
+    tier: `collaborator`,
     providedAddress: false,
     localHostname: null,
 };

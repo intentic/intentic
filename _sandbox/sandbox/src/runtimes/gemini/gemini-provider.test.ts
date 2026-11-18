@@ -88,7 +88,7 @@ test("refuses a turn the translator has no Google model to serve, instead of sen
     });
 });
 
-// Gemini rides OpenCode, which takes the turn's remote MCP servers as Codex does (the browser the persona may drive is one
+// Gemini rides OpenCode, which takes the turn's remote MCP servers as Codex does (the browser the role may drive is one
 // of them), and the daemon's own servers after them on the same lease, with the relay its loop attaches to.
 test("hands the turn its remote MCP servers, the browser first and the daemon's own after", async () => {
     const web = { name: "web", url: "http://127.0.0.1:1/mcp/web", token: "turn-bearer", timeoutMs: 120_000 };
@@ -105,7 +105,7 @@ test("hands the turn its remote MCP servers, the browser first and the daemon's 
     expect(plan.request.hooks.relay).toMatchObject({ attach: expect.any(Function), push: expect.any(Function) });
 });
 
-// A helper's request reads nothing past its prompt, so the browser the persona could drive is not mounted for it.
+// A helper's request reads nothing past its prompt, so the browser the role could drive is not mounted for it.
 test("a sealed request is handed no MCP server, on the model it pinned", async () => {
     const web = { name: "web", url: "http://127.0.0.1:1/mcp/web", token: "turn-bearer", timeoutMs: 120_000 };
     browserServers.mockResolvedValue({ servers: [web], accounts: {}, ports: { web: 41_000 }, passkeys: {} });

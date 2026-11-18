@@ -10,7 +10,7 @@ import { useAgents } from "../../../../models/fleet/useAgents";
 import { pressAutoLand } from "../../../../models/fleet/presses/autoLandPress";
 import { autoVersionRule, landsByDefault, NAMED_RULES } from "../../../../models/sandbox/environment/rules";
 import { useRules } from "../../../../models/sandbox/environment/useRules";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import type { Conversation } from "../../../../models/conversations/session/conversation";
 import { type LandsHow, waitTargets } from "./waitTargets";
 import { hourChoices, type SendLater, waitText } from "../../../../models/conversations/drafts/sendLater";
@@ -55,7 +55,7 @@ const backToHours = async (from: Exclude<View, `hours`>): Promise<void> => {
 
 const { fleet } = useAgents();
 const { byId, upsert, settings } = useRules();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const sandboxLands = computed(() => landsByDefault(settings.value?.rules ?? []));
 const targets = computed(() => waitTargets(fleet.value, props.conversation.conversationId, sandboxLands.value));
 

@@ -80,7 +80,7 @@ export const needsContract = {
             path: "/needs/{id}/answer",
             summary: "Answer a need",
             description:
-                "Declines it, or says yes the way its card offered: accept a connection being set up, apply a change, grant for this conversation or the persona, release a gated credential, approve an environment proposal. A release is refused from anyone the gate does not name.",
+                "Declines it, or says yes the way its card offered: accept a connection being set up, apply a change, grant for this conversation or the role, release a gated credential, approve an environment proposal. A release is refused from anyone the gate does not name.",
         })
         .input(NeedAnswerInputSchema)
         .output(NeedSchema),
@@ -112,7 +112,7 @@ export const needsContract = {
             path: "/needs/grants",
             summary: "The yeses still standing",
             description:
-                "What people allowed conversations beyond their persona or area, and the gated credentials released to them, by conversation; and, apart from them, the yeses that name no conversation: command policy lines allowed with Always, approved hook sets, approved workspace extensions. Names only, never a value.",
+                "What people allowed conversations beyond their role or area, and the gated credentials released to them, by conversation; and, apart from them, the yeses that name no conversation: command policy lines allowed with Always, approved hook sets, approved workspace extensions. Names only, never a value.",
         })
         .output(StandingGrantsSchema),
     revokeGrant: answerRoute

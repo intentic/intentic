@@ -11,13 +11,13 @@ const capability = (id: string, kind: ReachCapability[`kind`]): ReachCapability 
 
 const input: ReachInput = {
     areas: [{ id: `site`, folders: [`web/site`] }],
-    personas: [{ id: `owen`, capabilities: [`x-brand`], workspace: { startIn: `web/site` } }],
+    roles: [{ id: `owen`, capabilities: [`x-brand`], workspace: { startIn: `web/site` } }],
     capabilities: [capability(`github`, `cli`), capability(`postgres`, `cli`), capability(`x-brand`, `browser`)],
     secrets: [],
     models: [],
-    roster: { owner: `ada@acme.dev`, members: [{ email: `sam@acme.dev`, role: `guest`, areas: [`site`] }] },
+    roster: { owner: `ada@acme.dev`, members: [{ email: `sam@acme.dev`, tier: `guest`, areas: [`site`] }] },
     invited: new Set([`sam@acme.dev`]),
-    self: { email: `ada@acme.dev`, role: `owner` },
+    self: { email: `ada@acme.dev`, tier: `owner` },
     now: 0,
 };
 const map = buildReachMap(input);
@@ -37,7 +37,7 @@ const layout: MapLayout = {
         [`cap:github`, { rect: rect(500, 20), group: `services` as const }],
         [`bundle:services`, { rect: rect(500, 60), group: `services` as const }],
         [`cap:x-brand`, { rect: rect(500, 120), group: `accounts` as const }],
-        [`persona:owen`, { rect: rect(220, 200), group: undefined }],
+        [`role:owen`, { rect: rect(220, 200), group: undefined }],
     ]),
     groups: new Map([
         [`services`, rect(500, 0, 100, 100)],
@@ -61,7 +61,7 @@ describe(`side by side`, () => {
     });
 
     // Sam only chats, so everything outward is through Owen; the folded postgres lights its group's `more` row.
-    it(`lights a principal's lines, dashes what it reaches only as a persona, and lights a fold hiding a reached thing`, () => {
+    it(`lights a principal's lines, dashes what it reaches only as a role, and lights a fold hiding a reached thing`, () => {
         expect(states(lightingOf(map, input, { kind: `principal`, id: `person:sam@acme.dev` }))).toEqual({
             "entry:person:ada@acme.dev": `off`,
             "entry:person:sam@acme.dev": `on,dashed`,
@@ -81,7 +81,7 @@ describe(`side by side`, () => {
     });
 
     it(`threads a focused node to what it is tied to`, () => {
-        const drawn = drawMap(layout, map, lightingOf(map, input, { kind: `node`, id: `persona:owen` }), `across`, `persona:owen`);
+        const drawn = drawMap(layout, map, lightingOf(map, input, { kind: `node`, id: `role:owen` }), `across`, `role:owen`);
         expect(drawn.edges.filter((edge) => edge.kind === `thread`).map((edge) => edge.key)).toEqual([`thread:cap:x-brand`]);
     });
 });

@@ -13,7 +13,7 @@ import { useServices } from "./profiles/useServices";
 import { useMintedTokens } from "../../../workbench/operations/useMintedTokens";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useT } from "@intentic/ui/i18n";
 
 // Program credential minted here by the owner or a maintainer: every scope, every token against this sandbox, and the
@@ -63,7 +63,7 @@ const { tokens, minted, minting, notice, mint, forgetMinted, revoke } = useMinte
 
 // Maintainer and up, the floor of all three token routes (the daemon's operating gate, `ownerDenied`), which is not the
 // owner alone: a maintainer holds the owner's operating authority, and only the member roster stays the owner's.
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 const SCOPE_ICONS: Record<ControlScope, PickerOption[`icon`]> = { editor: `code`, read: `eye`, drive: `play`, land: `check-circle` };
 

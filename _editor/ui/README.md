@@ -202,18 +202,18 @@ flowchart LR
   Segmented controls use one tab stop and support Left/Right, Home and End to select and focus a tab.
   Modals move focus inside before their entrance animation finishes, retain the caller's chosen field,
   and return focus to the opener when dismissed. The demo accessibility suite exercises the modal on desktop and mobile.
-- **Assistant faces.** Every persona is the same clay companion, told apart by two things. Its body color comes
-  from a hash of the persona's id, so a rename keeps it. The prop it holds comes from its name, because the prop is
-  what says at a glance what the persona helps with. `personaAccessory` reads the name. A project persona still
+- **Assistant faces.** Every role is the same clay companion, told apart by two things. Its body color comes
+  from a hash of the role's id, so a rename keeps it. The prop it holds comes from its name, because the prop is
+  what says at a glance what the role helps with. `roleAccessory` reads the name. A project role still
   named after its repository codes. Otherwise the rightmost specialty word wins (English job titles end in their
   head noun: a UX Writer writes, a Code Reviewer reviews). A generic title (engineer, manager, lead) counts only
   when no specialty was named. Anything else, such as a person's name or a repository's, gets the terminal laptop.
-  Past the project check, the id is read only when there is no label, since a renamed persona keeps its old id.
-  `PersonaFace` does this for a persona. `AssistantFace` takes a `seed` (color and motion phase), an accessible
+  Past the project check, the id is read only when there is no label, since a renamed role keeps its old id.
+  `RoleFace` does this for a role. `AssistantFace` takes a `seed` (color and motion phase), an accessible
   `label`, a pixel `size`, an `accessory`, an optional `color` overriding the seed's, and `animated` (default
   true). Larger faces bob and breathe; toolbar faces stay still, and turning motion off stops them. Try names
   at `/kit#assistants`. (2026-09-30: the eight fixed illustrated characters this replaced tied color and prop
-  together, so a persona's prop said nothing about its job.)
+  together, so a role's prop said nothing about its job.)
 
 ## Modular avatar artwork
 

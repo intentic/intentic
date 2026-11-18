@@ -1,21 +1,22 @@
 import type { ControlScope, ControlTokenSummary } from "@intentic/sandbox-contract/policy/control-scopes";
-import { type Fence, pathInsideFolder } from "@intentic/sandbox-contract/policy/fence-paths";
-import { isSignedInAccount, personaAllowsCapability } from "@intentic/sandbox-contract/policy/persona-capability";
-import { fenceHoldsPersona } from "@intentic/sandbox-contract/policy/persona-home";
+import { type Fence, fenceIntersection, pathInsideFolder } from "@intentic/sandbox-contract/policy/fence-paths";
+import { isSignedInAccount, roleAllowsCapability } from "@intentic/sandbox-contract/policy/role-capability";
+import { fenceHoldsRole } from "@intentic/sandbox-contract/policy/role-home";
+import type { AccessProfile } from "@intentic/sandbox-contract/schemas/access-profiles";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { InboundLinkSummary } from "@intentic/sandbox-contract/schemas/links";
 import { type Member, memberAccess, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-contract/schemas/members";
-import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 
-// Pure, language-free reach graph joins incoming principals to the box's areas, personas, credentials and external connections.
-// Derive people from memberAccess/fenceHoldsPersona/credential reach; chat-only access is further limited by reachable personas.
-// Control tokens are unfenced at their scope tier; sandbox links run unattended as their persona or without an account when unpinned.
+// Pure, language-free reach graph joins incoming principals to the box's areas, roles, credentials and external connections.
+// Derive people from memberAccess/fenceHoldsRole/credential reach; chat-only access is further limited by reachable roles.
+// Control tokens are unfenced at their scope tier; sandbox links run unattended as their role or without an account when unpinned.
 // The composable gathers data, views translate ids and reachLighting computes focus; lit reach must match daemon authorization.
 
-/** How a principal reaches a node: changes it by hand, reads it, acts through it, or acts through it only as a persona. */
+/** How a principal reaches a node: changes it by hand, reads it, acts through it, or acts through it only as a role. */
 export type ReachHow = `edit` | `see` | `use` | `through`;
 
 export type GroupKey = `services` | `accounts` | `machines` | `sandboxes` | `network` | `models`;
@@ -23,7 +24,7 @@ export type GroupKey = `services` | `accounts` | `machines` | `sandboxes` | `net
 /** The order the outward groups stand in, nearest-to-the-work first. */
 const GROUP_ORDER: readonly GroupKey[] = [`services`, `accounts`, `machines`, `sandboxes`, `network`, `models`];
 
-export type NodeKind = `area` | `rest` | `persona` | `secret` | `capability` | `model` | `port` | `outbox` | `session`;
+export type NodeKind = `area` | `rest` | `role` | `secret` | `capability` | `model` | `port` | `outbox` | `session`;
 
 export type NodeTone = `success` | `warning` | `danger` | `info` | `neutral`;
 
@@ -42,7 +43,7 @@ export interface MapNode {
     readonly live?: boolean | undefined;
     /** The capability kind, for a connection; where its page is and which rule decides it. */
     readonly capabilityKind?: CapabilityKind;
-    /** The record's own id (an area's, a persona's, a connection's), for the link to the page that edits it. */
+    /** The record's own id (an area's, a role's, a connection's), for the link to the page that edits it. */
     readonly ref?: string;
     /** A model source's provider, whose own mark draws it. */
     readonly provider?: AgentProvider | undefined;
@@ -61,17 +62,17 @@ export interface Principal {
     /** An address for a person, a label for a token or a link. */
     readonly label: string;
     /** The tier a person's grant makes; `owner` for the owner. */
-    readonly role?: MemberRole;
+    readonly tier?: MemberTier;
     /** The signed-in reader. */
     readonly self?: boolean;
     readonly scope?: ControlScope;
-    /** The persona a link's tasks wear; absent, they wear none. */
+    /** The role a link's tasks wear; absent, they wear none. */
     readonly actsAs?: string | undefined;
     /** `invited`: the grant stands and they have not signed in yet. `inert`: it holds nothing (expired, its minter gone,
-     *  its persona gone). */
+     *  its role gone). */
     readonly status: `active` | `invited` | `inert`;
     /** Why an inert principal holds nothing. */
-    readonly inert?: `expired` | `minter` | `persona` | `invite` | undefined;
+    readonly inert?: `expired` | `minter` | `role` | `invite` | undefined;
     /** Tasks a link has handed over that wait for a yes here. */
     readonly waiting?: number | undefined;
     readonly reach: ReadonlyMap<string, ReachHow>;
@@ -80,7 +81,7 @@ export interface Principal {
 export interface ReachMap {
     readonly principals: readonly Principal[];
     readonly areas: readonly MapNode[];
-    readonly personas: readonly MapNode[];
+    readonly roles: readonly MapNode[];
     readonly secrets: readonly MapNode[];
     readonly groups: readonly MapGroup[];
     /** Every node by id, inside the box and out. */
@@ -115,7 +116,10 @@ export interface ReachModelSource {
 
 export interface ReachInput {
     readonly areas: readonly Area[];
-    readonly personas: readonly Persona[];
+    readonly roles: readonly Role[];
+    /** The access profiles, for what each card may reach: the ones whose `roles` list it. Undefined when the reader may not
+     *  list them, where every card is drawn reaching whatever its accounts and its holder's access allow. */
+    readonly profiles?: readonly AccessProfile[] | undefined;
     readonly capabilities: readonly ReachCapability[];
     /** Stored secrets the owner keeps or the sandbox made (not a connection's own, which ride its connection). */
     readonly secrets: readonly string[];
@@ -128,7 +132,7 @@ export interface ReachInput {
     readonly tokens?: readonly ControlTokenSummary[] | undefined;
     readonly inbound?: readonly InboundLinkSummary[] | undefined;
     /** The signed-in reader: their address and tier, so they appear even when the roster is not theirs to read. */
-    readonly self?: { readonly email: string; readonly role: MemberRole } | undefined;
+    readonly self?: { readonly email: string; readonly tier: MemberTier } | undefined;
     /** Ids of signed-in capabilities with a browser window open now, and whether a signed-out one is open. */
     readonly liveAccounts?: ReadonlySet<string>;
     readonly anonymousBrowser?: boolean;
@@ -166,7 +170,7 @@ const groupOfKind = (kind: CapabilityKind): GroupKey => GROUP_OF_KIND.get(kind) 
 
 export const REST_ID = `rest`;
 export const areaId = (id: string): string => `area:${id}`;
-export const personaId = (id: string): string => `persona:${id}`;
+export const roleId = (id: string): string => `role:${id}`;
 export const capabilityId = (id: string): string => `cap:${id}`;
 export const secretId = (name: string): string => `secret:${name}`;
 
@@ -178,35 +182,65 @@ const foldersOf = (areas: readonly Area[], held: readonly string[] | undefined):
 export const overlaps = (fence: Fence, area: Area): boolean =>
     fence === undefined || area.folders.some((folder) => fence.some((held) => pathInsideFolder(held, folder) || pathInsideFolder(folder, held)));
 
-export const shelvesOf = (persona: Persona) => PersonaPowersSchema.parse(persona.powers ?? {});
-
-/** Whether a persona lets a turn act through this connection: the daemon's own rule, shared through the contract. */
-export const personaAllows = (persona: Persona, capability: Pick<ReachCapability, `id` | `kind`>): boolean =>
-    personaAllowsCapability(capability, persona.capabilities, shelvesOf(persona));
-
 // What a credential reach decides: only the kinds a member's reach can withhold; the rest hold nothing to withhold.
 const decides = (kind: CapabilityKind): boolean => REACHABLE_CREDENTIAL_KINDS.includes(kind);
+
+// What a card's reach is read from: the profiles listing it, and the areas those name.
+type CardAccess = Pick<ReachInput, `profiles` | `areas`>;
+
+/** The access profiles that hold a card: those whose `roles` list it. */
+const heldBy = (input: CardAccess, role: Role): AccessProfile[] =>
+    (input.profiles ?? []).filter((profile) => profile.roles?.includes(role.id) === true);
+
+/** Whether a card's turns may run commands: no profile holding it takes the shell away. */
+const roleShell = (input: CardAccess, role: Role): boolean => heldBy(input, role).every((profile) => profile.tools?.shell !== false);
+
+/** The folders a card's access fences it to, its profiles' areas held together; undefined is the whole workspace. */
+export const roleFence = (input: CardAccess, role: Role): Fence =>
+    heldBy(input, role).reduce<Fence>((fence, profile) => (profile.areas === undefined ? fence : fenceIntersection(fence, foldersOf(input.areas, profile.areas))), undefined);
+
+// Whether one profile holding a card lets it act through a connection: its credentials, and the two shelves that decide
+// a connection (the sandbox shelf for the owner's account, the delegate one for a linked sandbox), as the daemon caps them.
+const profileAllows = (profile: AccessProfile, capability: Pick<ReachCapability, `id` | `kind`>): boolean => {
+    const credited = profile.credentials === undefined || !decides(capability.kind) || profile.credentials.capabilities.includes(capability.id);
+    const shelf = capability.kind === `fleet` ? profile.tools?.sandbox !== false : capability.kind === `link` ? profile.tools?.delegate !== false : true;
+    return credited && shelf;
+};
+
+/** Whether a role lets a turn act through this connection: the accounts it speaks through (the daemon's own rule,
+ *  shared through the contract), then every access profile listing it. */
+export const roleAllows = (input: CardAccess, role: Role, capability: Pick<ReachCapability, `id` | `kind`>): boolean =>
+    roleAllowsCapability(capability, role.capabilities) && heldBy(input, role).every((profile) => profileAllows(profile, capability));
+
+/** The stored secrets a card's turns may spend: through the shell, and only those every profile holding it lists. */
+export const roleSecrets = (input: CardAccess, role: Role, secrets: readonly string[]): string[] => {
+    if (!roleShell(input, role)) {
+        return [];
+    }
+    const held = heldBy(input, role);
+    return secrets.filter((name) => held.every((profile) => profile.credentials === undefined || profile.credentials.secrets.includes(name)));
+};
 
 interface Credentials {
     readonly capabilities: ReadonlySet<string>;
     readonly secrets: ReadonlySet<string>;
 }
 
-// Builds one principal's reach from the parts every kind of principal is made of: where it works, which personas it may
+// Builds one principal's reach from the parts every kind of principal is made of: where it works, which roles it may
 // wear, whether it runs turns at all, and how it reaches what the turns spend.
 interface ReachParts {
     /** Areas it changes by hand, and areas it reads (undefined: the whole workspace). */
     readonly edit: Fence | `none`;
     readonly see: Fence | `none`;
-    readonly personas: readonly Persona[];
-    /** `direct`: its turns act through anything its credentials allow. `personas`: only what those personas allow.
+    readonly roles: readonly Role[];
+    /** `direct`: its turns act through anything its credentials allow. `roles`: only what those roles allow.
      *  `none`: it starts no turn. */
-    readonly turns: `direct` | `personas` | `none`;
-    /** `through` marks everything outward as reached only inside something narrower (a persona, one conversation). */
+    readonly turns: `direct` | `roles` | `none`;
+    /** `through` marks everything outward as reached only inside something narrower (a role, one conversation). */
     readonly how: `use` | `through`;
     /** Undefined: every credential. */
     readonly credentials?: Credentials | undefined;
-    /** A turn nobody watches with no persona named holds no signed-in account. */
+    /** A turn nobody watches with no role named holds no signed-in account. */
     readonly accountsDenied?: boolean;
 }
 
@@ -224,11 +258,11 @@ const markAreas = (reach: Map<string, ReachHow>, areas: readonly Area[], fence: 
 };
 
 // Whether a principal's turns may act through one connection: its credentials first, then a watcher-less turn's missing
-// accounts, then (for one who acts only as a persona) whether any persona it may wear allows it.
-const turnsReach = (parts: ReachParts, capability: ReachCapability): boolean => {
+// accounts, then (for one who acts only as a role) whether any role it may wear allows it.
+const turnsReach = (input: CardAccess, parts: ReachParts, capability: ReachCapability): boolean => {
     const credited = parts.credentials === undefined || !decides(capability.kind) || parts.credentials.capabilities.has(capability.id);
     const signedIn = parts.accountsDenied !== true || !isSignedInAccount(capability.kind);
-    const worn = parts.turns !== `personas` || parts.personas.some((persona) => personaAllows(persona, capability));
+    const worn = parts.turns !== `roles` || parts.roles.some((role) => roleAllows(input, role, capability));
     return credited && signedIn && worn;
 };
 
@@ -240,14 +274,14 @@ const build = (input: ReachInput, parts: ReachParts): Map<string, ReachHow> => {
         return reach;
     }
     const outward = [
-        ...input.capabilities.filter((capability) => turnsReach(parts, capability)).map((capability) => capabilityId(capability.id)),
+        ...input.capabilities.filter((capability) => turnsReach(input, parts, capability)).map((capability) => capabilityId(capability.id)),
         ...input.secrets.filter((name) => parts.credentials === undefined || parts.credentials.secrets.has(name)).map(secretId),
         ...input.models.map((model) => model.id),
         // What its turns can put in front of the internet: anyone who runs turns can publish.
         ...networkIds(input),
     ];
-    for (const persona of parts.personas) {
-        reach.set(personaId(persona.id), `use`);
+    for (const role of parts.roles) {
+        reach.set(roleId(role.id), `use`);
     }
     for (const id of outward) {
         reach.set(id, parts.how);
@@ -260,14 +294,14 @@ const networkIds = (input: ReachInput): string[] => [
     ...((input.outboxFiles ?? 0) > 0 ? [`outbox`] : []),
 ];
 
-const EVERYTHING: Omit<ReachParts, `personas`> = { edit: undefined, see: undefined, turns: `direct`, how: `use` };
+const EVERYTHING: Omit<ReachParts, `roles`> = { edit: undefined, see: undefined, turns: `direct`, how: `use` };
 
 const lower = (email: string): string => email.toLowerCase();
 
 const personReach = (input: ReachInput, member: Member): Map<string, ReachHow> => {
     const access = memberAccess(member);
     if (access.manage) {
-        return build(input, { ...EVERYTHING, personas: input.personas });
+        return build(input, { ...EVERYTHING, roles: input.roles });
     }
     const see = foldersOf(input.areas, access.see);
     const edit = access.edit === `none` ? `none` : access.edit === `all` ? see : foldersOf(input.areas, access.edit);
@@ -278,8 +312,8 @@ const personReach = (input: ReachInput, member: Member): Map<string, ReachHow> =
     return build(input, {
         see,
         edit,
-        personas: input.personas.filter((card) => fenceHoldsPersona(see, card)),
-        turns: access.agents === `off` ? `none` : access.agents === `chat` ? `personas` : `direct`,
+        roles: input.roles.filter((card) => fenceHoldsRole(see, card)),
+        turns: access.agents === `off` ? `none` : access.agents === `chat` ? `roles` : `direct`,
         // Somebody who only chats acts through whichever card they talk to.
         how: access.agents === `chat` ? `through` : `use`,
         credentials,
@@ -290,13 +324,13 @@ const personReach = (input: ReachInput, member: Member): Map<string, ReachHow> =
 const tokenReach = (input: ReachInput, scope: ControlScope): Map<string, ReachHow> => {
     switch (scope) {
         case `read`:
-            return build(input, { ...EVERYTHING, edit: `none`, turns: `none`, personas: [] });
+            return build(input, { ...EVERYTHING, edit: `none`, turns: `none`, roles: [] });
         // One conversation: whatever that conversation reaches, and nothing beside it.
         case `editor`:
-            return build(input, { ...EVERYTHING, edit: `none`, how: `through`, personas: input.personas });
+            return build(input, { ...EVERYTHING, edit: `none`, how: `through`, roles: input.roles });
         case `drive`:
         case `land`:
-            return build(input, { ...EVERYTHING, edit: `none`, personas: input.personas });
+            return build(input, { ...EVERYTHING, edit: `none`, roles: input.roles });
     }
 };
 
@@ -309,18 +343,18 @@ const linkReach = (input: ReachInput, link: InboundLinkSummary): Map<string, Rea
     const actsAs = link.terms.actsAs;
     // Unpinned: the full toolbox, the whole workspace, and no signed-in account, since nobody here is watching.
     if (actsAs === undefined) {
-        return build(input, { ...EVERYTHING, edit: `none`, personas: [], accountsDenied: true });
+        return build(input, { ...EVERYTHING, edit: `none`, roles: [], accountsDenied: true });
     }
-    const persona = input.personas.find((card) => card.id === actsAs);
-    if (persona === undefined) {
+    const role = input.roles.find((card) => card.id === actsAs);
+    if (role === undefined) {
         return new Map();
     }
     return build(input, {
-        // Its tasks work inside the persona's folders, the conversation itself being unfenced.
-        see: persona.workspace?.folders === undefined || persona.workspace.folders.length === 0 ? undefined : persona.workspace.folders,
+        // Its tasks work inside the areas the role's access fences it to, the conversation itself being unfenced.
+        see: roleFence(input, role),
         edit: `none`,
-        personas: [persona],
-        turns: `personas`,
+        roles: [role],
+        turns: `roles`,
         how: `through`,
     });
 };
@@ -333,7 +367,7 @@ const tokenInert = (input: ReachInput, token: ControlTokenSummary): `expired` | 
     // roster says so only to the reader allowed to read it.
     const minter = token.createdBy === undefined ? undefined : lower(token.createdBy);
     // A roster that does not name its owner cannot say whether the minter still manages: say nothing rather than guess.
-    const owner = input.roster?.owner ?? (input.self?.role === `owner` ? input.self.email : undefined);
+    const owner = input.roster?.owner ?? (input.self?.tier === `owner` ? input.self.email : undefined);
     if (minter === undefined || input.roster === undefined || owner === undefined || lower(owner) === minter) {
         return undefined;
     }
@@ -341,7 +375,7 @@ const tokenInert = (input: ReachInput, token: ControlTokenSummary): `expired` | 
 };
 
 // The reader first, then the owner, then by how much they may do.
-const ROLE_RANK = { owner: 0, maintainer: 1, writer: 2, collaborator: 3, guest: 4, viewer: 5 } as const satisfies Record<MemberRole, number>;
+const TIER_RANK = { owner: 0, maintainer: 1, writer: 2, collaborator: 3, guest: 4, viewer: 5 } as const satisfies Record<MemberTier, number>;
 
 const memberRow = (input: ReachInput, member: Member, selfEmail: string | undefined): Principal => {
     const address = lower(member.email);
@@ -351,7 +385,7 @@ const memberRow = (input: ReachInput, member: Member, selfEmail: string | undefi
         id: `person:${address}`,
         kind: `person`,
         label: member.email,
-        role: memberAccess(member).manage ? `maintainer` : member.role,
+        tier: memberAccess(member).manage ? `maintainer` : member.tier,
         self: address === selfEmail,
         status: expired ? `inert` : invited ? `invited` : `active`,
         inert: expired ? `invite` : undefined,
@@ -360,36 +394,36 @@ const memberRow = (input: ReachInput, member: Member, selfEmail: string | undefi
 };
 
 // Below the owner the roster is not the reader's: they still stand on the map as themselves, at their own tier.
-const selfRow = (input: ReachInput, self: { readonly email: string; readonly role: MemberRole }): Principal => ({
+const selfRow = (input: ReachInput, self: { readonly email: string; readonly tier: MemberTier }): Principal => ({
     id: `person:${lower(self.email)}`,
     kind: `person`,
     label: self.email,
-    role: self.role,
+    tier: self.tier,
     self: true,
     status: `active`,
-    reach: self.role === `maintainer` ? build(input, { ...EVERYTHING, personas: input.personas }) : new Map(),
+    reach: self.tier === `maintainer` ? build(input, { ...EVERYTHING, roles: input.roles }) : new Map(),
 });
 
 const people = (input: ReachInput): Principal[] => {
     const selfEmail = input.self === undefined ? undefined : lower(input.self.email);
-    const owner = input.roster?.owner ?? (input.self?.role === `owner` ? input.self.email : undefined);
+    const owner = input.roster?.owner ?? (input.self?.tier === `owner` ? input.self.email : undefined);
     const rows: Principal[] = [];
     if (owner !== undefined) {
-        const reach = build(input, { ...EVERYTHING, personas: input.personas });
-        rows.push({ id: `person:${lower(owner)}`, kind: `person`, label: owner, role: `owner`, self: lower(owner) === selfEmail, status: `active`, reach });
+        const reach = build(input, { ...EVERYTHING, roles: input.roles });
+        rows.push({ id: `person:${lower(owner)}`, kind: `person`, label: owner, tier: `owner`, self: lower(owner) === selfEmail, status: `active`, reach });
     }
     for (const member of input.roster?.members ?? []) {
         if (!rows.some((row) => row.id === `person:${lower(member.email)}`)) {
             rows.push(memberRow(input, member, selfEmail));
         }
     }
-    if (input.roster === undefined && input.self !== undefined && input.self.role !== `owner`) {
+    if (input.roster === undefined && input.self !== undefined && input.self.tier !== `owner`) {
         rows.push(selfRow(input, input.self));
     }
     return rows.toSorted(
         (left, right) =>
             Number(right.self === true) - Number(left.self === true) ||
-            ROLE_RANK[left.role ?? `viewer`] - ROLE_RANK[right.role ?? `viewer`] ||
+            TIER_RANK[left.tier ?? `viewer`] - TIER_RANK[right.tier ?? `viewer`] ||
             left.label.localeCompare(right.label),
     );
 };
@@ -415,14 +449,14 @@ const tokens = (input: ReachInput): Principal[] =>
 const links = (input: ReachInput): Principal[] =>
     (input.inbound ?? []).map((link) => {
         const actsAs = link.terms.actsAs;
-        const lost = actsAs !== undefined && !input.personas.some((card) => card.id === actsAs);
+        const lost = actsAs !== undefined && !input.roles.some((card) => card.id === actsAs);
         return {
             id: `link:${link.id}`,
             kind: `link` as const,
             label: link.label,
             actsAs,
             status: lost ? (`inert` as const) : (`active` as const),
-            inert: lost ? (`persona` as const) : undefined,
+            inert: lost ? (`role` as const) : undefined,
             waiting: link.requests.length > 0 ? link.requests.length : undefined,
             reach: linkReach(input, link),
         };
@@ -442,14 +476,14 @@ const areaNodes = (input: ReachInput): MapNode[] => [
     { id: REST_ID, kind: `rest` as const, label: REST_ID, icon: `folder-open`, tone: `neutral` as const },
 ];
 
-const personaNodes = (input: ReachInput): MapNode[] =>
-    input.personas.map((persona) => ({
-        id: personaId(persona.id),
-        kind: `persona` as const,
-        label: persona.label ?? persona.id,
-        detail: persona.brief,
+const roleNodes = (input: ReachInput): MapNode[] =>
+    input.roles.map((role) => ({
+        id: roleId(role.id),
+        kind: `role` as const,
+        label: role.label ?? role.id,
+        detail: role.brief,
         tone: `neutral` as const,
-        ref: persona.id,
+        ref: role.id,
     }));
 
 const capabilityNode = (capability: ReachCapability, live: boolean): MapNode => ({
@@ -499,14 +533,14 @@ const outward = (input: ReachInput): MapGroup[] => {
 
 export const buildReachMap = (input: ReachInput): ReachMap => {
     const areas = areaNodes(input);
-    const personas = personaNodes(input);
+    const roles = roleNodes(input);
     const secrets: MapNode[] = input.secrets.map((name) => ({ id: secretId(name), kind: `secret`, label: name, icon: `key`, tone: `neutral` }));
     const groups = outward(input);
-    const nodes = new Map<string, MapNode>([...areas, ...personas, ...secrets, ...groups.flatMap((group) => group.nodes)].map((node) => [node.id, node]));
+    const nodes = new Map<string, MapNode>([...areas, ...roles, ...secrets, ...groups.flatMap((group) => group.nodes)].map((node) => [node.id, node]));
     return {
         principals: [...people(input), ...tokens(input), ...links(input)],
         areas,
-        personas,
+        roles,
         secrets,
         groups,
         nodes,

@@ -39,8 +39,8 @@ test("a person's own answer lists the AI accounts they connected beside the ones
     const dir = await mkdtemp(join(tmpdir(), "account-connectors-self-"));
     const members = fileMembersStore(join(dir, "members.json"));
     const accountConnectors = fileAccountConnectors(dir);
-    await members.add("bob@example.com", { role: "collaborator", aiAccounts: ["claude:a"] });
-    await members.add("cy@example.com", { role: "collaborator" });
+    await members.add("bob@example.com", { tier: "collaborator", aiAccounts: ["claude:a"] });
+    await members.add("cy@example.com", { tier: "collaborator" });
     await accountConnectors.record("claude:b", "bob@example.com", 1);
     await accountConnectors.record("claude:c", "cy@example.com", 1);
     const selfOf = async (email: string): Promise<MemberSelf> => {

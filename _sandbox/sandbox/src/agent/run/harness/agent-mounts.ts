@@ -1,15 +1,15 @@
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { pluginDirsOf } from "../../../capabilities/plugin-dirs.js";
 import type { Services } from "../../../composition.js";
 import { type ExtensionHost, extensionAgentDirsOf, extensionGranted } from "../../../capabilities/extension-inventory/installed-extensions.js";
-import { personaKitPlugin } from "../../../personas/persona-kit.js";
+import { roleKitPlugin } from "../../../roles/role-kit.js";
 
 // One Claude Code plugin dir a turn loads, named the way the Skills list names the skills inside it.
 export interface AgentMount {
     // `builtin` is a plugin this image ships; the rest say which of the owner's things brought it.
-    readonly origin: "builtin" | "plugin" | "extension" | "persona";
-    // What a list row's id is qualified by: the baked plugin's name, or the capability, extension or persona id.
+    readonly origin: "builtin" | "plugin" | "extension" | "role";
+    // What a list row's id is qualified by: the baked plugin's name, or the capability, extension or role id.
     readonly id: string;
     // Who ships it, as the list names them.
     readonly owner: string;
@@ -24,9 +24,9 @@ export type MountHost = ExtensionHost & { readonly config: Pick<Services["config
 export interface MountChoice {
     // The plugin capabilities that mount: those granted to a turn, or every one the list may show.
     readonly capabilities: readonly Capability[];
-    // Whose kit mounts, when its manifest exists: the persona a turn wears, or every persona for the list.
-    readonly personas: readonly Persona[];
-    // Which extensions' agent plugins mount: the `extensions` shelf of the persona a turn wears, or undefined (every
+    // Whose kit mounts, when its manifest exists: the role a turn wears, or every role for the list.
+    readonly roles: readonly Role[];
+    // Which extensions' agent plugins mount: the `extensions` shelf of the role a turn wears, or undefined (every
     // enabled one) for the list. Required, so no caller loads them all by forgetting to say.
     readonly extensions: readonly string[] | undefined;
 }
@@ -38,7 +38,7 @@ export const agentMounts = async (host: MountHost, choice: MountChoice): Promise
     const root = host.workspace.root;
     const [extensions, kits] = await Promise.all([
         extensionAgentDirsOf(host),
-        Promise.all(choice.personas.map(async (persona) => ({ persona, dir: await personaKitPlugin(root, persona.id) }))),
+        Promise.all(choice.roles.map(async (role) => ({ role, dir: await roleKitPlugin(root, role.id) }))),
     ]);
     return [
         ...(host.config.webqPluginDir !== "" ? [baked("webq", "Web pages", host.config.webqPluginDir)] : []),
@@ -46,8 +46,8 @@ export const agentMounts = async (host: MountHost, choice: MountChoice): Promise
         ...extensions.flatMap(({ id, name, dir, source }): AgentMount[] =>
             extensionGranted(choice.extensions, id) ? [{ origin: "extension", id, owner: name, pluginDir: dir, shipped: source === "builtin" }] : [],
         ),
-        ...kits.flatMap(({ persona, dir }): AgentMount[] =>
-            dir === undefined ? [] : [{ origin: "persona", id: persona.id, owner: persona.label ?? persona.id, pluginDir: dir, shipped: false }],
+        ...kits.flatMap(({ role, dir }): AgentMount[] =>
+            dir === undefined ? [] : [{ origin: "role", id: role.id, owner: role.label ?? role.id, pluginDir: dir, shipped: false }],
         ),
     ];
 };

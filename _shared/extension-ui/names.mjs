@@ -101,6 +101,7 @@ export const extensionUiNames = [
     "RepoRail",
     "ResizeSeam",
     "ResponsiveOverlay",
+    "RoleFace",
     "Row",
     "RowGroup",
     "RowNote",
@@ -189,6 +190,14 @@ export const extensionUiDeprecated = [
         use: "Await",
         since: "2.33.0",
         deprecated: "2026-10-20",
+        removableIn: "3.0.0",
+    },
+    {
+        // Personas were renamed roles on 2026-11-18: the face is the same component under the new name.
+        name: "PersonaFace",
+        use: "RoleFace",
+        since: "2.43.0",
+        deprecated: "2026-11-18",
         removableIn: "3.0.0",
     },
 ];

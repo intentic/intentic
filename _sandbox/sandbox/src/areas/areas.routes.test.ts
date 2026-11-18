@@ -1,4 +1,4 @@
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import { call } from "@orpc/server";
 import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";
@@ -17,7 +17,7 @@ const asOwner: OrpcContext = {
     headers: new Headers(),
     method: "POST",
     url: "/areas/save",
-    identity: { email: "owner@example.com", role: "owner" as MemberRole, methods: ["google"] },
+    identity: { email: "owner@example.com", tier: "owner" as MemberTier, methods: ["google"] },
 };
 
 const routes = () => {
@@ -27,8 +27,8 @@ const routes = () => {
     const services = {
         areas: memoryAreasStore([{ id: "support", label: "Support", folders: ["support"] }]),
         members: memoryMembersStore([
-            { email: "fay@example.com", role: "collaborator", areas: ["support"] },
-            { email: "vic@example.com", role: "viewer" },
+            { email: "fay@example.com", tier: "collaborator", areas: ["support"] },
+            { email: "vic@example.com", tier: "viewer" },
         ]),
         auth: unstubbed<NonNullable<Services["auth"]>>("auth", { connections }),
         wsTickets: createWsTickets(),
@@ -39,7 +39,7 @@ const routes = () => {
 
 test("moving an area's folders closes its holders' streams, and nobody else's", async () => {
     const { areas, revoked, services } = routes();
-    const ticket = services.wsTickets.mint({ email: "fay@example.com", role: "collaborator" });
+    const ticket = services.wsTickets.mint({ email: "fay@example.com", tier: "collaborator" });
     await call(areas.save, { id: "support", label: "Support", folders: ["support", "faq"] }, { context: asOwner });
     expect(revoked).toEqual(["fay@example.com"]);
     // A ticket minted under the old folders opens nothing either.

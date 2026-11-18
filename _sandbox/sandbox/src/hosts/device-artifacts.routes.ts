@@ -18,7 +18,7 @@ import { defineRawRoutes } from "../http/raw-route-server.js";
 // THE `devices push` DOOR: a program the agent built, carried from its shell to one of the owner's computers
 // (schemas/device-artifacts.ts). The CLI reads the bytes in the agent's own view of /work, so a build in a conversation's
 // private checkout is the one that goes; this route only relays them over the device link in chunks. Reached on the agent
-// token, and held to the devices the calling conversation's live turn mounts, so a persona that withholds a computer
+// token, and held to the devices the calling conversation's live turn mounts, so a role that withholds a computer
 // withholds pushing to it too. What may run there is the machine's to decide: it refuses every chunk unless "Run
 // programs this sandbox sends" is on.
 

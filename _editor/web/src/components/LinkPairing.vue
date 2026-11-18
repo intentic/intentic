@@ -9,12 +9,12 @@ import { computed, ref, watch } from "vue";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import {
     DEFAULT_TERMS,
-    type FarPersona,
+    type FarRole,
     farSandboxNote,
     type PairedLink,
     pairableSandboxes,
     pairWith,
-    personasAt,
+    rolesAt,
     preferredSandbox,
 } from "./linkPairing";
 
@@ -52,10 +52,10 @@ watch(
     },
     { immediate: true },
 );
-const personas = ref<readonly FarPersona[]>([]);
-const loadingPersonas = ref(false);
-const NO_PERSONA = ``;
-const actsAs = ref<string | undefined>(NO_PERSONA);
+const roles = ref<readonly FarRole[]>([]);
+const loadingRoles = ref(false);
+const NO_ROLE = ``;
+const actsAs = ref<string | undefined>(NO_ROLE);
 const approve = ref(DEFAULT_TERMS.approve);
 const turnsPerHour = ref(DEFAULT_TERMS.turnsPerHour);
 // Whether this sandbox may read the far one's records (its conversations, logs and diagnostics) over the link.
@@ -65,27 +65,27 @@ const operate = ref(DEFAULT_TERMS.operate);
 const pairing = ref(false);
 const paired = ref<PairedLink>();
 
-const personaOptions = computed<readonly PickerOption<string>[]>(() => [
-    { value: NO_PERSONA, label: t(`capabilities.linkPairing.noPersona`), hint: t(`capabilities.linkPairing.noPersonaHint`) },
-    ...personas.value.map((persona) => ({ value: persona.id, label: persona.label ?? persona.id })),
+const roleOptions = computed<readonly PickerOption<string>[]>(() => [
+    { value: NO_ROLE, label: t(`capabilities.linkPairing.noRole`), hint: t(`capabilities.linkPairing.noRoleHint`) },
+    ...roles.value.map((role) => ({ value: role.id, label: role.label ?? role.id })),
 ]);
 
-// The far sandbox's personas, read as the reader there; a sandbox that will not say leaves the choice at none.
+// The far sandbox's roles, read as the reader there; a sandbox that will not say leaves the choice at none.
 watch(farId, async (id) => {
-    personas.value = [];
-    actsAs.value = NO_PERSONA;
+    roles.value = [];
+    actsAs.value = NO_ROLE;
     paired.value = undefined;
     if (id === undefined) {
         return;
     }
-    loadingPersonas.value = true;
+    loadingRoles.value = true;
     emit(`notice`, null);
     try {
-        personas.value = await personasAt(id);
+        roles.value = await rolesAt(id);
     } catch (error) {
-        emit(`notice`, noticeFrom(error, t(`capabilities.linkPairing.couldntReadPersonas`)));
+        emit(`notice`, noticeFrom(error, t(`capabilities.linkPairing.couldntReadRoles`)));
     } finally {
-        loadingPersonas.value = false;
+        loadingRoles.value = false;
     }
 });
 
@@ -104,7 +104,7 @@ const pair = async (): Promise<void> => {
             records: records.value,
             operate: operate.value,
         };
-        if (actsAs.value !== undefined && actsAs.value !== NO_PERSONA) {
+        if (actsAs.value !== undefined && actsAs.value !== NO_ROLE) {
             terms.actsAs = actsAs.value;
         }
         paired.value = await pairWith(
@@ -144,11 +144,11 @@ const pair = async (): Promise<void> => {
                         <Picker
                             v-if="farId !== undefined"
                             v-model="actsAs"
-                            :options="personaOptions"
-                            :disabled="loadingPersonas"
+                            :options="roleOptions"
+                            :disabled="loadingRoles"
                             variant="input"
-                            :aria-label="t(`capabilities.linkPairing.persona`)"
-                            :header="t(`capabilities.linkPairing.persona`)"
+                            :aria-label="t(`capabilities.linkPairing.role`)"
+                            :header="t(`capabilities.linkPairing.role`)"
                             class="ui-field-sm w-48"
                         />
                     </div>
@@ -180,7 +180,7 @@ const pair = async (): Promise<void> => {
                                 <span class="text-2xs text-subtle">{{ t(`capabilities.linkPairing.operateHint`) }}</span>
                             </label>
                         </div>
-                        <Button tier="accent" type="submit" :label="t(`capabilities.linkPairing.pair`)" size="small" :loading="pairing" :disabled="pairing || loadingPersonas">
+                        <Button tier="accent" type="submit" :label="t(`capabilities.linkPairing.pair`)" size="small" :loading="pairing" :disabled="pairing || loadingRoles">
                             <template #icon><Icon name="link" /></template>
                         </Button>
                     </div>

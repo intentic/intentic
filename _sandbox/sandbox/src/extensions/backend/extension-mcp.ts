@@ -54,9 +54,9 @@ const cardServerOf = async (
 };
 
 // One server per granted card whose kind serves tools, named by the card's id like mcp-kind cards and peers, and one per
-// enabled extension serving tools of its own that the persona's `extensions` shelf grants (absent: every one), named by
+// enabled extension serving tools of its own that the role's `extensions` shelf grants (absent: every one), named by
 // the extension's `name`. The card is the grant for the first, the extension for the second, so neither mounts into a
-// turn whose persona was not given it. A server named after a daemon server is skipped rather than allowed to shadow it.
+// turn whose role was not given it. A server named after a daemon server is skipped rather than allowed to shadow it.
 export const extensionMcpToolsOf = async (
     services: ExtensionHost,
     granted: readonly Capability[],

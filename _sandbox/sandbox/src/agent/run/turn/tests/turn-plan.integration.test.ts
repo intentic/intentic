@@ -94,10 +94,12 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         // No conversation-level grants: what a conversation nobody has widened reads.
         conversationGrants: unstubbed<Services["conversationGrants"]>("conversationGrants", { of: async () => undefined }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        // Every turn resolves a persona now; an empty list is the open, attended posture these tests assume.
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
+        // Every turn resolves a role now; an empty list is the open, attended posture these tests assume.
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [] }),
         // No areas: the unfenced workspace, which is what a turn an owner started carries.
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [] }),
+        // No access profiles: no role is held to anything beyond what the ceiling and the reach below say.
+        accessProfiles: unstubbed<Services["accessProfiles"]>("accessProfiles", { list: async () => [] }),
         // Where this turn's checklist is read back from; the shared store, matching the unfenced `areas` above.
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
             sessionStore: (entry) => claudeStoreOf(root, testConfig.historyRoot, entry),
@@ -155,18 +157,18 @@ test("a Claude turn gets the readiness tools instead of the paragraph, however f
     expect(request.spec.sessionStore).toBe(claudeStoreOf(root, testConfig.historyRoot, undefined));
 });
 
-// A persona that can't read the workspace can't read the daemon's log either: withheld whole, since half an answer
+// A role that can't read the workspace can't read the daemon's log either: withheld whole, since half an answer
 // about a failure is worse than none.
-test("a persona with no file reads does not get the diagnostic tools", async () => {
+test("a role whose access allows no file reads does not get the diagnostic tools", async () => {
     const root = await workspaceWithMissingDeps();
     const services = servicesIn(root, {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         openCode: unstubbed<Services["openCode"]>("openCode", { shielded: async () => true, connected: async () => false }),
         async *codexAgent() {},
         async *agent() {},
-        personas: unstubbed<Services["personas"]>("personas", {
-            list: async () => [{ id: "reader", name: "Reader", powers: { files: "none", shell: false } }] as never,
-        }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [{ id: "reader", label: "Reader", capabilities: [] }] }),
+        // The card's access, as the chain answers it for the role the turn wears.
+        toolCeiling: async (_conversation, _people, _services, role) => (role?.id === "reader" ? { files: "none", shell: false } : undefined),
     });
 
     const plan = await planTurn(services, { prompt: "do the thing", actsAs: "reader" } as AgentTurn, contextIn(root));
@@ -176,7 +178,7 @@ test("a persona with no file reads does not get the diagnostic tools", async () 
 
 // The whole reason memory is composed here: a card that starts a conversation inside one folder used to be at the mercy
 // of the runtime's own discovery, which stops at a nested repo on some loops and does not exist at all on others.
-test("a persona starting in a nested folder is told the workspace's rules and that folder's", async () => {
+test("a role starting in a nested folder is told the workspace's rules and that folder's", async () => {
     const root = await mkdtemp(join(tmpdir(), "turn-plan-"));
     await mkdir(join(root, "shop"), { recursive: true });
     await writeFile(join(root, "AGENTS.md"), "No legacy support.");
@@ -184,7 +186,7 @@ test("a persona starting in a nested folder is told the workspace's rules and th
     const services = servicesIn(root, {
         openCode: unstubbed<Services["openCode"]>("openCode", { shielded: async () => true, connected: async () => false }),
         async *agent() {},
-        personas: unstubbed<Services["personas"]>("personas", {
+        roles: unstubbed<Services["roles"]>("roles", {
             list: async () => [{ id: "shopkeeper", label: "Shopkeeper", capabilities: [], workspace: { startIn: "shop" } }] as never,
         }),
     });
@@ -210,7 +212,7 @@ test("a native Codex turn is told the tree's dependencies are missing, exactly a
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(root));
 
     expect(prompt).toContain(SETUP_NOTICE_HEADER);
-    // A main-tree turn whose persona may install is told what its own install would do, not sent to the owner.
+    // A main-tree turn whose role may install is told what its own install would do, not sent to the owner.
     expect(prompt).toContain(
         "needs `pnpm install`. Run it there if the task needs it: this turn works in the main tree, so the install serves every conversation.",
     );

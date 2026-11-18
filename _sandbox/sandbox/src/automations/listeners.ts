@@ -29,7 +29,7 @@ import { type SenderLane, senderLane } from "./senders.js";
 // A conversation is a thread (sessions/thread-sessions.ts): the provider's own thread when the message names one (a
 // Discord thread, a Slack thread), else the channel. Messages resume the same conversation and session until quiet past
 // THREAD_SESSION_TTL_MS for a thread, CHANNEL_SESSION_TTL_MS for a channel, then start fresh. Who sent the message picks
-// its lane (senders.ts): the persona the wake wears and whether a person releases it. Batches and threads are keyed by
+// its lane (senders.ts): the role the wake wears and whether a person releases it. Batches and threads are keyed by
 // lane as well as thread, so a burst from two people the automation answers as different agents becomes two wakes,
 // never one. A message for a thread whose turn is running goes into that turn, between its tool calls, when the runtime
 // takes words mid-turn and the sender needs nobody's release; otherwise it waits and fires once the turn ends.

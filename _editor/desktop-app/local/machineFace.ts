@@ -66,7 +66,7 @@ const rowOf = (sandbox: MachineSandbox, now: Date): SandboxSummary => ({
     removedAt: null,
     removedBy: null,
     token: null,
-    role: `owner`,
+    tier: `owner`,
     providedAddress: false,
     localHostname: null,
     hosted: null,

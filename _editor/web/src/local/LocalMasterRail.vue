@@ -54,7 +54,7 @@ const noteOf = (box: SandboxSummary): string => {
     const where = rowPlacement(box);
     return [
         where.label,
-        box.role !== `owner` && where.kind !== `shared` ? t(`shared.shared`).toLocaleLowerCase() : undefined,
+        box.tier !== `owner` && where.kind !== `shared` ? t(`shared.shared`).toLocaleLowerCase() : undefined,
         answerNote(answerOf(box, undefined), sleepingOn(box))?.text,
     ]
         .filter((part) => part !== undefined)
@@ -84,7 +84,7 @@ const boxes = computed<readonly RailBox[]>(() => {
 const openBox = (box: RailBox): void => void place.openFromFolder(box.id);
 // Its settings in the hub this reader may open, known by the platform's row; a guest's is found out there otherwise.
 const openSettings = (box: RailBox): void => {
-    const guest = sandbox.sandboxes.value.find((row) => row.id === box.id)?.role === `guest`;
+    const guest = sandbox.sandboxes.value.find((row) => row.id === box.id)?.tier === `guest`;
     void place.openSettingsFromFolder(box.id, sandboxHubPath(guest));
 };
 

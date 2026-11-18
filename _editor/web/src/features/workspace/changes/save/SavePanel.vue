@@ -27,7 +27,7 @@ import { useRunLine } from "../commit/runLine";
 import ChangeRowName from "../../../../components/ChangeRowName.vue";
 import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
 import AccessNote from "../../../../components/access/AccessNote.vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 
 // The maker's half of the Changes sidebar, over the same read the developer's ReviewPanel uses. Everything git asks a
 // developer to decide is decided here instead: there is no index (a save records the whole tree), no message to write
@@ -48,7 +48,7 @@ const { fleet } = useAgents();
 const { mobile } = useDevice();
 // Saving, backing up and throwing changes away are a maintainer's: below that the list is to read, every press that
 // changes it is left out, and one line says why.
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
 // The body lands in the tabs store directly, not through the host: on a phone the host swaps this panel out for the

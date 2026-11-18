@@ -98,7 +98,7 @@ export interface ViewAsk {
     readonly actions?: readonly ViewAskAction[] | undefined;
 }
 
-// The daemon's contract as `api.sandbox.rpc` types it, and one of its procedures by route name (`personas.list`), the
+// The daemon's contract as `api.sandbox.rpc` types it, and one of its procedures by route name (`roles.list`), the
 // name the host files that read's cache entry under and the daemon's pushes refresh it by.
 type SandboxRpc = ContractRouterClient<typeof sandboxContract>;
 export type SandboxProcedure = { [G in keyof SandboxRpc & string]: `${G}.${keyof SandboxRpc[G] & string}` }[keyof SandboxRpc & string];
@@ -395,7 +395,7 @@ export interface IntenticApi {
         // required prefix for every host-provided vue-query key.
         key(...parts: readonly string[]): readonly unknown[];
         // The cache key of one contract read, exactly the host's own for it, so a view and the shell reading
-        // `personas.list` share one entry and every push the daemon makes for that read refreshes it. The entry holds
+        // `roles.list` share one entry and every push the daemon makes for that read refreshes it. The entry holds
         // the procedure's whole answer: return `rpc.<group>.<name>(input)` unchanged from `queryFn` and reshape with
         // `select`, or two readers of one key would store two shapes under it.
         readKey<P extends SandboxProcedure>(procedure: P, input?: SandboxProcedureInput<P>): readonly unknown[];
@@ -404,6 +404,8 @@ export interface IntenticApi {
         // The signed-in user's trust tier, reactive like `reachable`. For affordances only: every route is
         // still floored by the daemon independently. A guest sees only the chat and its own conversations; a view
         // reading files or the fleet for one draws a refusal.
+        tier(): "owner" | "maintainer" | "writer" | "collaborator" | "viewer" | "guest";
+        // Deprecated since 2.43.0, kept until 3.0.0: `tier()`, under its name from before personas were renamed roles.
         role(): "owner" | "maintainer" | "writer" | "collaborator" | "viewer" | "guest";
         // The address this browser should frame or open a preview at, given the public one the daemon handed out (a
         // forwarded port's `previewUrl`, a panel's): its loopback twin when the app is on the daemon's loopback lane

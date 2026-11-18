@@ -3,7 +3,7 @@ import { Avatar, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { identityHue } from "../../../lib/identityHue";
-import { type PersonaName, principalLine, principalName } from "./mapWords";
+import { type RoleName, principalLine, principalName } from "./mapWords";
 import type { Principal, ReachHow } from "./reachModel";
 
 // ONE WAY INTO THE SANDBOX, as the map's left column draws it: a person by their face and address, a control token by its
@@ -17,19 +17,19 @@ const {
     principal,
     lit,
     pinned,
-    personaName,
+    roleName,
     compact = false,
 } = defineProps<{
     principal: Principal;
     lit: ReachHow | `self` | `off` | undefined;
     pinned: boolean;
-    personaName: PersonaName;
+    roleName: RoleName;
     compact?: boolean;
 }>();
 defineEmits<{ point: [on: boolean]; press: [] }>();
 
 const name = computed(() => principalName(principal));
-const line = computed(() => principalLine(principal, personaName));
+const line = computed(() => principalLine(principal, roleName));
 const icon = computed(() => (principal.kind === `token` ? `key` : `link`));
 // The same quiet edges every card on the map wears (MapNodeButton): a tint for what the focus lights, a halo for the focus.
 const edge = computed(() => {

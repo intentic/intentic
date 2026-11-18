@@ -18,7 +18,7 @@ const needOf = (subject: Need["subject"]): Need => ({ id: "need-1", conversation
 const NEED = needOf({ kind: "release", subject: "reddit-work", approvers: ["Bob@acme.dev"] });
 
 describe("release need", () => {
-    it("refuses what is not gated, pointing at the persona instead", async () => {
+    it("refuses what is not gated, pointing at the role instead", async () => {
         const answer = await harness([]).kind.resolve({ kind: "release", subject: "reddit-work" }, context);
         expect(answer).toMatchObject({ kind: "refused", code: "not_gated" });
         expect(answer.kind === "refused" ? answer.message : "").toContain("grants request capability reddit-work");

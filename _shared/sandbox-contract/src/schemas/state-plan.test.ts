@@ -21,12 +21,12 @@ const clear: StatePlan = {
     failures: [],
     steps: [
         { document: "conversations-db-schema", change: "upgrades the conversations database schema" },
-        { document: `${STATE_DIR}/config/personas.json`, change: `moves it from ${STATE_DIR}/identities.json` },
+        { document: `${STATE_DIR}/config/roles.json`, change: `moves it from ${STATE_DIR}/identities.json` },
     ],
     converts: [
-        { document: `${STATE_DIR}/config/settings.json`, change: "converts personaRouting from its old values", detail: '"suggest" became true' },
+        { document: `${STATE_DIR}/config/settings.json`, change: "converts roleRouting from its old values", detail: '"suggest" became true' },
     ],
-    files: [`${STATE_DIR}/config/personas.json`],
+    files: [`${STATE_DIR}/config/roles.json`],
 };
 
 const refused: StatePlan = {

@@ -23,7 +23,7 @@ const wake = (id: string, conversationId?: string): AutomationApproval => ({ id,
 
 const ME = `me@example.com`;
 const ADA = `ada@example.com`;
-const none = { held: [], personas: [], project: undefined, owner: undefined, me: ME };
+const none = { held: [], roles: [], project: undefined, owner: undefined, me: ME };
 
 describe(`attentionHidden`, () => {
     const fleet = [card(`shop`, { startIn: `shop` }), card(`api`, { startIn: `api` }), card(`web`, { startIn: `web` })];

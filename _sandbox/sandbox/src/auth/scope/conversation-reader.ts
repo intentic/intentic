@@ -1,4 +1,4 @@
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import type { Caller } from "../auth.js";
 import { type Provenance, provenanceOf, visibleTo } from "../fleet-scope.js";
@@ -14,12 +14,12 @@ import { sealedFrom } from "../seal-scope.js";
 
 export type ConversationReader = (conversationId: string | undefined) => boolean;
 
-export const readsEverything = (caller: Caller | undefined): boolean => caller === undefined || roleAtLeast(caller.role, "maintainer");
+export const readsEverything = (caller: Caller | undefined): boolean => caller === undefined || tierAtLeast(caller.tier, "maintainer");
 
 // Whether every conversation is visible to this caller anyway (an unfenced member who is not a guest), so words that
 // name no conversation to check (a snapshot's label, a past session's transcript) are theirs to read as well.
 export const seesWholeFleet = (caller: Caller | undefined): boolean =>
-    readsEverything(caller) || (caller !== undefined && caller.role !== "guest" && caller.areas === undefined);
+    readsEverything(caller) || (caller !== undefined && caller.tier !== "guest" && caller.areas === undefined);
 
 // A private conversation is read by its readers alone (seal-scope.ts), so reading everything stops at a seal: the owner, a
 // maintainer and the owner's own tools read every conversation that has none.

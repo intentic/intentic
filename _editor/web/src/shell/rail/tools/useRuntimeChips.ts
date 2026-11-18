@@ -2,7 +2,7 @@ import { computed, type ComputedRef, type Ref } from "vue";
 import { useRoute } from "vue-router";
 import { here, linkOf, page, pageCovers, type PageLink } from "../../../lib/routes/links";
 import { useAudience } from "../../../app/useAudience";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { directMode } from "../../../client/directory/directState";
 import { platformHealth } from "../../../lib/platform/platformHealth";
@@ -43,7 +43,7 @@ export function useRuntimeChips(): RuntimeChips {
         return shown !== undefined && pageCovers(link, shown);
     };
 
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     const { maker } = useAudience();
     const { reachable } = useSandbox();
     const words = useVocabulary();

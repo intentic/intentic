@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { at, drop, dropAll, fold, isJsonObject, type JsonObject, mapValue, retype, transform } from "../documents/conversions.js";
+import { at, drop, dropAll, fold, isJsonObject, type JsonObject, mapValue, rename, retype, transform } from "../documents/conversions.js";
 import { type ModelRole, ModelRoleSchema } from "../models/model-roles.js";
 import { setupsFromRoleLists } from "../models/model-setups.js";
 import { ModelPinSchema, type ModelPin } from "./agent.js";
@@ -180,4 +180,6 @@ export const SETTINGS_HISTORY = [
     // iq (2026-11-18): teaching agents the workspace search tool moved neither cost, calls nor searches against a held-out
     // half over 1,480 conversations, and the tool itself was removed.
     ...dropAll(["iqSearch", "iqSearchHoldout"]),
+    // Personas were renamed roles (2026-11-18): the switch that matches a new chat to one moves with them.
+    rename("personaRouting", "roleRouting"),
 ] as const;

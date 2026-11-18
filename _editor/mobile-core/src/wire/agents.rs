@@ -63,7 +63,7 @@ pub struct AgentSummary {
     /// Its worktree branch (`agent/<id>`); absent for one working in the shared tree.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
-    /// Which persona its last turn acted as: who it speaks as now.
+    /// Which role its last turn acted as: who it speaks as now.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_acts_as: Option<String>,
     /// Set when an outside message opened it (a chat mention, a webhook) rather than a person.

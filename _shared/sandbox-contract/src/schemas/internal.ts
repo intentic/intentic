@@ -1,5 +1,5 @@
 import { z } from "zod";
-// A manifest entry id (capabilities + automations + personas), also the `mcp__<id>__…` server name for mcp
+// A manifest entry id (capabilities + automations + roles), also the `mcp__<id>__…` server name for mcp
 // capabilities, so it's a safe identifier.
 export const entryId = z
     .string()

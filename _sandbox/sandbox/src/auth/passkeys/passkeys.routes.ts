@@ -51,7 +51,7 @@ const sessionOf = (minted: { readonly token: string; readonly expiresAt: number 
 // Why this caller may not remove a passkey that is not their own, or undefined when they may. Resetting a locked-out
 // member is part of running people and access; the owner's own passkeys are the owner's door, which nobody else touches.
 const otherPasskeyRefusal = async (services: PasskeyRoutesDeps, caller: Caller, holder: string): Promise<string | undefined> => {
-    if (caller.role === "owner") {
+    if (caller.tier === "owner") {
         return undefined;
     }
     if (!holdsRight(caller, "people")) {
@@ -68,7 +68,7 @@ const otherPasskeyRefusal = async (services: PasskeyRoutesDeps, caller: Caller, 
 // The owner sees everyone's, and whoever runs people and access everyone's but the owner's, since resetting a locked-out
 // member is theirs to do; anyone else sees only their own.
 const visiblePasskeys = async (services: PasskeyRoutesDeps, caller: Caller, all: readonly StoredCredential[]): Promise<StoredCredential[]> => {
-    if (caller.role === "owner") {
+    if (caller.tier === "owner") {
         return [...all];
     }
     const owner = await services.ownerEmail();
@@ -100,7 +100,7 @@ const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
             const list: PasskeysList = {
                 passkeys: visible.map(summaryOf),
                 required,
-                ...(identity.role === "owner" && required ? { recovery: { remaining: await unspentRecovery() } } : {}),
+                ...(identity.tier === "owner" && required ? { recovery: { remaining: await unspentRecovery() } } : {}),
             };
             return c.json(list);
         },
@@ -202,7 +202,7 @@ const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
             noteAudit({ actor: { kind: "member", email: credential.email.toLowerCase(), role: "unverified" }, details: { method: "passkey" } });
             try {
                 const caller = await services.auth.authorizeProven(proof);
-                noteAudit({ actor: { kind: "member", email: caller.email.toLowerCase(), role: caller.role } });
+                noteAudit({ actor: { kind: "member", email: caller.email.toLowerCase(), role: caller.tier } });
                 return c.json(sessionOf(await services.auth.mintSession(caller), caller.email));
             } catch (error) {
                 return denied(c, error);
@@ -219,7 +219,7 @@ const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
             }
             try {
                 const caller = await services.auth.authorizeRecovery(bearerFrom(c.req.header("authorization")), listenerOf((name) => c.req.header(name)));
-                noteAudit({ actor: { kind: "member", email: caller.email.toLowerCase(), role: caller.role }, details: { method: "recovery" } });
+                noteAudit({ actor: { kind: "member", email: caller.email.toLowerCase(), role: caller.tier }, details: { method: "recovery" } });
                 if (!(await services.passkeyCeremonies.spendRecoveryCode(request.code))) {
                     return c.json({ error: "that recovery code is not one of yours, or was already used" }, 403);
                 }

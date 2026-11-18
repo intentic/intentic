@@ -9,7 +9,7 @@ import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useAuth } from "../../../../client/auth/useAuth";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { identityHue } from "../../../../lib/identityHue";
 import { askToRead, answerOpening } from "../../../../models/fleet/presses/sealPresses";
 import { firstName, fullName, isOpener, sealAuthor } from "../../../../models/agent-status/sealView";
@@ -23,7 +23,7 @@ const t = useT();
 const { conversationId } = defineProps<{ conversationId: string }>();
 
 const { user } = useAuth();
-const { canShip, canReview } = useRole();
+const { canShip, canReview } = useTier();
 
 const { agentById } = useAgents();
 const agent = computed(() => agentById(conversationId));

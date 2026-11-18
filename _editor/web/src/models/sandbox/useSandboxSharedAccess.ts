@@ -9,15 +9,15 @@ import { sharedAccessKey, storedValue, storeValue } from "../../app/storage/brow
 // they may manage.
 export function useSandboxSharedAccess() {
     const { active } = useSandbox();
-    const isOwner = computed(() => active.value?.role === `owner`);
+    const isOwner = computed(() => active.value?.tier === `owner`);
     const { query } = useMembers({ enabled: isOwner });
     // The answer once there is one: undefined while the sandbox list or the members read is still on its way.
     const known = computed<boolean | undefined>(() => {
-        const role = active.value?.role;
-        if (role === undefined) {
+        const tier = active.value?.tier;
+        if (tier === undefined) {
             return undefined;
         }
-        if (role !== `owner`) {
+        if (tier !== `owner`) {
             return true;
         }
         return query.isPending.value ? undefined : (query.data.value?.members.length ?? 0) > 0;

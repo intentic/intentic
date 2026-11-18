@@ -19,7 +19,7 @@ export interface SandboxTarget {
 // How the platform can vouch for the reader of this listed sandbox: always its identity assertion, and the owner ticket
 // on a hosted machine read by its owner.
 const vouchFor = (sandbox: SandboxSummary | undefined): Pick<SandboxTarget, `platformVouch`> =>
-    sandbox === undefined ? {} : { platformVouch: { ownerTicket: sandbox.hosted !== null && sandbox.hosted !== undefined && sandbox.role === `owner` } };
+    sandbox === undefined ? {} : { platformVouch: { ownerTicket: sandbox.hosted !== null && sandbox.hosted !== undefined && sandbox.tier === `owner` } };
 
 export const currentSandboxTarget = (): SandboxTarget | undefined => {
     const { active, activeSandboxId } = useSandbox();

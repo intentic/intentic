@@ -10,7 +10,7 @@ import {
 import { refuse } from "@intentic/contract-serve";
 import { DEMO_USER } from "../../platform";
 import { LAPTOP_SANDBOX } from "../../world/sandboxRegistry";
-import { demoPersonas } from "../extensions/personas";
+import { demoRoles } from "../extensions/roles";
 import { sayOrBook } from "../board/queue";
 
 // Other sandboxes linked into this one (the Access tab's Linked sandboxes, Sandbox ▸ Map), held as the daemon's link
@@ -52,15 +52,15 @@ export const linksList = (at: URL): InboundLinksList => ({ links: [...linksAt(at
 
 const linkOf = (at: URL, id: string): InboundLinkSummary => linksAt(at).find((link) => link.id === id) ?? refuse(`no such link`, 404);
 
-// As the daemon refuses a persona the sandbox does not hold, rather than minting a link that could never run.
-const checkPersona = (actsAs: string | null | undefined): void => {
-    if (actsAs !== null && actsAs !== undefined && !demoPersonas.some((persona) => persona.id === actsAs)) {
-        refuse(`No persona here is called ${actsAs}.`, 400);
+// As the daemon refuses a role the sandbox does not hold, rather than minting a link that could never run.
+const checkRole = (actsAs: string | null | undefined): void => {
+    if (actsAs !== null && actsAs !== undefined && !demoRoles.some((role) => role.id === actsAs)) {
+        refuse(`No role here is called ${actsAs}.`, 400);
     }
 };
 
 export const mintLink = (at: URL, { label, from, terms }: InboundLinkMint): InboundLinkMinted => {
-    checkPersona(terms?.actsAs);
+    checkRole(terms?.actsAs);
     const id = `lnk_${crypto.randomUUID().slice(0, 8)}`;
     const summary: InboundLinkSummary = { id, label, terms: LinkTermsSchema.parse(terms ?? {}), createdAt: Date.now(), createdBy: DEMO_USER.email, conversations: 0, requests: [] };
     if (from !== undefined) {
@@ -70,9 +70,9 @@ export const mintLink = (at: URL, { label, from, terms }: InboundLinkMint): Inbo
     return { id, token: `ilk_${crypto.randomUUID().replaceAll(`-`, ``)}` };
 };
 
-// Whole fields replaced, the rest kept; `null` takes the persona or the service off.
+// Whole fields replaced, the rest kept; `null` takes the role or the service off.
 export const updateLink = (at: URL, id: string, { label, actsAs, runAs, approve, turnsPerHour, tasks, records, operate }: InboundLinkTermsUpdate): InboundLinkSummary => {
-    checkPersona(actsAs);
+    checkRole(actsAs);
     const link = linkOf(at, id);
     const terms: InboundLinkSummary[`terms`] = {
         approve: approve ?? link.terms.approve,
@@ -81,9 +81,9 @@ export const updateLink = (at: URL, id: string, { label, actsAs, runAs, approve,
         records: records ?? link.terms.records,
         operate: operate ?? link.terms.operate,
     };
-    const persona = actsAs === null ? undefined : (actsAs ?? link.terms.actsAs);
-    if (persona !== undefined) {
-        terms.actsAs = persona;
+    const role = actsAs === null ? undefined : (actsAs ?? link.terms.actsAs);
+    if (role !== undefined) {
+        terms.actsAs = role;
     }
     const service = runAs === null ? undefined : (runAs ?? link.terms.runAs);
     if (service !== undefined) {

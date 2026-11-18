@@ -1,7 +1,7 @@
 import { createAuthConnections } from "./connections.js";
 import type { ControlPrincipal } from "./principal.js";
 
-const caller = (email: string) => ({ email, role: "maintainer" as const });
+const caller = (email: string) => ({ email, tier: "maintainer" as const });
 const token = (id: string): ControlPrincipal => ({ kind: "control", id, label: `ci ${id}`, scope: "read" });
 
 test("revokes every live transport for one identity without touching another", () => {

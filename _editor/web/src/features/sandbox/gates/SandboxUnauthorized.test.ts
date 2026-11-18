@@ -26,7 +26,7 @@ const retryEmailSignIn = jest.fn();
 jest.mock(`../../../client/session/sandboxSession`, () => ({
     useSandboxSession: () => ({ presentedEmail: ref(`someone.else@example.com`), invalidateSession, getSessionToken, emailRefusal, retryEmailSignIn }),
 }));
-jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ name: `workspace`, role: `owner` }) }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ name: `workspace`, tier: `owner` }) }) }));
 
 const signInThroughBrowser = jest.fn<(options?: { pickAccount?: boolean }) => void>();
 const desktopVersion = jest.fn<() => string | undefined>();

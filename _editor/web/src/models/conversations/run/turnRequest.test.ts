@@ -114,7 +114,7 @@ describe(`turnRequestBody`, () => {
         });
     });
 
-    it(`carries the persona only once one is picked`, () => {
+    it(`carries the role only once one is picked`, () => {
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`actsAs`);
         expect(wire(turnRequestBody({ ...base, settings: { ...settings, actsAs: `work` } }))).toMatchObject({ actsAs: `work` });
     });
@@ -177,7 +177,7 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, settings: settingsWithAccount, box: `sbx-there` }))).not.toHaveProperty(`account`);
     });
 
-    it(`sends no persona and no editor context when the turn runs in another sandbox`, () => {
+    it(`sends no role and no editor context when the turn runs in another sandbox`, () => {
         const sent = wire(
             turnRequestBody({
                 ...base,

@@ -1,5 +1,5 @@
 import type { Need, NeedAnswer } from "@intentic/sandbox-contract/schemas/needs";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import { memberRefusal } from "@intentic/sandbox-contract/protocol/member-reach";
 import { call } from "@orpc/server";
 import { unstubbed } from "@intentic/testing";
@@ -20,11 +20,11 @@ const need = (subject: Need["subject"]): Need => ({
     updatedAt: 1,
 });
 
-const as = (email: string, role: MemberRole): OrpcContext => ({
+const as = (email: string, role: MemberTier): OrpcContext => ({
     headers: new Headers(),
     method: "POST",
     url: "/needs/need-1/release",
-    identity: { email, role, methods: ["google"] },
+    identity: { email, tier: role, methods: ["google"] },
 });
 
 const routesOver = (held: Need) => {
@@ -47,9 +47,9 @@ const RELEASE = need({ kind: "release", subject: "reddit-work", approvers: ["rin
 
 describe("needs.release", () => {
     test("is floored where every member reaches it, while the other answers stay the operating tier's", () => {
-        expect(memberRefusal({ role: "viewer" }, "POST", "/needs/need-1/release")).toBeUndefined();
-        expect(memberRefusal({ role: "viewer" }, "POST", "/needs/need-1/answer")).toEqual({ error: "maintainer access required", floor: "maintainer", reason: "floor" });
-        expect(memberRefusal({ role: "guest" }, "POST", "/needs/need-1/release")).toEqual({ error: "not open to a guest member", floor: "viewer", reason: "guest" });
+        expect(memberRefusal({ tier: "viewer" }, "POST", "/needs/need-1/release")).toBeUndefined();
+        expect(memberRefusal({ tier: "viewer" }, "POST", "/needs/need-1/answer")).toEqual({ error: "maintainer access required", floor: "maintainer", reason: "floor" });
+        expect(memberRefusal({ tier: "guest" }, "POST", "/needs/need-1/release")).toEqual({ error: "not open to a guest member", floor: "viewer", reason: "guest" });
     });
 
     test("carries a named viewer's release and decline to the need, which decides who may answer", async () => {

@@ -127,10 +127,10 @@ export const sandboxPlacement = (evidence: PlacementEvidence): SandboxPlacement 
 // The same answer straight off a platform row. Called bare for a row in a list, where only those fields are to hand;
 // `refine` is for the ACTIVE sandbox alone, the only one the fleet and the transport can say anything more about.
 export const placementOf = (
-    sandbox: Pick<SandboxSummary, "hosted" | "role" | "daemonUrl">,
+    sandbox: Pick<SandboxSummary, "hosted" | "tier" | "daemonUrl">,
     refine: Pick<PlacementEvidence, "device" | "onThisComputer"> = {},
 ): SandboxPlacement =>
-    sandboxPlacement({ hosted: sandbox.hosted, owner: sandbox.role === `owner`, daemonUrl: sandbox.daemonUrl, ...refine });
+    sandboxPlacement({ hosted: sandbox.hosted, owner: sandbox.tier === `owner`, daemonUrl: sandbox.daemonUrl, ...refine });
 
 // A PLACEMENT KNOWN ONLY BY ITS KIND, as the desktop app hands a local window the account's sandboxes (localHost.ts
 // `LocalSandbox`): no region, host or device name rode with it, so each is worded by its kind alone. A `device` is

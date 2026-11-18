@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { Avatar, BrandMark, Icon, PersonaFace, ui } from "@intentic/ui";
+import { Avatar, BrandMark, Icon, RoleFace, ui } from "@intentic/ui";
 import { formatList } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { identityHue } from "../../../lib/identityHue";
-import { editPath, editWords, GROUP_ICONS, groupLabel, isGround, nodeDetail, nodeLabel, type PersonaName, principalLine } from "./mapWords";
+import { editPath, editWords, GROUP_ICONS, groupLabel, isGround, nodeDetail, nodeLabel, type RoleName, principalLine } from "./mapWords";
 import { bundleId, type Focus, type Lighting } from "./reachLighting";
 import type { MapNode, Principal, ReachMap } from "./reachModel";
 import { here, page } from "../../../lib/routes/links";
@@ -18,12 +18,12 @@ import { here, page } from "../../../lib/routes/links";
 
 const t = useT();
 
-const { map, focus, lighting, pinned, personaName } = defineProps<{
+const { map, focus, lighting, pinned, roleName } = defineProps<{
     map: ReachMap;
     focus: Focus | undefined;
     lighting: Lighting | undefined;
     pinned: boolean;
-    personaName: PersonaName;
+    roleName: RoleName;
 }>();
 defineEmits<{ clear: [] }>();
 
@@ -64,7 +64,7 @@ const workspaceLine = (who: Principal): string => {
 
 // The narrowing a principal's outward reach comes with, if any.
 const throughLine = (who: Principal): string | undefined => {
-    const outward = [...who.reach.entries()].filter(([id]) => !isGround(id) && !id.startsWith(`persona:`));
+    const outward = [...who.reach.entries()].filter(([id]) => !isGround(id) && !id.startsWith(`role:`));
     if (who.status === `inert`) {
         return undefined;
     }
@@ -80,8 +80,8 @@ const throughLine = (who: Principal): string | undefined => {
     if (!outward.some(([, how]) => how === `through`)) {
         return undefined;
     }
-    const worn = map.personas.filter((card) => who.reach.has(card.id)).map((card) => card.label);
-    return t(`sandbox.sandboxMap.onlyThrough`, { personas: formatList(worn) });
+    const worn = map.roles.filter((card) => who.reach.has(card.id)).map((card) => card.label);
+    return t(`sandbox.sandboxMap.onlyThrough`, { roles: formatList(worn) });
 };
 
 const summary = computed(() => {
@@ -115,7 +115,7 @@ const markOf = (entry: MapNode): string => entry.icon ?? `folder`;
                 ><Icon :name="principal.kind === `token` ? `key` : `link`"
             /></span>
             <span class="max-w-64 shrink-0 truncate text-sm font-medium text-content">{{ principal.label }}</span>
-            <span class="shrink-0 text-xs text-muted">{{ principalLine(principal, personaName) }}</span>
+            <span class="shrink-0 text-xs text-muted">{{ principalLine(principal, roleName) }}</span>
             <span class="min-w-0 truncate text-xs text-subtle" :title="summary">{{ summary }}</span>
             <RouterLink :to="here(page.sandboxSettings(`access`))" :class="ui.textButton()" class="ml-auto shrink-0">{{ t(`sandbox.sandboxMap.changeAccess`) }}</RouterLink>
         </template>
@@ -128,7 +128,7 @@ const markOf = (entry: MapNode): string => entry.icon ?? `folder`;
         </template>
 
         <template v-else-if="node !== undefined">
-            <PersonaFace v-if="node.kind === `persona`" :persona="{ id: node.ref ?? node.id, label: node.label }" :size="20" />
+            <RoleFace v-if="node.kind === `role`" :role="{ id: node.ref ?? node.id, label: node.label }" :size="20" />
             <span v-else-if="node.kind === `model` && node.provider !== undefined" class="flex size-5 shrink-0 items-center justify-center text-sm text-content">
                 <ProviderLogo :provider="node.provider" />
             </span>

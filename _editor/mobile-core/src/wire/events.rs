@@ -6,7 +6,7 @@
 use super::agents::AgentSummary;
 use super::endpoint::{Endpoint, query};
 use super::lenient::{Millis, Seq, open_enum};
-use super::session::MemberRole;
+use super::session::MemberTier;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -135,7 +135,9 @@ pub struct PresenceUser {
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub picture: Option<String>,
-    pub role: MemberRole,
+    /// Named `role` on the wire until 2026-11-18; a daemon from before still sends that.
+    #[serde(alias = "role")]
+    pub tier: MemberTier,
     pub idle: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub away: Option<bool>,

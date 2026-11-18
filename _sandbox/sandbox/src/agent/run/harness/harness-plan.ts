@@ -8,7 +8,7 @@ import { browserFields } from "../../../browser/tools/browser-fields.js";
 import { mcpToolsOf } from "../../../capabilities/mcp-tools.js";
 import type { Services } from "../../../composition.js";
 import { gatedPlugins, withSettingsHookGate } from "./settings-hook-gate.js";
-import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
+import { type TurnRole, turnRole } from "../../../roles/roles.js";
 import { declaredChecks } from "../../../rules/repo-checks.js";
 import { standing } from "../../../rules/rules.js";
 import { offloadRunEnabled } from "../../../offload/offload-prefix.js";
@@ -65,23 +65,23 @@ const harnessReads = (deps: HarnessPlanDeps, input: RoutedAgentTurn, context: Tu
     ]);
 
 // The last planning I/O, run together rather than chained: the plugin dirs the Skills list also derives from, and the
-// turn's MCP mounts (the browsers filtered to this persona's accounts, each call bound to its account's persisted profile).
-const harnessMounts = (deps: HarnessPlanDeps, input: RoutedAgentTurn, granted: readonly Capability[], persona: TurnPersona) =>
+// turn's MCP mounts (the browsers filtered to this role's accounts, each call bound to its account's persisted profile).
+const harnessMounts = (deps: HarnessPlanDeps, input: RoutedAgentTurn, granted: readonly Capability[], role: TurnRole) =>
     Promise.all([
         deps.perf.track("turn.plan.extensions", {}, () =>
             agentMounts(deps, {
                 capabilities: granted,
-                personas: persona.persona === undefined ? [] : [persona.persona],
-                extensions: persona.powers.extensions,
+                roles: role.role === undefined ? [] : [role.role],
+                extensions: role.powers.extensions,
             }),
         ),
         deps.perf.track("turn.plan.mounts", {}, () =>
             turnToolsOf(deps, granted, {
                 conversationId: input.conversationId,
                 cleanOutput: false,
-                anonymousBrowser: persona.powers.browser,
-                shell: persona.powers.shell,
-                extensions: persona.powers.extensions,
+                anonymousBrowser: role.powers.browser,
+                shell: role.powers.shell,
+                extensions: role.powers.extensions,
             }),
         ),
     ]);
@@ -145,7 +145,7 @@ const harnessPolicy = (base: TurnPolicy, settings: SandboxSettings, context: Tur
     ...base,
     ...opt("toolSearch", context.toolSearch),
     // hashlineEdits owns file mutation via its own MCP server, so native Edit/Write are dropped (Read stays, for viewing
-    // images/PDFs). Added to what planning denied, never in its place: replacing the list once dropped every persona
+    // images/PDFs). Added to what planning denied, never in its place: replacing the list once dropped every role
     // and `Skill(<id>)` denial whenever the setting was on (2026-10-25).
     ...(settings.hashlineEdits ? { disallowedTools: [...new Set([...(base.disallowedTools ?? []), "Edit", "Write"])] } : {}),
     ...delegationCaps(settings),
@@ -232,12 +232,12 @@ export const planHarnessTurn = async (
     // allow(silent-catch): the paragraph is advice; a fleet that cannot be read leaves the turn as it was.
     const pressure = await fleetPressure(deps).catch(() => undefined);
     // Resolved by planTurn and already applied to `granted`; the open, attended fallback is only for the bench.
-    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
-    const [mounts, mounted] = await harnessMounts(deps, input, granted, persona);
+    const role = context.role ?? turnRole({ roles: [], actsAs: undefined, unattended: false });
+    const [mounts, mounted] = await harnessMounts(deps, input, granted, role);
     const { browser, tools: remote } = mounted;
     const plugins = mounts.map((mount) => mount.pluginDir);
     const secrets = turnSecretAccess(deps, input, context.base.signal);
-    const sdkServers = harnessServers(deps, { input, context, persona, browser, desktop: mounted.desktop, granted, secrets, hashlineEdits: settings.hashlineEdits });
+    const sdkServers = harnessServers(deps, { input, context, role, browser, desktop: mounted.desktop, granted, secrets, hashlineEdits: settings.hashlineEdits });
     const tools: TurnTools = {
         ...context.base.tools,
         ...(plugins.length > 0 ? { plugins } : {}),

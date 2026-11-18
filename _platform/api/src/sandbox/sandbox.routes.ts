@@ -1,8 +1,8 @@
 import { type AnnounceRefusal, apiContract, type BootReport, HostedStatusSchema, type SetupReport } from "@intentic/api-contract";
 import { hostedOfferFor } from "./hosted-offer.js";
 import type { Prisma } from "@intentic/prisma";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
-import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
+import { GrantedTierSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { localHostname } from "@intentic/sandbox-contract/ids/hostnames";
 import { implement, ORPCError } from "@orpc/server";
 import type { Config } from "../config.js";
@@ -74,13 +74,13 @@ const loopbackHostname = (config: Config, encryptedToken: string): string | null
 };
 
 /* THE CONNECT TOKEN IS THE OWNER'S AND ONLY THE OWNER'S: decrypted onto their row, null on a member's. */
-const connectTokenFor = (config: Config, encryptedToken: string, role: MemberRole): string | null =>
-    role === `owner` ? decryptSecret(config, encryptedToken) : null;
+const connectTokenFor = (config: Config, encryptedToken: string, tier: MemberTier): string | null =>
+    tier === `owner` ? decryptSecret(config, encryptedToken) : null;
 
 // Every timestamp on the wire is ISO or null; one spelling, so the summary below reads as a list of fields.
 const isoOrNull = (at: Date | null): string | null => (at === null ? null : at.toISOString());
 
-// Shape a sandbox row for the browser. `role` is the caller's relationship, owner rows drive management, member
+// Shape a sandbox row for the browser. `tier` is the caller's relationship, owner rows drive management, member
 // rows are access-only. daemonUrl is what the browser needs to reach the daemon directly (plus, for the owner,
 // the connect token above); daemonUrl + lastSeenAt come from the daemon's announce.
 // `providedAddress` flags a daemonUrl under the platform's own zone, the browser reads it to tell a sandbox we
@@ -92,7 +92,7 @@ const isoOrNull = (at: Date | null): string | null => (at === null ? null : at.t
 // token, and only for a sandbox on a machine of its own: a hosted one is narrated by hostedStatus. `hostReporters` is
 // the newest report of each machine and environment that reported, newest first, on the same rows (2026-10-05).
 // `sleep` says a sandbox asleep on its own machine and whether that machine can wake it (host-report.ts `sleepOf`), on
-// every role's row, since the report it is read from is the owner's alone (2026-10-29).
+// every tier's row, since the report it is read from is the owner's alone (2026-10-29).
 // `duplicateCopies` names two copies of the sandbox announcing side by side (announce-copies.ts), on the owner's row:
 // only the owner can remove one of them (2026-10-05).
 const toSummary = async (
@@ -123,14 +123,14 @@ const toSummary = async (
         hosted?: { region: string; warm: boolean; previousImage?: string | null; appName?: string; machineId?: string } | null;
         token: string;
     },
-    role: MemberRole,
+    tier: MemberTier,
     context: OrpcContext,
 ) => {
     const zone = intenticZoneOf(context);
     const providedAddress = sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`);
     const hosted = sandbox.hosted ?? null;
     const reports = hosted === null ? hostReportsOf(sandbox.hostReport) : [];
-    const hostReports = role === `owner` ? reports : [];
+    const hostReports = tier === `owner` ? reports : [];
     return {
         id: sandbox.id,
         name: sandbox.name,
@@ -147,13 +147,15 @@ const toSummary = async (
         removedBy: sandbox.removedBy,
         daemonVersion: sandbox.daemonVersion ?? null,
         hosted: hosted === null ? null : await hostedSummaryOf(context.config, hosted),
-        // Every role's: a member asked to wait for a sleeping sandbox is owed the same answer as its owner.
+        // Every tier's: a member asked to wait for a sleeping sandbox is owed the same answer as its owner.
         sleep: hosted === null ? sleepOf({ reports, sleepCheckedAt: sandbox.sleepCheckedAt ?? null, lastSeenAt: sandbox.lastSeenAt }, Date.now()) : null,
-        token: connectTokenFor(context.config, sandbox.token, role),
+        token: connectTokenFor(context.config, sandbox.token, tier),
         hostReport: hostReports[0] ?? null,
-        ...(role === `owner` && hosted === null ? { hostReporters: hostReports } : {}),
-        duplicateCopies: role === `owner` ? duplicateCopiesOf(sandbox.seenInstances, sandbox.duplicateSince ?? null, new Date(), activeHostOf(sandbox.activeHost ?? null)) : null,
-        role,
+        ...(tier === `owner` && hosted === null ? { hostReporters: hostReports } : {}),
+        duplicateCopies: tier === `owner` ? duplicateCopiesOf(sandbox.seenInstances, sandbox.duplicateSince ?? null, new Date(), activeHostOf(sandbox.activeHost ?? null)) : null,
+        tier,
+        // Beside `tier` for one release (2026-11-18), for an editor from before the rename.
+        role: tier,
         providedAddress,
         // Derived from the loopback zone, never `daemonUrl`: they are two different zones now.
         localHostname: loopbackHostname(context.config, sandbox.token),
@@ -170,7 +172,7 @@ export const sandboxRoutes = {
         const [owned, memberships] = await Promise.all([
             context.prisma.sandbox.findMany({ where: { ownerId: user.id }, include: { hosted: true }, orderBy: { createdAt: `asc` } }),
             // Only accepted memberships surface a shared sandbox; queried through the membership row (not `some`)
-            // because it carries the caller's role.
+            // because it carries the caller's tier.
             context.prisma.sandboxMember.findMany({
                 where: { email: user.email.toLowerCase(), acceptedAt: { not: null } },
                 include: { sandbox: { include: { hosted: true } } },
@@ -182,8 +184,8 @@ export const sandboxRoutes = {
         return {
             sandboxes: await Promise.all([
                 ...owned.map((sandbox) => toSummary(sandbox, `owner`, context)),
-                // Same fallback as toInviteRecord: an unrecognized stored role degrades to the safest tier.
-                ...memberships.map((membership) => toSummary(membership.sandbox, GrantedRoleSchema.catch(`viewer`).parse(membership.role), context)),
+                // Same fallback as toInviteRecord: an unrecognized stored tier degrades to the safest one.
+                ...memberships.map((membership) => toSummary(membership.sandbox, GrantedTierSchema.catch(`viewer`).parse(membership.tier), context)),
             ]),
         };
     }),
@@ -195,16 +197,16 @@ export const sandboxRoutes = {
         return toSummary(sandbox, `owner`, context);
     }),
     // Renames and/or sets the switcher logo (`null` clears it); the `!== undefined` guards keep the two fields
-    // independent. The owner or Full access, and the summary carries the caller's own role, since the editor files it
+    // independent. The owner or Full access, and the summary carries the caller's own tier, since the editor files it
     // over the caller's row.
     update: os.sandbox.update.handler(async ({ context, input }) => {
-        const role = await requireFullAccess(context, input.sandboxId);
+        const tier = await requireFullAccess(context, input.sandboxId);
         const sandbox = await context.prisma.sandbox.update({
             where: { id: input.sandboxId },
             data: { ...(input.name !== undefined && { name: input.name }), ...(input.image !== undefined && { image: input.image }) },
             include: { hosted: true },
         });
-        return toSummary(sandbox, role, context);
+        return toSummary(sandbox, tier, context);
     }),
     // The identity goes now; the disk under it is held for the recovery window (sandbox-trash.ts), which is also
     // why no cleanup is kicked here — there is nothing yet to tear down.

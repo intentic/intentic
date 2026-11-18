@@ -44,7 +44,7 @@ const sliceOn = (roots: StateRoots) => createAuthSlice({ ...testConfig, historyR
 
 const identity = (roots: StateRoots, name: string): string => join(roots.workspace, STATE_DIR, "identity", name);
 
-const ROSTER = { members: [{ email: "max@example.com", role: "maintainer" as const }] };
+const ROSTER = { members: [{ email: "max@example.com", tier: "maintainer" as const }] };
 const TOKENS = { tokens: [{ id: "ci", label: "CI", scope: "drive", hash: sha256Hex("ict_ci"), createdAt: 1 }] };
 
 test("a sandbox from before the move keeps its owner, roster and tokens, and the workspace copy stays for a rollback", async () => {
@@ -74,7 +74,7 @@ test("a roster a turn writes at the old address after the move is never brought 
     await put(identity(roots, "members.json"), ROSTER);
     await converge(roots);
 
-    await put(identity(roots, "members.json"), { members: [...ROSTER.members, { email: "mallory@example.com", role: "maintainer" }] });
+    await put(identity(roots, "members.json"), { members: [...ROSTER.members, { email: "mallory@example.com", tier: "maintainer" }] });
     await put(identity(roots, "owner.json"), { email: "mallory@example.com" });
     expect((await converge(roots)).plan?.steps).toEqual([]);
 
@@ -87,7 +87,7 @@ test("a sandbox with nothing to move starts an empty roster, so what a turn plan
     const roots = await volumes();
     expect((await converge(roots)).plan?.steps.map(({ change }) => change)).toEqual(["starts identity/members.json on the history volume with nobody on it"]);
 
-    await put(identity(roots, "members.json"), { members: [{ email: "mallory@example.com", role: "maintainer" }] });
+    await put(identity(roots, "members.json"), { members: [{ email: "mallory@example.com", tier: "maintainer" }] });
     await put(identity(roots, "control-tokens.json"), TOKENS);
     await converge(roots);
 

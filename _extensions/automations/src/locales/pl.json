@@ -89,14 +89,14 @@
         "onlyAllowedSitesDaily": "Zostają tylko dozwolone witryny i dzienny limit.",
         "onlyRepoOptional": "Tylko to repozytorium (opcjonalnie)",
         "othersCaption": {
-            "allow": "Każdy, kogo nie wymieniono, dostaje odpowiedź jako persona powyżej — tak działała ta automatyzacja, zanim miała reguły.",
-            "hold": "Każdy, kogo nie wymieniono, czeka na Ciebie w Zatwierdzeniach i działa jako persona powyżej, gdy się zgodzisz.",
+            "allow": "Każdy, kogo nie wymieniono, dostaje odpowiedź jako rola powyżej — tak działała ta automatyzacja, zanim miała reguły.",
+            "hold": "Każdy, kogo nie wymieniono, czeka na Ciebie w Zatwierdzeniach i działa jako rola powyżej, gdy się zgodzisz.",
             "ignore": "Każdy, kogo nie wymieniono, nie dostaje odpowiedzi. Nadal pojawia się w sekcji „widziane niedawno”, więc wymienienie go później to jedno kliknięcie."
         },
         "peopleRuleNames": "Nazwy reguły osób {index}",
-        "persona": "Mówi jako",
-        "personaAutomationRuns": "Mówi jako",
-        "personaRuleAnswers": "Reguła persony {index} odpowiada jako",
+        "role": "Mówi jako",
+        "roleAutomationRuns": "Mówi jako",
+        "roleRuleAnswers": "Reguła roli {index} odpowiada jako",
         "pickAtLeastOne": "Wybierz przynajmniej jeden dzień.",
         "pickModel": "Wybierz model",
         "readGrepGlob": "Read, Grep, Glob",
@@ -123,12 +123,12 @@
         "standard5FieldCron": "Standardowy cron z 5 pól: minuta godzina dzień miesiąc dzień-tygodnia.",
         "starter": "Rozrusznik z {recipeNote}.",
         "staysInSandboxOnly": "Zostaje w Twoim sandboxie: do przeglądarki odwiedzającego trafia tylko klucz witryny.",
-        "strangersWritePromptsSaving": "Te prompty piszą obcy, więc zapis dokłada do Twoich person recepcję tylko do odczytu.",
+        "strangersWritePromptsSaving": "Te prompty piszą obcy, więc zapis dokłada do Twoich ról recepcję tylko do odczytu.",
         "sun": "niedz",
         "then": "Wtedy",
         "theyTalkTo": "Mówi jako",
         "thu": "czw",
-        "toolNamesCommaSeparated": "Nazwy narzędzi, oddzielone przecinkami. Puste zostawia własną listę persony w spokoju.",
+        "toolNamesCommaSeparated": "Nazwy narzędzi, oddzielone przecinkami. Puste zostawia własną listę roli w spokoju.",
         "toolNamesJobMay": "Nazwy narzędzi, które to zadanie może wywoływać",
         "tue": "wt",
         "turnSettles": "Tura się ustatkuje",
@@ -217,7 +217,7 @@
         "aiDisclosure": "Informuj odwiedzających, że odpowiada AI",
         "aiDisclosureText": "Własna informacja (opcjonalnie)",
         "aiDisclosureDefault": "Odpowiedzi pisze asystent AI. Mogą zawierać błędy.",
-        "personaGoneHint": "Ta persona już nie istnieje, więc uruchomienia nie miałyby narzędzi ani kont. Wybierz inną."
+        "roleGoneHint": "Ta rola już nie istnieje, więc uruchomienia nie miałyby narzędzi ani kont. Wybierz inną."
     },
     "automationRow": {
         "alreadyFired": "Już uruchomiona",
@@ -295,10 +295,10 @@
         "lastSaw": "Co ostatnio zobaczyła",
         "lastSawSince": "Co ostatnio zobaczyła, bez zmian od {when}",
         "checkedAt": "Sprawdzono {at}",
-        "personaMissing": "Persona usunięta",
-        "personaMissingNote": "{ids} już nie istnieje, więc jej uruchomienia nie mają żadnych narzędzi ani kont. Wybierz inną personę.",
+        "roleMissing": "Rola usunięta",
+        "roleMissingNote": "{ids} już nie istnieje, więc jej uruchomienia nie mają żadnych narzędzi ani kont. Wybierz inną rolę.",
         "noAccounts": "Bez kont",
-        "noAccountsNote": "Jej uruchomienia mają wszystkie narzędzia, ale żadnego z Twoich zalogowanych kont. Wybierz Pełny dostęp albo personę, jeśli ma publikować lub przeglądać jako Ty."
+        "noAccountsNote": "Jej uruchomienia nie sięgają żadnego z Twoich zalogowanych kont. Wybierz Wszystkie konta albo rolę, jeśli ma publikować lub przeglądać jako Ty."
     },
     "automationsView": {
         "addAutomation": "Dodaj automatyzację",
@@ -466,7 +466,7 @@
         "failing": "Z błędami",
         "group": "Grupa",
         "groups": "Grupy",
-        "howFiled": "Ułożone według grupy, którą każda podaje, a bez niej według persony, jako która działa.",
+        "howFiled": "Ułożone według grupy, którą każda podaje, a bez niej według roli, w której działa.",
         "on": "Włączone",
         "show": "Pokaż",
         "total": "Razem"
@@ -489,15 +489,15 @@
     },
     "automationLabels": {
         "group": "Grupa",
-        "groupHint": "Automatyzacje z jednej grupy stoją razem. Puste układa ją według persony.",
+        "groupHint": "Automatyzacje z jednej grupy stoją razem. Puste układa ją według roli.",
         "groupOptional": "Grupa (opcjonalnie)",
         "groupPlaceholder": "Marketing"
     },
-    "builtInPersonas": {
-        "fullAccess": "Pełny dostęp",
-        "fullAccessNote": "każde narzędzie i każde zalogowane konto",
+    "builtInRoles": {
+        "fullAccess": "Wszystkie konta",
+        "fullAccessNote": "każde zalogowane konto",
         "noAccounts": "Bez kont",
-        "noAccountsNote": "każde narzędzie, żadnego zalogowanego konta"
+        "noAccountsNote": "żadnego zalogowanego konta"
     },
     "scheduleWords": {
         "daysAt": "W dni: {days}, o {times}",
@@ -524,7 +524,7 @@
         "schedule": "Harmonogram",
         "trigger": "Startuje przy"
     },
-    "personaProperty": {
+    "roleProperty": {
         "runsAs": "Mówi jako"
     },
     "modelProperty": {
@@ -552,10 +552,10 @@
     "groupProperty": {
         "byChore": "Zadanie przy kodzie",
         "byNothing": "Jeszcze bez grupy",
-        "byPersona": "Według persony",
+        "byRole": "Według roli",
         "change": "Zmień grupę: {now}",
         "group": "Grupa",
-        "hint": "Zostaw puste, by ułożyć ją według persony.",
+        "hint": "Zostaw puste, by ułożyć ją według roli.",
         "placeholder": "Marketing"
     },
     "instructionsSection": {
@@ -579,8 +579,8 @@
     },
     "service": {
         "runsAs": "Działa jako",
-        "owner": "Właściciel (ograniczony tylko przez personę)",
-        "authority": "Uprawnienia: dostęp opiekuna ograniczony profilem. Persony mogą go tylko zawężać.",
+        "owner": "Właściciel (ograniczony tylko przez rolę)",
+        "authority": "Uprawnienia: dostęp opiekuna ograniczony profilem. Role mogą go tylko zawężać.",
         "inherit": "Tak jak automatyzacja",
         "steward": "Opiekun: {email}",
         "stewardLimits": "Pełny dostęp opiekuna",

@@ -6,7 +6,7 @@ import { standingOf } from "../../../models/conversations/tabs/tabFacts";
 import { laneOfTab } from "./tabs";
 
 // Open chats split into the board's three lanes and put in the board's order (useAgents.lanes), for both cuts of the
-// rail: the Agents cut draws the lanes, the Personas cut draws one persona's chats lane after lane. One rule, so a chat
+// rail: the Agents cut draws the lanes, the Roles cut draws one role's chats lane after lane. One rule, so a chat
 // sits beside the same neighbours whichever cut draws it, and no working chat climbs the list each time it streams.
 // A chat with no roster entry is read off its conversation instead.
 

@@ -4,15 +4,15 @@ import type { SandboxSettings, SystemPromptMode } from "@intentic/sandbox-contra
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 import { jsExecutionPlanOf } from "../../../execution/js-runtime.js";
-import { personaScopeOf } from "../../../personas/persona-scope.js";
+import { roleScopeOf } from "../../../roles/role-scope.js";
 import {
-    type TurnPersona,
-    personaCliEnv,
-    personaDisallowedTools,
-    personaNote,
-    personaWithheldAccounts,
+    type TurnRole,
+    roleCliEnv,
+    roleDisallowedTools,
+    roleNote,
+    roleWithheldAccounts,
     unattendedAccountsNote,
-} from "../../../personas/personas.js";
+} from "../../../roles/roles.js";
 import { gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../../../secrets/credential-gating.js";
 import { outOfReachNote, reachCliEnv, withinReach } from "../../../secrets/credential-reach.js";
 import { gatewayHeld, shellEnvOf } from "../../../capabilities/cli-env.js";
@@ -42,10 +42,10 @@ import { notesDue, type TurnPremise } from "./turn-premise.js";
 import { SPAWN_NOTE_TITLE } from "../../../sessions/vocabulary/prompt-envelope.js";
 
 // The one point every provider arm passes through: controls a runtime cannot honour are dropped, and every
-// runtime-agnostic fact (worktree, dependency readiness, persona shelves, credential gates, standing instructions) is
+// runtime-agnostic fact (worktree, dependency readiness, role shelves, credential gates, standing instructions) is
 // applied once here rather than drifting per arm. Pure: whatever it needs from disk is already in the facts.
 
-// Which system prompt the turn runs on: the persona's answer, already resolved against the sandbox's (personaPrompt).
+// Which system prompt the turn runs on: the role's answer, already resolved against the sandbox's (rolePrompt).
 export interface TurnPrompt {
     readonly mode: SystemPromptMode;
     readonly systemPrompt: string;
@@ -55,18 +55,18 @@ export interface TurnPrompt {
 const startPathOf = (startIn: string | undefined, effectiveCwd: string): string | undefined =>
     startIn === undefined || startIn === "" ? undefined : resolveWithin(effectiveCwd, startIn);
 
-// What the turn may reach. The environment passes two filters, the persona's and the gate's, and a connector caught by
+// What the turn may reach. The environment passes two filters, the role's and the gate's, and a connector caught by
 // either loses every variable carrying its suffix; a withheld credential's skill is denied with it, since it would dangle.
 // A third filter runs first and answers to nobody: what the people the conversation works for were not given loses its
-// variables (the gateway's addresses too) and its skill, whatever the persona or a release would say.
-const turnAccess = (facts: AdmittedTurnFacts, base: TurnBase, persona: TurnPersona, withheldMounts: readonly CredentialGate[]) => {
+// variables (the gateway's addresses too) and its skill, whatever the role or a release would say.
+const turnAccess = (facts: AdmittedTurnFacts, base: TurnBase, role: TurnRole, withheldMounts: readonly CredentialGate[]) => {
     const outOfReach = withinReach(facts.installed, facts.reach).withheld;
     const reachEnv = base.tools.cliEnv === undefined ? undefined : reachCliEnv(base.tools.cliEnv, outOfReach, envSuffix);
-    const personaEnv = reachEnv === undefined ? undefined : personaCliEnv(reachEnv, facts.installed, persona, envSuffix);
+    const roleEnv = reachEnv === undefined ? undefined : roleCliEnv(reachEnv, facts.installed, role, envSuffix);
     const gatedEnv =
-        personaEnv === undefined
+        roleEnv === undefined
             ? undefined
-            : gatedCliEnv(personaEnv, facts.installed, facts.gates, facts.releases, base.spec.conversationId, envSuffix, gatewayHeld);
+            : gatedCliEnv(roleEnv, facts.installed, facts.gates, facts.releases, base.spec.conversationId, envSuffix, gatewayHeld);
     const withheld = [...withheldMounts, ...(gatedEnv?.withheld ?? [])];
     return {
         // Git's rewrites onto the credential gateway are folded in only now, from the cards both filters kept.
@@ -74,7 +74,7 @@ const turnAccess = (facts: AdmittedTurnFacts, base: TurnBase, persona: TurnPerso
         withheld,
         denied: [
             ...(base.policy.disallowedTools ?? []),
-            ...personaDisallowedTools(persona, facts.installed),
+            ...roleDisallowedTools(role, facts.installed),
             ...gatedSkills(withheld),
             ...outOfReach.map((capability) => `Skill(${capability.id})`),
         ],
@@ -87,11 +87,11 @@ export interface PlannedNotes {
 }
 
 // Where the turn's own install would write: a namespace gives it its own copy, a cwd-only runtime's dependency
-// folders are links into the main tree, and a persona without the power to change the workspace installs nothing.
+// folders are links into the main tree, and a role without the power to change the workspace installs nothing.
 const installReachOf = (isolated: boolean, capabilities: AgentCapabilities, canInstall: boolean): InstallReach =>
     !canInstall ? "ask-owner" : !isolated ? "main-tree" : capabilities.isolation === "namespace" ? "own-copy" : "ask-owner";
 
-// The skills a denied list names (`Skill(<id>)`, written by the persona, the gates and the reach filter alike), so the
+// The skills a denied list names (`Skill(<id>)`, written by the role, the gates and the reach filter alike), so the
 // catalogue leaves out what the turn may not use instead of advertising it.
 const deniedSkillNames = (denied: readonly string[]): ReadonlySet<string> =>
     new Set(denied.flatMap((rule) => /^Skill\((.+)\)$/.exec(rule)?.slice(1, 2) ?? []));
@@ -152,11 +152,11 @@ const workspaceNotes = (
     send: TurnPremise["send"],
     isolated: boolean,
     canInstall: boolean,
-    access: { readonly denied: readonly string[]; readonly persona: string | undefined },
+    access: { readonly denied: readonly string[]; readonly role: string | undefined },
 ): TurnNote[] => {
     const setupNotice = setupNoticeFor(facts.setup, installReachOf(isolated, capabilities, canInstall));
     const skillCatalogNote =
-        facts.skillCatalog === undefined ? undefined : skillCatalogNoteOf(catalogFor(facts.skillCatalog, access.persona), deniedSkillNames(access.denied));
+        facts.skillCatalog === undefined ? undefined : skillCatalogNoteOf(catalogFor(facts.skillCatalog, access.role), deniedSkillNames(access.denied));
     return [
         ...treeNotes(facts, context, capabilities, isolated),
         ...(send.map && facts.mapNote !== undefined ? [{ title: WORKSPACE_MAP_NOTE_TITLE, text: facts.mapNote }] : []),
@@ -179,7 +179,7 @@ const turnNotes = (facts: AdmittedTurnFacts, premise: TurnPremise, spawn: string
     // What the people it works for were not given, said apart from the gates: there is no one to ask for these.
     ...[outOfReachNote(facts.reach, withinReach(facts.installed, facts.reach).withheld)].filter((note) => note !== undefined),
     // The other reason an account can be missing: nobody is at the composer, so the turn acts as no one.
-    ...[unattendedAccountsNote(premise.persona, personaWithheldAccounts(facts.installed, premise.persona))].filter((note) => note !== undefined),
+    ...[unattendedAccountsNote(premise.role, roleWithheldAccounts(facts.installed, premise.role))].filter((note) => note !== undefined),
     // Every runtime alike, isolated or not: no runtime runs a check at its end any more, so none is told of one.
     ...[facts.landingChecksNote].filter((note) => note !== undefined),
 ];
@@ -199,17 +199,17 @@ const honouredReasoning = (base: TurnBase, capabilities: AgentCapabilities): Pic
     ...(base.spec.fast === true && capabilities.fastMode ? { fast: base.spec.fast } : {}),
 });
 
-// The JS backend's plan, where persona, tree and filtered environment are all in hand. Gated on the runtime hosting it
+// The JS backend's plan, where role, tree and filtered environment are all in hand. Gated on the runtime hosting it
 // and on the card, so an ungranted backend is absent rather than present-and-refused.
 const jsExecutionFor = (
     capabilities: AgentCapabilities,
-    persona: TurnPersona,
+    role: TurnRole,
     context: TurnContext,
     startPath: string | undefined,
     shellEnv: Record<string, string> | undefined,
 ): TurnTools["jsExecution"] =>
     capabilities.execution.includes("js")
-        ? jsExecutionPlanOf(persona, { root: context.effectiveCwd, cwd: startPath ?? context.base.spec.cwd }, { ...shellEnv })
+        ? jsExecutionPlanOf(role, { root: context.effectiveCwd, cwd: startPath ?? context.base.spec.cwd }, { ...shellEnv })
         : undefined;
 
 export const honoured = (
@@ -224,7 +224,7 @@ export const honoured = (
     withheldMounts: readonly CredentialGate[],
     planned: PlannedNotes,
 ): TurnBase => {
-    const { persona, send } = premise;
+    const { role, send } = premise;
     const { base } = context;
     // The three controls come back only where the runtime honours them (honouredPolicy/Reasoning); the rest are rebuilt.
     const { effort: _effort, fast: _fast, ...spec } = base.spec;
@@ -236,12 +236,12 @@ export const honoured = (
     const placement = turnPromptPlacement({
         capabilities,
         ...prompt,
-        ...opt("personaNote", personaNote(persona)),
+        ...opt("roleNote", roleNote(role)),
         ...opt("memoryNote", facts.memoryNote),
         // What the window will not pay for: this product's guidance, and on the smallest windows the base prompt too.
         ...opt("trim", promptTrim(context.contextTrim)),
     });
-    const access = turnAccess(facts, base, persona, withheldMounts);
+    const access = turnAccess(facts, base, role, withheldMounts);
     return {
         ...base,
         spec: {
@@ -250,9 +250,9 @@ export const honoured = (
             notes: premise.briefing.keep([
                 // First, when there is one: who the turn acts as belongs ahead of anything about files or tools.
                 ...(placement.userNotes ?? []),
-                ...workspaceNotes(facts, context, capabilities, send, isolated, persona.powers.files === "write" && persona.powers.shell, {
+                ...workspaceNotes(facts, context, capabilities, send, isolated, role.powers.files === "write" && role.powers.shell, {
                     denied: access.denied,
-                    persona: persona.persona?.id,
+                    role: role.role?.id,
                 }),
                 ...turnNotes(facts, premise, planned.spawn, access.withheld),
             ]),
@@ -272,18 +272,18 @@ export const honoured = (
             ...policy,
             // Read from the pair's own record, so a lying row changes turn behavior and not just what the composer shows.
             rulebook: capabilities.rulebook,
-            dependencyInstallAllowed: persona.powers.files === "write" && persona.powers.shell,
+            dependencyInstallAllowed: role.powers.files === "write" && role.powers.shell,
             // Whether the owner is asleep as the turn starts, which its instructions say (agent/night).
             ...opt("night", nightNow(settings, peopleAtEditor(), Date.now())),
-            // Anchored at the workspace root, not the start folder: a persona may start in one repo and read a sibling.
-            ...opt("personaScope", personaScopeOf(persona, context.effectiveCwd)),
+            // Anchored at the workspace root, not the start folder: a role may start in one repo and read a sibling.
+            ...opt("roleScope", roleScopeOf(role, context.effectiveCwd)),
             ...(access.denied.length > 0 ? { disallowedTools: access.denied } : {}),
             ...honouredPolicy(base, capabilities),
         },
         tools: {
             ...tools,
             ...(access.shellEnv !== undefined && Object.keys(access.shellEnv).length > 0 ? { cliEnv: access.shellEnv } : {}),
-            ...opt("jsExecution", jsExecutionFor(capabilities, persona, context, startPath, access.shellEnv)),
+            ...opt("jsExecution", jsExecutionFor(capabilities, role, context, startPath, access.shellEnv)),
         },
     };
 };

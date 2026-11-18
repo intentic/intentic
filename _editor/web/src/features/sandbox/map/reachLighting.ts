@@ -1,16 +1,17 @@
-import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
-import { isSignedInAccount } from "@intentic/sandbox-contract/policy/persona-capability";
-import { fenceHoldsPersona, personaHome } from "@intentic/sandbox-contract/policy/persona-home";
+import { isSignedInAccount } from "@intentic/sandbox-contract/policy/role-capability";
+import { fenceHoldsRole, roleHome } from "@intentic/sandbox-contract/policy/role-home";
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import {
     areaId,
     capabilityId,
     type GroupKey,
     type MapNode,
     overlaps,
-    personaAllows,
-    personaId,
+    roleAllows,
+    roleFence,
+    roleId,
+    roleSecrets,
     type Principal,
     type ReachCapability,
     type ReachHow,
@@ -18,52 +19,52 @@ import {
     type ReachMap,
     REST_ID,
     secretId,
-    shelvesOf,
 } from "./reachModel";
 
 // WHAT A FOCUS LIGHTS ON THE REACH MAP (reachModel.ts builds the map itself): the nodes a node is tied to whoever holds
 // it, the principals that reach it, and what stays bright when the reader points at a principal, a node or a block.
 
-/** What a node is tied to on its own, whoever holds it: a persona's home and what it may act through, an identity's
- *  accounts, an area's personas. Drawn as the focus's own threads. */
+/** What a node is tied to on its own, whoever holds it: a role's home and what it may act through, an identity's
+ *  accounts, an area's roles. Drawn as the focus's own threads. */
 export interface Relations {
     /** Nodes lit alongside it. */
     readonly lit: ReadonlySet<string>;
-    /** The few drawn as threads from it: a persona's own accounts, an identity's accounts. */
+    /** The few drawn as threads from it: a role's own accounts, an identity's accounts. */
     readonly threads: readonly string[];
 }
 
-type RelationInput = Pick<ReachInput, `areas` | `personas` | `capabilities` | `secrets` | `models`>;
+type RelationInput = Pick<ReachInput, `areas` | `roles` | `profiles` | `capabilities` | `secrets` | `models`>;
 
-// A persona lights where it works and everything it may act through, and threads the accounts it carries.
-const personaRelations = (input: RelationInput, persona: Persona, lit: Set<string>, threads: string[]): void => {
-    const folders = persona.workspace?.folders;
-    const fence: Fence = folders === undefined || folders.length === 0 ? undefined : folders;
+// A role lights where its access lets it work and everything it may act through, and threads the accounts it carries.
+const roleRelations = (input: RelationInput, role: Role, lit: Set<string>, threads: string[]): void => {
+    const fence = roleFence(input, role);
     for (const id of [...input.areas.filter((area) => overlaps(fence, area)).map((area) => areaId(area.id)), ...(fence === undefined ? [REST_ID] : [])]) {
         lit.add(id);
     }
-    const allowed = input.capabilities.filter((capability) => personaAllows(persona, capability));
+    const allowed = input.capabilities.filter((capability) => roleAllows(input, role, capability));
     // Every card runs on a model; the stored secrets reach its turns through the shell, so only a card with one has them.
-    const spent = [...input.models.map((model) => model.id), ...(shelvesOf(persona).shell ? input.secrets.map(secretId) : [])];
+    const spent = [...input.models.map((model) => model.id), ...roleSecrets(input, role, input.secrets).map(secretId)];
     for (const id of [...allowed.map((capability) => capabilityId(capability.id)), ...spent]) {
         lit.add(id);
     }
     threads.push(...allowed.filter((capability) => isSignedInAccount(capability.kind)).map((capability) => capabilityId(capability.id)));
 };
 
-// An area (or the rest of the workspace) threads the personas that live in it.
+// An area (or the rest of the workspace) threads the roles that live in it.
 const areaRelations = (input: RelationInput, area: Area | undefined): string[] =>
-    input.personas
-        .filter((persona) => {
-            const home = personaHome(persona);
-            return area === undefined ? home === undefined : home !== undefined && fenceHoldsPersona(area.folders, persona);
+    input.roles
+        .filter((role) => {
+            const home = roleHome(role);
+            return area === undefined ? home === undefined : home !== undefined && fenceHoldsRole(area.folders, role);
         })
-        .map((persona) => personaId(persona.id));
+        .map((role) => roleId(role.id));
 
 // A signed-in account threads the cards that carry it (every card allows a connector by default, so lighting those would
 // say nothing), and an identity the accounts born in its browser, an account the identity it was born in.
 const capabilityRelations = (input: RelationInput, capability: ReachCapability): string[] => {
-    const cards = isSignedInAccount(capability.kind) ? input.personas.filter((persona) => personaAllows(persona, capability)).map((persona) => personaId(persona.id)) : [];
+    const cards = isSignedInAccount(capability.kind)
+        ? input.roles.filter((role) => roleAllows(input, role, capability)).map((role) => roleId(role.id))
+        : [];
     const kin = input.capabilities.filter(
         (account) => (capability.kind === `identity` && account.identity === capability.id) || (capability.identity !== undefined && account.id === capability.identity),
     );
@@ -73,10 +74,10 @@ const capabilityRelations = (input: RelationInput, capability: ReachCapability):
 export const relationsOf = (input: RelationInput, nodeId: string): Relations => {
     const lit = new Set<string>([nodeId]);
     const threads: string[] = [];
-    const persona = input.personas.find((card) => personaId(card.id) === nodeId);
+    const role = input.roles.find((card) => roleId(card.id) === nodeId);
     const capability = input.capabilities.find((entry) => capabilityId(entry.id) === nodeId);
-    if (persona !== undefined) {
-        personaRelations(input, persona, lit, threads);
+    if (role !== undefined) {
+        roleRelations(input, role, lit, threads);
     } else if (nodeId.startsWith(`area:`) || nodeId === REST_ID) {
         threads.push(...areaRelations(input, input.areas.find((entry) => areaId(entry.id) === nodeId)));
     } else if (capability !== undefined) {
@@ -117,7 +118,7 @@ export const bundleId = (key: GroupKey | `secrets`): string => `bundle:${key}`;
 const bundleMembers = (map: ReachMap, id: string): readonly MapNode[] =>
     id === bundleId(`secrets`) ? map.secrets : (map.groups.find((group) => bundleId(group.key) === id)?.nodes ?? []);
 
-// The stronger of two ways to reach: acting through a thing beats only reading it, and both beat reaching it as a persona.
+// The stronger of two ways to reach: acting through a thing beats only reading it, and both beat reaching it as a role.
 const STRENGTH = { edit: 3, use: 3, see: 2, through: 1 } as const satisfies Record<ReachHow, number>;
 
 // Who reaches anything a block holds, each at the strongest way they reach any of it.

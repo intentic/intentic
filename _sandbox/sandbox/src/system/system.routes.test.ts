@@ -54,7 +54,7 @@ const signedIn: OrpcContext = {
     headers: new Headers(),
     method: "GET",
     url: "/system/presentation",
-    identity: { email: "ada@example.com", role: "viewer", methods: ["google"] },
+    identity: { email: "ada@example.com", tier: "viewer", methods: ["google"] },
 };
 const heard = { name: "radarsu-intentic", digest: "1f2e", at: "2026-11-08T09:00:00.000Z" };
 

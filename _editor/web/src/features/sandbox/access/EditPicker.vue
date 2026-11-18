@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { SegmentedControl, type Tip } from "@intentic/ui";
 import { computed } from "vue";
-import { useAreas } from "../areas/useAreas";
+import { useAreas } from "../../../models/sandbox/access/useAreas";
 import MultiPick from "./pick/MultiPick.vue";
 import type { PickSection } from "./pick/multiPick";
 import { useT } from "@intentic/ui/i18n";

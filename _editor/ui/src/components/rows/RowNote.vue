@@ -1,7 +1,7 @@
 <!-- A non-record line on a <RowGroup>'s surface: an empty-state sentence, a fallback message, or a "show more" line. -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { FACE_SIZES } from "../brand/personaFace.js";
+import { FACE_SIZES } from "../brand/roleFace.js";
 import type { IconName } from "../../icons/iconSets.js";
 import Icon from "../primitives/Icon.vue";
 import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, ROW_TONES, type RowTone, useRowDensity, useRowFlushInline } from "./row.js";

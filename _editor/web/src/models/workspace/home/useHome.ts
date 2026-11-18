@@ -12,7 +12,7 @@ import type { SearchScope } from "../search/useWorkspaceSearch";
 // so the other view marks what this one picked, and closing the last tab brings back the folder the reader left, not
 // the root.
 
-// A folder's own rows for the home's menu (documents, personas, checks, management), composed by the workspace page,
+// A folder's own rows for the home's menu (documents, roles, checks, management), composed by the workspace page,
 // which holds the openers; provided rather than passed, since the home is mounted by the pane, not the page.
 export const HOME_DIR_ACTIONS: InjectionKey<(dir: string) => readonly RowAction[]> = Symbol(`home-dir-actions`);
 

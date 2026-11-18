@@ -2,11 +2,11 @@ import type { IconName } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { useNow } from "@intentic/ui/async";
 import { computed, type ComputedRef } from "vue";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
 import { acpProviders, endpointProviders } from "../../../models/providers/providerCatalog";
 import { accessKnown, providerReady } from "../../../models/providers/access";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSyncHealth } from "../../../models/sandbox/devices/useDevices";
 import { useEnvironment } from "../../../models/sandbox/environment/useEnvironment";
@@ -144,7 +144,7 @@ const diskItems = (pressure: DiskPressure | undefined): SandboxAttentionItem[] =
 };
 
 export function useSandboxAttention() {
-    const { isGuest, role } = useRole();
+    const { isGuest, tier } = useTier();
     const { pending, proposal } = useEnvironment();
     // Extensions an agent wrote into this workspace, which run nothing until a maintainer approves the powers they ask
     // for. They were a row in the Needs you inbox until 2026-10-12; the Extensions tab is where the yes is given.
@@ -159,7 +159,7 @@ export function useSandboxAttention() {
     const { unbacked: noRepoRemote } = useUnbackedWork();
     // People waiting on the owner's answer to what they asked for, from where they were refused: the owner's alone to
     // grant, so read and counted only on the owner's own page.
-    const { requests: accessRequests } = useAccessRequests(computed(() => role.value === `owner`));
+    const { requests: accessRequests } = useAccessRequests(computed(() => tier.value === `owner`));
     const { settings } = useSandboxSettings();
     const { pressure: diskPressure } = useDiskPressure();
 
@@ -218,7 +218,7 @@ export function useSandboxAttention() {
             },
             // The same kind of yes, for code rather than an image: below maintainer the daemon refuses the press.
             {
-                when: waitingExtensions.value.length > 0 && roleAtLeast(role.value, `maintainer`),
+                when: waitingExtensions.value.length > 0 && tierAtLeast(tier.value, `maintainer`),
                 item: {
                     icon: `sliders-h`,
                     tone: `warning`,

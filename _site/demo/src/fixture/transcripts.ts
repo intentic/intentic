@@ -43,7 +43,7 @@ interface AgentTranscript {
 
 // /agents/{id}/transcript returns the restored transcript for a finished agent; other cards return empty, honestly.
 // Diffs match the review panel's. Fixtured: the finished-delta agent, main's two CI fix agents, the desk's review and
-// one per persona; persona chats touch no files, only their accounts.
+// one per role; role chats touch no files, only their accounts.
 
 const SCHEMA_BEFORE = `export const users = pgTable("users", {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -349,7 +349,7 @@ const SOFT_DELETES: AgentTranscript = {
     ],
 };
 
-// Persona chat; browser capture is one compact artifact, enough evidence without becoming a dashboard.
+// Role chat; browser capture is one compact artifact, enough evidence without becoming a dashboard.
 const MAYA_SUPPORT: AgentTranscript = {
     sessionId: `ses_01j9maya`,
     provider: `claude`,
@@ -389,7 +389,7 @@ const MAYA_SUPPORT: AgentTranscript = {
     ],
 };
 
-// Shorter than Maya's on purpose: writing, posted through the persona's own accounts.
+// Shorter than Maya's on purpose: writing, posted through the role's own accounts.
 const OWEN_LAUNCH: AgentTranscript = {
     sessionId: `ses_01j9owen`,
     provider: `claude`,
@@ -415,7 +415,7 @@ const OWEN_LAUNCH: AgentTranscript = {
     ],
 };
 
-// Ends on a question, not a result: not every persona chat should read as finished.
+// Ends on a question, not a result: not every role chat should read as finished.
 const PRIYA_PAYOUTS: AgentTranscript = {
     sessionId: `ses_01j9priya`,
     provider: `claude`,

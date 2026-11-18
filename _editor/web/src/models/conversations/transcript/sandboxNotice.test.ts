@@ -269,7 +269,7 @@ describe(`a sandbox notice, as the chat says it`, () => {
             `Wznowiono na zimno, choć pamięć podręczną podtrzymywano przez 7m (3 odświeżenia): 310k tokenów wysłano ponownie, bo prompt tej tury nie pasował już do pamięci podręcznej.`,
         );
         expect(line(coded(`contextTrim`))).toBe(
-            `Wysłano w wersji odchudzonej, bo okno tego modelu ma 16k. Pominięto: Working in this sandbox, Skills. Podstawowe instrukcje samego agenta też zastąpiono krótkim akapitem. Reguły Twojej przestrzeni roboczej, persona tej tury i miejsce jej plików i tak zostały wysłane.`,
+            `Wysłano w wersji odchudzonej, bo okno tego modelu ma 16k. Pominięto: Working in this sandbox, Skills. Podstawowe instrukcje samego agenta też zastąpiono krótkim akapitem. Reguły Twojej przestrzeni roboczej, rola tej tury i miejsce jej plików i tak zostały wysłane.`,
         );
         await setLocale(`en`);
     });

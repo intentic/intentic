@@ -4,6 +4,7 @@ import { aiAccountAllowed, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-
 import { intersectCeilings, type ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import type { Member } from "../auth/auth.js";
 import {
+    type ChainAlso,
     type ChainEntry,
     type ChainLimit,
     createPrincipalChain,
@@ -19,7 +20,7 @@ import {
 // (access/principal-chain.ts): the people who asked it for a turn and the services its turns ran as, with the
 // conversation a spawned child or a peer's message speaks for. Read live on every use, so a reach the owner narrows
 // holds from the next exit, mid-turn included.
-// This is the hard half of access, the one no card lifts: a capability outside the reach is never mounted for the turn
+// Every limit is here, the role's included (an access profile listing the card it wears), and no card lifts any: a capability outside the reach is never mounted for the turn
 // (turn-decision.ts), its variables and skill are left out (honoured.ts), and every exit that spends a credential refuses
 // it at the one gate they share (gates/credential-gate.ts). The approver gates are the soft half: a person's click
 // releases those.
@@ -103,13 +104,20 @@ export const peopleOf = (entryOf: (id: string) => ChainEntry | undefined, conver
 export type CredentialReachDeps = PrincipalChainDeps;
 
 // Resolves a conversation's reach, with `also` for a person and `services` for a service whose turn is starting before
-// the conversation has recorded them. No conversation (an automation's own check, a detached shell) and nobody limited
-// both answer `all`, with no roster read; a file that cannot be read answers nothing, never everything.
-export type ConversationReachOf = (conversationId: string | undefined, also?: readonly string[], services?: readonly string[]) => Promise<ConversationReach>;
+// the conversation has recorded them, and `role` for the role it starts in (left out, the one its last turn wore;
+// given as undefined, none: what the people and services alone allow). No conversation (an automation's own check, a
+// detached shell) and nobody limited both answer `all`, with no roster read; a file that cannot be read answers
+// nothing, never everything.
+export type ConversationReachOf = (
+    conversationId: string | undefined,
+    also?: readonly string[],
+    services?: readonly string[],
+    role?: ChainAlso["role"],
+) => Promise<ConversationReach>;
 
 export const createConversationReach = (deps: CredentialReachDeps): ConversationReachOf => {
     const chain = createPrincipalChain(deps);
-    return async (conversationId, also = [], services = []) => reachOfChain(await chain(conversationId, { people: also, services }));
+    return async (conversationId, also = [], services = [], role = undefined) => reachOfChain(await chain(conversationId, { people: also, services, role }));
 };
 
 // WHICH AI ACCOUNTS A CONVERSATION MAY RUN ON, as everyone it acts for may (auth.ts `Member.aiAccounts`, a profile's
@@ -165,12 +173,14 @@ export type ConversationAccountReachOf = (
     conversationId: string | undefined,
     also?: readonly string[],
     services?: readonly string[],
+    role?: ChainAlso["role"],
 ) => Promise<AccountReach>;
 
 // No conversation and nobody limited both answer `all`; a file that cannot be read answers no account, never every one.
 export const createConversationAccountReach = (deps: CredentialReachDeps): ConversationAccountReachOf => {
     const chain = createPrincipalChain(deps);
-    return async (conversationId, also = [], services = []) => accountReachOfChain(await chain(conversationId, { people: also, services }));
+    return async (conversationId, also = [], services = [], role = undefined) =>
+        accountReachOfChain(await chain(conversationId, { people: also, services, role }));
 };
 
 // THE MOST A CONVERSATION'S TOOLS MAY BE, from the same chain: every limit's ceiling held together. Undefined is no
@@ -182,11 +192,12 @@ export type ConversationCeilingOf = (
     conversationId: string | undefined,
     also?: readonly string[],
     services?: readonly string[],
+    role?: ChainAlso["role"],
 ) => Promise<ToolCeiling | undefined>;
 
 export const createConversationCeiling = (deps: CredentialReachDeps): ConversationCeilingOf => {
     const chain = createPrincipalChain(deps);
-    return async (conversationId, also = [], services = []) => ceilingOfChain(await chain(conversationId, { people: also, services }));
+    return async (conversationId, also = [], services = [], role = undefined) => ceilingOfChain(await chain(conversationId, { people: also, services, role }));
 };
 
 const naming = (who: readonly string[]): string =>
@@ -200,7 +211,7 @@ export const outOfReachReason = (reach: Extract<ConversationReach, { kind: "some
     reach.unreadable !== undefined
         ? `"${subject}" was not used: the sandbox's record of who this conversation acts for (its roster, services or access profiles) could not be read, so what it may spend is unknown and nothing is spent on a guess. Do not retry: tell the user that record is unreadable.`
         : `"${subject}" is not available in this conversation: ${naming(reach.who)} ${reach.who.length > 1 ? "were" : "was"} not given it, and a conversation can use only what everyone it acts for may. ` +
-          `No card can release it and \`secrets request\` cannot ask for it: only the sandbox owner can change who may use what, on the Access page. ` +
+          `No card can release it and \`secrets request\` cannot ask for it: only the sandbox owner can change who may use what, on the Access page, and where a role holds it back, another role may have it (\`grants request\` offers the switch). ` +
           `Do not retry and do not look for another way to it: carry on without it and say plainly what you left undone.`;
 
 /** A turn's shell environment without the variables of the cli connectors a reach withholds, gateway addresses and all. */

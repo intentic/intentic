@@ -26,7 +26,7 @@ jest.mock("../../../../models/conversations/panel/useChat-strip", () => ({
 
 // A reader the daemon takes every press from, so the card offers what an owner sees (a code review of its work among them).
 jest.mock("../../../../client/sandbox/access/useAccess", () => ({
-    useAccess: () => ({ known: { value: true }, role: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
+    useAccess: () => ({ known: { value: true }, tier: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
 }));
 
 const { default: AgentCard } = await import("./AgentCard.vue");
@@ -762,12 +762,12 @@ it(`says, without a press of its own, that a refusal is the user's own to clear`
 // G4: a refusal held only by files a Sandbox page wrote is not the owner's edits, and the card says so in the review's
 // own words, read off the same report the review shows.
 it(`names the Sandbox page when a page wrote every file holding the land`, () => {
-    const conflicts = [{ repo: `root`, clean: 3, paths: [{ path: `${STATE_DIR}/config/personas.json`, reason: `workspace` as const }] }];
+    const conflicts = [{ repo: `root`, clean: 3, paths: [{ path: `${STATE_DIR}/config/roles.json`, reason: `workspace` as const }] }];
     queryClient.setQueryData(rpcKey(`agents.diff`, { id: `a1` }), { repos: [], conflicts });
     const el = mount(conflicted([`workspace`]));
     queryClient.removeQueries({ queryKey: rpcKey(`agents.diff`, { id: `a1` }) });
 
-    expect(el.textContent ?? ``).toContain(`Changed on the Sandbox page Personas, not saved yet: open its review and press Save them and land.`);
+    expect(el.textContent ?? ``).toContain(`Changed on the Sandbox page Roles, not saved yet: open its review and press Save them and land.`);
     expect(el.textContent ?? ``).toContain(`Unsaved settings`);
     expect(el.textContent ?? ``).not.toContain(`Your edits`);
 });

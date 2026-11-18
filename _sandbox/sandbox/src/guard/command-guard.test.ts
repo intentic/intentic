@@ -640,7 +640,7 @@ describe("command gate: what an answer remembers", () => {
         await settled();
         const card = cardOf(gate.events);
         expect(card.alwaysLabel).toContain("Deleting build directories under /work is fine.");
-        cards.resolve({ kind: "permission", requestId: card.requestId, decision: "always" }, { email: "ada@acme.dev", role: "maintainer" });
+        cards.resolve({ kind: "permission", requestId: card.requestId, decision: "always" }, { email: "ada@acme.dev", tier: "maintainer" });
         await pending;
         expect(gate.remembered).toEqual(["Deleting build directories under /work is fine."]);
         expect(gate.rememberedBy).toEqual(["ada@acme.dev"]);
@@ -919,7 +919,7 @@ describe("the gate over installs", () => {
         expect(gate.events.at(-1)).toEqual({ kind: "install", reach: "main-tree", projects: ["site"] });
     });
 
-    test("a persona without write and shell power is refused and sent to the owner", async () => {
+    test("a role without write and shell power is refused and sent to the owner", async () => {
         const out = await harness({ judge: always("allow"), installs: installsOf({ canInstall: false }) }).run("pnpm install");
         expect(reasonOf(out)).toContain("ask the owner");
         expect(reasonOf(out)).not.toContain("mcp__deps__install");

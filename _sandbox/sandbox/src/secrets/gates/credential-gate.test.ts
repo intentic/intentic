@@ -13,8 +13,8 @@ const cards = parkedCards(memoryFleet().conversations);
 // Drives the gate end to end with a fake policy store and live turn: a credential releases only for a named, verified
 // click, and every other path uses nothing. Each fail-closed ending gets its own test.
 
-const BOB = { email: "bob@corp.com", role: "collaborator" } as const;
-const EVE = { email: "eve@corp.com", role: "maintainer" } as const;
+const BOB = { email: "bob@corp.com", tier: "collaborator" } as const;
+const EVE = { email: "eve@corp.com", tier: "maintainer" } as const;
 
 const policy = (over: Partial<GatePolicy> = {}): GatePolicy => ({
     subject: "DATABASE_URL",

@@ -18,7 +18,7 @@ import { modelCapacity } from "./usageStatus";
 
 // Every native provider and configured endpoint, with whether a turn on it can send and the models it can run a turn on,
 // as far as its catalog has been read: readyChain takes a pin verbatim, but a preset setup is worked out from these
-// (contract model-setups.ts), as the daemon works it out from the same catalogs. Exported so persona models and the
+// (contract model-setups.ts), as the daemon works it out from the same catalogs. Exported so role models and the
 // settings page resolve over the same providers.
 export const roleSources = computed(() =>
     [...NATIVE_PROVIDERS, ...endpointProviders.value.map((endpoint) => endpoint.id)].map((provider) => ({

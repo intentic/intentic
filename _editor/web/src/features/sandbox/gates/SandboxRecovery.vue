@@ -35,7 +35,7 @@ const { active, sandboxes, select } = useSandbox();
 const slug = useServingSlug();
 const notice = useDiagnosisNotice(useVisibleOutage());
 const hosted = computed(() => (active.value?.hosted ?? null) !== null);
-const owner = computed(() => active.value?.role === `owner`);
+const owner = computed(() => active.value?.tier === `owner`);
 // The machine by the name it reported itself under, if it ever did.
 const machine = computed(() => (hosted.value ? undefined : active.value?.hostReport?.machine));
 

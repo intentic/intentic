@@ -1,25 +1,27 @@
 #!/usr/bin/env node
-// The in-sandbox grants command: ask the owner, on a card in this chat, for reach this conversation's persona or area
-// withholds (docs/architecture/needs.md). A persona decides what a turn may touch by leaving things out, so a
-// withheld account or folder is simply absent; this is the door to ask for it rather than stopping to say so in prose.
-// The person allows it for this conversation, or on the persona itself; either way it reaches the conversation's next
-// turn, and the sandbox continues the conversation with it.
+// The in-sandbox grants command: ask the owner, on a card in this chat, for reach this conversation's role withholds
+// (docs/architecture/needs.md). What a role withholds (an account it does not speak through, or what an access profile
+// holding it leaves out) is simply absent; this is the door to ask for it rather than stopping to say so in prose. The
+// card offers the roles that have it, and the person's pick switches the conversation to one from its next turn,
+// which the sandbox continues the conversation with.
 
 import { die, parseArgs, raise, WAIT_HELP } from "./needs-cli.mjs";
 
 const COMMAND = "grants";
 
-const USAGE = `grants — ask for reach this conversation's persona or area withholds
+const USAGE = `grants — ask for reach this conversation's role withholds
 
   grants request capability <id> [--why "…"] [--wait <seconds>]
-                                             a connected account, connector, device or server the persona leaves out
+                                             a connected account, connector, device or server the role leaves out
   grants request folder <path> [--why "…"] [--wait <seconds>]
                                              a workspace folder outside this conversation's reach
   grants request shelf <name> [--why "…"] [--wait <seconds>]
                                              a whole shelf of tools: files, shell, code, web, browser, delegate, sandbox
 
-A grant reaches this conversation from its NEXT turn: finish what you can, and the sandbox continues the conversation
-once it is allowed. A refusal is a person's decision: carry on without it, never around it.
+The card offers the roles whose access has it. A pick switches this conversation to that role from its NEXT turn:
+finish what you can, and the sandbox continues the conversation once it is switched. What the people or service this
+conversation works for were not given is refused with no card: no role has more than they do. A refusal is a
+person's decision: carry on without it, never around it.
 
 ${WAIT_HELP}`;
 

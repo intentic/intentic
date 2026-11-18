@@ -10,7 +10,7 @@ import { linkMountsOf } from "../link-mounts.js";
 
 // A linked sandbox reaches a turn the way a connected computer does: a tool server named after its card, on the turn's
 // lease, for the cards the turn was granted. Handing it work is spawning's sibling, so a turn no supervisor was armed
-// for (an outside wake, a persona that does not delegate) is refused.
+// for (an outside wake, a role that does not delegate) is refused.
 
 const ops: Capability = { id: "ops", kind: "link", config: { url: "https://sandbox-ops.sbx.test", token: "ilk_x", name: "Ops box" } };
 const laptop: Capability = {

@@ -190,11 +190,11 @@ it("takes a payment's approval from the owner alone, leaving the card up for any
     const { requestId } = frames[0] as Extract<AgentEvent, { kind: "payment_offer" }>;
     const approve = { kind: "payment_offer", requestId, approve: true } as const;
     for (const role of ["maintainer", "collaborator"] as const) {
-        expect(cards.resolve(approve, { email: `${role}@example.com`, role })).toEqual({ refused: "Only the owner (ada@example.com) can approve a payment from this sandbox's wallet." });
+        expect(cards.resolve(approve, { email: `${role}@example.com`, tier: role })).toEqual({ refused: "Only the owner (ada@example.com) can approve a payment from this sandbox's wallet." });
     }
     expect(cards.resolve(approve)).toEqual({ refused: expect.stringContaining("Only the owner") });
     expect(signed).toEqual([]);
-    expect(cards.resolve(approve, { email: "ADA@example.com", role: "owner" })).toBe("settled");
+    expect(cards.resolve(approve, { email: "ADA@example.com", tier: "owner" })).toBe("settled");
     expect((await pending).status).toBe(200);
     expect(signed).toHaveLength(1);
 });

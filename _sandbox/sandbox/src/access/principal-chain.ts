@@ -3,6 +3,7 @@ import type { CredentialReach } from "@intentic/sandbox-contract/schemas/members
 import type { OrgCeiling } from "@intentic/sandbox-contract/schemas/organisation";
 import type { Service } from "@intentic/sandbox-contract/schemas/services";
 import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
+import { isBuiltInRole } from "@intentic/sandbox-contract/schemas/roles";
 import { errorMessage } from "@intentic/base/errors";
 import type { Member } from "../auth/auth.js";
 import { parentOfActor } from "../auth/principal.js";
@@ -17,6 +18,9 @@ import { parentOfActor } from "../auth/principal.js";
  *     somebody whose access was taken back;
  *   - a service: its steward, as a person above, and its access profile. A service, steward or profile that no longer
  *     exists reaches nothing, never everything;
+ *   - the role the conversation wears: every access profile whose `roles` lists it, so a Reviewer card held to a
+ *     read-only profile is read-only whoever wears it. A card's limits are access like the rest (2026-11-18), never a
+ *     narrowing a card answer lifts; the conversation gets more only by wearing another role;
  *   - a bound sandbox's organisation: its ceiling on tools and AI accounts, held over every turn, the owner's included.
  * What the conversation may reach is what every limit allows (secrets/credential-reach.ts reads credentials and AI
  * accounts off this, the turn's premise the tool ceiling). Read live on every use, so narrowing any of them holds from
@@ -29,6 +33,9 @@ export interface ChainLimit {
     readonly credentials: CredentialReach | "all";
     readonly aiAccounts: readonly string[] | "all";
     readonly tools: ToolCeiling | undefined;
+    // The role this limit holds, for a limit that comes from what the conversation wears rather than whom it acts for:
+    // the one kind a person can get past, by switching it to another role (needs/kinds/grant-need.ts).
+    readonly role?: string;
 }
 
 // `open`: nothing limits the conversation (nobody, or the owner alone, and no organisation ceiling). `unreadable`: a file
@@ -48,6 +55,8 @@ const lower = (email: string): string => email.toLowerCase();
 // The parts of a conversation's record this reads: who it latched, and the conversation its starter names when an agent
 // opened it (a spawned child's parent).
 export interface ChainEntry {
+    // The role its last turn wore, which an exit mid-turn is held to when nobody names one.
+    readonly profile?: { readonly actsAs?: string | undefined } | undefined;
     readonly identity: {
         readonly people?: readonly string[] | undefined;
         readonly services?: readonly string[] | undefined;
@@ -105,9 +114,25 @@ export const personLimit = (email: string, roster: readonly Member[], owner: str
         who: address,
         credentials: member.credentials ?? "all",
         aiAccounts: member.aiAccounts === undefined ? "all" : [...new Set([...member.aiAccounts, ...connected])],
-        tools: member.role === "maintainer" ? undefined : member.tools,
+        tools: member.tier === "maintainer" ? undefined : member.tools,
     };
 };
+
+/** The words a refusal names a role with. */
+const roleWho = (id: string, label: string | undefined): string => `the role "${label ?? id}"`;
+
+/**
+ * The limits a role holds a conversation to: one per access profile that lists it. A built-in lists in no profile's
+ * picker and is held to none here; a card no profile lists holds nothing.
+ */
+export const roleLimits = (
+    id: string | undefined,
+    label: string | undefined,
+    profiles: readonly Pick<AccessProfile, "credentials" | "aiAccounts" | "tools" | "roles">[],
+): ChainLimit[] =>
+    id === undefined || isBuiltInRole(id)
+        ? []
+        : profiles.filter((profile) => profile.roles?.includes(id) === true).map((profile) => ({ ...profileLimit(roleWho(id, label), profile), role: id }));
 
 /** The words a refusal names a service with. */
 const serviceWho = (id: string, service: Pick<Service, "label"> | undefined): string => `the service "${service?.label ?? id}"`;
@@ -156,15 +181,20 @@ export interface PrincipalChainDeps {
     // Absent in a composition with no services (a test, a tool): a conversation naming one then reaches nothing.
     readonly services?: { readonly list: () => Promise<readonly Service[]> } | undefined;
     readonly profiles?: { readonly list: () => Promise<readonly AccessProfile[]> } | undefined;
+    // The cards, for the name a role's limit is said with; absent, it is said with the card's id.
+    readonly roles?: { readonly list: () => Promise<readonly { readonly id: string; readonly label?: string | undefined }[]> } | undefined;
     readonly org?: { readonly current: () => Promise<{ readonly orgName: string; readonly ceiling?: OrgCeiling | undefined } | undefined> } | undefined;
     // Who connected each AI account, its key to their address (auth/members/account-connectors.ts); absent, nobody did.
     readonly connectors?: { readonly all: () => Promise<ReadonlyMap<string, string>> } | undefined;
 }
 
-// What a turn starting now adds before the conversation has recorded it: the person asking, the service it runs as.
+// What a turn starting now adds before the conversation has recorded it: the person asking, the service it runs as, and
+// the role it wears. `role` given, even holding undefined, is the answer; left out, the role the conversation's
+// last turn wore is read off its record, which is what an exit mid-turn is held to.
 export interface ChainAlso {
     readonly people?: readonly string[] | undefined;
     readonly services?: readonly string[] | undefined;
+    readonly role?: { readonly id: string | undefined } | undefined;
 }
 
 export type PrincipalChainOf = (conversationId: string | undefined, also?: ChainAlso) => Promise<PrincipalChain>;
@@ -204,23 +234,30 @@ const resolveLimits = async (
     ];
 };
 
+// The limits the role a conversation wears holds it to, read only for a card: a built-in or no role reads nothing.
+const resolveRoleLimits = async (deps: PrincipalChainDeps, role: string | undefined): Promise<ChainLimit[]> => {
+    if (role === undefined || isBuiltInRole(role)) {
+        return [];
+    }
+    const [profiles, cards] = await Promise.all([deps.profiles?.list() ?? [], deps.roles?.list() ?? []]);
+    return roleLimits(role, cards.find((card) => card.id === role)?.label, profiles);
+};
+
 export const createPrincipalChain =
     (deps: PrincipalChainDeps): PrincipalChainOf =>
     async (conversationId, also = {}) => {
         const latched = principalsOf(deps.entry, conversationId);
         const people = [...new Set([...latched.people, ...(also.people ?? []).map(lower)])];
         const serviceIds = [...new Set([...latched.services, ...(also.services ?? [])])];
-        let org: ChainLimit | undefined;
+        const role = also.role === undefined ? (conversationId === undefined ? undefined : deps.entry(conversationId)?.profile?.actsAs) : also.role.id;
         try {
             const policy = await deps.org?.current();
-            org = policy === undefined ? undefined : orgLimit(policy.ceiling, policy.orgName);
-            const limits = await resolveLimits(deps, people, serviceIds);
-            if (limits === "open") {
-                return org === undefined ? CHAIN_OPEN : { kind: "limits", limits: [org] };
-            }
-            const all = org === undefined ? limits : [...limits, org];
+            const org = policy === undefined ? undefined : orgLimit(policy.ceiling, policy.orgName);
+            const [limits, worn] = await Promise.all([resolveLimits(deps, people, serviceIds), resolveRoleLimits(deps, role)]);
+            const all = [...(limits === "open" ? [] : limits), ...worn, ...(org === undefined ? [] : [org])];
             return all.length === 0 ? CHAIN_OPEN : { kind: "limits", limits: all };
         } catch (error) {
-            return { kind: "unreadable", who: [...people, ...serviceIds.map((id) => serviceWho(id, undefined))], detail: errorMessage(error) };
+            const who = [...people, ...serviceIds.map((id) => serviceWho(id, undefined)), ...(role === undefined ? [] : [roleWho(role, undefined)])];
+            return { kind: "unreadable", who, detail: errorMessage(error) };
         }
     };

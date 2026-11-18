@@ -16,7 +16,7 @@ import { registry } from "../capabilities/registry.js";
 
 // The capability pages' own writes to the connection manifest, each committed as it lands (settings-versions.ts): left
 // uncommitted, they read as the owner's edits and a land touching the same file is refused. A rename also repoints the
-// personas that name the connection, so it commits that file with it. Only where the files held nothing uncommitted
+// roles that name the connection, so it commits that file with it. Only where the files held nothing uncommitted
 // before the write: an agent's landed change to them waiting in Changes is not the page's to commit unreviewed.
 export const versionManifest = <T>(
     services: Services,

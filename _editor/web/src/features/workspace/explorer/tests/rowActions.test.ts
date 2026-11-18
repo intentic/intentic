@@ -1,15 +1,15 @@
 import { registerDocumentProvider } from "../../../../workbench/views/documentRegistry";
 import { rowActionsFor, type RowActionSources } from "../rowActions";
 
-// Composition rule for a tree row's icons: the one place directory-surface extensions, document providers and personas
+// Composition rule for a tree row's icons: the one place directory-surface extensions, document providers and roles
 // meet on the same row.
 
 const sources = (over: Partial<RowActionSources> = {}): RowActionSources => ({
     manageableDirs: new Set<string>(),
-    personaDirs: new Map<string, number>(),
+    roleDirs: new Map<string, number>(),
     checkDirs: new Map<string, { adopted: boolean; changed: boolean }>(),
     openDirectory: jest.fn(),
-    openPersonas: jest.fn(),
+    openRoles: jest.fn(),
     openChecks: jest.fn(),
     openDocument: jest.fn(),
     ...over,
@@ -49,13 +49,13 @@ describe(`rowActionsFor`, () => {
         expect(rowActionsFor(`other`, sources({ runDirs: new Map([[`intentic`, 2]]), openRuns }))).toEqual([]);
     });
 
-    it(`gives an ordinary directory without personas no actions`, () => {
+    it(`gives an ordinary directory without roles no actions`, () => {
         expect(rowActionsFor(`intentic/_editor/web/src`, sources())).toEqual([]);
     });
 
-    it(`gives a directory with personas its persona action`, () => {
-        const source = sources({ personaDirs: new Map([[`intentic/_editor/web/src`, 1]]) });
-        expect(rowActionsFor(`intentic/_editor/web/src`, source).map((action) => action.id)).toEqual([`personas`]);
+    it(`gives a directory with roles its role action`, () => {
+        const source = sources({ roleDirs: new Map([[`intentic/_editor/web/src`, 1]]) });
+        expect(rowActionsFor(`intentic/_editor/web/src`, source).map((action) => action.id)).toEqual([`roles`]);
     });
 
     // A repository's git history, docs and health are tabs of its management panel, so the row offers the one cog that
@@ -70,7 +70,7 @@ describe(`rowActionsFor`, () => {
     });
 
     // A repository's own checks are evidence the file exists, so they stand rather than waiting for a hover, and they
-    // sit with what the folder CARRIES (personas) rather than with what can be done to it (manage).
+    // sit with what the folder CARRIES (roles) rather than with what can be done to it (manage).
     it(`gives a repo that declares checks a standing shield, before the cog`, () => {
         const source = sources({
             manageableDirs: new Set([`intentic`]),
@@ -131,28 +131,28 @@ describe(`rowActionsFor`, () => {
         expect(rowActionsFor(`intentic`, sources()).map((action) => action.standing)).toEqual([false]);
     });
 
-    // Persona icon stands (is evidence) once a folder has a persona, answering "which packages have one" without hover.
+    // Role icon stands (is evidence) once a folder has a role, answering "which packages have one" without hover.
     // Empty folders show none.
-    it(`stands on a folder that already has a persona, and is absent on one that has none`, () => {
-        const withCards = sources({ personaDirs: new Map([[`intentic/_editor`, 1]]) });
+    it(`stands on a folder that already has a role, and is absent on one that has none`, () => {
+        const withCards = sources({ roleDirs: new Map([[`intentic/_editor`, 1]]) });
         expect(rowActionsFor(`intentic/_editor`, withCards)[0]?.standing).toBe(true);
         expect(rowActionsFor(`intentic/_sandbox`, withCards)).toEqual([]);
     });
 
     // Several cards means a list behind the icon, not one card, so the tooltip states the count rather than leaving it
     // to the click.
-    it(`says how many personas start here`, () => {
-        const one = rowActionsFor(`docs`, sources({ personaDirs: new Map([[`docs`, 1]]) }))[0]?.tooltip ?? ``;
-        const three = rowActionsFor(`docs`, sources({ personaDirs: new Map([[`docs`, 3]]) }))[0]?.tooltip ?? ``;
-        expect(one).toContain(`1 persona`);
-        expect(three).toContain(`3 personas`);
+    it(`says how many roles start here`, () => {
+        const one = rowActionsFor(`docs`, sources({ roleDirs: new Map([[`docs`, 1]]) }))[0]?.tooltip ?? ``;
+        const three = rowActionsFor(`docs`, sources({ roleDirs: new Map([[`docs`, 3]]) }))[0]?.tooltip ?? ``;
+        expect(one).toContain(`1 role`);
+        expect(three).toContain(`3 roles`);
         expect(one).not.toBe(three);
     });
 
     it(`opens the panel for the folder that was clicked`, () => {
-        const source = sources({ personaDirs: new Map([[`intentic/_editor/web`, 1]]) });
+        const source = sources({ roleDirs: new Map([[`intentic/_editor/web`, 1]]) });
         rowActionsFor(`intentic/_editor/web`, source)[0]?.run();
-        expect(source.openPersonas).toHaveBeenCalledWith(`intentic/_editor/web`);
+        expect(source.openRoles).toHaveBeenCalledWith(`intentic/_editor/web`);
     });
 
     it(`drops a provider whose detect throws, keeping the rest of the row`, () => {

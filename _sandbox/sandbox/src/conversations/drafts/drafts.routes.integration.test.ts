@@ -1,5 +1,5 @@
 import type { ContractRouterClient } from "@orpc/contract";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { sandboxContract } from "@intentic/sandbox-contract";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +19,7 @@ import { MAX_REACTION_KINDS } from "../registry/agents-registry.js";
 
 interface Board {
     readonly client: ContractRouterClient<typeof sandboxContract>;
-    readonly actAs: (email: string, role?: MemberRole, name?: string) => void;
+    readonly actAs: (email: string, role?: MemberTier, name?: string) => void;
 }
 
 const board = (): Board => {
@@ -30,7 +30,7 @@ const board = (): Board => {
             config: { ...testConfig, historyRoot: mkdtempSync(join(tmpdir(), "drafts-routes-")) },
             auth: { authorize: async () => caller, authorizeOwner: rejectForbidden },
             ownerEmail: async () => `ada@example.com`,
-            members: { list: async () => [{ email: `bob@example.com`, role: `collaborator` }], add: async () => {}, remove: async () => {} },
+            members: { list: async () => [{ email: `bob@example.com`, tier: `collaborator` }], add: async () => {}, remove: async () => {} },
         }),
     );
     return {

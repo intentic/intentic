@@ -42,8 +42,26 @@ export const RETIRED = [
     {
         id: "card-persona",
         pattern: /\b(personaCard|reachableCards)\b|wearing this card/,
-        became: "persona",
+        became: "role (a persona until 2026-11-18)",
         since: "2026-09-21",
+    },
+    {
+        // The code's names for the card, not the word: the stored and wire spellings an older sandbox or editor still
+        // sends (`personas.json`, `personaRouting`, a grant need's `persona`, the Roles organisation section's id) are
+        // read on purpose where they are converted.
+        id: "persona-role",
+        pattern:
+            /\b(PersonaSchema|PersonasListSchema|PersonaPowersSchema|PersonasStore|filePersonasStore|personasDocument|usePersonas|turnPersona|TurnPersona|capPersona|PersonaForm|SandboxPersonas|ChatPersonaMenu|BuiltInPersona|personaAllowsCapability|personaHome|personaFence|personaLimits)\b/,
+        became: "role",
+        since: "2026-11-18",
+    },
+    {
+        // A member's access level, which "role" stopped naming when personas were renamed roles. The useTier note that says
+        // what it was called is the one spelling left, in prose.
+        id: "member-role-tier",
+        pattern: /\b(MemberRoleSchema|MemberRole|GrantedRoleSchema|GrantedRole|roleAtLeast|MEMBER_ROLE_RANK)\b|\buseRole\(/,
+        became: "tier (MemberTier, GrantedTier, tierAtLeast, useTier)",
+        since: "2026-11-18",
     },
     {
         id: "card-request",

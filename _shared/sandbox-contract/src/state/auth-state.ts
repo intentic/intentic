@@ -51,7 +51,7 @@ export const AUTH_STATE_FILES: readonly StateFile[] = [
 
     /* ---- yeses the owner gave here: decided again on the target ---- */
 
-    // Sandbox-wide permissions ("Always: <line>") and each conversation's own (personas/owner-grants.ts,
+    // Sandbox-wide permissions ("Always: <line>") and each conversation's own (roles/owner-grants.ts,
     // conversation-grants.ts); a conversation's card simply asks again, so only the sandbox-wide ones carry a note.
     { path: "owner-grants.json", portability: "identity", note: "Give sandbox-wide permissions again from the Access tab." },
     { path: "conversation-grants.json", portability: "identity" },

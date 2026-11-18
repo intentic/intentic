@@ -81,7 +81,7 @@ export const useDiagnosisNotice = (clock: { readonly elapsed: ComputedRef<number
             diagnosis: current,
             name: box.name,
             lane: box.hosted === null ? `own` : `hosted`,
-            owner: box.role === `owner`,
+            owner: box.tier === `owner`,
             canRollBack: box.hosted?.canRollBack === true,
             outageMs: clock.elapsed.value,
             now: now.value,
@@ -102,7 +102,7 @@ export const useRecoveryDue = (clock = useVisibleOutage(), notice = useDiagnosis
             restartExpected: restartExpected(box?.id) !== undefined,
             removed: (box?.removedAt ?? null) !== null,
             refused: activeWakeRefused.value !== undefined,
-            owner: box?.role === `owner`,
+            owner: box?.tier === `owner`,
             notice: notice.value,
         }) && freshFailure.value;
     });

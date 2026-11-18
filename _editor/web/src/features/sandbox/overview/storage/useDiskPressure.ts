@@ -2,7 +2,7 @@ import type { StorageCleanResult } from "@intentic/sandbox-contract/schemas/metr
 import { computed } from "vue";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { t } from "@intentic/ui/i18n";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
@@ -14,7 +14,7 @@ import { storageCategoryLabel } from "./storageCategories";
 // daemon pushes the `disk` domain when the level moves, so this never polls.
 
 export function useDiskPressure() {
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     // Maintainer-floored at the daemon, like the Disk card, and absent from a daemon older than the watch.
     const available = computed(() => canShip.value && supportsRoute(`system.diskPressure`));
     const { query } = useSandboxQuery({ ...rpcQuery(`system.diskPressure`), enabled: available });

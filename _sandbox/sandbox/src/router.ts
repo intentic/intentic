@@ -16,7 +16,7 @@ import { createTranslatorRoutes } from "./agent/routes/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
 import { probeDockerGpu } from "./hosts/gpu/docker-gpu-probe.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
-import { createPersonasRoutes } from "./personas/personas.routes.js";
+import { createRolesRoutes } from "./roles/roles.routes.js";
 import { createOrgRoutes } from "./org/org.routes.js";
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
@@ -158,7 +158,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     diff: createDiffRoutes(services),
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
-    personas: createPersonasRoutes(services),
+    roles: createRolesRoutes(services),
     services: createServicesRoutes(services),
     org: createOrgRoutes(services),
     privacy: createPrivacyRoutes(services),

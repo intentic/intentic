@@ -50,7 +50,7 @@ const opsSandbox = async (): Promise<Ops> => {
         logger: quiet,
         auth: undefined,
         sandboxName: () => "ops",
-        personas: async () => [{ id: "oncall", label: "On call" }],
+        roles: async () => [{ id: "oncall", label: "On call" }],
         turns: {
             say: async (words) => {
                 said.push(words);
@@ -150,7 +150,7 @@ test("a task handed over runs there, its report comes back as the parent's wake,
         throw new Error(handed.message);
     }
     expect(handed.id.startsWith("linked-")).toBe(true);
-    // Over there: one turn, in the link's persona, unattended, marked as outside words.
+    // Over there: one turn, in the link's role, unattended, marked as outside words.
     expect(ops.said).toHaveLength(1);
     expect(ops.said[0]?.turn).toMatchObject({ actsAs: "oncall", unattended: true, isolated: true });
     const remote = ops.said[0]?.turn.conversationId ?? "";
@@ -243,7 +243,7 @@ test("a revoked link ends the task here as failed, and the links listing says th
 test("the links listing names each linked sandbox with the terms it holds its tasks to", async () => {
     dev = devSandbox(await cardFor({ approve: true }));
     expect(await dev.linked.links(PARENT.conversationId)).toEqual([
-        { to: "ops", sandbox: "ops", online: true, persona: "On call", approve: true, turnsPerHour: 20, records: false, operate: false },
+        { to: "ops", sandbox: "ops", online: true, role: "On call", approve: true, turnsPerHour: 20, records: false, operate: false },
     ]);
 });
 

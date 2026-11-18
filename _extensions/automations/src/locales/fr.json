@@ -81,9 +81,9 @@
         "onlyAllowedSitesDaily": "Il ne reste que les sites autorisés et la limite quotidienne.",
         "onlyRepoOptional": "Ce dépôt uniquement (facultatif)",
         "peopleRuleNames": "Noms de la règle de personnes {index}",
-        "persona": "Parle en tant que",
-        "personaAutomationRuns": "Parle en tant que",
-        "personaRuleAnswers": "La règle de persona {index} répond en tant que",
+        "role": "Parle en tant que",
+        "roleAutomationRuns": "Parle en tant que",
+        "roleRuleAnswers": "La règle de rôle {index} répond en tant que",
         "pickAtLeastOne": "Choisissez au moins un jour.",
         "pickModel": "Choisissez un modèle",
         "readGrepGlob": "Read, Grep, Glob",
@@ -108,12 +108,12 @@
         "standard5FieldCron": "Cron standard à 5 champs : minute heure jour mois jour-de-semaine.",
         "starter": "Point de départ issu de {recipeNote}.",
         "staysInSandboxOnly": "Reste dans votre sandbox : seule la clé de site part vers le navigateur d'un visiteur.",
-        "strangersWritePromptsSaving": "Ce sont des inconnus qui écrivent ces consignes : enregistrer ajoute donc un accueil en lecture seule à vos personas.",
+        "strangersWritePromptsSaving": "Ce sont des inconnus qui écrivent ces consignes : enregistrer ajoute donc un accueil en lecture seule à vos rôles.",
         "sun": "Dim",
         "then": "Alors",
         "theyTalkTo": "Parle en tant que",
         "thu": "Jeu",
-        "toolNamesCommaSeparated": "Noms d'outils, séparés par des virgules. Vide laisse la liste propre du persona telle quelle.",
+        "toolNamesCommaSeparated": "Noms d'outils, séparés par des virgules. Vide laisse la liste propre du rôle telle quelle.",
         "toolNamesJobMay": "Noms d'outils que cette tâche peut appeler",
         "tue": "Mar",
         "turnSettles": "Un tour se stabilise",
@@ -136,8 +136,8 @@
         "retired": "retiré",
         "retiredNeverFires": "Plus rien n'envoie ceci : la vérification qui tournait après chaque intégration n'existe plus, donc cette automatisation ne se déclenche jamais. Choisissez l'un des moments ci-dessus, ou faites-la réveiller par une pipeline CI en échec.",
         "othersCaption": {
-            "allow": "Toute personne non nommée reçoit une réponse en tant que la persona ci-dessus, comme le faisait cette automatisation avant d'avoir des règles.",
-            "hold": "Toute personne non nommée attend dans Approbations, puis est traitée en tant que la persona ci-dessus une fois que vous l'avez accepté.",
+            "allow": "Toute personne non nommée reçoit une réponse en tant que le rôle ci-dessus, comme le faisait cette automatisation avant d'avoir des règles.",
+            "hold": "Toute personne non nommée attend dans Approbations, puis est traitée en tant que le rôle ci-dessus une fois que vous l'avez accepté.",
             "ignore": "Toute personne non nommée ne reçoit aucune réponse. Elle apparaît quand même sous « vus récemment » : la nommer plus tard ne demande qu'un clic."
         },
         "kindCaption": {
@@ -217,7 +217,7 @@
         "aiDisclosure": "Informer les visiteurs que l’IA répond",
         "aiDisclosureText": "Mention personnalisée (facultative)",
         "aiDisclosureDefault": "Les réponses sont rédigées par un assistant IA et peuvent contenir des erreurs.",
-        "personaGoneHint": "Ce persona n'existe plus, donc ses réveils tourneraient sans outils ni comptes. Choisissez-en un autre."
+        "roleGoneHint": "Ce rôle n'existe plus, donc ses réveils tourneraient sans outils ni comptes. Choisissez-en un autre."
     },
     "automationRow": {
         "alreadyFired": "Déjà déclenchée",
@@ -295,10 +295,10 @@
         "lastSaw": "Dernière valeur vue",
         "lastSawSince": "Dernière valeur vue, inchangée depuis {when}",
         "checkedAt": "Vérifiée {at}",
-        "personaMissing": "Persona disparu",
-        "personaMissingNote": "{ids} n'existe plus, donc ses réveils tournent sans outils ni comptes. Choisissez un autre persona.",
+        "roleMissing": "Rôle disparu",
+        "roleMissingNote": "{ids} n'existe plus, donc ses réveils tournent sans outils ni comptes. Choisissez un autre rôle.",
         "noAccounts": "Aucun compte",
-        "noAccountsNote": "Ses réveils ont tous les outils, mais aucun de vos comptes connectés. Choisissez Accès complet ou un persona s'il doit publier ou naviguer en votre nom."
+        "noAccountsNote": "Ses réveils n'atteignent aucun de vos comptes connectés. Choisissez Tous les comptes ou un rôle s'il doit publier ou naviguer en votre nom."
     },
     "automationsView": {
         "addAutomation": "Ajouter une automatisation",
@@ -466,7 +466,7 @@
         "failing": "En échec",
         "group": "Groupe",
         "groups": "Groupes",
-        "howFiled": "Classées selon le groupe que chacune nomme, sinon selon la persona sous laquelle elle s'exécute.",
+        "howFiled": "Classées selon le groupe que chacune nomme, sinon selon le rôle sous lequel elle s'exécute.",
         "on": "Activées",
         "show": "Afficher",
         "total": "Total"
@@ -489,15 +489,15 @@
     },
     "automationLabels": {
         "group": "Groupe",
-        "groupHint": "Les automatisations d'un même groupe sont listées ensemble. Vide, elle est classée selon sa persona.",
+        "groupHint": "Les automatisations d'un même groupe sont listées ensemble. Vide, elle est classée selon son rôle.",
         "groupOptional": "Groupe (facultatif)",
         "groupPlaceholder": "Marketing"
     },
-    "builtInPersonas": {
-        "fullAccess": "Accès complet",
-        "fullAccessNote": "tous les outils et tous les comptes connectés",
+    "builtInRoles": {
+        "fullAccess": "Tous les comptes",
+        "fullAccessNote": "tous les comptes connectés",
         "noAccounts": "Aucun compte",
-        "noAccountsNote": "tous les outils, aucun compte connecté"
+        "noAccountsNote": "aucun compte connecté"
     },
     "scheduleWords": {
         "daysAt": "Chaque {days} à {times}",
@@ -524,7 +524,7 @@
         "schedule": "Planning",
         "trigger": "Démarre sur"
     },
-    "personaProperty": {
+    "roleProperty": {
         "runsAs": "Parle en tant que"
     },
     "modelProperty": {
@@ -552,10 +552,10 @@
     "groupProperty": {
         "byChore": "Une tâche de code",
         "byNothing": "Pas encore de groupe",
-        "byPersona": "D'après sa persona",
+        "byRole": "D'après son rôle",
         "change": "Changer de groupe : {now}",
         "group": "Groupe",
-        "hint": "Laisse vide pour la classer selon sa persona.",
+        "hint": "Laisse vide pour la classer selon son rôle.",
         "placeholder": "Marketing"
     },
     "instructionsSection": {
@@ -579,8 +579,8 @@
     },
     "service": {
         "runsAs": "Exécuter en tant que",
-        "owner": "Propriétaire (limité uniquement par son persona)",
-        "authority": "Autorité : accès du responsable, restreint par son profil. Les personas le restreignent davantage.",
+        "owner": "Propriétaire (limité uniquement par son rôle)",
+        "authority": "Autorité : accès du responsable, restreint par son profil. Les rôles le restreignent davantage.",
         "inherit": "Comme l’automatisation",
         "steward": "Responsable : {email}",
         "stewardLimits": "Tous les accès du responsable",

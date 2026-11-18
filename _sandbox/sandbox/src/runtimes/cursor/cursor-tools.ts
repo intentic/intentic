@@ -441,7 +441,7 @@ export const cursorCustomTools = (
 ): Record<string, SDKCustomTool> => ({
     ask: askTool(request, push),
     ...opt("result", request.hooks.result === undefined ? undefined : resultTool(request.hooks.result)),
-    // Absent, not refused, when the persona's card withheld the backend: jsExecutionPlanOf answers undefined there.
+    // Absent, not refused, when the role's card withheld the backend: jsExecutionPlanOf answers undefined there.
     ...(request.tools.jsExecution === undefined ? {} : { code: codeTool(request, request.tools.jsExecution, guard, push, owner) }),
     ...(request.hooks.children !== undefined
         ? {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { useSandboxMode } from "../../../../models/sandbox/mode/useSandboxMode";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { autoLandRule, autoPushRule, autoVersionRule, NAMED_RULES } from "../../../../models/sandbox/environment/rules";
@@ -24,7 +24,7 @@ const groupRefusal = computed(() => refusal.value ?? rulesRefusal.value);
 // switch that would snap back. Setting them by hand is one press away, and that press is the switch to hands-on, which
 // keeps all three as they stand.
 const { mode, switchTo, saving: switching } = useSandboxMode();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const handsOff = computed(() => mode.value === `hands-off`);
 const setMyself = (): void => void switchTo(`hands-on`);
 

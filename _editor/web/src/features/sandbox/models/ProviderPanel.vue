@@ -12,7 +12,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, useTemplateRef } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { accountsOutdated } from "../../../models/providers/accountsOutdated";
 import { translatorAccounts } from "../../../models/providers/providerAccounts";
 import { accountsOf, subscriptionOnly } from "../../../models/conversations/accounts/useChat-accounts";
@@ -55,7 +55,7 @@ import {
 // while it runs, at the top of the list where that button was pressed. There is no other door to a provider's sign-in on
 // the page: the grid picks the provider, this panel connects it.
 //
-// Empty, the card is the explanation and the Connect button, as an empty persona list is its own Add button; once it holds
+// Empty, the card is the explanation and the Connect button, as an empty role list is its own Add button; once it holds
 // an account, adding another moves to the group's header, where every list in the app keeps its "add one".
 //
 // Two mechanisms draw the same: a provider's own account (Claude, Cursor, Grok's xAI, the minted ones) and a subscription
@@ -144,7 +144,7 @@ const canAddDefault = computed(() => provider !== `grok` || nativeAccounts.value
 // Who is reading, as far as changing an account goes (accountRows.ts): Full access changes every row, someone given AI
 // accounts of their own only the ones they connected, and anyone else none. Below Full access the rest of the list is
 // still read, so a person sees what the sandbox runs on, with no press on a row the sandbox would refuse them.
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { can, holds } = useAccess();
 const { user } = useAuth();
 const reader = computed<AccountReader>(() => ({ full: canShip.value, ownAccounts: holds(`ownAccounts`), email: user.value?.email }));

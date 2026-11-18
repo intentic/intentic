@@ -241,7 +241,7 @@ export const startConversationTurn = async (
     { attempts = 0, senderKeeps = false, continues }: StartOptions & Pick<RunOptions, "continues"> = {},
 ): Promise<TurnRun | BeginRefusal> => {
     // Routed on the way in (idempotent): the one path every detached turn starts through names its provider and loop,
-    // after the run role or persona pin had the chance to, since a pin fills only what the turn left unnamed.
+    // after the run role or role pin had the chance to, since a pin fills only what the turn left unnamed.
     const turn = await routeTurn(services, sent);
     const { conversationId, prompt } = turn;
     // The record is copied now; the pump waits for it before invoking the provider.

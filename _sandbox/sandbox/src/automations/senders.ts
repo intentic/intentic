@@ -2,11 +2,11 @@ import type { Automation } from "@intentic/sandbox-contract/schemas/automations"
 import type { ListenerMessage } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 
 // Which lane a listener message runs in, decided by who sent it (Automation.senders). A lane is what the fire wears
-// and whether a person has to release it; two senders resolving to different personas must never share a wake or a
+// and whether a person has to release it; two senders resolving to different roles must never share a wake or a
 // thread, which is why the lane also keys the batcher and the thread (listeners.ts).
 
 export interface SenderLane {
-    // The persona the wake wears; undefined is no persona, the full toolbox reaching no account.
+    // The role the wake wears; undefined is no role, the full toolbox reaching no account.
     readonly actsAs: string | undefined;
     // The service the wake acts as (docs/architecture/access.md): a rule's own, else the automation's; undefined acts for
     // the owner, as a wake always did.
@@ -20,7 +20,7 @@ const named = (rule: NonNullable<Automation["senders"]>["rules"][number], author
     (rule.ids?.includes(author.id) ?? false) || (rule.groups?.some((group) => author.groups?.includes(group)) ?? false);
 
 // The lane for this sender, or undefined when they are not admitted at all. No `senders` means everyone the trigger's
-// filters admit, wearing the automation's own persona, which is what a listener did before rules existed.
+// filters admit, wearing the automation's own role, which is what a listener did before rules existed.
 export const senderLane = (automation: Automation, author: ListenerMessage["author"]): SenderLane | undefined => {
     const senders = automation.senders;
     if (senders === undefined) {

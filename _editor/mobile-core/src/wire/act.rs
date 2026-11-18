@@ -55,7 +55,7 @@ pub struct SendMessage {
     /// Which connected account pays.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
-    /// Which persona the turn speaks as.
+    /// Which role the turn speaks as.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub acts_as: Option<String>,
     /// `default` (ask before each tool), `plan` (propose a plan first) or `bypassPermissions`.

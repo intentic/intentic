@@ -3,7 +3,7 @@
 <script setup lang="ts">
 import { Button, EmptyState } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { showTab } from "../../workbench/browsers/browsersSurface";
 
 const { label, windows } = defineProps<{
@@ -13,7 +13,7 @@ const { label, windows } = defineProps<{
 
 const t = useT();
 // The desktop is a maintainer's to drive (the daemon refuses the rest), so only they are offered a window on it.
-const { canShip } = useRole();
+const { canShip } = useTier();
 </script>
 
 <template>

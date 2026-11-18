@@ -13,7 +13,7 @@ import ChatTabRow from "./ChatTabRow.vue";
 import { laneOfTab } from "./tabs";
 import { injectChatRowActions } from "./useChatRowActions";
 
-// A run of open chats drawn as rail rows, the same rows whichever cut (lanes or personas) holds them: every gesture and
+// A run of open chats drawn as rail rows, the same rows whichever cut (lanes or roles) holds them: every gesture and
 // menu comes from the host's one set of verbs (useChatRowActions), so no cut can offer less than another.
 
 const t = useT();
@@ -26,7 +26,7 @@ const props = withDefaults(
         matchCase?: boolean;
         // Why a filtered row matched, for the lanes' filter; absent where nothing filters.
         snippetOf?: (agent: FleetAgent) => MatchSnippet | undefined;
-        // False where the reader is looking at who a chat speaks as rather than what it set going (the Personas cut):
+        // False where the reader is looking at who a chat speaks as rather than what it set going (the Roles cut):
         // each card is drawn alone, without the tray of agents it started, which the Agents cut and the board still hang
         // under it. Defaulted here, not read as `!== false`: Vue hands an absent boolean prop over as `false`.
         trays?: boolean;

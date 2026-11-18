@@ -26,7 +26,7 @@ import { useConversations, useSenders } from "./useAutomations";
 import { type AutomationFormState, type SenderRuleDraft, splitIds, type TargetKind } from "./useAutomationForm";
 import { t } from "./i18n.js";
 import ServicePicker from "./service/ServicePicker.vue";
-import { usePersonaOptions } from "./persona/personaOptions";
+import { useRoleOptions } from "./role/roleOptions";
 
 // Shared create/edit fields use useAutomationForm, with content-sized When, Then and Runs as steps in a label rail.
 
@@ -64,8 +64,8 @@ const {
 } = props.state;
 
 // Who its wakes act as: the built-ins and the cards, for the automation and for each sender rule, and the one sentence
-// under the picker when a card it names is gone (personaOptions.ts).
-const { personaOptions, rulePersonaOptions, personaHint } = usePersonaOptions(form, isVisitorChat);
+// under the picker when a card it names is gone (roleOptions.ts).
+const { roleOptions, ruleRoleOptions, roleHint } = useRoleOptions(form, isVisitorChat);
 const { TRIGGER_TABS, whenCaption, kind } = useTriggerKinds(props.state);
 
 // Who has written to this source, by name, so a rule is filled by a click rather than a copied id; read only while the
@@ -271,9 +271,9 @@ const conversationOptions = computed<readonly PickerOption[]>(() => [
         : []),
 ]);
 
-// The persona decides what a new agent may reach, and what credentials a guard command runs with; a conversation runs
+// The role decides what a new agent may reach, and what credentials a guard command runs with; a conversation runs
 // as itself and a notification runs nothing, so with neither there is nobody to pick.
-const personaShown = computed(() => needsModels.value || form.condition === `guard`);
+const roleShown = computed(() => needsModels.value || form.condition === `guard`);
 
 </script>
 
@@ -411,7 +411,7 @@ const personaShown = computed(() => needsModels.value || form.condition === `gua
             <div class="flex min-w-0 flex-1 flex-col gap-3">
                 <!-- Keep the same-shaped behavior and runtime pickers side by side. Only a new agent spends a model of
                      its own; a conversation continues on its own, and a notification runs none. -->
-                <div v-if="personaShown" class="grid gap-3 @xl:grid-cols-2">
+                <div v-if="roleShown" class="grid gap-3 @xl:grid-cols-2">
                     <!-- Preserve the daemon's preference order so fallback remains predictable. -->
                     <div v-if="needsModels" class="ui-field min-w-0">
                         <span class="ui-field-label">{{ t(`automationFields.runsOn`) }}</span>
@@ -470,22 +470,22 @@ const personaShown = computed(() => needsModels.value || form.condition === `gua
                     </div>
                     <ServicePicker v-model="form.runAs" />
                     <div class="ui-field min-w-0">
-                        <span class="ui-field-label">{{ t(`automationFields.persona`) }}</span>
-                        <!-- A pick by hand ends the trigger's default for a new automation (usePersonaDefault.ts). -->
+                        <span class="ui-field-label">{{ t(`automationFields.role`) }}</span>
+                        <!-- A pick by hand ends the trigger's default for a new automation (useRoleDefault.ts). -->
                         <Picker
                             v-model="form.actsAs"
-                            :options="personaOptions"
+                            :options="roleOptions"
                             @update:model-value="markTouched(`actsAs`)"
-                            :aria-label="t(`automationFields.personaAutomationRuns`)"
+                            :aria-label="t(`automationFields.roleAutomationRuns`)"
                             class="w-full"
                         />
                     </div>
                 </div>
-                <!-- A blank Visitor chat uses the saved read-only persona's boundary. -->
+                <!-- A blank Visitor chat uses the saved read-only role's boundary. -->
                 <p v-if="isVisitorChat && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
                     {{ t(`automationFields.strangersWritePromptsSaving`) }}
                 </p>
-                <p v-else-if="personaShown && personaHint" class="-mt-1 text-2xs" :class="personaHint.tone">{{ personaHint.text }}</p>
+                <p v-else-if="roleShown && roleHint" class="-mt-1 text-2xs" :class="roleHint.tone">{{ roleHint.text }}</p>
 
                 <!-- WHO IT ANSWERS: drawn only where the source vouches for who is writing; the Visitor chat keeps its own access above. -->
                 <div v-if="sendersOffered" class="flex flex-col gap-3 border-t border-line-subtle pt-3">
@@ -561,8 +561,8 @@ const personaShown = computed(() => needsModels.value || form.condition === `gua
                                     <span class="ui-field-label">{{ t(`automationFields.theyTalkTo`) }}</span>
                                     <Picker
                                         v-model="rule.actsAs"
-                                        :options="rulePersonaOptions"
-                                        :aria-label="t(`automationFields.personaRuleAnswers`, { index: index + 1 })"
+                                        :options="ruleRoleOptions"
+                                        :aria-label="t(`automationFields.roleRuleAnswers`, { index: index + 1 })"
                                         class="w-full"
                                     />
                                 </div>
@@ -595,7 +595,7 @@ const personaShown = computed(() => needsModels.value || form.condition === `gua
                 </div>
 
                 <!-- One line, since they compose: approval holds every fire for a click, the countdown holds it and starts by itself. -->
-                <div class="flex flex-wrap items-center gap-x-6 gap-y-2" :class="personaShown ? `border-t border-line-subtle pt-3` : ``">
+                <div class="flex flex-wrap items-center gap-x-6 gap-y-2" :class="roleShown ? `border-t border-line-subtle pt-3` : ``">
                     <label class="flex items-center gap-2 text-xs text-content">
                         <ToggleSwitch v-model="form.requireApproval" :aria-label="t(`automationFields.requireMyApprovalBefore`)" />
                         {{ t(`automationFields.requireMyApprovalBefore2`) }}
@@ -622,7 +622,7 @@ const personaShown = computed(() => needsModels.value || form.condition === `gua
                 </p>
 
                 <!-- Keep the extra job restriction folded because it is uncommon. -->
-                <details v-if="personaShown && form.actsAs !== ``" class="text-xs">
+                <details v-if="roleShown && form.actsAs !== ``" class="text-xs">
                     <summary class="cursor-pointer text-muted hover:text-content">{{ t(`automationFields.narrowOneJobFurther`) }}</summary>
                     <div class="ui-field mt-2 max-w-sm">
                         <input

@@ -3,7 +3,7 @@ import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { projectScope } from "../../../app/projectScope";
 import { useAuth } from "../../../client/auth/useAuth";
-import { usePersonas } from "../../sandbox/personas/usePersonas";
+import { useRoles } from "../../sandbox/roles/useRoles";
 import { watchRemoteSeen } from "../fleetScope";
 import { useAgents } from "../useAgents";
 import { attentionOutsideProject, trackScopeInputs } from "./attentionOutside";
@@ -33,10 +33,10 @@ export const watchAgentsScope = (): void => {
     // Marks a chat placed in another sandbox read while it's open in front of the user, as that sandbox's own board
     // would.
     watchRemoteSeen();
-    const { personas } = usePersonas();
+    const { roles } = useRoles();
     const { user } = useAuth();
     trackScopeInputs(
-        personas,
+        roles,
         computed(() => user.value?.email),
     );
 };

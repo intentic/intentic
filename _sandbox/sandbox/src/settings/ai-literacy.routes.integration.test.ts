@@ -19,7 +19,7 @@ const fixture = () => {
     return { routes, setNotice: (show: boolean, text: string) => { settings = { ...settings, aiNotice: { show, text } }; } };
 };
 const as = (email: string) => {
-    const identity: ProvenCaller = { email, role: "viewer", methods: ["google"] };
+    const identity: ProvenCaller = { email, tier: "viewer", methods: ["google"] };
     const context: OrpcContext = { identity, headers: new Headers(), method: "GET", url: "/settings/ai-literacy/en" };
     return { context };
 };

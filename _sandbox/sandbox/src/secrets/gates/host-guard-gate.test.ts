@@ -17,8 +17,8 @@ import { resolveCommandSecrets, type SecretAccess, type SecretTarget } from "../
 
 const cards = parkedCards(memoryFleet().conversations);
 
-const OWNER = { email: "owner@corp.com", role: "owner" } as const;
-const EVE = { email: "eve@corp.com", role: "maintainer" } as const;
+const OWNER = { email: "owner@corp.com", tier: "owner" } as const;
+const EVE = { email: "eve@corp.com", tier: "maintainer" } as const;
 
 const GITHUB: SecretHostGuard = { subject: "GITHUB_TOKEN", kind: "secret", guard: true, hosts: ["api.github.com", "github.com"], source: "owner" };
 

@@ -78,10 +78,10 @@ export const DEFINITION_SOURCES: readonly string[] = [
 // Manifests riding the workspace repo, not a section; a workspaceless definition omits them all.
 export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly note: string }[] = [
     {
-        path: ".intentic/config/personas.json",
-        note: "Personas arrive naming accounts the target has not connected; each reads as broken until its capability is.",
+        path: ".intentic/config/roles.json",
+        note: "Roles arrive naming accounts the target has not connected; each reads as broken until its capability is.",
     },
-    { path: ".intentic/config/personas/", note: "Persona prompt files, beside the cards that name them." },
+    { path: ".intentic/config/roles/", note: "Role prompt files, beside the cards that name them." },
     {
         // Joined from the constant rather than spelled or interpolated: this entry postdates both the hardcoded-path
         // baseline and the rule against composing a state path out of a template.
@@ -196,7 +196,7 @@ const workspaceOf = async (root: string): Promise<{ workspace?: DefinitionWorksp
             subject: "The workspace itself",
             detail:
                 found.problem === "none"
-                    ? "/work has no remote, so this definition carries none of the workspace's own content: notes, skills, personas, automations, workflow and loop designs, approvals, workspace extensions. Publish the workspace to add a [workspace] section, or move it with a bundle."
+                    ? "/work has no remote, so this definition carries none of the workspace's own content: notes, skills, roles, automations, workflow and loop designs, approvals, workspace extensions. Publish the workspace to add a [workspace] section, or move it with a bundle."
                     : `The workspace's "${found.remoteName}" remote has no URL this daemon can read; fix it, or move the workspace with a bundle.`,
         },
     };
@@ -398,7 +398,7 @@ export const emitDefinitionToml = (definition: SandboxDefinition, omitted: reado
     if (workspace !== undefined) {
         lines.push(
             "",
-            "# The workspace repo itself: this sandbox's own content — notes, skills, personas, automations,",
+            "# The workspace repo itself: this sandbox's own content — notes, skills, roles, automations,",
             "# designs, approvals, workspace extensions. Applied before the repositories below, and never over",
             "# a workspace that already has a history of its own.",
             "[workspace]",

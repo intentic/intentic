@@ -6,7 +6,7 @@ import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 
 const canShip = ref(true);
-jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ canShip }) }));
+jest.mock(`../../../client/sandbox/useTier`, () => ({ useTier: () => ({ canShip }) }));
 // The Docker capability as its echo lists it: `gpu` is the owner's ask, a boolean.
 const dockerGpu = ref(true);
 jest.mock(`../../../models/capabilities/useCapabilities`, () => ({

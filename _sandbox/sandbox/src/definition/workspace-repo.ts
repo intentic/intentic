@@ -26,7 +26,7 @@ import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { DEFINITION_SOURCES } from "./definition.js";
 
 // Publishes /work and adopts a published workspace into a fresh one. The exclude list tracks only owner-authored
-// content (notes, skills, personas, automations, approvals, extensions). A foreign tree is preflighted and rewritten
+// content (notes, skills, roles, automations, approvals, extensions). A foreign tree is preflighted and rewritten
 // inert in a detached worktree before it ever touches /work; nothing unsafe is checked out live.
 
 export class WorkspaceRemoteError extends Error {}

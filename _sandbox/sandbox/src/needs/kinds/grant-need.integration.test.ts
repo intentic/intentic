@@ -1,55 +1,71 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import type { AccessProfile } from "@intentic/sandbox-contract/schemas/access-profiles";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Need } from "@intentic/sandbox-contract/schemas/needs";
-import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import { type Role, RolePowersSchema } from "@intentic/sandbox-contract/schemas/roles";
 import type { TurnStanding } from "../../conversations/actor/turn-standing.js";
-import { type ConversationGrants, fileConversationGrants } from "../../personas/conversation-grants.js";
 import { grantNeed } from "./grant-need.js";
 
-// Reach a persona or area withholds: asked for only when it is really withheld, allowed for one conversation or on the
-// persona itself, and continued into the conversation's next turn either way.
+// Reach a role withholds: asked for only when it is really withheld, refused when the people the conversation acts
+// for hold it back whatever it wears, and otherwise answered by switching the conversation to a role whose access has
+// it, from the conversation's next turn.
 
 const STANDING: TurnStanding = {
     at: 0,
     unattended: false,
-    persona: { id: "research", name: "Research" },
+    role: { id: "research", name: "Research" },
     granted: [],
-    withheldByPersona: [],
+    withheldByRole: [],
     withheldByGate: [],
     withheldByReach: [],
     fence: ["intentic"],
-    powers: { ...PersonaPowersSchema.parse({}), shell: false, connectors: ["github"] },
+    powers: { ...RolePowersSchema.parse({}), shell: false },
     runtime: "claude-code",
     secrets: "masked",
 };
 
 const REDDIT: Capability = CapabilitySchema.parse({ id: "reddit-work", kind: "browser", config: { platform: "reddit" } });
+const X: Capability = CapabilitySchema.parse({ id: "x-main", kind: "browser", config: { platform: "x" } });
 const LINEAR: Capability = CapabilitySchema.parse({ id: "linear", kind: "cli", config: { provider: "linear" } });
 
-const harness = (allowedSites: readonly string[] = []) => {
-    const grants: ConversationGrants = fileConversationGrants(join(mkdtempSync(join(tmpdir(), "grants-")), "conversation-grants.json"));
-    const personas = new Map<string, Persona>([
-        ["research", { id: "research", label: "Research", capabilities: [], powers: { ...PersonaPowersSchema.parse({}), shell: false, connectors: ["github"] }, workspace: { folders: ["intentic"] } }],
-    ]);
+// Research wears the read-and-search profile and is fenced to `intentic`; Writer speaks through Reddit and is held to
+// nothing; Locked is held without a shell; Elsewhere opens in a folder a fenced starter cannot reach.
+const ROLES: readonly Role[] = [
+    { id: "research", label: "Research", capabilities: [] },
+    { id: "writer", label: "Writer", capabilities: ["reddit-work"] },
+    { id: "locked", label: "Locked", capabilities: ["reddit-work"] },
+    { id: "elsewhere", label: "Elsewhere", capabilities: [], workspace: { startIn: "other" } },
+];
+const AREAS: readonly Area[] = [{ id: "core", folders: ["intentic"] }];
+const PROFILES: readonly AccessProfile[] = [
+    { id: "role-research", tools: { shell: false }, areas: ["core"], roles: ["research"] },
+    { id: "no-shell", tools: { shell: false }, credentials: { capabilities: [], secrets: [] }, roles: ["locked"] },
+];
+
+const harness = (allowedSites: readonly string[] = [], conversations: readonly string[] = ["conv-1"]) => {
+    const worn: { conversationId: string; role: string }[] = [];
     const kind = grantNeed({
-        capabilities: async () => [REDDIT, LINEAR],
-        personas: {
-            get: async (id) => personas.get(id),
-            upsert: async (persona) => {
-                personas.set(persona.id, persona);
-            },
+        capabilities: async () => [REDDIT, X, LINEAR],
+        roles: async () => ROLES,
+        profiles: async () => PROFILES,
+        areas: async () => AREAS,
+        wearRole: async (conversationId, role) => {
+            worn.push({ conversationId, role });
+            return conversations.includes(conversationId);
         },
-        grants: () => grants,
-        personaIdByName: async (name) => [...personas.values()].find((persona) => (persona.label ?? persona.id) === name)?.id,
         siteAllowed: async (site) => allowedSites.includes(site),
     });
-    return { kind, grants, personas };
+    return { kind, worn };
 };
 
 const context = (standing: Partial<TurnStanding> = {}) => ({ conversationId: "conv-1", standing: { ...STANDING, ...standing } });
-const needOf = (subject: Need["subject"]): Need => ({ id: "need-1", conversationId: "conv-1", subject, title: "", status: "open", createdAt: 1, updatedAt: 1 });
+const needOf = (subject: Need["subject"], conversationId = "conv-1"): Need => ({ id: "need-1", conversationId, subject, title: "", status: "open", createdAt: 1, updatedAt: 1 });
+
+const WRITER = { id: "writer", label: "Writer" };
+const LOCKED = { id: "locked", label: "Locked" };
+const ELSEWHERE = { id: "elsewhere", label: "Elsewhere" };
+const ALL_ACCOUNTS = { id: "full-access", label: "All accounts" };
+const NO_ACCOUNTS = { id: "no-accounts", label: "No accounts" };
 
 describe("grant need", () => {
     it("refuses a capability that is not connected, pointing at the capability ask", async () => {
@@ -57,74 +73,99 @@ describe("grant need", () => {
         expect(await kind.resolve({ kind: "grant", subject: "capability", what: "notion" }, context())).toMatchObject({ kind: "refused", code: "not_connected" });
     });
 
-    it("answers use it for a capability the persona does not withhold, and raises a grant for one it does", async () => {
+    it("answers use it for a capability the role does not withhold, and offers the roles that speak through one it does", async () => {
         const { kind } = harness();
         expect(await kind.resolve({ kind: "grant", subject: "capability", what: "reddit-work" }, context())).toMatchObject({ kind: "met" });
-        expect(await kind.resolve({ kind: "grant", subject: "capability", what: "reddit-work" }, context({ withheldByPersona: ["reddit-work"] }))).toEqual({
+        // Locked speaks through Reddit too, but its access spends nothing; No accounts speaks through nobody.
+        expect(await kind.resolve({ kind: "grant", subject: "capability", what: "reddit-work" }, context({ withheldByRole: ["reddit-work"] }))).toEqual({
             kind: "raise",
-            title: 'Let this conversation use "reddit-work"',
-            subject: { kind: "grant", subject: "capability", what: "reddit-work", label: '"reddit-work" (browser)', persona: "Research" },
+            title: 'Switch this conversation to a role that uses "reddit-work"',
+            subject: { kind: "grant", subject: "capability", what: "reddit-work", label: '"reddit-work" (browser)', roles: [WRITER, ALL_ACCOUNTS], role: "Research" },
         });
     });
 
-    it("asks for a folder only when it is outside the fence, whatever root it was named under", async () => {
+    it("refuses a capability the people it works for were not given, since no role has more than they do", async () => {
+        const { kind } = harness();
+        expect(await kind.resolve({ kind: "grant", subject: "capability", what: "linear" }, context({ withheldByReach: ["linear"], withheldByRole: ["linear"] }))).toMatchObject({
+            kind: "refused",
+            code: "out_of_reach",
+        });
+    });
+
+    it("refuses when no role the conversation could wear has it", async () => {
+        const { kind } = harness();
+        // Wearing All accounts already: nobody else speaks through the X account.
+        const wearingAll = context({ role: { id: "full-access", name: "All accounts" }, withheldByRole: ["x-main"] });
+        expect(await kind.resolve({ kind: "grant", subject: "capability", what: "x-main" }, wearingAll)).toMatchObject({ kind: "refused", code: "no_role" });
+    });
+
+    it("asks for a folder only when it is outside the fence, whatever root it was named under, and offers the roles that reach it", async () => {
         const { kind } = harness();
         expect(await kind.resolve({ kind: "grant", subject: "folder", what: "/work/intentic/_sandbox" }, context())).toMatchObject({ kind: "met" });
         expect(await kind.resolve({ kind: "grant", subject: "folder", what: "/mnt/intentic-main/refs/sdk/" }, context())).toEqual({
             kind: "raise",
-            title: "Let this conversation reach refs/sdk",
-            subject: { kind: "grant", subject: "folder", what: "refs/sdk", label: "the folder refs/sdk", persona: "Research" },
+            title: "Switch this conversation to a role that reaches refs/sdk",
+            subject: { kind: "grant", subject: "folder", what: "refs/sdk", label: "the folder refs/sdk", roles: [WRITER, LOCKED, ELSEWHERE, ALL_ACCOUNTS, NO_ACCOUNTS], role: "Research" },
         });
         expect(await kind.resolve({ kind: "grant", subject: "folder", what: "../etc" }, context())).toMatchObject({ kind: "refused", code: "invalid" });
         expect(await kind.resolve({ kind: "grant", subject: "folder", what: "refs/sdk" }, context({ fence: undefined }))).toMatchObject({ kind: "met" });
     });
 
-    it("refuses a shelf the access the conversation runs under holds back, since no grant lifts it", async () => {
+    it("refuses a folder outside the areas the conversation was born in, and offers no card homed outside them", async () => {
+        const { kind } = harness();
+        expect(await kind.resolve({ kind: "grant", subject: "folder", what: "refs/sdk" }, context({ accessFence: ["intentic"] }))).toMatchObject({
+            kind: "refused",
+            code: "out_of_reach",
+        });
+        // Inside the starter's areas, but outside Research's own: a card homed at the root or elsewhere is not one its
+        // starter may wear, so only the built-ins are offered.
+        const fenced = await kind.resolve({ kind: "grant", subject: "folder", what: "intentic/app" }, context({ fence: ["intentic/docs"], accessFence: ["intentic"] }));
+        expect(fenced).toMatchObject({ kind: "raise", subject: { roles: [ALL_ACCOUNTS, NO_ACCOUNTS] } });
+    });
+
+    it("refuses a shelf the access the conversation runs under holds back, since no role lifts it", async () => {
         const { kind } = harness();
         expect(await kind.resolve({ kind: "grant", subject: "shelf", what: "shell" }, context({ ceiling: { shell: false } }))).toEqual({
             kind: "refused",
             code: "out_of_reach",
             message:
-                "This conversation may not run commands: the people or the service it acts for are held back from it, and no grant changes that, only the sandbox owner does, on the Access page. Carry on without it.",
+                "This conversation may not run commands: the people or the service it acts for are held back from it, and no role changes that: only the sandbox owner does, on the Access page. Carry on without it.",
         });
-        // A ceiling over another shelf leaves this one to the persona, which a grant may open.
+        // A ceiling over another shelf leaves this one to the role, which another role may have.
         expect(await kind.resolve({ kind: "grant", subject: "shelf", what: "shell" }, context({ ceiling: { web: false } }))).toMatchObject({ kind: "raise" });
     });
 
-    it("asks for a shelf only when it is shut, and refuses one that does not exist", async () => {
+    it("asks for a shelf only when it is shut, offers the roles whose access has it, and refuses one that does not exist", async () => {
         const { kind } = harness();
         expect(await kind.resolve({ kind: "grant", subject: "shelf", what: "web" }, context())).toMatchObject({ kind: "met" });
-        expect(await kind.resolve({ kind: "grant", subject: "shelf", what: "shell" }, context())).toMatchObject({
+        // Locked is held without a shell, so it is not offered; the built-ins are held to nothing of their own.
+        expect(await kind.resolve({ kind: "grant", subject: "shelf", what: "shell" }, context())).toEqual({
             kind: "raise",
-            title: "Let this conversation run commands",
+            title: "Switch this conversation to a role that may run commands",
+            subject: { kind: "grant", subject: "shelf", what: "shell", label: "the shell", roles: [WRITER, ELSEWHERE, ALL_ACCOUNTS, NO_ACCOUNTS], role: "Research" },
         });
         expect(await kind.resolve({ kind: "grant", subject: "shelf", what: "wizardry" }, context())).toMatchObject({ kind: "refused", code: "invalid" });
     });
 
-    it("records a conversation grant, meets the need and says it reaches the next turn", async () => {
-        const { kind, grants } = harness();
-        const need = needOf({ kind: "grant", subject: "folder", what: "refs/sdk", label: "the folder refs/sdk", persona: "Research" });
-        const answered = await kind.answer(need, { kind: "grant", scope: "conversation" }, { email: "owner@acme.dev" });
-        expect(answered).toEqual({
+    it("switches the conversation to the role picked, meets the need and says it reaches the next turn", async () => {
+        const { kind, worn } = harness();
+        const need = needOf({ kind: "grant", subject: "folder", what: "refs/sdk", label: "the folder refs/sdk", roles: [WRITER, ALL_ACCOUNTS], role: "Research" });
+        expect(await kind.answer(need, { kind: "grant", role: "writer" }, { email: "owner@acme.dev" })).toEqual({
             status: "met",
-            result: "Allowed for this conversation: the folder refs/sdk.",
+            result: "Switched this conversation to the role Writer: the folder refs/sdk is within its reach.",
             use: ["It reaches this conversation from its next turn: finish what you can now, and the sandbox continues the conversation with it."],
         });
-        expect(await grants.of("conv-1")).toMatchObject({ folders: ["refs/sdk"], capabilities: [], shelves: [], by: "owner@acme.dev" });
+        expect(worn).toEqual([{ conversationId: "conv-1", role: "writer" }]);
         expect(kind.nextTurn(need)).toBe(true);
     });
 
-    it("writes a persona grant onto the card itself, into the list each kind of reach lives in", async () => {
-        const { kind, personas } = harness();
-        await kind.answer(needOf({ kind: "grant", subject: "capability", what: "reddit-work", label: "", persona: "Research" }), { kind: "grant", scope: "persona" }, { email: undefined });
-        await kind.answer(needOf({ kind: "grant", subject: "capability", what: "linear", label: "", persona: "Research" }), { kind: "grant", scope: "persona" }, { email: undefined });
-        await kind.answer(needOf({ kind: "grant", subject: "folder", what: "refs/sdk", label: "", persona: "Research" }), { kind: "grant", scope: "persona" }, { email: undefined });
-        await kind.answer(needOf({ kind: "grant", subject: "shelf", what: "shell", label: "", persona: "Research" }), { kind: "grant", scope: "persona" }, { email: undefined });
-        expect(personas.get("research")).toMatchObject({
-            capabilities: ["reddit-work"],
-            powers: { shell: true, connectors: ["github", "linear"] },
-            workspace: { folders: ["intentic", "refs/sdk"] },
-        });
+    it("refuses a role the card did not offer, and a conversation that is gone, switching nothing for the first", async () => {
+        const { kind, worn } = harness();
+        const need = needOf({ kind: "grant", subject: "shelf", what: "shell", label: "the shell", roles: [WRITER] });
+        expect(await kind.answer(need, { kind: "grant", role: "locked" }, { email: undefined })).toEqual({ refused: "Pick one of the roles the card offers." });
+        expect(worn).toEqual([]);
+        const gone = needOf({ kind: "grant", subject: "shelf", what: "shell", label: "the shell", roles: [WRITER] }, "conv-gone");
+        expect(await kind.answer(gone, { kind: "grant", role: "writer" }, { email: undefined })).toEqual({ refused: "The conversation is gone." });
     });
 
     // Mirrored from the person's own browser's `ask_access` (webext-peer.ts): nobody answers it on the card, the browser does.
@@ -136,15 +177,8 @@ describe("grant need", () => {
         // Its tools answer at once, so it is told to the turn that asked rather than held for the next one.
         expect(kind.nextTurn(site)).toBe(false);
         expect(kind.key({ kind: "grant", subject: "site", what: "github.com/*", label: "" })).toBe(kind.key(site.subject));
-        expect(await kind.answer(site, { kind: "grant", scope: "conversation" }, { email: "owner@acme.dev" })).toEqual({
+        expect(await kind.answer(site, { kind: "grant", role: "writer" }, { email: "owner@acme.dev" })).toEqual({
             refused: "A site is allowed in the person's own browser, from its Intentic extension: this card shows when it is.",
-        });
-    });
-
-    it("refuses a persona grant for a conversation that wears no persona", async () => {
-        const { kind } = harness();
-        expect(await kind.answer(needOf({ kind: "grant", subject: "shelf", what: "shell", label: "the shell" }), { kind: "grant", scope: "persona" }, { email: undefined })).toEqual({
-            refused: "This conversation wears no persona that could take it: allow it for the conversation instead.",
         });
     });
 });

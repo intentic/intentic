@@ -76,7 +76,7 @@ const sandboxRow = (overrides: Partial<SandboxSummary> = {}): SandboxSummary =>
         lastSeenAt: null,
         setupCodeClaimedAt: null,
         token: `tok`,
-        role: `owner`,
+        tier: `owner`,
         providedAddress: false,
         ...overrides,
     }) as SandboxSummary;
@@ -188,7 +188,7 @@ it(`renames from the title's own field, without sending the logo`, async () => {
 
 // Same rule as the logo tile beside it: a member is kept out of the control, not handed a dead one.
 it(`gives a member the name as text, with nothing to press`, () => {
-    const el = mount(sandboxRow({ role: `collaborator` }));
+    const el = mount(sandboxRow({ tier: `collaborator` }));
     expect(titleButton(el)).toBeNull();
     // The clipping span, not the heading: the heading also holds the invisible twin that measures the box.
     expect(el.querySelector(`h2 span.truncate`)?.textContent).toBe(`radarsu-intentic`);
@@ -217,14 +217,14 @@ it(`says the tile does two things once a logo is set, and one thing before that`
 
 // No control at all, rather than a disabled one with no reason: a member sees the logo, and nothing offers to change it.
 it(`keeps a member out of the tile entirely`, () => {
-    const el = mount(sandboxRow({ role: `collaborator` }));
+    const el = mount(sandboxRow({ tier: `collaborator` }));
     expect(el.querySelector(`button[aria-haspopup="dialog"]`)).toBeNull();
     expect(logoTile(el)).toBeNull();
 });
 
 // Full access changes the name and the logo as the owner does: the platform's update admits it.
 it(`hands Full access the name and the logo, as the owner has them`, () => {
-    const el = mount(sandboxRow({ role: `maintainer` }));
+    const el = mount(sandboxRow({ tier: `maintainer` }));
     expect(titleButton(el)).not.toBeNull();
     expect(logoTile(el)).not.toBeNull();
 });
@@ -289,7 +289,7 @@ it(`reports an unreadable file without writing anything`, async () => {
 it(`states this sandbox's own hours on the hosted card, with Billing where a plan is sold`, async () => {
     hostedPlan.value = hostedPlanState(hostedLane([hostedMachine(`s1`, spentHours(1_680))], spentHours(1_680)));
     planOffered.value = true;
-    const root = mount(sandboxRow({ role: `owner`, hosted: { region: `arn`, warm: true } }));
+    const root = mount(sandboxRow({ tier: `owner`, hosted: { region: `arn`, warm: true } }));
     await nextTick();
     expect(root.textContent).toContain(`Free hours · 12h of 40h left this month`);
     expect(root.textContent).toContain(`Billing`);
@@ -352,7 +352,7 @@ const changeButton = (el: HTMLElement): HTMLButtonElement | undefined =>
 
 it(`hands a maintainer the Resources form, not the owner alone`, async () => {
     onConnectedMachine();
-    const el = mount(sandboxRow({ role: `maintainer` }));
+    const el = mount(sandboxRow({ tier: `maintainer` }));
     expect(el.textContent).toContain(`12 GiB · 4 CPUs`);
     changeButton(el)?.click();
     await waitFor(() => expect(document.body.textContent).toContain(`Resources for radarsu-intentic`));
@@ -361,7 +361,7 @@ it(`hands a maintainer the Resources form, not the owner alone`, async () => {
 it(`says what a reshape in flight is doing in place of the button, rather than holding a link that looks pressable`, () => {
     onConnectedMachine();
     pending.value = `apply`;
-    const el = mount(sandboxRow({ role: `maintainer` }));
+    const el = mount(sandboxRow({ tier: `maintainer` }));
     expect(changeButton(el)).toBeUndefined();
     expect(el.querySelector(`[data-testid="overview-resize-pending"]`)?.textContent).toContain(`Restarting with the new share…`);
     pending.value = undefined;
@@ -369,7 +369,7 @@ it(`says what a reshape in flight is doing in place of the button, rather than h
 
 it(`gives a member below maintainer the share without the button`, () => {
     onConnectedMachine();
-    const el = mount(sandboxRow({ role: `writer` }));
+    const el = mount(sandboxRow({ tier: `writer` }));
     expect(el.textContent).toContain(`12 GiB · 4 CPUs`);
     expect(changeButton(el)).toBeUndefined();
 });

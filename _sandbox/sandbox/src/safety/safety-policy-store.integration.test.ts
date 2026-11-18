@@ -52,7 +52,7 @@ test("a save is newline-terminated exactly once", async () => {
     expect(await readFile(path, "utf8")).toBe(`One line.\n`);
 });
 
-// The card's Always button no longer touches this file: the lines it allowed are owner-wide grants (personas/owner-grants.ts)
+// The card's Always button no longer touches this file: the lines it allowed are owner-wide grants (roles/owner-grants.ts)
 // the judge reads after the owner's own text. The Safety page still shows, and saves, only what the owner wrote.
 test("the judge reads the owner's text followed by the allowed lines, and the page's reading has none of them", async () => {
     const { path, policy } = await store(async () => [`Deleting build directories under /work is fine.`, `Pushing to a scratch branch is fine.`]);
@@ -91,7 +91,7 @@ test("no allowed line leaves the policy exactly as written, and the same lines a
     expect(withGrantedLines(`One line.`, [`A.`]).startsWith(`One line.\n\n${GRANTED_HEADING}`)).toBe(true);
 });
 
-// A grants file this build cannot read is the grants store's to say (personas/owner-grants.ts: it reads as none and warns);
+// A grants file this build cannot read is the grants store's to say (roles/owner-grants.ts: it reads as none and warns);
 // a reading that fails outright is never turned into a policy with some lines missing.
 test("a failed reading of the allowed lines is an error, never a quiet policy without them", async () => {
     const { policy } = await store(async () => {

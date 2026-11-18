@@ -11,7 +11,7 @@ import { computed, inject, nextTick, onMounted, ref, useId, useTemplateRef, watc
 import { useRoute, useRouter } from "vue-router";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { foundToOffer } from "../../../lib/foundOnComputer";
 import { SANDBOX_SELF_ACCESS } from "../../../lib/queryKeys";
@@ -76,7 +76,7 @@ const { reachable, active: activeSandbox } = useSandbox();
 // members.ts `ownAccounts`) reaches it too, to sign in with accounts of theirs, so every press below that would only be
 // refused them is left out rather than drawn: a translator's subscription, the found keys, the other sandboxes' accounts,
 // and Local models, where everything adds or changes a connection.
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { can } = useAccess();
 
 // What each tile holds, judged the way the Models row in the sandbox's menu judges it.
@@ -158,7 +158,7 @@ const tileFacts = computed(() =>
 // ARRIVAL: `?provider=` continues a press made elsewhere (a picker row, a trial strip, the chat's "Try again"): open its
 // tile, and start its sign-in when nothing of it is connected yet (linkArrival). Without one, the tile whose turn it is:
 // the sign-in waiting on the reader, the one that just failed, else whatever needs a person, else the first connected
-// provider, else the grid's first tile (arrivalTile): the page always arrives with a tile open, as personas does.
+// provider, else the grid's first tile (arrivalTile): the page always arrives with a tile open, as roles does.
 let arrived = false;
 const settleArrival = (): void => {
     if (!accessKnown.value) {

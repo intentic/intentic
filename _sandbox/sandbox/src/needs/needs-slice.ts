@@ -166,9 +166,10 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
             secret,
             grant: grantNeed({
                 capabilities,
-                personas: { get: (id) => whole().personas.get(id), upsert: (persona) => whole().personas.upsert(persona) },
-                grants: () => whole().conversationGrants,
-                personaIdByName: async (name) => (await whole().personas.list()).find((persona) => (persona.label ?? persona.id) === name)?.id,
+                roles: () => whole().roles.list(),
+                profiles: () => whole().accessProfiles.list(),
+                areas: () => whole().areas.list(),
+                wearRole: async (conversationId, role) => (await whole().agents.wearRole(conversationId, role)) !== undefined,
                 siteAllowed: sites.siteAllowed,
             }),
             release: releaseNeed({

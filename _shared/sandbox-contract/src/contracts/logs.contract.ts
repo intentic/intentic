@@ -31,7 +31,7 @@ export const logsContract = {
         })
         .input(LogReadQuerySchema)
         .output(LogReadSchema),
-    // The one write route; lands in its own file, never daemon.log, floored at viewer role for a crashed page.
+    // The one write route; lands in its own file, never daemon.log, floored at the viewer tier for a crashed page.
     report: procedure
         .meta({ floor: "viewer", control: "never" })
         .route({

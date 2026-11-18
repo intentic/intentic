@@ -486,14 +486,14 @@ describe(`adminUserDetail`, () => {
                         bootReport: null,
                         announceRefusal: null,
                         hosted: { region: `arn`, appName: `intentic-sbx-1`, wokeAt: new Date(`2026-08-25T08:00:00Z`), idleWarnedAt: null },
-                        members: [{ email: `bob@example.com`, role: `collaborator`, acceptedAt: null }],
+                        members: [{ email: `bob@example.com`, tier: `collaborator`, acceptedAt: null }],
                     },
                 ],
             },
             sandboxMember: {
                 findMany: async () => [
                     {
-                        role: `viewer`,
+                        tier: `viewer`,
                         acceptedAt: new Date(`2026-08-10T00:00:00Z`),
                         sandbox: { name: `team box`, owner: { email: `boss@example.com` } },
                     },
@@ -530,9 +530,9 @@ describe(`adminUserDetail`, () => {
             setupClaimedAt: `2026-08-02T01:00:00.000Z`,
             setupReport: { stage: `pulling-image` },
             hosted: { region: `arn`, wokeAt: `2026-08-25T08:00:00.000Z`, idleWarnedAt: null },
-            members: [{ email: `bob@example.com`, role: `collaborator`, accepted: false }],
+            members: [{ email: `bob@example.com`, tier: `collaborator`, accepted: false }],
         });
-        expect(detail?.memberOf).toEqual([{ sandboxName: `team box`, ownerEmail: `boss@example.com`, role: `viewer`, accepted: true }]);
+        expect(detail?.memberOf).toEqual([{ sandboxName: `team box`, ownerEmail: `boss@example.com`, tier: `viewer`, accepted: true }]);
         // Standing and the watch's verdicts ride along, the strike in the page's own units.
         expect(detail?.hostedSuspended).toBeNull();
         expect(detail?.strikes).toEqual([

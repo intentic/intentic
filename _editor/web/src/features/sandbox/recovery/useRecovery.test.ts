@@ -12,7 +12,7 @@ import { type RecoveryDeps, useRecovery } from "./useRecovery";
 const remembered = (over: Partial<RememberedSandbox> & Pick<RememberedSandbox, `id` | `daemonUrl`>): RememberedSandbox => ({
     name: over.id,
     image: null,
-    role: `owner`,
+    tier: `owner`,
     hosted: false,
     lastSeenAt: `2026-10-01T18:00:09.479Z`,
     missingSince: `2026-10-02T12:00:00.000Z`,
@@ -21,7 +21,7 @@ const remembered = (over: Partial<RememberedSandbox> & Pick<RememberedSandbox, `
 
 const intentic = remembered({ id: `s1`, name: `intentic`, daemonUrl: `https://sandbox-82789f4106b4.radarsu.com`, image: `data:image/webp;base64,AAAA` });
 const notes = remembered({ id: `s2`, daemonUrl: `https://sandbox-574ea8038415.sbx.intentic.dev` });
-const shared = remembered({ id: `s3`, role: `writer`, daemonUrl: `https://sandbox-1ea6479e2362.sbx.intentic.dev` });
+const shared = remembered({ id: `s3`, tier: `writer`, daemonUrl: `https://sandbox-1ea6479e2362.sbx.intentic.dev` });
 const custom = remembered({ id: `s4`, daemonUrl: `https://box.example.com` });
 
 const registered: RelinkAnswer = { announce: { state: `registered`, at: 0 } };

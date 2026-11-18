@@ -2,7 +2,7 @@
 import type { EngineRow } from "@intentic/sandbox-contract/schemas/engines";
 import { Await, BrandMark, Button, Notice, Picker, type PickerOption, Row, RowGroup, SkeletonRows, StatusBadge, ui } from "@intentic/ui";
 import { useEngines } from "./useEngines";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useHubWork } from "../../../workbench/hub/hubWork";
 import { engineVisual } from "./engineVisual";
 import { useT } from "@intentic/ui/i18n";
@@ -15,7 +15,7 @@ import { accessWords } from "../../../client/sandbox/access/accessWords";
 
 const t = useT();
 
-const { canShip: canOperate } = useRole();
+const { canShip: canOperate } = useTier();
 // Below maintainer the card is read: where each engine gets its version stays as words, and nothing offers to change it.
 const maintainersOnly = computed(() => accessWords({ kind: `tier`, floor: `maintainer` }).short);
 const channelLabel = (kind: string): string | undefined => CHANNELS.value.find((option) => option.value === kind)?.label;

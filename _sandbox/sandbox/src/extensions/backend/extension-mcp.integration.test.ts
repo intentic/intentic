@@ -89,9 +89,9 @@ test("mounts one server per granted card whose extension serves its kind tools, 
     expect(await extensionMcpToolsOf(host, [], mounts.lease(), undefined)).toEqual([]);
 });
 
-// A card is the grant for its server; an extension's own server (no card) is granted by the persona's `extensions`
-// shelf, so a persona that was not given the extension does not get its tools mounted.
-test("an extension's card-less server mounts only into a turn whose persona's extensions shelf grants it", async () => {
+// A card is the grant for its server; an extension's own server (no card) is granted by the role's `extensions`
+// shelf, so a role that was not given the extension does not get its tools mounted.
+test("an extension's card-less server mounts only into a turn whose role's extensions shelf grants it", async () => {
     const host = hostFor([acme], ["ledger", "notes"]);
     const names = async (shelf: readonly string[] | undefined): Promise<string[]> =>
         (await extensionMcpToolsOf(host, [acme], mountsAt().lease("conv-a"), shelf)).map((tool) => tool.name).toSorted();

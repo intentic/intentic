@@ -6,7 +6,7 @@ import { computed } from "vue";
 import { askLocalApp, localFace } from "../../../app/environments/local";
 import BringProjectModal from "./BringProjectModal.vue";
 import { useBringProject } from "./useBringProject";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 
 const { look = `sidebar` } = defineProps<{ look?: `sidebar` | `phone` | `home` }>();
 // The page owns the file picker, so the dialog's upload choice is passed up. A button of the phone's carries its dialog;
@@ -17,7 +17,7 @@ const { show } = useBringProject();
 const local = computed(() => localFace() !== undefined);
 // Bringing a project in writes files: a member who may change none (below the writer tier, which is what editing
 // somewhere makes) is not offered it. A folder window opens one instead.
-const { canWrite } = useRole();
+const { canWrite } = useTier();
 const offered = computed(() => local.value || canWrite.value);
 const label = computed(() => t(local.value ? `local.emptyFolder.openFolder` : `workspace.bringProject.title`));
 const icon = computed(() => local.value ? `folder-open` : `arrow-down-left`);

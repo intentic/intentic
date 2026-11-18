@@ -100,7 +100,7 @@ export const extractLinks = (body: string, token: string): string[] => {
     return [...new Set(confirming)];
 };
 
-// "From this site" means the name appears in From or Subject only; a body mention is how a digest impersonates real
+// "From this site" means the name appears in From or Subject only; a body mention is how a digest imroletes real
 // mail.
 export const matchesSite = (from: string, subject: string, token: string): boolean =>
     from.toLowerCase().includes(token) || subject.toLowerCase().includes(token);

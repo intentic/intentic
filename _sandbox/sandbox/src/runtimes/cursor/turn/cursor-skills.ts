@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import type { TurnContext } from "../../../agent/providers/adapter.js";
 import { runRootFor } from "../../../agent/tools/agent-terminals.js";
 import type { TurnPlacement } from "../../../conversations/worktrees/isolation.js";
-import { personaSkillsRoot } from "../../../personas/persona-kit.js";
+import { roleSkillsRoot } from "../../../roles/role-kit.js";
 import { skillFolderNames } from "../../../skill-file.js";
 import { loadedSkillsRoot } from "../../../store/loaded-skills.js";
 
@@ -11,15 +11,15 @@ import { loadedSkillsRoot } from "../../../store/loaded-skills.js";
 // reads every `SKILL.md` under `.agents/skills/` (and `.cursor/`, `.claude/`, `.codex/`, `.grok/`) of each workspace
 // root it is given: the turn's cwd, which holds the workspace's loaded skills, and `local.dirs` (options.d.ts). So:
 // - the workspace's loaded skills are found where they already are, in the conversation's own tree;
-// - the worn persona's own kit, which lives where no loader looks (.intentic/config/personas/<id>/skills), is copied into
+// - the worn role's own kit, which lives where no loader looks (.intentic/config/roles/<id>/skills), is copied into
 //   a folder of the turn's own laid out as Cursor reads one, and handed over as a second root;
-// - a skill the persona or a credential gate withholds (TurnPolicy.disallowedTools names it `Skill(<name>)`, as the
+// - a skill the role or a credential gate withholds (TurnPolicy.disallowedTools names it `Skill(<name>)`, as the
 //   Claude Code loop is told) is refused at Cursor's read tool (cursor-hooks.ts), the seam the Claude loop's
 //   `Skill(<name>)` denial is. Like that denial it stops the loader's path, not a shell that cats the file, and Cursor
 //   still lists the skill's name and description: its loader reads the whole folder and takes no filter.
 
 export interface CursorSkills {
-    // The persona kit's skill folders, as the daemon reads them.
+    // The role kit's skill folders, as the daemon reads them.
     readonly kit: readonly string[];
     // The loaded skills this turn may not open.
     readonly denied: readonly string[];
@@ -28,11 +28,11 @@ export interface CursorSkills {
 export const NO_SKILLS: CursorSkills = { kit: [], denied: [] };
 
 /** What a turn's skills are, listed off the conversation's tree as the daemon sees it. */
-export const cursorSkillsOf = async (context: Pick<TurnContext, "localCwd" | "base" | "persona">): Promise<CursorSkills> => {
+export const cursorSkillsOf = async (context: Pick<TurnContext, "localCwd" | "base" | "role">): Promise<CursorSkills> => {
     const withheld = new Set(context.base.policy.disallowedTools ?? []);
     const denied = (await skillFolderNames(loadedSkillsRoot(context.localCwd))).filter((name) => withheld.has(`Skill(${name})`));
-    const persona = context.persona?.persona?.id;
-    const root = persona === undefined ? undefined : personaSkillsRoot(context.localCwd, persona);
+    const role = context.role?.role?.id;
+    const root = role === undefined ? undefined : roleSkillsRoot(context.localCwd, role);
     const kit = root === undefined ? [] : (await skillFolderNames(root)).map((name) => join(root, name));
     return { kit, denied };
 };

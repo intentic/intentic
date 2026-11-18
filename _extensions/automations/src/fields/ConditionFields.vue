@@ -200,7 +200,7 @@ const checkVerdict = (result: WatchCheckResult): string => {
         </span>
 
         <!-- CHECK NOW: what the watch would see today, before it is armed. Sources only: a guard command runs
-             with the persona's credentials, which nobody has approved for a preview. -->
+             with the role's credentials, which nobody has approved for a preview. -->
         <div v-if="isSource" class="flex flex-col gap-2">
             <div class="flex flex-wrap items-center gap-2">
                 <Button

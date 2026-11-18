@@ -1,4 +1,4 @@
-import { type MemberRole, roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { type MemberTier, tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
 import { areasCover } from "../auth/fleet-scope.js";
 
@@ -8,8 +8,8 @@ import { areasCover } from "../auth/fleet-scope.js";
 
 export type AssignVerdict = { readonly kind: "ok" } | { readonly kind: "forbidden"; readonly message: string };
 
-export const assignVerdict = (owner: SessionOwner | undefined, caller: { readonly email: string; readonly role: MemberRole }): AssignVerdict => {
-    if (owner === undefined || owner.email.toLowerCase() === caller.email.toLowerCase() || roleAtLeast(caller.role, "maintainer")) {
+export const assignVerdict = (owner: SessionOwner | undefined, caller: { readonly email: string; readonly tier: MemberTier }): AssignVerdict => {
+    if (owner === undefined || owner.email.toLowerCase() === caller.email.toLowerCase() || tierAtLeast(caller.tier, "maintainer")) {
         return { kind: "ok" };
     }
     return {

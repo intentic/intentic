@@ -797,7 +797,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         hint: "The agent runs `sandboxes create` and every create asks you in chat first, naming the machine it would run on. New sandboxes land on a computer you have connected as a device — this never provisions hosted machines, so it cannot spend your plan.",
     },
     // Another of the owner's sandboxes this one may hand tasks to, kept with their computers: to them it is another place
-    // their agent can act, its tools named after it, picked by personas on the same devices list, and held to what that
+    // their agent can act, its tools named after it, picked by roles on the same devices list, and held to what that
     // side allows as a device is. The token is minted over there, where the terms live; the editor pairs the two
     // sandboxes and adds this by itself (components/LinkPairing.vue), and the folded fields are the way to do it by hand.
     {
@@ -815,13 +815,13 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         guide: {
             scopes: "Starts, follows up on and stops the tasks it hands over, and reads what they report. When that sandbox's owner shares its records on the link, also reads its conversations, logs and diagnostics, read-only. Never its files or its settings",
             steps: [
-                "Pick the other sandbox above, what its tasks wear (a persona), whether each one waits for you there, and how many turns an hour it may start.",
+                "Pick the other sandbox above, what its tasks wear (a role), whether each one waits for you there, and how many turns an hour it may start.",
                 "`Link` makes the link over there under your own sign-in and adds it here: nothing to copy.",
                 "Offered for a sandbox you own or maintain. For any other, its owner makes the link there (`Sandbox` → `Access` → `Linked sandboxes` → `New link`), and its address and token go under Advanced.",
                 "Revoke the link over there; tasks stop reaching it the moment you do.",
             ],
         },
-        hint: "The agent hands a task over with that sandbox's own `delegate` tool and waits on it like a subagent. It runs and lands in the other sandbox, under that sandbox's own persona, approvals and limits, which only its owner sets.",
+        hint: "The agent hands a task over with that sandbox's own `delegate` tool and waits on it like a subagent. It runs and lands in the other sandbox, under that sandbox's own role, approvals and limits, which only its owner sets.",
     },
     {
         id: "identity",

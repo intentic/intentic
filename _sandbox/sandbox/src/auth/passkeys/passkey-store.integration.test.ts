@@ -486,6 +486,6 @@ describe("the file store", () => {
         });
         await expect(authorizer.authorize("google-proof", undefined)).rejects.toThrow("whether a passkey is required is unknown");
         await writeFile(path, JSON.stringify({ required: false, credentials: [], recovery: [] }), "utf8");
-        await expect(authorizer.authorize("google-proof", undefined)).resolves.toMatchObject({ email: "owner@example.com", role: "owner" });
+        await expect(authorizer.authorize("google-proof", undefined)).resolves.toMatchObject({ email: "owner@example.com", tier: "owner" });
     });
 });

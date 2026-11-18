@@ -1,7 +1,7 @@
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { Member } from "../auth/auth.js";
-import { memoryMembersStore, memoryAreasStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
+import { memoryMembersStore, memoryAreasStore, memoryRolesStore } from "../harness/route-stores.testing.js";
 import { checks } from "./invariant.js";
 
 /* The roster names area ids, the manifest says what each holds, and the cards say where each works: three tracked,
@@ -11,29 +11,29 @@ const fail = (message: string): never => {
     throw new Error(message);
 };
 
-const run = async (index: number, areas: Area[], members: Member[], personas: Persona[] = []): Promise<void> => {
-    const check = checks({ areas: memoryAreasStore(areas), members: memoryMembersStore(members), personas: memoryPersonasStore(personas) })[index];
+const run = async (index: number, areas: Area[], members: Member[], roles: Role[] = []): Promise<void> => {
+    const check = checks({ areas: memoryAreasStore(areas), members: memoryMembersStore(members), roles: memoryRolesStore(roles) })[index];
     await check?.run({ moment: "sweep", fail });
 };
 
 const heldAreas = (areas: Area[], members: Member[]): Promise<void> => run(0, areas, members);
-const strandedGuests = (areas: Area[], members: Member[], personas: Persona[]): Promise<void> => run(1, areas, members, personas);
+const strandedGuests = (areas: Area[], members: Member[], roles: Role[]): Promise<void> => run(1, areas, members, roles);
 const fencedMaintainers = (members: Member[]): Promise<void> => run(2, [], members);
 
 test("a grant naming an area the manifest holds reports nothing", async () => {
     await expect(
-        heldAreas([{ id: "support", folders: ["support"] }], [{ email: "fay@example.com", role: "viewer", areas: ["support"] }]),
+        heldAreas([{ id: "support", folders: ["support"] }], [{ email: "fay@example.com", tier: "viewer", areas: ["support"] }]),
     ).resolves.toBeUndefined();
 });
 
 test("a grant naming no area at all is the whole workspace, not an orphan", async () => {
-    await expect(heldAreas([], [{ email: "fay@example.com", role: "viewer" }])).resolves.toBeUndefined();
+    await expect(heldAreas([], [{ email: "fay@example.com", tier: "viewer" }])).resolves.toBeUndefined();
 });
 
 // Fail-shut is the safe direction and therefore the silent one: that person's file tree simply empties, and nothing
 // says why. The check is what turns it into a sentence.
 test("a grant naming an area that has been deleted is named, with whose grant it is", async () => {
-    await expect(heldAreas([], [{ email: "fay@example.com", role: "viewer", areas: ["support"] }])).rejects.toThrow(
+    await expect(heldAreas([], [{ email: "fay@example.com", tier: "viewer", areas: ["support"] }])).rejects.toThrow(
         /fay@example.com → support.*reaches no folder at all/s,
     );
 });
@@ -44,7 +44,7 @@ test("a guest whose areas hold an assistant reports nothing", async () => {
     await expect(
         strandedGuests(
             [{ id: "support", folders: ["support"] }],
-            [{ email: "dee@example.com", role: "guest", areas: ["support"] }],
+            [{ email: "dee@example.com", tier: "guest", areas: ["support"] }],
             [{ id: "helper", capabilities: [], workspace: { startIn: "support" } }],
         ),
     ).resolves.toBeUndefined();
@@ -54,7 +54,7 @@ test("a guest whose areas hold no assistant is named, since it can sign in and t
     await expect(
         strandedGuests(
             [{ id: "support", folders: ["support"] }],
-            [{ email: "dee@example.com", role: "guest", areas: ["support"] }],
+            [{ email: "dee@example.com", tier: "guest", areas: ["support"] }],
             // Homed at the root, which no fence covers: the card exists and this guest still reaches none.
             [{ id: "helper", capabilities: [] }],
         ),
@@ -62,13 +62,13 @@ test("a guest whose areas hold no assistant is named, since it can sign in and t
 });
 
 test("an unfenced maintainer reports nothing", async () => {
-    await expect(fencedMaintainers([{ email: "mai@example.com", role: "maintainer" }])).resolves.toBeUndefined();
+    await expect(fencedMaintainers([{ email: "mai@example.com", tier: "maintainer" }])).resolves.toBeUndefined();
 });
 
 // The route refuses this shape; the file can still be edited around it, and a roster claiming a fence that enforces
 // nothing is worse than one that claims none.
 test("a maintainer row carrying areas is named, since nothing at that tier enforces them", async () => {
-    await expect(fencedMaintainers([{ email: "mai@example.com", role: "maintainer", areas: ["support"] }])).rejects.toThrow(
+    await expect(fencedMaintainers([{ email: "mai@example.com", tier: "maintainer", areas: ["support"] }])).rejects.toThrow(
         /mai@example.com.*enforce nothing at that tier/s,
     );
 });

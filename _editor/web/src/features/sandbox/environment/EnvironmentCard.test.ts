@@ -77,7 +77,7 @@ jest.mock(`./useEnvironmentContents`, () => ({
     }),
 }));
 // The active sandbox as the platform describes it; `hosted` selects the rebuild executor.
-const active = ref<{ id: string; role: string; hosted?: { region: string; warm: boolean } | null }>({ id: `sb1`, role: `owner` });
+const active = ref<{ id: string; tier: string; hosted?: { region: string; warm: boolean } | null }>({ id: `sb1`, tier: `owner` });
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ active, daemonUrl: ref(undefined), reachable: ref(true) }),
     sandboxKey: (name: string) => [name],
@@ -144,7 +144,7 @@ afterEach(() => {
     slug.value = `demo`;
     route.fullPath = `/sandbox/environment`;
     route.hash = ``;
-    active.value = { id: `sb1`, role: `owner` };
+    active.value = { id: `sb1`, tier: `owner` };
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -165,7 +165,7 @@ it(`hands a pending overlay to the host executor on a sandbox the owner runs`, (
 
 it(`hands a pending overlay to the platform's builder on a hosted sandbox`, () => {
     pending.value = { content: OVERLAY, hash: `pending` };
-    active.value = { id: `sb1`, role: `owner`, hosted: { region: `iad`, warm: true } };
+    active.value = { id: `sb1`, tier: `owner`, hosted: { region: `iad`, warm: true } };
     const el = mount();
     expect(el.querySelector(`[data-executor="hosted"]`)).not.toBeNull();
     expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
@@ -175,7 +175,7 @@ it(`hands a pending overlay to the platform's builder on a hosted sandbox`, () =
 // They still approve or reject the change, which the daemon lets them do.
 it(`leaves a hosted sandbox's build to its owner, while a maintainer still decides the change`, () => {
     pending.value = { content: OVERLAY, hash: `pending` };
-    active.value = { id: `sb1`, role: `maintainer`, hosted: { region: `iad`, warm: true } };
+    active.value = { id: `sb1`, tier: `maintainer`, hosted: { region: `iad`, warm: true } };
     const el = mount();
     expect(el.querySelector(`[data-executor="hosted"]`)).toBeNull();
     expect(el.textContent).toContain(`Only the sandbox owner can rebuild it.`);
@@ -557,7 +557,7 @@ it(`says a request still waiting is only dropped, and offers no Remove to a read
     app?.unmount();
     document.body.innerHTML = ``;
 
-    active.value = { id: `sb1`, role: `viewer` };
+    active.value = { id: `sb1`, tier: `viewer` };
     const readOnly = mount();
     await nextTick();
     chipOf(readOnly, `custom:sox`).click();

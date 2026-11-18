@@ -3,7 +3,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Logger } from "pino";
 import { allowlistRefusal, denylistRefusal, toolAllowed, toolDenied } from "../../agent/tools/tool-allowlist.js";
-import { type PersonaScope, scopeRefusal } from "../../personas/persona-scope.js";
+import { type RoleScope, scopeRefusal } from "../../roles/role-scope.js";
 import { editedPath } from "../../rules/edit-tools.js";
 import { askCwdOf, askProgramOf, CONSULT_FAILED, VendorToolInputSchema } from "../decorators/vendor-ask.js";
 import { JS_TOOL_NAME } from "../../seams/js-tool-names.js";
@@ -54,11 +54,11 @@ export interface PolicyTurn {
     readonly hold?: (() => () => void) | undefined;
     // The turn's tool list, when it carries one: a call off it is refused before anything else is asked.
     readonly allowedTools?: readonly string[] | undefined;
-    // What the persona withholds (TurnPolicy.disallowedTools) and the folders it works in (TurnPolicy.personaScope), in
+    // What the role withholds (TurnPolicy.disallowedTools) and the folders it works in (TurnPolicy.roleScope), in
     // the one tool vocabulary every runtime's translator maps onto (rules/tool-vocabulary.ts). Until 2026-10-25 only the
-    // Claude Code loop read either, so a read-only or fenced persona on Codex, Cursor or Pi edited and ran anything.
+    // Claude Code loop read either, so a read-only or fenced role on Codex, Cursor or Pi edited and ran anything.
     readonly deniedTools?: readonly string[] | undefined;
-    readonly scope?: PersonaScope | undefined;
+    readonly scope?: RoleScope | undefined;
     // A change the turn makes to a call before it runs (a path redirect, a shield reading a token back), asked after the
     // tool list and before the rules, so the rules read the call that will actually run.
     readonly rewrite?: ((call: PolicyCall) => Promise<PolicyRewrite>) | undefined;
@@ -116,28 +116,28 @@ const listRefusal = (turn: PolicyTurn, call: PolicyCall): PolicyVerdict | undefi
         : { decision: "deny", reason: allowlistRefusal({ name: call.tool, command }, turn.allowedTools) };
 };
 
-// A turn's limits as the gate reads them, from its policy: the tool list, what the persona withholds, and its folders.
+// A turn's limits as the gate reads them, from its policy: the tool list, what the role withholds, and its folders.
 // One spelling for every runtime that builds a PolicyTurn, so a limit added to the policy reaches all of them at once.
 export const policyLimitsOf = (policy: {
     readonly allowedTools?: readonly string[] | undefined;
     readonly disallowedTools?: readonly string[] | undefined;
-    readonly personaScope?: PersonaScope | undefined;
+    readonly roleScope?: RoleScope | undefined;
 }): Pick<PolicyTurn, "allowedTools" | "deniedTools" | "scope"> => ({
     allowedTools: policy.allowedTools,
     deniedTools: policy.disallowedTools,
-    scope: policy.personaScope,
+    scope: policy.roleScope,
 });
 
-// The persona's half alone, undefined when it puts no limit on the turn, for a runtime that carries it on its own field.
-export const personaLimitsOf = (policy: {
+// The role's half alone, undefined when it puts no limit on the turn, for a runtime that carries it on its own field.
+export const roleLimitsOf = (policy: {
     readonly disallowedTools?: readonly string[] | undefined;
-    readonly personaScope?: PersonaScope | undefined;
+    readonly roleScope?: RoleScope | undefined;
 }): Pick<PolicyTurn, "deniedTools" | "scope"> | undefined =>
-    policy.disallowedTools === undefined && policy.personaScope === undefined ? undefined : { deniedTools: policy.disallowedTools, scope: policy.personaScope };
+    policy.disallowedTools === undefined && policy.roleScope === undefined ? undefined : { deniedTools: policy.disallowedTools, scope: policy.roleScope };
 
-// The persona's limits: a refusal for a tool it withholds, or for a file outside its folders (or the sandbox's own
+// The role's limits: a refusal for a tool it withholds, or for a file outside its folders (or the sandbox's own
 // config, where it may not change it); else undefined.
-export const personaRefusal = (turn: Pick<PolicyTurn, "deniedTools" | "scope">, call: PolicyCall): string | undefined => {
+export const roleRefusal = (turn: Pick<PolicyTurn, "deniedTools" | "scope">, call: PolicyCall): string | undefined => {
     if (turn.deniedTools !== undefined && toolDenied(turn.deniedTools, { name: call.tool })) {
         return denylistRefusal({ name: call.tool });
     }
@@ -213,7 +213,7 @@ export const consultPolicy = async (turn: PolicyTurn | undefined, call: PolicyCa
     if (listed !== undefined) {
         return listed;
     }
-    const withheld = personaRefusal(turn, call);
+    const withheld = roleRefusal(turn, call);
     if (withheld !== undefined) {
         return { decision: "deny", reason: withheld };
     }

@@ -54,7 +54,7 @@ afterEach(() => {
 });
 
 it(`tells a sandbox on its owner's computer that it is never metered, whatever the account's hosted hours say`, async () => {
-    active.value = { id: `local`, role: `owner`, hosted: null };
+    active.value = { id: `local`, tier: `owner`, hosted: null };
     hostedPlan.value = holding(spentHours(2_280));
     const root = mount();
     await nextTick();
@@ -64,7 +64,7 @@ it(`tells a sandbox on its owner's computer that it is never metered, whatever t
 });
 
 it(`shows a hosted sandbox's owner the free hours its machine spends, and when they come back`, async () => {
-    active.value = { id: `box`, role: `owner`, hosted: HOSTED };
+    active.value = { id: `box`, tier: `owner`, hosted: HOSTED };
     hostedPlan.value = holding(spentHours(1_680));
     const root = mount();
     await nextTick();
@@ -76,7 +76,7 @@ it(`shows a hosted sandbox's owner the free hours its machine spends, and when t
 });
 
 it(`shows a machine on a paid slot its own month, named by its rung`, async () => {
-    active.value = { id: `box`, role: `owner`, hosted: HOSTED };
+    active.value = { id: `box`, tier: `owner`, hosted: HOSTED };
     hostedPlan.value = holding(spentHours(600, STANDARD.monthlyHours * 60, `slot`), STANDARD.id);
     const root = mount();
     await nextTick();
@@ -86,7 +86,7 @@ it(`shows a machine on a paid slot its own month, named by its rung`, async () =
 });
 
 it(`says a comped owner's hours are counted against no limit, with no bar to fill`, async () => {
-    active.value = { id: `box`, role: `owner`, hosted: HOSTED };
+    active.value = { id: `box`, tier: `owner`, hosted: HOSTED };
     hostedPlan.value = holding(spentHours(120, null), FREE_TIER.id, true);
     const root = mount();
     await nextTick();
@@ -96,7 +96,7 @@ it(`says a comped owner's hours are counted against no limit, with no bar to fil
 });
 
 it(`tells a guest whose hours a hosted sandbox spends, and shows them none of the owner's figures`, async () => {
-    active.value = { id: `theirs`, role: `maintainer`, hosted: HOSTED };
+    active.value = { id: `theirs`, tier: `maintainer`, hosted: HOSTED };
     hostedPlan.value = holding(spentHours(1_680));
     const root = mount();
     await nextTick();
@@ -105,7 +105,7 @@ it(`tells a guest whose hours a hosted sandbox spends, and shows them none of th
 });
 
 it(`says nothing where the platform hosts no machines at all`, async () => {
-    active.value = { id: `local`, role: `owner`, hosted: null };
+    active.value = { id: `local`, tier: `owner`, hosted: null };
     hostedPlan.value = { enabled: false, onPlan: false, priceUsd: 0 };
     const root = mount();
     await nextTick();

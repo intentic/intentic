@@ -5,20 +5,20 @@ import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 const owned = { email: "ania@example.com", name: "Ania", since: 1 };
 
 test("nobody's conversation is anyone's to claim, at any driving tier", () => {
-    expect(assignVerdict(undefined, { email: "bob@example.com", role: "collaborator" })).toEqual({ kind: "ok" });
+    expect(assignVerdict(undefined, { email: "bob@example.com", tier: "collaborator" })).toEqual({ kind: "ok" });
 });
 
 test("its owner hands it over, whatever their tier; addresses compare folded", () => {
-    expect(assignVerdict(owned, { email: "Ania@Example.com", role: "collaborator" })).toEqual({ kind: "ok" });
+    expect(assignVerdict(owned, { email: "Ania@Example.com", tier: "collaborator" })).toEqual({ kind: "ok" });
 });
 
 test("a maintainer or the sandbox owner reassigns anyone's", () => {
-    expect(assignVerdict(owned, { email: "bob@example.com", role: "maintainer" })).toEqual({ kind: "ok" });
-    expect(assignVerdict(owned, { email: "bob@example.com", role: "owner" })).toEqual({ kind: "ok" });
+    expect(assignVerdict(owned, { email: "bob@example.com", tier: "maintainer" })).toEqual({ kind: "ok" });
+    expect(assignVerdict(owned, { email: "bob@example.com", tier: "owner" })).toEqual({ kind: "ok" });
 });
 
 test("a collaborator is refused someone else's, with the owner named so the next step is a person", () => {
-    const verdict = assignVerdict(owned, { email: "bob@example.com", role: "collaborator" });
+    const verdict = assignVerdict(owned, { email: "bob@example.com", tier: "collaborator" });
     expect(verdict.kind).toBe("forbidden");
     expect(verdict.kind === "forbidden" ? verdict.message : "").toContain("Ania's");
 });

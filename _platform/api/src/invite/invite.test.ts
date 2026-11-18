@@ -63,7 +63,7 @@ describe(`invite routes`, () => {
         const findMany = jest.fn().mockResolvedValue([
             {
                 email: `guest@example.com`,
-                role: `collaborator`,
+                tier: `collaborator`,
                 manages: [],
                 acceptedAt: null,
                 inviteExpiresAt: new Date(`2099-01-01T00:00:00Z`),
@@ -77,7 +77,7 @@ describe(`invite routes`, () => {
 
         const result = await call(
             inviteRoutes.create,
-            { sandboxId: `s1`, email: `Guest@Example.com`, role: `collaborator` },
+            { sandboxId: `s1`, email: `Guest@Example.com`, tier: `collaborator` },
             { context: context({ prisma }) },
         );
 
@@ -86,16 +86,18 @@ describe(`invite routes`, () => {
             create: {
                 sandboxId: `s1`,
                 email: `guest@example.com`,
-                role: `collaborator`,
+                tier: `collaborator`,
                 manages: [],
                 inviteToken: expect.any(String),
                 inviteExpiresAt: expect.any(Date),
             },
-            update: { role: `collaborator`, manages: [], inviteToken: expect.any(String), inviteExpiresAt: expect.any(Date) },
+            update: { tier: `collaborator`, manages: [], inviteToken: expect.any(String), inviteExpiresAt: expect.any(Date) },
         });
         expect(result.members).toEqual([
             {
                 email: `guest@example.com`,
+                tier: `collaborator`,
+                // Beside `tier` for one release, for an editor from before the rename.
                 role: `collaborator`,
                 status: `pending`,
                 invitedAt: `2020-01-01T00:00:00.000Z`,
@@ -120,7 +122,7 @@ describe(`invite routes`, () => {
 
         const result = await call(
             inviteRoutes.create,
-            { sandboxId: `s1`, email: `guest@example.com`, role: `viewer` },
+            { sandboxId: `s1`, email: `guest@example.com`, tier: `viewer` },
             { context: context({ prisma, logger, config: mailConfig(`https://app.test`) } as unknown as Partial<OrpcContext>) },
         );
 
@@ -148,7 +150,7 @@ describe(`invite routes`, () => {
 
         const result = await call(
             inviteRoutes.create,
-            { sandboxId: `s1`, email: `guest@example.com`, role: `viewer` },
+            { sandboxId: `s1`, email: `guest@example.com`, tier: `viewer` },
             { context: context({ prisma, config: mailConfig(`https://localhost:47145`) } as Partial<OrpcContext>) },
         );
 
@@ -257,7 +259,7 @@ describe(`invite routes`, () => {
     it(`invite.preview names the tier the link grants, so the accept page can say what is being accepted`, async () => {
         const memberRow = {
             email: `guest@example.com`,
-            role: `viewer`,
+            tier: `viewer`,
             acceptedAt: null,
             inviteExpiresAt: new Date(`2099-01-01T00:00:00Z`),
             sandbox: sandboxRow,
@@ -267,6 +269,7 @@ describe(`invite routes`, () => {
             status: `pending`,
             sandboxName: `dev`,
             invitedEmail: `guest@example.com`,
+            tier: `viewer`,
             role: `viewer`,
         });
     });
@@ -278,11 +281,11 @@ describe(`invite routes`, () => {
 });
 
 // A roster row as the mirror stores it; accepted unless said otherwise.
-const memberRow = (email: string, role: string, options: { manages?: string[]; accepted?: boolean } = {}) => ({
+const memberRow = (email: string, tier: string, options: { manages?: string[]; accepted?: boolean } = {}) => ({
     id: `m-${email}`,
     sandboxId: `s1`,
     email,
-    role,
+    tier,
     manages: options.manages ?? [],
     inviteToken: null,
     inviteExpiresAt: null,
@@ -323,16 +326,20 @@ describe(`invite routes for someone other than the owner`, () => {
     it(`Full access runs the roster as the owner does, their own row included`, async () => {
         const { prisma, upsert, update, deleteMany } = rosterOf([memberRow(lead, `maintainer`), memberRow(`dev@example.com`, `collaborator`)]);
 
-        await call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, role: `maintainer` }, asCaller(lead, prisma));
+        await call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, tier: `maintainer` }, asCaller(lead, prisma));
         expect(upsert).toHaveBeenCalledWith(
-            expect.objectContaining({ create: expect.objectContaining({ email: `new@example.com`, role: `maintainer`, manages: [] }) }),
+            expect.objectContaining({ create: expect.objectContaining({ email: `new@example.com`, tier: `maintainer`, manages: [] }) }),
         );
 
-        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: `dev@example.com`, role: `writer`, manages: [`secrets`] }, asCaller(lead, prisma));
-        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-dev@example.com` }, data: { role: `writer`, manages: [`secrets`] } });
+        await call(inviteRoutes.setTier, { sandboxId: `s1`, email: `dev@example.com`, tier: `writer`, manages: [`secrets`] }, asCaller(lead, prisma));
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-dev@example.com` }, data: { tier: `writer`, manages: [`secrets`] } });
 
-        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: lead, role: `collaborator` }, asCaller(lead, prisma));
-        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-${lead}` }, data: { role: `collaborator`, manages: [] } });
+        await call(inviteRoutes.setTier, { sandboxId: `s1`, email: lead, tier: `collaborator` }, asCaller(lead, prisma));
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-${lead}` }, data: { tier: `collaborator`, manages: [] } });
+
+        // An editor from before the rename (2026-11-18) still re-grades through the old route, naming the tier `role`.
+        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: `dev@example.com`, role: `viewer` }, asCaller(lead, prisma));
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-dev@example.com` }, data: { tier: `viewer`, manages: [] } });
 
         // Revoking their own row is them leaving.
         await call(inviteRoutes.revoke, { sandboxId: `s1`, email: lead }, asCaller(lead, prisma));
@@ -343,17 +350,17 @@ describe(`invite routes for someone other than the owner`, () => {
         const { prisma, upsert } = rosterOf([memberRow(helper, `collaborator`, { manages: [`people`] })]);
 
         const listed = await call(inviteRoutes.list, { sandboxId: `s1` }, asCaller(helper, prisma));
-        expect(listed.members[0]).toEqual(expect.objectContaining({ email: helper, role: `collaborator`, manages: [`people`] }));
+        expect(listed.members[0]).toEqual(expect.objectContaining({ email: helper, tier: `collaborator`, manages: [`people`] }));
 
-        const sent = await call(inviteRoutes.create, { sandboxId: `s1`, email: `Guest@Example.com`, role: `viewer` }, asCaller(helper, prisma));
+        const sent = await call(inviteRoutes.create, { sandboxId: `s1`, email: `Guest@Example.com`, tier: `viewer` }, asCaller(helper, prisma));
         expect(sent.delivery).toBe(`unconfigured`);
         expect(upsert).toHaveBeenLastCalledWith(
-            expect.objectContaining({ create: expect.objectContaining({ email: `guest@example.com`, role: `viewer`, manages: [] }) }),
+            expect.objectContaining({ create: expect.objectContaining({ email: `guest@example.com`, tier: `viewer`, manages: [] }) }),
         );
 
         await call(
             inviteRoutes.create,
-            { sandboxId: `s1`, email: `peer@example.com`, role: `collaborator`, manages: [`people`] },
+            { sandboxId: `s1`, email: `peer@example.com`, tier: `collaborator`, manages: [`people`] },
             asCaller(helper, prisma),
         );
         expect(upsert).toHaveBeenLastCalledWith(expect.objectContaining({ create: expect.objectContaining({ manages: [`people`] }) }));
@@ -367,10 +374,10 @@ describe(`invite routes for someone other than the owner`, () => {
         ]);
         const as = asCaller(helper, prisma);
 
-        await expectOrpcCode(call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, role: `maintainer` }, as), `FORBIDDEN`);
-        await expectOrpcCode(call(inviteRoutes.create, { sandboxId: `s1`, email: `invited-lead@example.com`, role: `viewer` }, as), `FORBIDDEN`);
+        await expectOrpcCode(call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, tier: `maintainer` }, as), `FORBIDDEN`);
+        await expectOrpcCode(call(inviteRoutes.create, { sandboxId: `s1`, email: `invited-lead@example.com`, tier: `viewer` }, as), `FORBIDDEN`);
         await expectOrpcCode(call(inviteRoutes.resend, { sandboxId: `s1`, email: `invited-lead@example.com` }, as), `FORBIDDEN`);
-        await expectOrpcCode(call(inviteRoutes.setRole, { sandboxId: `s1`, email: lead, role: `viewer` }, as), `FORBIDDEN`);
+        await expectOrpcCode(call(inviteRoutes.setTier, { sandboxId: `s1`, email: lead, tier: `viewer` }, as), `FORBIDDEN`);
         await expectOrpcCode(call(inviteRoutes.revoke, { sandboxId: `s1`, email: lead }, as), `FORBIDDEN`);
         expect(upsert).not.toHaveBeenCalled();
         expect(update).not.toHaveBeenCalled();
@@ -380,7 +387,7 @@ describe(`invite routes for someone other than the owner`, () => {
     it(`People & access never changes its holder's own row`, async () => {
         const { prisma, update, deleteMany } = rosterOf([memberRow(helper, `collaborator`, { manages: [`people`] })]);
 
-        await expectOrpcCode(call(inviteRoutes.setRole, { sandboxId: `s1`, email: helper, role: `writer` }, asCaller(helper, prisma)), `FORBIDDEN`);
+        await expectOrpcCode(call(inviteRoutes.setTier, { sandboxId: `s1`, email: helper, tier: `writer` }, asCaller(helper, prisma)), `FORBIDDEN`);
         await expectOrpcCode(call(inviteRoutes.revoke, { sandboxId: `s1`, email: `Helper@Example.com` }, asCaller(helper, prisma)), `FORBIDDEN`);
         expect(update).not.toHaveBeenCalled();
         expect(deleteMany).not.toHaveBeenCalled();
@@ -394,19 +401,19 @@ describe(`invite routes for someone other than the owner`, () => {
         const as = asCaller(helper, prisma);
 
         const refused = await expectOrpcCode(
-            call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, role: `viewer`, manages: [`secrets`] }, as),
+            call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, tier: `viewer`, manages: [`secrets`] }, as),
             `FORBIDDEN`,
         );
         expect(refused.message).toContain(`secrets`);
         expect(upsert).not.toHaveBeenCalled();
 
         // The row already ran its secrets; re-grading it keeps them whether the list is left out or repeated.
-        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: `keeper@example.com`, role: `writer` }, as);
-        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-keeper@example.com` }, data: { role: `writer`, manages: [`secrets`] } });
-        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: `keeper@example.com`, role: `writer`, manages: [`secrets`, `people`] }, as);
-        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-keeper@example.com` }, data: { role: `writer`, manages: [`secrets`, `people`] } });
+        await call(inviteRoutes.setTier, { sandboxId: `s1`, email: `keeper@example.com`, tier: `writer` }, as);
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-keeper@example.com` }, data: { tier: `writer`, manages: [`secrets`] } });
+        await call(inviteRoutes.setTier, { sandboxId: `s1`, email: `keeper@example.com`, tier: `writer`, manages: [`secrets`, `people`] }, as);
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-keeper@example.com` }, data: { tier: `writer`, manages: [`secrets`, `people`] } });
         await expectOrpcCode(
-            call(inviteRoutes.setRole, { sandboxId: `s1`, email: `keeper@example.com`, role: `writer`, manages: [`secrets`, `privacy`] }, as),
+            call(inviteRoutes.setTier, { sandboxId: `s1`, email: `keeper@example.com`, tier: `writer`, manages: [`secrets`, `privacy`] }, as),
             `FORBIDDEN`,
         );
     });
@@ -420,7 +427,7 @@ describe(`invite routes for someone other than the owner`, () => {
         for (const email of [`dev@example.com`, `pending@example.com`, `pending-helper@example.com`, `stranger@example.com`]) {
             await expectOrpcCode(call(inviteRoutes.list, { sandboxId: `s1` }, asCaller(email, prisma)), `NOT_FOUND`);
             await expectOrpcCode(
-                call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, role: `viewer` }, asCaller(email, prisma)),
+                call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, tier: `viewer` }, asCaller(email, prisma)),
                 `NOT_FOUND`,
             );
             await expectOrpcCode(call(inviteRoutes.revoke, { sandboxId: `s1`, email: `dev@example.com` }, asCaller(email, prisma)), `NOT_FOUND`);
@@ -439,7 +446,7 @@ describe(`invite routes for someone other than the owner`, () => {
             memberRow(`keeper@example.com`, `collaborator`, { manages: [`people`] }),
         ]);
 
-        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: `keeper@example.com`, role: `guest` }, asCaller(lead, prisma));
-        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-keeper@example.com` }, data: { role: `guest`, manages: [] } });
+        await call(inviteRoutes.setTier, { sandboxId: `s1`, email: `keeper@example.com`, tier: `guest` }, asCaller(lead, prisma));
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-keeper@example.com` }, data: { tier: `guest`, manages: [] } });
     });
 });

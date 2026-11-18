@@ -12,7 +12,7 @@ import type { HookPlace } from "../guard/settings-hooks.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { fileSafetyPolicyStore } from "../safety/safety-policy-store.js";
-import { commandPolicyLines, memoryOwnerGrants } from "../personas/owner-grants.js";
+import { commandPolicyLines, memoryOwnerGrants } from "../roles/owner-grants.js";
 import { testConfig } from "../env.config.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 
@@ -102,9 +102,9 @@ test("taking back an extension sends it back to waiting for a yes and deletes no
 
 test("a conversation's yes and an owner-wide one of the same word never meet", async () => {
     const { client, svc } = await withOwnerWideYeses();
-    await svc.conversationGrants.add("conv-1", { subject: "folder", what: LINE }, "ada@acme.dev");
+    await svc.conversationGrants.add("conv-1", { subject: "secret", what: LINE }, "ada@acme.dev");
     // The conversation kind still needs its conversation; an owner-wide kind never takes one.
-    expect(await errorCode(client.needs.revokeGrant({ conversationId: "conv-1", kind: "folder", what: "elsewhere" }))).toBe("NOT_FOUND");
+    expect(await errorCode(client.needs.revokeGrant({ conversationId: "conv-1", kind: "secret", what: "elsewhere" }))).toBe("NOT_FOUND");
     expect(await client.needs.revokeGrant({ kind: "command-policy", what: LINE })).toEqual({ ok: true });
-    expect((await client.needs.grants()).conversations).toMatchObject([{ conversationId: "conv-1", folders: [LINE] }]);
+    expect((await client.needs.grants()).conversations).toMatchObject([{ conversationId: "conv-1", secrets: [LINE] }]);
 });

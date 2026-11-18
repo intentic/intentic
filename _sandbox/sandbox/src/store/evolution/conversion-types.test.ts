@@ -17,11 +17,11 @@ const settingsSchema = z.object({
     labels: z.record(z.string(), z.object({ colour: z.string() })).optional(),
 });
 const plain = defineDocument({ path: "evolution/settings.json", schema: settingsSchema });
-const converted = defineDocument({ path: "evolution/converted.json", schema: settingsSchema, history: [rename("personaRouting", "routing"), drop("legacy")] });
+const converted = defineDocument({ path: "evolution/converted.json", schema: settingsSchema, history: [rename("roleRouting", "routing"), drop("legacy")] });
 const stepped = defineDocument({ path: "evolution/stepped.json", schema: settingsSchema, movedByStep: ["agent.token"] });
 
 type Old = {
-    personaRouting?: string;
+    roleRouting?: string;
     legacy?: boolean;
     agent?: { model: string; token?: string; temperature?: number };
     pins?: { id: string; pinnedAt?: number }[];
@@ -29,12 +29,12 @@ type Old = {
 };
 
 test("a key renamed or removed without its conversion is named, at any depth, by its dotted path", () => {
-    expect(holds<Same<VanishedKeys<Old, typeof plain>, "personaRouting" | "legacy" | "agent.token" | "agent.temperature" | "pins.[].pinnedAt" | "labels.{}.hue">>()).toBeUndefined();
+    expect(holds<Same<VanishedKeys<Old, typeof plain>, "roleRouting" | "legacy" | "agent.token" | "agent.temperature" | "pins.[].pinnedAt" | "labels.{}.hue">>()).toBeUndefined();
 });
 
 test("a rename or a drop in the history, or a step that moves the key, answers for it", () => {
     expect(holds<Same<VanishedKeys<Old, typeof converted>, "agent.token" | "agent.temperature" | "pins.[].pinnedAt" | "labels.{}.hue">>()).toBeUndefined();
-    expect(holds<Same<VanishedKeys<Old, typeof stepped>, "personaRouting" | "legacy" | "agent.temperature" | "pins.[].pinnedAt" | "labels.{}.hue">>()).toBeUndefined();
+    expect(holds<Same<VanishedKeys<Old, typeof stepped>, "roleRouting" | "legacy" | "agent.temperature" | "pins.[].pinnedAt" | "labels.{}.hue">>()).toBeUndefined();
 });
 
 // A value mapped under a key the old shape may lack altogether, as a conversation record's queue is.

@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { useAudience } from "../app/useAudience";
 import { desktopNotices } from "../app/environments/desktopNotices";
 import { localFace } from "../app/environments/local";
-import { useRole } from "../client/sandbox/useRole";
+import { useTier } from "../client/sandbox/useTier";
 import { useAccess } from "../client/sandbox/access/useAccess";
 import { useOrgPolicy } from "../features/organisations/useOrgPolicy";
 import { SETTINGS_CARDS, settingsPages, settingsPageTerms } from "../features/settings/settingsIndex";
@@ -20,13 +20,13 @@ import type { HubPage, HubReader, HubSource } from "../workbench/hub/hubSearch";
 import type { HubSearchSources } from "../workbench/hub/useHubSearch";
 
 // The two hubs' pages and cards as THIS reader may open them: what the hub's own search field and the palette both
-// answer from. Gated by the same tables, the same role and the same plan the hubs draw their indexes from, so an answer
+// answer from. Gated by the same tables, the same tier and the same plan the hubs draw their indexes from, so an answer
 // never names a page the hub would bounce the reader off (useNavigationCommands.ts gates its destinations the same way).
 // Here rather than beside the search (workbench/hub/useHubSearch.ts) because it names both hubs and the models behind
 // them, which the workbench sits below; main.ts hands it down.
 
 export function useHubSearchSources(): HubSearchSources {
-    const { canShip, isGuest } = useRole();
+    const { canShip, isGuest } = useTier();
     // The sections a part of the sandbox given to the reader opens below maintainer (sandboxNav.ts `right`).
     const { holds } = useAccess();
     const { hidden: orgHidden } = useOrgPolicy();

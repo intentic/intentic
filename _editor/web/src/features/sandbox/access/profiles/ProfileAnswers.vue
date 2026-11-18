@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AccessProfile } from "@intentic/sandbox-contract/schemas/access-profiles";
 import type { AgentAccess } from "@intentic/sandbox-contract/schemas/members";
-import { PersonaFace, Section, SegmentedControl } from "@intentic/ui";
+import { RoleFace, Section, SegmentedControl } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -10,12 +10,13 @@ import EditPicker from "../EditPicker.vue";
 import ReachPicker from "../ReachPicker.vue";
 import AiAccountsPicker from "../ai-accounts/AiAccountsPicker.vue";
 import MultiPick from "../pick/MultiPick.vue";
-import { usePersonaReach } from "../usePersonaReach";
+import { useRoleReach } from "../useRoleReach";
+import { useRoles } from "../../../../models/sandbox/roles/useRoles";
 import ToolCeilingPicker from "./ToolCeilingPicker.vue";
 const { profile, disabled = false } = defineProps<{ profile: AccessProfile; disabled?: boolean }>();
 const emit = defineEmits<{ change: [profile: AccessProfile] }>();
 const t = useT();
-const { reach } = usePersonaReach();
+const { reach } = useRoleReach();
 const set = (change: Partial<AccessProfile>): void => emit(`change`, { ...profile, ...change });
 const agents = computed(() =>
     ([`off`, `chat`, `run`, `home`] as const).map((value) => ({ value, label: t(`sandbox.accessProfiles.agents_${value}`) })),
@@ -31,11 +32,17 @@ const pickAreas = (areas: string[] | undefined): void => {
     set({
         areas,
         edit: areas === undefined || edit === undefined ? edit : edit === `all` ? areas : edit.filter((id) => areas.includes(id)),
-        assistants: profile.assistants?.filter((id) => reach(areas).some((persona) => persona.id === id)),
+        assistants: profile.assistants?.filter((id) => reach(areas).some((role) => role.id === id)),
     });
 };
 const assistantSections = computed(() => [
-    { key: `assistants`, entries: reach(profile.areas).map((persona) => ({ value: persona.id, label: persona.label ?? persona.id })) },
+    { key: `assistants`, entries: reach(profile.areas).map((role) => ({ value: role.id, label: role.label ?? role.id })) },
+]);
+// The role cards it holds: a conversation wearing one reaches no more than this profile, whoever it works for. A card is
+// listed here rather than pointing here itself, since the card sits in the workspace where a conversation could edit it.
+const { roles } = useRoles();
+const roleSections = computed(() => [
+    { key: `roles`, entries: roles.value.map((role) => ({ value: role.id, label: role.label ?? role.id })) },
 ]);
 const modes = computed(() => [
     { value: `all`, label: t(`sandbox.accessProfiles.allAssistants`) },
@@ -77,6 +84,19 @@ const modes = computed(() => [
         <Section :label="t(`sandbox.accessProfiles.tools`)"
             ><ToolCeilingPicker :tools="profile.tools" :disabled="disabled" @change="set({ tools: $event })"
         /></Section>
+        <Section :label="t(`sandbox.accessProfiles.roles`)">
+            <p class="m-0 text-xs text-subtle">{{ t(`sandbox.accessProfiles.rolesHint`) }}</p>
+            <MultiPick
+                :sections="roleSections"
+                :picked="profile.roles ?? []"
+                :disabled="disabled"
+                :aria-label="t(`sandbox.accessProfiles.roles`)"
+                :search-label="t(`sandbox.accessProfiles.roles`)"
+                @change="set({ roles: $event.length === 0 ? undefined : $event })"
+                ><template #mark="{ value, size }"
+                    ><RoleFace :role="roles.find((role) => role.id === value) ?? { id: value }" :size="size" /></template
+            ></MultiPick>
+        </Section>
         <Section v-if="profile.agents === `chat`" :label="t(`sandbox.accessProfiles.assistants`)">
             <SegmentedControl
                 :model-value="profile.assistants === undefined ? `all` : `some`"
@@ -92,7 +112,7 @@ const modes = computed(() => [
                 :search-label="t(`sandbox.accessProfiles.assistants`)"
                 @change="set({ assistants: $event })"
                 ><template #mark="{ value, size }"
-                    ><PersonaFace :persona="reach(profile.areas).find((persona) => persona.id === value) ?? { id: value }" :size="size" /></template
+                    ><RoleFace :role="reach(profile.areas).find((role) => role.id === value) ?? { id: value }" :size="size" /></template
             ></MultiPick>
         </Section>
     </fieldset>

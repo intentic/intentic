@@ -3,7 +3,8 @@ import { z } from "zod";
 import { SystemPromptModeSchema } from "./settings.js";
 
 // Every section names its mechanism: the reader asks "did my AGENTS.md arrive", not "what does paragraph nine say".
-export const PromptSectionSourceSchema = z.enum(["guidance", "persona", "memory"]);
+// "role" was "persona" until personas were renamed roles (2026-11-18), which a daemon from before still answers.
+export const PromptSectionSourceSchema = z.preprocess((source) => (source === "persona" ? "role" : source), z.enum(["guidance", "role", "memory"]));
 export type PromptSectionSource = z.infer<typeof PromptSectionSourceSchema>;
 
 export const PromptSectionSchema = z.object({

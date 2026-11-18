@@ -8,7 +8,7 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useAudience } from "../../../../app/useAudience";
 import { here, page } from "../../../../lib/routes/links";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { attentionReason, reviewAction } from "../../../../models/agent-status/agentStatus-attention";
 import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
 import { landFromMenu } from "../../../../models/fleet/presses/landPress";
@@ -26,7 +26,7 @@ const props = defineProps<{ agent: FleetAgent; strip: LandStrip }>();
 const t = useT();
 const words = useVocabulary();
 const router = useRouter();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { maker } = useAudience();
 const { mobile } = useDevice();
 

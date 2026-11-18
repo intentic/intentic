@@ -23,11 +23,11 @@ import { localInputOf } from "../cronSchedule";
 import ConditionFields from "../fields/ConditionFields.vue";
 import VisitorChatFields from "../fields/VisitorChatFields.vue";
 import { host } from "../host";
-import { usePersonaDefault } from "../persona/usePersonaDefault";
+import { useRoleDefault } from "../role/useRoleDefault";
 import GateProperty from "../properties/GateProperty.vue";
 import GroupProperty from "../properties/GroupProperty.vue";
 import ModelProperty from "../properties/ModelProperty.vue";
-import PersonaProperty from "../properties/PersonaProperty.vue";
+import RoleProperty from "../properties/RoleProperty.vue";
 import ServiceProperty from "../properties/ServiceProperty.vue";
 import { type AutomationChange, provideDraftWriter } from "../properties/useAutomationPatch";
 import { embedSnippet, useAutomations, useSandboxZone, webhookUrl } from "../useAutomations";
@@ -58,7 +58,7 @@ const state = useAutomationForm(
 const { form, touched, markTouched, touchAll, valid, build, loadTemplate, isVisitorChat, retireOffered, targetsOffered, needsModels, effectiveTarget } = state;
 // Who a new automation acts as follows its trigger until the picker is touched: Full access for a plain schedule, No
 // accounts for anything that brings outside words in.
-usePersonaDefault(form, touched);
+useRoleDefault(form, touched);
 
 // It starts on the model this sandbox gives automations, said in its column like any other value, rather than on a blank
 // that refuses Create until somebody finds the picker.
@@ -142,8 +142,8 @@ const write = (change: AutomationChange): void => {
 };
 provideDraftWriter(write);
 
-// Who it acts as matters wherever something runs: a new agent, or a check command run with that persona's credentials.
-const personaShown = computed(() => needsModels.value || form.condition === `guard`);
+// Who it acts as matters wherever something runs: a new agent, or a check command run with that role's credentials.
+const roleShown = computed(() => needsModels.value || form.condition === `guard`);
 
 /* ---- its head ---- */
 
@@ -321,7 +321,7 @@ const promptPlaceholder = computed(() =>
                                 <EndsProperty v-if="retireOffered" :state="state" />
                                 <ThenProperty v-if="targetsOffered" :state="state" />
                                 <ServiceProperty v-if="needsModels" :automation="summary" />
-                                <PersonaProperty v-if="personaShown" :automation="summary" />
+                                <RoleProperty v-if="roleShown" :automation="summary" />
                                 <template v-if="needsModels">
                                     <ModelProperty :automation="summary" />
                                     <p v-if="touched.has(`models`) && state.modelsError.value" class="text-xs text-danger">{{ state.modelsError.value }}</p>

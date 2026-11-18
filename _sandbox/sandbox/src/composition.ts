@@ -23,7 +23,7 @@ import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./c
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
-import { filePersonasStore, personasDocument, type PersonasStore } from "./personas/personas-store.js";
+import { fileRolesStore, rolesDocument, type RolesStore } from "./roles/roles-store.js";
 import { areasDocument, type AreasStore, fileAreasStore } from "./areas/areas-store.js";
 import { deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
@@ -131,8 +131,8 @@ import { accessRosterOf } from "./access/invariant.js";
 import { type BrokerSlice, createBrokerSlice } from "./capabilities/broker/broker-slice.js";
 import { createPrivacySlice, type PrivacySlice } from "./privacy/privacy-slice.js";
 import { grantsChanged } from "./needs/standing-grants.js";
-import { type ConversationGrants, conversationGrantsDocument, fileConversationGrants } from "./personas/conversation-grants.js";
-import { commandPolicyLines, fileOwnerGrants, type OwnerGrants, ownerGrantsDocument } from "./personas/owner-grants.js";
+import { type ConversationGrants, conversationGrantsDocument, fileConversationGrants } from "./roles/conversation-grants.js";
+import { commandPolicyLines, fileOwnerGrants, type OwnerGrants, ownerGrantsDocument } from "./roles/owner-grants.js";
 import { createExtensionsSlice, type ExtensionsSlice } from "./extensions/extensions-slice.js";
 import { type AutomationsSlice, createAutomationsSlice, type IntakeMembers } from "./automations/automations-slice.js";
 import type { LoopsSlice, WorkflowsMembers } from "./loops/loops-slice.js";
@@ -219,9 +219,9 @@ export interface Services
     readonly trial: TrialService;
     // Loopback TLS terminator for a dev platform; awaited by the translator's render so the address isn't a race.
     readonly platformTunnel: PlatformTunnel;
-    // Named personas this sandbox shows outside; the turn path reads it to decide what a wake may act through.
-    readonly personas: PersonasStore;
-    // What a person allowed one conversation beyond its persona, from a grant need's card; read as its turns are planned.
+    // Named roles this sandbox shows outside; the turn path reads it to decide what a wake may act through.
+    readonly roles: RolesStore;
+    // What a person allowed one conversation beyond its role, from a grant need's card; read as its turns are planned.
     readonly conversationGrants: ConversationGrants;
     // Yeses that name no conversation (a command policy line allowed with Always), kept beside the conversation grants.
     readonly ownerGrants: OwnerGrants;
@@ -642,6 +642,9 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
     // here, before the gates that hold their cards on it (guard/held-asks.ts).
     const heldCards = createHeldCards(heldCardWake(whole, logger));
     const hold = turnHold(heldCards, conversations);
+    const roles = fileRolesStore(join(workspace.root, rolesDocument.path), (id, reason) =>
+        logger.warn(`roles: skipping unreadable card "${id}" (${reason}), the rest are unaffected`),
+    );
     const secretsSlice = createSecretsSlice({
         workspace,
         authRoot,
@@ -652,7 +655,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         conversationGrants,
         // The same host the extension enumerators read, so a connector's hosts come from exactly the installed set.
         ...secretHostSources({ workspace, files: workspaceSlice.files, capabilities, config }, capabilitiesParts),
-        ...principalsOfAuth(authSlice, orgPolicy),
+        ...principalsOfAuth(authSlice, orgPolicy, roles),
         conversationEntry: agents.entry,
         warn: (message, error) => logger.warn({ err: error }, message),
         ...keyringReach(whole, config),
@@ -677,9 +680,6 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         served: { workspace, files: workspaceSlice.files, capabilities, config },
         declared: capabilitiesParts.manifestHost,
     });
-    const personas = filePersonasStore(join(workspace.root, personasDocument.path), (id, reason) =>
-        logger.warn(`personas: skipping unreadable card "${id}" (${reason}), the rest are unaffected`),
-    );
     const areas = fileAreasStore(join(workspace.root, areasDocument.path), (id, reason) =>
         logger.warn(`areas: skipping unreadable area "${id}" (${reason}); anyone fenced to it reaches nothing until it parses`),
     );
@@ -801,7 +801,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         }),
         trial,
         platformTunnel,
-        personas,
+        roles,
         conversationGrants,
         ownerGrants,
         areas,
@@ -834,7 +834,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         remoteTurns: services.remoteTurns,
         areas,
         ...accessRosterOf(services),
-        personas,
+        roles,
         manifest: capabilitiesParts.manifest,
         connectors: capabilitiesParts.connectors,
         // The decorated store, since the exit checks read kind and a country code, never a credential.

@@ -70,7 +70,7 @@ export interface RowRevealOptions {
     readonly wait?: number;
     /**
      * Whether a row that arrives after the opening plays in too, on its own (several at once in their order): a new
-     * item on a checklist, a chat starting in a lane, a whole persona's lanes swapped in. Off, later rows are the
+     * item on a checklist, a chat starting in a lane, a whole role's lanes swapped in. Off, later rows are the
      * caller's to animate (the board's lanes have an entrance of their own) or simply appear.
      */
     readonly arrivals?: boolean;

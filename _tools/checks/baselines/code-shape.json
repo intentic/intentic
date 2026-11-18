@@ -2018,11 +2018,11 @@
         "count": 125,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/needs/kinds/grant-need.ts#onPersona#cognitive": {
+    "_sandbox/sandbox/src/needs/kinds/grant-need.ts#onRole#cognitive": {
         "count": 25,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/sandbox/src/needs/kinds/grant-need.ts#onPersona#cyclomatic": {
+    "_sandbox/sandbox/src/needs/kinds/grant-need.ts#onRole#cyclomatic": {
         "count": 24,
         "why": "standing when the check arrived (2026-10-16)"
     },
@@ -2082,7 +2082,7 @@
         "count": 29,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/sandbox/src/personas/conversation-grants.ts#grantsOver#lines": {
+    "_sandbox/sandbox/src/roles/conversation-grants.ts#grantsOver#lines": {
         "count": 131,
         "why": "standing when the check arrived (2026-10-16)"
     },

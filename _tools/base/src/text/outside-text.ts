@@ -91,7 +91,7 @@ const MARKER = /<\s*(?:\/\s*)?untrusted[\s_-]+content\b[^>]*>/gi;
 // Same shape cut off at the body's end; no marker prefix may sit immediately before a real close tag.
 const MARKER_TAIL = /<\s*(?:\/\s*)?untrusted[\s_-]+content\b[^>]*$/i;
 
-// The harness's own tags; a page with one is quoting or impersonating it, and an inert token serves either.
+// The harness's own tags; a page with one is quoting or imroleting it, and an inert token serves either.
 const CONTROL_TAGS = ["system-reminder", "task-notification", "command-name", "command-message", "command-args", "local-command-stdout"];
 const CONTROL = new RegExp(String.raw`<\s*(?:/\s*)?(?:${CONTROL_TAGS.join("|")})\b[^>]*>`, "gi");
 
@@ -141,7 +141,7 @@ const replaceFolded = (original: string, folded: Folded, pattern: RegExp): strin
     return out + original.slice(cursor);
 };
 
-// Neutralizes anything in `body` that could impersonate a marker or the harness inside an envelope; idempotent, since
+// Neutralizes anything in `body` that could imrolete a marker or the harness inside an envelope; idempotent, since
 // the replacement token matches none of the patterns.
 export const neutralizeOutsideText = (body: string): string => {
     let text = body;

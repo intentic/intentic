@@ -30,7 +30,7 @@ const routesOn = (mode: SandboxMode = "hands-on") =>
 const as = (email: string | undefined) => {
     const context: OrpcContext = { headers: new Headers(), method: "POST", url: "/settings/audience" };
     if (email !== undefined) {
-        const identity: ProvenCaller = { email, role: "collaborator", methods: ["google"] };
+        const identity: ProvenCaller = { email, tier: "collaborator", methods: ["google"] };
         context.identity = identity;
     }
     return { context };

@@ -62,12 +62,12 @@ pub struct Refusal {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<RefusalReason>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub floor: Option<MemberRole>,
+    pub floor: Option<MemberTier>,
 }
 
 open_enum! {
-    /// A person's tier on a sandbox, lowest first (`MemberRoleSchema`).
-    pub enum MemberRole {
+    /// A person's tier on a sandbox, lowest first (`MemberTierSchema`).
+    pub enum MemberTier {
         Guest = "guest",
         Viewer = "viewer",
         Collaborator = "collaborator",

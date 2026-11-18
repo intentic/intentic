@@ -1,5 +1,5 @@
 import { holdsRight, MANAGE_RIGHTS, type ManageRight } from "@intentic/sandbox-contract/schemas/members";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import { ORPCError } from "@orpc/server";
 import type { OrpcContext } from "./context.js";
 import { storedGrant } from "./invite/invites.js";
@@ -47,7 +47,7 @@ export const requireOwnedSandbox = async (context: OrpcContext, sandboxId: strin
     return sandbox;
 };
 
-/* Whether the caller runs this sandbox as its owner does, and in which role: its owner, or a person who accepted an invite
+/* Whether the caller runs this sandbox as its owner does, and at which tier: its owner, or a person who accepted an invite
  * with Full access (the maintainer tier). 404 otherwise, as `requireOwnedSandbox` does. The gate for the sandbox's
  * presentation (its name and switcher logo), which Full access changes as the owner does. (2026-11-04) Came with letting
  * Full access rename and re-logo a sandbox. */
@@ -58,7 +58,7 @@ export const requireFullAccess = async (context: OrpcContext, sandboxId: string)
         return `owner`;
     }
     const member = await context.prisma.sandboxMember.findFirst({
-        where: { sandboxId, email: user.email.toLowerCase(), acceptedAt: { not: null }, role: `maintainer` },
+        where: { sandboxId, email: user.email.toLowerCase(), acceptedAt: { not: null }, tier: `maintainer` },
         select: { sandboxId: true },
     });
     if (member) {
@@ -70,7 +70,7 @@ export const requireFullAccess = async (context: OrpcContext, sandboxId: string)
 // Who is changing a sandbox's access roster, as sandbox-contract `peopleChangeRefusal` reads them.
 export interface RosterManager {
     readonly email: string;
-    readonly role: MemberRole;
+    readonly tier: MemberTier;
     readonly manages: readonly ManageRight[];
 }
 
@@ -85,7 +85,7 @@ export const requireRosterManager = async (context: OrpcContext, sandboxId: stri
     const email = user.email.toLowerCase();
     const sandbox = await context.prisma.sandbox.findUnique({ where: { id: sandboxId } });
     if (sandbox?.ownerId === user.id) {
-        return { sandbox, manager: { email, role: `owner`, manages: MANAGE_RIGHTS } satisfies RosterManager };
+        return { sandbox, manager: { email, tier: `owner`, manages: MANAGE_RIGHTS } satisfies RosterManager };
     }
     if (sandbox) {
         const member = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });

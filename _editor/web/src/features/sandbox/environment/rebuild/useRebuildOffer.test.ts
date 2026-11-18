@@ -4,9 +4,9 @@ import "@intentic/testing/dom";
 import type { HostedBuildState } from "@intentic/api-contract";
 import { ref } from "vue";
 
-const active = ref<{ id: string; role: string; hosted: { region: string; warm: boolean } | null }>({
+const active = ref<{ id: string; tier: string; hosted: { region: string; warm: boolean } | null }>({
     id: `sb1`,
-    role: `owner`,
+    tier: `owner`,
     hosted: { region: `iad`, warm: true },
 });
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
@@ -23,7 +23,7 @@ const { useRebuildOffer } = await import("./useRebuildOffer");
 const { forgetOperations } = await import("../../../../workbench/operations/operations");
 
 afterEach(() => {
-    active.value = { id: `sb1`, role: `owner`, hosted: { region: `iad`, warm: true } };
+    active.value = { id: `sb1`, tier: `owner`, hosted: { region: `iad`, warm: true } };
     pending.value = { hash: `h1`, content: `RUN true` };
     proposal.value = undefined;
     build.value = undefined;
@@ -41,7 +41,7 @@ it(`offers the hosted owner's rebuild, and sends the recipe the card would`, asy
 
 it.each<[string, () => void]>([
     [`a sandbox on a computer, whose rebuild runs there`, () => (active.value = { ...active.value, hosted: null })],
-    [`a reader who is not its owner`, () => (active.value = { ...active.value, role: `maintainer` })],
+    [`a reader who is not its owner`, () => (active.value = { ...active.value, tier: `maintainer` })],
     [`nothing waiting to be built`, () => (pending.value = undefined)],
     [`a proposal still to decide, which the build would leave out`, () => (proposal.value = { hash: `p1`, content: `RUN more` })],
     [`a build of it already under way`, () => (build.value = { state: `building`, hash: `h1`, startedAt: new Date().toISOString() })],

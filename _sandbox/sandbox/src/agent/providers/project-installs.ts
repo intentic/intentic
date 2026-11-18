@@ -21,7 +21,7 @@ import { agentCommand, classifyImageInstalls, type ProjectInstall, projectInstal
 // own installs take (heavy-rules.cjs `dependency-install`), so two never run at once. What lasts is settled at the
 // land: the manifest and lockfile travel with the work, the review lists what it adds, and the reconciler installs it
 // in the main tree. The owner's `projectInstalls` setting only says whether a person is asked, and a person's "allow
-// for this conversation" is kept (personas/conversation-grants.ts), never held in memory only.
+// for this conversation" is kept (roles/conversation-grants.ts), never held in memory only.
 
 const execFileAsync = promisify(execFile);
 
@@ -63,7 +63,7 @@ export interface ProjectInstallGate {
     readonly root: string;
     // Absent reads as automatic, the shipped default.
     readonly mode: ProjectInstallMode | undefined;
-    // The persona's own authority (files write and a shell); without it nothing is asked, only refused.
+    // The role's own authority (files write and a shell); without it nothing is asked, only refused.
     readonly canInstall: boolean;
     // Absent for a turn with no conversation to hold a grant; its card then offers no "for this conversation".
     readonly grants: InstallGrants | undefined;
@@ -301,7 +301,7 @@ const projectsOf = async (placement: InstallPlacement, root: string, installs: r
     return [...named];
 };
 
-// One install command's consult, driven by the command gate. The persona's authority first, the owner's setting
+// One install command's consult, driven by the command gate. The role's authority first, the owner's setting
 // second, and only then where it lands, which decides what is prepared, never whether it runs. Allowed, it tells the
 // chat as it starts.
 export async function* consultProjectInstall(
@@ -314,7 +314,7 @@ export async function* consultProjectInstall(
         return {
             allow: false,
             reason:
-                "This persona cannot change the workspace, so it cannot install dependencies. Do not retry; say what the task " +
+                "This role cannot change the workspace, so it cannot install dependencies. Do not retry; say what the task " +
                 "needs installed and ask the owner.",
         };
     }

@@ -22,7 +22,7 @@ const everything: PersistedAgent = {
             { repo: "root", base: "b".repeat(40), landedTip: "t".repeat(40), landedHead: "h".repeat(40), landedAt: 5, absorbed: 3 },
             { repo: "nested/app", base: "c".repeat(40) },
         ],
-        composition: { persona: "reviewer", repos: ["nested/app"] },
+        composition: { role: "reviewer", repos: ["nested/app"] },
     },
     identity: {
         origin: { automationId: "visitor-chat", provider: "webchat" },

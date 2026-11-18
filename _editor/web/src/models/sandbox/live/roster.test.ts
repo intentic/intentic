@@ -13,7 +13,7 @@ const row = (over: Partial<SandboxSummary>): SandboxSummary =>
         lastSeenAt: null,
         setupCodeClaimedAt: null,
         token: `tok`,
-        role: `owner`,
+        tier: `owner`,
         providedAddress: false,
         hosted: null,
         ...over,
@@ -36,7 +36,7 @@ it(`counts a sandbox that has never checked in as an unfinished setup`, () => {
 
 // Finishing it would open /setup, which starts a sandbox of the member's own rather than resuming somebody else's.
 it(`leaves a shared sandbox its owner never finished off the member's errands`, () => {
-    const shared = row({ id: `shared`, role: `maintainer`, token: null });
+    const shared = row({ id: `shared`, tier: `maintainer`, token: null });
     expect(connectedSandboxes([shared])).toEqual([]);
     expect(unfinishedSandboxes([shared])).toEqual([]);
 });
@@ -81,6 +81,6 @@ it(`lets Home finish the owner's sandbox whose container was removed, alongside 
     const draft = row({ id: `draft` });
     const removed = row({ id: `removed`, lastSeenAt: SEEN, removedAt: SEEN });
     const live = row({ id: `live`, lastSeenAt: SEEN });
-    const sharedRemoved = row({ id: `shared`, role: `maintainer`, lastSeenAt: SEEN, removedAt: SEEN });
+    const sharedRemoved = row({ id: `shared`, tier: `maintainer`, lastSeenAt: SEEN, removedAt: SEEN });
     expect(finishableSandboxes([draft, removed, live, sharedRemoved])).toEqual([draft, removed]);
 });

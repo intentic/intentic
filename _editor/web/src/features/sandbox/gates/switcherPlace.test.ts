@@ -207,7 +207,7 @@ describe(`in a local window`, () => {
             removedAt: null,
             removedBy: null,
             token: null,
-            role: `owner`,
+            tier: `owner`,
             providedAddress: false,
             localHostname: null,
             hosted: null,

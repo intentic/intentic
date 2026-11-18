@@ -11,7 +11,7 @@ import { modelLabelFor } from "../../models/providers/providerCatalog";
 import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useNeedAnswer } from "./needAnswer";
 import { useNeeds } from "../../models/needs/useNeeds";
-import { personaLabel } from "../../models/sandbox/personas/builtInPersonas";
+import { roleLabel } from "../../models/sandbox/roles/builtInRoles";
 
 const t = useT();
 
@@ -95,12 +95,12 @@ const thenWords = computed<string>(() => {
     return target?.kind === `notify` ? t(`needs.automation.notify`) : t(`needs.automation.agent`);
 });
 
-// Who its wakes act as, by name: the persona cards live in the sandbox feature, which this one may not reach
+// Who its wakes act as, by name: the role cards live in the sandbox feature, which this one may not reach
 // (editor-boundaries), so a card is its id. Said for every wake that starts an agent, since naming none is a choice too:
 // an unwatched wake wears No accounts, and Full access is every account the sandbox holds, which is what the person
 // approving this most needs to see. Nothing for a wake that continues a conversation or only notifies.
 const runsAs = (it: Automation): string | undefined =>
-    it.target === undefined || it.target.kind === `agent` ? personaLabel(it.actsAs, [], true) : undefined;
+    it.target === undefined || it.target.kind === `agent` ? roleLabel(it.actsAs, [], true) : undefined;
 
 // Who may set off a listener, by the ids its source vouches for, and what everyone else gets: the line that says whether
 // a stranger's mail can start an agent, which is the first thing to read before approving one.
@@ -111,7 +111,7 @@ const fromWords = (it: Automation): string | undefined => {
     const senders = it.senders.rules
         .flatMap((rule) => {
             const who = [...(rule.ids ?? []), ...(rule.groups ?? [])].join(`, `);
-            return rule.actsAs === it.actsAs ? [who] : [`${who} (${personaLabel(rule.actsAs, [], true)})`];
+            return rule.actsAs === it.actsAs ? [who] : [`${who} (${roleLabel(rule.actsAs, [], true)})`];
         })
         .join(`; `);
     switch (it.senders.others) {
@@ -142,7 +142,7 @@ const facts = computed<readonly { key: string; label: string; value: string; mon
               : it.expiresAt === undefined
                 ? undefined
                 : t(`needs.automation.at`, { date: formatDateTime(it.expiresAt) });
-    const persona = runsAs(it);
+    const role = runsAs(it);
     const models = (it.target === undefined || it.target.kind === `agent`) && it.models !== undefined ? it.models : [];
     return [
         { key: `name`, label: t(`needs.automation.name`), value: it.id, mono: true },
@@ -184,7 +184,7 @@ const facts = computed<readonly { key: string; label: string; value: string; mon
                       value: models.map((pin) => modelLabelFor(pin.provider, pin.model)).join(`, `),
                   },
               ]),
-        ...(persona === undefined ? [] : [{ key: `persona`, label: t(`needs.automation.runsAs`), value: persona }]),
+        ...(role === undefined ? [] : [{ key: `role`, label: t(`needs.automation.runsAs`), value: role }]),
         ...(it.requireApproval === true ? [{ key: `approval`, label: t(`needs.automation.approval`), value: t(`needs.automation.heldForYou`) }] : []),
     ];
 });
@@ -221,7 +221,7 @@ const approve = async (): Promise<void> => {
             </template>
         </dl>
 
-        <!-- A guard is a command that runs with the persona's credentials: shown whole, since that is what is approved. -->
+        <!-- A guard is a command that runs with the role's credentials: shown whole, since that is what is approved. -->
         <Code v-if="automation.guard" :code="automation.guard" lang="bash" wrap :scroll-lines="6" />
 
         <div v-if="firstCheck" class="flex flex-col gap-1">

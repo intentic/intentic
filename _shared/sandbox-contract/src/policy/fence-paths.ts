@@ -39,7 +39,7 @@ export const pathInsideFolder = (folder: string, path: string): boolean => {
 };
 
 // "Change the sandbox" as paths: the daemon's own configuration, and the outbox the internet reads. One list, read by
-// the persona hook that judges a turn's writes and by the area schema that decides what a grant may name.
+// the role hook that judges a turn's writes and by the area schema that decides what a grant may name.
 export const SANDBOX_PATHS: readonly string[] = [STATE_DIR, PUBLIC_DIR];
 
 // Whether a path is one of those folders or sits inside one, by segment: `publications` is not `public`.
@@ -82,7 +82,7 @@ export const fenceCovers = (outer: Fence, inner: Fence): boolean => {
 };
 
 /**
- * The tighter of two fences: what a turn may touch when a persona's folders meet the member's own. Undefined on both
+ * The tighter of two fences: what a turn may touch when a role's folders meet the member's own. Undefined on both
  * sides is the whole workspace; either side alone narrows to itself.
  */
 export const fenceIntersection = (left: Fence, right: Fence): Fence => {

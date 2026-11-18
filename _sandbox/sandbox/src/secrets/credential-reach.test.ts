@@ -19,12 +19,12 @@ import {
 
 const OWNER = "ada@example.com";
 const roster: Member[] = [
-    { email: "bob@example.com", role: "collaborator", credentials: { capabilities: ["github", "reddit"], secrets: ["DATABASE_URL"] } },
-    { email: "cy@example.com", role: "collaborator", credentials: { capabilities: ["github"], secrets: [] } },
-    { email: "dee@example.com", role: "collaborator" },
-    { email: "eve@example.com", role: "maintainer" },
+    { email: "bob@example.com", tier: "collaborator", credentials: { capabilities: ["github", "reddit"], secrets: ["DATABASE_URL"] } },
+    { email: "cy@example.com", tier: "collaborator", credentials: { capabilities: ["github"], secrets: [] } },
+    { email: "dee@example.com", tier: "collaborator" },
+    { email: "eve@example.com", tier: "maintainer" },
     // Managing the sandbox and spending all of it are separate answers: a maintainer may be held to some of it.
-    { email: "fox@example.com", role: "maintainer", credentials: { capabilities: ["github"], secrets: [] } },
+    { email: "fox@example.com", tier: "maintainer", credentials: { capabilities: ["github"], secrets: [] } },
 ];
 
 test("the owner, and a maintainer or a member with no reach on their row, are not limited", () => {
@@ -176,8 +176,8 @@ describe("a conversation running as a service", () => {
 // person's own row, never a service run for them, nor anyone the roster no longer names.
 describe("the AI accounts a person connected themselves", () => {
     const limited: Member[] = [
-        { email: "bob@example.com", role: "collaborator", aiAccounts: ["claude:a"] },
-        { email: "cy@example.com", role: "collaborator", aiAccounts: ["claude:a"] },
+        { email: "bob@example.com", tier: "collaborator", aiAccounts: ["claude:a"] },
+        { email: "cy@example.com", tier: "collaborator", aiAccounts: ["claude:a"] },
     ];
     const connectors = {
         all: async () =>

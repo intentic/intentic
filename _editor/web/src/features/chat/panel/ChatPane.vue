@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import TourMark from "../../tour/TourMark.vue";
-import { Button, FACE_SIZES, Icon, Meter, Notice, PersonaFace, ResponsiveOverlay, type TooltipValue, ui, useDevice } from "@intentic/ui";
+import { Button, FACE_SIZES, Icon, Meter, Notice, RoleFace, ResponsiveOverlay, type TooltipValue, ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, provide, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
@@ -11,7 +11,7 @@ import { stopAgent } from "../../../models/fleet/agentActions";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { conversationView, PANE_VIEW } from "../../../models/conversations/panel/useChat-view";
 import { useChatRoute } from "../routing/chatRoute";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useDriveRefusal } from "../session/driveRefusal";
 import AccessNote from "../../../components/access/AccessNote.vue";
 import { useAudience } from "../../../app/useAudience";
@@ -36,7 +36,7 @@ import ChatFreshDraft from "./pane/ChatFreshDraft.vue";
 import ChatPaneEmpty from "./pane/ChatPaneEmpty.vue";
 import { useComposerSize } from "./pane/composerSize";
 import { useComposerControls } from "./pane/composerControls";
-import { usePanePersona } from "./pane/panePersona";
+import { usePaneRole } from "./pane/paneRole";
 import { useComposerSend } from "./pane/composerSend";
 import { useLimitResend, useScheduledWays } from "./pane/scheduledSend";
 import { useComposerPopovers } from "./pane/composerPopovers";
@@ -63,7 +63,7 @@ import ChatPaneNotices from "./ChatPaneNotices.vue";
 import LeakSelectionReport from "./privacy/LeakSelectionReport.vue";
 import { provideAccountNudge } from "../accounts/accountNudge";
 import ChatPaneStatus from "./ChatPaneStatus.vue";
-import ChatPersonaMenu from "../personas/ChatPersonaMenu.vue";
+import ChatRoleMenu from "../roles/ChatRoleMenu.vue";
 import ChatSubagentBar from "./subagent/ChatSubagentBar.vue";
 import { agentDisplayTitle } from "../../../models/agent-status/agentStatus-meta";
 import { agentSeed } from "../../../models/fleet/useAgents-actions";
@@ -118,7 +118,7 @@ const { reachable, connection } = useSandbox();
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
 const blocked = computed(() => connection.value.failure !== undefined && isBlocked(connection.value.failure));
 const { mobile } = useDevice();
-const { isGuest, canShip } = useRole();
+const { isGuest, canShip } = useTier();
 const readOnly = useDriveRefusal(() => props.conversation.conversationId); // a viewer, a writer with agents off, a seal read-only: one quiet line
 // Plain words name the assistant and simplify shaping controls. Model and effort remain available to non-guests
 // in either audience: the way somebody reads the app does not decide which model they can use.
@@ -135,7 +135,7 @@ const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 const modePill = ref<HTMLElement>();
 const placementPill = ref<HTMLElement>();
 const runThroughPill = ref<HTMLElement>();
-const personaPill = ref<HTMLElement>();
+const rolePill = ref<HTMLElement>();
 // The "send later" pill, which its panel opens over while it rides the row.
 // The overflow's button; also the anchor three pickers fall back to when their own chip isn't in the row.
 const morePill = ref<HTMLElement>();
@@ -212,7 +212,7 @@ const startFrom = useStartFrom(() => props.conversation);
 const {
     modelOpen,
     modeOpen,
-    personaOpen,
+    roleOpen,
     placementOpen,
     laterOpen,
     moreOpen,
@@ -235,7 +235,7 @@ const {
     moreHint,
     modeAnchor,
     placementAnchor,
-    personaAnchor,
+    roleAnchor,
     runThroughAnchor,
     laterOffered,
     openFromMore,
@@ -253,7 +253,7 @@ const {
     pills: {
         mode: modePill,
         placement: placementPill,
-        persona: personaPill,
+        role: rolePill,
         runThrough: runThroughPill,
         more: computed(() => morePill.value ?? composerForm.value),
     },
@@ -287,12 +287,12 @@ const chipRow = computed(() => attachments.value.length > 0 || editorChip.value)
 
 // What the daemon reads the sent message as opening this chat on, asked once on a turnless chat (chatRoute.ts).
 const chatRoute = useChatRoute(() => props.conversation);
-const { personas, pickedPersona, personaName, personaIcon, personaNotice, pickPersona } = usePanePersona({
+const { roles, pickedRole, roleName, roleIcon, roleNotice, pickRole } = usePaneRole({
     conversation: () => props.conversation,
     route: chatRoute,
     isGuest,
     picked: () => {
-        personaOpen.value = false;
+        roleOpen.value = false;
     },
 });
 
@@ -368,12 +368,12 @@ const scheduledWays = useScheduledWays({
     open: laterOpen,
 });
 
-// The row's density cutoffs assume the round send press. A labelled schedule press, persona, run-through or landing pill
+// The row's density cutoffs assume the round send press. A labelled schedule press, role, run-through or landing pill
 // adds width to the right group, so the model's name drops at a wider container before the row breaks in two.
 const wideActions = computed(
     () =>
         (sendShown.value && scheduledLabel.value !== undefined && scheduledLabel.value !== ``) ||
-        inRow.value.persona ||
+        inRow.value.role ||
         inRow.value.runThrough ||
         inRow.value.land ||
         landing.home.value !== undefined,
@@ -445,8 +445,8 @@ const popovers = useComposerPopovers({
     commands: commands.rows,
     input,
     grow,
-    personas,
-    pickPersona,
+    roles,
+    pickRole,
     placement: { remote, shown: placementShown, runners: pairedRunners },
     steered,
     isGuest,
@@ -657,7 +657,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                 <!-- The control row keeps model controls and actions in separate groups. -->
                                 <!-- In a narrow composer every chip is its glyph alone, as square as the presses
                                  beside it (the name is in its label and its sheet), the mic and Send share one slot, and the chips that still
-                                 do not fit scroll inside their own strip instead of breaking the row. A persona's name, a 5-rung meter and a
+                                 do not fit scroll inside their own strip instead of breaking the row. A role's name, a 5-rung meter and a
                                  dead Send were a 375px phone's row and more. The groups can wrap when enlarged text needs more room. -->
                                 <div
                                     class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2.5 pb-2.5 @max-md:gap-x-0.5 @max-md:px-2 @max-md:pb-2"
@@ -747,27 +747,27 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                             <ComposerStartPill :start="startFrom" :conversation="conversation" :ride="inRow.startFrom" :fallback="morePill ?? composerForm" />
                                             <!-- Whether the conversation starts private, before its first message only (ComposerSealPill). -->
                                             <ComposerSealPill :conversation="conversation" />
-                                            <!-- Persona: who the chat is to the outside world. -->
+                                            <!-- Role: who the chat is to the outside world. -->
                                             <button
-                                                v-if="inRow.persona"
-                                                ref="personaPill"
+                                                v-if="inRow.role"
+                                                ref="rolePill"
                                                 type="button"
                                                 class="composer-ghost composer-glyph h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                                 :class="{
                                                     'composer-active': pickedWorkflow === undefined,
                                                     'composer-steered': pickedWorkflow !== undefined,
-                                                    'composer-flash': flashed === 'persona',
+                                                    'composer-flash': flashed === 'role',
                                                 }"
                                                 :disabled="pickedWorkflow !== undefined"
-                                                @click="personaOpen = !personaOpen"
-                                                v-tooltip.top="{ title: t(`chat.chatPane.persona`), note: t(`chat.chatPane.itsAccountsOnly`) }"
-                                                :aria-expanded="personaOpen"
-                                                :aria-label="t(`chat.chatPane.acts`, { personaName })"
+                                                @click="roleOpen = !roleOpen"
+                                                v-tooltip.top="{ title: t(`chat.chatPane.role`), note: t(`chat.chatPane.itsAccountsOnly`) }"
+                                                :aria-expanded="roleOpen"
+                                                :aria-label="t(`chat.chatPane.acts`, { roleName })"
                                             >
-                                                <!-- The persona control shows its face when a persona is selected, at the pill size: it clears the row's `h-8`. -->
-                                                <PersonaFace v-if="pickedPersona !== undefined" :persona="pickedPersona" :size="FACE_SIZES.pill" />
-                                                <Icon v-else :name="personaIcon" class="text-2xs text-link" />
-                                                <span class="max-w-32 truncate @max-md:hidden">{{ personaName }}</span>
+                                                <!-- The role control shows its face when a role is selected, at the pill size: it clears the row's `h-8`. -->
+                                                <RoleFace v-if="pickedRole !== undefined" :role="pickedRole" :size="FACE_SIZES.pill" />
+                                                <Icon v-else :name="roleIcon" class="text-2xs text-link" />
+                                                <span class="max-w-32 truncate @max-md:hidden">{{ roleName }}</span>
                                                 <Icon name="chevron-down" class="text-2xs text-subtle @max-md:hidden" />
                                             </button>
 
@@ -1006,9 +1006,9 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     t(`chat.chatPane.sendLoopsUntilEndsOn`, { design: loopDesignWords(pickedLoop) })
                                 }}
                             </p>
-                            <!-- Persona capability text appears where the message is written. -->
-                            <p v-else-if="personaNotice" class="flex items-center gap-1.5 px-1 text-2xs text-warning">
-                                <Icon name="exclamation-circle" class="shrink-0 text-2xs" />{{ personaNotice }}
+                            <!-- Role capability text appears where the message is written. -->
+                            <p v-else-if="roleNotice" class="flex items-center gap-1.5 px-1 text-2xs text-warning">
+                                <Icon name="exclamation-circle" class="shrink-0 text-2xs" />{{ roleNotice }}
                             </p>
                         </template>
                     </template>
@@ -1036,8 +1036,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         <ResponsiveOverlay v-model="modeOpen" :anchor="modeAnchor" cross="end" :header="plainWords ? t(`chat.composerMore.plain.mode`) : t(`chat.words.agentMode`)" panel-class="w-56 p-1">
             <ChatModeMenu @selected="modeOpen = false" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="personaOpen" :anchor="personaAnchor" cross="end" :header="t(`chat.words.acts`)" panel-class="w-80 p-1">
-            <ChatPersonaMenu :picked="conversation.selection.actsAs.value" @picked="pickPersona($event)" />
+        <ResponsiveOverlay v-model="roleOpen" :anchor="roleAnchor" cross="end" :header="t(`chat.words.acts`)" panel-class="w-80 p-1">
+            <ChatRoleMenu :picked="conversation.selection.actsAs.value" @picked="pickRole($event)" />
         </ResponsiveOverlay>
         <ResponsiveOverlay v-model="placementOpen" :anchor="placementAnchor" cross="end" :header="t(`chat.words.whereRuns`)" panel-class="w-80 p-1">
             <ChatPlacementMenu :conversation="conversation" @selected="placementOpen = false" />

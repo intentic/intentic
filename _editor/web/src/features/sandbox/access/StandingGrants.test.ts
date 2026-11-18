@@ -59,9 +59,6 @@ const { forgetOperations } = await import("../../../workbench/operations/operati
 const HOUR = 3_600_000;
 const conversation = (conversationId: string, over: Partial<StandingConversation> = {}): StandingConversation => ({
     conversationId,
-    capabilities: [],
-    folders: [],
-    shelves: [],
     installs: false,
     secrets: [],
     everything: false,
@@ -149,13 +146,13 @@ it(`says an archived conversation holds its permissions unused, and lists it aft
 });
 
 it(`says so when a conversation is on neither the board nor in the archive, and offers no page to open`, async () => {
-    standing.value = [conversation(`gone`, { folders: [`refs/stripe`] })];
+    standing.value = [conversation(`gone`, { secrets: [`STRIPE_KEY`] })];
     await mount();
 
     expect(loadArchived).toHaveBeenCalledTimes(1);
     expect(shown()).toContain(`Unknown conversation`);
     expect(shown()).toContain(`Not on the board or in the archive`);
-    expect(shown()).toContain(`May work in refs/stripe, outside its area`);
+    expect(shown()).toContain(`STRIPE_KEY`);
     expect(buttons(`Open`)).toHaveLength(0);
 });
 

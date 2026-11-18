@@ -111,7 +111,7 @@ export interface ResolvedLink {
 
 // New terms as a request carries them: any field left out (or undefined) keeps what the link has.
 export type LinkTermsPatch = { readonly [K in keyof LinkTerms]?: LinkTerms[K] | undefined };
-// An update may also take the persona or the service off, with null.
+// An update may also take the role or the service off, with null.
 export type LinkTermsChange = Omit<LinkTermsPatch, "actsAs" | "runAs"> & {
     readonly actsAs?: string | null | undefined;
     readonly runAs?: string | null | undefined;

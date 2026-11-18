@@ -12,8 +12,8 @@ import { sandboxSummary } from "../../../testing/sandboxSummary";
 import type { DiagnosisNotice } from "../diagnosis/presentation";
 
 const SLUG = `sandbox-3c469e9d6c58`;
-const active = ref(sandboxSummary({ id: `quiet`, name: `Quiet`, role: `owner` }));
-const lab = sandboxSummary({ id: `lab`, name: `Lab`, role: `owner` });
+const active = ref(sandboxSummary({ id: `quiet`, name: `Quiet`, tier: `owner` }));
+const lab = sandboxSummary({ id: `lab`, name: `Lab`, tier: `owner` });
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active, sandboxes: computed(() => [active.value, lab]), select: jest.fn() }) }));
 jest.mock(`../../../models/sandbox/environment/servingSlug`, () => ({ useServingSlug: () => computed(() => SLUG) }));
 // A diagnosis with nothing pressed first: only the other options are under test here.

@@ -3,8 +3,8 @@ import { isNavigationFailure, NavigationFailureType, type RouteLocationNormalize
 import { onNavigation } from "../../workbench/navigation/navigation";
 import { readWindowState, writeWindowState } from "../../workbench/window/windowStore";
 import { useSandbox } from "../../client/sandbox/useSandbox";
-import { useRole } from "../../client/sandbox/useRole";
-import { insideScreen, type LandingRole, sandboxEntry } from "../../lib/routes/firstScreens";
+import { useTier } from "../../client/sandbox/useTier";
+import { insideScreen, type LandingTier, sandboxEntry } from "../../lib/routes/firstScreens";
 import { type HomeSection, homeSection, sectionLink, sectionOfPage, showsSection } from "../../lib/routes/homeSection";
 import { frameOf, isSandboxPage, linkOf, pageOf, routeSandbox, routeSegment, segmentOf, toHome, toInside } from "../../lib/routes/links";
 
@@ -20,11 +20,11 @@ const screenKey = (sandboxId: string): string => `intentic.sandboxScreen.${sandb
 const parseScreen = (raw: string): string | undefined => (raw.startsWith(`/`) ? raw : undefined);
 
 const { activeSandboxId } = useSandbox();
-// Read on first use rather than on import: the router imports this module, and the role reads a sandbox query.
-let role: ReturnType<typeof useRole> | undefined;
-const roleNow = (): LandingRole => {
-    role ??= useRole();
-    return { isGuest: role.isGuest.value, homeOnly: role.homeOnly.value };
+// Read on first use rather than on import: the router imports this module, and the tier reads a sandbox query.
+let tier: ReturnType<typeof useTier> | undefined;
+const tierNow = (): LandingTier => {
+    tier ??= useTier();
+    return { isGuest: tier.isGuest.value, homeOnly: tier.homeOnly.value };
 };
 
 /**
@@ -32,7 +32,7 @@ const roleNow = (): LandingRole => {
  * first screen, as an address inside it. Read after the sandbox is selected, since the landing depends on the person's
  * standing in it.
  */
-export const sandboxEntryPath = (sandboxId: string): string => sandboxEntry(sandboxId, readWindowState(screenKey(sandboxId), parseScreen), roleNow());
+export const sandboxEntryPath = (sandboxId: string): string => sandboxEntry(sandboxId, readWindowState(screenKey(sandboxId), parseScreen), tierNow());
 
 /**
  * Where a sandbox opens in Home's frame, on the section chosen there (lib/routes/homeSection.ts): the screen it was last
@@ -47,7 +47,7 @@ export const sectionEntryPath = (sandboxId: string, section: Pick<HomeSection, `
 
 /** Where a sandbox opens in Home's frame: the section chosen there of it, else its home conversation. */
 export const homeEntryPath = (sandboxId: string): string => {
-    const section = roleNow().homeOnly ? undefined : homeSection.value;
+    const section = tierNow().homeOnly ? undefined : homeSection.value;
     return section === undefined ? toHome(sandboxId) : sectionEntryPath(sandboxId, section);
 };
 
@@ -65,7 +65,7 @@ const unrolledPage = (route: ScreenRoute) => (frameOf(route) === `home` && pageO
  */
 export const sameViewPath = (sandboxId: string, route: ScreenRoute): string => {
     const link = unrolledPage(route);
-    const section = link === undefined || roleNow().homeOnly ? undefined : sectionOfPage(link);
+    const section = link === undefined || tierNow().homeOnly ? undefined : sectionOfPage(link);
     return section === undefined ? homeEntryPath(sandboxId) : sectionEntryPath(sandboxId, { page: section });
 };
 

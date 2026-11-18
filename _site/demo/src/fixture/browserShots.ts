@@ -1,4 +1,4 @@
-/* Browser evidence carried by the recorded persona conversation. */
+/* Browser evidence carried by the recorded role conversation. */
 
 export const SUPPORT_SWEEP_PATH = `.intentic/records/artifacts/browser/maya-support-sweep.svg`;
 

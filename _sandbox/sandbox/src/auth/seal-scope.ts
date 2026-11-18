@@ -1,6 +1,6 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { Seal, SealAsk, SealGrant, SealOpen, SealPerson, SealVia, SealView } from "@intentic/sandbox-contract/schemas/seal";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { opt } from "../opt.js";
 import type { Caller } from "./auth.js";
 
@@ -122,7 +122,7 @@ export const sealedCard = (summary: AgentSummary, caller: Caller | undefined): A
     const seal: SealHold = summary.seal ?? {};
     const pending = pendingOpen(seal);
     const opener = pending !== undefined && caller !== undefined && same(pending.email, caller.email);
-    const approver = pending !== undefined && caller !== undefined && !opener && roleAtLeast(caller.role, "maintainer");
+    const approver = pending !== undefined && caller !== undefined && !opener && tierAtLeast(caller.tier, "maintainer");
     const asked = caller !== undefined && seal.asks?.some((ask) => same(ask.email, caller.email)) === true;
     const view: SealView = { sealed: true };
     if (asked) {
@@ -131,7 +131,7 @@ export const sealedCard = (summary: AgentSummary, caller: Caller | undefined): A
     if (pending !== undefined && (opener || approver)) {
         view.pending = pending;
     }
-    if (caller?.role === "owner" && pending === undefined) {
+    if (caller?.tier === "owner" && pending === undefined) {
         view.canOpen = true;
     }
     if (approver) {

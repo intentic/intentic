@@ -1,5 +1,5 @@
 import type { IconName } from "../../icons/iconSets.js";
-import type { PersonaLike } from "../brand/personaFace.js";
+import type { RoleLike } from "../brand/roleFace.js";
 
 // Picker's option model: a flat list for simple choices, or labelled groups when options have families. Data, not
 // markup; a custom glyph goes through the #icon slot instead.
@@ -13,8 +13,8 @@ export interface PickerOption<T extends string = string> {
     readonly hint?: string;
     /** Leading glyph for the row and the closed trigger. */
     readonly icon?: IconName;
-    // Draws <PersonaFace> instead of a glyph, in row and trigger; wins over `icon` when both are set.
-    readonly face?: PersonaLike;
+    // Draws <RoleFace> instead of a glyph, in row and trigger; wins over `icon` when both are set.
+    readonly face?: RoleLike;
     /** Monospace label, domains, repo paths, other machine names. */
     readonly mono?: boolean;
     readonly disabled?: boolean;

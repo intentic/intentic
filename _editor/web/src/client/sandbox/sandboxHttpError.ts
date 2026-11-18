@@ -103,7 +103,7 @@ export const wordsOf = (body: unknown): RefusalWords => {
     if (error !== undefined) {
         words.error = error;
     }
-    // The access fields wherever the body put them: on the body itself (the role floor's, a hand-written route's), or
+    // The access fields wherever the body put them: on the body itself (the tier floor's, a hand-written route's), or
     // under an oRPC handler's `data`.
     for (const field of [`floor`, `reason`, `org`, `section`] as const) {
         const value = parsed.data[field] ?? data?.[field];

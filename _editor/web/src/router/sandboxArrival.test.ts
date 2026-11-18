@@ -27,8 +27,8 @@ const stage = (rows: readonly SandboxSummary[]) => {
                 component: nothing,
                 beforeEnter: [(to: RouteLocationNormalized) => arriveOnSandbox(to, sandbox)],
                 children: [
-                    // The shell's home, decided by the active sandbox's role: a guest's is its chat.
-                    { path: ``, redirect: () => (rows.find((row) => row.id === active.value)?.role === `guest` ? `/chat` : `/workspace`) },
+                    // The shell's home, decided by the active sandbox's tier: a guest's is its chat.
+                    { path: ``, redirect: () => (rows.find((row) => row.id === active.value)?.tier === `guest` ? `/chat` : `/workspace`) },
                     { path: `workspace`, component: nothing },
                     { path: `chat`, component: nothing },
                 ],
@@ -40,7 +40,7 @@ const stage = (rows: readonly SandboxSummary[]) => {
 
 const MINE = sandboxSummary({ id: `mine`, lastSeenAt: `2026-09-23T10:00:00Z` });
 const PROJECT = sandboxSummary({ id: `project`, lastSeenAt: `2026-09-28T10:00:00Z` });
-const SHARED = sandboxSummary({ id: `shared`, role: `guest`, token: null, lastSeenAt: `2026-09-28T10:00:00Z` });
+const SHARED = sandboxSummary({ id: `shared`, tier: `guest`, token: null, lastSeenAt: `2026-09-28T10:00:00Z` });
 
 it(`selects a sandbox the account lists, and drops only the id from the address`, async () => {
     const { select, router } = stage([MINE, PROJECT]);
@@ -166,7 +166,7 @@ describe(`a link naming a sandbox, in a shell whose bare address is Home`, () =>
         const select = jest.fn((id: string) => {
             active.value = id;
         });
-        const landing = jest.fn((id: string) => (rows.find((row) => row.id === id)?.role === `guest` ? `/chat` : `/agents`));
+        const landing = jest.fn((id: string) => (rows.find((row) => row.id === id)?.tier === `guest` ? `/chat` : `/agents`));
         const sandbox: SandboxArrivalHost = { list: async () => rows, select, landing };
         const router = createRouter({
             history: createMemoryHistory(),

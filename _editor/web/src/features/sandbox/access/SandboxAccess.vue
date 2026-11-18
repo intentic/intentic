@@ -3,7 +3,7 @@ import { SegmentedControl } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { ACCESS_PARTS, type AccessPart, LINKED_SANDBOXES_ANCHOR, MEMBER_ACCESS_PARTS, PEOPLE_ACCESS_PARTS } from "../../../models/sandbox/sandboxNav";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
@@ -38,7 +38,7 @@ const { open = undefined } = defineProps<{
 const t = useT();
 const route = useRoute();
 const router = useRouter();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { holds } = useAccess();
 // Areas is an organisation section of its own (sandbox-contract schemas/organisation.ts), from when it was a hub row: a
 // hidden one leaves the tabs, a locked one is drawn read-only under its own notice, as Activity's parts held by another
@@ -55,7 +55,7 @@ const parts = computed<readonly AccessPart[]>(() => {
 const first = computed<AccessPart>(() => parts.value[0] ?? `people`);
 
 // Two parts carry a count, so what waits on them is seen from whichever part the reader came for: Programs the tasks a
-// linked sandbox handed over that wait for the owner's yes, Allowed what stands past a persona or an area.
+// linked sandbox handed over that wait for the owner's yes, Allowed what stands past a role or an area.
 const waitingTasks = useWaitingLinkTasks(canShip);
 const { conversations, ownerWide } = useStandingGrants(canShip);
 const allowedCount = computed(() => conversations.value.length + ownerWide.value.length);

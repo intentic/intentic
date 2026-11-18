@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, useId } from "vue";
 import { ASSISTANT_CANVAS, assistantFace, assistantLayers, assistantTint, type AssistantAccessory } from "./assistantFaces.js";
-import { FACE_SIZES } from "./personaFace.js";
+import { FACE_SIZES } from "./roleFace.js";
 
 const {
     seed,

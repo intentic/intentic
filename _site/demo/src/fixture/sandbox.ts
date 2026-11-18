@@ -135,7 +135,7 @@ export const demoCapabilities = (): CapabilitySummary[] => [
         config: { platform: `windows`, shell: `on`, sandboxes: `on`, write: `off`, screen: `off`, control: `off`, destructive: `off` },
         secrets: [],
     },
-    // The brand's identity and the X account born in its browser, which Owen's persona carries: the map threads the three.
+    // The brand's identity and the X account born in its browser, which Owen's role carries: the map threads the three.
     { id: `brand`, kind: `identity`, status: { state: `active` }, config: { email: `brand@acme.dev`, openAccounts: `on`, hasPassword: true }, secrets: [] },
     { id: `x-brand`, kind: `browser`, status: { state: `active` }, config: { platform: `x`, identity: `brand`, username: `acmeshop` }, secrets: [] },
     { id: `reddit`, kind: `browser`, status: { state: `pending`, detail: `sign in once in its browser` }, config: { platform: `reddit` }, secrets: [] },

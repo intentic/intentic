@@ -90,7 +90,7 @@ export const newerThanEntry = (entry: PickerEntry): ModelOption | undefined => {
 export const isOlderEntry = (entry: PickerEntry): boolean => newerThanEntry(entry) !== undefined;
 
 // Lowercase and strip separators, so "gpt5" matches "GPT-5" and "45" matches "4.5". Shared with the composer's `@`
-// picker so a persona or runner matches the way a model does.
+// picker so a role or runner matches the way a model does.
 export const normalize = (text: string): string => text.toLowerCase().replace(/[\s.\-_]/g, ``);
 
 const haystackFor = (entry: PickerEntry): string =>

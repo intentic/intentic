@@ -10,8 +10,8 @@ import { serviceStanding } from "./service-standing.js";
 const OWNER = "ada@example.com";
 
 const roster: Member[] = [
-    { email: "bob@example.com", role: "collaborator", areas: ["site", "docs"] },
-    { email: "vic@example.com", role: "viewer" },
+    { email: "bob@example.com", tier: "collaborator", areas: ["site", "docs"] },
+    { email: "vic@example.com", tier: "viewer" },
 ];
 const profiles: AccessProfile[] = [{ id: "site-only", areas: ["site", "shop"] }];
 const OWNERS: Service = { id: "owners", steward: OWNER, profile: "site-only" };

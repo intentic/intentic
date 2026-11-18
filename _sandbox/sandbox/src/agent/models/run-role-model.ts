@@ -31,7 +31,7 @@ const readinessSources = async (services: Services): Promise<ModelSource[]> => {
 export const runRoleModel = async (services: Services, role: ModelRole): Promise<ModelPin | undefined> =>
     pinnedRunModel(services, await ladderPinsNow(services, roleLadder(await services.sandboxSettings.get(), role)));
 
-// Walks any ordered ladder of pins, whoever wrote it (a role, a persona, an automation); readiness and quota are
+// Walks any ordered ladder of pins, whoever wrote it (a role, a role, an automation); readiness and quota are
 // sandbox facts, not the caller's. An empty ladder answers undefined and the caller decides what that means.
 export const pinnedRunModel = async (services: Services, pinned: readonly ModelPin[]): Promise<ModelPin | undefined> => {
     if (pinned.length === 0) {
@@ -53,13 +53,13 @@ export const unpinnedRunProvider = async (services: Services, preferred?: AgentP
 // Said when a run role finds no model at all: no pin that can serve, and no provider connected to fall back to.
 export const NO_PROVIDER_CONNECTED = `No AI provider is connected to this sandbox, so there is no model to run this on. Connect one in Setup, then try again.`;
 
-// Pin from the persona's own ladder (schemas/personas.ts `models`), consulted before the role since it is more
+// Pin from the role's own ladder (schemas/roles.ts `models`), consulted before the role since it is more
 // specific; undefined when the card, its ladder, or every provider in it is unavailable.
-export const personaRunModel = async (services: Services, actsAs: string | undefined): Promise<ModelPin | undefined> => {
+export const roleRunModel = async (services: Services, actsAs: string | undefined): Promise<ModelPin | undefined> => {
     if (actsAs === undefined) {
         return undefined;
     }
-    return pinnedRunModel(services, (await services.personas.get(actsAs))?.models ?? []);
+    return pinnedRunModel(services, (await services.roles.get(actsAs))?.models ?? []);
 };
 
 // The rung the run opens on (the contract's openingRung, which the editor names on the job's button too): the first

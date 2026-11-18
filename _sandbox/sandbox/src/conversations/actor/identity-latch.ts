@@ -74,7 +74,7 @@ const freshOf = (existing: Identity, turn: BeginTurn, opening: boolean): Identit
     return { ...kept, at: turn.fresh.at };
 };
 
-// Latched with the conversation: each field keeps the first answer it got, and a later turn's differing persona does
+// Latched with the conversation: each field keeps the first answer it got, and a later turn's differing role does
 // not move the conversation to another project. `opening` says no turn of it has run yet (an entry a booking opened).
 export const identityOf = (existing: Identity, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined, opening = false): Identity => ({
     ...opt("origin", existing.origin ?? turn.origin),

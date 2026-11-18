@@ -3,7 +3,7 @@
 // Sign-in, Programs, Allowed); a test about one opens it as a reader would, by its tab.
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import "@intentic/testing/dom";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
 import { type OrgPolicyState, OrgPolicyStateSchema, type OrgSectionMode } from "@intentic/sandbox-contract/schemas/organisation";
 import { type InboundLinkTermsUpdate, InboundLinkTermsUpdateSchema } from "@intentic/sandbox-contract/schemas/links";
@@ -50,7 +50,7 @@ const unread = async (): Promise<never> => {
 type Answer<G extends keyof SandboxRpc, P extends keyof SandboxRpc[G]> = SandboxRpc[G][P] extends (...args: never[]) => Promise<infer A> ? A : never;
 const profileList = ref([{ id: `engineering`, label: `Engineering`, brief: `Build with the team`, origin: `sandbox` as const, agents: `run` as const }]);
 const serviceList = ref([{ id: `nightly`, label: `Nightly review`, steward: `owner@example.com`, profile: `engineering` }]);
-const saveProfile = jest.fn(async (_profile: unknown) => ({ ok: true as const, holders: [{ email: `guest@example.com`, role: `collaborator` as const }] }));
+const saveProfile = jest.fn(async (_profile: unknown) => ({ ok: true as const, holders: [{ email: `guest@example.com`, tier: `collaborator` as const }] }));
 const saveService = jest.fn(async (_service: unknown) => ({ ok: true as const }));
 const removeService = jest.fn(async (_id: unknown) => {
     throw new Error(`Used by nightly automation`);
@@ -108,16 +108,16 @@ jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({
 
 const create = jest.fn();
 const list = jest.fn(async (): Promise<{ members: unknown[] }> => ({ members: [] }));
-const setRole = jest.fn();
+const setTier = jest.fn();
 jest.mock(`../../../lib/useApi`, () => ({
-    apiClient: { invite: { list: () => list(), create: (...a: unknown[]) => create(...a), setRole: (...a: unknown[]) => setRole(...a) } },
+    apiClient: { invite: { list: () => list(), create: (...a: unknown[]) => create(...a), setTier: (...a: unknown[]) => setTier(...a) } },
 }));
 
 jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
-const role = ref<MemberRole>(`owner`);
+const role = ref<MemberTier>(`owner`);
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({
-        active: computed(() => ({ name: `radarsu-mig`, role: role.value })),
+        active: computed(() => ({ name: `radarsu-mig`, tier: role.value })),
         activeSandboxId: ref(`s1`),
         daemonUrl: ref(`https://sandbox-abc.example.test`),
         // The sandbox answers: the roster and the door counts are cache reads, asked only of a sandbox that does.
@@ -125,8 +125,8 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({
     }),
 }));
 // One assistant, homed in the support folder: which areas hand it over is read off where it starts, never picked.
-const personas = ref([{ id: `support`, label: `Support`, capabilities: [], workspace: { startIn: `support` } }]);
-jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
+const roles = ref([{ id: `support`, label: `Support`, capabilities: [], workspace: { startIn: `support` } }]);
+jest.mock(`../../../models/sandbox/roles/useRoles`, () => ({ useRoles: () => ({ roles, connected: ref([]), isConnected: () => false }) }));
 // Two named parts of the workspace: one the assistant above works in, one nobody works in — the two answers a fence
 // can give.
 const areas = ref([
@@ -134,7 +134,7 @@ const areas = ref([
     { id: `finance`, label: `Finance`, folders: [`finance`] },
 ]);
 const idle = { mutateAsync: async () => ({ ok: true }), isPending: ref(false) };
-jest.mock(`../areas/useAreas`, () => ({
+jest.mock(`../../../models/sandbox/access/useAreas`, () => ({
     useAreas: () => ({
         areas,
         labelOf: (id: string) => areas.value.find((area) => area.id === id)?.label ?? id,
@@ -147,7 +147,7 @@ jest.mock(`../../../workbench/presence/usePresence`, () => ({ presenceOthers: []
 // Session module touches GIS/localStorage at eval; needs only its expiry. Fixed date avoids timezone drift.
 const sessionExpiresAt = ref<number | undefined>(Date.parse(`2026-09-24T12:00:00.000Z`));
 jest.mock(`../../../client/session/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
-// What conversations were allowed past their persona: none unless a test lists one. Its take-back is a vue-query
+// What conversations were allowed inside their access: none unless a test lists one. Its take-back is a vue-query
 // mutation, and this page mounts without a query client.
 const standing = ref<readonly StandingConversation[]>([]);
 // Beside them the yeses that name no conversation, and the kinds of those this sandbox could not read.
@@ -180,7 +180,7 @@ const mount = (): void => {
     app.directive(`tooltip`, {});
     app.use(PrimeVue);
     app.use(VueQueryPlugin, { queryClient });
-    // The area picker links to the pages that fix what it reports (Areas, Personas); any path resolves.
+    // The area picker links to the pages that fix what it reports (Areas, Roles); any path resolves.
     router = createRouter({ history: createMemoryHistory(), routes: [{ path: `/:rest(.*)*`, component: { render: () => null } }] });
     app.use(router);
     app.mount(el);
@@ -282,7 +282,7 @@ afterEach(() => {
     // Nothing advertised reads as every route answered: today's daemon.
     setDaemonRoutes(undefined);
     create.mockReset();
-    setRole.mockReset();
+    setTier.mockReset();
     daemonMembers.mockReset();
     daemonMembers.mockReturnValue([]);
     list.mockReset();
@@ -320,7 +320,7 @@ it(`hands the owner the link when the email did not carry it`, async () => {
     const writeText = jest.fn(async () => undefined);
     Object.defineProperty(globalThis.navigator, `clipboard`, { value: { writeText }, configurable: true });
     create.mockResolvedValue({
-        members: [{ email: `guest@example.com`, role: `collaborator`, status: `pending`, invitedAt: `2026-08-18T00:00:00.000Z` }],
+        members: [{ email: `guest@example.com`, tier: `collaborator`, status: `pending`, invitedAt: `2026-08-18T00:00:00.000Z` }],
         link: `https://localhost:47145/invite/tok`,
         delivery: `local-link`,
     });
@@ -340,7 +340,7 @@ it(`hands the owner the link when the email did not carry it`, async () => {
 // app and coming back must still find it.
 it(`keeps the link to carry across the tab closing and opening again`, async () => {
     create.mockResolvedValue({
-        members: [{ email: `guest@example.com`, role: `collaborator`, status: `pending`, invitedAt: `2026-08-18T00:00:00.000Z` }],
+        members: [{ email: `guest@example.com`, tier: `collaborator`, status: `pending`, invitedAt: `2026-08-18T00:00:00.000Z` }],
         link: `https://localhost:47145/invite/tok`,
         delivery: `local-link`,
     });
@@ -480,11 +480,11 @@ const grantsSent = (): unknown[] =>
         .filter(([path, init]) => path === `/members` && (init as { method?: string } | undefined)?.method === `POST`)
         .map(([, init]) => JSON.parse((init as { body: string }).body) as unknown);
 
-const accepted = (tier: string) => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
+const accepted = (tier: string) => ({ email: `guest@example.com`, tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
 // A member the platform and the daemon both know, the daemon answering whatever `daemonMembers` holds.
 const withMember = (tier: string, row: Record<string, unknown> = {}): void => {
     list.mockResolvedValue({ members: [accepted(tier)] });
-    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: tier, ...row }]);
+    daemonMembers.mockReturnValue([{ email: `guest@example.com`, tier, ...row }]);
     sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
 };
 
@@ -492,7 +492,7 @@ const withMember = (tier: string, row: Record<string, unknown> = {}): void => {
 
 it(`adds a person read-only with nothing to spend, and opens them`, async () => {
     create.mockResolvedValue({
-        members: [{ email: `dee@corp.example`, role: `viewer`, status: `pending`, invitedAt: `2026-08-18T00:00:00.000Z` }],
+        members: [{ email: `dee@corp.example`, tier: `viewer`, status: `pending`, invitedAt: `2026-08-18T00:00:00.000Z` }],
         link: `https://localhost:47145/invite/tok`,
         delivery: `sent`,
     });
@@ -501,9 +501,9 @@ it(`adds a person read-only with nothing to spend, and opens them`, async () => 
     await addPerson(`dee@corp.example`);
 
     expect(grantsSent()).toEqual([
-        { email: `dee@corp.example`, role: `viewer`, emailSignIn: true, agents: `off`, credentials: { capabilities: [], secrets: [] }, aiAccounts: `all`, manages: [] },
+        { email: `dee@corp.example`, tier: `viewer`, emailSignIn: true, agents: `off`, credentials: { capabilities: [], secrets: [] }, aiAccounts: `all`, manages: [] },
     ]);
-    expect(create).toHaveBeenCalledWith({ sandboxId: `s1`, email: `dee@corp.example`, role: `viewer`, manages: [] });
+    expect(create).toHaveBeenCalledWith({ sandboxId: `s1`, email: `dee@corp.example`, tier: `viewer`, manages: [] });
     // Their tile says what they can do, and their panel is open for the rest.
     expect(shown()).toContain(`Can see`);
     expect(panel()?.textContent).toContain(`Invite pending`);
@@ -515,7 +515,7 @@ it(`adds a person read-only with nothing to spend, and opens them`, async () => 
 // or one whose areas nobody works in; the panel holds it until it is one the daemon takes, then sends it whole.
 it(`holds a move to chatting until its areas reach an assistant, then saves it`, async () => {
     withMember(`collaborator`);
-    setRole.mockResolvedValue({ members: [accepted(`guest`)] });
+    setTier.mockResolvedValue({ members: [accepted(`guest`)] });
     mount();
     await settle();
     await openPerson(`guest@example.com`);
@@ -527,13 +527,13 @@ it(`holds a move to chatting until its areas reach an assistant, then saves it`,
 
     await tickRow(`Support guest`);
     expect(shown()).not.toContain(`No assistant works in these areas.`);
-    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `guest`, agents: `chat`, areas: [`support`] }]);
+    daemonMembers.mockReturnValue([{ email: `guest@example.com`, tier: `guest`, agents: `chat`, areas: [`support`] }]);
     await autosaved();
 
     expect(grantsSent()).toEqual([
-        { email: `guest@example.com`, role: `guest`, emailSignIn: false, agents: `chat`, areas: [`support`], credentials: `all`, aiAccounts: `all`, manages: [] },
+        { email: `guest@example.com`, tier: `guest`, emailSignIn: false, agents: `chat`, areas: [`support`], credentials: `all`, aiAccounts: `all`, manages: [] },
     ]);
-    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `guest`, manages: [] });
+    expect(setTier).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, tier: `guest`, manages: [] });
 });
 
 // The refusal the owner cannot read off the fence itself: an area can name real folders and still hand over nobody.
@@ -548,14 +548,14 @@ it(`will not save a chat in areas no assistant works in, and says so`, async () 
 
     expect(shown()).toContain(`No assistant works in these areas.`);
     expect(grantsSent()).toEqual([]);
-    expect(setRole).not.toHaveBeenCalled();
+    expect(setTier).not.toHaveBeenCalled();
 });
 
 // Seeing and editing are separate answers: someone may read the whole workspace and change files in one area by hand,
 // with agents off, which is a writer that drives nothing.
 it(`lets a person edit some areas by hand, see everything, and run no agents`, async () => {
     withMember(`collaborator`);
-    setRole.mockResolvedValue({ members: [accepted(`writer`)] });
+    setTier.mockResolvedValue({ members: [accepted(`writer`)] });
     mount();
     await settle();
     await openPerson(`guest@example.com`);
@@ -565,9 +565,9 @@ it(`lets a person edit some areas by hand, see everything, and run no agents`, a
     await autosaved();
 
     expect(grantsSent()).toEqual([
-        { email: `guest@example.com`, role: `writer`, emailSignIn: false, agents: `off`, edit: [`support`], credentials: `all`, aiAccounts: `all`, manages: [] },
+        { email: `guest@example.com`, tier: `writer`, emailSignIn: false, agents: `off`, edit: [`support`], credentials: `all`, aiAccounts: `all`, manages: [] },
     ]);
-    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `writer`, manages: [] });
+    expect(setTier).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, tier: `writer`, manages: [] });
 });
 
 // What their agents may spend is in the same panel, sent in the same grant, and enforced by the sandbox. Narrowing
@@ -587,7 +587,7 @@ it(`limits what a person's agents may use`, async () => {
     expect(grantsSent()).toEqual([
         {
             email: `guest@example.com`,
-            role: `collaborator`,
+            tier: `collaborator`,
             emailSignIn: false,
             agents: `run`,
             credentials: { capabilities: [`github`], secrets: [] },
@@ -595,7 +595,7 @@ it(`limits what a person's agents may use`, async () => {
             manages: [],
         },
     ]);
-    expect(setRole).not.toHaveBeenCalled();
+    expect(setTier).not.toHaveBeenCalled();
 });
 
 // Which AI accounts pay for their turns is its own answer beside what their agents work with: narrowing it starts from
@@ -622,7 +622,7 @@ it(`limits which AI accounts a person's conversations run on`, async () => {
         await autosaved();
 
         expect(grantsSent()).toEqual([
-            { email: `guest@example.com`, role: `collaborator`, emailSignIn: false, agents: `run`, credentials: `all`, aiAccounts: [`claude:work`], manages: [] },
+            { email: `guest@example.com`, tier: `collaborator`, emailSignIn: false, agents: `run`, credentials: `all`, aiAccounts: [`claude:work`], manages: [] },
         ]);
     } finally {
         providerAccounts.value = { ...providerAccounts.value, claude: [] };
@@ -633,7 +633,7 @@ it(`limits which AI accounts a person's conversations run on`, async () => {
 // drawing controls that would mean nothing. What their conversations spend is still asked beneath it.
 it(`gives a person full access with the first choice`, async () => {
     withMember(`viewer`);
-    setRole.mockResolvedValue({ members: [accepted(`maintainer`)] });
+    setTier.mockResolvedValue({ members: [accepted(`maintainer`)] });
     mount();
     await settle();
     await openPerson(`guest@example.com`);
@@ -646,8 +646,8 @@ it(`gives a person full access with the first choice`, async () => {
     expect(shown()).not.toContain(`can lift them`);
     await autosaved();
 
-    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `maintainer`, emailSignIn: false, credentials: `all`, aiAccounts: `all` }]);
-    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `maintainer` });
+    expect(grantsSent()).toEqual([{ email: `guest@example.com`, tier: `maintainer`, emailSignIn: false, credentials: `all`, aiAccounts: `all` }]);
+    expect(setTier).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, tier: `maintainer` });
 });
 
 // Managing the sandbox and paying for every turn are separate answers: someone may change every setting, add providers
@@ -662,7 +662,7 @@ it(`gives a person full access on only some AI accounts`, async () => {
     };
     try {
         withMember(`collaborator`);
-        setRole.mockResolvedValue({ members: [accepted(`maintainer`)] });
+        setTier.mockResolvedValue({ members: [accepted(`maintainer`)] });
         mount();
         await settle();
         await openPerson(`guest@example.com`);
@@ -672,7 +672,7 @@ it(`gives a person full access on only some AI accounts`, async () => {
         expect(shown()).toContain(`can lift them`);
         await autosaved();
 
-        expect(grantsSent().at(-1)).toEqual({ email: `guest@example.com`, role: `maintainer`, emailSignIn: false, credentials: `all`, aiAccounts: [`claude:work`] });
+        expect(grantsSent().at(-1)).toEqual({ email: `guest@example.com`, tier: `maintainer`, emailSignIn: false, credentials: `all`, aiAccounts: [`claude:work`] });
     } finally {
         providerAccounts.value = { ...providerAccounts.value, claude: [] };
     }
@@ -680,8 +680,8 @@ it(`gives a person full access on only some AI accounts`, async () => {
 
 // With no assistant homed in any area, nobody can be set to chat; that is said once, before any area is tried.
 it(`tells the owner up front when no area has an assistant to chat with`, async () => {
-    const homed = personas.value;
-    personas.value = [];
+    const homed = roles.value;
+    roles.value = [];
     try {
         withMember(`viewer`);
         mount();
@@ -690,7 +690,7 @@ it(`tells the owner up front when no area has an assistant to chat with`, async 
         await tab(`Chat with assistants`);
         expect(shown()).toContain(`No assistant works in any area yet.`);
     } finally {
-        personas.value = homed;
+        roles.value = homed;
     }
 });
 
@@ -799,9 +799,9 @@ it(`lists only the doors in use, with paired machines counted`, async () => {
     expect(shown()).not.toContain(`0 runners`);
 });
 
-// What a conversation was allowed past its persona is taken back here, where the rest of who-reaches-this-box is: the
-// Needs you inbox's Allowed tab until 2026-10-12. Nothing standing draws nothing.
-it(`lists what conversations were allowed past their persona, each with Revoke`, async () => {
+// What a conversation was allowed is taken back here, where the rest of who-reaches-this-box is: the Needs you inbox's
+// Allowed tab until 2026-10-12. Nothing standing draws nothing.
+it(`lists what conversations were allowed, each with Revoke`, async () => {
     mount();
     await openPart(`Allowed`);
     expect(shown()).not.toContain(`Conversation permissions`);
@@ -811,14 +811,14 @@ it(`lists what conversations were allowed past their persona, each with Revoke`,
     document.body.innerHTML = ``;
 
     standing.value = [
-        { conversationId: `c1`, capabilities: [`github`], folders: [], shelves: [], installs: false, secrets: [], everything: false, rules: [], releases: [] },
+        { conversationId: `c1`, installs: false, secrets: [`GITHUB_TOKEN`], everything: false, rules: [], releases: [] },
     ];
     mount();
     await openPart(`Allowed`);
 
     expect(shown()).not.toContain(`Nothing is allowed past the rules`);
     expect(shown()).toContain(`Conversation permissions`);
-    expect(shown()).toContain(`May use github, which its persona leaves out`);
+    expect(shown()).toContain(`May send GITHUB_TOKEN to any host, not only its own`);
     expect(buttonLabelled(`Revoke`)?.disabled).toBe(false);
 });
 
@@ -832,7 +832,7 @@ it(`lists the owner-wide yeses above the conversations, and takes each back by i
         { kind: `command-policy`, line: `Deleting build directories under /work is fine.`, at: Date.now() - 120_000, by: `ada@acme.dev` },
         { kind: `hook-set`, digest, hooks: [`PreToolUse (Bash): ./guard.sh`], at: Date.now() - 180_000 },
     ];
-    standing.value = [{ conversationId: `c1`, capabilities: [`github`], folders: [], shelves: [], installs: false, secrets: [], everything: false, rules: [], releases: [] }];
+    standing.value = [{ conversationId: `c1`, installs: false, secrets: [`GITHUB_TOKEN`], everything: false, rules: [], releases: [] }];
     mount();
     await openPart(`Allowed`);
 
@@ -844,7 +844,7 @@ it(`lists the owner-wide yeses above the conversations, and takes each back by i
     expect(shown()).toContain(`Extension acme.toolbox may run`);
     expect(shown()).toContain(`approved to: runs a backend bundle inside the daemon's extension host`);
     // The conversation's own yes is still there, after them.
-    expect(shown().indexOf(`May use github, which its persona leaves out`)).toBeGreaterThan(shown().indexOf(`Extension acme.toolbox may run`));
+    expect(shown().indexOf(`May send GITHUB_TOKEN to any host, not only its own`)).toBeGreaterThan(shown().indexOf(`Extension acme.toolbox may run`));
 
     const revokes = [...document.body.querySelectorAll(`button`)].filter((button) => button.textContent?.trim() === `Revoke`);
     expect(revokes).toHaveLength(4);
@@ -880,7 +880,7 @@ it(`leaves email-code sign-in off for an address Google holds`, async () => {
     await addPerson(address);
 
     expect(grantsSent()).toEqual([
-        { email: address, role: `viewer`, emailSignIn: false, agents: `off`, credentials: { capabilities: [], secrets: [] }, aiAccounts: `all`, manages: [] },
+        { email: address, tier: `viewer`, emailSignIn: false, agents: `off`, credentials: { capabilities: [], secrets: [] }, aiAccounts: `all`, manages: [] },
     ]);
 });
 
@@ -897,9 +897,9 @@ it(`changes a person's email sign-in with the rest of their access kept, at the 
     await autosaved();
 
     expect(grantsSent()).toEqual([
-        { email: `guest@example.com`, role: `collaborator`, emailSignIn: true, agents: `run`, areas: [`support`], credentials: `all`, aiAccounts: `all`, manages: [] },
+        { email: `guest@example.com`, tier: `collaborator`, emailSignIn: true, agents: `run`, areas: [`support`], credentials: `all`, aiAccounts: `all`, manages: [] },
     ]);
-    expect(setRole).not.toHaveBeenCalled();
+    expect(setTier).not.toHaveBeenCalled();
 });
 
 /* THE PARTS: People opens first, every other part is a tab and an address, and the links made before the parts had names
@@ -995,7 +995,7 @@ it(`shares a link's records from its terms, and says so on its row`, async () =>
 
 it(`counts what stands on the Allowed tab, so it is seen from any part`, async () => {
     ownerWide.value = [{ kind: `command-policy`, line: `Deleting build directories under /work is fine.`, at: Date.now() - 120_000, by: `ada@acme.dev` }];
-    standing.value = [{ conversationId: `c1`, capabilities: [`github`], folders: [], shelves: [], installs: false, secrets: [], everything: false, rules: [], releases: [] }];
+    standing.value = [{ conversationId: `c1`, installs: false, secrets: [`GITHUB_TOKEN`], everything: false, rules: [], releases: [] }];
     mount();
     await settle();
     const allowed = [...document.body.querySelectorAll(`[role=tab]`)].find((button) => button.textContent?.trim().startsWith(`Allowed`));
@@ -1106,8 +1106,8 @@ it(`names a new service, and derives the id automations run as from that name`, 
 });
 
 it(`shows profiles, their tier and service holders, then synchronizes changed holder tiers`, async () => {
-    list.mockResolvedValue({ members: [{ email: `guest@example.com`, role: `viewer` }] });
-    setRole.mockResolvedValue({ members: [] });
+    list.mockResolvedValue({ members: [{ email: `guest@example.com`, tier: `viewer` }] });
+    setTier.mockResolvedValue({ members: [] });
     mount();
     await openPart(`Profiles`);
     await waitFor(() => expect(shown()).toContain(`Engineering`));
@@ -1117,7 +1117,7 @@ it(`shows profiles, their tier and service holders, then synchronizes changed ho
     await settle();
     buttonLabelled(`Save`)?.click();
     await waitFor(() => expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ id: `engineering`, label: `Engineering` })));
-    await waitFor(() => expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `collaborator` }));
+    await waitFor(() => expect(setTier).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, tier: `collaborator` }));
 });
 
 it(`shows a service deletion refusal with the named dependency`, async () => {
@@ -1148,7 +1148,7 @@ it(`grants a named profile with its tier and hides editable inline answers`, asy
         await settle();
         [...document.querySelectorAll<HTMLElement>(`[role=option]`)].find((option) => option.textContent?.includes(`Engineering`))?.click();
         await autosaved();
-        expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `collaborator`, profile: `engineering`, emailSignIn: false, manages: [] }]);
+        expect(grantsSent()).toEqual([{ email: `guest@example.com`, tier: `collaborator`, profile: `engineering`, emailSignIn: false, manages: [] }]);
         // The profile's own answers are drawn held still inside the panel's fieldset, which stays open to its owner.
         expect([...(panel()?.querySelectorAll(`fieldset`) ?? [])].map((set) => set.disabled)).toEqual([false, true]);
     } finally {
@@ -1158,7 +1158,7 @@ it(`grants a named profile with its tier and hides editable inline answers`, asy
 });
 
 it(`does not re-grade a profile holder whose platform tier already agrees`, async () => {
-    list.mockResolvedValue({ members: [{ email: `guest@example.com`, role: `collaborator` }] });
+    list.mockResolvedValue({ members: [{ email: `guest@example.com`, tier: `collaborator` }] });
     mount();
     await openPart(`Profiles`);
     await waitFor(() => expect(shown()).toContain(`Engineering`));
@@ -1166,7 +1166,7 @@ it(`does not re-grade a profile holder whose platform tier already agrees`, asyn
     await settle();
     buttonLabelled(`Save`)?.click();
     await waitFor(() => expect(document.querySelector(`main form`)).toBeNull());
-    expect(setRole).not.toHaveBeenCalled();
+    expect(setTier).not.toHaveBeenCalled();
 });
 
 /* RIGHTS: under custom access, the parts of the sandbox a person also runs, one at a time; Full access runs every one. */
@@ -1174,7 +1174,7 @@ it(`does not re-grade a profile holder whose platform tier already agrees`, asyn
 // A switch row per part, sent as one list on the person's row and on the platform's record, which moves with them.
 it(`hands out the parts of the sandbox one at a time under custom access`, async () => {
     withMember(`collaborator`);
-    setRole.mockResolvedValue({ members: [accepted(`collaborator`)] });
+    setTier.mockResolvedValue({ members: [accepted(`collaborator`)] });
     mount();
     await settle();
     await openPerson(`guest@example.com`);
@@ -1189,10 +1189,10 @@ it(`hands out the parts of the sandbox one at a time under custom access`, async
     await autosaved();
 
     expect(grantsSent()).toEqual([
-        { email: `guest@example.com`, role: `collaborator`, emailSignIn: false, agents: `run`, credentials: `all`, aiAccounts: `all`, manages: [`secrets`] },
+        { email: `guest@example.com`, tier: `collaborator`, emailSignIn: false, agents: `run`, credentials: `all`, aiAccounts: `all`, manages: [`secrets`] },
     ]);
     // The tier did not move, the rights did: the platform's record is brought along.
-    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `collaborator`, manages: [`secrets`] });
+    expect(setTier).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, tier: `collaborator`, manages: [`secrets`] });
 });
 
 // Someone who only chats holds no rights at all; AI accounts of their own mean nothing while agents are off.
@@ -1209,19 +1209,19 @@ it(`offers rights only where the way of working can carry them`, async () => {
 
 /* PEOPLE & ACCESS below Full access: changes anyone's access below Full access but their own, hands out only what it holds. */
 
-const PEOPLE_HOLDER = { role: `collaborator`, agents: `run`, edit: `none`, manages: [`people`] };
+const PEOPLE_HOLDER = { tier: `collaborator`, agents: `run`, edit: `none`, manages: [`people`] };
 const asPeopleHolder = (): void => {
     role.value = `collaborator`;
     const records = [
         accepted(`collaborator`),
-        { email: `max@example.com`, role: `maintainer`, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` },
-        { email: `owner@example.com`, role: `collaborator`, manages: [`people`], status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` },
+        { email: `max@example.com`, tier: `maintainer`, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` },
+        { email: `owner@example.com`, tier: `collaborator`, manages: [`people`], status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` },
     ];
     list.mockResolvedValue({ members: records });
     daemonMembers.mockReturnValue([
-        { email: `guest@example.com`, role: `collaborator` },
-        { email: `max@example.com`, role: `maintainer` },
-        { email: `owner@example.com`, role: `collaborator`, manages: [`people`] },
+        { email: `guest@example.com`, tier: `collaborator` },
+        { email: `max@example.com`, tier: `maintainer` },
+        { email: `owner@example.com`, tier: `collaborator`, manages: [`people`] },
     ]);
     sandboxJson.mockImplementation(async (path: unknown) => {
         if (path === `/members/self`) {

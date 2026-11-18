@@ -28,7 +28,7 @@ const cancelSignIn = jest.fn(() => {
 });
 // Connecting is a maintainer's; most of these tests read as one.
 const canShip = ref(true);
-jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ canShip }) }));
+jest.mock(`../../../client/sandbox/useTier`, () => ({ useTier: () => ({ canShip }) }));
 const dismissSignInFailure = jest.fn(() => {
     signInFailure.value = undefined;
 });

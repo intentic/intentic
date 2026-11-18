@@ -91,7 +91,7 @@ const REPOS: RepoRecord[] = [
     { repo: "root", base: "b".repeat(40), landedTip: "t".repeat(40), landedHead: "h".repeat(40), landedAt: 5, absorbed: 3 },
     { repo: "nested/app", base: "c".repeat(40) },
 ];
-const COMPOSITION: Composition = { persona: "reviewer", repos: ["nested/app"] };
+const COMPOSITION: Composition = { role: "reviewer", repos: ["nested/app"] };
 const IDENTITY: PersistedAgent["identity"] = {
     origin: { automationId: "visitor-chat", provider: "webchat" },
     startedBy: "ania@example.com",

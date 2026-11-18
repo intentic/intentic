@@ -1,5 +1,5 @@
 import type { ChatRoute } from "@intentic/sandbox-contract/schemas/chat-route";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { effectScope, type EffectScope, type Ref, ref } from "vue";
@@ -14,9 +14,9 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
 
-// `backend` names its own model, `social` names none: the two cases that decide whether a routed persona answers the
+// `backend` names its own model, `social` names none: the two cases that decide whether a routed role answers the
 // model question itself.
-const personas = ref<Persona[]>([
+const roles = ref<Role[]>([
     {
         id: `backend`,
         label: `Backend`,
@@ -27,17 +27,17 @@ const personas = ref<Persona[]>([
     },
     { id: `social`, capabilities: [] },
 ]);
-jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas }) }));
+jest.mock(`../../../models/sandbox/roles/useRoles`, () => ({ useRoles: () => ({ roles }) }));
 
-// A guest is never routed onto a persona: its chat wears one of its own from the start.
+// A guest is never routed onto a role: its chat wears one of its own from the start.
 const isGuest = ref(false);
-jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest }) }));
+jest.mock(`../../../client/sandbox/useTier`, () => ({ useTier: () => ({ isGuest }) }));
 
 // The one daemon read under test: the reading itself.
 const routeChat = jest.fn<(input: ProcedureInput<`agent.routeChat`>) => Promise<ChatRoute>>();
 jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ agent: { routeChat } }) }));
 
-// Claude connected, nothing else: the backend persona's ladder resolves to its one pin.
+// Claude connected, nothing else: the backend role's ladder resolves to its one pin.
 jest.mock(`../../../models/providers/roleModel`, () => ({ roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
 
 const { SEND_WAIT_MS, chatRouteWait, useChatRoute } = await import("./chatRoute");
@@ -122,11 +122,11 @@ afterEach(() => {
 });
 
 test("both questions open: one call asks for both, and nothing is read until the message is sent", async () => {
-    expect(settings.value.personaRouting).toBe(true);
+    expect(settings.value.roleRouting).toBe(true);
     const chat = chatWith({ attachments: ref([{ path: `docs/spec.md` }]) });
     const text = `the invoice totals are off in @api/src/totals.ts`;
     answer({
-        persona: { id: `social`, reason: `The message reads like social's work.` },
+        role: { id: `social`, reason: `The message reads like social's work.` },
         model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` },
     });
     const routing = route(chat);
@@ -143,9 +143,10 @@ test("both questions open: one call asks for both, and nothing is read until the
         editorContext: false,
         planMode: false,
         model: true,
+        role: true,
         persona: true,
     });
-    // A persona with no model of its own leaves the model question to the reading's own pick.
+    // A role with no model of its own leaves the model question to the reading's own pick.
     expect(chat.selection.actsAs.value).toBe(`social`);
     expect(wearModel).toHaveBeenCalledWith({ provider: `claude`, model: `claude-opus-5`, effort: `high` });
     expect(chat.selection.account.value).toBe(`work`);
@@ -155,10 +156,10 @@ test("both questions open: one call asks for both, and nothing is read until the
     );
 });
 
-test("a persona that brings its own model answers the model question itself, and the line says so", async () => {
+test("a role that brings its own model answers the model question itself, and the line says so", async () => {
     const chat = chatWith();
     answer({
-        persona: { id: `backend`, reason: `The message reads like Backend's work.` },
+        role: { id: `backend`, reason: `The message reads like Backend's work.` },
         model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` },
     });
     await route(chat).beforeSend(WORK, false);
@@ -173,12 +174,12 @@ test("a persona that brings its own model answers the model question itself, and
     );
 });
 
-test("auto model on, persona matching off: only the model is asked for", async () => {
-    settings.value = { ...settings.value, personaRouting: false };
+test("auto model on, role matching off: only the model is asked for", async () => {
+    settings.value = { ...settings.value, roleRouting: false };
     const chat = chatWith();
     answer({ model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` } });
     await route(chat).beforeSend(WORK, false);
-    expect(sent()).toMatchObject({ model: true, persona: false });
+    expect(sent()).toMatchObject({ model: true, role: false });
     expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Choosing which model this chat runs on`), `upcoming`, { noticeWait: `chatRoute` });
     expect(chat.selection.actsAs.value).toBeUndefined();
     expect(verdict()).toBe(
@@ -186,12 +187,12 @@ test("auto model on, persona matching off: only the model is asked for", async (
     );
 });
 
-test("persona matching on, auto model off: only the persona is asked for, and Auto is left as the owner set it", async () => {
+test("role matching on, auto model off: only the role is asked for, and Auto is left as the owner set it", async () => {
     const chat = chatWith({ selection: { auto: ref(false) } });
-    answer({ persona: { id: `backend`, reason: `The message reads like Backend's work.` } });
+    answer({ role: { id: `backend`, reason: `The message reads like Backend's work.` } });
     await route(chat).beforeSend(WORK, false);
-    expect(sent()).toMatchObject({ model: false, persona: true });
-    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Reading which persona this chat belongs to`), `upcoming`, { noticeWait: `chatRoute` });
+    expect(sent()).toMatchObject({ model: false, role: true });
+    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Reading which role this chat belongs to`), `upcoming`, { noticeWait: `chatRoute` });
     expect(chat.selection.actsAs.value).toBe(`backend`);
     // Nothing to disarm: Auto was never armed here, and the next new chat's default is not this reading's business.
     expect(setAuto).not.toHaveBeenCalled();
@@ -199,7 +200,7 @@ test("persona matching on, auto model off: only the persona is asked for, and Au
 });
 
 test("neither question open means no call at all", () => {
-    settings.value = { ...settings.value, personaRouting: false };
+    settings.value = { ...settings.value, roleRouting: false };
     expect(route(chatWith({ selection: { auto: ref(false) } })).beforeSend(WORK, false)).toBeUndefined();
     expect(routeChat).not.toHaveBeenCalled();
     expect(notice).not.toHaveBeenCalled();
@@ -215,7 +216,7 @@ test("the chat says the reading is running, and the row settles in place", async
     expect(chatRouteWait(chat)).toMatchObject({ since: expect.any(Number) });
 
     resolve({
-        persona: { id: `social`, reason: `The message reads like social's work.` },
+        role: { id: `social`, reason: `The message reads like social's work.` },
         model: { reason: `Couldn't choose a model for this chat, so it keeps the one it had.` },
         judge: JUDGE,
     });
@@ -227,7 +228,7 @@ test("the chat says the reading is running, and the row settles in place", async
 test("a half that named nothing is still reported: the call was paid for either way", async () => {
     const chat = chatWith();
     answer({
-        persona: { reason: `No persona fits this message.` },
+        role: { reason: `No role fits this message.` },
         model: { reason: `Couldn't choose a model for this chat, so it keeps the one it had.` },
     });
     await route(chat).beforeSend(`what is a closure exactly?`, false);
@@ -235,12 +236,12 @@ test("a half that named nothing is still reported: the call was paid for either 
     expect(wearModel).not.toHaveBeenCalled();
     expect(chat.selection.autoPicked.value).toBe(false);
     expect(verdict()).toBe(
-        `No persona matched, so this chat acts as Full access. No persona fits this message. Couldn't choose a model for this chat, so it keeps the one it had. Read by ${JUDGE_LABEL}.`,
+        `No role matched, so this chat acts as All accounts. No role fits this message. Couldn't choose a model for this chat, so it keeps the one it had. Read by ${JUDGE_LABEL}.`,
     );
 });
 
 test("a reading nothing was spent on names no model as having read it", async () => {
-    routeChat.mockResolvedValueOnce({ persona: { id: `backend`, reason: `Opened in api, which Backend works in.` } });
+    routeChat.mockResolvedValueOnce({ role: { id: `backend`, reason: `Opened in api, which Backend works in.` } });
     await route(chatWith({ selection: { auto: ref(false) } })).beforeSend(WORK, false);
     expect(verdict()).toBe(`Acting as Backend. Opened in api, which Backend works in.`);
 });
@@ -255,10 +256,10 @@ test("a chat already under way disarms Auto instead of leaving a question nothin
     expect(routeChat).not.toHaveBeenCalled();
 });
 
-test("each half has its own floor: a short message is still worth a model, and not yet worth a persona", async () => {
+test("each half has its own floor: a short message is still worth a model, and not yet worth a role", async () => {
     answer({ model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` } });
     await route(chatWith()).beforeSend(`fix it`, false);
-    expect(sent()).toMatchObject({ model: true, persona: false });
+    expect(sent()).toMatchObject({ model: true, role: false });
 
     // Two characters is not a description of work at all: nothing is read, and Auto disarms rather than standing armed.
     const greeting = chatWith();
@@ -267,11 +268,11 @@ test("each half has its own floor: a short message is still worth a model, and n
     expect(routeChat).toHaveBeenCalledTimes(1);
 });
 
-test("a chat pointed at a persona by hand asks only about the model, and a pick by hand overrules the reading", async () => {
+test("a chat pointed at a role by hand asks only about the model, and a pick by hand overrules the reading", async () => {
     const pinned = chatWith({ selection: { actsAs: ref(`social`) } });
     answer({ model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` } });
     await route(pinned).beforeSend(WORK, false);
-    expect(sent()).toMatchObject({ model: true, persona: false });
+    expect(sent()).toMatchObject({ model: true, role: false });
 
     // The pill pressed before the send does the same for the rest of the chat's life.
     const chat = chatWith();
@@ -279,18 +280,18 @@ test("a chat pointed at a persona by hand asks only about the model, and a pick 
     routing.byHand();
     answer({ model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` } });
     await routing.beforeSend(WORK, false);
-    expect(sent(1)).toMatchObject({ model: true, persona: false });
+    expect(sent(1)).toMatchObject({ model: true, role: false });
 });
 
 test("a hand on either control while the reading ran is the last word", async () => {
     const chat = chatWith();
     answer({
-        persona: { id: `social`, reason: `The message reads like social's work.` },
+        role: { id: `social`, reason: `The message reads like social's work.` },
         model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` },
     });
     const routing = route(chat);
     const pending = routing.beforeSend(WORK, false);
-    // Exactly what selectModel and the persona pill do while the call is out.
+    // Exactly what selectModel and the role pill do while the call is out.
     chat.selection.apply({ kind: `set`, picks: { auto: false } });
     routing.byHand();
     await pending;
@@ -302,7 +303,7 @@ test("a hand on either control while the reading ran is the last word", async ()
 });
 
 test("a second message never buys another reading", async () => {
-    answer({ persona: { id: `social`, reason: `because` }, model: { pick: PICK, reason: `because` } });
+    answer({ role: { id: `social`, reason: `because` }, model: { pick: PICK, reason: `because` } });
     const chat = chatWith();
     const routing = route(chat);
     await routing.beforeSend(WORK, false);
@@ -320,7 +321,7 @@ test("a send is not held past the wait, and each half says what the chat keeps i
     expect(chatRouteWait(chat)).toBeUndefined();
     expect(verdict()).toBe(`Couldn't read what this chat opens on in time, so it stays open to everything and runs on the model it already had.`);
 
-    settings.value = { ...settings.value, personaRouting: false };
+    settings.value = { ...settings.value, roleRouting: false };
     const alone = chatWith();
     const second = route(alone).beforeSend(WORK, false);
     await advanceTimersByTimeAsync(SEND_WAIT_MS + 1);
@@ -337,15 +338,15 @@ test("a failed call reads as no answer rather than an error", async () => {
     expect(setAuto).toHaveBeenCalledWith(false);
 });
 
-test("a guest's chat is never asked about personas, whatever the setting says", async () => {
+test("a guest's chat is never asked about roles, whatever the setting says", async () => {
     isGuest.value = true;
     answer({ model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` } });
     await route(chatWith()).beforeSend(WORK, false);
-    expect(sent()).toMatchObject({ model: true, persona: false });
+    expect(sent()).toMatchObject({ model: true, role: false });
 });
 
 test("plan mode and the editor chip ride along: facts the words alone cannot carry", async () => {
-    answer({ model: { pick: PICK, reason: `because` }, persona: { reason: `No persona fits this message.` } });
+    answer({ model: { pick: PICK, reason: `because` }, role: { reason: `No role fits this message.` } });
     await route(chatWith({ selection: { modePick: ref(`plan`) } })).beforeSend(WORK, true);
     expect(sent()).toMatchObject({ planMode: true, editorContext: true });
 });

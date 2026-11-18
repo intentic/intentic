@@ -67,7 +67,7 @@ test("nothing of the daemon's history is bound but the turn's own pieces and the
     expect(pairs("--ro-bind")).toContainEqual([`${WORKSPACE_ROOT}/refs/sdk`, `${WORKSPACE_ROOT}/refs/sdk`]);
 });
 
-// Personas and areas grant shelf folders one by one (`refs/sdk`); the rest of the shelf is not the fence's.
+// Roles and areas grant shelf folders one by one (`refs/sdk`); the rest of the shelf is not the fence's.
 test("the shelf comes in only as far as the fence names folders on it", () => {
     const shelf = [...pairs("--bind"), ...pairs("--ro-bind")].filter(([source]) => source.startsWith(`${WORKSPACE_ROOT}/refs`));
     expect(shelf).toEqual([[`${WORKSPACE_ROOT}/refs/sdk`, `${WORKSPACE_ROOT}/refs/sdk`]]);

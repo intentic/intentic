@@ -20,7 +20,7 @@ const {
     filterTip,
 } = defineProps<{
     search: ExplorerSearchBox;
-    // Rows the host adds to the funnel while the tree shows (the workspace's persona lens), and whether one is on.
+    // Rows the host adds to the funnel while the tree shows (the workspace's role lens), and whether one is on.
     treeFilters?: readonly MenuItem[];
     treeFiltered?: boolean;
     // What the lit funnel says instead of its name: what the host's own rows have narrowed.

@@ -126,11 +126,13 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         conversations: memoryFleet().conversations,
         // No conversation-level grants: what a conversation nobody has widened reads.
         conversationGrants: unstubbed<Services["conversationGrants"]>("conversationGrants", { of: async () => undefined }),
-        // Read on every turn, not just a pinned one: an unattended wake naming no persona must still answer "no
+        // Read on every turn, not just a pinned one: an unattended wake naming no role must still answer "no
         // accounts".
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [] }),
         // No areas: the unfenced workspace, which is what a turn started by an owner carries.
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [] }),
+        // No access profiles: no role is held to anything beyond what its turn's ceiling and reach say.
+        accessProfiles: unstubbed<Services["accessProfiles"]>("accessProfiles", { list: async () => [] }),
         // Where this turn's checklist is read back from; the shared store, matching the unfenced `areas` above.
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
             sessionStore: (entry) => claudeStoreOf(ROOT, testConfig.historyRoot, entry),

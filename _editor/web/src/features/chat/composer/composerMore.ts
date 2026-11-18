@@ -3,21 +3,21 @@ import type { IconName } from "@intentic/ui";
 import { modeMeta } from "../models/catalog";
 import type { RunThroughState } from "../models/run-settings/useRunThrough";
 import { t } from "@intentic/ui/i18n";
-import { FULL_ACCESS_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
-import { builtInPersonaView } from "../../../models/sandbox/personas/builtInPersonas";
+import { FULL_ACCESS_ROLE } from "@intentic/sandbox-contract/schemas/roles";
+import { builtInRoleView } from "../../../models/sandbox/roles/builtInRoles";
 
 // One rule for the composer row vs overflow: a control at its default is a named row in the overflow
 // menu; set to anything else, it becomes a chip on the row. A pure, testable table; model and effort
 // aren't here since the row places them itself (effort draws nothing at all under Auto).
 
 // When the message goes is not one of them: it is the send's own caret (ChatPane), beside the press it changes.
-export type ComposerControl = `mode` | `placement` | `startFrom` | `persona` | `runThrough` | `voice` | `land`;
+export type ComposerControl = `mode` | `placement` | `startFrom` | `role` | `runThrough` | `voice` | `land`;
 
 /**
  * Order the controls read in, row and menu alike, so muscle memory doesn't depend on which half they're on. Whether the
  * work lands by itself comes last, beside the Send it follows.
  */
-export const CONTROL_ORDER: readonly ComposerControl[] = [`mode`, `placement`, `startFrom`, `persona`, `runThrough`, `voice`, `land`];
+export const CONTROL_ORDER: readonly ComposerControl[] = [`mode`, `placement`, `startFrom`, `role`, `runThrough`, `voice`, `land`];
 
 export interface ComposerControlSituation {
     /** The posture the next turn starts in, or the running turn's if the agent has moved itself. */
@@ -45,11 +45,11 @@ export interface ComposerControlSituation {
     readonly startSet?: boolean;
     /** The shared workspace's main line by name ("main"), what a new agent starts from by default. */
     readonly mainLine?: string | undefined;
-    readonly persona: string | undefined;
+    readonly role: string | undefined;
     readonly runThrough: RunThroughState;
     readonly voiceAgent: boolean;
-    /** Personas belong to one daemon, so a chat living in another sandbox is offered none. */
-    readonly personaOffered: boolean;
+    /** Roles belong to one daemon, so a chat living in another sandbox is offered none. */
+    readonly roleOffered: boolean;
     /** Writing as the agent needs a transcript to place into: offered from this chat's first turn on. */
     readonly voiceOffered: boolean;
     /** Whether finished work lands by itself is this chat's to answer: a private copy here, and a reader who may land. */
@@ -88,7 +88,7 @@ export type ControlFlags = Readonly<Record<ComposerControl, boolean>>;
 /** Whether the control exists for this chat at all. A control that isn't offered is in neither place. */
 const offeredIn = (situation: ComposerControlSituation) => {
     if (situation.guest === true) {
-        return { mode: false, placement: false, startFrom: false, persona: false, runThrough: false, voice: false, land: false } satisfies ControlFlags;
+        return { mode: false, placement: false, startFrom: false, role: false, runThrough: false, voice: false, land: false } satisfies ControlFlags;
     }
     // Plain words keep the mode; the rest are a developer's tools and stay out of the menu.
     const developer = situation.plain !== true;
@@ -96,7 +96,7 @@ const offeredIn = (situation: ComposerControlSituation) => {
         mode: true,
         placement: developer && situation.placementOffered,
         startFrom: developer && situation.startOffered === true,
-        persona: developer && situation.personaOffered,
+        role: developer && situation.roleOffered,
         runThrough: developer,
         voice: developer && situation.voiceOffered,
         land: developer && situation.landOffered,
@@ -109,7 +109,7 @@ const setIn = (situation: ComposerControlSituation): Record<ComposerControl, boo
     mode: situation.mode !== situation.startingMode,
     placement: situation.placed,
     startFrom: situation.startSet === true,
-    persona: situation.persona !== undefined,
+    role: situation.role !== undefined,
     runThrough: situation.runThrough !== `idle`,
     voice: situation.voiceAgent,
     land: situation.landOwn,
@@ -123,7 +123,7 @@ export const ridesRow = (situation: ComposerControlSituation): Record<ComposerCo
         mode: offered.mode && set.mode,
         placement: offered.placement && set.placement,
         startFrom: offered.startFrom && set.startFrom,
-        persona: offered.persona && set.persona,
+        role: offered.role && set.role,
         runThrough: offered.runThrough && set.runThrough,
         voice: offered.voice && set.voice,
         land: offered.land && set.land,
@@ -164,14 +164,14 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
                 value: situation.mainLine ?? t(`workspace.workspaceScopeChip.mainLine`),
                 description: t(`chat.composerMore.startFromNote`),
             };
-        case `persona`:
+        case `role`:
             return {
                 key: control,
                 icon: `users`,
                 label: t(`chat.words.acts`),
                 // Offered here only while unset, which is Full access.
-                value: builtInPersonaView(FULL_ACCESS_PERSONA).label,
-                description: t(`chat.composerMore.onePersonasAccountsOnly`),
+                value: builtInRoleView(FULL_ACCESS_ROLE).label,
+                description: t(`chat.composerMore.oneRolesAccountsOnly`),
             };
         case `runThrough`:
             return {

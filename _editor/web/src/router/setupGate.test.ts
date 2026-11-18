@@ -14,7 +14,7 @@ const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">
     removedBy: null,
     hosted: null,
     token: `token-${overrides.id}`,
-    role: `owner`,
+    tier: `owner`,
     providedAddress: false,
     localHostname: null,
     ...overrides,
@@ -124,11 +124,11 @@ describe(`setupRedirect`, () => {
     // A member cannot mint a setup code for someone else's sandbox, so resuming theirs would land them on a
     // step they are not allowed to finish. The blank form still offers the attach lane.
     it(`does not resume a shared sandbox the caller only has access to`, () => {
-        expect(setupRedirect([sandbox({ id: `theirs`, role: `collaborator` })])).toBe(`/setup`);
+        expect(setupRedirect([sandbox({ id: `theirs`, tier: `collaborator` })])).toBe(`/setup`);
     });
 
     it(`resumes the caller's own sandbox rather than a shared one listed before it`, () => {
-        expect(setupRedirect([sandbox({ id: `theirs`, role: `collaborator` }), sandbox({ id: `mine` })])).toEqual({
+        expect(setupRedirect([sandbox({ id: `theirs`, tier: `collaborator` }), sandbox({ id: `mine` })])).toEqual({
             path: `/setup`,
             query: { sandbox: `mine` },
         });

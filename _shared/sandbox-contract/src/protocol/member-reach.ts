@@ -1,11 +1,11 @@
 import type { AgentAccess, ManageRight } from "../schemas/members.js";
-import { type MemberRole, roleAtLeast } from "../schemas/shared.js";
+import { type MemberTier, tierAtLeast } from "../schemas/shared.js";
 import { defaultFloor } from "./route-meta.js";
 import { isAttachmentPath } from "../state/workspace-state.js";
 import { sandboxRouteFor } from "../index.js";
 
 // Role floors: the minimum trust tier each route demands, read from the route's own RouteMeta (route-meta.ts). One
-// function for both sides: the daemon's bearer middleware refuses with it right after the caller's role resolves, and
+// function for both sides: the daemon's bearer middleware refuses with it right after the caller's tier resolves, and
 // the editor asks it before sending, so a request the daemon would refuse is never sent and the two cannot disagree.
 // A floor, not the whole answer: operating routes still keep their own in-route gates (members.ts `holdsRight`,
 // `peopleChangeRefusal`). A route that runs one part of the sandbox names it (`right`), and a person given that part
@@ -22,7 +22,7 @@ export type MemberRefusalReason = "floor" | "agents-off" | "guest";
 // The body of that refusal, as the daemon sends it and as the editor predicts it before sending.
 export interface MemberRefusal {
     readonly error: string;
-    readonly floor: MemberRole;
+    readonly floor: MemberTier;
     readonly reason: MemberRefusalReason;
 }
 
@@ -31,7 +31,7 @@ export interface MemberRefusal {
 // the bytes land.
 export const memberRefusal = (
     caller: {
-        readonly role: MemberRole;
+        readonly tier: MemberTier;
         readonly areas?: readonly string[] | undefined;
         readonly agents?: AgentAccess | undefined;
         readonly lands?: true | undefined;
@@ -41,13 +41,13 @@ export const memberRefusal = (
     path: string,
     target?: string,
 ): MemberRefusal | undefined => {
-    if (caller.role === "guest") {
+    if (caller.tier === "guest") {
         return guestReach(method, path, target) || homeReach(caller, method, path)
             ? undefined
             : { error: "not open to a guest member", floor: "viewer", reason: "guest" };
     }
     const floor = routeFloor(method, path, target);
-    if (!roleAtLeast(caller.role, floor) && !givenRight(caller, method, path)) {
+    if (!tierAtLeast(caller.tier, floor) && !givenRight(caller, method, path)) {
         return { error: `${floor} access required`, floor, reason: "floor" };
     }
     // The collaborator floor is driving agents. A person who edits files by hand without running agents holds the
@@ -77,7 +77,7 @@ const homeReach = (caller: { readonly agents?: AgentAccess | undefined; readonly
 export const homeLandReach = (method: string, path: string): boolean => sandboxRouteFor(method, path)?.meta.home === "land";
 
 // `target` is the workspace path a byte-write addresses (upload's `?path=`); absent for every other route.
-export const routeFloor = (method: string, path: string, target?: string): MemberRole => {
+export const routeFloor = (method: string, path: string, target?: string): MemberTier => {
     const meta = sandboxRouteFor(method, path)?.meta;
     if (meta?.attachmentFloor !== undefined && attachment(target)) {
         return meta.attachmentFloor;

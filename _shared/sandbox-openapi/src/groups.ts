@@ -220,12 +220,12 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
 
     // Agent setup
     {
-        name: "personas",
+        name: "roles",
         shelf: "kit",
-        label: "Personas",
+        label: "Roles",
         summary: "Named characters an agent can wear: the accounts it speaks for and what it is told",
         description:
-            "A persona records a decision about accounts that already exist: which of them this character speaks for, what a conversation wearing it may do, and what it is told. The kit routes edit the files behind one — its own instructions, and the skills only its conversations reach.",
+            "A role records a decision about accounts that already exist: which of them this character speaks for, what a conversation wearing it may do, and what it is told. The kit routes edit the files behind one — its own instructions, and the skills only its conversations reach.",
     },
     {
         name: "skills",

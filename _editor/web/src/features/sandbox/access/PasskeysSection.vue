@@ -23,22 +23,22 @@ const { user } = useAuth();
 const { active } = useSandbox();
 const { list, unread, codes, forgetCodes, busy, notice, supported, add, remove, setRequired, regenerateCodes } = usePasskeys();
 
-const isOwner = computed(() => active.value?.role === `owner`);
+const isOwner = computed(() => active.value?.tier === `owner`);
 const label = ref(``);
 
 const mine = (passkey: PasskeySummary): boolean => passkey.email.toLowerCase() === (user.value?.email ?? ``).toLowerCase();
 // Below Full access, another member's passkey is reset only where their access could be changed (sandbox-contract
 // `peopleChangeRefusal`): never a Full access person's. The list already leaves out what the reader may not see.
-const { holds, role } = useAccess();
+const { holds, tier: ownTier } = useAccess();
 const self = selfMember();
 const { members } = useMembers({ enabled: computed(() => holds(`people`) && !isOwner.value) });
 const removable = (passkey: PasskeySummary): boolean => {
-    const tier = role.value;
+    const tier = ownTier.value;
     if (mine(passkey) || isOwner.value || tier === undefined) {
         return true;
     }
     const before = members.value.find((member) => member.email.toLowerCase() === passkey.email.toLowerCase());
-    return peopleChangeRefusal({ email: user.value?.email ?? ``, role: tier, manages: self.value?.manages }, { email: passkey.email, before }) === undefined;
+    return peopleChangeRefusal({ email: user.value?.email ?? ``, tier, manages: self.value?.manages }, { email: passkey.email, before }) === undefined;
 };
 const ownCount = computed(() => list.value.passkeys.filter(mine).length);
 

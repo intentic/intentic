@@ -19,7 +19,7 @@ export interface WorkspaceStateFile extends StateFile {
     // Present only on entries with no invalidations.
     readonly why?: string;
     // Whether this entry is tracked by the root repo, so its diff is reviewable in Changes and `git log`. Absent by
-    // default; only configuration (settings, personas, skills, automations, workflow designs, environment overlay,
+    // default; only configuration (settings, roles, skills, automations, workflow designs, environment overlay,
     // which extensions are on) or authored content whose consequences leave the sandbox (workspace extensions, drafts
     // posted under the owner's name) earns it. Ledgers and bulk content stay out even when `carry`. Narrower than
     // `carry`: `carry` asks whether it moves to a new sandbox, this asks whether a human should review it changing.
@@ -70,15 +70,15 @@ const STATE_FILES = [
         portability: "carry",
     },
 
-    // Named personas: which connected accounts each speaks for, what a session wearing it may do, where it works
-    // (PersonaSchema). Invalidates `capabilities` too since a persona's account list is read together with the
+    // Named roles: which connected accounts each speaks for, what a session wearing it may do, where it works
+    // (RoleSchema). Invalidates `capabilities` too since a role's account list is read together with the
     // capability catalog. `carry`: a card is a name and ids, never a credential.
-    { path: ".intentic/config/personas.json", invalidates: ["personas", "capabilities", "manifests"], portability: "carry", versioned: true },
+    { path: ".intentic/config/roles.json", invalidates: ["roles", "capabilities", "manifests"], portability: "carry", versioned: true },
 
     // Named parts of the workspace (AreaSchema), the unit a person's reach is granted in. `carry`: folder names, no
     // credential, and a workspace that moves keeps the shape of its own fences. `versioned` because editing an area
     // changes what people already granted it can see, which is precisely a change a human should review. It stays
-    // agent-writable like personas.json, and is safe there for a reason worth stating: a fenced conversation's own
+    // agent-writable like roles.json, and is safe there for a reason worth stating: a fenced conversation's own
     // fence has to admit `.intentic` before its agent can reach this file, so no fence can widen itself.
     { path: ".intentic/config/areas.json", invalidates: ["areas", "manifests"], portability: "carry", versioned: true },
 
@@ -468,7 +468,7 @@ const STATE_FILES = [
         portability: "secret",
         note: "Webhook, gate and intake URLs are minted fresh on the first read here: re-copy each into its caller's secret store.",
     },
-    // The one `identity` entry that opts out of backup: unlike the rows beside it (a name, an id, a role), these
+    // The one `identity` entry that opts out of backup: unlike the rows beside it (a name, an id, a tier), these
     // tokens authenticate against this sandbox from outside it, so a copy has no business surviving the sandbox it
     // admits callers to. Re-minted on a new sandbox regardless, so nothing is lost by excluding it.
     {
@@ -529,11 +529,11 @@ const STATE_FILES = [
     // (settings.json's `skills` list); a skill switched off keeps its text here rather than nowhere. `versioned`+
     // `carry`: it changes agent behavior and holds no credential.
     { path: ".intentic/config/skills/", invalidates: ["skills"], portability: "carry", versioned: true },
-    // One folder per persona: its system prompt, skills and tools, laid out as a Claude Code plugin
+    // One folder per role: its system prompt, skills and tools, laid out as a Claude Code plugin
     // (`.claude-plugin/plugin.json`, `skills/`, `agents/`, `commands/`, `hooks/`, `.mcp.json`) so the runtime's own
-    // loader reads it directly. Kept separate from `personas.json` because this is prose and files rather than a
+    // loader reads it directly. Kept separate from `roles.json` because this is prose and files rather than a
     // diffable record; folding a 20k prompt into JSON would make every edit unreadable.
-    { path: ".intentic/config/personas/", invalidates: ["personas"], portability: "carry", versioned: true },
+    { path: ".intentic/config/roles/", invalidates: ["roles"], portability: "carry", versioned: true },
 ] as const satisfies readonly WorkspaceStateFile[];
 
 export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
@@ -554,7 +554,7 @@ export const SEARCHABLE_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.f
 // cleanly (every `versioned` and `authored` entry is `carry`), declaring the group separately would be a fourth
 // fact to keep in step.
 export type StateGroup =
-    // Reviewed and reviewable: settings, personas, skills, approvals, staged docs, environment overlay. Tracked,
+    // Reviewed and reviewable: settings, roles, skills, approvals, staged docs, environment overlay. Tracked,
     // searchable, backed up, carried. Called `config` even though approvals and staged docs are authored content, not
     // settings, since most members are.
     | "config"
@@ -707,7 +707,7 @@ export const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
 export const PLAN_DOCUMENTS_DIR = `${STATE_DIR}/records/sessions/claude/plans`;
 
 // Where message attachments land: the browser posts to `<this>/<uuid>/<name>` before the message is sent, and the
-// turn reads them back (schemas/agent.ts). The role floor (protocol/member-reach.ts) keys off this path: attaching is
+// turn reads them back (schemas/agent.ts). The tier floor (protocol/member-reach.ts) keys off this path: attaching is
 // part of sending (a collaborator's grant), writing elsewhere in the workspace is the operating tier's, and both
 // travel through the same upload route.
 export const ATTACHMENTS_DIR = `${STATE_DIR}/records/artifacts/attachments`;

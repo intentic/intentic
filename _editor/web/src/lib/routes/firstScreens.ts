@@ -8,9 +8,9 @@ import { sandboxOfAddress, toHome, toInside } from "./links";
 // back out to Home. Both are addresses of the sandbox's own since 2026-11-04 (`/s/<sandbox>/agents`), so each answer
 // names the sandbox it is about.
 
-/** What the two answers read of the person's standing in the sandbox (client/sandbox/useRole.ts). */
-export interface LandingRole {
-    /** The tier below viewer: talks to the persona cards it holds, and is shown nothing else of the box. */
+/** What the two answers read of the person's standing in the sandbox (client/sandbox/useTier.ts). */
+export interface LandingTier {
+    /** The tier below viewer: talks to the role cards it holds, and is shown nothing else of the box. */
     readonly isGuest: boolean;
     /** A guest whose only way in is its own home conversation. */
     readonly homeOnly: boolean;
@@ -19,9 +19,9 @@ export interface LandingRole {
 export const HOME_PATH = homePath();
 
 /** A sandbox's own first screen: its agents board; a guest's chat, or a home-only guest's home. */
-export const sandboxLanding = (sandbox: string, role: LandingRole): string => {
-    if (role.isGuest) {
-        return role.homeOnly ? toHome(sandbox) : toInside(sandbox, page.chat());
+export const sandboxLanding = (sandbox: string, tier: LandingTier): string => {
+    if (tier.isGuest) {
+        return tier.homeOnly ? toHome(sandbox) : toInside(sandbox, page.chat());
     }
     return toInside(sandbox, page.agents());
 };
@@ -31,9 +31,9 @@ export const sandboxLanding = (sandbox: string, role: LandingRole): string => {
  * first sandbox. A plain guest's way in is the chat of the box it was let into, as before. The Android app draws the
  * board itself (router/nativeHandoff.ts), so its WebView keeps opening there. With no sandbox to open, Home it is.
  */
-export const rootLanding = (role: LandingRole, embedded: boolean, sandbox: string | undefined): string => {
-    if (sandbox !== undefined && (embedded || (role.isGuest && !role.homeOnly))) {
-        return sandboxLanding(sandbox, role);
+export const rootLanding = (tier: LandingTier, embedded: boolean, sandbox: string | undefined): string => {
+    if (sandbox !== undefined && (embedded || (tier.isGuest && !tier.homeOnly))) {
+        return sandboxLanding(sandbox, tier);
     }
     return HOME_PATH;
 };
@@ -56,5 +56,5 @@ export const insideScreen = (sandbox: string, address: string): string | undefin
 };
 
 /** Where opening a sandbox goes: the screen it was last left on, when that was a screen of its own, else its first screen. */
-export const sandboxEntry = (sandbox: string, remembered: string | undefined, role: LandingRole): string =>
-    (remembered === undefined ? undefined : insideScreen(sandbox, remembered)) ?? sandboxLanding(sandbox, role);
+export const sandboxEntry = (sandbox: string, remembered: string | undefined, tier: LandingTier): string =>
+    (remembered === undefined ? undefined : insideScreen(sandbox, remembered)) ?? sandboxLanding(sandbox, tier);

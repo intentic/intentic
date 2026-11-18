@@ -39,12 +39,12 @@
                     "email": "ada@example.com",
                     "name": "Ada",
                     "picture": "https://lh3.googleusercontent.com/a/ada",
-                    "role": "owner",
+                    "tier": "owner",
                     "idle": false,
                     "view": "agents",
                     "sessionId": "cnv_soft_deletes"
                 },
-                { "clientId": "c_22f0", "email": "grace@example.com", "role": "collaborator", "idle": true, "away": true }
+                { "clientId": "c_22f0", "email": "grace@example.com", "tier": "collaborator", "idle": true, "away": true }
             ]
         },
         "agents": {

@@ -318,7 +318,7 @@ test("a fatal source failure lands as an error run on the provider's listener au
 const mark = { id: "u-mark", name: "Mark" };
 const martha = { id: "u-martha", name: "Martha" };
 
-// The owner's front line: Mark gets the unpinned agent, Martha the guest persona, nobody else gets anything.
+// The owner's front line: Mark gets the unpinned agent, Martha the guest role, nobody else gets anything.
 const frontLine = (id: string, extra: Partial<Automation> = {}): Automation =>
     listenerAutomation(id, {
         senders: { rules: [{ ids: [mark.id] }, { ids: [martha.id], actsAs: "customer-service" }], others: "ignore" },
@@ -337,7 +337,7 @@ test("a sender no rule names wakes nothing under `others: ignore`, and is still 
     await eventually(async () => expect(await services.senders.list("discord")).toMatchObject([{ id: "u1", name: "alice", messages: 1 }]));
 });
 
-test("two people one channel answers as different agents get two conversations, each turn wearing its rule's persona", async () => {
+test("two people one channel answers as different agents get two conversations, each turn wearing its rule's role", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(frontLine("senders-lanes"));
     const turns: AgentTurn[] = [];
@@ -367,18 +367,18 @@ test("a burst from two lanes becomes two wakes, neither carrying the other's lin
         turns.push(input);
         yield { kind: "done" };
     };
-    // Inside one debounce window: without lanes these would coalesce into one payload under one persona.
+    // Inside one debounce window: without lanes these would coalesce into one payload under one role.
     await dispatchListenerMessage(drivenBy(services, capture), message({ author: mark, content: "mark's line" }), 5);
     await dispatchListenerMessage(drivenBy(services, capture), message({ id: "m2", author: martha, content: "martha's line" }), 5);
     await eventually(() => expect(turns).toHaveLength(2));
-    const byPersona = new Map(turns.map((turn) => [turn.actsAs, turn.prompt]));
-    expect(byPersona.get(undefined)).toContain("mark's line");
-    expect(byPersona.get(undefined)).not.toContain("martha's line");
-    expect(byPersona.get("customer-service")).toContain("martha's line");
-    expect(byPersona.get("customer-service")).not.toContain("mark's line");
+    const byRole = new Map(turns.map((turn) => [turn.actsAs, turn.prompt]));
+    expect(byRole.get(undefined)).toContain("mark's line");
+    expect(byRole.get(undefined)).not.toContain("martha's line");
+    expect(byRole.get("customer-service")).toContain("martha's line");
+    expect(byRole.get("customer-service")).not.toContain("mark's line");
 });
 
-test("a rule that holds its people parks the wake with the lane's persona and thread snapshotted, running nothing", async () => {
+test("a rule that holds its people parks the wake with the lane's role and thread snapshotted, running nothing", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(
         listenerAutomation("senders-hold", {
@@ -398,7 +398,7 @@ test("a rule that holds its people parks the wake with the lane's persona and th
     expect((await services.automations.get("senders-hold"))?.runs).toEqual([]);
 });
 
-test("`others: hold` parks a stranger wearing the automation's own persona", async () => {
+test("`others: hold` parks a stranger wearing the automation's own role", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(
         listenerAutomation("senders-others-hold", { actsAs: "guest", senders: { rules: [{ ids: [mark.id] }], others: "hold" } }),

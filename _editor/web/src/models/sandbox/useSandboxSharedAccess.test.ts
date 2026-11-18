@@ -4,7 +4,7 @@ import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 import type { SandboxSummary } from "@intentic/api-contract";
 
-const active = ref<SandboxSummary | undefined>({ id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary);
+const active = ref<SandboxSummary | undefined>({ id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, tier: `owner` } as SandboxSummary);
 const reachable = ref(true);
 jest.mock("../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ active, reachable }) }));
 
@@ -38,7 +38,7 @@ beforeEach(() => {
     app?.unmount();
     app = undefined;
     queryClient.clear();
-    active.value = { id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary;
+    active.value = { id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, tier: `owner` } as SandboxSummary;
     sandboxJson.mockReset();
     sandboxJson.mockResolvedValue({ members: [], owner: `owner@example.com` });
 });
@@ -51,7 +51,7 @@ describe("useSandboxSharedAccess", () => {
 
     it("is true once the owner has granted someone else access", async () => {
         sandboxJson.mockResolvedValue({
-            members: [{ email: `guest@example.com`, role: `collaborator` }],
+            members: [{ email: `guest@example.com`, tier: `collaborator` }],
             owner: `owner@example.com`,
         });
         const { sharedAccess } = mounted();
@@ -59,7 +59,7 @@ describe("useSandboxSharedAccess", () => {
     });
 
     it("is true for a member, since the roster already names someone besides them", () => {
-        active.value = { id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, role: `collaborator` } as SandboxSummary;
+        active.value = { id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, tier: `collaborator` } as SandboxSummary;
         const { sharedAccess } = mounted();
         expect(sharedAccess.value).toBe(true);
     });
@@ -76,8 +76,8 @@ describe("before the answer arrives", () => {
         const { sharedAccess } = mounted();
         expect(sharedAccess.value).toBe(true);
 
-        // SAFETY: the same summary the suite's beforeEach seeds; the composable reads only its role.
-        active.value = { id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary;
+        // SAFETY: the same summary the suite's beforeEach seeds; the composable reads only its tier.
+        active.value = { id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, tier: `owner` } as SandboxSummary;
         await waitFor(() => expect(sharedAccess.value).toBe(false));
         expect(localStorage.getItem(`intentic.sharedAccess.sbx-1`)).toBe(`0`);
     });

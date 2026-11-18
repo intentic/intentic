@@ -139,7 +139,7 @@ test(`an ignored file outranks anything else wrong with it`, () => {
 test(`each file is its own row, in the order the daemon reported them`, () => {
     const notices = manifestNotices([
         { path: settings, problems: [{ kind: `unknownKey`, detail: `skils` }] },
-        { path: `${STATE_DIR}/config/personas.json`, problems: [{ kind: `unreadable`, detail: `the file is not valid JSON` }] },
+        { path: `${STATE_DIR}/config/roles.json`, problems: [{ kind: `unreadable`, detail: `the file is not valid JSON` }] },
     ]);
-    expect(notices.map((notice) => notice.file)).toEqual([`settings.json`, `personas.json`]);
+    expect(notices.map((notice) => notice.file)).toEqual([`settings.json`, `roles.json`]);
 });

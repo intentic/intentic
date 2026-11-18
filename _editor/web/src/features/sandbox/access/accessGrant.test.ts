@@ -20,11 +20,11 @@ describe(`newPerson`, () => {
 });
 
 describe(`draftGrant`, () => {
-    // The role sent is the tier the answers make, and the answers ride beside it so the row says what was decided.
+    // The tier sent is the one the answers make, and the answers ride beside it so the row says what was decided.
     it(`sends the tier the access makes, with every answer that makes it`, () => {
         expect(draftGrant(`ana@corp.example`, draft())).toEqual({
             email: `ana@corp.example`,
-            role: `viewer`,
+            tier: `viewer`,
             agents: `off`,
             emailSignIn: true,
             credentials: { capabilities: [], secrets: [] },
@@ -33,7 +33,7 @@ describe(`draftGrant`, () => {
         });
         expect(draftGrant(`ana@corp.example`, draft({ agents: `off`, see: [`web`, `support`], edit: [`support`], credentials: `all` }))).toEqual({
             email: `ana@corp.example`,
-            role: `writer`,
+            tier: `writer`,
             agents: `off`,
             areas: [`web`, `support`],
             edit: [`support`],
@@ -47,7 +47,7 @@ describe(`draftGrant`, () => {
     // The AI accounts ride as a list, so the daemon holds the person to exactly the ones ticked.
     it(`sends the AI accounts a person may run on`, () => {
         expect(draftGrant(`ana@corp.example`, draft({ agents: `run`, aiAccounts: [`claude:work`, `endpoint/gateway`] }))).toMatchObject({
-            role: `collaborator`,
+            tier: `collaborator`,
             aiAccounts: [`claude:work`, `endpoint/gateway`],
         });
     });
@@ -59,7 +59,7 @@ describe(`draftGrant`, () => {
             draftGrant(`mai@example.com`, draft({ manage: true, see: [`web`], credentials: { capabilities: [`github`], secrets: [] }, aiAccounts: [`claude:work`] })),
         ).toEqual({
             email: `mai@example.com`,
-            role: `maintainer`,
+            tier: `maintainer`,
             emailSignIn: true,
             credentials: { capabilities: [`github`], secrets: [] },
             aiAccounts: [`claude:work`],
@@ -71,7 +71,7 @@ describe(`draftGrant`, () => {
 // the panel shows, and never on Full access, which runs every part already.
 describe(`draftGrant with rights`, () => {
     it(`sends the rights a person was given, and an empty list when none`, () => {
-        expect(draftGrant(`ana@corp.example`, draft({ agents: `run`, manages: [`secrets`, `people`] }))).toMatchObject({ role: `collaborator`, manages: [`people`, `secrets`] });
+        expect(draftGrant(`ana@corp.example`, draft({ agents: `run`, manages: [`secrets`, `people`] }))).toMatchObject({ tier: `collaborator`, manages: [`people`, `secrets`] });
         expect(draftGrant(`ana@corp.example`, draft({ agents: `run` })).manages).toEqual([]);
     });
 
@@ -84,7 +84,7 @@ describe(`draftGrant with rights`, () => {
         const profile = { id: `engineering`, agents: `run` as const };
         expect(draftGrant(`ana@corp.example`, draft({ ...profileAccess(profile), profile: profile.id, manages: [`privacy`] }))).toEqual({
             email: `ana@corp.example`,
-            role: `collaborator`,
+            tier: `collaborator`,
             profile: `engineering`,
             emailSignIn: true,
             manages: [`privacy`],
@@ -104,15 +104,15 @@ describe(`draftGrant with rights`, () => {
     });
 
     it(`reads a row's rights back into the draft`, () => {
-        expect(draftOf({ email: `c@x.example`, role: `collaborator`, manages: [`people`] }, `collaborator`).manages).toEqual([`people`]);
-        expect(draftOf({ email: `m@x.example`, role: `maintainer` }, `maintainer`).manages).toBeUndefined();
+        expect(draftOf({ email: `c@x.example`, tier: `collaborator`, manages: [`people`] }, `collaborator`).manages).toEqual([`people`]);
+        expect(draftOf({ email: `m@x.example`, tier: `maintainer` }, `maintainer`).manages).toBeUndefined();
     });
 });
 
 describe(`draftGrant for a home-only person`, () => {
     // A guest's tier with no area needed, and `lands` only when on: silence is what takes it back.
     it(`sends lands only when their home lands by itself`, () => {
-        expect(draftGrant(`h@x.example`, draft({ agents: `home`, lands: true }))).toMatchObject({ role: `guest`, agents: `home`, lands: true });
+        expect(draftGrant(`h@x.example`, draft({ agents: `home`, lands: true }))).toMatchObject({ tier: `guest`, agents: `home`, lands: true });
         expect(draftGrant(`h@x.example`, draft({ agents: `home` }))).not.toHaveProperty(`lands`);
         expect(draftGrant(`h@x.example`, draft({ agents: `run`, lands: true }))).not.toHaveProperty(`lands`);
         expect(draftProblem(draft({ agents: `home` }), 0)).toBeUndefined();
@@ -120,16 +120,16 @@ describe(`draftGrant for a home-only person`, () => {
 });
 
 describe(`draftOf`, () => {
-    // A row from before agents and edit reads as its role meant, and a person the daemon never wrote as the platform's tier.
+    // A row from before agents and edit reads as its tier meant, and a person the daemon never wrote as the platform's tier.
     it(`reads what the daemon holds, else the platform's tier`, () => {
-        expect(draftOf({ email: `w@x.example`, role: `writer`, areas: [`web`] }, `writer`)).toMatchObject({
+        expect(draftOf({ email: `w@x.example`, tier: `writer`, areas: [`web`] }, `writer`)).toMatchObject({
             agents: `run`,
             see: [`web`],
             edit: [`web`],
             credentials: `all`,
             aiAccounts: `all`,
         });
-        expect(draftOf({ email: `c@x.example`, role: `collaborator`, aiAccounts: [`codex:me`] }, `collaborator`)).toMatchObject({ aiAccounts: [`codex:me`] });
+        expect(draftOf({ email: `c@x.example`, tier: `collaborator`, aiAccounts: [`codex:me`] }, `collaborator`)).toMatchObject({ aiAccounts: [`codex:me`] });
         expect(draftOf(undefined, `collaborator`)).toMatchObject({ agents: `run`, see: undefined, edit: `none`, emailSignIn: false });
     });
 });
@@ -187,17 +187,17 @@ describe(`emailSignInByDefault`, () => {
 describe(`profile grants`, () => {
     it(`sends a profile id and its derived tier without competing inline answers`, () => {
         const profile = { id: `support`, agents: `chat` as const, areas: [`support`], tools: { shell: false }, assistants: [`helper`] };
-        expect(draftGrant(`ana@corp.example`, draft({ ...profileAccess(profile), profile: profile.id }))).toEqual({ email: `ana@corp.example`, role: `guest`, profile: `support`, emailSignIn: true, manages: [] });
+        expect(draftGrant(`ana@corp.example`, draft({ ...profileAccess(profile), profile: profile.id }))).toEqual({ email: `ana@corp.example`, tier: `guest`, profile: `support`, emailSignIn: true, manages: [] });
     });
     it(`keeps tools and assistants when changing an existing person's sign-in`, () => {
-        const row = { email: `ana@corp.example`, role: `guest` as const, agents: `chat` as const, areas: [`support`], tools: { shell: false }, assistants: [`helper`] };
-        expect(draftGrant(row.email, { ...draftOf(row, row.role), emailSignIn: true })).toMatchObject({ tools: row.tools, assistants: [`helper`], emailSignIn: true });
-        expect(draftGrant(row.email, { ...draftOf({ ...row, profile: `support` }, row.role), emailSignIn: true })).toEqual({ email: row.email, role: `guest`, profile: `support`, emailSignIn: true, manages: [] });
+        const row = { email: `ana@corp.example`, tier: `guest` as const, agents: `chat` as const, areas: [`support`], tools: { shell: false }, assistants: [`helper`] };
+        expect(draftGrant(row.email, { ...draftOf(row, row.tier), emailSignIn: true })).toMatchObject({ tools: row.tools, assistants: [`helper`], emailSignIn: true });
+        expect(draftGrant(row.email, { ...draftOf({ ...row, profile: `support` }, row.tier), emailSignIn: true })).toEqual({ email: row.email, tier: `guest`, profile: `support`, emailSignIn: true, manages: [] });
     });
     it(`never attaches a profile to a maintainer`, () => {
         expect(draftGrant(`ana@corp.example`, draft({ manage: true, profile: `support`, credentials: `all` }))).toEqual({
             email: `ana@corp.example`,
-            role: `maintainer`,
+            tier: `maintainer`,
             emailSignIn: true,
             credentials: `all`,
             aiAccounts: `all`,

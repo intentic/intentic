@@ -2,7 +2,7 @@
 import { z } from "zod";
 import type { CapabilityKind } from "./capabilities.js";
 import { entryId } from "./internal.js";
-import { type GrantedRole, GrantedRoleSchema, type MemberRole, MemberRoleSchema } from "./shared.js";
+import { type GrantedTier, GrantedTierSchema, type MemberTier, MemberTierSchema, withLegacyTier } from "./shared.js";
 import { ToolCeilingSchema } from "./tool-ceiling.js";
 
 // WHAT A PERSON MAY RUN BESIDES THEIR OWN WORK, one part of the sandbox at a time. Full access (the maintainer tier) holds
@@ -20,8 +20,8 @@ export type ManageRight = z.infer<typeof ManageRightSchema>;
 export const MANAGE_RIGHTS: readonly ManageRight[] = ManageRightSchema.options;
 
 /** Whether this person may run one part of the sandbox: the owner and Full access run every part, anyone else what their row names. */
-export const holdsRight = (caller: { readonly role: MemberRole; readonly manages?: readonly ManageRight[] | undefined }, right: ManageRight): boolean =>
-    caller.role === "owner" || caller.role === "maintainer" || (caller.manages?.includes(right) ?? false);
+export const holdsRight = (caller: { readonly tier: MemberTier; readonly manages?: readonly ManageRight[] | undefined }, right: ManageRight): boolean =>
+    caller.tier === "owner" || caller.tier === "maintainer" || (caller.manages?.includes(right) ?? false);
 
 /**
  * Why someone who manages people may not make this change to one person's access; undefined when they may. The owner and
@@ -31,14 +31,14 @@ export const holdsRight = (caller: { readonly role: MemberRole; readonly manages
  * its `manages` absent keeps the row's, as a grant reads it.
  */
 export const peopleChangeRefusal = (
-    manager: { readonly email: string; readonly role: MemberRole; readonly manages?: readonly ManageRight[] | undefined },
+    manager: { readonly email: string; readonly tier: MemberTier; readonly manages?: readonly ManageRight[] | undefined },
     target: {
         readonly email: string;
-        readonly before?: { readonly role: GrantedRole; readonly manages?: readonly ManageRight[] | undefined } | undefined;
-        readonly after?: { readonly role: GrantedRole; readonly manages?: readonly ManageRight[] | undefined } | undefined;
+        readonly before?: { readonly tier: GrantedTier; readonly manages?: readonly ManageRight[] | undefined } | undefined;
+        readonly after?: { readonly tier: GrantedTier; readonly manages?: readonly ManageRight[] | undefined } | undefined;
     },
 ): string | undefined => {
-    if (manager.role === "owner" || manager.role === "maintainer") {
+    if (manager.tier === "owner" || manager.tier === "maintainer") {
         return undefined;
     }
     if (!holdsRight(manager, "people")) {
@@ -47,10 +47,10 @@ export const peopleChangeRefusal = (
     if (manager.email.toLowerCase() === target.email.toLowerCase()) {
         return "your own access is changed by the owner or someone with Full access";
     }
-    if (target.before?.role === "maintainer") {
+    if (target.before?.tier === "maintainer") {
         return "a Full access person's access is changed by the owner or someone with Full access";
     }
-    if (target.after?.role === "maintainer") {
+    if (target.after?.tier === "maintainer") {
         return "Full access is granted by the owner or someone with Full access";
     }
     const had = new Set(target.before?.manages ?? []);
@@ -119,7 +119,7 @@ export const aiAccountAllowed = (keys: Iterable<string>, provider: string, accou
 // WHAT ONE PERSON MAY DO, as three independent answers rather than one rung of a ladder: whether their conversations
 // run agents (`agents`), where they may look (`areas`, the fence their agents run inside too) and where they may change
 // files by hand (`edit`), and whether they manage the sandbox (the maintainer tier, which implies every other answer).
-// The `role` a row carries is the tier those answers make (`tierOf`), kept because the platform's invite record, the
+// The `tier` a row carries is the tier those answers make (`tierOf`), kept because the platform's invite record, the
 // presence list and every route's floor read a tier; a row written before the answers existed reads as its role meant
 // (`memberAccess`).
 // `chat` is the guest's way of working: it talks to the assistants that work in its areas and is shown nothing else of
@@ -150,7 +150,7 @@ export interface MemberAccess {
 
 // The fields of a row or a grant that decide a person's access.
 interface AccessFields {
-    readonly role: GrantedRole;
+    readonly tier: GrantedTier;
     readonly areas?: readonly string[] | undefined;
     readonly agents?: AgentAccess | undefined;
     readonly edit?: EditScope | undefined;
@@ -160,12 +160,12 @@ interface AccessFields {
 
 /** A row's access: what it says, and for a row written before `agents` and `edit` existed, what its role meant then. */
 export const memberAccess = (row: AccessFields): MemberAccess => {
-    if (row.role === "maintainer") {
+    if (row.tier === "maintainer") {
         return { manage: true, agents: "run", see: undefined, edit: "all" };
     }
-    const agents = row.agents ?? (row.role === "guest" ? "chat" : row.role === "viewer" ? "off" : "run");
+    const agents = row.agents ?? (row.tier === "guest" ? "chat" : row.tier === "viewer" ? "off" : "run");
     // A writer from before `edit` changes files where it sees them, which its areas always named.
-    const edit = row.edit ?? (row.role === "writer" && row.areas !== undefined ? [...row.areas] : "none");
+    const edit = row.edit ?? (row.tier === "writer" && row.areas !== undefined ? [...row.areas] : "none");
     const base: MemberAccess = { manage: false, agents, see: row.areas, edit: agents === "chat" || agents === "home" ? "none" : edit };
     const access = row.manages !== undefined && row.manages.length > 0 ? { ...base, manages: [...row.manages] } : base;
     return row.lands === true ? { ...access, lands: true } : access;
@@ -180,7 +180,7 @@ export const landsHere = (access: Pick<MemberAccess, "manage" | "agents" | "land
     access.manage || (access.agents === "home" && access.lands === true);
 
 /** The tier an access makes: what every route's floor, the platform's record and the presence list read. */
-export const tierOf = (access: MemberAccess): GrantedRole => {
+export const tierOf = (access: MemberAccess): GrantedTier => {
     if (access.manage) {
         return "maintainer";
     }
@@ -230,14 +230,18 @@ const editRefusal = (access: MemberAccess): string | undefined => {
 /** Why an access cannot be granted on its face, before any area or assistant is looked up; undefined when it can. */
 export const accessRefusal = (access: MemberAccess): string | undefined => (access.manage ? undefined : (workingRefusal(access) ?? editRefusal(access)));
 
+// A member's tier rode under `role` on the wire until 2026-11-18, when personas were renamed roles. What a sender
+// from before writes is read as `tier` here, so an editor reads an older daemon's roster, and a daemon an older editor's
+// grant (MemberGrantInputSchema). A row that already says `tier` is read as it is.
+
 // One person on the roster as the daemon answers it. `areas` fences what of the workspace they reach, and with it which
 // assistants they may talk to: absent is the whole workspace, empty is nothing.
-export const MemberSchema = z.object({
+export const MemberRowSchema = z.object({
     email: z.string().describe("Who, lowercased."),
-    role: GrantedRoleSchema.describe("The tier their access makes: maintainer when they manage the sandbox, else what `agents` and `edit` add up to."),
+    tier: GrantedTierSchema.describe("The tier their access makes: maintainer when they manage the sandbox, else what `agents` and `edit` add up to."),
     areas: z.array(z.string()).optional().describe("The areas they may see, and their agents work in. Absent means the whole workspace."),
     agents: AgentAccessSchema.optional().describe(
-        "Whether their conversations run agents: off (they watch), chat (only with the assistants in their areas, nothing else of the sandbox), run, or home (only their own home conversation, nothing else of the sandbox). Absent means what their role meant.",
+        "Whether their conversations run agents: off (they watch), chat (only with the assistants in their areas, nothing else of the sandbox), run, or home (only their own home conversation, nothing else of the sandbox). Absent means what their tier meant.",
     ),
     edit: EditScopeSchema.optional().describe(
         "Where they may change files by hand: everything they see, or these areas. Absent means nowhere, or for a writer its areas.",
@@ -261,14 +265,14 @@ export const MemberSchema = z.object({
             "The AI accounts their conversations may run on, each `provider:account`, or a provider's id alone for every account of it (how an API-key endpoint is named). Absent means every one, including any connected later.",
         ),
     tools: ToolCeilingSchema.optional().describe(
-        "The most their conversations' tools may be, shelf by shelf; a persona only narrows inside it. Absent means no limit.",
+        "The most their conversations' tools may be, shelf by shelf; a role only narrows inside it. Absent means no limit.",
     ),
     assistants: z
         .array(entryId)
         .max(50)
         .optional()
         .describe(
-            "For a guest who chats: which of the assistants working in their areas they may talk to, by persona id. Absent means every one that works there.",
+            "For a guest who chats: which of the assistants working in their areas they may talk to, by role id. Absent means every one that works there.",
         ),
     profile: entryId
         .optional()
@@ -282,7 +286,8 @@ export const MemberSchema = z.object({
             "The parts of the sandbox they run besides their own work: people and access, secrets, the privacy shield, AI accounts of their own. Never on a maintainer, who runs every part. Absent means none.",
         ),
 });
-export type Member = z.infer<typeof MemberSchema>;
+export const MemberSchema = withLegacyTier(MemberRowSchema);
+export type Member = z.infer<typeof MemberRowSchema>;
 
 // What every roster write answers: the roster after it.
 export const MembersListSchema = z.object({ members: z.array(MemberSchema) });
@@ -293,21 +298,21 @@ export type MembersList = z.infer<typeof MembersListSchema>;
 export const MembersRosterSchema = MembersListSchema.extend({ owner: z.string().optional() });
 export type MembersRoster = z.infer<typeof MembersRosterSchema>;
 
-// POST /members: the role is required, the tier the grant makes. Areas are optional, their absence being the whole
+// POST /members: the tier is required, the one the grant makes. Areas are optional, their absence being the whole
 // workspace; chatting with assistants needs them, since the assistants working there are the whole of that access.
 // `emailSignIn` lets the platform's identity assertion open this sandbox for them (policy/identity-assertion.ts): true
 // allows it, false takes it back, absent keeps what the row already says, so a re-grade from an editor that predates
 // the field never drops it. `credentials` the same way: `all` lifts a reach, a list sets one, absent keeps the row's,
 // so a re-grade that never mentions it can never widen what a person's conversations may spend. A maintainer may hold
 // a list too: managing the sandbox and spending all of it are separate answers (docs/architecture/access.md).
-// `agents` and `edit` decide the rest of the access; absent, the role's own meaning stands, so an editor that predates
+// `agents` and `edit` decide the rest of the access; absent, the tier's own meaning stands, so an editor that predates
 // them still grants what it always did. `lands` is written as sent: absent is no, so a re-grade that never mentions it
-// can never hand a home-only person's agent the authority to land. The role sent must be the tier the access makes (`tierOf`): two answers to one
+// can never hand a home-only person's agent the authority to land. The tier sent must be the one the access makes (`tierOf`): two answers to one
 // question are refused rather than one of them guessed away. `aiAccounts` reads as `credentials` does: `all` lifts it, a
 // list sets it, absent keeps the row's, a maintainer's included. `tools` and `assistants` read the same way, except that
 // a maintainer is refused a tool ceiling, since the tier runs every tool.
 // `profile` names an access profile instead of answering on the row: the daemon writes that profile's answers out on
-// the row and ignores the access fields sent beside it, and the role sent must still be the tier the profile makes.
+// the row and ignores the access fields sent beside it, and the tier sent must still be the one the profile makes.
 // Absent is answers of the row's own, so a re-grade from an editor that predates profiles unlinks the row, keeping
 // the answers it carried, rather than leaving a link the grant did not mean. A maintainer is refused one.
 // `manages` reads as `credentials` does: a list sets the rights, `[]` takes them all back, absent keeps the row's, so a
@@ -316,7 +321,7 @@ export type MembersRoster = z.infer<typeof MembersRosterSchema>;
 // sandbox is handed to a person, never through something shared.
 export const MemberGrantSchema = z.object({
     email: z.string(),
-    role: GrantedRoleSchema,
+    tier: GrantedTierSchema,
     areas: z.array(z.string().min(1)).max(20).optional(),
     agents: AgentAccessSchema.optional(),
     edit: EditScopeSchema.optional(),
@@ -330,11 +335,13 @@ export const MemberGrantSchema = z.object({
     manages: z.array(ManageRightSchema).max(10).optional(),
 });
 export type MemberGrant = z.infer<typeof MemberGrantSchema>;
+// The grant as the daemon reads it off the wire: an editor from before 2026-11-18 sends the tier as `role`.
+export const MemberGrantInputSchema = withLegacyTier(MemberGrantSchema);
 
 // GET /members/self: what the signed-in person may do here, for an editor that offers only what will be taken. The
 // owner reads as managing everything.
-export const MemberSelfSchema = z.object({
-    role: MemberRoleSchema.describe("Their tier on this sandbox."),
+export const MemberSelfRowSchema = z.object({
+    tier: MemberTierSchema.describe("Their tier on this sandbox."),
     agents: AgentAccessSchema.describe("Whether their conversations run agents."),
     areas: z.array(z.string()).optional().describe("The areas they may see. Absent means the whole workspace."),
     edit: z.union([z.literal("none"), EditScopeSchema]).describe("Where they may change files by hand."),
@@ -359,7 +366,8 @@ export const MemberSelfSchema = z.object({
         .optional()
         .describe("When they asked the owner for more access, while that request is still open (POST /members/requests). Absent when they have not, or it was answered."),
 });
-export type MemberSelf = z.infer<typeof MemberSelfSchema>;
+export const MemberSelfSchema = withLegacyTier(MemberSelfRowSchema);
+export type MemberSelf = z.infer<typeof MemberSelfRowSchema>;
 
 // ASKING FOR MORE ACCESS, from where the person was refused: the editor draws an "Ask for access" press on a place or an
 // action their access refuses, and whoever runs people and access sees each open request beside the roster (Access ▸

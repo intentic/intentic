@@ -9,7 +9,7 @@ import { startAgent } from "../../../models/fleet/agentActions";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../models/extensions/useExtensions";
 import { useRegistry } from "../../extensions/useRegistry";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useTerminalPanel } from "../../../models/terminal/useTerminalPanel";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { useOperations } from "../../../workbench/operations/operations";
@@ -51,7 +51,7 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const router = useRouter();
-const { canShip: canOperate } = useRole();
+const { canShip: canOperate } = useTier();
 const { entries, registryName, url, token, isOfficial, loaded, error, refetch, useRegistryAt, resetRegistry } = useRegistry();
 const { extensions, applyUpdate } = useExtensions();
 const { add } = useCapabilities();

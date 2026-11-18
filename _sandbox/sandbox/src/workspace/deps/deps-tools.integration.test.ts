@@ -133,7 +133,7 @@ test("the standing rule tells the agent it may install, and where that install w
         "it writes to this conversation's own copy of the tree, which no other conversation reads",
     );
     expect(statusTool(deps(dependencies)).description).toContain("it runs in the main tree, one install at a time with the daemon's own");
-    expect(statusTool(deps(dependencies, { canInstall: false })).description).toContain("This persona cannot install dependencies; ask the owner.");
+    expect(statusTool(deps(dependencies, { canInstall: false })).description).toContain("This role cannot install dependencies; ask the owner.");
     expect(depsTools(deps(dependencies, { canInstall: false })).map((tool) => tool.name)).toEqual(["status"]);
     expect(depsTools(deps(dependencies)).map((tool) => tool.name)).toEqual(["status", "install"]);
 });

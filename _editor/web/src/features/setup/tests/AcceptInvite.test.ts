@@ -17,7 +17,7 @@ jest.mock(`vue-router`, () => ({
     // SAFETY: as above, the token alone.
     useRoute: () => ({ params: { token: `tok-1` } }) as never,
 }));
-const preview = jest.fn(async () => ({ status: `pending`, invitedEmail: `ana@corp.example`, sandboxName: `notes`, role: `collaborator` }));
+const preview = jest.fn(async () => ({ status: `pending`, invitedEmail: `ana@corp.example`, sandboxName: `notes`, tier: `collaborator` }));
 jest.mock(`../../../lib/useApi`, () => ({ apiClient: { invite: { preview: () => preview(), accept: jest.fn() } } }));
 const signInWithGoogle = jest.fn<(path?: string) => Promise<void>>().mockResolvedValue(undefined);
 const sendEmailCode = jest.fn<(email: string) => Promise<void>>().mockResolvedValue(undefined);

@@ -117,10 +117,12 @@ export {
     Page,
     PageAction,
     PageHeader,
-    ScrollFrame,
-    // Also reachable via `Picker`'s `face` option: hand it a persona and the picker draws it.
+    // Deprecated: RoleFace, under its name before personas were renamed roles (names.mjs).
     PersonaFace,
-    type PersonaLike,
+    ScrollFrame,
+    // Also reachable via `Picker`'s `face` option: hand it a role and the picker draws it.
+    RoleFace,
+    type RoleLike,
     Picker,
     ProjectChip,
     type PickerGroup,

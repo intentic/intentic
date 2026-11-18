@@ -55,7 +55,7 @@ These rules hold when requests race. Every admin change runs in one transaction 
 - `locked`: anyone can read it, but every change is refused, including the sandbox owner's and the agent's.
 - `hidden`: locked, and also removed from the sandbox hub and the command palette. Reads that would show a value to a person (`secrets.reveal`, `privacy.reveal`) are refused too. Hidden controls what people see, not what the sandbox uses: the agent still uses the secrets of a hidden Secrets section.
 
-The lockable parts are the hub sections `models`, `agent`, `environment`, `secrets` (secrets and connections), `data-protection`, `extensions`, `access`, `areas` and `personas`, plus `updates`, the auto-update switch on Overview. The `agent` lock also holds the hub's Privacy shield, Guardrails and Retention pages: they write the privacy policy, the safety policy and settings, which are the `agent` section's routes, and the editor maps them to it (`useOrgPolicy.ts`). Overview, Usage, Activity and Audit are not lockable: they report on the sandbox and change nothing an organisation needs to hold.
+The lockable parts are the hub sections `models`, `agent`, `environment`, `secrets` (secrets and connections), `data-protection`, `extensions`, `access`, `areas` and `roles`, plus `updates`, the auto-update switch on Overview. The `agent` lock also holds the hub's Privacy shield, Guardrails and Retention pages: they write the privacy policy, the safety policy and settings, which are the `agent` section's routes, and the editor maps them to it (`useOrgPolicy.ts`). Overview, Usage, Activity and Audit are not lockable: they report on the sandbox and change nothing an organisation needs to hold.
 
 [`policy/org-locks.ts`](../../_shared/sandbox-contract/src/policy/org-locks.ts) lists which daemon routes each part covers, route by route rather than by contract group. A group mixes the changes a lock is meant to stop with operations it should leave alone: probing a connection, asking a named person to release a credential (`secrets.request`), confirming your own AI-literacy notice, leaving a sandbox (`DELETE /members/self`), and teaching the privacy shield more values. The side effect is that a route added later stays open until someone lists it, and that omission shows up in the file's diff. A test checks every listed name against the route tables, so renaming a route cannot leave a lock pointing at nothing. One route is refused on every bound sandbox whatever the sections say (`ORG_BOUND_ROUTES`): `POST /system/access/disable`, which closes the daemon to every browser. Deleting an account calls it on each owned sandbox, and on a bound one it would lock a whole department out.
 
@@ -67,7 +67,7 @@ A platform reads a stored mode it does not recognise as `locked`, so a newer pla
 
 **Access profiles (`profiles`).** Up to 50 named profiles travel with the policy. Each bound daemon lists them beside its own profiles as read-only, with `origin: org`. People and services can hold them. A local profile cannot take an organisation profile's id. Areas, credentials and assistants name each sandbox's own ids. AI accounts use provider or account keys such as `claude` or `claude:work`.
 
-**Ceiling (`ceiling`).** Tool shelves and AI accounts set one more limit in every turn's chain. No turn in a bound sandbox exceeds it, the owner's included. A field left out adds no limit. An empty AI account list allows none. Local profiles, personas and conversation grants cannot lift the organisation's ceiling.
+**Ceiling (`ceiling`).** Tool shelves and AI accounts set one more limit in every turn's chain. No turn in a bound sandbox exceeds it, the owner's included. A field left out adds no limit. An empty AI account list allows none. Local profiles, roles and conversation grants cannot lift the organisation's ceiling.
 
 ### Delivery
 
@@ -137,12 +137,12 @@ Pinned settings, read-time enforcement with write-back and drift records, the me
 
 Central access profiles and the ceiling are built (2026-10-26). Admins edit them in the organisation console. They travel with the policy over its existing delivery channel. The daemon lists organisation profiles read-only beside local profiles. A local profile cannot take an organisation profile's id. The ceiling is one more limit in every turn's chain, including the owner's.
 
-Central persona cards and kits remain a later phase. They would carry the organisation's prompts, skills and assistant templates, rather than the access a person or service holds.
+Central role cards and kits remain a later phase. They would carry the organisation's prompts, skills and assistant templates, rather than the access a person or service holds.
 
 ### Phase 4: provisioning
 
 - Bulk invite: paste or upload a CSV of addresses with a department and a role. The platform creates the `OrgMember` rows and sends one email each.
-- From organisation member to sandbox access: an admin sets a department's default sandbox, role and area. The platform sends the grant to the daemon through a new admin-signed route, so a locked Access section has a managed way in. `SandboxMember` and the daemon's roster stay the enforced copies.
+- From organisation member to sandbox access: an admin sets a department's default sandbox, tier and area. The platform sends the grant to the daemon through a new admin-signed route, so a locked Access section has a managed way in. `SandboxMember` and the daemon's roster stay the enforced copies.
 - Ownership handover: an admin hands a bound sandbox to another member when its owner leaves. The daemon's owner is fixed at first sign-in, so this needs a daemon route that takes a platform-signed handover for a bound sandbox, and a decision about how far the platform may then reassign a machine it does not run.
 - Sessions on removal: a removed member's daemon session is refused by the roster check, but it stays valid for its 30 days and works again if they are re-added. Revoking it outright needs per-session revocation, which the daemon does not have.
 - Sandbox creation for the organisation: `sandboxes` / `fleet.provision` take an `orgId`, so IT can create one sandbox per clerk, already bound, without creating them one by one.

@@ -8,11 +8,11 @@ const check = (kind: `review` | `test`, status: AgentSummary[`status`], at: numb
 
 describe(`home tiles`, () => {
     const roster = [
-        { id: `a`, name: `zeta`, role: `viewer` },
-        { id: `b`, name: `Mail`, role: `owner` },
-        { id: `c`, name: `box 10`, role: `owner` },
-        { id: `d`, name: `Alpha`, role: `writer` },
-        { id: `e`, name: `box 2`, role: `owner` },
+        { id: `a`, name: `zeta`, tier: `viewer` },
+        { id: `b`, name: `Mail`, tier: `owner` },
+        { id: `c`, name: `box 10`, tier: `owner` },
+        { id: `d`, name: `Alpha`, tier: `writer` },
+        { id: `e`, name: `box 2`, tier: `owner` },
     ];
     test(`unarranged, owners lead and each part goes by name`, () => {
         expect(orderedSandboxes(roster).map((box) => box.id)).toEqual([`e`, `c`, `b`, `d`, `a`]);

@@ -24,7 +24,7 @@ it("gives both states a rule of the same weight, so selecting one moves nothing"
 });
 
 // Weight is the tempting third signal and the one that cannot be afforded: a bolder label is a WIDER label, so the
-// tabs beside it shift by a pixel on every switch. Measured on the chat rail: "Personas" went 51px → 52px.
+// tabs beside it shift by a pixel on every switch. Measured on the chat rail: "Roles" went 51px → 52px.
 it("carries the state in ink and rule, never in weight", () => {
     for (const state of [true, false]) {
         expect(classesOf(state).filter((name) => name.startsWith(`font-`))).toEqual([]);

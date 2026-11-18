@@ -562,14 +562,14 @@ test("a successful scope acquires once and transfers namespace lifetime to indep
     } finally { scope.dispose(); borrower.release(); other.dispose(); service.close(admission); }
 });
 
-// Regression: a persona's startIn resolves to a subfolder of the view root (honoured.ts:209), and assertAgentExecution
-// must accept it. Before this fix every project-persona turn was refused with PLACEMENT_REFUSED.
+// Regression: a role's startIn resolves to a subfolder of the view root (honoured.ts:209), and assertAgentExecution
+// must accept it. Before this fix every project-role turn was refused with PLACEMENT_REFUSED.
 test("assertAgentExecution accepts a cwd inside the admitted view (startIn subfolder)", async () => {
     const service = rootExecutionService();
     const admission = await service.admit();
     const lease = service.acquire(admission, { localCwd: VIEW });
     try {
-        // A persona sets cwd to <view>/my-project; this must pass, not refuse with PLACEMENT_REFUSED.
+        // A role sets cwd to <view>/my-project; this must pass, not refuse with PLACEMENT_REFUSED.
         expect(() => assertAgentExecution(lease.context, { cwd: `${VIEW}/my-project` })).not.toThrow();
         // Deeper nesting is still within the view.
         expect(() => assertAgentExecution(lease.context, { cwd: `${VIEW}/my-project/packages/core` })).not.toThrow();

@@ -1,21 +1,29 @@
 import type { AccessProfile } from "@intentic/sandbox-contract/schemas/access-profiles";
 import type { Service } from "@intentic/sandbox-contract/schemas/services";
 import type { Member } from "../auth/auth.js";
-import { type ChainEntry, createPrincipalChain, orgLimit, personLimit, principalsOf, serviceLimits } from "./principal-chain.js";
+import { FULL_ACCESS_ROLE } from "@intentic/sandbox-contract/schemas/roles";
+import { type ChainEntry, createPrincipalChain, orgLimit, roleLimits, personLimit, principalsOf, serviceLimits } from "./principal-chain.js";
 
-// Who a conversation acts for, turned into limits: a person's row, a service's steward and profile, an organisation's
-// ceiling. Anything that cannot be named limits to nothing, never to everything.
+// Who a conversation acts for, turned into limits: a person's row, a service's steward and profile, the access profiles
+// listing the role it wears, an organisation's ceiling. Anything that cannot be named limits to nothing, never to
+// everything.
 
 const OWNER = "ada@example.com";
 const NOTHING = { credentials: { capabilities: [], secrets: [] }, aiAccounts: [], tools: undefined };
 
 const roster: Member[] = [
-    { email: "bob@example.com", role: "collaborator", credentials: { capabilities: ["github"], secrets: [] }, aiAccounts: ["claude:work"], tools: { shell: false } },
-    { email: "eve@example.com", role: "maintainer" },
-    { email: "fox@example.com", role: "maintainer", credentials: { capabilities: ["github"], secrets: [] }, aiAccounts: ["claude:work"] },
+    { email: "bob@example.com", tier: "collaborator", credentials: { capabilities: ["github"], secrets: [] }, aiAccounts: ["claude:work"], tools: { shell: false } },
+    { email: "eve@example.com", tier: "maintainer" },
+    { email: "fox@example.com", tier: "maintainer", credentials: { capabilities: ["github"], secrets: [] }, aiAccounts: ["claude:work"] },
 ];
 
-const profiles: AccessProfile[] = [{ id: "marketing", credentials: { capabilities: ["reddit-work"], secrets: [] }, aiAccounts: ["claude"], tools: { browser: false } }];
+const profiles: AccessProfile[] = [
+    { id: "marketing", credentials: { capabilities: ["reddit-work"], secrets: [] }, aiAccounts: ["claude"], tools: { browser: false } },
+    // The Reviewer card's own limits, and a profile that lists a built-in (which no picker offers, and the chain ignores).
+    { id: "role-reviewer", tools: { files: "read", shell: false }, roles: ["reviewer"] },
+    { id: "odd", tools: { web: false }, roles: [FULL_ACCESS_ROLE] },
+];
+const REVIEWER = { who: `the role "Reviewer"`, credentials: "all", aiAccounts: "all", tools: { files: "read", shell: false }, role: "reviewer" } as const;
 
 const services: Service[] = [
     { id: "bot", label: "Marketing bot", steward: OWNER, profile: "marketing" },
@@ -88,6 +96,21 @@ describe("orgLimit", () => {
     });
 });
 
+describe("roleLimits", () => {
+    test("a card is held to each profile that lists it, said by its name", () => {
+        expect(roleLimits("reviewer", "Reviewer", profiles)).toEqual([REVIEWER]);
+        // No label to say it by: its id.
+        expect(roleLimits("reviewer", undefined, profiles)[0]?.who).toBe(`the role "reviewer"`);
+        expect(roleLimits("reviewer", "Reviewer", [...profiles, { id: "second", aiAccounts: ["claude"], roles: ["reviewer"] }])).toHaveLength(2);
+    });
+
+    test("a card no profile lists, a built-in and no role at all hold nothing", () => {
+        expect(roleLimits("writer", "Writer", profiles)).toEqual([]);
+        expect(roleLimits(FULL_ACCESS_ROLE, undefined, profiles)).toEqual([]);
+        expect(roleLimits(undefined, undefined, profiles)).toEqual([]);
+    });
+});
+
 describe("principalsOf", () => {
     const entries = new Map<string, ChainEntry>([
         ["parent", { identity: { people: ["bob@example.com"], services: ["bot"] }, social: {} }],
@@ -104,13 +127,18 @@ describe("principalsOf", () => {
 });
 
 describe("createPrincipalChain", () => {
-    const chainWith = (over: { readonly org?: { readonly orgName: string; readonly ceiling?: { readonly tools?: { readonly shell?: boolean } } } } = {}) =>
+    interface ChainOver {
+        readonly org?: { readonly orgName: string; readonly ceiling?: { readonly tools?: { readonly shell?: boolean } } };
+        readonly entries?: ReadonlyMap<string, ChainEntry>;
+    }
+    const chainWith = (over: ChainOver = {}) =>
         createPrincipalChain({
             members: { list: async () => roster },
             ownerEmail: async () => OWNER,
-            entry: () => undefined,
+            entry: (id) => over.entries?.get(id),
             services: { list: async () => services },
             profiles: { list: async () => profiles },
+            roles: { list: async () => [{ id: "reviewer", label: "Reviewer" }, { id: "writer" }] },
             org: { current: async () => over.org },
         });
 
@@ -129,6 +157,28 @@ describe("createPrincipalChain", () => {
         const chain = await chainWith()(undefined, { services: ["bot"] });
         expect(chain).toMatchObject({ kind: "limits" });
         expect(chain.kind === "limits" ? chain.limits.map((limit) => limit.who) : []).toEqual([`the service "Marketing bot" (for ${OWNER})`, `the service "Marketing bot"`]);
+    });
+
+    // A card's limits are access like a person's (2026-11-18): the owner wearing the Reviewer is read-only too.
+    test("the role a turn wears adds the limits of the profiles listing it, the owner's own conversation included", async () => {
+        await expect(chainWith()(undefined, { people: [OWNER], role: { id: "reviewer" } })).resolves.toEqual({ kind: "limits", limits: [REVIEWER] });
+        const bobs = await chainWith()(undefined, { people: ["bob@example.com"], role: { id: "reviewer" } });
+        expect(bobs.kind === "limits" ? bobs.limits.map((limit) => limit.who) : []).toEqual(["bob@example.com", `the role "Reviewer"`]);
+    });
+
+    test("a role asked as none, a card no profile lists and a built-in add nothing", async () => {
+        await expect(chainWith()(undefined, { people: [OWNER], role: { id: undefined } })).resolves.toEqual({ kind: "open" });
+        await expect(chainWith()(undefined, { people: [OWNER], role: { id: "writer" } })).resolves.toEqual({ kind: "open" });
+        await expect(chainWith()(undefined, { people: [OWNER], role: { id: FULL_ACCESS_ROLE } })).resolves.toEqual({ kind: "open" });
+    });
+
+    // An exit mid-turn (a credential gate, a secret's use) names no role: it is held to the one the conversation's
+    // last turn wore, read off its record.
+    test("with no role named, the one the conversation's last turn wore is read off its record", async () => {
+        const entries = new Map<string, ChainEntry>([["conv-1", { profile: { actsAs: "reviewer" }, identity: { people: [OWNER] }, social: {} }]]);
+        await expect(chainWith({ entries })("conv-1")).resolves.toEqual({ kind: "limits", limits: [REVIEWER] });
+        // Naming one, even none, wins over the record.
+        await expect(chainWith({ entries })("conv-1", { role: { id: undefined } })).resolves.toEqual({ kind: "open" });
     });
 
     test("a roster that cannot be read is unreadable, naming who it was for", async () => {

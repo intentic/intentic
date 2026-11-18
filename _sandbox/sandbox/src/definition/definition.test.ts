@@ -2,7 +2,7 @@ import type { SandboxDefinition } from "@intentic/sandbox-contract/state/definit
 import { stateFileFor } from "@intentic/sandbox-contract/state/state-portability";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 import { join } from "node:path";
-import { ownerGrantsDocument } from "../personas/owner-grants.js";
+import { ownerGrantsDocument } from "../roles/owner-grants.js";
 import { DEFINITION_SOURCES, DEFINITION_WORKSPACE, definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml, settingsDefinition, settingsDrift, unreadableDefinition } from "./definition.js";
 
 // Round-trip promises: emit then parse is byte-identical, emission is deterministic, and a bad document fails naming
@@ -176,7 +176,7 @@ describe("a definition from an earlier release", () => {
             "[settings]",
             "hashlineEdits = true",
             "terseOutput = true",
-            'personaRouting = "auto"',
+            'roleRouting = "auto"',
             "",
             "[[capabilities]]",
             'id = "laptop"',
@@ -185,7 +185,7 @@ describe("a definition from an earlier release", () => {
             "",
         ].join("\n");
         const applied = parseDefinitionToml(old);
-        expect(applied.settings).toEqual({ hashlineEdits: true, personaRouting: true });
+        expect(applied.settings).toEqual({ hashlineEdits: true, roleRouting: true });
         expect(applied.capabilities).toEqual([
             {
                 id: "laptop",

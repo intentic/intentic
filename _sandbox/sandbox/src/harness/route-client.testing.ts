@@ -7,7 +7,7 @@ import type { AnyRouter } from "@orpc/server";
 import type { Hono } from "hono";
 import { afterEach } from "bun:test";
 import { unstubAllEnvs } from "@intentic/testing/bun";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { ProofMethod } from "@intentic/sandbox-contract/schemas/system";
 import { ForbiddenError, type ProvenCaller } from "../auth/auth.js";
 import type { AppEnv, OrpcContext } from "../app-env.js";
@@ -45,14 +45,14 @@ export const rejectForbidden = async (): Promise<never> => {
 // the test says otherwise), for an `authorize` stub that admits everyone as this person.
 export const proven = (
     email: string,
-    role: MemberRole,
+    role: MemberTier,
     methods: readonly ProofMethod[] = ["google"],
     // The areas this caller is fenced to; absent is the whole workspace, which is what every unfenced tier holds, and
     // with it every assistant, since which cards a caller may wear is read off this fence.
     areas?: readonly string[],
 ): ProvenCaller => ({
     email,
-    role,
+    tier: role,
     methods,
     ...(areas === undefined ? {} : { areas }),
 });

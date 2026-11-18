@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { REACH_ALL } from "../../../secrets/credential-reach.js";
@@ -13,19 +13,18 @@ import { base, context as planContext, turn } from "../turn/turn-plan.testing.js
 import { decideTurn } from "./turn-decision.js";
 import type { AdmittedTurnFacts } from "./turn-facts.js";
 
-// Regression: a project persona's workspace.startIn caused every turn to be refused with "Agent request placement
+// Regression: a project role's workspace.startIn caused every turn to be refused with "Agent request placement
 // does not match its admitted execution context." because honoured.ts set spec.cwd to <root>/<startIn> while
 // assertAgentExecution demanded exact cwd equality with the admitted view root. The fix accepts cwd inside the view.
 
 const ROOT = "/nowhere/turn-plan";
 const PROJECT = "my-project-16chr";
 
-const projectPersona: Persona = {
+const projectRole: Role = {
     id: `project-${PROJECT}`,
     label: PROJECT,
     capabilities: [],
-    powers: PersonaPowersSchema.parse({}),
-    workspace: { startIn: PROJECT, folders: [PROJECT] },
+    workspace: { startIn: PROJECT },
     context: { repos: [PROJECT] },
 };
 
@@ -37,16 +36,18 @@ const FACTS: AdmittedTurnFacts = {
     declared: undefined,
     installed: [],
     setup: [],
-    personas: [projectPersona],
+    roles: [projectRole],
     areas: [],
-    grant: undefined,
+    profiles: [],
     skillCatalog: undefined,
     contextNote: undefined,
     gates: [],
     releases: createCredentialGrants(),
     reach: REACH_ALL,
+    accessReach: REACH_ALL,
     ceiling: undefined,
-    personaPrompt: undefined,
+    accessCeiling: undefined,
+    rolePrompt: undefined,
     memoryNote: undefined,
     mapNote: undefined,
     landingChecksNote: undefined,
@@ -86,32 +87,32 @@ test("a chat acting as Anyone runs", async () => {
     expect(await runArm(turn({ agent: "codex" }), FACTS)).toEqual({ cwd: ROOT, group: ROOT, ran: true });
 });
 
-// This is the core regression: the project persona's startIn sets spec.cwd to <root>/<project>, which must pass.
-test("a chat acting as a project persona runs (startIn subfolder accepted)", async () => {
-    const result = await runArm(turn({ agent: "codex", actsAs: projectPersona.id }), FACTS);
+// This is the core regression: the project role's startIn sets spec.cwd to <root>/<project>, which must pass.
+test("a chat acting as a project role runs (startIn subfolder accepted)", async () => {
+    const result = await runArm(turn({ agent: "codex", actsAs: projectRole.id }), FACTS);
     expect(result.ran).toBe(true);
     expect(result.cwd).toBe(`${ROOT}/${PROJECT}`);
 });
 
-test("claude runtime with project persona runs", async () => {
-    const result = await runArm(turn({ agent: "claude", actsAs: projectPersona.id }), FACTS);
+test("claude runtime with project role runs", async () => {
+    const result = await runArm(turn({ agent: "claude", actsAs: projectRole.id }), FACTS);
     expect(result.ran).toBe(true);
     expect(result.cwd).toBe(`${ROOT}/${PROJECT}`);
 });
 
-test("an isolated worktree turn with project persona runs", async () => {
-    const result = await runArm(turn({ agent: "codex", actsAs: projectPersona.id }), FACTS, true);
+test("an isolated worktree turn with project role runs", async () => {
+    const result = await runArm(turn({ agent: "codex", actsAs: projectRole.id }), FACTS, true);
     expect(result.ran).toBe(true);
 });
 
-test("persona deleted: identity.startIn still runs (subfolder accepted)", async () => {
+test("role deleted: identity.startIn still runs (subfolder accepted)", async () => {
     const entry = conversationAfter(3, { identity: { startIn: PROJECT } });
-    const result = await runArm(turn({ agent: "codex", actsAs: projectPersona.id, conversationId: entry.id }), { ...FACTS, personas: [], entry });
+    const result = await runArm(turn({ agent: "codex", actsAs: projectRole.id, conversationId: entry.id }), { ...FACTS, roles: [], entry });
     expect(result.ran).toBe(true);
     expect(result.cwd).toBe(`${ROOT}/${PROJECT}`);
 });
 
-test("persona switched back to Anyone on a latched identity.startIn still runs", async () => {
+test("role switched back to Anyone on a latched identity.startIn still runs", async () => {
     const entry = conversationAfter(3, { identity: { startIn: PROJECT } });
     const result = await runArm(turn({ agent: "codex", conversationId: entry.id }), { ...FACTS, entry });
     expect(result.ran).toBe(true);
@@ -120,7 +121,7 @@ test("persona switched back to Anyone on a latched identity.startIn still runs",
 
 test("Send again: repeated sends succeed", async () => {
     for (let press = 0; press < 3; press += 1) {
-        const result = await runArm(turn({ agent: "codex", actsAs: projectPersona.id }), FACTS);
+        const result = await runArm(turn({ agent: "codex", actsAs: projectRole.id }), FACTS);
         expect(result.ran).toBe(true);
     }
 });
@@ -128,7 +129,7 @@ test("Send again: repeated sends succeed", async () => {
 // Invariant: every decideTurn result's spec passes assertAgentExecution against the context it was built from.
 test("every turn decision's request passes assertAgentExecution against its own execution context", async () => {
     for (const agent of ["codex", "claude"] as const) {
-        for (const actsAs of [undefined, projectPersona.id] as const) {
+        for (const actsAs of [undefined, projectRole.id] as const) {
             for (const isolated of [false, true]) {
                 const { context } = await placed(isolated);
                 const decision = decideTurn(FACTS, turn({ agent, actsAs }), context);

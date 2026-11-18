@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 
 import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
 import { services } from "../../harness/route-services.testing.js";
@@ -11,7 +11,7 @@ import { proven, rejectForbidden } from "../../harness/route-client.testing.js";
 // An editor's explorer writes through /workspace/upload but everything else through oRPC, so a tier missing one route
 // can create a file it can't then rename or delete.
 
-const appAs = (role: MemberRole): Hono<AppEnv> =>
+const appAs = (role: MemberTier): Hono<AppEnv> =>
     createApp(
         services({
             auth: { authorize: async () => proven(`member@example.com`, role), authorizeOwner: rejectForbidden },
@@ -32,7 +32,7 @@ const appAs = (role: MemberRole): Hono<AppEnv> =>
 const bearer = { authorization: `Bearer member` };
 
 // The status of one call made as `role`, over the same routes the browser uses.
-const statusAs = async (role: MemberRole, method: string, path: string, body?: unknown): Promise<number> => {
+const statusAs = async (role: MemberTier, method: string, path: string, body?: unknown): Promise<number> => {
     const app = appAs(role);
     // A GET carries no body regardless: fetch rejects the request outright, reading as an unreachable route.
     const init: RequestInit =
@@ -52,7 +52,7 @@ const fileActions = (path: string): readonly { readonly name: string; readonly m
     { name: `delete`, method: `DELETE`, url: `/workspace/entry`, body: { path } },
 ];
 
-const surfaceFor = async (role: MemberRole): Promise<Record<string, number>> => {
+const surfaceFor = async (role: MemberTier): Promise<Record<string, number>> => {
     const out: Record<string, number> = {};
     for (const action of fileActions(`scratch.txt`)) {
         out[action.name] = await statusAs(role, action.method, action.url, action.body);
@@ -106,7 +106,7 @@ test("chat attachments stay reachable for the tier that drives agents", async ()
 // it. Statuses are read as permission only.
 // Kept as one table since the tiers only mean anything together: "a viewer may watch" is also a claim about every row
 // below it.
-const SURFACE: readonly { readonly does: string; readonly method: string; readonly url: string; readonly needs: MemberRole }[] = [
+const SURFACE: readonly { readonly does: string; readonly method: string; readonly url: string; readonly needs: MemberTier }[] = [
     // Watching. All of it is reading, POST or not.
     { does: `list the conversations`, method: `GET`, url: `/agents`, needs: `viewer` },
     { does: `read a file`, method: `GET`, url: `/workspace/file?path=README.md`, needs: `viewer` },
@@ -140,8 +140,8 @@ const SURFACE: readonly { readonly does: string; readonly method: string; readon
     { does: `unpack an archive`, method: `POST`, url: `/workspace/extract`, needs: `writer` },
 ];
 
-const TIERS: readonly MemberRole[] = [`viewer`, `collaborator`, `writer`, `maintainer`];
-const rank = (role: MemberRole): number => TIERS.indexOf(role);
+const TIERS: readonly MemberTier[] = [`viewer`, `collaborator`, `writer`, `maintainer`];
+const rank = (role: MemberTier): number => TIERS.indexOf(role);
 
 test("every co-working act answers at its own tier, and at none below it", async () => {
     for (const row of SURFACE) {

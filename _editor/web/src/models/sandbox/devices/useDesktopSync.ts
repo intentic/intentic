@@ -1,4 +1,4 @@
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { syncFolder } from "@intentic/sandbox-contract/ids/hostnames";
 import { computed, ref, watch } from "vue";
 import { t } from "@intentic/ui/i18n";
@@ -81,7 +81,7 @@ const PAIRING = `devices/desktop-sync/pairing`;
 export function useDesktopSync() {
     const { active, daemonUrl } = useSandbox();
 
-    const canOperate = computed(() => roleAtLeast(active.value?.role ?? `owner`, `maintainer`));
+    const canOperate = computed(() => tierAtLeast(active.value?.tier ?? `owner`, `maintainer`));
 
     // Whether this sandbox can do desktop sync at all; read from the daemon (the one status read, useSyncStatus) rather
     // than assumed, since an old daemon that can't answer shouldn't offer sync. Unknown until it answers: starting at

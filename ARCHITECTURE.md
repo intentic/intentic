@@ -20,7 +20,7 @@ flowchart LR
 - [app-plane.md](docs/architecture/app-plane.md): what counts as the product, and how one editor release drives daemons of any age.
 - [extensions.md](docs/architecture/extensions.md): how extensions are packaged, loaded and kept to what they declare.
 - [capabilities.md](docs/architecture/capabilities.md): connectors, accounts and machines, the catalog they come from, and where their credentials live.
-- [access.md](docs/architecture/access.md): who a turn acts for (people and services), the access profiles that bound them, and how a persona narrows inside that.
+- [access.md](docs/architecture/access.md): who a turn acts for (people and services), the access profiles that bound them, and the roles held to them.
 - [needs.md](docs/architecture/needs.md): how an agent asks a person for a connection, a secret, access or a tool, and how the answer finds the conversation again.
 - [convergence.md](docs/architecture/convergence.md): how containers, sync sessions, records, tunnels and hosted apps left behind return to the current shape by themselves, and the six rules every component follows for it.
 - [os.md](docs/architecture/os.md): Intentic OS, the bootc image a machine boots straight into, and who may update, reboot or roll it back.

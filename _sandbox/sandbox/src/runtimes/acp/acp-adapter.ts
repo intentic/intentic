@@ -14,7 +14,7 @@ import { withAttachments } from "../../sessions/vocabulary/attachment-note.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
-import { turnPersona } from "../../personas/personas.js";
+import { turnRole } from "../../roles/roles.js";
 import { opt } from "../../opt.js";
 import { commandListOf, publishedCommandOf } from "../../agent/providers/agent-commands.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
@@ -54,17 +54,17 @@ export const planAcpTurn = async (
     // A warm session keeps the MCP config it was opened with, so its turns share the conversation's bearer.
     const mounted = await turnToolsOf(services, granted, {
         conversationId: input.conversationId,
-        anonymousBrowser: context.persona?.powers.browser ?? true,
-        shell: context.persona?.powers.shell ?? true,
-        extensions: context.persona?.powers.extensions,
+        anonymousBrowser: context.role?.powers.browser ?? true,
+        shell: context.role?.powers.shell ?? true,
+        extensions: context.role?.powers.extensions,
         warmSession: true,
     });
     // The daemon's own servers ride the same lease, so the warm session's bearer reaches them on every turn it serves; a
-    // server a later turn adds (a persona change) is not seen until a new session opens. The agent's own permission asks
+    // server a later turn adds (a role change) is not seen until a new session opens. The agent's own permission asks
     // already reach the gate in-process (acp-agent.ts), so no gate server.
-    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    const role = context.role ?? turnRole({ roles: [], actsAs: undefined, unattended: false });
     const settings = context.settings ?? (await services.sandboxSettings.get());
-    const daemon = daemonServersFor(services, { input, context, persona, granted, settings, mounted, gate: false });
+    const daemon = daemonServersFor(services, { input, context, role, granted, settings, mounted, gate: false });
     const tools = [...mounted.tools, ...daemon.tools];
     return armPlan(
         // The agent's warm session keeps the conversation's bearer and each server's URL across turns; the release only

@@ -7,7 +7,7 @@ import { ConfirmDialog, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watchEffect } from "vue";
 import { useAudience } from "../../../../app/useAudience";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { commitShas, homeCommitOf, landOfRow, type RevertRefusal, revertHomeCommit, reverted } from "../../../../models/home/homeCommits";
@@ -18,7 +18,7 @@ const { message } = defineProps<{ message: ChatMessage }>();
 const t = useT();
 const { conversation } = usePaneView();
 const { agentById } = useAgents();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { maker } = useAudience();
 
 const commit = computed(() => homeCommitOf(agentById(conversation.value.conversationId), landOfRow(message)));

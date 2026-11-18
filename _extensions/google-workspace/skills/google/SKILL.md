@@ -162,4 +162,4 @@ automations propose mail-from-boss --on google --event mail --from boss@example.
 
 `--from` (repeatable) admits only those senders and ignores everyone else; `--mentioned` keeps only mail with the
 owner's address in To; `--event event` is for calendar events. A wake with no `--as` wears No accounts, which
-still carries this connection's credentials, so `gw` works there; name a persona when the run needs more.
+still carries this connection's credentials, so `gw` works there; name a role when the run needs more.

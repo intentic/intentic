@@ -9,7 +9,7 @@ import { useOperation } from "../../../workbench/operations/operations";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../../models/sandbox/environment/useEnvironment";
 import { useEnvironmentContents } from "./useEnvironmentContents";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import HostedRebuild from "./rebuild/HostedRebuild.vue";
 import ComposeRebuild from "./rebuild/ComposeRebuild.vue";
@@ -47,7 +47,7 @@ const actionNotice = computed<NoticeModel | undefined>(() =>
         : notice.value,
 );
 
-const { canShip: canOperate, isOwner } = useRole();
+const { canShip: canOperate, isOwner } = useTier();
 
 // The derived environment state (shared with the shell's rebuild banner via one vue-query fetch).
 const { state, query, isFetching, proposal, pending, applied, recurring, slug, localImage } = useEnvironment();

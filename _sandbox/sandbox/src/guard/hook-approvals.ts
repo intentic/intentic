@@ -12,6 +12,7 @@ import {
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { z } from "zod";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { at, mapValue } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openApprovalLedger, openDocument } from "../store/open-document.js";
 import type { ModuleReader } from "./plugin-modules.js";
@@ -53,6 +54,8 @@ export const hookRequestsDocument = defineDocument({
     // The hook sets waiting for the owner's yes; the next turn that finds them lists them again.
     portability: "derived",
     schema: RequestsSchema,
+    // 2026-11-18: personas were renamed roles; a plugin a role's kit brought was `from: "persona"`.
+    history: [at("requests.*.plugins.*", mapValue("from", { persona: "role" }))],
 });
 
 // Newest kept: an older set nobody answered is one the workspace has since moved past.

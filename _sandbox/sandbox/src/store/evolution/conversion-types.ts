@@ -108,7 +108,7 @@ export type Retired<History> = History extends readonly (infer C)[] ? RetiredBy<
 // The overlap, which the generated checks require to be `never`.
 export type ReusedKeys<D extends DocumentSpec> = Extract<Retired<D["history"]>, keyof Accepted<D>>;
 
-// Assignability cannot see a key that went away: an old file's `personaRouting` fits a schema that no longer declares it
+// Assignability cannot see a key that went away: an old file's `roleRouting` fits a schema that no longer declares it
 // (the key is simply extra), so a rename or removal without its conversion passes `Fits` and quietly resets the owner's
 // value to its default. This names every such key instead, as a dotted path (`[]` an element of a list, `{}` a value
 // of a record): each key an old shape holds, after its conversions, that today's schema does not declare anywhere at

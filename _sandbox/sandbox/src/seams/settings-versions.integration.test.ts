@@ -27,14 +27,14 @@ afterAll(() => {
 
 const git = (root: string, ...args: string[]): string => execFileSync("git", args, { cwd: root, encoding: "utf8" });
 
-const PERSONAS = `${STATE_DIR}/config/personas.json`;
+const ROLES = `${STATE_DIR}/config/roles.json`;
 
 const workspace = (): string => {
     const root = mkdtempSync(join(tmpdir(), "settings-versions-"));
     roots.push(root);
     git(root, "init", "-q");
     mkdirSync(join(root, STATE_DIR, "config"), { recursive: true });
-    writeFileSync(join(root, PERSONAS), "[]\n");
+    writeFileSync(join(root, ROLES), "[]\n");
     writeFileSync(join(root, "notes.md"), "mine\n");
     git(root, "add", "-A");
     git(root, "-c", "user.name=owner", "-c", "user.email=owner@example.com", "commit", "-q", "-m", "Initialize workspace");
@@ -58,30 +58,30 @@ const status = (root: string): string => git(root, "status", "--porcelain").trim
 
 test("a settings write is committed on its own, and the owner's edits stay theirs, dirty and staged as they were", async () => {
     const root = workspace();
-    writeFileSync(join(root, PERSONAS), `[{"id":"studio","label":"Studio","capabilities":[]}]\n`);
+    writeFileSync(join(root, ROLES), `[{"id":"studio","label":"Studio","capabilities":[]}]\n`);
     writeFileSync(join(root, "notes.md"), "mine, edited\n");
     writeFileSync(join(root, "draft.md"), "staged\n");
     git(root, "add", "draft.md");
     const locked: string[] = [];
 
-    expect(await versionSettingsWrite(hostOn(root, locked), [PERSONAS], "Settings: persona Studio")).toBe(true);
+    expect(await versionSettingsWrite(hostOn(root, locked), [ROLES], "Settings: role Studio")).toBe(true);
 
-    expect(git(root, "log", "-1", "--format=%s|%an", "--name-only").trim().split("\n")).toEqual(["Settings: persona Studio|intentic", "", PERSONAS]);
+    expect(git(root, "log", "-1", "--format=%s|%an", "--name-only").trim().split("\n")).toEqual(["Settings: role Studio|intentic", "", ROLES]);
     expect(status(root)).toBe("A  draft.md\n M notes.md");
     // Under the root repo's lock, so a land touching the same file queues behind it rather than racing it.
     expect(locked).toEqual(["root"]);
 });
 
-test("a removed persona's kit is committed as gone, and a kit that never existed is left out rather than failing it", async () => {
+test("a removed role's kit is committed as gone, and a kit that never existed is left out rather than failing it", async () => {
     const root = workspace();
-    const kit = `${STATE_DIR}/config/personas/studio`;
+    const kit = `${STATE_DIR}/config/roles/studio`;
     mkdirSync(join(root, kit), { recursive: true });
     writeFileSync(join(root, kit, "PROMPT.md"), "You write release notes.\n");
-    await versionSettingsWrite(hostOn(root), [kit], "Settings: persona Studio prompt");
+    await versionSettingsWrite(hostOn(root), [kit], "Settings: role Studio prompt");
     rmSync(join(root, kit), { recursive: true });
-    writeFileSync(join(root, PERSONAS), "[]\n\n");
+    writeFileSync(join(root, ROLES), "[]\n\n");
 
-    expect(await versionSettingsWrite(hostOn(root), [PERSONAS, kit, ".intentic/config/personas/ghost"], "Settings: removed persona Studio")).toBe(true);
+    expect(await versionSettingsWrite(hostOn(root), [ROLES, kit, ".intentic/config/roles/ghost"], "Settings: removed role Studio")).toBe(true);
 
     expect(status(root)).toBe("");
     expect(git(root, "ls-files", kit).trim()).toBe("");
@@ -91,7 +91,7 @@ test("nothing changed is nothing committed", async () => {
     const root = workspace();
     const head = git(root, "rev-parse", "HEAD");
 
-    expect(await versionSettingsWrite(hostOn(root), [PERSONAS], "Settings: persona Studio")).toBe(false);
+    expect(await versionSettingsWrite(hostOn(root), [ROLES], "Settings: role Studio")).toBe(false);
     expect(git(root, "rev-parse", "HEAD")).toBe(head);
 });
 
@@ -102,15 +102,15 @@ test("a workspace that ignores its settings folder keeps the write uncommitted, 
     writeFileSync(join(root, ".git", "info", "exclude"), "/.intentic/\n");
     git(root, "rm", "-r", "-q", "--cached", STATE_DIR);
     git(root, "-c", "user.name=owner", "-c", "user.email=owner@example.com", "commit", "-q", "-m", "untrack settings");
-    writeFileSync(join(root, PERSONAS), `[{"id":"studio","capabilities":[]}]\n`);
+    writeFileSync(join(root, ROLES), `[{"id":"studio","capabilities":[]}]\n`);
     const head = git(root, "rev-parse", "HEAD");
 
-    expect(await versionSettingsWrite(hostOn(root), [PERSONAS], "Settings: persona studio")).toBe(false);
+    expect(await versionSettingsWrite(hostOn(root), [ROLES], "Settings: role studio")).toBe(false);
     expect(git(root, "rev-parse", "HEAD")).toBe(head);
 });
 
 // G4's leftover: the Agent tab's saves to settings.json were never committed, so a land touching the file was refused as
-// the owner's edits just as a persona save's once was.
+// the owner's edits just as a role save's once was.
 test("an Agent tab save is committed on its own, as a settings page's write", async () => {
     const root = workspace();
     const host = hostOn(root);
@@ -142,16 +142,16 @@ test("an Agent tab save is committed on its own, as a settings page's write", as
 test("a settings file already holding uncommitted edits is written but left uncommitted", async () => {
     const root = workspace();
     const head = git(root, "rev-parse", "HEAD");
-    writeFileSync(join(root, PERSONAS), `[{"id":"mine","capabilities":[]}]\n`);
+    writeFileSync(join(root, ROLES), `[{"id":"mine","capabilities":[]}]\n`);
 
-    const written = await versionedSettingsWrite(hostOn(root), [PERSONAS], "Settings: persona Studio", async () => {
-        writeFileSync(join(root, PERSONAS), `[{"id":"mine","capabilities":[]},{"id":"studio","capabilities":[]}]\n`);
+    const written = await versionedSettingsWrite(hostOn(root), [ROLES], "Settings: role Studio", async () => {
+        writeFileSync(join(root, ROLES), `[{"id":"mine","capabilities":[]},{"id":"studio","capabilities":[]}]\n`);
         return "saved";
     });
 
     expect(written).toBe("saved");
     expect(git(root, "rev-parse", "HEAD")).toBe(head);
-    expect(status(root)).toBe(`M ${PERSONAS}`);
+    expect(status(root)).toBe(`M ${ROLES}`);
 });
 
 test("a Safety page save is committed on its own too", async () => {

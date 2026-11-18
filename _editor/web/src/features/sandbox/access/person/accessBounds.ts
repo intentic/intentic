@@ -1,5 +1,5 @@
 import { MANAGE_RIGHTS, type ManageRight, type Member, peopleChangeRefusal } from "@intentic/sandbox-contract/schemas/members";
-import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { GrantedTier, MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 
 // WHAT THE PERSON EDITING THE ROSTER MAY CHANGE OF ONE PERSON'S ACCESS, asked of the contract's own bound
 // (`peopleChangeRefusal`) so the panel offers exactly what the daemon and the platform will take. The owner and Full
@@ -9,7 +9,7 @@ import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract/schemas
 /** Who is editing, as the bound reads them: their address, their tier, and the rights their own row names. */
 export interface PeopleManager {
     readonly email: string;
-    readonly role: MemberRole;
+    readonly tier: MemberTier;
     readonly manages?: readonly ManageRight[] | undefined;
 }
 
@@ -29,26 +29,26 @@ export interface PanelBounds {
 export const OPEN_BOUNDS: PanelBounds = { locked: undefined, full: true, rights: new Set(MANAGE_RIGHTS) };
 
 /** The access the person holds as the bound reads it: the daemon's row, else the platform's tier for one it never wrote. */
-const heldOf = (row: Pick<Member, `role` | `manages`> | undefined, recorded: GrantedRole) => row ?? { role: recorded };
+const heldOf = (row: Pick<Member, `tier` | `manages`> | undefined, recorded: GrantedTier) => row ?? { tier: recorded };
 
 export const panelBounds = (
     manager: PeopleManager,
     email: string,
-    row: Pick<Member, `role` | `manages`> | undefined,
-    recorded: GrantedRole,
+    row: Pick<Member, `tier` | `manages`> | undefined,
+    recorded: GrantedTier,
 ): PanelBounds => {
     const before = heldOf(row, recorded);
     // Taking access away is refused exactly where changing it at all is: their own, and a Full access person's.
     const removal = peopleChangeRefusal(manager, { email, before });
     const locked = removal === undefined ? undefined : manager.email.toLowerCase() === email.toLowerCase() ? `own` : `full`;
     // A right is theirs to hand out when granting it to someone who has none would be taken.
-    const fresh = { role: before.role, manages: [] };
+    const fresh = { tier: before.tier, manages: [] };
     const rights = new Set(
-        MANAGE_RIGHTS.filter((right) => locked === undefined && peopleChangeRefusal(manager, { email, before: fresh, after: { role: before.role, manages: [right] } }) === undefined),
+        MANAGE_RIGHTS.filter((right) => locked === undefined && peopleChangeRefusal(manager, { email, before: fresh, after: { tier: before.tier, manages: [right] } }) === undefined),
     );
     return {
         locked,
-        full: locked === undefined && peopleChangeRefusal(manager, { email, before, after: { role: `maintainer` } }) === undefined,
+        full: locked === undefined && peopleChangeRefusal(manager, { email, before, after: { tier: `maintainer` } }) === undefined,
         rights,
     };
 };

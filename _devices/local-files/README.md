@@ -57,7 +57,7 @@ flowchart LR
   editor's file views read a folder exactly as they read `/work`. The file semantics are the daemon's: 4 MiB text
   windows cut on line and character boundaries, an ETag on raw bytes, and saves that name the text they replace by
   hash and are refused (409) when the file moved under them. Every other route the editor's chrome reads (agents,
-  git changes, personas) answers its empty truth rather than a 404. The `/events` hello lists exactly the routes a
+  git changes, roles) answers its empty truth rather than a 404. The `/events` hello lists exactly the routes a
   window is served, with `surface: "folder"`, so the editor offers nothing else: no terminal or ZIP. A document's own
   window and a read-only one leave out the verbs they would only refuse.
 - **New folder, rename, move, copy and delete** (`tree-verbs.ts`) keep the daemon's rules: a new folder is `mkdir -p`,

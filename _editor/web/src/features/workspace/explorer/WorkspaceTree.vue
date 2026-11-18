@@ -24,10 +24,11 @@ import { commandShortcut } from "../../../workbench/commands/useCommands";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import { viewersOfPath } from "../../../workbench/presence/usePresence";
 import { useLayout } from "../../../workbench/window/useLayout";
-import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import { useRoles } from "../../../models/sandbox/roles/useRoles";
 import { isRecentlyChanged } from "../../../models/workspace/changes/useWorkspaceLive";
 import { workspaceScope } from "../../../app/workspaceScope";
-import { lensRefuses } from "../directory-ui/personaReach";
+import { lensRefuses } from "../directory-ui/roleReach";
+import { useRoleAccess } from "../directory-ui/useRoleAccess";
 import { opensAsFolder } from "../../../models/workspace/files/archiveEntries";
 import { requestCaret } from "../files/caretRequest";
 import { type CoverMark, useCover } from "../home/useCover";
@@ -182,9 +183,10 @@ watch(
 const { pendingRow, pending, dropTargetOf, noDrops } = rules;
 // An arriving row holding nothing a press can reach: a pending file, not a pending folder, which still expands.
 const notYetOpenable = (row: Row): boolean => pending(row.entry.path) && !expandable(row);
-const { personas } = usePersonas();
-// Only dims the rows the read-as persona's fence refuses: a lens must not restrict the actual user.
-const refused = (path: string): boolean => lensRefuses(personas.value, path);
+const { roles } = useRoles();
+// Only dims the rows the read-as role's fence refuses: a lens must not restrict the actual user.
+const roleAccess = useRoleAccess();
+const refused = (path: string): boolean => lensRefuses(roles.value, path, roleAccess.value);
 const { selection, lead, tabbablePath } = selecting;
 const { edit, draft, createError, editing } = inline;
 const { scroller, preamble, probeRow, rowHeight, createBlock, painted, treeHeight, onScroll, setRowEl, showRow, focusLead, focusRow } = useTreeWindow({
@@ -421,7 +423,7 @@ defineExpose({ focusTree });
                                         marks.get(row.entry.path)?.holds === false
                                             ? 'text-subtle'
                                             : 'text-content/90',
-                                        // Out of the persona being read as: dimmed FURTHER, and only while a lens is on.
+                                        // Out of the role being read as: dimmed FURTHER, and only while a lens is on.
                                         // Opacity rather than a colour, so it stacks on whatever the row already was:
                                         // an ignored row outside the fence should read as both, not as one of the two.
                                         refused(row.entry.path) ? 'opacity-40' : '',

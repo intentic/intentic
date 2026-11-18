@@ -9,10 +9,10 @@ const PLAIN: ComposerControlSituation = {
     startingMode: `bypassPermissions`,
     placementOffered: true,
     placed: false,
-    persona: undefined,
+    role: undefined,
     runThrough: `idle`,
     voiceAgent: false,
-    personaOffered: true,
+    roleOffered: true,
     voiceOffered: true,
     landOffered: true,
     lands: false,
@@ -23,14 +23,14 @@ const keys = (situation: ComposerControlSituation): string[] => overflowRows(sit
 
 // When the message goes is not among them: it is the send's own caret, beside the press it changes (ChatPane).
 it(`keeps an ordinary chat's row empty and offers all six in the overflow`, () => {
-    expect(ridesRow(PLAIN)).toEqual({ mode: false, placement: false, startFrom: false, persona: false, runThrough: false, voice: false, land: false });
-    expect(keys(PLAIN)).toEqual([`mode`, `placement`, `persona`, `runThrough`, `voice`, `land`]);
+    expect(ridesRow(PLAIN)).toEqual({ mode: false, placement: false, startFrom: false, role: false, runThrough: false, voice: false, land: false });
+    expect(keys(PLAIN)).toEqual([`mode`, `placement`, `role`, `runThrough`, `voice`, `land`]);
 });
 
 it(`promotes each control into the row the moment it is set`, () => {
     expect(ridesRow(chat({ mode: `plan` })).mode).toBe(true);
     expect(ridesRow(chat({ placed: true })).placement).toBe(true);
-    expect(ridesRow(chat({ persona: `ada` })).persona).toBe(true);
+    expect(ridesRow(chat({ role: `ada` })).role).toBe(true);
     expect(ridesRow(chat({ runThrough: `workflow` })).runThrough).toBe(true);
     expect(ridesRow(chat({ voiceAgent: true })).voice).toBe(true);
     expect(ridesRow(chat({ landOwn: true, lands: true })).land).toBe(true);
@@ -53,8 +53,8 @@ it(`puts every offered control in exactly one of the two places`, () => {
         PLAIN,
         chat({ mode: `plan` }),
         chat({ placed: true }),
-        chat({ persona: `ada`, voiceAgent: true }),
-        chat({ mode: `plan`, placed: true, persona: `ada`, runThrough: `running`, voiceAgent: true }),
+        chat({ role: `ada`, voiceAgent: true }),
+        chat({ mode: `plan`, placed: true, role: `ada`, runThrough: `running`, voiceAgent: true }),
         chat({ landOwn: true, lands: true }),
         chat({ startOffered: true }),
         chat({ startOffered: true, startSet: true }),
@@ -99,7 +99,7 @@ it(`keeps where the chat runs in the overflow while it is here, and on the row o
 // overflow, named by the branch the shared workspace stands on; a branch or another agent's copy rides the row.
 it(`offers a draft where it starts from in the overflow, and rides the row once it starts from a branch or a copy`, () => {
     const draft = chat({ startOffered: true, mainLine: `main` });
-    expect(keys(draft)).toEqual([`mode`, `placement`, `startFrom`, `persona`, `runThrough`, `voice`, `land`]);
+    expect(keys(draft)).toEqual([`mode`, `placement`, `startFrom`, `role`, `runThrough`, `voice`, `land`]);
     expect(overflowRows(draft).find((row) => row.key === `startFrom`)).toMatchObject({ label: `Start from`, value: `main`, icon: `git-branch` });
     expect(ridesRow(draft).startFrom).toBe(false);
 
@@ -114,22 +114,22 @@ it(`offers a draft where it starts from in the overflow, and rides the row once 
     expect(keys(chat({ startOffered: true, plain: true }))).toEqual([`mode`]);
 });
 
-// A control this chat can't have is in neither place: personas are one daemon's personas, voice needs a
+// A control this chat can't have is in neither place: roles are one daemon's roles, voice needs a
 // transcript.
 it(`drops the controls this chat is not offered`, () => {
-    const away = chat({ placementOffered: false, personaOffered: false, voiceOffered: false, landOffered: false });
-    expect(ridesRow(away)).toEqual({ mode: false, placement: false, startFrom: false, persona: false, runThrough: false, voice: false, land: false });
+    const away = chat({ placementOffered: false, roleOffered: false, voiceOffered: false, landOffered: false });
+    expect(ridesRow(away)).toEqual({ mode: false, placement: false, startFrom: false, role: false, runThrough: false, voice: false, land: false });
     expect(keys(away)).toEqual([`mode`, `runThrough`]);
     // An answer given before the chat stopped being this reader's to land gets no chip either.
     expect(ridesRow(chat({ landOffered: false, landOwn: true })).land).toBe(false);
-    // A persona set before the chat moved sandboxes still gets no chip: the send drops it.
-    expect(ridesRow(chat({ personaOffered: false, persona: `ada` })).persona).toBe(false);
+    // A role set before the chat moved sandboxes still gets no chip: the send drops it.
+    expect(ridesRow(chat({ roleOffered: false, role: `ada` })).role).toBe(false);
 });
 
 it(`carries the current value and a sentence on every overflow row`, () => {
     const rows = overflowRows(PLAIN);
     expect(rows.map((row) => row.label)).toEqual([`Agent mode`, `Where this runs`, `Acts as`, `Run through`, `Write as agent`, `Land when done`]);
-    expect(rows.map((row) => row.value)).toEqual([`Auto`, `This sandbox`, `Full access`, `Just this chat`, `Off`, `Off`]);
+    expect(rows.map((row) => row.value)).toEqual([`Auto`, `This sandbox`, `All accounts`, `Just this chat`, `Off`, `Off`]);
     expect(rows.every((row) => row.description.length > 0)).toBe(true);
     // The mode row names the posture this chat is actually in, so a main-tree chat's menu doesn't say "Auto".
     expect(overflowRows(chat({ mode: `plan`, startingMode: `plan` }))[0]?.value).toBe(`Plan`);
@@ -157,7 +157,7 @@ it(`offers a non-coder only how much it does alone in the overflow`, () => {
 });
 
 it(`offers a guest nothing at all, in either place`, () => {
-    const guest = chat({ guest: true, mode: `plan`, persona: `ada` });
+    const guest = chat({ guest: true, mode: `plan`, role: `ada` });
     expect(keys(guest)).toEqual([]);
     expect(Object.values(ridesRow(guest)).some(Boolean)).toBe(false);
 });

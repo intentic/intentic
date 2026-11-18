@@ -427,7 +427,7 @@ export const createSystemRoutes = (services: Services) => {
         // What the daemon couldn't read in `.intentic/` manifests. The three hand-edited ones are re-read here before
         // answering, since a registry entry is only as fresh as its last read; daemon-written manifests skip this step.
         manifestProblems: i.manifestProblems.handler(async () => {
-            await Promise.all([services.sandboxSettings.get(), services.capabilities.list(), services.personas.list()]);
+            await Promise.all([services.sandboxSettings.get(), services.capabilities.list(), services.roles.list()]);
             return manifestProblems(services.workspace.root, services.config.historyRoot);
         }),
         // Removes one stray key from a manifest. Nothing to invalidate afterward: the write goes through the store's

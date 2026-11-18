@@ -247,7 +247,7 @@
     "_sandbox/sandbox/src/panels/panels.ts": 1,
     "_sandbox/sandbox/src/peers/peer-hub.ts": 1,
     "_sandbox/sandbox/src/peers/peer-routes.ts": 1,
-    "_sandbox/sandbox/src/personas/persona-kit.ts": 1,
+    "_sandbox/sandbox/src/roles/role-kit.ts": 1,
     "_sandbox/sandbox/src/portability/arrival.routes.ts": 2,
     "_sandbox/sandbox/src/portability/bundle-arrival.ts": 3,
     "_sandbox/sandbox/src/portability/bundle.ts": 1,

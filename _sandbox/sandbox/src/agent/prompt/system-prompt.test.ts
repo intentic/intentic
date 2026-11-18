@@ -1,6 +1,6 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
+import { ROLE_NOTE_TITLE } from "../../roles/roles.js";
 import { CLAUDE_CODE_RUNTIME, GUIDANCE_HEADER, GUIDANCE_TITLE, guidanceBlock, otherRuntime } from "./guidance.js";
 import { intenticPromptOf } from "./intentic-prompt.js";
 import { promptInputOf, sdkSystemPrompt, turnPromptPlacement, withRuntimeGuidance } from "./system-prompt.js";
@@ -31,7 +31,7 @@ const systemPromptOf = (input: Parameters<typeof sdkSystemPrompt>[0]): ReturnTyp
 // prompt, and the instruction axis's three answers are three distinct placements.
 
 const CUSTOM = "You are a release-notes writer. Never edit code.";
-const PERSONA = "## Who this turn is acting as\n\nYou are acting as Studio.";
+const ROLE = "## Who this turn is acting as\n\nYou are acting as Studio.";
 const MEMORY = "## Standing instructions for this workspace\n\n### AGENTS.md\n\nNo legacy support.";
 const BASE = { append: undefined, unattended: false, browserOutputDir: undefined } as const;
 
@@ -65,10 +65,10 @@ test("custom replaces everything: nothing is appended to it", () => {
         capabilities: CLAUDE,
         mode: "custom",
         systemPrompt: CUSTOM,
-        personaNote: PERSONA,
+        roleNote: ROLE,
     });
     expect(placement.systemPrompt).toBe(CUSTOM);
-    // The persona note is suppressed too: withheld accounts are withheld by absence, not by a sentence, once the owner
+    // The role note is suppressed too: withheld accounts are withheld by absence, not by a sentence, once the owner
     // is doing their own instructing.
     expect(placement.systemAppend).toBeUndefined();
     expect(placement.userNotes).toBeUndefined();
@@ -99,7 +99,7 @@ test("a runtime outside the Claude Code loop is told what outside content is", (
 
 // Composed from the mounts once the arm has mounted them (withRuntimeGuidance), never from a turn that mounted nothing.
 test("no runtime's guidance is placed before its arm has mounted anything", () => {
-    const placement = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", personaNote: "## Who" });
+    const placement = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", roleNote: "## Who" });
     expect(placement.systemAppend).toBe("## Who");
 });
 
@@ -119,11 +119,11 @@ test("a runtime with a system seam carries the guidance ahead of its append, and
     const guidance = guidanceBlock(OTHER_FACTS);
     const appended = withRuntimeGuidance({ prompt: "go", cwd: "/w", systemAppend: "## Who" }, CODEX, guidance, undefined);
     expect(appended.systemAppend).toBe(`${guidance}\n\n## Who`);
-    const persona = { title: PERSONA_NOTE_TITLE, text: "## Who" };
-    const opening = withRuntimeGuidance({ prompt: "go", cwd: "/w", notes: [persona] }, ACP, guidance, undefined);
-    expect(opening.notes?.map((note) => note.title)).toEqual([PERSONA_NOTE_TITLE, GUIDANCE_TITLE]);
+    const role = { title: ROLE_NOTE_TITLE, text: "## Who" };
+    const opening = withRuntimeGuidance({ prompt: "go", cwd: "/w", notes: [role] }, ACP, guidance, undefined);
+    expect(opening.notes?.map((note) => note.title)).toEqual([ROLE_NOTE_TITLE, GUIDANCE_TITLE]);
     // A resumed session already holds it.
-    expect(withRuntimeGuidance({ prompt: "go", cwd: "/w", sessionId: "s1", notes: [persona] }, ACP, guidance, undefined).notes).toEqual([persona]);
+    expect(withRuntimeGuidance({ prompt: "go", cwd: "/w", sessionId: "s1", notes: [role] }, ACP, guidance, undefined).notes).toEqual([role]);
 });
 
 test("the Claude Code loop, a custom prompt and a window too small for it take no placed guidance", () => {
@@ -153,18 +153,18 @@ test("an emptied custom prompt replaces with nothing, and adds nothing", () => {
     expect(cursor.systemPrompt).toBeUndefined();
 });
 
-// The persona note still has to arrive: a session that does not know which accounts it may speak through is unsafe, and
+// The role note still has to arrive: a session that does not know which accounts it may speak through is unsafe, and
 // the user message is the only channel left.
-test("a runtime with no system prompt still hears which persona it is wearing", () => {
+test("a runtime with no system prompt still hears which role it is wearing", () => {
     const placement = turnPromptPlacement({
         capabilities: ACP,
         mode: "custom",
         systemPrompt: CUSTOM,
-        personaNote: PERSONA,
+        roleNote: ROLE,
     });
     expect(placement.systemPrompt).toBeUndefined();
     expect(placement.systemAppend).toBeUndefined();
-    expect(placement.userNotes).toEqual([{ title: "Who this turn is acting as", text: PERSONA }]);
+    expect(placement.userNotes).toEqual([{ title: "Who this turn is acting as", text: ROLE }]);
     // Nothing to say is nothing sent: an empty list would put a bare separator in front of the user's own words.
     expect(turnPromptPlacement({ capabilities: ACP, mode: "intentic", systemPrompt: "" })).toEqual({});
 });
@@ -176,7 +176,7 @@ test("the workspace's standing rules reach every runtime, whatever seam it has",
         const placement = turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "", memoryNote: MEMORY });
         expect(placement.systemAppend).toContain(MEMORY);
     }
-    // No system seam at all: the rules ride the user message, as the persona note does.
+    // No system seam at all: the rules ride the user message, as the role note does.
     const acp = turnPromptPlacement({ capabilities: ACP, mode: "intentic", systemPrompt: "", memoryNote: MEMORY });
     expect(acp.userNotes).toEqual([{ title: "Standing instructions for this workspace", text: MEMORY }]);
 });
@@ -188,13 +188,13 @@ test("a custom prompt drops the harness's guidance and keeps the owner's own rul
         capabilities: CLAUDE,
         mode: "custom",
         systemPrompt: CUSTOM,
-        personaNote: PERSONA,
+        roleNote: ROLE,
         memoryNote: MEMORY,
     });
     expect(claude.systemPrompt).toBe(`${CUSTOM}\n\n${MEMORY}`);
     expect(claude.systemAppend).toBeUndefined();
-    // Still suppressed: the persona note is this harness talking, not the owner.
-    expect(claude.systemPrompt).not.toContain(PERSONA);
+    // Still suppressed: the role note is this harness talking, not the owner.
+    expect(claude.systemPrompt).not.toContain(ROLE);
 
     const cursor = turnPromptPlacement({ capabilities: APPENDING, mode: "custom", systemPrompt: CUSTOM, memoryNote: MEMORY });
     expect(cursor.systemAppend).toBe(`${CUSTOM}\n\n${MEMORY}`);
@@ -400,7 +400,7 @@ test("every runtime is pointed at the product guide by its file", () => {
     expect(otherAppend(CODEX)).toContain("`/root/.claude/skills/intentic/SKILL.md`");
 });
 
-// Diagnostics tools are named only on the turns that mounted them; turn-plan withholds the server from a persona with
+// Diagnostics tools are named only on the turns that mounted them; turn-plan withholds the server from a role with
 // no files power.
 test("the diagnostics tools are named on the turns that mounted them, and nowhere else", async () => {
     const mounted = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, diagnostics: true })) as string;
@@ -581,13 +581,13 @@ test("a lean window drops the workspace conventions from the append and keeps ev
         capabilities: CODEX,
         mode: "intentic",
         systemPrompt: "",
-        personaNote: PERSONA,
+        roleNote: ROLE,
         memoryNote: MEMORY,
         trim: LEAN,
     });
     // The same runtime is told the conventions when nothing is trimmed (see the test above); here it is not.
     expect(placement.systemAppend).not.toContain("reference shelf");
-    expect(placement.systemAppend).toContain(PERSONA);
+    expect(placement.systemAppend).toContain(ROLE);
     expect(placement.systemAppend).toContain(MEMORY);
 });
 
@@ -600,18 +600,18 @@ test("a lean window leaves the Claude Code loop its own base", async () => {
     expect(prompt).not.toContain("ripgrep");
 });
 
-test("the smallest window swaps the base, carrying the persona and the owner's rules onto it", async () => {
+test("the smallest window swaps the base, carrying the role and the owner's rules onto it", async () => {
     const placement = turnPromptPlacement({
         capabilities: CLAUDE,
         mode: "intentic",
         systemPrompt: "",
-        personaNote: PERSONA,
+        roleNote: ROLE,
         memoryNote: MEMORY,
         trim: MINIMAL,
     });
 
     expect(placement.systemPrompt).toContain("context window is small");
-    expect(placement.systemPrompt).toContain(PERSONA);
+    expect(placement.systemPrompt).toContain(ROLE);
     expect(placement.systemPrompt).toContain(MEMORY);
     expect(placement.systemPrompt).not.toContain(INTENTIC);
     expect(placement.systemAppend).toBeUndefined();

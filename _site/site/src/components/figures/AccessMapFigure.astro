@@ -1,6 +1,6 @@
 ---
 /* THE ACCESS MAP: the app's Sandbox ▸ Map, redrawn for the home page. The sandbox is a walled precinct: who gets in
-   reaches it through gates in its west wall, its areas are rooms with their personas seated inside, its secrets are a
+   reaches it through gates in its west wall, its areas are rooms with their roles seated inside, its secrets are a
    sealed vault, and what it reaches leaves through ports in its east wall. Pointing at a way in lights what it reaches;
    pointing at a thing lights who reaches it. A tour lights each way in while the figure is on screen.
 
@@ -20,26 +20,26 @@ const clusters = CLUSTER_ORDER.map((key) => ({ key, label: scene.clusters[key], 
 const lights = Object.fromEntries(accessLightings(scene));
 const tour = scene.principals.map(principalKey);
 
-// One caption per thing: who reaches it, with the line that says what it is (a persona's note, an area's folders). A
-// persona is worn rather than reached, so its caption is its own name and who may work as it.
+// One caption per thing: who reaches it, with the line that says what it is (a role's note, an area's folders). A
+// role is worn rather than reached, so its caption is its own name and who may work as it.
 const nodeCaptions = nodeIdsOf(scene).map((id) => {
-    const persona = scene.personas.find((card) => card.id === id);
+    const role = scene.roles.find((card) => card.id === id);
     const area = scene.areas.find((room) => room.id === id);
     const outward = scene.groups.flatMap((group) => group.items).find((item) => item.id === id);
     const rows = reachedBy(scene, id).map((row) => ({
-        label: persona === undefined ? row.label : scene.reachedBy.persona.replace("{name}", persona.name),
+        label: role === undefined ? row.label : scene.reachedBy.role.replace("{name}", role.name),
         names: listed(row.names),
     }));
     return {
         id,
-        title: persona === undefined ? scene.reachedBy.title.replace("{name}", area?.name ?? outward?.label ?? scene.secrets.called) : `${persona.name}, ${persona.role}`,
-        note: persona?.note ?? area?.folders.join("  ") ?? (id === "secrets" ? scene.secrets.note : undefined),
+        title: role === undefined ? scene.reachedBy.title.replace("{name}", area?.name ?? outward?.label ?? scene.secrets.called) : `${role.name}, ${role.role}`,
+        note: role?.note ?? area?.folders.join("  ") ?? (id === "secrets" ? scene.secrets.note : undefined),
         mono: area !== undefined,
         rows,
     };
 });
 
-const personasIn = (areaId: string) => scene.personas.filter((persona) => persona.home === areaId);
+const rolesIn = (areaId: string) => scene.roles.filter((role) => role.home === areaId);
 const initial = (name: string): string => name.slice(0, 1).toUpperCase();
 
 const GLYPH = {
@@ -143,7 +143,7 @@ const mark = (brand: "claude" | "codex"): string =>
                     <div class="rm-rooms">
                         {
                             scene.areas.map((area) => (
-                                <div class:list={["rm-room", { "rm-room-wide": personasIn(area.id).length === 0 }]} data-rm-node={area.id} data-rm-focus={area.id}>
+                                <div class:list={["rm-room", { "rm-room-wide": rolesIn(area.id).length === 0 }]} data-rm-node={area.id} data-rm-focus={area.id}>
                                     <div class="rm-room-head">
                                         <button type="button" class="rm-room-name" data-rm-focus={area.id} aria-pressed="false">
                                             {area.name}
@@ -155,18 +155,18 @@ const mark = (brand: "claude" | "codex"): string =>
                                             <span>{folder}</span>
                                         ))}
                                     </p>
-                                    {personasIn(area.id).map((persona) => (
+                                    {rolesIn(area.id).map((role) => (
                                         <button
                                             type="button"
-                                            class="rm-persona"
-                                            data-rm-node={persona.id}
-                                            data-rm-focus={persona.id}
+                                            class="rm-role"
+                                            data-rm-node={role.id}
+                                            data-rm-focus={role.id}
                                             aria-pressed="false"
-                                            style={`--hue:${persona.id === "persona:maya" ? 350 : 262}`}
+                                            style={`--hue:${role.id === "role:maya" ? 350 : 262}`}
                                         >
-                                            <span class="rm-face rm-face-ring">{initial(persona.name)}</span>
-                                            <span class="rm-persona-name">{persona.name}</span>
-                                            <span class="rm-persona-role">{persona.role}</span>
+                                            <span class="rm-face rm-face-ring">{initial(role.name)}</span>
+                                            <span class="rm-role-name">{role.name}</span>
+                                            <span class="rm-role-role">{role.role}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -765,7 +765,7 @@ const mark = (brand: "claude" | "codex"): string =>
         }
     }
 
-    /* Faces: a person is a filled disc in their own hue, a persona the same disc as a ring, a program a glyph. */
+    /* Faces: a person is a filled disc in their own hue, a role the same disc as a ring, a program a glyph. */
     .rm-face {
         display: inline-grid;
         width: 2rem;
@@ -842,7 +842,7 @@ const mark = (brand: "claude" | "codex"): string =>
         grid-column: 1 / -1;
     }
 
-    /* A room: hairline walls, its name, its folders, and the personas who live there. */
+    /* A room: hairline walls, its name, its folders, and the roles who live there. */
     .rm-room,
     .rm-vault {
         position: relative;
@@ -904,7 +904,7 @@ const mark = (brand: "claude" | "codex"): string =>
         border: 1px solid var(--color-line);
         padding: 0.05rem 0.4rem;
     }
-    .rm-persona {
+    .rm-role {
         display: grid;
         grid-template-columns: auto auto minmax(0, 1fr);
         align-items: center;
@@ -920,11 +920,11 @@ const mark = (brand: "claude" | "codex"): string =>
             opacity 0.3s var(--rm-ease),
             background-color 0.3s var(--rm-ease);
     }
-    .rm-persona-name {
+    .rm-role-name {
         font-size: 0.875rem;
         font-weight: var(--font-weight-medium);
     }
-    .rm-persona-role {
+    .rm-role-role {
         font-size: 0.8125rem;
         color: var(--color-muted);
     }
@@ -999,10 +999,10 @@ const mark = (brand: "claude" | "codex"): string =>
     /* ── Lit and dimmed ───────────────────────────────────────────────────────────────────────────────────── */
     .rm-who[data-lit="off"],
     .rm-chip[data-lit="off"],
-    .rm-persona[data-lit="off"] {
+    .rm-role[data-lit="off"] {
         opacity: var(--rm-dim);
     }
-    /* A room dims its own walls and words, never the personas in it: one of them may be lit on its own. */
+    /* A room dims its own walls and words, never the roles in it: one of them may be lit on its own. */
     .rm-room[data-lit="off"],
     .rm-vault[data-lit="off"] {
         border-color: var(--color-line);
@@ -1035,17 +1035,17 @@ const mark = (brand: "claude" | "codex"): string =>
         border-width: 1px;
         padding: 0.7rem 0.8rem 0.75rem;
     }
-    .rm-persona[data-lit="use"],
-    .rm-persona[data-lit="tie"],
-    .rm-persona[data-lit="focus"] {
+    .rm-role[data-lit="use"],
+    .rm-role[data-lit="tie"],
+    .rm-role[data-lit="focus"] {
         background: var(--rm-wash);
     }
-    .rm-persona[data-lit] .rm-face-ring {
+    .rm-role[data-lit] .rm-face-ring {
         transition: box-shadow 0.3s var(--rm-ease);
     }
-    .rm-persona[data-lit="use"] .rm-face-ring,
-    .rm-persona[data-lit="tie"] .rm-face-ring,
-    .rm-persona[data-lit="focus"] .rm-face-ring {
+    .rm-role[data-lit="use"] .rm-face-ring,
+    .rm-role[data-lit="tie"] .rm-face-ring,
+    .rm-role[data-lit="focus"] .rm-face-ring {
         box-shadow:
             inset 0 0 0 1.5px var(--rm-ember),
             0 0 12px -2px var(--rm-ember-soft);
@@ -1055,7 +1055,7 @@ const mark = (brand: "claude" | "codex"): string =>
         border-color: var(--rm-ember);
         background: var(--rm-wash);
     }
-    /* Reached only as a persona, or tied to the persona pointed at: either way, through it. */
+    /* Reached only as a role, or tied to the role pointed at: either way, through it. */
     .rm-chip[data-lit="through"],
     .rm-chip[data-lit="tie"] {
         border-color: var(--rm-ember);
@@ -1068,13 +1068,13 @@ const mark = (brand: "claude" | "codex"): string =>
         border-color: var(--color-accent);
         background: color-mix(in oklab, var(--color-accent) 10%, transparent);
     }
-    .rm-persona[data-lit="focus"] {
+    .rm-role[data-lit="focus"] {
         box-shadow: inset 0 0 0 1px var(--color-accent);
     }
 
     .rm-who:focus-visible,
     .rm-room-name:focus-visible,
-    .rm-persona:focus-visible,
+    .rm-role:focus-visible,
     .rm-chip:focus-visible,
     .rm-play:focus-visible {
         outline: 2px solid var(--color-accent);

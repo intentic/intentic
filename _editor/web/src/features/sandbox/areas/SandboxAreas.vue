@@ -21,9 +21,9 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import FolderPicker from "../devices/FolderPicker.vue";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { selfMember } from "../../../client/sandbox/useMembers";
-import { usePersonaReach } from "../access/usePersonaReach";
+import { useRoleReach } from "../access/useRoleReach";
 import AreasExplainer from "./AreasExplainer.vue";
-import { useAreas } from "./useAreas";
+import { useAreas } from "../../../models/sandbox/access/useAreas";
 
 // The named parts of the workspace, and the folders behind each: Access ▸ Areas, beside the profiles that name them. This
 // is where "who sees what" is decided: a person or a profile is handed an area by name, and this part is the only thing
@@ -33,15 +33,15 @@ import { useAreas } from "./useAreas";
 // Written by whoever runs people and access, like the roster itself, since editing an area moves everyone holding it at
 // once. Below Full access, never an area they are fenced to themselves, which would widen their own fence (the daemon
 // refuses it, areas.routes.ts).
-// Shaped like the personas list: the row IS the disclosure, an open one writes as it changes, and what an area is for
+// Shaped like the roles list: the row IS the disclosure, an open one writes as it changes, and what an area is for
 // is said in the empty state, where somebody is deciding whether to make one.
 
 const t = useT();
-const { holds, role } = useAccess();
+const { holds, tier } = useAccess();
 const self = selfMember();
 const runsPeople = computed(() => holds(`people`));
 // The areas the reader is fenced to, which only the owner or Full access move.
-const fencedTo = computed<readonly string[]>(() => (role.value === `owner` || role.value === `maintainer` ? [] : (self.value?.areas ?? [])));
+const fencedTo = computed<readonly string[]>(() => (tier.value === `owner` || tier.value === `maintainer` ? [] : (self.value?.areas ?? [])));
 const editable = (area: Area): boolean => runsPeople.value && !fencedTo.value.includes(area.id);
 const someFenced = computed(() => runsPeople.value && areas.value.some((area) => fencedTo.value.includes(area.id)));
 
@@ -168,7 +168,7 @@ const renameOf =
         }
     };
 
-// Making one. Unlike a persona, an area cannot be written on its name alone — one holding no folder is the grant the
+// Making one. Unlike a role, an area cannot be written on its name alone — one holding no folder is the grant the
 // daemon refuses — so the folders are named here, before the row exists.
 const newName = ref<string>();
 const newFolders = ref<string[]>([]);
@@ -267,8 +267,8 @@ const folderLine = (area: Area): string =>
         : area.folders.join(`, `);
 
 // The assistants this area hands over: those whose starting folder it covers. Derived, never configured — the same
-// answer the daemon gives a member asking which cards they may wear (personas/persona-reach.ts).
-const { namesOf } = usePersonaReach();
+// answer the daemon gives a member asking which cards they may wear (roles/role-reach.ts).
+const { namesOf } = useRoleReach();
 const assistantsIn = (area: Area): string[] => namesOf([area.id]);
 </script>
 

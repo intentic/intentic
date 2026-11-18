@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { Caller } from "../auth.js";
 
 // One-shot tickets for the WebSocket upgrades (/system/terminal, /system/browser-profile, /system/browser-view): minted
@@ -19,12 +19,12 @@ export interface WsTickets {
     readonly revoke: (email?: string) => void;
 }
 
-// Gate shared by the three upgrade handlers: redeems `?ticket=`, holds it to this socket's role floor, or throws. Each
-// socket needs a different tier, so the check runs at redemption against the role the ticket was minted under.
+// Gate shared by the three upgrade handlers: redeems `?ticket=`, holds it to this socket's tier floor, or throws. Each
+// socket needs a different tier, so the check runs at redemption against the tier the ticket was minted under.
 export const redeemTicket = (
     services: { readonly auth: unknown; readonly wsTickets: WsTickets },
     query: URLSearchParams,
-    floor: MemberRole,
+    floor: MemberTier,
 ): Caller | undefined => {
     if (services.auth === undefined) {
         return undefined;
@@ -33,7 +33,7 @@ export const redeemTicket = (
     if (caller === undefined) {
         throw new Error("invalid or expired websocket ticket");
     }
-    if (!roleAtLeast(caller.role, floor)) {
+    if (!tierAtLeast(caller.tier, floor)) {
         throw new Error(`${floor} access required`);
     }
     return caller;

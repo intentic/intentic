@@ -38,14 +38,14 @@ const reachableDevices = async (services: Services): Promise<{ ids: readonly str
     self: await hostRunningSelf(services),
 });
 
-// A persona's shelves, or the reach of the people a conversation works for, can leave the fleet card out of a turn
+// A role's shelves, or the reach of the people a conversation works for, can leave the fleet card out of a turn
 // (turn-standing.ts): its CLI's routes then refuse that turn too, rather than answering for the sandbox. A shell no
 // planned turn owns (a person's own terminal) is answered as before, and the card on every create still stands.
 // Undefined lets the call through; otherwise the sentence to refuse it with.
 export const fleetWithheld = (fleetId: string | undefined, standing: Pick<TurnStanding, "granted"> | undefined): string | undefined =>
     fleetId === undefined || standing === undefined || standing.granted.includes(fleetId)
         ? undefined
-        : `This conversation's turn was not given the "${fleetId}" card: its persona leaves the sandbox shelf shut, or the people it ` +
+        : `This conversation's turn was not given the "${fleetId}" card: its role leaves the sandbox shelf shut, or the people it ` +
           "works for were not given the owner's account. Nothing was listed or created; carry on without it and say what you left undone.";
 
 const withheldFrom = async (services: Services, c: Context<AppEnv>): Promise<Response | undefined> => {

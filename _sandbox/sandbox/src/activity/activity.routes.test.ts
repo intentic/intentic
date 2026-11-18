@@ -50,7 +50,7 @@ describe("activityScope", () => {
         const shows = activityScope(caller, (id) => conversations.get(id));
         return events.filter((event) => shows === undefined || shows(event)).map((event) => event.id);
     };
-    const member = (role: Caller["role"]): Caller => ({ email: `${role}@example.com`, role });
+    const member = (role: Caller["tier"]): Caller => ({ email: `${role}@example.com`, tier: role });
 
     test("the owner, a maintainer and the owner's own tools read every entry", () => {
         const all = events.map((event) => event.id);
@@ -68,6 +68,6 @@ describe("activityScope", () => {
     });
 
     test("a guest reads only its own conversations", () => {
-        expect(read({ email: "gus@example.com", role: "guest", areas: ["finance"] })).toEqual(["guest-own"]);
+        expect(read({ email: "gus@example.com", tier: "guest", areas: ["finance"] })).toEqual(["guest-own"]);
     });
 });

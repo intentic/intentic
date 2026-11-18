@@ -298,7 +298,7 @@ test("POST /system/sessions/revoke re-keys sessions, closes live access, drops t
     let rotations = 0;
     const close = jest.fn();
     const connections = createAuthConnections();
-    connections.register({ email: "owner@x.com", role: "owner" }, close);
+    connections.register({ email: "owner@x.com", tier: "owner" }, close);
     const auth = {
         authorize: async () => proven("member@x.com", "collaborator"),
         authorizeOwner: rejectForbidden,
@@ -312,7 +312,7 @@ test("POST /system/sessions/revoke re-keys sessions, closes live access, drops t
     const ownerServices = services({
         auth: { ...auth, authorize: async () => proven("owner@x.com", "owner"), authorizeOwner: async () => {} },
     });
-    const ticket = ownerServices.wsTickets.mint({ email: "owner@x.com", role: "owner" });
+    const ticket = ownerServices.wsTickets.mint({ email: "owner@x.com", tier: "owner" });
     const owner = createApp(ownerServices);
     expect((await postJson(owner, "/system/sessions/revoke")).status).toBe(200);
     expect(rotations).toBe(1);
@@ -323,7 +323,7 @@ test("POST /system/sessions/revoke re-keys sessions, closes live access, drops t
 test("account deletion can retire owner access permanently, and a member can remove only self", async () => {
     const ownerClose = jest.fn();
     const ownerConnections = createAuthConnections();
-    ownerConnections.register({ email: "owner@x.com", role: "owner" }, ownerClose);
+    ownerConnections.register({ email: "owner@x.com", tier: "owner" }, ownerClose);
     const disable = jest.fn(async () => {});
     const rotate = jest.fn(async () => {});
     const ownerServices = services({
@@ -336,7 +336,7 @@ test("account deletion can retire owner access permanently, and a member can rem
             connections: ownerConnections,
         },
     });
-    const ownerTicket = ownerServices.wsTickets.mint({ email: "owner@x.com", role: "owner" });
+    const ownerTicket = ownerServices.wsTickets.mint({ email: "owner@x.com", tier: "owner" });
     expect((await postJson(createApp(ownerServices), "/system/access/disable")).status).toBe(200);
     expect(disable).toHaveBeenCalledTimes(1);
     expect(rotate).toHaveBeenCalledTimes(1);
@@ -362,7 +362,7 @@ test("account deletion can retire owner access permanently, and a member can rem
     const removed: string[] = [];
     const memberClose = jest.fn();
     const memberConnections = createAuthConnections();
-    memberConnections.register({ email: "member@x.com", role: "viewer" }, memberClose);
+    memberConnections.register({ email: "member@x.com", tier: "viewer" }, memberClose);
     const memberServices = services({
         auth: {
             authorize: async () => proven("member@x.com", "viewer"),
@@ -371,7 +371,7 @@ test("account deletion can retire owner access permanently, and a member can rem
         },
         members: { list: async () => [], add: async () => {}, remove: async (email) => void removed.push(email) },
     });
-    const memberTicket = memberServices.wsTickets.mint({ email: "member@x.com", role: "viewer" });
+    const memberTicket = memberServices.wsTickets.mint({ email: "member@x.com", tier: "viewer" });
     expect((await createApp(memberServices).request("/members/self", { method: "DELETE" })).status).toBe(200);
     expect(removed).toEqual(["member@x.com"]);
     expect(memberClose).toHaveBeenCalledTimes(1);

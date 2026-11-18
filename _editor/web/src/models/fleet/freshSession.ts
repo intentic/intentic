@@ -123,7 +123,7 @@ const bookFreshSend = (conversation: Conversation, origin: FleetAgent | undefine
 const freshTitle = (kind: FreshKind, origin: FleetAgent): string | null =>
     kind === `ask` ? null : t(`agents.freshSession.title.${kind}`, { title: agentDisplayTitle(origin) });
 
-// Opens a new chat on `origin`'s work with the kind's ask in its composer. The persona and project ride across, since
+// Opens a new chat on `origin`'s work with the kind's ask in its composer. The role and project ride across, since
 // the daemon cuts the new copy from the origin's own repos; the model is the composer's, the reader's to change.
 export const draftFreshSession = async (origin: FleetAgent, kind: FreshKind): Promise<void> => {
     const conversation = draftConversation();

@@ -6,7 +6,7 @@ import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { createHeldCards } from "../../guard/held-cards.js";
 import { revokeGrant, standingGrants } from "../../needs/standing-grants.js";
 import { standingDeps } from "../../needs/standing-grants.testing.js";
-import { type ConversationGrants, fileConversationGrants } from "../../personas/conversation-grants.js";
+import { type ConversationGrants, fileConversationGrants } from "../../roles/conversation-grants.js";
 import { createCredentialGrants } from "../../secrets/credential-grants.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createRulePrompts } from "./broker-prompts.js";

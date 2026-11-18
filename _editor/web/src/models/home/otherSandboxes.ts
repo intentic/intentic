@@ -8,7 +8,7 @@ export interface OtherBox {
     readonly id: string;
     readonly name: string;
     readonly image?: string | null | undefined;
-    readonly role: string;
+    readonly tier: string;
 }
 
 export interface ClusterSlot {

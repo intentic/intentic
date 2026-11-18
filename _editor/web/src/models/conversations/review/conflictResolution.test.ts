@@ -48,25 +48,25 @@ describe(`blockers`, () => {
     });
 });
 
-// A land was refused over personas.json as "your uncommitted edits", although only the Personas page had written it.
+// A land was refused over roles.json as "your uncommitted edits", although only the Roles page had written it.
 describe(`settingsOrigin`, () => {
     const held = (repo: string, path: string) => ({ repo, path, reason: `workspace` as const });
 
     it(`names the pages that wrote every held file, each once`, () => {
         const pages = settingsOrigin([
-            held(`root`, `${STATE_DIR}/config/personas.json`),
+            held(`root`, `${STATE_DIR}/config/roles.json`),
             held(`root`, `${STATE_DIR}/config/capabilities.json`),
-            held(`root`, `${STATE_DIR}/config/personas/studio/PROMPT.md`),
+            held(`root`, `${STATE_DIR}/config/roles/studio/PROMPT.md`),
             held(`root`, `${STATE_DIR}/config/settings.json`),
         ]);
 
-        expect(pages).toEqual([`personas`, `capabilities`, `agent`]);
-        expect(pages?.map(settingsPageName)).toEqual([`Personas`, `Capabilities`, `Agent`]);
+        expect(pages).toEqual([`roles`, `capabilities`, `agent`]);
+        expect(pages?.map(settingsPageName)).toEqual([`Roles`, `Capabilities`, `Agent`]);
     });
 
     it(`names none once any held file is the owner's own, or the same path sits in a nested repo`, () => {
-        expect(settingsOrigin([held(`root`, `.intentic/config/personas.json`), held(`root`, `src/config.ts`)])).toBeUndefined();
-        expect(settingsOrigin([held(`api`, `.intentic/config/personas.json`)])).toBeUndefined();
+        expect(settingsOrigin([held(`root`, `.intentic/config/roles.json`), held(`root`, `src/config.ts`)])).toBeUndefined();
+        expect(settingsOrigin([held(`api`, `.intentic/config/roles.json`)])).toBeUndefined();
         expect(settingsOrigin([])).toBeUndefined();
     });
 });

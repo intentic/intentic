@@ -68,7 +68,7 @@ is **Home** (`/home`): every sandbox the person has, at once. Going into a sandb
 - **Sandbox** (`/sandbox/<tab>`): Overview (version, update, Sandbox URL), Usage, Models (every account, subscription,
   local model and endpoint it can run on), Agent (`?section=` jobs, instructions, tools, finishing), Environment,
   Secrets, Extensions (finding and installing them too), Access (`?section=` people, profiles, areas, sign-in, programs,
-  allowed), Personas, Map (who gets in and everything the sandbox reaches, on one drawing), Privacy & safety (tabs: Data
+  allowed), Roles, Map (who gets in and everything the sandbox reaches, on one drawing), Privacy & safety (tabs: Data
   protection, Privacy shield, Guardrails, Retention), and Activity (`?section=audit` for the audit log).
 - **Workspace** (`/workspace/<path>`): the file tree, and the Changes panel where work is committed (**Commit**, or
   **Save N changes** in plain words). **Browsers** (`/browsers`): everything live the sandbox shows, as tabs: the
@@ -78,7 +78,7 @@ is **Home** (`/home`): every sandbox the person has, at once. Going into a sandb
 
 ## Who changes what
 
-Settings and config are the owner's to change from the editor (Sandbox ▸ Models, ▸ Agent, ▸ Secrets, ▸ Personas, ▸
+Settings and config are the owner's to change from the editor (Sandbox ▸ Models, ▸ Agent, ▸ Secrets, ▸ Roles, ▸
 Extensions, ▸ Environment, and the tabs of Privacy & safety: Data protection, Privacy shield, Guardrails, Retention).
 Read them to answer questions; edit them only when asked to. What happened is Sandbox ▸ Activity, in tabs: turns,
 commands the judge checked, what the shield masked, and the audit log of what people did.

@@ -5,11 +5,11 @@ const lights = accessLightings(scene);
 const principal = (id: string) => scene.principals.find((entry) => entry.id === id);
 
 describe("a way in's lighting", () => {
-    it("lights a writer's one area, the persona homed there and only the keys her grant lists", () => {
+    it("lights a writer's one area, the role homed there and only the keys her grant lists", () => {
         const ada = lights.get("who:ada");
         expect(ada?.nodes["area:support"]).toBe("edit");
         expect(ada?.nodes["area:storefront"]).toBeUndefined();
-        expect(ada?.nodes["persona:maya"]).toBe("use");
+        expect(ada?.nodes["role:maya"]).toBe("use");
         expect(ada?.nodes["cap:stripe"]).toBeUndefined();
         expect(ada?.nodes.secrets).toBeUndefined();
         expect(ada?.tags["area:support"]).toBe("edits");
@@ -18,7 +18,7 @@ describe("a way in's lighting", () => {
         expect(ada?.wires["g:machines"]).toBeUndefined();
     });
 
-    it("names the persona on a room a guest reaches only through it, and dashes the groups it reaches that way", () => {
+    it("names the role on a room a guest reaches only through it, and dashes the groups it reaches that way", () => {
         const kai = lights.get("who:kai");
         expect(kai?.tags["area:support"]).toBe("as Maya");
         expect(kai?.wires["g:services"]).toBe("through");
@@ -32,7 +32,7 @@ describe("a way in's lighting", () => {
 });
 
 describe("a thing's lighting", () => {
-    it("lights who reaches a connection, dashing those who reach it only as a persona, and ties the persona that carries it", () => {
+    it("lights who reaches a connection, dashing those who reach it only as a role, and ties the role that carries it", () => {
         const stripe = lights.get("cap:stripe");
         expect(stripe?.principals).toEqual(["you", "kai", "nightly-ci", "helpdesk"]);
         expect(stripe?.wires).toMatchObject({
@@ -42,18 +42,18 @@ describe("a thing's lighting", () => {
             "c:sandboxes": "through",
             "g:services": "on",
         });
-        expect(stripe?.nodes).toMatchObject({ "cap:stripe": "focus", "persona:maya": "tie" });
+        expect(stripe?.nodes).toMatchObject({ "cap:stripe": "focus", "role:maya": "tie" });
     });
 
-    it("ties an area to the personas homed in it", () => {
-        expect(lights.get("area:storefront")?.nodes["persona:owen"]).toBe("tie");
+    it("ties an area to the roles homed in it", () => {
+        expect(lights.get("area:storefront")?.nodes["role:owen"]).toBe("tie");
     });
 
     it("words who reaches it strongest first, as a sentence", () => {
         expect(reachedBy(scene, "area:support").map((row) => [row.label, listed(row.names)])).toEqual([
             ["Changes it", "You and Ada"],
             ["Only reads it", "nightly CI, status board and helpdesk"],
-            ["Only as a persona", "Kai"],
+            ["Only as a role", "Kai"],
         ]);
     });
 
@@ -69,11 +69,11 @@ describe("the sample keeps the daemon's rules", () => {
         expect(editors).toEqual(["you", "ada"]);
     });
 
-    it("gives a way in that acts as a persona no connection that persona does not carry", () => {
+    it("gives a way in that acts as a role no connection that role does not carry", () => {
         for (const entry of scene.principals.filter((candidate) => candidate.actsAs !== undefined)) {
-            const persona = scene.personas.find((card) => card.id === entry.actsAs);
+            const role = scene.roles.find((card) => card.id === entry.actsAs);
             const connections = nodeIdsOf(scene).filter((id) => id.startsWith("cap:") && entry.reach[id] !== undefined);
-            expect(connections.filter((id) => !persona?.allows.some((allowed) => allowed === id))).toEqual([]);
+            expect(connections.filter((id) => !role?.allows.some((allowed) => allowed === id))).toEqual([]);
         }
     });
 
@@ -82,7 +82,7 @@ describe("the sample keeps the daemon's rules", () => {
         expect(nodeIdsOf(scene).filter((id) => reader?.reach[id] !== undefined && reader.reach[id] !== "see")).toEqual([]);
     });
 
-    it("homes every persona in an area on the drawing", () => {
-        expect(scene.personas.filter((persona) => !scene.areas.some((area) => area.id === persona.home))).toEqual([]);
+    it("homes every role in an area on the drawing", () => {
+        expect(scene.roles.filter((role) => !scene.areas.some((area) => area.id === role.home))).toEqual([]);
     });
 });

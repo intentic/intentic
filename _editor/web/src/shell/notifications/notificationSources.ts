@@ -374,7 +374,7 @@ export const startNotificationSources = (): void => {
     const lost = computed(() => {
         const email = user.value?.email.toLowerCase();
         const account = email === undefined ? undefined : directory.value.accounts[email];
-        return (account?.sandboxes ?? []).filter((entry) => entry.missingSince !== undefined && entry.standing === `unknown` && entry.role === `owner`).length;
+        return (account?.sandboxes ?? []).filter((entry) => entry.missingSince !== undefined && entry.standing === `unknown` && entry.tier === `owner`).length;
     });
     hold(`lost-sandboxes`, () => {
         if (lost.value === 0 || lostDismissed.value || directMode.value || router.currentRoute.value.name === `recover`) {

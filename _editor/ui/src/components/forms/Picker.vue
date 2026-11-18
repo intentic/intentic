@@ -4,8 +4,8 @@ import { twMerge } from "tailwind-merge";
 import { computed, ref, useAttrs, useSlots } from "vue";
 import { useDevice } from "../../composables/useDevice.js";
 import { normalizePickerGroups, type PickerOption, type PickerOptions } from "./picker.js";
-import { FACE_SIZES } from "../brand/personaFace.js";
-import PersonaFace from "../brand/PersonaFace.vue";
+import { FACE_SIZES } from "../brand/roleFace.js";
+import RoleFace from "../brand/RoleFace.vue";
 import PickerPanel from "./PickerPanel.vue";
 import ResponsiveOverlay from "../overlays/ResponsiveOverlay.vue";
 import { useT } from "../../i18n/index.js";
@@ -122,7 +122,7 @@ const applyPick = (option: PickerOption<T>): void => {
             <slot name="icon" :option="selected">
                 <!-- A face, not a glyph, in the closed trigger too, since it's the only thing shown once the panel shuts. -->
                 <!-- Both variants take the pill size: it clears the field's own line box, so a faced trigger is no taller than an empty one. -->
-                <PersonaFace v-if="selected.face !== undefined" :persona="selected.face" :size="FACE_SIZES.pill" />
+                <RoleFace v-if="selected.face !== undefined" :role="selected.face" :size="FACE_SIZES.pill" />
                 <Icon v-else-if="selected.icon !== undefined" :name="selected.icon" class="shrink-0 text-sm text-muted" aria-hidden="true" />
             </slot>
         </template>

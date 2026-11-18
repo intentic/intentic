@@ -259,10 +259,12 @@ export {
     type AssistantAccessory,
     type AssistantColor,
 } from "./components/brand/assistantFaces.js";
-// A persona's id picks its companion's color, and its name the prop it holds, on every surface.
-export { default as PersonaFace } from "./components/brand/PersonaFace.vue";
-export { personaAccessory } from "./components/brand/personaAccessory.js";
-export { FACE_SIZES, type PersonaLike } from "./components/brand/personaFace.js";
+// A role's id picks its companion's color, and its name the prop it holds, on every surface.
+export { default as RoleFace } from "./components/brand/RoleFace.vue";
+// RoleFace under its name before personas were renamed roles, for extensions built against it.
+export { default as PersonaFace } from "./components/brand/RoleFace.vue";
+export { roleAccessory } from "./components/brand/roleAccessory.js";
+export { FACE_SIZES, type RoleLike } from "./components/brand/roleFace.js";
 // Bordered surface: own header, own interrupting strips, one scrolling body (the min-h-0/overflow-hidden
 // contract). Named for the contract, not the shape; avoids the ambiguous `Panel` name used elsewhere in the app.
 export { default as ScrollFrame } from "./components/layout/ScrollFrame.vue";

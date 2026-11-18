@@ -48,7 +48,7 @@ import {
 import { mergeChild, settleHeldChild } from "../child-held.js";
 import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { recordTurnStanding, type TurnStanding } from "../../../conversations/actor/turn-standing.js";
-import { PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import { RolePowersSchema } from "@intentic/sandbox-contract/schemas/roles";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import type { Fleet } from "../../../conversations/registry/agents-registry.js";
 import { conversationProfile, type Postures } from "../../../conversations/registry/agents-store.js";
@@ -139,20 +139,20 @@ describe("what a child is", () => {
         });
     });
 
-    // Every turn wears a persona, and a child is its parent's turn continuing by other means: the card or built-in its
+    // Every turn wears a role, and a child is its parent's turn continuing by other means: the card or built-in its
     // parent's own turn wore, as the parent's standing recorded it. What the ask names is never trusted: an agent cannot
-    // hand its child a wider persona than its own.
-    it("wears its parent's persona, whatever the ask named", async () => {
-        const standing = (persona: TurnStanding["persona"]): TurnStanding => ({
+    // hand its child a wider role than its own.
+    it("wears its parent's role, whatever the ask named", async () => {
+        const standing = (role: TurnStanding["role"]): TurnStanding => ({
             at: Date.now(),
             unattended: false,
-            persona,
+            role,
             granted: [],
-            withheldByPersona: [],
+            withheldByRole: [],
             withheldByGate: [],
             withheldByReach: [],
             fence: undefined,
-            powers: PersonaPowersSchema.parse({}),
+            powers: RolePowersSchema.parse({}),
             runtime: "claude-code",
             secrets: "shell",
         });
@@ -170,10 +170,10 @@ describe("what a child is", () => {
             await waitForSubagent(actors, from.conversationId, { target: result.id, until: ["finished"], timeoutMs: 5_000 });
             return turns[0];
         };
-        for (const persona of [{ id: "full-access", name: "Full access" }, { id: "marketing", name: "Marketing" }]) {
-            const from = { conversationId: `conv-wearing-${persona.id}`, cwd: parent.cwd };
-            recordTurnStanding(actors, from.conversationId, standing(persona));
-            expect(await spawnUnder(from)).toMatchObject({ unattended: true, actsAs: persona.id });
+        for (const role of [{ id: "full-access", name: "Full access" }, { id: "marketing", name: "Marketing" }]) {
+            const from = { conversationId: `conv-wearing-${role.id}`, cwd: parent.cwd };
+            recordTurnStanding(actors, from.conversationId, standing(role));
+            expect(await spawnUnder(from)).toMatchObject({ unattended: true, actsAs: role.id });
         }
         // A parent with no standing recorded names nothing, and an unwatched child naming nothing wears No accounts.
         expect((await spawnUnder({ conversationId: "conv-unplanned", cwd: parent.cwd }))?.actsAs).toBeUndefined();
@@ -926,7 +926,7 @@ describe("a follow-up that meets a turn somebody else started", () => {
     });
 });
 
-// children.routes.ts' gate: the persona decision is recorded at plan time as the supervisor itself, so a conversation
+// children.routes.ts' gate: the role decision is recorded at plan time as the supervisor itself, so a conversation
 // no qualifying turn planned has nothing armed.
 describe("the shell door's arming", () => {
     const supervisor = (onSpawn: (prompt: string) => void): ChildSupervisor => ({

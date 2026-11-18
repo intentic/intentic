@@ -1,4 +1,4 @@
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { PresenceUser } from "@intentic/sandbox-contract/events/system-events";
 import { sandboxRef } from "@intentic/extension-api";
 import { t } from "@intentic/ui/i18n";
@@ -22,7 +22,7 @@ export interface PresenceMember {
     readonly name?: string;
     readonly picture?: string;
     // Trust tier resolved by the daemon per connection; every tab of a member carries the same one.
-    readonly role: MemberRole;
+    readonly tier: MemberTier;
     // Idle only when every tab is hidden; one visible tab means they're here.
     readonly idle: boolean;
     readonly tabs: readonly PresenceUser[];
@@ -51,7 +51,7 @@ export const presenceOthers = computed<readonly PresenceMember[]>(() => {
             email: first.email,
             ...(first.name !== undefined ? { name: first.name } : {}),
             ...(first.picture !== undefined ? { picture: first.picture } : {}),
-            role: first.role,
+            tier: first.tier,
             idle: tabs.every((tab) => tab.idle),
             tabs,
         });

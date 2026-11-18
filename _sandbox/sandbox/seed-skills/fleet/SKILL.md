@@ -52,7 +52,7 @@ one when the difference is any of those:
 - **Its own blast radius.** Work you want to be able to throw away, or that should not share this box's cores.
 
 If the difference is only *how a turn behaves* — which model, which folder, which tone, which tools of the
-ones already here — that is a **persona** in this sandbox, not a new machine. Personas are free; a sandbox is
+ones already here — that is a **role** in this sandbox, not a new machine. Roles are free; a sandbox is
 a container somebody's computer has to run.
 
 ## How consent works: enforced, not promised
@@ -97,7 +97,7 @@ there as a draft the owner still approves, and credentials land as names to fill
 ## Handing the new sandbox work
 
 Creating a sandbox does not give this one a way to hand it tasks. That is a **link**, which the owner pairs in their
-editor once the new box is up: its terms (the persona its tasks wear, whether each waits for its owner, its hourly
+editor once the new box is up: its terms (the role its tasks wear, whether each waits for its owner, its hourly
 limit) are set over there. Then `delegate` reaches it; see the `links` skill. Ask for one with
 `capabilities request link --why "…"`.
 

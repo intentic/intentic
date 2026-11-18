@@ -5,7 +5,7 @@ import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { turnToolsOf, type TurnRemoteTools, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
-import { turnPersona } from "../../personas/personas.js";
+import { turnRole } from "../../roles/roles.js";
 import { turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
 import { type DaemonServersDeps, daemonServersFor } from "./daemon-servers.js";
 
@@ -38,19 +38,19 @@ export const doorToolsOf = async (
     // daemon over its own permission channel gains nothing from three more tools.
     gate: boolean,
 ): Promise<DoorTools> => {
-    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    const role = context.role ?? turnRole({ roles: [], actsAs: undefined, unattended: false });
     // Read before the lease opens, so a settings read that throws leaves nothing leased.
     const settings = context.settings ?? (await services.sandboxSettings.get());
     const mounted = await turnToolsOf(services, granted, {
         conversationId: input.conversationId,
-        anonymousBrowser: persona.powers.browser,
-        shell: persona.powers.shell,
-        extensions: persona.powers.extensions,
+        anonymousBrowser: role.powers.browser,
+        shell: role.powers.shell,
+        extensions: role.powers.extensions,
     });
     try {
         const secrets = context.base.tools.secrets ?? turnSecretAccess(services, input, context.base.signal);
         const withSecrets: TurnContext = { ...context, base: { ...context.base, tools: { ...context.base.tools, secrets } } };
-        const daemon = daemonServersFor(services, { input, context: withSecrets, persona, granted, settings, mounted, gate });
+        const daemon = daemonServersFor(services, { input, context: withSecrets, role, granted, settings, mounted, gate });
         const remote = [...mounted.tools, ...daemon.tools];
         return {
             mounted,

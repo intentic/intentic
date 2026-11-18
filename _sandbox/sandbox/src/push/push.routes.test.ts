@@ -12,7 +12,7 @@ const laptop: PushChannel = { kind: "webpush", endpoint: "https://push.example/l
 
 // The request as the middleware hands it on: with no verified caller (loopback, no sign-in), or with the one it verified.
 const anonymous: OrpcContext = { headers: new Headers(), method: "POST", url: "/push/subscribe" };
-const signedIn = (email: string): OrpcContext => ({ ...anonymous, identity: { email, role: "collaborator", methods: ["google"] } });
+const signedIn = (email: string): OrpcContext => ({ ...anonymous, identity: { email, tier: "collaborator", methods: ["google"] } });
 
 const routes = () => {
     const filed: { readonly channel: PushChannel; readonly member: string | undefined }[] = [];

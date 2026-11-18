@@ -26,7 +26,7 @@ const storage = useSandboxStorage();
 const scan = computed(() => storage.report.value?.scan);
 const scanning = storage.scanning;
 const historyDisk = computed(() => storage.report.value?.historyDisk);
-// Nested repos only: a persona can leave one of those out of its conversations, while the workspace's own repo is the
+// Nested repos only: a role can leave one of those out of its conversations, while the workspace's own repo is the
 // directory every other one mounts into and is always carried, so the remedy this warning names does not reach it.
 const largeCheckouts = computed(() => (storage.report.value?.repositoryCheckouts ?? []).filter((repo) => repo.repo !== `root` && repo.bytes >= 1024 ** 3));
 
@@ -256,7 +256,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                 <Notice
                     :of="{ tone: `warning`, title: t(`sandbox.sandboxStorageCard.largeCheckout`, { repo: repo.repo, bytes: formatBytes(repo.bytes) }) }"
                 />
-                <RouterLink :to="here(page.sandboxSettings(`personas`, { query: { repositories: `true` } }))" class="text-xs text-link hover:underline">{{
+                <RouterLink :to="here(page.sandboxSettings(`roles`, { query: { repositories: `true` } }))" class="text-xs text-link hover:underline">{{
                     t(`sandbox.sandboxStorageCard.chooseRepositories`)
                 }}</RouterLink>
             </div>

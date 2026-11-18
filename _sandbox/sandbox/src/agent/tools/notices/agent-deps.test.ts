@@ -121,7 +121,7 @@ test("a never-installed project asks for setup rather than promising an automati
     expect(told).not.toContain("queued its repair");
 });
 
-test("a read-only persona is told to ask the owner for first-time setup", async () => {
+test("a read-only role is told to ask the owner for first-time setup", async () => {
     const hooks = depsNoticeHooks(async () => ({ dir: "app", state: "needs-setup", names: ["vue"] }), false);
     expect(context(await fire(hooks, `Cannot find module 'vue'`))).toMatch(/ask the owner/i);
 });

@@ -4,7 +4,7 @@ import type { PrivacyBypass, PrivacyRefusal } from "@intentic/sandbox-contract/s
 import type { AgentProvider, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
-import type { TurnPersona } from "../../personas/personas.js";
+import type { TurnRole } from "../../roles/roles.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { TurnTrim } from "../prompt/window/context-trim.js";
 import type { MainCatchUp } from "../run/main-catch-up.js";
@@ -124,7 +124,7 @@ export interface TurnContext {
     readonly contextTrim?: TurnTrim;
     // Who the turn is and what it may do, resolved once by planTurn; absent on the context the route builds before a
     // card is read.
-    readonly persona?: TurnPersona;
+    readonly role?: TurnRole;
     // Re-takes the pre-turn rebase while parked on a card; isolated, harness-only turns, since only the harness's cards
     // park long enough to need it.
     readonly resync?: () => Promise<AgentEvent | undefined>;
@@ -141,8 +141,8 @@ export interface TurnContext {
 // cast, and `D` is what the adapter reads of the daemon: named per runtime, handed in by whoever holds more.
 export interface AgentAdapter<R extends AgentCapabilities["runtime"], D> {
     readonly runtime: R;
-    // Gate the credential, resolve the model, and assemble the request, or refuse. `granted` is the persona's narrowed
-    // capability manifest; shared so an arm cannot mount what the persona did not grant.
+    // Gate the credential, resolve the model, and assemble the request, or refuse. `granted` is the role's narrowed
+    // capability manifest; shared so an arm cannot mount what the role did not grant.
     // `input` has its provider and loop named: routed at the door it came in through (withRuntimeDefaults).
     readonly preflight: (deps: D, input: RoutedAgentTurn, context: TurnContext, granted: readonly Capability[]) => Promise<TurnArmPlan>;
     // Cheap and cached; never on the turn's path.

@@ -1,7 +1,7 @@
 import type { AgentAccess, CredentialReach, EditScope, ManageRight } from "@intentic/sandbox-contract/schemas/members";
 import { type ToolCeiling, ToolCeilingSchema } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { entryId } from "@intentic/sandbox-contract/schemas/internal";
-import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { GrantedTier, MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { ProofMethod } from "@intentic/sandbox-contract/schemas/system";
 import {
     accessRefusal,
@@ -14,11 +14,12 @@ import {
     tierOf,
 } from "@intentic/sandbox-contract/schemas/members";
 import { EMAIL_SIGN_IN_OFF, PLATFORM_KEY_UNKNOWN } from "@intentic/sandbox-contract/schemas/system";
-import { GrantedRoleSchema, roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { GrantedTierSchema, tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { isIdentityAssertion, verifyIdentityAssertion } from "@intentic/sandbox-contract/identity-assertion";
 import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
+import { at as atPath, rename } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
@@ -126,20 +127,20 @@ export const fileOwnerStore = (path: string): OwnerStore => {
     };
 };
 
-// The additional authorized identities beyond the owner and the role each was granted, stored as
-// {members:[{email,role,areas?}]}.
+// The additional authorized identities beyond the owner and the tier each was granted, stored as
+// {members:[{email,tier,areas?}]} (`role` until 2026-11-18, renamed on read).
 // The owner is never listed here; the daemon enforces shared access, the platform only mirrors these grants. Areas
 // are the daemon's alone: what of this workspace a person reaches is a fact about this workspace's folders, never
 // mirrored.
 export interface Member {
     readonly email: string;
     // The tier the rest of the row makes (sandbox-contract `tierOf`), kept in step by every write.
-    readonly role: GrantedRole;
-    // Area ids fencing what of the workspace this person reaches, and with it which persona cards they may wear
-    // (personas/persona-reach.ts). Absent means the whole workspace; empty means nothing at all. Never absent on a
+    readonly tier: GrantedTier;
+    // Area ids fencing what of the workspace this person reaches, and with it which role cards they may wear
+    // (roles/role-reach.ts). Absent means the whole workspace; empty means nothing at all. Never absent on a
     // guest row.
     readonly areas?: readonly string[];
-    // Whether their conversations run agents, and where they change files by hand; absent, what the role meant
+    // Whether their conversations run agents, and where they change files by hand; absent, what the tier meant
     // (sandbox-contract `memberAccess`).
     readonly agents?: AgentAccess;
     readonly edit?: EditScope;
@@ -157,7 +158,7 @@ export interface Member {
     readonly aiAccounts?: readonly string[];
     // The most their conversations' tools may be (access/principal-chain.ts). Absent is no limit; never on a maintainer.
     readonly tools?: ToolCeiling;
-    // A chatting guest's assistants, by persona id, inside the ones their areas hold (personas/persona-reach.ts).
+    // A chatting guest's assistants, by role id, inside the ones their areas hold (roles/role-reach.ts).
     // Absent is every one their areas hold.
     readonly assistants?: readonly string[];
     // The access profile the answers above were written from (docs/architecture/access.md); saving that profile writes
@@ -172,7 +173,7 @@ export interface Member {
 // absent keep what the row already says, so a re-grade from an editor that predates them never drops a way in or widens
 // what a person's conversations may spend; `credentials: "all"` is how a grant lifts a reach.
 export interface MemberGrant {
-    readonly role: GrantedRole;
+    readonly tier: GrantedTier;
     readonly areas?: readonly string[] | undefined;
     readonly agents?: AgentAccess | undefined;
     readonly edit?: EditScope | undefined;
@@ -190,7 +191,7 @@ export interface MemberGrant {
 
 export interface MembersStore {
     list(): Promise<Member[]>;
-    // Upsert: granting an email that already holds access re-grades its role, and replaces its areas.
+    // Upsert: granting an email that already holds access re-grades its tier, and replaces its areas.
     add(email: string, grant: MemberGrant): Promise<void>;
     remove(email: string): Promise<void>;
 }
@@ -204,7 +205,7 @@ export interface MembersStore {
 const MemberSchema = z
     .object({
         email: z.string(),
-        role: GrantedRoleSchema,
+        tier: GrantedTierSchema,
         areas: z.array(z.string().min(1)).optional(),
         // Added 2026-10-12, optional: a row written before it is a person who signs in with Google.
         emailSignIn: z.boolean().optional(),
@@ -212,7 +213,7 @@ const MemberSchema = z
         credentials: CredentialReachSchema.optional(),
         // Added 2026-10-26, optional: a row written before it runs on every AI account, as it did then.
         aiAccounts: z.array(AiAccountKeySchema).optional(),
-        // Added 2026-10-13, optional: a row written before them reads as its role meant (sandbox-contract `memberAccess`).
+        // Added 2026-10-13, optional: a row written before them reads as its tier meant (sandbox-contract `memberAccess`).
         agents: AgentAccessSchema.optional(),
         edit: EditScopeSchema.optional(),
         // Added 2026-10-22, optional: a row written before it is nobody whose work lands by itself.
@@ -225,8 +226,8 @@ const MemberSchema = z
         // Added 2026-10-29, optional: a row written before it runs no part of the sandbox beyond its own work.
         manages: z.array(ManageRightSchema).optional(),
     })
-    .refine((member) => accessRefusal(memberAccess(member)) === undefined && tierOf(memberAccess(member)) === member.role, {
-        message: "a row's access must be one a grant could write, and its role the tier that access makes",
+    .refine((member) => accessRefusal(memberAccess(member)) === undefined && tierOf(memberAccess(member)) === member.tier, {
+        message: "a row's access must be one a grant could write, and its tier the one that access makes",
     });
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 
@@ -239,6 +240,8 @@ export const membersDocument = defineDocument({
     portability: "identity",
     note: "Re-invite collaborators from the Access tab, a grant is the platform's record, and the target enforces its own copy.",
     schema: z.object({ members: z.array(MemberSchema) }),
+    // 2026-11-18: a row's tier was stored as `role` until personas were renamed roles.
+    history: [atPath("members.*", rename("role", "tier"))],
 });
 
 export { memberRow };
@@ -326,19 +329,19 @@ export { tokenEquals } from "./token-equals.js";
 // Role is resolved fresh on each authorize (owner + members re-read), so a re-grade applies on the very next request.
 export interface Caller extends VerifiedIdentity {
     // The tier their access makes; an owner and a maintainer hold every other answer below.
-    readonly role: MemberRole;
+    readonly tier: MemberTier;
     // Whether they may start agents, and where they may change files by hand (a subset of `areas`). Absent: what the
     // tier means, which for the owner is everything.
     readonly agents?: AgentAccess;
     readonly edits?: "none" | "all" | readonly string[];
     // A home-only member's answer to whether their home lands by itself and they may land it (`landsHere`).
     readonly lands?: true;
-    // Area ids fencing what of the workspace this caller reaches, and with it which persona cards they may wear;
+    // Area ids fencing what of the workspace this caller reaches, and with it which role cards they may wear;
     // absent means the whole workspace, which is what the owner always holds. Carried as ids, not folders, so one read
     // of the area manifest per request answers it freshly: editing an area narrows its holders on their very next
     // call, like a re-grade does.
     readonly areas?: readonly string[];
-    // A chatting guest's assistants by persona id, inside what their areas hold; absent is every one they hold.
+    // A chatting guest's assistants by role id, inside what their areas hold; absent is every one they hold.
     readonly assistants?: readonly string[];
     // The parts of the sandbox they were given (sandbox-contract `holdsRight`); the owner and a maintainer run every one.
     readonly manages?: readonly ManageRight[];
@@ -435,7 +438,7 @@ export interface Authorizer {
 // replace the owner.
 export const authorizeMaintainer = async (authorizer: Authorizer, bearer: string, listener?: Listener): Promise<void> => {
     const caller = await authorizer.authorize(bearer, undefined, { listener });
-    if (!roleAtLeast(caller.role, "maintainer")) {
+    if (!tierAtLeast(caller.tier, "maintainer")) {
         throw new ForbiddenError("not a sandbox maintainer");
     }
 };
@@ -453,7 +456,7 @@ export const operatesSandbox =
         if (bound !== undefined && sameEmail(bound, email)) {
             return true;
         }
-        return (await members.list()).some((member) => sameEmail(member.email, email) && roleAtLeast(member.role, "maintainer"));
+        return (await members.list()).some((member) => sameEmail(member.email, email) && tierAtLeast(member.tier, "maintainer"));
     };
 
 export const createAuthorizer = (deps: {
@@ -525,7 +528,7 @@ export const createAuthorizer = (deps: {
     const enforce = async (proof: Proof, owner: string): Promise<ProvenCaller> => {
         if (sameEmail(proof.email, owner)) {
             await requireOwnerOptIn(proof);
-            return { ...proof, role: "owner" };
+            return { ...proof, tier: "owner" };
         }
         const member = (await deps.members.list()).find(({ email }) => sameEmail(email, proof.email));
         if (member === undefined) {
@@ -591,7 +594,7 @@ export const createAuthorizer = (deps: {
             throw new ForbiddenError(`this sandbox is registered to ${deps.expectedOwner}`);
         }
         await deps.owner.write(proof.email, { emailSignIn: proof.methods.includes("email") });
-        return { ...proof, role: "owner" };
+        return { ...proof, tier: "owner" };
     };
     return {
         authorize: async (bearer, firstBind, options = {}) => {
@@ -636,7 +639,7 @@ export const createAuthorizer = (deps: {
         },
         authorizeRecovery: async (bearer, listener) => {
             await requireBrowserAccess();
-            return { ...(await ownerProof(bearer, listener)), role: "owner" };
+            return { ...(await ownerProof(bearer, listener)), tier: "owner" };
         },
     };
 };

@@ -33,7 +33,7 @@ feature…), or the provider's logo when no kind is read; the title; a status pi
 is not you), the model, the machine it runs on when that is elsewhere, the branch (without `agent/`), the lines it
 added and removed (press them to open the review) and the account; and a closing row with reactions and the time.
 What each agent has cost joins that row only with **Geek metrics** on (Settings → Appearance), beside its CPU and
-memory share; spend across agents is on the Usage page. The card does not show the persona or the repository.
+memory share; spend across agents is on the Usage page. The card does not show the role or the repository.
 
 **Reactions** are the one mark people add: 👍 and 👎 in one press, the rest from a fixed picker (**Add reaction**).
 Everyone sharing the sandbox sees them and who left each; one per person per emoji, up to 24 different emoji on a
@@ -45,17 +45,17 @@ state, not a label on the agent.
 
 ## There are no tags
 
-Agents have no tags, labels, colors or stars, and personas have no icon or color. What exists instead:
+Agents have no tags, labels, colors or stars, and roles have no icon or color. What exists instead:
 
 - **Rename** with a convention (a project or ticket prefix): the board's search matches titles.
 - The board's filters: **Everyone** / **Mine** / one chip per person (when others share the sandbox), the project
   filter chip, and the search box **Filter by your messages or id…**, which matches a title or either side's messages, archived agents included. There is no
-  filter by status, provider, model, persona or reaction; the lanes are fixed: **Attention**, **Active**,
+  filter by status, provider, model, role or reaction; the lanes are fixed: **Attention**, **Active**,
   **Finished**.
 - The board covers this sandbox only. Which of the owner's other sandboxes have agents that need them
   is on **Home**, one tile per sandbox.
-- The chat list is one list of every open chat in those same lanes. It is not grouped or filtered by persona: a
-  persona is a posture a chat wears, shown and changed on its composer's **Acts as** pill.
+- The chat list is one list of every open chat in those same lanes. It is not grouped or filtered by role: a
+  role is a posture a chat wears, shown and changed on its composer's **Acts as** pill.
 - **Reactions**, as above.
 
 ## Where finished agents go

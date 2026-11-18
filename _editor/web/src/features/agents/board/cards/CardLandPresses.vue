@@ -2,7 +2,7 @@
 import { Button } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { landWord } from "../../../../models/fleet/branches/branchLanding";
@@ -27,7 +27,7 @@ const props = defineProps<{
 const emit = defineEmits<{ land: [] }>();
 
 // Maintainers get Land now; collaborators get Request land instead, since the daemon floors landing at maintainer.
-const { canReview, canShip } = useRole();
+const { canReview, canShip } = useTier();
 const words = useVocabulary();
 // Request land goes to the daemon from here (cardRequests.ts), since the board is only one of the card's hosts.
 const { requesting, requestLand, landAsk } = useCardRequests(() => props.agent, () => props.title);

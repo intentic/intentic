@@ -20,7 +20,7 @@ import { queryClient, UNPERSISTED } from "../../lib/queryPersistence";
 import { throttleTrailing } from "../../lib/throttleTrailing";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { refusalSummary } from "../workspace/push/refusalSummary";
 import { outgoingWork } from "../workspace/push/outgoingWork";
 import { landingAgents, landingLineOf, landingNow, type LandingAgent } from "./landing";
@@ -105,7 +105,7 @@ const actionState = (view: ViewScope) => {
     return states.value.get(key)!;
 };
 // Signed-in member's tier on the active sandbox, read once for the module; runBatch checks it before sending.
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 /** What a press said as it was pressed (its label, and the count beside it), which it keeps saying while its work runs. */
 export interface PressFace {

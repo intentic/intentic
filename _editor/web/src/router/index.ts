@@ -23,7 +23,7 @@ import { useAuth } from "../client/auth/useAuth";
 import { useGoogleIdentity } from "../client/auth/useGoogleIdentity";
 import { mintsOnArrival } from "../features/auth/handoffSpent";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { useRole } from "../client/sandbox/useRole";
+import { useTier } from "../client/sandbox/useTier";
 import { useSandboxSession } from "../client/session/sandboxSession";
 import { retryOnEntry } from "../client/auth/platformRetry";
 import { NOTHING_TO_OPEN_PATH } from "../app/environments/nothingToOpen";
@@ -104,7 +104,7 @@ export const openInPage = async (path: string): Promise<void> => {
 // The root: Home for everyone who has one (lib/routes/firstScreens.ts), the landing inside the sandbox open for a guest
 // of a box and for the Android app, which draws the board itself.
 const rootRedirect = (): string => {
-    const { isGuest, homeOnly } = useRole();
+    const { isGuest, homeOnly } = useTier();
     return rootLanding({ isGuest: isGuest.value, homeOnly: homeOnly.value }, embedded(), activeSandboxId.value);
 };
 
@@ -115,7 +115,7 @@ const sandboxRootRedirect = (to: Pick<RouteLocationNormalized, `params`>): strin
     if (sandbox === undefined) {
         return HOME_PATH;
     }
-    const { isGuest, homeOnly } = useRole();
+    const { isGuest, homeOnly } = useTier();
     return sandboxLanding(sandbox, sandbox === activeSandboxId.value ? { isGuest: isGuest.value, homeOnly: homeOnly.value } : { isGuest: false, homeOnly: false });
 };
 

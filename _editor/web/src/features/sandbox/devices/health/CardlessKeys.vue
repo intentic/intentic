@@ -4,7 +4,7 @@ import { Button, Notice, type NoticeModel, Row, RowGroup, RowNote } from "@inten
 import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import type { MachineRow } from "../../../../models/sandbox/devices/deviceRows";
 import { withdrawDeviceKey } from "../../../../models/sandbox/devices/useDevices";
 
@@ -27,7 +27,7 @@ const props = defineProps<{
 }>();
 
 const t = useT();
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 const withdrawing = ref<string | undefined>();
 const failed = ref<string | undefined>();

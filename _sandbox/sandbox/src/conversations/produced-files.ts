@@ -111,7 +111,7 @@ const refusalFor = (caller: AppEnv["Variables"]["identity"], entry: PersistedAge
     // it no longer takes its files away.
     const owner = entry.social.owner?.email ?? entry.identity.startedBy;
     const theirs = owner?.toLowerCase() === caller?.email.toLowerCase();
-    return caller?.role === "guest" && !theirs ? "not your conversation" : undefined;
+    return caller?.tier === "guest" && !theirs ? "not your conversation" : undefined;
 };
 
 // The file at `path` under the first of `roots` that holds it, open; "refused" when the path meets a link or a file

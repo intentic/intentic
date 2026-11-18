@@ -22,7 +22,7 @@ import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
-import { mayDelegate, turnPersona } from "../../personas/personas.js";
+import { mayDelegate, turnRole } from "../../roles/roles.js";
 import { createCursorAgent, type CursorTurnExtras } from "./cursor-agent.js";
 import { type HarnessServersDeps, turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
 import type { HarnessHooksDeps } from "../../agent/run/harness/harness-hooks.js";
@@ -92,7 +92,7 @@ export const planCursorTurn = async (
     if (!readiness.ok) {
         return { ok: false, ...(readiness.code !== undefined ? { code: readiness.code } : {}), message: readiness.detail };
     }
-    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    const role = context.role ?? turnRole({ roles: [], actsAs: undefined, unattended: false });
     // Never empty, so this always resolves: keeps the pinned model while offered, else the catalog default.
     const catalog = await services.cursorModels.models();
     const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
@@ -118,9 +118,9 @@ export const planCursorTurn = async (
     const settings = context.settings ?? (await services.sandboxSettings.get());
     const mounted = await turnToolsOf(services, granted, {
         conversationId: input.conversationId,
-        anonymousBrowser: persona.powers.browser,
-        shell: persona.powers.shell,
-        extensions: persona.powers.extensions,
+        anonymousBrowser: role.powers.browser,
+        shell: role.powers.shell,
+        extensions: role.powers.extensions,
         clientCeilingMs: CURSOR_MCP_CALL_CEILING_MS,
     });
     // The privacy shield reads this turn channel by channel (cursor-shield.ts); undefined when there is nothing to read
@@ -132,7 +132,7 @@ export const planCursorTurn = async (
         mounted.release();
         return { ok: false, code: "privacy-unshielded", message: `The privacy shield's policy could not be read, so this turn was not sent. ${error instanceof Error ? error.message : ""}`.trim() };
     }
-    // The skills the turn's persona brings and withholds, which Cursor's own loader takes (cursor-skills.ts).
+    // The skills the turn's role brings and withholds, which Cursor's own loader takes (cursor-skills.ts).
     const skills = await cursorSkillsOf(context);
     // The sandbox's stored secrets, which every shell command this turn runs resolves and masks through the hooks
     // (cursor-secrets.ts): the same registry and release gates a Claude Code turn spends them through.
@@ -142,7 +142,7 @@ export const planCursorTurn = async (
     let daemon: DaemonServers;
     try {
         const withSecrets: TurnContext = { ...context, base: { ...context.base, tools: { ...context.base.tools, secrets } } };
-        daemon = daemonServersFor(services, { input, context: withSecrets, persona, granted, settings, mounted, served: CURSOR_SERVED });
+        daemon = daemonServersFor(services, { input, context: withSecrets, role, granted, settings, mounted, served: CURSOR_SERVED });
     } catch (error) {
         mounted.release();
         throw error;
@@ -162,8 +162,8 @@ export const planCursorTurn = async (
         hooks: {
             ...context.base.hooks,
             // Same predicate the harness arm applies: a child has shell and write; a narrowed turn can't proxy them back.
-            ...(context.children !== undefined && mayDelegate(persona) ? { children: context.children } : {}),
-            // A spawned child its parent gave a result schema hands its value back here, whatever its persona's shelves.
+            ...(context.children !== undefined && mayDelegate(role) ? { children: context.children } : {}),
+            // A spawned child its parent gave a result schema hands its value back here, whatever its role's shelves.
             ...opt("result", childResultDoor(services, input.conversationId)),
             ...opt("privacy", privacy),
             // The relay its loop attaches to, and the checks said as the turn ends (runtimes/decorators/ending-checks.ts).

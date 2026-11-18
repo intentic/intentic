@@ -83,7 +83,7 @@ export const sealKit = (services: Services, replaceShells: () => void) => {
         await services.pushSender.notifyIfAway({ title, body, url: conversationUrl(conversationId), tag: `seal-${conversationId}` }, peopleAudience([to]));
     };
     const record = (caller: Caller, action: string, target: string, details?: AuditEvent["details"]): void => {
-        services.audit.record({ actor: { kind: "member", email: caller.email.toLowerCase(), role: caller.role }, action, target, ...opt("details", details) });
+        services.audit.record({ actor: { kind: "member", email: caller.email.toLowerCase(), role: caller.tier }, action, target, ...opt("details", details) });
     };
     // Every home that is not private yet, made private to its own person: under any rule but `everyone` a home is one
     // person's chat with the sandbox, and the sandbox's owner reads it no more than anyone else does.

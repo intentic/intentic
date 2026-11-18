@@ -12,7 +12,7 @@ import { type Focus, lightingOf } from "./reachLighting";
 import { useReachMap } from "./useReachMap";
 
 // SANDBOX ▸ MAP: the sandbox's whole access and reach on one drawing. Who can get in (people, control tokens, other
-// sandboxes' links), the box itself (its areas, personas and secrets), and everything it reaches once they are in
+// sandboxes' links), the box itself (its areas, roles and secrets), and everything it reaches once they are in
 // (connections, accounts and browsers, machines, other sandboxes, what it publishes, the models it runs on). Pointing at
 // a way in lights what it reaches and dims the rest; pointing at a thing lights who reaches it. A press keeps a focus
 // lit while the pointer moves on, and Escape or the caption's close lets it go.
@@ -93,7 +93,7 @@ const look = computed(() => ({
     "--map-halo": `0 0 0 3px color-mix(in oklab, var(--map-ink) 12%, transparent)`,
 }));
 
-const personaName = (id: string): string => map.value.personas.find((card) => card.ref === id)?.label ?? id;
+const roleName = (id: string): string => map.value.roles.find((card) => card.ref === id)?.label ?? id;
 
 // Compact first: the drawing reads at a glance, and every block opens where its detail is wanted. The reader's choice is
 // kept on this device, as a view preference rather than anything about the sandbox.
@@ -115,7 +115,7 @@ const views = computed(() => [
         <div class="flex flex-col gap-3" :style="look">
             <!-- One line, kept in view while the drawing scrolls: what the focus means, and how much the drawing shows. -->
             <div class="sticky top-0 z-10 -mx-1 flex min-w-0 items-center gap-3 bg-canvas px-1 py-1">
-                <MapCaption :map :focus :lighting :pinned="pinned !== undefined" :persona-name @clear="clear" />
+                <MapCaption :map :focus :lighting :pinned="pinned !== undefined" :role-name @clear="clear" />
                 <SegmentedControl
                     class="shrink-0"
                     size="xs"
@@ -131,7 +131,7 @@ const views = computed(() => [
                 :focus
                 :pinned
                 :name="active?.name ?? t(`sandbox.sandboxMap.theSandbox`)"
-                :persona-name
+                :role-name
                 :compact="view === `compact`"
                 @point="point"
                 @press="press"

@@ -88,12 +88,12 @@ export const patchAgent = (id: string, patch: Partial<AgentSummary>): AgentSumma
 export const agentAnswer = (agent: AgentSummary | undefined): AgentSummary => agent ?? refuse(`No such agent.`, 404);
 
 // The two demo presence users; TEAMMATE alone tells the whole sharing story.
-export const OWNER: PresenceUser = { clientId: `demo-owner`, email: `ada@acme.dev`, name: `Ada Lovelace`, role: `owner`, idle: false, view: `workspace` };
+export const OWNER: PresenceUser = { clientId: `demo-owner`, email: `ada@acme.dev`, name: `Ada Lovelace`, tier: `owner`, idle: false, view: `workspace` };
 export const TEAMMATE: PresenceUser = {
     clientId: `demo-mate`,
     email: `grace@acme.dev`,
     name: `Grace Hopper`,
-    role: `collaborator`,
+    tier: `collaborator`,
     idle: true,
     view: `agents`,
 };

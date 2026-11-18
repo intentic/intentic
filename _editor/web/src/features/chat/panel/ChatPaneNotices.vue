@@ -17,7 +17,7 @@ import ChatShipStrip from "./landing/ChatShipStrip.vue";
 import { landStripOf } from "./landing/landStrip";
 import { shipsFrom } from "./landing/shipStrip";
 import { useAudience } from "../../../app/useAudience";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import NeedsStrip from "../../needs/NeedsStrip.vue";
 import SealAsks from "./seal/SealAsks.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -42,7 +42,7 @@ const { state: hostedPlan, offered: planOffered } = useHostedPlan();
 const { info: sandboxInfo } = useSandboxVersion();
 const standbyLine = computed(() => standbyNotice(sandboxInfo.value));
 const hoursNotice = computed(() =>
-    (active.value?.hosted ?? null) === null || active.value?.role !== `owner` ? undefined : lowHoursNotice(hostedPlan.value, active.value?.id),
+    (active.value?.hosted ?? null) === null || active.value?.tier !== `owner` ? undefined : lowHoursNotice(hostedPlan.value, active.value?.id),
 );
 const { agentById, archived, loadArchived, restore, busyIds } = useAgents();
 
@@ -65,7 +65,7 @@ const activeArchived = computed(() => {
 
 // Its finished work still on its branch, its land under way, or its land refused, with the press the board card offers
 // for it (landStrip.ts): said here for the reader who opened the chat rather than landed it from the board.
-const { canShip, canReview } = useRole();
+const { canShip, canReview } = useTier();
 const landStrip = computed(() => {
     const agent = agentById(conversation.value.conversationId);
     const strip = landStripOf(agent, {

@@ -43,7 +43,7 @@ const filesShellJobs = (capabilities: AgentCapabilities, request: AgentRequest):
 export interface RuntimeGuidanceTurn {
     readonly capabilities: AgentCapabilities;
     readonly request: AgentRequest;
-    // The persona's narrowed manifest, the one the arm mounted the owner's computers, browsers and phones from.
+    // The role's narrowed manifest, the one the arm mounted the owner's computers, browsers and phones from.
     readonly granted: readonly Capability[];
     // The owner's `chatPages` switch: the `ui` server offers the page tools only with it on.
     readonly chatPages: boolean;

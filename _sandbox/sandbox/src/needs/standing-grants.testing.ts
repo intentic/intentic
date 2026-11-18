@@ -1,4 +1,4 @@
-import { memoryOwnerGrants } from "../personas/owner-grants.js";
+import { memoryOwnerGrants } from "../roles/owner-grants.js";
 import type { OwnerApprovals, StandingGrantsDeps } from "./standing-grants.js";
 
 // No hook set and no extension approved, and nothing to take back: what a suite about conversation grants stands on.

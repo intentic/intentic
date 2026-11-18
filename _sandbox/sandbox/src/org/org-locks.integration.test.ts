@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { OrgPolicy } from "@intentic/sandbox-contract/schemas/organisation";
 import { createApp } from "../app.js";
 import { createLogger } from "../logger.js";
@@ -21,7 +21,7 @@ interface PlatformAnswer {
     answer: OrgPolicy | null | undefined;
 }
 
-const daemon = (options: { readonly role?: MemberRole; readonly fetch?: OrgPolicyFetch } = {}) => {
+const daemon = (options: { readonly role?: MemberTier; readonly fetch?: OrgPolicyFetch } = {}) => {
     const authRoot = mkdtempSync(join(tmpdir(), "org-locks-"));
     const orgPolicy = createOrgPolicyHolder({ authRoot, logger: createLogger(testConfig), fetch: options.fetch });
     const caller = proven("owner@gmina.test", options.role ?? "owner");

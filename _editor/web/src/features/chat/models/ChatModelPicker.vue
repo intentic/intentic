@@ -12,7 +12,7 @@ import PickerStatus from "../accounts/PickerStatus.vue";
 import { loopRowShown, offeredLoops } from "../../../models/providers/offeredLoops";
 import { accessKnown, anyProviderReady } from "../../../models/providers/access";
 import { useT } from "@intentic/ui/i18n";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { here, page } from "../../../lib/routes/links";
 
 // Chat's binding of the shared model picker: the list, then a footer every picker draws in the same three parts: one status
@@ -20,7 +20,7 @@ import { here, page } from "../../../lib/routes/links";
 // a proposed session's picker can be re-pointed before it starts. Harness is a separate axis from the model.
 
 const t = useT();
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();

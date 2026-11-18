@@ -15,7 +15,7 @@ import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { NO_GATE } from "./policy-gate.js";
 import { createTurnTaint } from "../../guard/turn-taint.js";
-import { type TurnPersona, turnPersona } from "../../personas/personas.js";
+import { type TurnRole, turnRole } from "../../roles/roles.js";
 import { DEFAULT_TURN_TIMEOUTS, turnWatchdog } from "../decorators/turn-watchdog.js";
 import { opt } from "../../opt.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
@@ -31,11 +31,11 @@ import { createTurnMounts } from "../../agent/tools/turn-mounts.js";
 import { createTurnMountRoute, daemonEndpoint, type MountEndpoints } from "../../agent/tools/turn-mounts.routes.js";
 
 // The daemon's own servers as a non-Claude runtime reaches them: built for one turn, mounted on its lease, called over
-// HTTP through the door with the turn's bearer, and held to the persona decisions the Claude loop's in-process servers are.
+// HTTP through the door with the turn's bearer, and held to the role decisions the Claude loop's in-process servers are.
 
 const ROOT = mkdtempSync(join(tmpdir(), "daemon-servers-"));
 const SETTINGS = SandboxSettingsSchema.parse({});
-const OPEN = turnPersona({ personas: [], actsAs: undefined, unattended: false });
+const OPEN = turnRole({ roles: [], actsAs: undefined, unattended: false });
 const input = AgentTurnSchema.parse({ prompt: "do the thing", conversationId: "conv-1" });
 
 const depsWith = (over: Partial<DaemonServersDeps> = {}): DaemonServersDeps => unstubbed<DaemonServersDeps>("deps", {
@@ -120,10 +120,10 @@ const AnswerSchema = z.object({
         .optional(),
 });
 
-const restricted = (powers: Partial<TurnPersona["powers"]>): TurnPersona => ({ ...OPEN, powers: { ...OPEN.powers, ...powers } });
+const restricted = (powers: Partial<TurnRole["powers"]>): TurnRole => ({ ...OPEN, powers: { ...OPEN.powers, ...powers } });
 
 test("an open turn reaches the daemon's servers through the door, each answering its own tools", async () => {
-    const door = doorFor({ input, context: contextOf(cardsAnswering().cards), persona: OPEN, granted: [], settings: { ...SETTINGS, chatPages: false } });
+    const door = doorFor({ input, context: contextOf(cardsAnswering().cards), role: OPEN, granted: [], settings: { ...SETTINGS, chatPages: false } });
     // The terminal hand-off rides only where commands run in the panel's tmux panes (tmux-run is in the image).
     expect(door.names).toEqual(["ui", "subagents", "watch", "deps", "diagnostics", ...(tmuxRunEnabled() ? ["terminal"] : [])]);
     expect(door.built.diagnostics).toBe(true);
@@ -136,17 +136,17 @@ test("an open turn reaches the daemon's servers through the door, each answering
     door.lease.release();
 });
 
-test("a persona's powers withhold exactly what they withhold from the Claude loop's in-process servers", () => {
+test("a role's powers withhold exactly what they withhold from the Claude loop's in-process servers", () => {
     const children = unstubbed<ChildSupervisor>("children", {});
-    const personas = [OPEN, restricted({ files: "none" }), restricted({ shell: false }), restricted({ delegate: false })];
-    for (const persona of personas) {
+    const roles = [OPEN, restricted({ files: "none" }), restricted({ shell: false }), restricted({ delegate: false })];
+    for (const role of roles) {
         const context = contextOf(cardsAnswering().cards, children);
         const claude = Object.keys(
-            harnessServers(deps, { input, context, persona, browser: NO_BROWSER, desktop: false, granted: [], secrets: turnSecretAccess(deps, input, context.base.signal), hashlineEdits: false }),
+            harnessServers(deps, { input, context, role, browser: NO_BROWSER, desktop: false, granted: [], secrets: turnSecretAccess(deps, input, context.base.signal), hashlineEdits: false }),
         );
-        const door = doorFor({ input, context, persona, granted: [], settings: SETTINGS });
+        const door = doorFor({ input, context, role, granted: [], settings: SETTINGS });
         // The door adds only what the Claude loop mounts in claude-code-runner.ts itself (`ui`, `terminal`), never a server
-        // the persona was denied.
+        // the role was denied.
         expect(door.names.filter((name) => name !== "ui" && name !== "terminal")).toEqual(claude);
         door.lease.release();
     }
@@ -154,20 +154,20 @@ test("a persona's powers withhold exactly what they withhold from the Claude loo
 
 test("spawn rides only with the delegate shelf and full agency, as it does in-process", async () => {
     const children = unstubbed<ChildSupervisor>("children", {});
-    const open = doorFor({ input, context: contextOf(cardsAnswering().cards, children), persona: OPEN, granted: [], settings: SETTINGS });
+    const open = doorFor({ input, context: contextOf(cardsAnswering().cards, children), role: OPEN, granted: [], settings: SETTINGS });
     expect(await open.toolsOf("subagents")).toContain("spawn");
-    const held = doorFor({ input, context: contextOf(cardsAnswering().cards, children), persona: restricted({ delegate: false }), granted: [], settings: SETTINGS });
+    const held = doorFor({ input, context: contextOf(cardsAnswering().cards, children), role: restricted({ delegate: false }), granted: [], settings: SETTINGS });
     expect(await held.toolsOf("subagents")).not.toContain("spawn");
 });
 
 test("the page tools ride the ui server only where the owner leaves them on", async () => {
-    const door = doorFor({ input, context: contextOf(cardsAnswering().cards), persona: OPEN, granted: [], settings: { ...SETTINGS, chatPages: true } });
+    const door = doorFor({ input, context: contextOf(cardsAnswering().cards), role: OPEN, granted: [], settings: { ...SETTINGS, chatPages: true } });
     expect(await door.toolsOf("ui")).toEqual(["show_page", "ask_page", "ask"]);
 });
 
 test("ask parks on a card: its frame waits for the loop, the watchdog is held while a person answers, the answer comes back", async () => {
     const { cards, answer } = cardsAnswering();
-    const door = doorFor({ input, context: contextOf(cards), persona: OPEN, granted: [], settings: SETTINGS });
+    const door = doorFor({ input, context: contextOf(cards), role: OPEN, granted: [], settings: SETTINGS });
     const asked = door.call("ui", "ask", {
         questions: [{ question: "Which?", header: "Pick", options: [{ label: "A", description: "a" }, { label: "B", description: "b" }] }],
     });
@@ -194,7 +194,7 @@ test("a peer call that runs three minutes holds the turn's watchdog, so the 120 
         const lease = mounts.lease("conv-1");
         // Mounted as turnToolsOf mounts it, before the daemon's servers, whose relay then hands the lease its hold.
         const { token } = lease.open({ name: "laptop", target: { kind: "device", id: "laptop" } });
-        const built = daemonServersFor(deps, { input, context: contextOf(cardsAnswering().cards), persona: OPEN, granted: [], settings: SETTINGS, mounted: { browser: NO_BROWSER, desktop: false, lease } });
+        const built = daemonServersFor(deps, { input, context: contextOf(cardsAnswering().cards), role: OPEN, granted: [], settings: SETTINGS, mounted: { browser: NO_BROWSER, desktop: false, lease } });
         // As the ACP, Pi and Muse loops attach their clock.
         const clock = turnWatchdog(DEFAULT_TURN_TIMEOUTS);
         built.relay.attach({ push: () => {}, hold: clock.hold });
@@ -227,7 +227,7 @@ test("an answer given after the asking call's client stopped waiting is said int
     const { cards, answer } = cardsAnswering();
     const said: Said[] = [];
     const door = doorFor(
-        { input, context: contextOf(cards), persona: OPEN, granted: [], settings: SETTINGS },
+        { input, context: contextOf(cards), role: OPEN, granted: [], settings: SETTINGS },
         depsWith({
             agents: unstubbed<DaemonServersDeps["agents"]>("agents", { entry: (id: string) => (id === "conv-1" ? conversationEntry({ id }) : undefined) }),
             turns: unstubbed<DaemonServersDeps["turns"]>("turns", {
@@ -260,7 +260,7 @@ test("an answer its call was still waiting for goes back as the call's result al
     const { cards, answer } = cardsAnswering();
     const said: Said[] = [];
     const door = doorFor(
-        { input, context: contextOf(cards), persona: OPEN, granted: [], settings: SETTINGS },
+        { input, context: contextOf(cards), role: OPEN, granted: [], settings: SETTINGS },
         depsWith({
             turns: unstubbed<DaemonServersDeps["turns"]>("turns", {
                 say: async (words: Said) => {
@@ -279,7 +279,7 @@ test("an answer its call was still waiting for goes back as the call's result al
 });
 
 test("the policy gate on the door refuses until the loop's gate attaches, then answers with it, marks taint and runs no checks it has none of", async () => {
-    const door = doorFor({ input, context: contextOf(cardsAnswering().cards), persona: OPEN, granted: [], settings: SETTINGS, gate: true });
+    const door = doorFor({ input, context: contextOf(cardsAnswering().cards), role: OPEN, granted: [], settings: SETTINGS, gate: true });
     expect(door.names).toContain("gate");
     const before: unknown = JSON.parse(await door.call("gate", "pre_tool_use", { tool_name: "Bash", tool_input: { command: "rm -rf build" } }));
     expect(before).toEqual({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: NO_GATE } });
@@ -311,7 +311,7 @@ test("the policy gate on the door refuses until the loop's gate attaches, then a
 });
 
 test("a door call answered from the daemon's own records is sealed as outside content and marks the turn", async () => {
-    const door = doorFor({ input, context: contextOf(cardsAnswering().cards), persona: OPEN, granted: [], settings: SETTINGS });
+    const door = doorFor({ input, context: contextOf(cardsAnswering().cards), role: OPEN, granted: [], settings: SETTINGS });
     const taint = createTurnTaint();
     door.built.relay.attach({ guard: { gate: unstubbed<CommandGuard>("gate", {}), taint } });
     expect(await door.call("diagnostics", "errors", {})).toMatch(/^<untrusted-content source="diagnostics"/);

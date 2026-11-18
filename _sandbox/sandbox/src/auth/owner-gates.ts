@@ -22,7 +22,7 @@ type AuthDeps = Pick<Services, "auth">;
 type Auth = NonNullable<Services["auth"]>;
 
 // The bearer, and the way the request came in that a channel-bound proof is checked against (listener.ts), with the
-// tier the check holds it to: named in the refusal (`floor`), as the role floor names its own, so the editor reads
+// tier the check holds it to: named in the refusal (`floor`), as the tier floor names its own, so the editor reads
 // which tier was wanted instead of matching the sentence.
 interface Check {
     readonly floor: "maintainer" | "owner";

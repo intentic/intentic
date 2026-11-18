@@ -1,4 +1,4 @@
-// A local asset catalogue, independent of the application's persona renderer.
+// A local asset catalogue, independent of the application's role renderer.
 const manifest = await fetch("./manifest.json").then((response) => {
     if (!response.ok) throw new Error(`Could not load avatar manifest: ${response.status}`);
     return response.json();

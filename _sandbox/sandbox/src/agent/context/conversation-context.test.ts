@@ -1,5 +1,5 @@
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
@@ -8,7 +8,7 @@ import { contextNoteFor, decideComposition } from "./conversation-context.js";
 
 /* THE COMPOSITION IS READ OFF THE CARD, AND OFF NOTHING ELSE. */
 
-const CARDS: readonly Persona[] = [
+const CARDS: readonly Role[] = [
     { id: "backend", label: "Backend", capabilities: [], context: { repos: ["api", "billing"] } },
     { id: "root-only", capabilities: [], context: { repos: [] } },
     { id: "open", capabilities: [] },
@@ -16,7 +16,7 @@ const CARDS: readonly Persona[] = [
 
 const services = (entry: PersistedAgent | undefined, root = "/nowhere"): Services =>
     unstubbed<Services>("services", {
-        personas: unstubbed<Services["personas"]>("personas", { get: async (id) => CARDS.find((card) => card.id === id) }),
+        roles: unstubbed<Services["roles"]>("roles", { get: async (id) => CARDS.find((card) => card.id === id) }),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => entry }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
     });
@@ -24,15 +24,15 @@ const services = (entry: PersistedAgent | undefined, root = "/nowhere"): Service
 const turn = (actsAs: string | undefined): AgentTurn => ({ prompt: "hello", ...(actsAs === undefined ? {} : { actsAs }) }) as AgentTurn;
 
 test("a card that names its context decides the composition, in the card's order", async () => {
-    expect(await decideComposition(services(undefined), turn("backend"))).toEqual({ persona: "backend", repos: ["api", "billing"] });
+    expect(await decideComposition(services(undefined), turn("backend"))).toEqual({ role: "backend", repos: ["api", "billing"] });
     // Root alone is a real answer, distinct from "everything".
-    expect(await decideComposition(services(undefined), turn("root-only"))).toEqual({ persona: "root-only", repos: [] });
+    expect(await decideComposition(services(undefined), turn("root-only"))).toEqual({ role: "root-only", repos: [] });
 });
 
 test("no card, a card that says nothing, and a card that does not exist all carry everything", async () => {
     expect(await decideComposition(services(undefined), turn(undefined))).toBeUndefined();
     expect(await decideComposition(services(undefined), turn("open"))).toBeUndefined();
-    // turnPersona already denies this turn every account and tool; the tree it cannot use may as well be whole.
+    // turnRole already denies this turn every account and tool; the tree it cannot use may as well be whole.
     expect(await decideComposition(services(undefined), turn("gone"))).toBeUndefined();
 });
 
@@ -42,12 +42,12 @@ test("the note names the card, what is carried, and what the workspace has that 
     // what the card asked for. The walk over a real tree is worktrees.integration.test.ts's business.
     const root = "/nowhere/intentic-context";
     const backend = isolatedAgent([], {
-        placement: { kind: "worktree", branch: "agent/c1", repos: [], composition: { persona: "backend", repos: ["api"] } },
+        placement: { kind: "worktree", branch: "agent/c1", repos: [], composition: { role: "backend", repos: ["api"] } },
     });
     const note = await contextNoteFor(services(backend, root), "c1");
     expect(note?.title).toBe("Context of this session");
-    expect(note?.text).toContain("(wearing the `Backend` persona)");
-    expect(note?.text).toContain("Named by the persona but not in this workspace: `api`.");
+    expect(note?.text).toContain("(wearing the `Backend` role)");
+    expect(note?.text).toContain("Named by the role but not in this workspace: `api`.");
     // A conversation with no composition has nothing to be told.
     expect(await contextNoteFor(services(conversationEntry({ id: "c2" }), root), "c2")).toBeUndefined();
 });

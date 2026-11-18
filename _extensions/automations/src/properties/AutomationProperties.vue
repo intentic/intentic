@@ -7,7 +7,7 @@ import GateProperty from "./GateProperty.vue";
 import GroupProperty from "./GroupProperty.vue";
 import ModelProperty from "./ModelProperty.vue";
 import ServiceProperty from "./ServiceProperty.vue";
-import PersonaProperty from "./PersonaProperty.vue";
+import RoleProperty from "./RoleProperty.vue";
 import PropertyRow from "./PropertyRow.vue";
 import { FIXED_VALUE } from "./propertyLook";
 import ScheduleProperty from "./ScheduleProperty.vue";
@@ -31,7 +31,7 @@ const answers = computed(() => answersPhrase(props.automation.senders));
         <!-- A conversation runs as itself on its own model, and a notification runs nothing: only a new agent has either. -->
         <template v-if="targetPhrase === undefined">
             <ServiceProperty :automation="automation" />
-            <PersonaProperty :automation="automation" />
+            <RoleProperty :automation="automation" />
             <ModelProperty :automation="automation" />
         </template>
         <PropertyRow v-else :label="t(`automationRow.then`)">

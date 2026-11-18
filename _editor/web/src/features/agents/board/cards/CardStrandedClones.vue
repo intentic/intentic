@@ -2,7 +2,7 @@
 import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
 import { settleAgentClone } from "../../../../models/fleet/agentActions";
 import { useAgents } from "../../../../models/fleet/useAgents";
@@ -15,7 +15,7 @@ import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 const t = useT();
 const props = defineProps<{ agent: FleetAgent }>();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { refresh } = useAgents();
 
 // A sandbox too old to say which repository a clone sits in placed every one in the workspace's own.

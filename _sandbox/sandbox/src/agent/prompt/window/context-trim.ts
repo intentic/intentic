@@ -14,7 +14,7 @@ const FULL_TURN_WINDOW = Number(LOCAL_MODEL_WINDOW_DEFAULT);
 // Below this rung the base prompt itself is swapped, where the runtime lets it be replaced.
 const LEAN_WINDOW = Number(LOCAL_MODEL_WINDOWS[1]);
 
-// Every trim sheds the guidance and each note a persona card may drop; only the base swap is by size.
+// Every trim sheds the guidance and each note a role card may drop; only the base swap is by size.
 export interface TurnTrim {
     readonly window: number;
     // Below the lean rung, and only where the runtime's instructions are `replace`: an appending runtime's is not ours.
@@ -29,7 +29,7 @@ export const turnTrim = (window: number | undefined, instructions: AgentCapabili
 export const promptTrim = (trim: TurnTrim | undefined): PromptTrim | undefined =>
     trim === undefined ? undefined : { guidance: true, base: trim.base };
 
-// The fixtures (rules, persona, file locations, gate notes) carry titles no card may drop, so a window never sheds them.
+// The fixtures (rules, role, file locations, gate notes) carry titles no card may drop, so a window never sheds them.
 const SHED_TITLES: ReadonlySet<string> = new Set(Object.values(BRIEFING_NOTE_TITLES).flat());
 
 // Carried from planning to the route that adds late notes, so both face the same window and the reader gets one list.

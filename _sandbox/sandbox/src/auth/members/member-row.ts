@@ -1,5 +1,5 @@
 import type { AgentAccess, CredentialReach, EditScope, ManageRight } from "@intentic/sandbox-contract/schemas/members";
-import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { GrantedTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import type { Member, MemberGrant } from "../auth.js";
 
@@ -9,7 +9,7 @@ import type { Member, MemberGrant } from "../auth.js";
 // A roster row while it is being built, its optional fields added one at a time.
 interface MemberRowDraft {
     email: string;
-    role: GrantedRole;
+    tier: GrantedTier;
     areas?: string[];
     agents?: AgentAccess;
     edit?: EditScope;
@@ -49,7 +49,7 @@ const aiAccountsOfRow = (grant: MemberGrant, previous: Member | undefined): stri
 // it, silence keeps the previous row's, and a maintainer holds neither, since the tier holds every tool and talks to
 // whoever it likes.
 const toolsOfRow = (grant: MemberGrant, previous: Member | undefined): ToolCeiling | undefined => {
-    if (grant.role === "maintainer" || grant.tools === "all") {
+    if (grant.tier === "maintainer" || grant.tools === "all") {
         return undefined;
     }
     const kept = grant.tools ?? previous?.tools;
@@ -57,7 +57,7 @@ const toolsOfRow = (grant: MemberGrant, previous: Member | undefined): ToolCeili
 };
 
 const assistantsOfRow = (grant: MemberGrant, previous: Member | undefined): string[] | undefined => {
-    if (grant.role === "maintainer" || grant.assistants === "all") {
+    if (grant.tier === "maintainer" || grant.assistants === "all") {
         return undefined;
     }
     const kept = grant.assistants ?? previous?.assistants;
@@ -68,7 +68,7 @@ const assistantsOfRow = (grant: MemberGrant, previous: Member | undefined): stri
 // on a maintainer, who runs every part of the sandbox, and never on a guest, who sees none of it: rights kept from a row
 // that worked another way are dropped there rather than written onto a row the store would then refuse whole.
 const managesOfRow = (grant: MemberGrant, previous: Member | undefined): ManageRight[] | undefined => {
-    if (grant.role === "maintainer" || grant.role === "guest") {
+    if (grant.tier === "maintainer" || grant.tier === "guest") {
         return undefined;
     }
     const kept = [...new Set(grant.manages ?? previous?.manages ?? [])];
@@ -76,15 +76,15 @@ const managesOfRow = (grant: MemberGrant, previous: Member | undefined): ManageR
 };
 
 export const memberRow = (email: string, grant: MemberGrant, previous?: Member): Member => {
-    const row: MemberRowDraft = { email, role: grant.role };
+    const row: MemberRowDraft = { email, tier: grant.tier };
     if (grant.areas !== undefined) {
         row.areas = [...grant.areas];
     }
     // Written as the grant said them, and never on a maintainer, whose tier already answers both.
-    if (grant.agents !== undefined && grant.role !== "maintainer") {
+    if (grant.agents !== undefined && grant.tier !== "maintainer") {
         row.agents = grant.agents;
     }
-    if (grant.edit !== undefined && grant.role !== "maintainer") {
+    if (grant.edit !== undefined && grant.tier !== "maintainer") {
         row.edit = grant.edit === "all" ? "all" : [...grant.edit];
     }
     // Written only when on, and only where it means something: a grant that does not say takes it back.
@@ -111,7 +111,7 @@ export const memberRow = (email: string, grant: MemberGrant, previous?: Member):
         row.assistants = assistants;
     }
     // Written as the grant said it, never kept: a grant that names no profile is answers of the row's own.
-    if (grant.profile !== undefined && grant.role !== "maintainer") {
+    if (grant.profile !== undefined && grant.tier !== "maintainer") {
         row.profile = grant.profile;
     }
     const manages = managesOfRow(grant, previous);

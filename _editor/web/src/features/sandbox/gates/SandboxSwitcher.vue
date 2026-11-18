@@ -103,7 +103,7 @@ const placementFor = (option: SandboxSummary): SandboxPlacement =>
 const settingsHere = (): void => {
     const active = sandbox.active.value;
     if (active !== undefined) {
-        const section = active.role === `guest` ? GUEST_SECTION : waiting.value === undefined ? undefined : `environment`;
+        const section = active.tier === `guest` ? GUEST_SECTION : waiting.value === undefined ? undefined : `environment`;
         void router.push(hereIn(active.id, page.sandboxSettings(section)));
     }
 };
@@ -177,7 +177,7 @@ if (inDesktopApp) {
             [
                 switchable.value.map((option) => {
                     const image = rememberedLogo(option.id);
-                    const row = { id: option.id, name: option.name, place: placementFor(option).kind, shared: option.role !== `owner` };
+                    const row = { id: option.id, name: option.name, place: placementFor(option).kind, shared: option.tier !== `owner` };
                     return image === undefined ? row : { ...row, image };
                 }),
                 user.value === null ? undefined : { email: user.value.email, name: user.value.name, image: user.value.image },

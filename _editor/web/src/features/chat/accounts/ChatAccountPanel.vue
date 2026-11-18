@@ -12,7 +12,7 @@ import { useChat } from "../../../models/conversations/run/useChat";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { modelsHref } from "../../../lib/routes/modelsPath";
 import { useT } from "@intentic/ui/i18n";
 import { ACCOUNT_NUDGE } from "./accountNudge";
@@ -49,7 +49,7 @@ const retryTo = computed(() => modelsHref({ provider: failure.value?.provider })
 // Connecting is Full access's, and that of someone given AI accounts of their own: the daemon refuses anyone else's
 // sign-in, and the hub withholds the section that holds it. Anyone else is told who can, rather than offered a door that
 // opens on nothing.
-const { canShip } = useRole();
+const { canShip } = useTier();
 const { holds } = useAccess();
 const mayConnect = computed(() => canShip.value || holds(`ownAccounts`));
 

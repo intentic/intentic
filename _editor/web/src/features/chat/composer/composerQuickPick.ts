@@ -1,7 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type CatalogOption, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
-import { FULL_ACCESS_PERSONA, NO_ACCOUNTS_PERSONA, type Persona } from "@intentic/sandbox-contract/schemas/personas";
-import { builtInPersonaView, personaLabel } from "../../../models/sandbox/personas/builtInPersonas";
+import { FULL_ACCESS_ROLE, NO_ACCOUNTS_ROLE, type Role } from "@intentic/sandbox-contract/schemas/roles";
+import { builtInRoleView, roleLabel } from "../../../models/sandbox/roles/builtInRoles";
 import type { IconName } from "@intentic/ui";
 import { filterEntries, normalize, type PickerEntry } from "../../../models/conversations/accounts/modelPickerState";
 import type { SendLater, TimeChoice } from "../../../models/conversations/drafts/sendLater";
@@ -14,7 +14,7 @@ import { formatUntil } from "@intentic/ui/time";
 // summary nor a search. Files are the component's own list, appended after these.
 
 export const kindMeta = (): Record<QuickKind, { readonly label: string; readonly badge: string; readonly icon: IconName }> => ({
-    persona: { label: t(`chat.words.acts`), badge: t(`chat.composerQuickPick.badgePersona`), icon: `users` },
+    role: { label: t(`chat.words.acts`), badge: t(`chat.composerQuickPick.badgeRole`), icon: `users` },
     sandbox: { label: t(`chat.words.whereRuns`), badge: t(`chat.composerQuickPick.badgeWhere`), icon: `desktop` },
     model: { label: t(`shared.model`), badge: t(`chat.composerQuickPick.badgeModel`), icon: `cpu` },
     effort: { label: t(`chat.composerQuickPick.effort`), badge: t(`chat.composerQuickPick.badgeEffort`), icon: `bolt` },
@@ -23,7 +23,7 @@ export const kindMeta = (): Record<QuickKind, { readonly label: string; readonly
 });
 
 export interface QuickPickSources {
-    readonly persona: { readonly personas: readonly Persona[]; readonly picked: string | undefined } | undefined;
+    readonly role: { readonly roles: readonly Role[]; readonly picked: string | undefined } | undefined;
     readonly sandbox:
         | {
               // Online runners and answering boxes only: a keyboard list has no use for a row that refuses the pick.
@@ -69,7 +69,7 @@ interface RowBase {
 }
 // A summary row: the kind's current value; picking it drills into that kind.
 type DrillRow = RowBase & { readonly kind: `drill`; readonly into: QuickKind };
-type PersonaRow = RowBase & { readonly kind: `persona`; readonly id: string | undefined; readonly current: boolean };
+type RoleRow = RowBase & { readonly kind: `role`; readonly id: string | undefined; readonly current: boolean };
 type SandboxRow = RowBase & {
     readonly kind: `sandbox`;
     readonly box: string | undefined;
@@ -81,7 +81,7 @@ type EffortRow = RowBase & { readonly kind: `effort`; readonly value: string; re
 // `now` clears a pick, `custom` opens the panel for a time of the reader's own; a pick books the next message.
 type SendRow = RowBase & { readonly kind: `send`; readonly to: SendLater | `now` | `custom`; readonly current: boolean };
 type LandRow = RowBase & { readonly kind: `land`; readonly on: boolean; readonly current: boolean };
-export type QuickRow = DrillRow | PersonaRow | SandboxRow | ModelRow | EffortRow | SendRow | LandRow;
+export type QuickRow = DrillRow | RoleRow | SandboxRow | ModelRow | EffortRow | SendRow | LandRow;
 // Everything the popover can hand back: a setting row, or a file from its own list.
 export type QuickPick = QuickRow | { readonly kind: `file`; readonly key: string; readonly path: string };
 
@@ -95,32 +95,32 @@ const matches = (query: string, ...texts: (string | undefined)[]): boolean => {
     return needle === `` || texts.some((text) => text !== undefined && normalize(text).includes(needle));
 };
 
-const personaRows = (source: NonNullable<QuickPickSources[`persona`]>, query: string): PersonaRow[] => {
-    // The built-ins first, as in the persona menu: Full access is what no pick means, so it sends none.
-    const rows: PersonaRow[] = [
+const roleRows = (source: NonNullable<QuickPickSources[`role`]>, query: string): RoleRow[] => {
+    // The built-ins first, as in the role menu: Full access is what no pick means, so it sends none.
+    const rows: RoleRow[] = [
         {
-            kind: `persona`,
-            key: `persona:`,
+            kind: `role`,
+            key: `role:`,
             id: undefined,
-            label: builtInPersonaView(FULL_ACCESS_PERSONA).label,
+            label: builtInRoleView(FULL_ACCESS_ROLE).label,
             detail: t(`chat.composerQuickPick.everyConnectedAccount`),
-            current: source.picked === undefined || source.picked === FULL_ACCESS_PERSONA,
+            current: source.picked === undefined || source.picked === FULL_ACCESS_ROLE,
         },
         {
-            kind: `persona`,
-            key: `persona:${NO_ACCOUNTS_PERSONA}`,
-            id: NO_ACCOUNTS_PERSONA,
-            label: builtInPersonaView(NO_ACCOUNTS_PERSONA).label,
-            detail: builtInPersonaView(NO_ACCOUNTS_PERSONA).note,
-            current: source.picked === NO_ACCOUNTS_PERSONA,
+            kind: `role`,
+            key: `role:${NO_ACCOUNTS_ROLE}`,
+            id: NO_ACCOUNTS_ROLE,
+            label: builtInRoleView(NO_ACCOUNTS_ROLE).label,
+            detail: builtInRoleView(NO_ACCOUNTS_ROLE).note,
+            current: source.picked === NO_ACCOUNTS_ROLE,
         },
-        ...source.personas.map((persona): PersonaRow => ({
-            kind: `persona`,
-            key: `persona:${persona.id}`,
-            id: persona.id,
-            label: persona.label ?? persona.id,
-            detail: persona.brief ?? (persona.capabilities.length > 0 ? persona.capabilities.join(` · `) : undefined),
-            current: source.picked === persona.id,
+        ...source.roles.map((role): RoleRow => ({
+            kind: `role`,
+            key: `role:${role.id}`,
+            id: role.id,
+            label: role.label ?? role.id,
+            detail: role.brief ?? (role.capabilities.length > 0 ? role.capabilities.join(` · `) : undefined),
+            current: source.picked === role.id,
         })),
     ];
     return rows.filter((row) => matches(query, row.label, row.id));
@@ -238,8 +238,8 @@ const landRows = (source: NonNullable<QuickPickSources[`land`]>, query: string):
 
 const rowsOf = (sources: QuickPickSources, kind: QuickKind, query: string): QuickRow[] => {
     switch (kind) {
-        case `persona`:
-            return sources.persona === undefined ? [] : personaRows(sources.persona, query);
+        case `role`:
+            return sources.role === undefined ? [] : roleRows(sources.role, query);
         case `sandbox`:
             return sources.sandbox === undefined ? [] : sandboxRows(sources.sandbox, query);
         case `model`:
@@ -253,9 +253,9 @@ const rowsOf = (sources: QuickPickSources, kind: QuickKind, query: string): Quic
     }
 };
 
-// What each kind is set to now, as the summary row's second word; a pick no list names (a deleted persona) shows its
+// What each kind is set to now, as the summary row's second word; a pick no list names (a deleted role) shows its
 // raw id rather than nothing.
-const personaValue = (source: NonNullable<QuickPickSources[`persona`]>): string => personaLabel(source.picked, source.personas);
+const roleValue = (source: NonNullable<QuickPickSources[`role`]>): string => roleLabel(source.picked, source.roles);
 const sandboxValue = (source: NonNullable<QuickPickSources[`sandbox`]>): string => {
     if (source.box !== undefined) {
         return source.boxes.find((box) => box.id === source.box)?.name ?? t(`chat.composerQuickPick.anotherSandbox`);
@@ -277,8 +277,8 @@ const sendValue = (source: NonNullable<QuickPickSources[`send`]>): string => {
 
 const currentValue = (sources: QuickPickSources, kind: QuickKind): string | undefined => {
     switch (kind) {
-        case `persona`:
-            return sources.persona === undefined ? undefined : personaValue(sources.persona);
+        case `role`:
+            return sources.role === undefined ? undefined : roleValue(sources.role);
         case `sandbox`:
             return sources.sandbox === undefined ? undefined : sandboxValue(sources.sandbox);
         case `model`:

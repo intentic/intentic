@@ -21,10 +21,10 @@ export const blockerLabel = (blocker: Blocker): string => (blocker.repo === `roo
 // Every one of them commits its own writes now (the daemon's settings-versions.ts); one still uncommitted is older than
 // that, or was saved over edits already in the file, which the daemon leaves uncommitted. Refused as the owner's own
 // edits, one took three Accepts, a trip to Changes and a redo to get a land through.
-export type SettingsPage = `personas` | `capabilities` | `agent`;
+export type SettingsPage = `roles` | `capabilities` | `agent`;
 const SETTINGS_FILES: readonly (readonly [path: string, page: SettingsPage])[] = [
-    [`${STATE_DIR}/config/personas.json`, `personas`],
-    [`${STATE_DIR}/config/personas/`, `personas`],
+    [`${STATE_DIR}/config/roles.json`, `roles`],
+    [`${STATE_DIR}/config/roles/`, `roles`],
     [`${STATE_DIR}/config/capabilities.json`, `capabilities`],
     [`${STATE_DIR}/config/settings.json`, `agent`],
     [`${STATE_DIR}/config/safety.md`, `agent`],
@@ -47,7 +47,7 @@ export const settingsOrigin = (blockers: readonly Blocker[]): readonly SettingsP
 
 // A page as the Sandbox view names it.
 export const settingsPageName = (page: SettingsPage): string =>
-    ({ personas: t(`shared.personas`), capabilities: t(`shared.capabilities`), agent: t(`shared.agent`) })[page];
+    ({ roles: t(`shared.roles`), capabilities: t(`shared.capabilities`), agent: t(`shared.agent`) })[page];
 
 // The pages behind the owner's half of a land report, named and joined as the report's heading names them; undefined
 // unless a page wrote every file in it. The board card reads it too, so the two never name one refusal differently.

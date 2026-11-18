@@ -42,12 +42,12 @@ import { storeRefreshToken } from "./refresh-token.js";
 import { mintPlatformAccess, platformDoor } from "./oauth-access.js";
 import { stateRelPath } from "../state-paths.js";
 
-// personas-store.ts's document, named by its contract-checked state path rather than imported: personas reaches
+// roles-store.ts's document, named by its contract-checked state path rather than imported: roles reaches
 // capabilities through the browser, so importing it here would close a cycle.
-const PERSONAS_PATH = stateRelPath(".intentic/config/personas.json");
+const ROLES_PATH = stateRelPath(".intentic/config/roles.json");
 
 // Follows a capability id everywhere else it's stored by name: an account's identity, an identity's mailbox, a
-// persona's capabilities list. Kept out of the handlers, since none of these is a fact about the kind being renamed.
+// role's capabilities list. Kept out of the handlers, since none of these is a fact about the kind being renamed.
 const repointCapabilityReferences = async (services: Services, ctx: CapabilityCtx, from: string, to: string): Promise<void> => {
     // Re-parsed rather than spread: the schema both narrows the entry to its own arm and validates it.
     const repointed = (entry: Capability, key: "identity" | "mailbox"): Capability =>
@@ -76,9 +76,9 @@ const repointCapabilityReferences = async (services: Services, ctx: CapabilityCt
             await restore(entry, "mailbox");
         }
     }
-    for (const persona of await services.personas.list()) {
-        if (persona.capabilities.includes(from)) {
-            await services.personas.upsert({ ...persona, capabilities: persona.capabilities.map((id) => (id === from ? to : id)) });
+    for (const role of await services.roles.list()) {
+        if (role.capabilities.includes(from)) {
+            await services.roles.upsert({ ...role, capabilities: role.capabilities.map((id) => (id === from ? to : id)) });
         }
     }
 };
@@ -353,7 +353,7 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
                     await services.capabilities.remove(capability.id);
                     await repointCapabilityReferences(services, ctx, capability.id, input.to);
                 },
-                [capabilitiesDocument.path, PERSONAS_PATH],
+                [capabilitiesDocument.path, ROLES_PATH],
             );
             if (handler.rename.reapply !== false) {
                 for await (const line of handler.apply(ctx, renamed.id, renamed.config)) {

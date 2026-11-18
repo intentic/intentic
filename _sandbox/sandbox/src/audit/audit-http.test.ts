@@ -21,11 +21,11 @@ test("a template's parameters are read off the path", () => {
 
 // A tiny app standing in for the daemon's: an identity set the way the bearer middleware sets it, the audit middleware
 // above it, and routes answering what the real ones would.
-const appWith = (reads: boolean, recorded: AuditEvent[], role: "owner" | "viewer" = "owner") => {
+const appWith = (reads: boolean, recorded: AuditEvent[], tier: "owner" | "viewer" = "owner") => {
     const app = new Hono<AppEnv>();
     app.use("*", auditRequests({ record: (event) => recorded.push(event), recordsReads: () => reads }));
     app.use("*", async (c, next) => {
-        c.set("identity", { email: "Ann@Example.com", role, methods: ["google"] });
+        c.set("identity", { email: "Ann@Example.com", tier, methods: ["google"] });
         await next();
     });
     app.post("/settings", (c) => {
@@ -36,7 +36,7 @@ const appWith = (reads: boolean, recorded: AuditEvent[], role: "owner" | "viewer
         noteAudit({ skip: true });
         return c.json({ ok: true });
     });
-    app.delete("/secrets/gates/:subject", (c) => (role === "owner" ? c.json({ ok: true }) : c.json({ error: "no" }, 403)));
+    app.delete("/secrets/gates/:subject", (c) => (tier === "owner" ? c.json({ ok: true }) : c.json({ error: "no" }, 403)));
     app.get("/workspace/file", (c) => c.json({ content: "x" }));
     app.get("/agents", (c) => c.json([]));
     return app;

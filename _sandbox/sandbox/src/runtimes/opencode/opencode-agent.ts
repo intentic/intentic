@@ -21,7 +21,7 @@ import type { TurnTaint } from "../../guard/turn-taint.js";
 import type { TurnRelay } from "../daemon-tools/turn-relay.js";
 import { planPhaseOf, type TurnCapture, type TurnTokens, usageTotals } from "../decorators/vendor-events.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
-import { personaLimitsOf } from "../daemon-tools/policy-gate.js";
+import { roleLimitsOf } from "../daemon-tools/policy-gate.js";
 import { opt } from "../../opt.js";
 import { isChatModel, OPENCODE_XAI_PROVIDER, parseModelSuggestions } from "./xai-models.js";
 import { openCodeBackendLabel, type OpenCodeLease, type OpenCodeService } from "./opencode.js";
@@ -104,7 +104,7 @@ export interface OpenCodeTurn {
     // The turn's tool list (TurnPolicy.allowedTools): its session offered only the listed tools (allowlist/opencode-allowlist.ts),
     // and every command its shell runs checked against the list's shell entries.
     readonly allowedTools?: readonly string[];
-    readonly persona?: SessionJudge["persona"];
+    readonly role?: SessionJudge["role"];
     // How a command its sessions' shell runs is routed (shell/opencode-shell.ts), for the session it is created on, a card for
     // the panel going to `push`: in the conversation's terminal pane, its secret references resolved, its output masked.
     readonly shell?: (sessionId: string, push: (frame: AgentEvent) => void) => ShellRoute;
@@ -498,7 +498,7 @@ const judgeOf = (turn: OpenCodeTurn, sessionId: string, queue: TurnQueue, clock:
         push,
         hold: clock.hold,
         ...opt("allowedTools", turn.allowedTools),
-        ...opt("persona", turn.persona),
+        ...opt("role", turn.role),
         ...opt("shell", turn.shell?.(sessionId, push)),
         ...opt(
             "approve",
@@ -956,7 +956,7 @@ const openCodeTurnOf =
             taint: base.taint,
             ...opt("approve", !sealed && request.policy.permissionMode === "default" ? approveVia(request) : undefined),
             ...opt("allowedTools", request.policy.allowedTools),
-            ...opt("persona", personaLimitsOf(request.policy)),
+            ...opt("role", roleLimitsOf(request.policy)),
             ...opt("shell", sealed ? undefined : base.shell),
             ...opt("ask", sealed ? undefined : askVia(request)),
             ...opt("say", noticeVia(request.hooks.backgroundJobs)),

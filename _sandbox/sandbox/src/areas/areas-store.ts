@@ -6,8 +6,8 @@ import type { IdListStore } from "../store/plain-files/id-list-file.js";
 import { openIdList } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
-// The named parts of the workspace, tracked in git like personas: an area holds folder names, never a credential.
-// Unlike personas it IS a security boundary, and what keeps it one is not the file's permissions but the fence itself:
+// The named parts of the workspace, tracked in git like roles: an area holds folder names, never a credential.
+// Unlike roles it IS a security boundary, and what keeps it one is not the file's permissions but the fence itself:
 // reaching `.intentic/config/areas.json` requires a fence that admits `.intentic`, which no fenced member is given.
 
 export type AreasStore = IdListStore<Area>;

@@ -8,7 +8,7 @@ export type AccessLevel = "read" | "write";
 
 // The three ways a card authenticates: `platform` is one person's grant to the platform's own client (the card's
 // Connect Google button), refreshed through the daemon since the client secret stays on the platform; `user` is one
-// person's grant to a client the owner brought; `domain` is a service account impersonating one person, hence the
+// person's grant to a client the owner brought; `domain` is a service account imroleting one person, hence the
 // address. `cardId` is how the daemon finds the card whose refresh token it trades.
 export type Credential =
     | { readonly mode: "platform"; readonly cardId: string; readonly refreshToken: string }
@@ -171,7 +171,7 @@ export const describe = (connection: Connection): string => (connection.email ==
 
 // `--as` retargets a company connection at another person in the domain; a personal grant has nobody else it could act
 // as. Only an address is a person: `gw drive get … --as md` names an export format, which must reach drive rather than
-// be refused as an impersonation (or, on a company connection, attempted as one, as a user called "md").
+// be refused as an imroletion (or, on a company connection, attempted as one, as a user called "md").
 export const retargetAs = (connection: Connection, as: string | undefined): Connection => {
     if (as === undefined || !as.includes("@")) {
         return connection;

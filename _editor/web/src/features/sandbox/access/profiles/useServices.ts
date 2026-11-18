@@ -5,12 +5,12 @@ import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { rpcKey } from "../../../../lib/queryKeys";
 
 export function useServices() {
     const cache = useQueryClient();
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     const available = computed(() => canShip.value && supportsRoute(`services.list`));
     const { query, loaded } = useSandboxQuery({ ...rpcQuery(`services.list`), enabled: available });
     const invalidate = (): Promise<void> => cache.invalidateQueries({ queryKey: rpcKey(`services.list`) });

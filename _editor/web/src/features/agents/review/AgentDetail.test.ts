@@ -140,7 +140,7 @@ jest.mock("./useAgentChanges", () => {
 });
 
 jest.mock("../../../models/fleet/agentActions", () => ({ ...realAgentActions, requestLandAgent: jest.fn(async () => {}), startAgent: jest.fn() }));
-jest.mock("../../../client/sandbox/useRole", () => ({ useRole: () => ({ canDrive: true, canReview: true, canShip: true }) }));
+jest.mock("../../../client/sandbox/useTier", () => ({ useTier: () => ({ canDrive: true, canReview: true, canShip: true }) }));
 // Whether the page is the Android app's WebView, which the page reads once as it is set up.
 jest.mock("../../../app/environments/nativeApp", () => ({ ...realNativeApp, embedded: () => knobs.inApp }));
 

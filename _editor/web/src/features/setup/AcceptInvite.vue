@@ -61,7 +61,7 @@ const invitedEmail = computed(() => preview.value?.invitedEmail);
 const sandboxName = computed(() => preview.value?.sandboxName);
 // States what the invitee's role grants; an absent role falls back to what every tier can do.
 const grantSentence = computed<string>(() => {
-    switch (preview.value?.role) {
+    switch (preview.value?.tier) {
         case `maintainer`: {
             return t(`setup.acceptInvite.grantMaintainer`);
         }

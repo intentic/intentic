@@ -11,7 +11,7 @@ const email = ref<string | undefined>(`viewer@acme.dev`);
 jest.mock("../../client/sandbox/access/useAccess", () => ({
     useAccess: () => ({
         known,
-        role: computed(() => undefined),
+        tier: computed(() => undefined),
         refusal: () => refused.value,
         can: () => known.value && refused.value === undefined,
     }),

@@ -8,7 +8,7 @@ import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type ApprovalStanding, approvalStandings, type SpentApproval, spendApprovals } from "./approval-decisions.js";
 import { type PerformedAction, performApprovedAction } from "./approval-performers.js";
 import { canPublishDirectly, publishDirectly } from "./direct-publish.js";
-import { BUILT_IN_PERSONAS, NO_ACCOUNTS_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
+import { BUILT_IN_ROLES, NO_ACCOUNTS_ROLE } from "@intentic/sandbox-contract/schemas/roles";
 
 // Sleeps until the exact due moment, one timer at a time, armed from disk (never memory) since both this daemon and the
 // agent write the queue.
@@ -43,11 +43,11 @@ export interface ApprovalsExecutor {
     readonly runDue: (now?: number) => Promise<void>;
 }
 
-// One turn per persona, not per batch: a turn wears exactly one face, so items under different names never share a
+// One turn per role, not per batch: a turn wears exactly one face, so items under different names never share a
 // turn.
 // Within one face the batch still holds, since what's expensive about a turn is that it exists; `` is the key for no
 // face.
-const byPersona = <T extends ApprovalSummary>(items: readonly T[]): Map<string, T[]> => {
+const byRole = <T extends ApprovalSummary>(items: readonly T[]): Map<string, T[]> => {
     const groups = new Map<string, T[]>();
     for (const item of items) {
         const face = item.actsAs ?? ``;
@@ -78,10 +78,10 @@ const performedError = (outcome: { readonly outcome: `refused` | `uncertain`; re
         ? `Nothing was done: ${outcome.error}`
         : `This may already have happened: ${outcome.error}. Check the system it was sent to before approving it again; it is never retried by itself.`;
 
-// Every persona an approved item may name: the cards, and the built-ins, which are always there, so naming one is never
+// Every role an approved item may name: the cards, and the built-ins, which are always there, so naming one is never
 // a ghost.
 const wearable = async (services: Services): Promise<ReadonlySet<string>> =>
-    new Set([...(await services.personas.list()).map((card) => card.id), ...BUILT_IN_PERSONAS.map((builtIn) => builtIn.id)]);
+    new Set([...(await services.roles.list()).map((card) => card.id), ...BUILT_IN_ROLES.map((builtIn) => builtIn.id)]);
 
 export const createApprovalsExecutor = (services: Services): ApprovalsExecutor => {
     let timer: NodeJS.Timeout | undefined;
@@ -178,7 +178,7 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
         void services.turns.start(turn).catch((error: unknown) => services.logger.error({ err: error }, `approval turn failed to start`));
     };
 
-    // A name that resolves to nobody fails every kind: turnPersona denies an unknown card every account and every tool.
+    // A name that resolves to nobody fails every kind: turnRole denies an unknown card every account and every tool.
     //
     // Said here in the queue rather than left to be rediscovered from inside a turn; returns the items that can go.
     const settleGhosts = async <T extends ApprovalSummary>(items: readonly T[], cast: ReadonlySet<string>): Promise<T[]> => {
@@ -186,24 +186,24 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
         for (const item of ghosts) {
             await fail(
                 item,
-                `No persona called "${item.actsAs}" exists, so nothing was done. A turn wearing a card nobody carries reaches no account at all. Point "actsAs" at a persona that holds the right account, then approve it again.`,
+                `No role called "${item.actsAs}" exists, so nothing was done. A turn wearing a card nobody carries reaches no account at all. Point "actsAs" at a role that holds the right account, then approve it again.`,
             );
         }
         return items.filter((item) => !ghosts.includes(item));
     };
 
-    // A post that needs a turn and names nobody is failed, not sent: an unattended turn with no persona wears No accounts,
+    // A post that needs a turn and names nobody is failed, not sent: an unattended turn with no role wears No accounts,
     // which is denied every logged-in account. Naming No accounts outright is the same post.
-    // An action without a persona is not the same case: it runs with no accounts, which is right for work that needs
+    // An action without a role is not the same case: it runs with no accounts, which is right for work that needs
     // none.
     const settleUnnamed = async (posts: readonly PostApprovalSummary[]): Promise<PostApprovalSummary[]> => {
-        for (const post of posts.filter((entry) => entry.actsAs === undefined || entry.actsAs === NO_ACCOUNTS_PERSONA)) {
+        for (const post of posts.filter((entry) => entry.actsAs === undefined || entry.actsAs === NO_ACCOUNTS_ROLE)) {
             await fail(
                 post,
-                `Nobody is named to post this. ${post.platform} publishes through a logged-in browser, and this post does not say which persona's account to use, so nothing was sent. Set "actsAs" to a persona that holds the right ${post.platform} account, then approve it again.`,
+                `Nobody is named to post this. ${post.platform} publishes through a logged-in browser, and this post does not say which role's account to use, so nothing was sent. Set "actsAs" to a role that holds the right ${post.platform} account, then approve it again.`,
             );
         }
-        return posts.filter((entry) => entry.actsAs !== undefined && entry.actsAs !== NO_ACCOUNTS_PERSONA);
+        return posts.filter((entry) => entry.actsAs !== undefined && entry.actsAs !== NO_ACCOUNTS_ROLE);
     };
 
     const runDue = async (now = Date.now()): Promise<void> => {
@@ -241,21 +241,21 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
             );
 
             let batch = 0;
-            // Short by construction: a persona id may run 60 chars, a conversation id 64, so a counter names the turn.
+            // Short by construction: a role id may run 60 chars, a conversation id 64, so a counter names the turn.
             const conversationId = (kind: string): string => `approvals-${kind}-${now.toString(36)}-${(batch += 1).toString(36)}`;
 
-            for (const [actsAs, wearing] of byPersona(posts)) {
+            for (const [actsAs, wearing] of byRole(posts)) {
                 await startTurn(wearing, {
                     prompt: publishTurnPrompt(wearing),
                     conversationId: conversationId(`post`),
                     unattended: true,
                     runRole: `approval-queue`,
-                    // The turn wakes holding this persona's accounts.
+                    // The turn wakes holding this role's accounts.
                     actsAs,
                     title: wearing.length === 1 ? `Publish 1 post` : `Publish ${wearing.length} posts`,
                 });
             }
-            for (const [actsAs, wearing] of byPersona(actions)) {
+            for (const [actsAs, wearing] of byRole(actions)) {
                 await startTurn(wearing, {
                     prompt: actionTurnPrompt(wearing),
                     conversationId: conversationId(`action`),

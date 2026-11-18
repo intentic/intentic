@@ -97,7 +97,7 @@ every platform that posts through a logged-in browser needs (see below).
   "kind": "action",
   "summary": "Book the Hotel Adlon, Berlin, 12–14 March, one double room, €420",
   "details": "**Hotel Adlon Kempinski**, Unter den Linden 77\\n- Check-in 12 March, check-out 14 March\\n- Double room, breakfast included: €420 total\\n- Paid with the card on the booking.com account",
-  "instructions": "Open booking.com as the persona, search Hotel Adlon Berlin for 12–14 March, pick the double room with breakfast at €420, complete the booking with the saved card, and put the confirmation number in \\"result\\".",
+  "instructions": "Open booking.com as the role, search Hotel Adlon Berlin for 12–14 March, pick the double room with breakfast at €420, complete the booking with the saved card, and put the confirmation number in \\"result\\".",
   "actsAs": "travel",
   "status": "proposed",
   "createdAt": 1767800000000
@@ -114,12 +114,12 @@ every platform that posts through a logged-in browser needs (see below).
 
 ## Both kinds
 
-- actsAs: WHOSE NAME THIS ACTS UNDER, the id of a persona in .intentic/config/personas.json, one that holds
+- actsAs: WHOSE NAME THIS ACTS UNDER, the id of a role in .intentic/config/roles.json, one that holds
   an account for the site involved. Read that file and pick; if none of them fits, say so to the owner
-  rather than guessing. Execution happens with nobody watching, and a turn that names no persona is given NO
+  rather than guessing. Execution happens with nobody watching, and a turn that names no role is given NO
   logged-in account at all: a browser-published post without this is failed unsent, with that reason written
   into it, and an action without it runs with no accounts, which is right only for work that needs none.
-  Discord and anything else the daemon posts through a stored key needs no persona and ignores this.
+  Discord and anything else the daemon posts through a stored key needs no role and ignores this.
 - scheduledAt: your SUGGESTED time in epoch ms, \`date -d "2026-07-10 09:00 +02:00" +%s%3N\` (always give an
   explicit UTC offset; the sandbox clock is UTC). Omit it to let the owner pick the time at approval.
 - status: defaults to "proposed" if omitted, and PROPOSED IS THE ONLY ONE YOU MAY WRITE. The owner approves in

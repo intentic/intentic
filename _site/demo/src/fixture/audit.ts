@@ -23,7 +23,7 @@ const rows: Omit<AuditRecord, `v` | `id` | `prevHash` | `hash`>[] = [
     { at: at(31), actor: owner, action: `conversation.break_policy`, target: `c-budget-review` },
     { at: at(31), actor: sandbox, action: `conversation.break_policy`, target: `c-budget-review` },
     { at: at(40), actor: owner, action: `settings.change`, details: { changed: [{ key: `audit.recordReads`, from: false, to: true }, { key: `audit.retentionDays`, from: 365, to: 730 }] } },
-    { at: at(41), actor: owner, action: `member.grant`, target: `anna.nowak@example.gov.pl`, details: { role: `viewer`, previousRole: `none`, areas: [`finance`] } },
+    { at: at(41), actor: owner, action: `member.grant`, target: `anna.nowak@example.gov.pl`, details: { tier: `viewer`, previousRole: `none`, areas: [`finance`] } },
     { at: at(60), actor: { kind: `system`, reason: `retention` }, action: `audit.pruned`, details: { segments: [`2024-09.jsonl`], retentionDays: 730 } },
     { at: at(75), actor: owner, action: `auth.sign_in`, details: { methods: [`google`] } },
     { at: at(DAY + 30), actor: owner, action: `privacy.reveal` },

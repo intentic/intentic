@@ -6,7 +6,7 @@ import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
-import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
+import { ROLE_NOTE_TITLE } from "../../roles/roles.js";
 import { claudeCodeRuntime, GUIDANCE_TITLE, guidanceBlock } from "./guidance.js";
 import { ANONYMOUS_BROWSER_SERVER } from "../../browser/tools/browser-servers.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
@@ -36,12 +36,12 @@ export interface TurnPromptInput {
     readonly mode: SystemPromptMode;
     // SandboxSettings.systemPrompt: the owner's text, meaningful only under "custom".
     readonly systemPrompt: string;
-    // Rides the system append, even under a stable prompt, since a persona doesn't change mid-session and changing it
+    // Rides the system append, even under a stable prompt, since a role doesn't change mid-session and changing it
     // mints a new prefix anyway. A runtime with no system seam sends it through the user message instead; a custom
     // prompt drops it like everything else appended.
-    readonly personaNote?: string;
+    readonly roleNote?: string;
     // The workspace's own standing instructions (workspace-memory.ts), composed here rather than left to the runtime's
-    // discovery. Same seams as the persona note, and the one thing a custom prompt does NOT drop: "nothing added" is
+    // discovery. Same seams as the role note, and the one thing a custom prompt does NOT drop: "nothing added" is
     // about this product's guidance, and these are the owner's own rules.
     readonly memoryNote?: string;
     // What the model's declared window will not pay for (context-trim.ts). Structural rather than that module's own
@@ -65,7 +65,7 @@ export interface TurnPromptPlacement {
     // What the daemon adds to that base. Undefined ⇒ nothing to add (or nothing may be added).
     readonly systemAppend?: string;
     // Notes that couldn't ride a system prompt, carried on the request's own notes (AgentRequest.notes) in read order;
-    // a runtime with no system seam sends the persona note through here.
+    // a runtime with no system seam sends the role note through here.
     readonly userNotes?: readonly TurnNote[];
 }
 
@@ -78,12 +78,12 @@ const titled = (entries: readonly (readonly [string, string | undefined])[]): Tu
     entries.flatMap(([title, text]) => (text === undefined ? [] : [{ title, text }]));
 
 // A runtime with no system seam at all (ACP): the owner's prompt is not applied and the composer discloses that
-// (limitationsOf), rather than quietly pasting it into the user message. The persona note and the workspace's standing
+// (limitationsOf), rather than quietly pasting it into the user message. The role note and the workspace's standing
 // instructions still have to arrive, so they go through the user message instead.
-const messageNotes = (personaNote: string | undefined, memoryNote: string | undefined): TurnPromptPlacement => {
+const messageNotes = (roleNote: string | undefined, memoryNote: string | undefined): TurnPromptPlacement => {
     const userNotes = titled([
         // Who the turn is acting as comes first, as it does in the preamble: it decides what the rest is for.
-        [PERSONA_NOTE_TITLE, personaNote],
+        [ROLE_NOTE_TITLE, roleNote],
         [MEMORY_NOTE_TITLE, memoryNote],
     ]);
     return userNotes.length === 0 ? {} : { userNotes };
@@ -98,10 +98,10 @@ const TAKES_NOTHING: PromptTrim = { guidance: false, base: false };
 // trim, because the owner's words are not this product's to shorten — a small window still takes the guidance and the
 // optional notes around it, just never the text the owner typed.
 //
-// The two pieces riding on the trimmed prompt, and why they survive a trim that takes everything else: the persona
+// The two pieces riding on the trimmed prompt, and why they survive a trim that takes everything else: the role
 // decides what the turn may DO, and the owner's rules are the owner's own words.
-const ownPrompt = ({ mode, systemPrompt, personaNote, memoryNote }: TurnPromptInput): string =>
-    mode === "custom" ? joined([systemPrompt, memoryNote]) : joined([SMALL_WINDOW_PROMPT, personaNote, memoryNote]);
+const ownPrompt = ({ mode, systemPrompt, roleNote, memoryNote }: TurnPromptInput): string =>
+    mode === "custom" ? joined([systemPrompt, memoryNote]) : joined([SMALL_WINDOW_PROMPT, roleNote, memoryNote]);
 
 // Where that replacement can go. On a runtime that can only add, it is appended since the base can't be dropped
 // anyway; "" with no memory on a replacing runtime is a legal, deliberate empty prompt.
@@ -111,12 +111,12 @@ const replacing = (own: string, instructions: AgentCapabilities["instructions"])
 // Decides where each composed piece goes. One function because the destinations are one decision: a note on the user
 // message must not also ride the append, and a custom prompt removes both choices at once.
 export const turnPromptPlacement = (input: TurnPromptInput): TurnPromptPlacement => {
-    const { capabilities, mode, personaNote, memoryNote } = input;
+    const { capabilities, mode, roleNote, memoryNote } = input;
     const { instructions } = capabilities;
     const trim = input.trim ?? TAKES_NOTHING;
 
     if (instructions === "none") {
-        return messageNotes(personaNote, memoryNote);
+        return messageNotes(roleNote, memoryNote);
     }
 
     // `trim.base` is only ever set for a replacing runtime, since on one that can only append there is no base to
@@ -129,9 +129,9 @@ export const turnPromptPlacement = (input: TurnPromptInput): TurnPromptPlacement
         // This product's guidance is not placed here for any runtime: it is composed from what the turn mounted, which
         // only exists once an arm has mounted it (sdkSystemPrompt for the Claude Code loop, withRuntimeGuidance below for
         // every other, called from planTurn).
-        personaNote,
+        roleNote,
         // Last, so the owner's rules sit closest to the conversation. Editing them mid-session mints a new prefix, the
-        // same cost as changing the persona, which is why neither is held back by a stable prompt.
+        // same cost as changing the role, which is why neither is held back by a stable prompt.
         memoryNote,
     ]);
     return append === "" ? {} : { systemAppend: append };
@@ -154,10 +154,10 @@ export interface SdkSystemPromptInput {
     // Whether an account stands behind the routed browser, so the browser sentence can name it. The `mcp__browser__`
     // schemas are deferred now, so this sentence is what tells a turn they exist.
     readonly browserAccounts?: boolean;
-    // Whether the credential-free `web` browser is mounted beside it (a persona without the browser shelf has only the
+    // Whether the credential-free `web` browser is mounted beside it (a role without the browser shelf has only the
     // accounts' `browser` server); absent reads as mounted.
     readonly anonymousBrowser?: boolean;
-    // Whether turn-plan mounted the diagnostics server (withheld from a persona whose files power is `none`); the
+    // Whether turn-plan mounted the diagnostics server (withheld from a role whose files power is `none`); the
     // sentence rides only where it's loadable.
     readonly diagnostics?: boolean;
     // Whether the turn mounted the sandbox's own desktop; its sentence rides only then.
@@ -281,7 +281,7 @@ export const sdkSystemPrompt = async (
     cwd: string,
 ): Promise<NonNullable<Options["systemPrompt"]>> => {
     // A trimmed base takes the same exit as the owner's own prompt: `custom` carries the paragraph turnPromptPlacement
-    // composed in place of the loop's instructions, persona and owner's rules already on it, and this product adds
+    // composed in place of the loop's instructions, role and owner's rules already on it, and this product adds
     // nothing to either.
     if (mode === "custom" || extras.trim?.base === true) {
         // "" is a legal custom prompt (the owner emptied the box): no system prompt, not a fallback to a default.
@@ -294,7 +294,7 @@ export const sdkSystemPrompt = async (
 };
 
 // This product's guidance for a runtime other than the Claude Code loop, placed once its arm has mounted what the
-// guidance describes (guidance/runtime-guidance.ts composes it from those mounts). The same seams the persona note
+// guidance describes (guidance/runtime-guidance.ts composes it from those mounts). The same seams the role note
 // takes: ahead of everything on the system append where the runtime has one, and on the opening message of a session
 // where it has none (ACP), since such a session keeps its history and would otherwise carry a copy per turn. The
 // volatile half (who is watching, what of the owner's is online) rides the message under a stable prompt, as the
@@ -311,8 +311,8 @@ export const withRuntimeGuidance = (
     const tail = surroundings === undefined ? [] : [surroundings];
     if (capabilities.instructions === "none") {
         const notes = spec.notes ?? [];
-        // After the persona note when there is one: who the turn acts as decides what the rest is for.
-        const at = notes[0]?.title === PERSONA_NOTE_TITLE ? 1 : 0;
+        // After the role note when there is one: who the turn acts as decides what the rest is for.
+        const at = notes[0]?.title === ROLE_NOTE_TITLE ? 1 : 0;
         const opening = spec.sessionId === undefined ? [{ title: GUIDANCE_TITLE, text: guidance }] : [];
         return { ...spec, notes: [...notes.slice(0, at), ...opening, ...notes.slice(at), ...tail] };
     }

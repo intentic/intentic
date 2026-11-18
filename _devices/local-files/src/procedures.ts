@@ -31,7 +31,7 @@ const OFFICE_SETTINGS = { engine: `browser`, localWindow: true };
 const NO_TRANSLATOR_ACCOUNTS = TranslatorAccountsSchema.parse(Object.fromEntries(TRANSLATOR_PROVIDERS.map((provider) => [provider, []])));
 
 // What the editor's own chrome reads on every screen, whatever the screen shows: the fleet, model accounts, running apps,
-// connected tools, personas, the review count. A folder has none of them, and says so rather than answering a 404 each
+// connected tools, roles, the review count. A folder has none of them, and says so rather than answering a 404 each
 // one retries.
 const NO_SANDBOX_CHROME = {
     agents: {
@@ -52,7 +52,7 @@ const NO_SANDBOX_CHROME = {
     git: { changes: () => ({ repos: [], originAgents: {} }) },
     panels: { list: () => ({ panels: [] }) },
     capabilities: { list: () => ({ capabilities: [] }) },
-    personas: { list: () => ({ personas: [], connected: [] }) },
+    roles: { list: () => ({ roles: [], connected: [] }) },
     // No model trial runs through a folder.
     endpoints: { trial: () => ({ available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` as const }) },
 } satisfies FixtureRouter;

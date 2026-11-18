@@ -5,7 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useAuth } from "../../../../client/auth/useAuth";
 import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { useSandboxSession } from "../../../../client/session/sandboxSession";
 import { useOperation } from "../../../../workbench/operations/operations";
 import PasskeysSection from "../PasskeysSection.vue";
@@ -18,7 +18,7 @@ import PreviewGuardSection from "../previews/PreviewGuardSection.vue";
 const t = useT();
 const { user } = useAuth();
 const { sessionExpiresAt } = useSandboxSession();
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 // No device roster can exist: a session is a signed claim the daemon verifies, not stored. The group says what's true:
 // this browser, why the rest are unlistable, and the switch's consequence.

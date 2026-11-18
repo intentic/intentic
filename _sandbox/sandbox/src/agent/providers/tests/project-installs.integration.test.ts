@@ -8,7 +8,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import type { IsolationPlan } from "../../../conversations/worktrees/isolation.js";
 import { opt } from "../../../opt.js";
-import { memoryConversationGrants } from "../../../personas/conversation-grants.js";
+import { memoryConversationGrants } from "../../../roles/conversation-grants.js";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import type { ProjectInstall } from "../agent-installs.js";
 import {
@@ -200,7 +200,7 @@ describe("the owner's setting", () => {
         expect(consulted.events).toEqual([]);
     });
 
-    test("a persona without the power to change the workspace is refused whatever the setting", async () => {
+    test("a role without the power to change the workspace is refused whatever the setting", async () => {
         expect(await verdictOf("pnpm add zod", ROOT_INSTALL, gateOf(shared, { canInstall: false }))).toMatchObject({
             allow: false,
             reason: expect.stringContaining("ask the owner"),

@@ -64,10 +64,10 @@ export const faqGroups: FaqGroup[] = [
                 more: { label: "Specialize a sandbox until it does a job alone", href: docsHref("autonomous-employees") },
             },
             {
-                id: "sandbox-or-persona",
-                question: "Should I start a new sandbox or add a new persona?",
+                id: "sandbox-or-role",
+                question: "Should I start a new sandbox or add a new role?",
                 answer: [
-                    "Create a sandbox when a job needs different code, tools, connected systems or its own budget. Add a persona when the job stays the same but the agent needs to speak as a different public identity, such as a brand account instead of your personal account.",
+                    "Create a sandbox when a job needs different code, tools, connected systems or its own budget. Add a role when the job stays the same but the agent needs to speak as a different public identity, such as a brand account instead of your personal account.",
                 ],
                 more: { label: "Specialize a sandbox, then grow a team", href: docsHref("autonomous-employees") },
             },

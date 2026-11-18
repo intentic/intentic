@@ -12,7 +12,7 @@ import { profileGrant, profileRefusal } from "./profile-grant.js";
 // changes what everybody holding it may do, so both writes are for whoever runs people and access, as the roster's and
 // the areas' are: the owner, Full access, or a member given People & access, who never rewrites the profile they hold.
 
-export type AccessProfilesRoutesDeps = Pick<Services, "accessProfiles" | "services" | "members" | "areas" | "personas" | "auth" | "wsTickets" | "mediaTickets">;
+export type AccessProfilesRoutesDeps = Pick<Services, "accessProfiles" | "services" | "members" | "areas" | "roles" | "auth" | "wsTickets" | "mediaTickets">;
 
 // Undefined identity is the owner's own tool (loopback, a panel), which is already inside every fence.
 const refuseUnlessPeople = async (services: AccessProfilesRoutesDeps, context: OrpcContext, id: string): Promise<void> => {
@@ -23,7 +23,7 @@ const refuseUnlessPeople = async (services: AccessProfilesRoutesDeps, context: O
     if (!holdsRight(identity, "people")) {
         throw new ORPCError("FORBIDDEN", { message: "only someone who runs people and access decides what an access profile lets its holders reach" });
     }
-    if (identity.role === "owner" || identity.role === "maintainer") {
+    if (identity.tier === "owner" || identity.tier === "maintainer") {
         return;
     }
     const email = identity.email.toLowerCase();
@@ -42,18 +42,18 @@ const refuseOrgProfile = async (services: AccessProfilesRoutesDeps, id: string):
 // One at a time through the roster's own write queue. Answers each with the tier their row now makes.
 const rewriteHolders = async (services: AccessProfilesRoutesDeps, profile: AccessProfile): Promise<AccessProfileSaved["holders"]> => {
     const grant = profileGrant(profile);
-    const holders = (await services.members.list()).filter((member) => member.profile === profile.id && member.role !== "maintainer");
+    const holders = (await services.members.list()).filter((member) => member.profile === profile.id && member.tier !== "maintainer");
     for (const holder of holders) {
         // one roster file, one write at a time through its own queue
         await services.members.add(holder.email, grant);
         revokeHeld(services, holder.email);
     }
     // A profile never manages (profileAccess), so its tier is never a maintainer's; narrowed here rather than asserted.
-    const { role } = grant;
-    if (role === "maintainer") {
+    const { tier } = grant;
+    if (tier === "maintainer") {
         return [];
     }
-    return holders.map((holder) => ({ email: holder.email.toLowerCase(), role }));
+    return holders.map((holder) => ({ email: holder.email.toLowerCase(), tier }));
 };
 
 export const createAccessProfilesRoutes = (services: AccessProfilesRoutesDeps) => {
@@ -74,11 +74,18 @@ export const createAccessProfilesRoutes = (services: AccessProfilesRoutesDeps) =
         remove: i.remove.handler(async ({ input, context }) => {
             await refuseUnlessPeople(services, context, input.id);
             await refuseOrgProfile(services, input.id);
-            // Named holders, not a count: every name here is one the owner may already read on the Access page.
-            const [members, held] = await Promise.all([services.members.list(), services.services.list()]);
+            // Named holders, not a count: every name here is one the owner may already read on the Access page. A role
+            // it lists counts too: taking the profile away would widen every conversation wearing that role.
+            const [members, held, profile, cards] = await Promise.all([
+                services.members.list(),
+                services.services.list(),
+                services.accessProfiles.get(input.id),
+                services.roles.list(),
+            ]);
             const holders = [
                 ...members.filter((member) => member.profile === input.id).map((member) => member.email),
                 ...held.filter((service) => service.profile === input.id).map((service) => `the service "${service.label ?? service.id}"`),
+                ...cards.filter((card) => profile?.roles?.includes(card.id) === true).map((card) => `the role "${card.label ?? card.id}"`),
             ];
             if (holders.length > 0) {
                 throw new ORPCError("CONFLICT", { message: `still held by ${holders.join(", ")}; move them off it first` });

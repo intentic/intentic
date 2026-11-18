@@ -3303,9 +3303,9 @@ it("drops a kept hold whose entry no longer ends in that spent allowance", async
     expect(restoreLimitHolds({ agents: registry, conversations, logger: silent })).toBe(0);
 });
 
-// Each turn runs as the persona it names (turn-premise.ts), so the conversation speaks as its last turn's: one daemon
+// Each turn runs as the role it names (turn-premise.ts), so the conversation speaks as its last turn's: one daemon
 // field every view groups by. The first turn's stays on `actsAs`, which never moves.
-describe("the persona a conversation speaks as", () => {
+describe("the role a conversation speaks as", () => {
     it("is the last turn's own, never carried to a turn naming none", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();

@@ -151,7 +151,7 @@ export const isMe = (address: string): boolean => address.toLowerCase() === me;
 /** org.bindSandbox: one of the caller's own sandboxes, under one organisation at a time. */
 export const bindSandbox = (org: Org, sandboxId: string): OrgRefusal | undefined => {
     const row = rowOf(sandboxId);
-    if (row === undefined || row.role !== `owner`) {
+    if (row === undefined || row.tier !== `owner`) {
         return { refused: `Sandbox not found.`, status: 404 };
     }
     if (orgs.some((other) => other !== org && other.sandboxes.some((sandbox) => sandbox.id === sandboxId))) {

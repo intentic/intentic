@@ -69,7 +69,7 @@
             "extensions": "Extensions",
             "access": "Accès",
             "areas": "Zones",
-            "personas": "Personas",
+            "personas": "Rôles",
             "updates": "Mises à jour automatiques"
         },
         "preset": {
@@ -1481,8 +1481,8 @@
             "ownPhone": "Permet à l'agent de {grants} sur votre téléphone Android, dans les applications que vous autorisez sur le téléphone",
             "privileged": "Privilégié",
             "provision": "Permet à l'agent de créer des sandboxes sur votre compte intentic, en vous le demandant dans le chat à chaque fois. Ceux qu'il a créés survivent à cette connexion",
-            "delegate": "Permet à l'agent de confier des tâches à un autre de vos sandboxes, qui les exécute avec sa propre persona, ses approbations et ses limites",
-            "delegateTo": "Permet à l'agent de confier des tâches au sandbox à l'adresse {to}, qui les exécute avec sa propre persona, ses approbations et ses limites",
+            "delegate": "Permet à l'agent de confier des tâches à un autre de vos sandboxes, qui les exécute avec son propre rôle, ses approbations et ses limites",
+            "delegateTo": "Permet à l'agent de confier des tâches au sandbox à l'adresse {to}, qui les exécute avec son propre rôle, ses approbations et ses limites",
             "registersMcpServerAgent": "Enregistre un serveur MCP auquel l'agent se connecte au tour suivant",
             "requiresNetworkAdminContainer": "Nécessite un accès conteneur avec droits d'administration réseau",
             "runsCodeInsideApp": "Exécute du code dans l'application avec votre session, réservé au propriétaire ; n'installez que des éditeurs de confiance",
@@ -2438,11 +2438,11 @@
             "link": {
                 "name": "Sandbox lié",
                 "description": "Confiez des tâches à un autre de vos sandboxes.",
-                "hint": "L'agent confie une tâche avec l'outil `delegate` propre à ce sandbox et l'attend comme un sous-agent. Elle s'exécute et s'intègre dans l'autre sandbox, sous la persona, les approbations et les limites de celui-ci, que seul son propriétaire définit.",
+                "hint": "L'agent confie une tâche avec l'outil `delegate` propre à ce sandbox et l'attend comme un sous-agent. Elle s'exécute et s'intègre dans l'autre sandbox, sous le rôle, les approbations et les limites de celui-ci, que seul son propriétaire définit.",
                 "guide": {
                     "scopes": "Lance, relance et arrête les tâches qu'il confie, et lit ce qu'elles rapportent. Rien d'autre de ce sandbox : ni ses fichiers, ni ses autres conversations, ni ses réglages",
                     "steps": {
-                        "0": "Choisissez ci-dessus l'autre sandbox, l'identité que portent ses tâches (une persona), si chacune vous attend là-bas, et combien de tours par heure il peut lancer.",
+                        "0": "Choisissez ci-dessus l'autre sandbox, le rôle que portent ses tâches, si chacune vous attend là-bas, et combien de tours par heure il peut lancer.",
                         "1": "`Lier` crée le lien de l'autre côté avec votre propre connexion et l'ajoute ici : rien à copier.",
                         "2": "Proposé pour un sandbox que vous possédez ou administrez. Pour tout autre, son propriétaire crée le lien là-bas (`Sandbox` → `Accès` → `Sandboxes liés` → `Nouveau lien`), et son adresse et son jeton vont sous Avancé.",
                         "3": "Révoquez le lien de l'autre côté ; les tâches cessent de l'atteindre dès que vous le faites."
@@ -2784,9 +2784,9 @@
             "noOthers": "Vous n'avez encore aucun autre sandbox à lier. Créez-en un depuis votre compte, ou avec la carte Flotte de sandboxes.",
             "which": "Sandbox",
             "pickOne": "Choisissez un sandbox",
-            "persona": "Ses tâches portent",
-            "noPersona": "Aucun compte",
-            "noPersonaHint": "Aucun compte connecté là-bas, et la boîte à outils complète, comme tout réveil sans surveillance.",
+            "role": "Ses tâches portent",
+            "noRole": "Aucun compte",
+            "noRoleHint": "Aucun compte connecté là-bas, et la boîte à outils complète, comme tout réveil sans surveillance.",
             "askFirst": "Me demander là-bas avant chaque tâche",
             "turnsAnHour": "tours par heure",
             "shareRecords": "Partager ses registres ici",
@@ -2798,7 +2798,7 @@
             "thisSandbox": "ce sandbox",
             "tooOld": "{name} exécute un sandbox trop ancien pour les liens. Mettez-le à jour, puis associez à nouveau.",
             "couldntPair": "Impossible de créer le lien sur {name}.",
-            "couldntReadPersonas": "Impossible de lire les personas de ce sandbox.",
+            "couldntReadRoles": "Impossible de lire les rôles de ce sandbox.",
             "cloud": "cloud Intentic",
             "awake": "éveillé",
             "asleep": "en veille",
@@ -3539,7 +3539,7 @@
             "contextTrim": "Envoyé allégé pour la fenêtre de {window} de ce modèle.",
             "contextTrimOmitted": "Envoyé allégé pour la fenêtre de {window} de ce modèle — omis : {omitted}.",
             "contextTrimBase": "Les instructions de base de l'agent ont aussi été remplacées par un court paragraphe.",
-            "contextTrimKept": "Les règles de votre espace de travail, la persona de ce tour et l'emplacement de ses fichiers ont été conservés.",
+            "contextTrimKept": "Les règles de votre espace de travail, le rôle de ce tour et l'emplacement de ses fichiers ont été conservés.",
             "installingOwn": "Installation de paquets dans la copie propre à cette conversation. Le manifeste et le lockfile sont intégrés avec le travail, et la revue liste ce qui est ajouté.",
             "installingOwnIn": "Installation de paquets dans {where}, dans la copie propre à cette conversation. Le manifeste et le lockfile sont intégrés avec le travail, et la revue liste ce qui est ajouté.",
             "installingMain": "Installation de paquets dans l'arborescence principale, une installation à la fois.",
@@ -3756,7 +3756,7 @@
             "sentMessage": "Envoyé avant votre message"
         },
         "chatPane": {
-            "acts": "Agit en tant que : {personaName}",
+            "acts": "Agit en tant que : {roleName}",
             "agent": "En tant qu'agent",
             "askAnythingChatFree": "Demandez ce que vous voulez, ce chat est gratuit et ne nécessite rien de connecté.",
             "atForFilesAndSettings": "{'@'} pour les fichiers et les réglages",
@@ -3785,7 +3785,7 @@
             "moreComposerSettings": "Plus de réglages du compositeur",
             "noReplyPressExit": "Pas de réponse ; appuyez pour quitter",
             "nothingChangedYet": "Rien n'a encore changé",
-            "persona": "Persona",
+            "role": "Rôle",
             "providerModel": "Fournisseur et modèle : {providerName} · {modelLabelText}",
             "replacedSend": "il est remplacé à l'envoi.",
             "runMessageThrough": "Faire passer ce message par",
@@ -3904,9 +3904,9 @@
             "leaveRun": "Quitter l'exécution",
             "runDiagram": "Diagramme d'exécution"
         },
-        "chatPersonaMenu": {
+        "chatRoleMenu": {
             "noGuestYet": "Aucun assistant ne vous a encore été attribué. Demandez-en un au propriétaire du sandbox.",
-            "noPersonasYetChat": "Pas encore de persona : ce chat parle donc à travers tous les comptes que vous avez connectés. Créez-en un pour envoyer un message en tant qu'une seule personne, avec seulement ses comptes à portée.",
+            "noRolesYetChat": "Pas encore de rôle : ce chat parle donc à travers tous les comptes que vous avez connectés. Créez-en un pour envoyer un message en tant qu'une seule personne, avec seulement ses comptes à portée.",
             "notSignedInYet": ", pas encore connecté"
         },
         "chatPlacementMenu": {
@@ -3923,7 +3923,7 @@
             "runnerOutdated": "build plus ancien que ce sandbox",
             "runnerReady": "Prêt",
             "runsOnMachineWorkspace": "Tourne sur la machine où vit cet espace de travail.",
-            "turnRunsStreamsBack": "Le tour s'exécute là-bas et revient en flux dans cet onglet. Il utilise les fichiers et les comptes de ce sandbox : le fichier ouvert de cette zone, les mentions {'@'} et les personas restent donc ici."
+            "turnRunsStreamsBack": "Le tour s'exécute là-bas et revient en flux dans cet onglet. Il utilise les fichiers et les comptes de ce sandbox : le fichier ouvert de cette zone, les mentions {'@'} et les rôles restent donc ici."
         },
         "chatQuestionCard": {
             "attachFiles": "Joindre des fichiers",
@@ -4084,7 +4084,7 @@
             "whenceMemory": "Des fichiers AGENTS.md de votre espace de travail.",
             "whenceOpaque": "Ce runtime garde son propre prompt et n'accepte que des ajouts : il n'y a rien à lire ici.",
             "whenceTrimmed": "Mis à la place du prompt habituel : la fenêtre de contexte de ce modèle est trop petite pour le contenir.",
-            "whencePersona": "Envoyé parce que ce chat agit en tant que quelqu'un de précis.",
+            "whenceRole": "Envoyé parce que ce chat agit en tant que quelqu'un de précis.",
             "promptHeading": "Prompt système",
             "notesHeading": "Envoyé avec votre premier message",
             "whenceNote": "Ajouté par votre sandbox avant votre premier message. Le contexte d'un message ultérieur reste à côté de ce message.",
@@ -4335,7 +4335,7 @@
             "howMuchMayDo": "Ce qu'il peut faire avant de demander.",
             "landsInTranscriptNo": "Se dépose dans la transcription, sans réponse.",
             "loopRunWorkflow": "Mettez-le en boucle, ou lancez un workflow.",
-            "onePersonasAccountsOnly": "Les comptes d'un seul persona.",
+            "oneRolesAccountsOnly": "Les comptes d'un seul rôle.",
             "whereRunsFixedNote": "Fixé par son premier message.",
             "whereRunsNote": "L'ordinateur sur lequel son agent s'exécute.",
             "runThrough": "Faire passer par",
@@ -4366,7 +4366,7 @@
             "landWhenDone": "Intégrer une fois terminé",
             "landOn": "S'intègre automatiquement",
             "landOff": "Reste sur la branche",
-            "badgePersona": "Persona",
+            "badgeRole": "Rôle",
             "badgeWhere": "Où",
             "badgeModel": "Modèle",
             "badgeEffort": "Effort",
@@ -4612,8 +4612,8 @@
             "closeOthers": "Fermer les autres",
             "closePane": "Fermer le panneau",
             "latest": "Le plus récent",
-            "setUpPersona": "Créer un persona",
-            "managePersonas": "Gérer les personas",
+            "setUpRole": "Créer un rôle",
+            "manageRoles": "Gérer les rôles",
             "gone": "N'est plus disponible",
             "autoLabel": "Auto",
             "editMessage": "Modifier ce message",
@@ -4794,23 +4794,23 @@
             "stopGenerating": "Arrêter la génération",
             "stopTheTurn": "Arrêter le tour"
         },
-        "panePersona": {
-            "personaGone": "Ce chat agit en tant que « {name} », qui n'existe plus : il n'aurait accès à aucun compte ni outil. Choisissez un autre persona.",
-            "personaNotSignedIn": "{name} n'est pas encore connecté : ce chat ne peut donc pas agir en son nom. Terminez sa connexion sous Capacités."
+        "paneRole": {
+            "roleGone": "Ce chat agit en tant que « {name} », qui n'existe plus : il n'aurait accès à aucun compte ni outil. Choisissez un autre rôle.",
+            "roleNotSignedIn": "{name} n'est pas encore connecté : ce chat ne peut donc pas agir en son nom. Terminez sa connexion sous Capacités."
         },
         "chatRoute": {
             "actingAs": "Agit en tant que {name}.",
             "matchedButHeld": "{name} correspond, mais ce chat avait d'abord été orienté manuellement : rien n'a été déplacé.",
-            "noPersonaMatched": "Aucun persona ne correspond : ce chat agit donc en Accès complet.",
-            "personaBringsModel": "{name} fournit son propre modèle, que ce chat utilise donc.",
+            "noRoleMatched": "Aucun rôle ne correspond : ce chat agit donc en tant que Tous les comptes.",
+            "roleBringsModel": "{name} fournit son propre modèle, que ce chat utilise donc.",
             "readBy": "Lu par {model}.",
-            "readingBoth": "Détermination du point de départ de ce chat : un appel choisit à la fois son persona et son modèle.",
+            "readingBoth": "Détermination du point de départ de ce chat : un appel choisit à la fois son rôle et son modèle.",
             "readingModel": "Choix du modèle de ce chat : un appel à la liste de routage des nouveaux chats.",
-            "readingPersona": "Détermination du persona de ce chat : un appel à la liste de routage des nouveaux chats.",
+            "readingRole": "Détermination du rôle de ce chat : un appel à la liste de routage des nouveaux chats.",
             "staysOnIt": "Chaque tour suivant conserve ce choix jusqu'à ce que vous le changiez.",
             "timedOutBoth": "Impossible de déterminer à temps le point de départ de ce chat : il garde l'accès à tout et utilise le modèle qu'il avait déjà.",
             "timedOutModel": "Impossible de choisir à temps un modèle pour ce chat : il utilise celui qu'il avait déjà.",
-            "timedOutPersona": "Impossible de déterminer à temps le persona de ce chat : il garde l'accès à tout."
+            "timedOutRole": "Impossible de déterminer à temps le rôle de ce chat : il garde l'accès à tout."
         },
         "chatConnect": {
             "connectionNotStarted": "Impossible de démarrer la connexion à {provider} : votre sandbox est-il en ligne ?",
@@ -6151,7 +6151,7 @@
                 "maintainer": "En attente de la réponse d’un mainteneur.",
                 "owner": "En attente de la réponse du propriétaire."
             },
-            "onPersona": "Ajouté à {persona}"
+            "onRole": "Ajouté à {role}"
         },
         "capability": {
             "connecting": "Connexion de {name}",
@@ -6202,11 +6202,10 @@
         },
         "grant": {
             "withheld": "Cette conversation n'a pas accès à {label}.",
-            "withheldBy": "La persona {persona} exclut {label}.",
-            "nextTurn": "Une fois autorisé, il est disponible pour la conversation dès son prochain tour, et l'agent continue avec.",
-            "forConversation": "Autoriser pour cette conversation",
-            "onPersona": "Ajouter à {persona}",
-            "site": "En attente de votre autorisation pour {site} dans l'extension Intentic de votre navigateur."
+            "withheldBy": "Le rôle {role} exclut {label}.",
+            "site": "En attente de votre autorisation pour {site} dans l'extension Intentic de votre navigateur.",
+            "switchTo": "Passer à {role}",
+            "switchNextTurn": "Les limites d'un rôle ne se lèvent pas ici, mais la conversation peut en porter un qui l'a : choisi maintenant, elle le porte dès son prochain tour, et l'agent continue."
         },
         "release": {
             "whole": "Le libérer couvre le reste de cette conversation, à partir de son prochain tour.",
@@ -6215,9 +6214,6 @@
         "grants": {
             "title": "Permissions de la conversation",
             "everything": "Peut tout faire sans vous demander",
-            "capability": "Peut utiliser {what}, que sa persona exclut",
-            "folder": "Peut travailler dans {what}, en dehors de sa zone",
-            "shelf": "Peut utiliser les outils {what}",
             "installs": "Peut installer des paquets sans demander",
             "secret": "Peut envoyer {what} à n'importe quel hôte, pas seulement le sien",
             "rule": "Peut faire des requêtes comme {what} sans demander",
@@ -8356,29 +8352,26 @@
             "couldntRead": "Impossible de lire qui peut ouvrir les aperçus de ce sandbox.",
             "whoChanges": "Le propriétaire, une personne ayant l’accès complet ou à qui l’on a confié Personnes et accès change qui peut ouvrir les aperçus."
         },
-        "personaBriefingFields": {
-            "sandboxPutsInFront": "Le sandbox place ceci devant le message avant que le modèle ne le lise ; le chat les montre sous « Envoyé avant votre message ». Désactivez-en un pour un persona dont le modèle a peu de place, ou dont le travail n'en a jamais besoin.",
+        "roleBriefingFields": {
+            "sandboxPutsInFront": "Le sandbox place ceci devant le message avant que le modèle ne le lise ; le chat les montre sous « Envoyé avant votre message ». Désactivez-en un pour un rôle dont le modèle a peu de place, ou dont le travail n'en a jamais besoin.",
             "sentEveryMessage": "Envoyé avec chaque message",
-            "turnedOffPersonaEvery": "{dropped} sur {count} désactivés pour ce persona. Tous les autres chats de ce sandbox les reçoivent encore tous.",
+            "turnedOffRoleEvery": "{dropped} sur {count} désactivés pour ce rôle. Tous les autres chats de ce sandbox les reçoivent encore tous.",
             "countMoreAlwaysSent": "{count} autre est toujours envoyé | {count} autres sont toujours envoyés"
         },
-        "personaForm": {
+        "roleForm": {
             "checkoutCost": "Environ {bytes} par conversation",
             "addAnother": "En ajouter un autre",
-            "addModelPersona": "Ajouter un modèle pour ce persona",
+            "addModelRole": "Ajouter un modèle pour ce rôle",
             "backendWorkOnApi": "Travail backend sur les services api et billing",
             "carries": "Porte",
             "chooseAccounts": "Choisir des comptes",
             "doneChoosing": "Choix terminé",
             "everyRepository": "Tous les dépôts",
             "everySessionWorksIn": "Chaque session travaille dans sa propre copie de l'espace de travail : plusieurs peuvent donc tourner en même temps sans toucher aux fichiers des autres.",
-            "everythingOnUnlessTurn": "Tout est activé sauf si vous le désactivez. Une session sur ce persona reçoit exactement ce qui reste.",
-            "fileToolsPointedOutside": "Les outils de fichiers pointés vers l'extérieur sont refusés : cela arrête les erreurs et les instructions mal comprises, pas un shell.",
             "filterByNameSite": "Filtrer par nom ou par site",
             "noAccountMatches": "Aucun compte ne correspond à « {trim} ».",
             "noAccountsConnectedIn": "Aucun compte connecté dans ce sandbox pour l'instant.",
-            "oneLineNewChat": "Une ligne. Un nouveau chat est associé à un persona par cette phrase : dites donc à quoi ressemble son travail.",
-            "onlyFolders": "Seulement ces dossiers",
+            "oneLineNewChat": "Une ligne. Un nouveau chat est associé à un rôle par cette phrase : dites donc à quoi ressemble son travail.",
             "repositoryOffNotIn": "Un dépôt désactivé n'est pas du tout dans l'arbre de la session : rien en dessous n'y existe. Le dépôt de l'espace de travail est toujours emporté.",
             "runsOn": "Tourne sur",
             "speaks": "Parle en tant que",
@@ -8387,65 +8380,33 @@
             "reachedBy": "Quiconque a accès à {areas} peut lui parler.",
             "reachedByNobody": "Il démarre à la racine de l'espace de travail, donc seul quelqu'un qui détient tout l'espace de travail peut lui parler. Donnez-lui un dossier de départ pour le confier à une zone.",
             "stopSpeakingThrough": "Cesser de parler via {id}",
-            "treeSessionOnPersona": "L'arbre sur lequel s'ouvre une session sur ce persona, et le modèle qui le lit. Les deux sont identiques pour chaque session de ce persona, et c'est ce qui permet à un chat qui lui est associé de s'ouvrir sur une consigne que le fournisseur a déjà mise en cache.",
+            "treeSessionOnRole": "L'arbre sur lequel s'ouvre une session sur ce rôle, et le modèle qui le lit. Les deux sont identiques pour chaque session de ce rôle, et c'est ce qui permet à un chat qui lui est associé de s'ouvrir sur une consigne que le fournisseur a déjà mise en cache.",
             "what": "À quoi il sert",
-            "whatMayDo": "Ce qu'il peut faire",
-            "whatToChangeAbout": "Ce qu'il faut changer à ce persona",
+            "whatToChangeAbout": "Ce qu'il faut changer à ce rôle",
             "whatTold": "Ce qu'on lui dit",
-            "whateverChatJobWould": "Ce sur quoi le chat ou la tâche aurait tourné de toute façon. Ajoutez un modèle pour décider pour chaque session sur ce persona ; le premier qui répond l'emporte, donc une deuxième entrée rattrape un compte hors service.",
-            "whereWorks": "Où il travaille",
+            "whateverChatJobWould": "Ce sur quoi le chat ou la tâche aurait tourné de toute façon. Ajoutez un modèle pour décider pour chaque session sur ce rôle ; le premier qui répond l'emporte, donc une deuxième entrée rattrape un compte hors service.",
             "wholeWorkspace": "Tout l'espace de travail",
-            "wholeWorkspaceChatNo": "Tout l'espace de travail, tel qu'un chat sans persona le voit.",
+            "wholeWorkspaceChatNo": "Tout l'espace de travail, tel qu'un chat sans rôle le voit.",
             "workspaceNoNestedRepositories": "Cet espace de travail n'a aucun dépôt imbriqué : le dépôt de l'espace de travail est donc tout ce qu'une session emporte de toute façon.",
             "accountNotSignedIn": "non connecté"
         },
-        "personaKitFields": {
-            "builtInPromptPersona": "Une consigne intégrée, pour ce persona seulement.",
-            "couldntReadKit": "Impossible de lire le prompt et les skills propres à ce persona.",
+        "roleKitFields": {
+            "builtInPromptRole": "Une consigne intégrée, pour ce rôle seulement.",
+            "couldntReadKit": "Impossible de lire le prompt et les skills propres à ce rôle.",
             "couldntReadSkill": "Impossible de lire ce skill.",
             "couldntRemoveSkill": "Impossible de supprimer ce skill.",
-            "couldntSavePrompt": "Impossible d'enregistrer le prompt de ce persona.",
+            "couldntSavePrompt": "Impossible d'enregistrer le prompt de ce rôle.",
             "couldntSaveSkill": "Impossible d'enregistrer ce skill.",
-            "instructionsSessionOnPersona": "Les instructions qu'une session sur ce persona emporte, et les skills que seuls ses tours peuvent atteindre. Aucun autre chat de ce sandbox n'est concerné.",
-            "noneYetSkillHere": "Aucun pour l'instant. Un skill ici, ce sont des instructions que l'agent ne lit qu'en agissant comme ce persona : un style maison, une liste de relecture, les étapes d'une tâche.",
+            "instructionsSessionOnRole": "Les instructions qu'une session sur ce rôle emporte, et les skills que seuls ses tours peuvent atteindre. Aucun autre chat de ce sandbox n'est concerné.",
+            "noneYetSkillHere": "Aucun pour l'instant. Un skill ici, ce sont des instructions que l'agent ne lit qu'en agissant comme ce rôle : un style maison, une liste de relecture, les étapes d'une tâche.",
             "own": "Le sien",
             "ownSkills": "Ses propres skills",
-            "ownWordsReplacingSandboxs": "Ses propres mots, remplaçant la consigne du sandbox pour les tours de ce persona.",
-            "personasSystemPrompt": "La consigne système de ce persona",
-            "replacesWholePromptOn": "Remplace toute la consigne sur les tours de ce persona, y compris ce que cette application dit à l'assistant sur ses questions, son panneau de liste de tâches et ses outils de navigateur. Laissez vide pour retomber sur celle du sandbox.",
+            "ownWordsReplacingSandboxs": "Ses propres mots, remplaçant la consigne du sandbox pour les tours de ce rôle.",
+            "rolesSystemPrompt": "La consigne système de ce rôle",
+            "replacesWholePromptOn": "Remplace toute la consigne sur les tours de ce rôle, y compris ce que cette application dit à l'assistant sur ses questions, son panneau de liste de tâches et ses outils de navigateur. Laissez vide pour retomber sur celle du sandbox.",
             "sandboxs": "Celle du sandbox",
             "whateverSandboxSetTo": "Ce à quoi le sandbox est réglé : changez-le dans Agent ▸ Instructions.",
-            "writeWhatPersonaWho": "Écrivez ce qu'est ce persona, qui il est, ce qu'il fait, comment il répond."
-        },
-        "personaPowersFields": {
-            "allIncludingNewOnes": "Tous, y compris les nouveaux.",
-            "anonymousBrowserNotSigned": "Le navigateur anonyme, pas les comptes connectés.",
-            "changeSandbox": "Modifier le sandbox",
-            "connectors": "Connecteurs",
-            "delegate": "Déléguer",
-            "driveBrowser": "Piloter un navigateur",
-            "extensions": "Extensions",
-            "fetchPageRunSearch": "Récupérer une page, lancer une recherche.",
-            "inWorkspace": "Dans votre espace de travail",
-            "javascriptRunsFencedBy": "Le JavaScript tourne clôturé par le runtime : les fichiers suivent la réponse de Fichiers, pas de programmes sans « Exécuter des commandes ».",
-            "mcpConnections": "Connexions MCP",
-            "noConnectorsAddedYet": "Aucun connecteur ajouté pour l'instant.",
-            "noDevicesConnectedYet": "Aucun appareil connecté pour l'instant.",
-            "noExtensionsSwitchedOn": "Aucune extension activée pour l'instant.",
-            "noMcpConnectionsAdded": "Aucune connexion MCP ajoutée pour l'instant.",
-            "none": "Aucun",
-            "onEveryOtherLimit": "activé, toute autre limite de ce persona est une valeur par défaut forte et non un mur : une session avec un shell peut atteindre un identifiant qui ne lui a pas été accordé. Désactivez-le pour un persona qui doit rester clôturé.",
-            "ownSettingsManifestsFolder": "Ses propres réglages et manifestes, le dossier qui publie des fichiers publiquement, et de nouvelles sandboxes sur votre compte.",
-            "pick": "Choisissez lesquels :",
-            "reachingOut": "Aller au-dehors",
-            "read": "Lire",
-            "readChange": "Lire et modifier",
-            "readWeb": "Lire le web",
-            "runCode": "Exécuter du code",
-            "runCommands": "Exécuter des commandes",
-            "shellTestsBuildsEvery": "Shell, tests, compilations, et chaque CLI présente sur l'image.",
-            "startSubagentsRun": "Lancer des sous-agents, exécuter des workflows et confier du travail aux sandboxes liées.",
-            "with": "Avec"
+            "writeWhatRoleWho": "Écrivez ce qu'est ce rôle, qui il est, ce qu'il fait, comment il répond."
         },
         "placement": {
             "cloudDetail": "S'exécute dans le cloud d'intentic",
@@ -8606,7 +8567,7 @@
             "thisBrowserSignedInUntil": "{who} · connecté jusqu'au {date}, renouvelé à chaque utilisation",
             "couldntSignOthersOut": "Impossible de déconnecter les autres navigateurs : le sandbox est-il en ligne ?",
             "couldntChangeRole": "Impossible de modifier cet accès sur le sandbox : est-il en ligne ?",
-            "recordingRoleFailed": "Le sandbox a accepté le nouvel accès, mais l'enregistrement du rôle a échoué.",
+            "recordingRoleFailed": "Le sandbox a accepté le nouvel accès, mais son enregistrement sur votre compte a échoué.",
             "couldntRevokeAccess": "Impossible de révoquer l'accès sur le sandbox : est-il en ligne ?",
             "clearingRecordFailed": "L'accès est révoqué sur le sandbox, mais la suppression de son enregistrement a échoué.",
             "invitingWhom": "Invitation de {email}",
@@ -8676,7 +8637,7 @@
             "partPrograms": "Programmes",
             "partAllowed": "Autorisé",
             "allowedEmpty": "Aucune exception aux règles",
-            "allowedEmptyLine": "Lorsque vous autorisez une conversation à dépasser son persona ou sa zone, ou accordez une autorisation à tout le sandbox depuis une carte, elle figure ici pour pouvoir être révoquée.",
+            "allowedEmptyLine": "Lorsque vous autorisez une conversation à dépasser son rôle ou sa zone, ou accordez une autorisation à tout le sandbox depuis une carte, elle figure ici pour pouvoir être révoquée.",
             "agentsHome": "Accueil seulement",
             "homeLands": "Intègre son travail",
             "homeLandsNote": "Leur conversation d’accueil intègre et valide d’elle-même ce qu’elle accepte, et ils peuvent l’intégrer aussi. Désactivé, elle vous attend.",
@@ -8871,7 +8832,7 @@
             "tokens": "Jetons de contrôle",
             "linked": "Sandboxes liés",
             "workspace": "Espace de travail",
-            "personas": "Personas",
+            "roles": "Rôles",
             "secrets": "Secrets",
             "groupServices": "Services",
             "groupAccounts": "Comptes et navigateurs",
@@ -8897,12 +8858,12 @@
             "scopeDrive": "Pilote les agents",
             "scopeLand": "Pilote et intègre le travail",
             "scopeEditor": "Une conversation",
-            "asPersona": "En tant que {persona}",
-            "noPersona": "Aucun compte",
+            "asRole": "En tant que {role}",
+            "noRole": "Aucun compte",
             "waiting": "{count} tâche attend votre accord | {count} tâches attendent votre accord",
             "inertExpired": "Expiré",
             "inertMinter": "La personne qui l'a créé ne gère plus le sandbox",
-            "inertPersona": "Son persona n'existe plus",
+            "inertRole": "Son rôle n'existe plus",
             "inertInvite": "Invitation expirée",
             "live": "Un navigateur y est ouvert actuellement",
             "rosterHidden": "Seul le propriétaire voit qui d'autre y a accès.",
@@ -8913,7 +8874,7 @@
             "litOf": "{lit} sur {total}",
             "legendEdits": "Modifie manuellement",
             "legendSees": "Lit uniquement",
-            "legendThrough": "Uniquement via un persona",
+            "legendThrough": "Uniquement via un rôle",
             "editsAll": "Modifie tout l'espace de travail",
             "seesAll": "Voit tout l'espace de travail",
             "editsAreas": "Modifie {areas}",
@@ -8922,12 +8883,12 @@
             "noAgents": "N'exécute aucun agent : aucune ressource externe n'est donc consommée pour cette personne",
             "oneConversation": "Agit uniquement dans la conversation à laquelle il est lié",
             "noAccounts": "Ne possède aucun compte connecté : personne ici ne surveille ses tâches",
-            "onlyThrough": "Agit uniquement via {personas}",
+            "onlyThrough": "Agit uniquement via {roles}",
             "reachedBy": "{count} points d'entrée sur {total} y accèdent : {names}",
             "reachedByNobody": "Aucun point d'entrée n'y accède.",
             "changeAccess": "Modifier l'accès",
             "editAreas": "Modifier les zones",
-            "editPersona": "Modifier le persona",
+            "editRole": "Modifier le rôle",
             "openConnection": "Ouvrir la connexion",
             "openSecrets": "Ouvrir les secrets",
             "openModels": "Ouvrir les modèles",
@@ -9032,45 +8993,45 @@
             "gpuPaused": "Le travail GPU est en pause : {reason}",
             "gpuResume": "Reprendre le travail GPU"
         },
-        "sandboxPersonas": {
-            "accountsSpeaksThroughStay": "Les comptes par lesquels il parle restent connectés. Toute automatisation épinglée à ce persona cesse de publier tant que vous ne lui en donnez pas un autre.",
-            "addPersona": "Ajouter un persona",
-            "couldntReadPersonas": "Impossible de lire vos personas.",
-            "couldntSavePersona": "Impossible d'enregistrer ce persona.",
+        "sandboxRoles": {
+            "accountsSpeaksThroughStay": "Les comptes par lesquels il parle restent connectés. Toute automatisation épinglée à ce rôle cesse de publier tant que vous ne lui en donnez pas un autre.",
+            "addRole": "Ajouter un rôle",
+            "couldntReadRoles": "Impossible de lire vos rôles.",
+            "couldntSaveRole": "Impossible d'enregistrer ce rôle.",
             "explainer": {
-                "label": "Ce qu'est une persona",
-                "title": "Une persona est l'identité de votre agent quand il agit",
+                "label": "Ce qu'est un rôle",
+                "title": "Un rôle est l'identité de votre agent quand il agit",
                 "wornBy": "Portée par",
                 "chat": "Un chat",
                 "automation": "Une automatisation",
                 "area": "Qui a accès à sa zone",
                 "sampleName": "Rédacteur",
                 "sampleBrief": "« Écrit les publications du studio et répond aux commentaires. »",
-                "withoutOne": "Sans persona",
+                "withoutOne": "Sans rôle",
                 "everyAccount": "dans les limites de son accès",
                 "noAccount": "aucun compte",
-                "sample": "Une persona d'exemple, pas l'une des vôtres."
+                "sample": "Un rôle d'exemple, pas l'un des vôtres."
             },
-            "firstMessageReadSend": "Le premier message est lu à l'envoi, et le chat indique sur quel persona il a atterri.",
-            "matchNewChatsTo": "Associer les nouveaux chats à un persona",
-            "namePersona": "Nommez ce persona",
+            "firstMessageReadSend": "Le premier message est lu à l'envoi, et le chat indique sur quel rôle il a atterri.",
+            "matchNewChatsTo": "Associer les nouveaux chats à un rôle",
+            "nameRole": "Nommez ce rôle",
             "nameWorkStudioReddit": "Nommez-le : Travail, Studio, Rédacteur Reddit…",
             "newChats": "Nouveaux chats",
-            "noPersonasYet": "Pas encore de personas",
+            "noRolesYet": "Pas encore de rôles",
             "notSignedIn": "Non connecté",
-            "nothingReadChatActs": "Rien n'est lu : un chat agit en tant que le persona que vous choisissez, ou en Accès complet.",
-            "personaName": "Nom du persona",
-            "personaNameTaken": "Vous avez déjà un persona nommé {name}.",
-            "personas": "Vos personas",
-            "readingSandboxsPersonas": "Lecture des personas de votre sandbox…",
+            "nothingReadChatActs": "Rien n'est lu : un chat agit en tant que le rôle que vous choisissez, ou en tant que Tous les comptes.",
+            "roleName": "Nom du rôle",
+            "roleNameTaken": "Vous avez déjà un rôle nommé {name}.",
+            "roles": "Vos rôles",
+            "readingSandboxsRoles": "Lecture des rôles de votre sandbox…",
             "remove": "Retirer {id} ?",
-            "removePersona": "Retirer ce persona",
-            "removePersona2": "Retirer le persona",
-            "renamePersona": "Renommer le persona",
+            "removeRole": "Retirer ce rôle",
+            "removeRole2": "Retirer le rôle",
+            "renameRole": "Renommer le rôle",
             "startsFullToolboxWhole": "Il démarre avec la boîte à outils complète, tout l'espace de travail et la consigne propre du sandbox. Changez ce que vous voulez une fois qu'il est ouvert.",
             "untilOneAutomationSchedule": "Tant qu'il n'y en a pas, une automatisation que vous programmez ne peut rien publier nulle part, et un chat atteint tous les comptes que vous avez connectés.",
             "useLettersOrDigits": "Utilisez des lettres ou des chiffres.",
-            "couldntRemovePersona": "Impossible de supprimer ce persona."
+            "couldntRemoveRole": "Impossible de supprimer ce rôle."
         },
         "sandboxSecrets": {
             "addSecret": "Ajouter un secret",
@@ -9578,8 +9539,8 @@
         },
         "sandboxStorageCard": {
             "historyLow": "Le disque d'historique n'a plus que {free} de libre, sous les {floor} réservés aux nouvelles conversations. Libérez de l'espace ici, puis renvoyez.",
-            "largeCheckout": "Chaque conversation reçoit sa propre copie complète de {repo} (environ {bytes}). Excluez-le des conversations qui n'en ont pas besoin avec la sélection de dépôts d'un persona.",
-            "chooseRepositories": "Choisir les dépôts dans les réglages Porte d'un persona",
+            "largeCheckout": "Chaque conversation reçoit sa propre copie complète de {repo} (environ {bytes}). Excluez-le des conversations qui n'en ont pas besoin avec la sélection de dépôts d'un rôle.",
+            "chooseRepositories": "Choisir les dépôts dans les réglages Porte d'un rôle",
             "changedTodayOrInUse": "Modifié aujourd'hui ou utilisé",
             "heading": "Disque",
             "measured": "Mesuré {when}",
@@ -9810,7 +9771,6 @@
             "systemPrompt": "Consigne système",
             "writeSkill": "Écrire un skill",
             "saveChanges": "Enregistrer les modifications",
-            "anywhereInWorkspace": "N'importe où dans l'espace de travail",
             "recentDecisions": "Décisions récentes",
             "worthBetterModelThan": "Mérite un meilleur modèle que le reste des tâches automatiques : il lit la commande comme des données, et dans un tour qui a absorbé quelque chose de l'extérieur, ce texte plaide peut-être pour sa propre approbation.",
             "youreHere": "Vous êtes ici"
@@ -9970,8 +9930,8 @@
                     "label": "Panneaux",
                     "where": "les panneaux d'opérateur dans la barre latérale"
                 },
-                "personas": {
-                    "label": "Personas",
+                "roles": {
+                    "label": "Rôles",
                     "where": "les identités au nom desquelles l'agent s'exprime"
                 },
                 "ports": {
@@ -10322,14 +10282,14 @@
             "dropped": "Fichier isolé",
             "extension": "Extension",
             "own": "Le vôtre",
-            "persona": "Persona",
+            "role": "Rôle",
             "plugin": "Plugin"
         },
         "useSandboxVersion": {
             "runtimeCantServeTurn": "Ce runtime ne peut pas traiter de tour pour le moment."
         },
-        "personaSelector": {
-            "couldntRename": "Impossible de renommer ce persona."
+        "roleSelector": {
+            "couldntRename": "Impossible de renommer ce rôle."
         },
         "useRecovery": {
             "couldntAskIntentic": "impossible d'interroger intentic au sujet de ce sandbox : vérifiez à nouveau dans un instant",
@@ -10495,7 +10455,7 @@
                 "label": "Tâches de maintenance"
             },
             "modelRouter": {
-                "blurb": "Le modèle qui lit le premier message d'un nouveau chat et choisit sur quoi il démarre : le modèle, l'effort et le compte, ainsi que le persona.",
+                "blurb": "Le modèle qui lit le premier message d'un nouveau chat et choisit sur quoi il démarre : le modèle, l'effort et le compte, ainsi que le rôle.",
                 "label": "Routage des nouveaux chats"
             },
             "pipelineFix": {
@@ -10531,7 +10491,7 @@
                 "blurb": "L'agent lancé par « Corriger avec un agent » après une synchronisation, un push, un commit, une exécution ou une compilation en échec."
             }
         },
-        "personaBounds": {
+        "roleBounds": {
             "fullPowers": "Pleins pouvoirs",
             "limits": "{count} limite | {count} limites",
             "noShell": "Pas de shell",
@@ -10793,7 +10753,7 @@
                 },
                 "memberRoles": {
                     "name": "Rôles",
-                    "what": "Chaque personne a un rôle qui limite ce qu'elle peut voir et faire."
+                    "what": "L'accès de chaque personne limite ce qu'elle peut voir et faire."
                 },
                 "areas": {
                     "name": "Zones",
@@ -10994,7 +10954,7 @@
                 "approval": "Approbations",
                 "grant": "Autorisations",
                 "safety": "Politique de sécurité",
-                "persona": "Personas",
+                "role": "Rôles",
                 "automation": "Automatisations",
                 "extension": "Extensions",
                 "environment": "Environnement",
@@ -11071,11 +11031,11 @@
                 "approval-hooks-dismiss": "Hooks du dépôt écartés",
                 "grant-revoke": "Autorisation retirée",
                 "safety-policy-change": "Politique de sécurité modifiée",
-                "persona-save": "Persona enregistrée",
-                "persona-remove": "Persona supprimée",
-                "persona-prompt-save": "Instructions d’une persona enregistrées",
-                "persona-skill-save": "Compétence d’une persona enregistrée",
-                "persona-skill-remove": "Compétence d’une persona supprimée",
+                "role-save": "Rôle enregistré",
+                "role-remove": "Rôle supprimé",
+                "role-prompt-save": "Instructions d’un rôle enregistrées",
+                "role-skill-save": "Compétence d’un rôle enregistrée",
+                "role-skill-remove": "Compétence d’un rôle supprimée",
                 "automation-approve": "Automatisation approuvée",
                 "automation-reject": "Automatisation refusée",
                 "extension-approve": "Extension approuvée",
@@ -11126,10 +11086,10 @@
         },
         "linkedSandboxes": {
             "title": "Sandboxes liés",
-            "noPersona": "Aucun compte",
-            "noPersonaHint": "Aucun compte connecté et tous les outils, comme tout réveil sans surveillance.",
-            "wearsNothing": "aucun persona",
-            "wears": "agit en tant que {persona}",
+            "noRole": "Aucun compte",
+            "noRoleHint": "Aucun compte connecté et tous les outils, comme tout réveil sans surveillance.",
+            "wearsNothing": "aucun rôle",
+            "wears": "agit en tant que {role}",
             "eachWaits": "chaque tâche attend votre accord",
             "startsAtOnce": "les tâches démarrent aussitôt",
             "perHour": "{count} tours par heure",
@@ -11146,7 +11106,7 @@
             "aTask": "Une tâche",
             "allow": "Autoriser",
             "decline": "Refuser",
-            "persona": "Persona",
+            "role": "Rôle",
             "askMeFirst": "Me demander avant chaque tâche",
             "turnsAnHour": "tours par heure",
             "shareRecords": "Partager les registres",
@@ -11288,7 +11248,7 @@
                 "usage": "coût, dépenses, jetons, facturation, limites, quota, heures, économies",
                 "secrets": "variables d'environnement, clés API, mots de passe, identifiants",
                 "access": "membres, inviter, partager, collaborateurs, équipe, rôles, passkeys, jetons",
-                "personas": "identités, comptes, e-mail, comptes en ligne, ajouter une persona",
+                "roles": "identités, comptes, e-mail, comptes en ligne, ajouter un rôle",
                 "map": "diagramme, vue d'ensemble, connexions, qui atteint quoi, graphe",
                 "dataProtection": "RGPD, DPO, conformité, données personnelles, AIPD, registre des traitements, AI Act, confidentialité",
                 "privacyShield": "PII, masquer, caviarder, anonymiser, données personnelles",
@@ -11314,7 +11274,7 @@
             "accessSignedInBrowsers": "sessions, se déconnecter, déconnexion, appareils, révoquer",
             "environmentExport": "déménager, sauvegarde, télécharger, migrer, paquet, partir",
             "environmentImport": "emménager, restaurer, migrer, rapatrier, téléverser, paquet",
-            "personasNewChats": "routage, attribution automatique, persona par défaut, identité",
+            "rolesNewChats": "routage, attribution automatique, rôle par défaut, identité",
             "privacyShieldPersonalData": "données personnelles, PII, masquer, caviarder, anonymiser, pseudonymiser, données sensibles, RGPD, noms, e-mails, numéros de téléphone",
             "privacyShieldAnalytics": "télémétrie, suivi, données d'usage, enregistrement de session, PostHog, désactiver",
             "guardrailsJudge": "approuver, approbation, autorisation, commandes dangereuses, demander avant, bloquer des commandes, sécurité",
@@ -11449,16 +11409,16 @@
                 "runsHere": "s'exécute ici à la place, comme avant"
             }
         },
-        "builtInPersonas": {
-            "fullAccess": "Accès complet",
-            "fullAccessNote": "Tous les comptes et outils dans les limites de l’accès de la personne ou du profil du service.",
-            "fullAccessWhen": "Porté par un chat que vous lancez sans choisir de persona.",
+        "builtInRoles": {
+            "fullAccess": "Tous les comptes",
+            "fullAccessNote": "Tous les comptes connectés, dans la limite de ce que peut atteindre la personne ou le service pour qui il travaille.",
+            "fullAccessWhen": "Porté par un chat que vous lancez sans choisir de rôle.",
             "noAccounts": "Aucun compte",
-            "noAccountsNote": "La boîte à outils complète, mais aucun de vos comptes connectés : il ne peut ni publier ni naviguer en votre nom.",
-            "noAccountsWhen": "Porté par tout ce qui tourne sans que personne ne regarde (une automatisation, une file, un sous-agent d'une telle exécution) et ne nomme aucun persona.",
+            "noAccountsNote": "Aucun de vos comptes connectés : il ne peut ni publier ni naviguer en votre nom. Le reste correspond à ce que peut atteindre la personne ou le service pour qui il travaille.",
+            "noAccountsWhen": "Porté par tout ce qui tourne sans que personne ne regarde (une automatisation, une file, un sous-agent d'une telle exécution) et ne nomme aucun rôle.",
             "title": "Intégrés",
-            "reserved": "« {name} » est un persona intégré. Choisissez un autre nom.",
-            "readOnly": "Intégré, il ne peut être ni modifié ni supprimé. Pour choisir ses comptes, outils et dossiers, ajoutez votre propre persona."
+            "reserved": "« {name} » est un rôle intégré. Choisissez un autre nom.",
+            "readOnly": "Intégré, donc ni modifiable ni supprimable. Pour choisir ses comptes, où il s’ouvre et ce qui le tient, ajoutez un rôle à vous."
         },
         "accessProfiles": {
             "title": "Profils",
@@ -11493,10 +11453,13 @@
             "agents_chat": "Discussion",
             "agents_run": "Exécuter des agents",
             "agents_home": "Accueil uniquement",
-            "posture": "Les personas définissent une posture : elles ne font que restreindre l’accès de la personne ou du service pour qui agit le tour, dans les limites du profil du service.",
+            "posture": "Un rôle décide sous quel nom une conversation parle. Ce qu’elle peut atteindre relève de l’accès : les profils d’accès qui le tiennent, en plus de ce que peuvent les personnes ou le service pour qui elle travaille.",
             "view": "Consulter",
             "readOnlyOrg": "Lecture seule. Les profils de l’organisation sont gérés par l’organisation.",
-            "readOnlyOwn": "Lecture seule. Votre propre accès vient de ce profil : il est modifié par le propriétaire ou une personne ayant l’accès complet."
+            "readOnlyOwn": "Lecture seule. Votre propre accès vient de ce profil : il est modifié par le propriétaire ou une personne ayant l’accès complet.",
+            "roles": "Rôles tenus par lui",
+            "rolesHint": "Une conversation portant l’un de ces rôles n’atteint pas plus que ce profil ne permet, pour qui qu’elle travaille.",
+            "heldRole": "le rôle {name}"
         },
         "accessServices": {
             "title": "Services",
@@ -11702,6 +11665,18 @@
                 "words": "Toute personne qui n'a pas choisi son propre vocabulaire ici voit des mots simples."
             },
             "question": "Qui s'occupe du code ici ?"
+        },
+        "roleAccess": {
+            "tab": "Accès",
+            "heldTo": "Ce qu’il peut atteindre",
+            "intro": "Ce qu’une conversation portant ce rôle peut atteindre est fixé par le profil d’accès qui le tient, rangé à côté de l’accès de vos personnes pour qu’une conversation ne puisse pas changer ses propres limites. Elle n’atteint jamais plus que les personnes pour qui elle travaille.",
+            "unreadable": "Seule une personne qui gère les personnes et l’accès voit quel profil le tient.",
+            "none": "Aucun profil ne le tient : il atteint ce que peuvent les personnes pour qui il travaille.",
+            "pick": "Tenu par",
+            "noProfile": "Aucun profil à lui",
+            "readOnly": "Seule une personne qui gère les personnes et l’accès place un rôle sur un autre profil.",
+            "editProfiles": "Modifier ce qu’un profil permet",
+            "moveFailed": "Impossible de placer le rôle sur ce profil"
         }
     },
     "settings": {
@@ -12480,7 +12455,7 @@
         "name": "Nom",
         "needs": "A besoin de vous",
         "other": "Autre",
-        "personas": "Personas",
+        "roles": "Rôles",
         "planLimits": "Limites de l'offre",
         "preview": "App en direct",
         "removed": "supprimé",
@@ -13246,31 +13221,31 @@
             "runTheseChecks": "Lancer ces vérifications",
             "whenIsEditOrTurn": "{when} vaut {edit} ou {turn}, et la commande s'exécute dans ce dossier : écrivez-la donc comme vous le feriez dans un terminal ici."
         },
-        "directoryPersonas": {
-            "addAPersona": "Ajouter un persona",
+        "directoryRoles": {
+            "addARole": "Ajouter un rôle",
             "addNewOneInstead": "En ajouter un nouveau à la place",
-            "addPersona": "Ajouter un persona",
-            "advancedWhatMayDo": "Avancé : ce qu'il peut faire",
-            "couldNotSave": "Impossible d'enregistrer ce persona.",
-            "findPersona": "Trouver un persona…",
-            "findPersona2": "Trouver un persona",
+            "addRole": "Ajouter un rôle",
+            "couldNotSave": "Impossible d'enregistrer ce rôle.",
+            "findRole": "Trouver un rôle…",
+            "findRole2": "Trouver un rôle",
             "fullEditor": "Éditeur complet",
             "moves": "Cela le déplace :",
-            "namePersonaDocsBot": "Nommez ce persona : {folderName}, Bot de docs, Équipe de refonte…",
-            "nameTaken": "Vous avez déjà un persona nommé {id}.",
-            "noPersonaGoesBy": "Aucun persona ne porte ce nom.",
+            "nameRoleDocsBot": "Nommez ce rôle : {folderName}, Bot de docs, Équipe de refonte…",
+            "nameTaken": "Vous avez déjà un rôle nommé {id}.",
+            "noRoleGoesBy": "Aucun rôle ne porte ce nom.",
             "noStartingFolder": "aucun dossier de départ",
-            "personaStartsHereOpens": "Un persona qui démarre ici ouvre ses sessions dans",
+            "roleStartsHereOpens": "Un rôle qui démarre ici ouvre ses sessions dans",
             "startHere": "Démarrer {id} ici",
             "startHere2": "Démarrer ici",
             "startingHere": "Démarre ici",
             "startsIn": "démarre dans",
             "startsIn2": "démarre dans {startIn}",
-            "todayPersonaOneStarting": "aujourd'hui, et un persona a un seul dossier de départ.",
-            "useExisting": "Utiliser un persona existant",
+            "todayRoleOneStarting": "aujourd'hui, et un rôle a un seul dossier de départ.",
+            "useExisting": "Utiliser un rôle existant",
             "useLettersOrDigits": "Utilisez des lettres ou des chiffres.",
             "useOneIAlready": "En utiliser un que j'ai déjà",
-            "whoWorksIn": "Qui travaille dans {folderName}"
+            "whoWorksIn": "Qui travaille dans {folderName}",
+            "reachOnAccess": "Ce qu'il peut atteindre se règle dans Accès ▸ Profils."
         },
         "directoryUiHost": {
             "directoryUi": "Interface de {dir}",
@@ -13532,7 +13507,7 @@
             "checksOn": "Checks actifs",
             "checksPaused": "Checks en pause",
             "manage": "Gérer",
-            "personas": "{count} persona | {count} personas",
+            "roles": "{count} rôle | {count} rôles",
             "runTargets": "Exécuter dans le sandbox ou sur un ordinateur | Exécuter dans le sandbox ou sur un ordinateur : {count} cibles"
         },
         "savePanel": {
@@ -13798,7 +13773,7 @@
         },
         "words": {
             "cantEditHere": "Non modifiable ici",
-            "persona": "Persona",
+            "role": "Rôle",
             "privateCopy": "Copie privée",
             "renderedText": "Texte rendu",
             "sharedFolder": "Partagé",
@@ -13878,7 +13853,7 @@
             "writing": "Écriture…",
             "written": "Écrit"
         },
-        "personaReach": {
+        "roleReach": {
             "dimmedRefused": "Grisé = refusé",
             "everywhere": "Partout",
             "noFileAccess": "Aucun accès aux fichiers"

@@ -6,7 +6,7 @@ import { receiveDesktopShown } from "../../../workbench/window/onScreen";
 const clock = ref(0);
 const reachable = ref(false);
 const connection = ref({ failure: { kind: `network` as const, message: `offline` }, unavailableSince: 0 });
-const active = ref({ id: `box`, role: `owner`, hosted: null, removedAt: null });
+const active = ref({ id: `box`, tier: `owner`, hosted: null, removedAt: null });
 const activeWakeRefused = ref(undefined);
 
 jest.mock("@intentic/ui/async", () => ({ useNow: () => clock }));

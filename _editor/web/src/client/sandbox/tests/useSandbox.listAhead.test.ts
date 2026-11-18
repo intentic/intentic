@@ -28,7 +28,7 @@ const summary = (id: string): SandboxSummary => ({
     removedBy: null,
     hosted: null,
     token: `token-${id}`,
-    role: `owner`,
+    tier: `owner`,
     providedAddress: false,
     localHostname: null,
 });

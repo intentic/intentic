@@ -1,0 +1,147 @@
+import type { HookCallbackMatcher, HookEvent, HookInput } from "@anthropic-ai/claude-agent-sdk";
+import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
+import { roleScopeHooks, roleScopeOf } from "./role-scope.js";
+import { capRole, turnRole } from "./roles.js";
+
+const ROOT = "/work";
+
+// What the role's access holds it to (an access profile listing it): the folders its areas come to, and the ceiling on
+// its tools. `fence` is what the conversation was born with (its starter's own); undefined is an unfenced member.
+interface Held {
+    readonly folders?: Fence;
+    readonly ceiling?: ToolCeiling;
+}
+const scopeFor = (held: Held, fence?: Fence) =>
+    roleScopeOf(
+        capRole(turnRole({ roles: [{ id: "support", capabilities: [] }], actsAs: "support", unattended: true, fence, roleFence: held.folders }), held.ceiling),
+        ROOT,
+    );
+
+// Drives the PreToolUse hook like the SDK does; returns the refusal reason, or undefined for allowed.
+const attempt = async (
+    hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>>,
+    tool: string,
+    input: Record<string, unknown>,
+): Promise<string | undefined> => {
+    const hook = hooks.PreToolUse?.[0]?.hooks[0];
+    if (hook === undefined) {
+        throw new Error("no PreToolUse hook was wired");
+    }
+    const result = await hook({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: input } as unknown as HookInput, undefined, {
+        signal: new AbortController().signal,
+    });
+    const output = (result as { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } }).hookSpecificOutput;
+    return output?.permissionDecision === "deny" ? output.permissionDecisionReason : undefined;
+};
+
+test("a role held to no folder and with full sandbox access asks for no scope", () => {
+    expect(scopeFor({})).toBeUndefined();
+});
+
+test("a file tool inside the allowed folders is untouched", async () => {
+    const scope = scopeFor({ folders: ["apps/web"] });
+    const hooks = roleScopeHooks(scope!);
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/web/src/main.ts" })).toBeUndefined();
+    // Relative paths resolve against the turn's own root, like the tool itself would resolve them.
+    expect(await attempt(hooks, "Edit", { file_path: "apps/web/package.json" })).toBeUndefined();
+});
+
+test("a file tool outside them is refused, and told where it may work", async () => {
+    const hooks = roleScopeHooks(scopeFor({ folders: ["apps/web"] })!);
+    const reason = await attempt(hooks, "Write", { file_path: "/work/apps/api/secret.ts" });
+    expect(reason).toContain("apps/web");
+    expect(reason).toContain("apps/api/secret.ts");
+});
+
+// `apps/web2` is not inside `apps/web`, however alike the strings look; a naive prefix check would grant a sibling
+// repo.
+test("a sibling folder sharing a prefix is not inside the limit", async () => {
+    const hooks = roleScopeHooks(scopeFor({ folders: ["apps/web"] })!);
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/web2/main.ts" })).toEqual(expect.any(String));
+});
+
+// Out-of-workspace paths are a different question, answered by the container, not this setting.
+test("a path outside the workspace entirely is not this setting's business", async () => {
+    const hooks = roleScopeHooks(scopeFor({ folders: ["apps/web"] })!);
+    expect(await attempt(hooks, "Read", { file_path: "/tmp/scratch.txt" })).toBeUndefined();
+});
+
+// Glob/Grep search the cwd when given no path, which is inside scope by construction.
+test("a search tool with no path is left alone", async () => {
+    const hooks = roleScopeHooks(scopeFor({ folders: ["apps/web"] })!);
+    expect(await attempt(hooks, "Grep", { pattern: "todo" })).toBeUndefined();
+});
+
+// The fence a conversation inherits from whoever started it
+
+// A role that names no folder used to mean "the whole workspace"; it now means "whatever the starter could see",
+// which is the whole point of inheritance — a fenced person cannot ask an unfenced role to fetch a file for them.
+test("a role naming no folder is still bounded by the fence its conversation was born with", async () => {
+    const scope = scopeFor({}, ["apps/web"]);
+    const hooks = roleScopeHooks(scope!);
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/web/src/main.ts" })).toBeUndefined();
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/api/secret.ts" })).toContain("apps/web");
+});
+
+test("the folders a role's access holds it to narrow the conversation's fence and can never widen it", async () => {
+    // The role's access names all of `apps`; the conversation was started by someone who only holds `apps/web`.
+    const hooks = roleScopeHooks(scopeFor({ folders: ["apps"] }, ["apps/web"])!);
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/web/main.ts" })).toBeUndefined();
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/api/main.ts" })).toEqual(expect.any(String));
+});
+
+// A member granted areas that resolve to no folder (every one deleted, or an area file that will not parse) reaches
+// nothing. Fail-shut: the empty list is a real fence, not the absence of one.
+test("a fence that resolves to no folder admits nothing rather than everything", async () => {
+    const hooks = roleScopeHooks(scopeFor({}, [])!);
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/web/main.ts" })).toContain("no folder of this workspace");
+});
+
+// "Change the sandbox"
+
+test("a role that may not change the sandbox is refused its config and its public outbox", async () => {
+    const hooks = roleScopeHooks(scopeFor({ ceiling: { sandbox: false } })!);
+    expect(await attempt(hooks, "Write", { file_path: "/work/.intentic/config/settings.json" })).toContain("sandbox's own configuration");
+    expect(await attempt(hooks, "Edit", { file_path: "/work/public/leak.txt" })).toContain("sandbox's own configuration");
+    // Ordinary workspace files are untouched; the switch is about the sandbox, not about editing in general.
+    expect(await attempt(hooks, "Write", { file_path: "/work/apps/web/main.ts" })).toBeUndefined();
+});
+
+// The switch is "change", not "know about"; blocking reads would break routine self-inspection.
+test("reading the sandbox's own config is still allowed", async () => {
+    const hooks = roleScopeHooks(scopeFor({ ceiling: { sandbox: false } })!);
+    expect(await attempt(hooks, "Read", { file_path: "/work/.intentic/config/settings.json" })).toBeUndefined();
+});
+
+// The hashline tools stand in for Edit/Write when the hashlineEdits setting is on; a fence that did not see them
+// would let a fenced role write anywhere.
+test("the hashline tools are fenced like the native ones they replace", async () => {
+    const hooks = roleScopeHooks(scopeFor({ folders: ["apps/web"] })!);
+    expect(await attempt(hooks, "mcp__hashline__write", { path: "/work/apps/api/secret.ts", content: "x" })).toContain("apps/web");
+    expect(await attempt(hooks, "mcp__hashline__edit", { path: "apps/api/secret.ts", anchor: "a", ops: [] })).toContain("apps/web");
+    expect(await attempt(hooks, "mcp__hashline__read", { path: "/work/apps/api/secret.ts" })).toContain("apps/web");
+    expect(await attempt(hooks, "mcp__hashline__write", { path: "/work/apps/web/ok.ts", content: "x" })).toBeUndefined();
+});
+
+test("a role that may not change the sandbox cannot reach its config through the hashline tools either", async () => {
+    const hooks = roleScopeHooks(scopeFor({ ceiling: { sandbox: false } })!);
+    expect(await attempt(hooks, "mcp__hashline__write", { path: "/work/public/leak.txt", content: "x" })).toContain(
+        "sandbox's own configuration",
+    );
+    expect(await attempt(hooks, "mcp__hashline__read", { path: "/work/.intentic/config/settings.json" })).toBeUndefined();
+});
+
+// `..stash` is a folder inside the workspace that only looks like a climb; a string-prefix check read it as outside
+// and waved it through before the fence was consulted.
+test("a folder whose name starts with two dots is inside the workspace and judged by the fence", async () => {
+    const hooks = roleScopeHooks(scopeFor({}, ["app"])!);
+    expect(await attempt(hooks, "Write", { file_path: "/work/..stash/a.md" })).toContain("..stash/a.md");
+    expect(await attempt(hooks, "Write", { file_path: "/work/app/../..stash/a.md" })).toEqual(expect.any(String));
+    expect(await attempt(hooks, "Write", { file_path: "/work/app/a.md" })).toBeUndefined();
+});
+
+test("a name inside the outbox that starts with two dots is still inside the outbox", async () => {
+    const hooks = roleScopeHooks(scopeFor({ ceiling: { sandbox: false } })!);
+    expect(await attempt(hooks, "Write", { file_path: "/work/public/..x" })).toContain("sandbox's own configuration");
+});

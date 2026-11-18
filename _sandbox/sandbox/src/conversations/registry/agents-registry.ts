@@ -135,8 +135,8 @@ const freshEntry = (turn: BeginTurn, now: number): PersistedAgent => ({
 // Provider, harness and account follow the one routing rule (conversations/registry/routing.ts).
 const settingsOf = (existing: StoredProfile, profile: TurnProfile): StoredProfile => {
     const { provider, harness, account } = routingFor(existing, profile);
-    // The persona is the turn's own, never the last turn's: a turn naming none is an ordinary chat.
-    const { account: _held, actsAs: _lastPersona, model, effort, thinking, fast, ...kept } = existing;
+    // The role is the turn's own, never the last turn's: a turn naming none is an ordinary chat.
+    const { account: _held, actsAs: _lastRole, model, effort, thinking, fast, ...kept } = existing;
     const sameProvider = existing.provider === provider;
     const sameModel = sameProvider && (profile.model === undefined || profile.model === model);
     return {
@@ -340,6 +340,10 @@ export interface AgentsRegistry {
         limit?: { readonly resetsAt?: number },
         pin?: { readonly at: number },
     ) => Promise<AgentSummary | undefined>;
+    // Puts the conversation on another role, as a person picked it on a card (needs/kinds/grant-need.ts): what its
+    // next wake wears (agents-store.ts conversationProfile) and what its panes' role pill follows. Leaves `updatedAt`
+    // alone.
+    readonly wearRole: (id: string, role: string) => Promise<AgentSummary | undefined>;
     // Moves every conversation running on account `from` to `to`, the survivor a superseded account merged into
     // (account-identity.ts). One write; answers how many moved. Leaves `updatedAt` and every session alone: it is the same
     // person's seat.
@@ -1071,6 +1075,7 @@ export const createFleet = (
             });
         },
         switchAccount: (id, account, limit, pin) => amend(id, (entry) => switchedEntry(entry, account, limit, pin)),
+        wearRole: (id, role) => amend(id, (entry) => ({ ...entry, profile: { ...entry.profile, actsAs: role } })),
         repointAccount: async (from, to) => {
             const moving = entries.filter((entry) => entry.profile.account === from);
             for (const entry of moving) {

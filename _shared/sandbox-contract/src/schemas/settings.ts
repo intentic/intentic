@@ -33,7 +33,7 @@ export const SystemPromptModeSchema = z.enum(["intentic", "claude", "custom"]);
 export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
 // Excludes "custom": there is nothing to fetch, it's whatever the owner already typed into the settings field.
 export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
-// Longest an owner's own system prompt may be, the sandbox's or a persona's; named so an editor can refuse a save the
+// Longest an owner's own system prompt may be, the sandbox's or a role's; named so an editor can refuse a save the
 // daemon would refuse, rather than copy the number.
 export const SYSTEM_PROMPT_MAX = 20_000;
 // Longest the guidance the New chat routing job reads may be (`autoModelGuidance` below).
@@ -143,10 +143,14 @@ export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
 // capability: something connected brought it (a CLI tool, a machine, a browser account, a VPN).
 // extension: an installed extension ships it inside its checkout.
 // plugin: a plugin capability cloned a repo that holds it.
-// persona: one card's own kit carries it; only turns wearing that card see it.
+// role: one card's own kit carries it; only turns wearing that card see it.
 // dropped: sitting in the loaded folder by hand or by the agent, claimed by nothing else.
 // Not a capability kind: a capability can be broken and wants a status light, a skill either exists or it doesn't.
-export const SkillOriginSchema = z.enum(["builtin", "own", "capability", "extension", "plugin", "persona", "dropped"]);
+// "role" was "persona" until personas were renamed roles (2026-11-18), which a daemon from before still answers.
+export const SkillOriginSchema = z.preprocess(
+    (origin) => (origin === "persona" ? "role" : origin),
+    z.enum(["builtin", "own", "capability", "extension", "plugin", "role", "dropped"]),
+);
 export type SkillOrigin = z.infer<typeof SkillOriginSchema>;
 // Same slug shape the SDK's loader accepts, checked here so a bad name is a refused save, not a skill that silently
 // never loads.
@@ -289,11 +293,11 @@ export const SandboxSettingsSchema = z.object({
     // message and one line per card are put to the same model that chooses what the chat runs on, in the same call.
     // Never asked of a draft: only a sent message is a finished one. Attended chats only: routing onto a card would
     // grant an unwatched wake accounts nobody named for it.
-    personaRouting: z
+    roleRouting: z
         .boolean()
         .default(true)
         .describe(
-            "Whether a new chat is matched to one of your personas from its first message. It is read once the message is sent, in the same single call that chooses what the chat runs on (the New chat routing job under Models), and the chat says in its own transcript which persona it landed on. Never applies to unwatched runs, which name their persona themselves.",
+            "Whether a new chat is matched to one of your roles from its first message. It is read once the message is sent, in the same single call that chooses what the chat runs on (the New chat routing job under Models), and the chat says in its own transcript which role it landed on. Never applies to unwatched runs, which name their role themselves.",
         ),
     // The `show_page`/`ask_page` tools and the guidance that names them (agent/pages/page-tools.ts); off, a turn is
     // offered neither and draws no page, which costs it nothing.
@@ -344,7 +348,7 @@ export const SandboxSettingsSchema = z.object({
             "Your own instructions, used only when the mode above says custom. Then it is the whole of them: both built-in bases go, and so does everything this product would otherwise add, including the guidance the chat's own cards are driven by. That is the price of total control.",
         ),
     ...claudeExperimentSettings,
-    // Rooted at the run's own starting folder (a persona's, an isolated conversation's worktree), not the workspace
+    // Rooted at the run's own starting folder (a role's, an isolated conversation's worktree), not the workspace
     // root — it maps the project containing that folder. On for new sandboxes from 2026-11-04, kept off for older ones
     // (the daemon's settings-store.ts pins the old default, settings/earlier-defaults-step.ts writes it down where never
     // saved).

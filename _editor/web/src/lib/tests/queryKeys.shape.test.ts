@@ -119,16 +119,16 @@ describe("agentReviewPrefixes", () => {
 });
 
 // Two readers that picked one name stored two shapes under one entry: the automations and workflows packs both keyed
-// `personas` (the whole answer, and a bare list), and the preview list's `apps` key equalled a pack's one-repo read
+// `roles` (the whole answer, and a bare list), and the preview list's `apps` key equalled a pack's one-repo read
 // whenever there was exactly one monorepo. A contract read is now keyed by its procedure on both sides, and the preview
 // list's repos ride as one element no key of plain names can equal.
 describe("keys that used to collide", () => {
     // What `api.sandbox.key(...parts)` hands a pack: plain names, then the box.
     const packKey = (...parts: string[]): unknown[] => [...parts, `sbx-here`];
 
-    it("files a pack's persona read and the shell's under the one procedure key", () => {
-        expect(rpcKey(`personas.list`)).toEqual([`personas.list`, `sbx-here`]);
-        expect(rpcKey(`personas.list`)).not.toEqual(packKey(`personas`));
+    it("files a pack's role read and the shell's under the one procedure key", () => {
+        expect(rpcKey(`roles.list`)).toEqual([`roles.list`, `sbx-here`]);
+        expect(rpcKey(`roles.list`)).not.toEqual(packKey(`roles`));
     });
 
     it("never lets the preview list's apps equal one repo's read, by name or by procedure", () => {
@@ -143,7 +143,7 @@ describe("keys that used to collide", () => {
         expect(reached(`apps`, rpcKey(`workspace.appsList`, { repo: `web` }))).toBe(true);
         expect(reached(`ci-runs`, rpcKey(`ci.runs`))).toBe(true);
         expect(reached(`automations`, rpcKey(`automations.list`))).toBe(true);
-        expect(reached(`personas`, rpcKey(`personas.list`))).toBe(true);
+        expect(reached(`roles`, rpcKey(`roles.list`))).toBe(true);
         expect(reached(`settings`, rpcKey(`settings.get`))).toBe(true);
     });
 

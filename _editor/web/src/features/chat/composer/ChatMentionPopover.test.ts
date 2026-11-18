@@ -31,7 +31,7 @@ const { default: ChatMentionPopover } = await import("./ChatMentionPopover.vue")
 
 const entry = (provider: AgentProvider, value: string, label: string): PickerEntry => ({ key: `${provider}:${value}`, provider, value, label });
 const SOURCES: QuickPickSources = {
-    persona: { personas: [{ id: `intentic`, label: `Intentic`, capabilities: [] }], picked: undefined },
+    role: { roles: [{ id: `intentic`, label: `Intentic`, capabilities: [] }], picked: undefined },
     sandbox: { runners: [{ id: `omen` }], boxes: [], box: undefined, runner: undefined },
     model: {
         entries: [entry(`claude`, `claude-opus-5`, `Claude Opus 5`), entry(`claude`, `claude-sonnet-4-5`, `Claude Sonnet 4.5`)],
@@ -42,7 +42,7 @@ const SOURCES: QuickPickSources = {
     },
     effort: { options: [{ label: `High`, value: `high` }], picked: `high` },
 };
-const NONE: QuickPickSources = { persona: undefined, sandbox: undefined, model: undefined, effort: undefined };
+const NONE: QuickPickSources = { role: undefined, sandbox: undefined, model: undefined, effort: undefined };
 
 let app: App | undefined;
 const picks: QuickPick[] = [];
@@ -90,7 +90,7 @@ afterEach(() => {
 it(`opens on an empty token with one summary row per setting, the files still to come`, () => {
     const element = mount(SOURCES);
     expect(header(element)).toBe(`Mention a file or change a setting`);
-    expect(rowTexts(element)).toEqual([`Acts as Full access`, `Where this runs Here`, `Model Claude Opus 5`, `Effort High`]);
+    expect(rowTexts(element)).toEqual([`Acts as All accounts`, `Where this runs Here`, `Model Claude Opus 5`, `Effort High`]);
     expect(element.textContent).toContain(`Keep typing to search files…`);
     expect(seen.active.value).toBe(true);
     expect(seen.query.value).toBe(``);
@@ -139,7 +139,7 @@ it(`hands a summary row back as a drill and a file row back as a path`, async ()
     files.value = [`src/app.ts`];
     const element = mount(SOURCES);
     expect(popover().pickActive()).toBe(true);
-    expect(picks[0]).toMatchObject({ kind: `drill`, into: `persona` });
+    expect(picks[0]).toMatchObject({ kind: `drill`, into: `role` });
 
     query.value = `app`;
     await nextTick();

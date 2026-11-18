@@ -167,7 +167,7 @@ export interface TurnStarter {
     readonly run: (turn: TurnInput & { readonly conversationId: string }, options?: DetachedRunOptions) => StartedRun | BeginRefusal;
     // The turn itself, for a caller folding its own frames (a runner's dispatched turn). Nothing holds it as the
     // conversation's run, so no window can attach to it while it runs: a conversation's own turn takes `run`. Routed like
-    // the other two doors (a persona or run role names a model the turn left unnamed), and left alone where it already
+    // the other two doors (a role or run role names a model the turn left unnamed), and left alone where it already
     // names one, which a caller that walked its own model ladder does.
     readonly stream: (turn: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
     // Words into the live turn: `invalid` names a reference escaping the workspace, false means no steerable turn.

@@ -1,13 +1,13 @@
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { ConversationGrant } from "@intentic/sandbox-contract/schemas/needs";
+import type { AccessProfile } from "@intentic/sandbox-contract/schemas/access-profiles";
 import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
 import type { HelperOnly } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import type { Rule, SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { Services } from "../../../composition.js";
-import { readPersonaPrompt } from "../../../personas/persona-kit.js";
+import { readRolePrompt } from "../../../roles/role-kit.js";
 import type { ShortMemory } from "@intentic/constants/memory-room";
 import type { ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 import { repoCheckRules } from "../../../rules/repo-checks.js";
@@ -66,16 +66,16 @@ export interface AdmittedTurnFacts {
     // Why the privacy shield refuses this turn: it is on, the provider is untrusted, and the runtime is one the gateway
     // cannot stand in front of. Absent: it may run.
     readonly privacyRefusal?: PrivacyRefusal;
-    // Everything the owner installed, before any persona or gate narrows it.
+    // Everything the owner installed, before any role or gate narrows it.
     readonly installed: readonly Capability[];
     // Dependency readiness of the main checkout; empty where the probe was skipped.
     readonly setup: readonly ProjectSetupStatus[];
-    readonly personas: readonly Persona[];
+    readonly roles: readonly Role[];
     readonly areas: readonly Area[];
-    // What a person allowed this conversation beyond its persona, if anything.
-    readonly grant: ConversationGrant | undefined;
+    // The access profiles, for the areas a role's own fence it to (turn-premise.ts).
+    readonly profiles: readonly AccessProfile[];
     // The skills the runtime's loader does not read, on a turn whose session holds no note of them; rendered once the
-    // persona is known, so a skill this turn may not use is never offered (honoured.ts).
+    // role is known, so a skill this turn may not use is never offered (honoured.ts).
     readonly skillCatalog: TurnSkillCatalog | undefined;
     readonly contextNote: TurnNote | undefined;
     // A fresh session's account of the work it started from (context/fresh-session.ts); absent for any other conversation.
@@ -85,12 +85,18 @@ export interface AdmittedTurnFacts {
     readonly gates: readonly CredentialGate[];
     // The releases this conversation held for those gates when they were read.
     readonly releases: CredentialGrants;
-    // What the people this conversation works for may spend; outside it, nothing is mounted and nothing is released.
+    // What everything this conversation acts for may spend, the role it wears included; outside it, nothing is
+    // mounted and nothing is released.
     readonly reach: ConversationReach;
-    // The most its tools may be, from the same principals; the premise caps the persona with it (turn-premise.ts).
+    // The same without the role: what the people and services it acts for allow whatever it wears. What lies between
+    // the two is what switching it to another role could open (needs/kinds/grant-need.ts).
+    readonly accessReach: ConversationReach;
+    // The most its tools may be, from the same chain; the premise caps the role with it (turn-premise.ts).
     readonly ceiling: ToolCeiling | undefined;
+    // The same without the role.
+    readonly accessCeiling: ToolCeiling | undefined;
     // The card's own PROMPT.md, read only for a card whose prompt mode is `custom`.
-    readonly personaPrompt: string | undefined;
+    readonly rolePrompt: string | undefined;
     // The owner's standing instructions, from the root down to the start folder.
     readonly memoryNote: string | undefined;
     // Read only when the map is due, so present only on a turn that sends it.
@@ -119,15 +125,15 @@ const manifests = (
     // session carried are not in this one, so they ride again.
     const homeFresh = entry?.identity.home === true && context.base.spec.sessionId === undefined;
     return Promise.all([
-        // What the owner installed, not the persona-filtered record, which answers what a runtime can do instead.
+        // What the owner installed, not the role-filtered record, which answers what a runtime can do instead.
         services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
         // Of the main checkout, which an isolated worktree only mounts; not for a runtime with its own deps server or a resumed session.
         capabilities.mcp === "full" || context.base.spec.sessionId !== undefined
             ? Promise.resolve([])
             : services.perf.track("turn.plan.deps", {}, () => services.dependencies.status()),
         // Unconditionally: an unattended wake naming nobody must still resolve to "no accounts".
-        services.perf.track("turn.plan.personas", {}, () => services.personas.list()),
-        // Both halves of the turn's fence, the conversation's and its persona's, resolve through this.
+        services.perf.track("turn.plan.roles", {}, () => services.roles.list()),
+        // Both halves of the turn's fence, the conversation's and its role's, resolve through this.
         services.perf.track("turn.plan.areas", {}, () => services.areas.list()),
         // The skills the runtime's loader does not read (turn-skills.ts), with paths as the agent sees them, whenever its
         // session holds no earlier note of them.
@@ -136,7 +142,7 @@ const manifests = (
                   turnSkillCatalog(
                       capabilities.skillDiscovery,
                       { localCwd: context.localCwd, effectiveCwd: context.effectiveCwd, builtIn: services.config.builtInSkillsDir },
-                      await services.personas.list(),
+                      await services.roles.list(),
                   ),
               )
             : Promise.resolve(undefined),
@@ -248,10 +254,15 @@ const accountRouteOf = async (services: TurnFactsDeps, input: RoutedTurn, entry:
 
 // Who a turn acts for before its conversation has recorded it: the person asking, the service it runs as. Begin records
 // both, and planning must not lean on its order.
-const principalsOfTurn = (input: RoutedTurn): [string | undefined, readonly string[], readonly string[]] => [
+// `withRole` false asks what the people and services alone allow, whatever role the turn wears.
+const principalsOfTurn = (
+    input: RoutedTurn,
+    withRole = true,
+): [string | undefined, readonly string[], readonly string[], { readonly id: string | undefined }] => [
     input.conversationId,
     input.owner === undefined ? [] : [input.owner.email],
     input.runAs === undefined ? [] : [input.runAs],
+    { id: withRole ? input.actsAs : undefined },
 ];
 
 // The route a turn takes once the people it works for have their say over the account (account-reach.ts): asked after
@@ -304,7 +315,8 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "logger"
     | "resources"
     | "perf"
-    | "personas"
+    | "roles"
+    | "accessProfiles"
     | "privacyShield"
     | "sandboxSettings"
     | "workspace"
@@ -333,7 +345,7 @@ const privacyRefusalOf = (services: Pick<Services, "privacyShield" | "perf">, ru
     );
 
 export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn, context: TurnContext): Promise<TurnFacts> => {
-    // First, so a held turn costs no settings read, capability list, dependency probe or persona load.
+    // First, so a held turn costs no settings read, capability list, dependency probe or role load.
     // Work nobody is waiting on is held here until there is room; a child the budget already admitted is not judged again.
     const admission = await services.resources.admit({
         workload: "agentRuntime",
@@ -356,7 +368,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     ]);
     const declared = windowOf(served);
     const helperOnly = served?.row.helperOnly;
-    const [installed, setup, personas, areas, skillCatalog, contextNote, repoChecks, fresh, homeNote] = await manifests(
+    const [installed, setup, roles, areas, skillCatalog, contextNote, repoChecks, fresh, homeNote] = await manifests(
         services,
         input,
         context,
@@ -365,21 +377,22 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     );
     // The stored releases are in before they are copied, so a yes from before a restart reaches this turn. The reach
     // names this turn's person beside the conversation's own: begin records them, and this must not lean on its order.
-    const [gates, accountRoute, reach, ceiling] = await Promise.all([
+    const [gates, accountRoute, reach, accessReach, ceiling, accessCeiling, profiles] = await Promise.all([
         gatesOf(services),
         reachedRouteOf(services, input, entry, installed),
         services.credentialReach(...principalsOfTurn(input)),
+        services.credentialReach(...principalsOfTurn(input, false)),
         services.toolCeiling(...principalsOfTurn(input)),
+        services.toolCeiling(...principalsOfTurn(input, false)),
+        services.accessProfiles.list(),
         services.credentialGrants.ready,
     ]);
-    // A conversation's own grants (personas/conversation-grants.ts) widen its persona from the turn after they are given.
-    const grant = input.conversationId === undefined ? undefined : await services.conversationGrants.of(input.conversationId);
-    const premise = premiseOf({ entry, settings, personas, areas, grant, ceiling }, input, runtime);
+    const premise = premiseOf({ entry, settings, roles, areas, profiles, ceiling }, input, runtime);
     // What checks the work, on the turns that owe it to a card that did not drop it (turn-premise.ts).
     const landingChecksNote = premise.send.landingChecks ? LANDING_CHECKS_NOTE : undefined;
-    const card = premise.persona.persona;
+    const card = premise.role.role;
     // Only a card that asked for its own prompt is read, so an ordinary turn pays nothing for it.
-    const personaPrompt = card?.systemPromptMode === "custom" ? await readPersonaPrompt(services.workspace.root, card.id) : undefined;
+    const rolePrompt = card?.systemPromptMode === "custom" ? await readRolePrompt(services.workspace.root, card.id) : undefined;
     return {
         root: services.workspace.root,
         entry,
@@ -391,9 +404,9 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         ...opt("privacyRefusal", privacyRefusal),
         installed,
         setup,
-        personas,
+        roles,
         areas,
-        grant,
+        profiles,
         skillCatalog,
         contextNote,
         ...opt("fresh", fresh),
@@ -401,8 +414,10 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         gates,
         releases: releasesOf(services.credentialGrants, gates, input.conversationId),
         reach,
+        accessReach,
         ceiling,
-        personaPrompt,
+        accessCeiling,
+        rolePrompt,
         landingChecksNote,
         ...treeReads(context, premise),
         sessionStore: services.agentWorktrees.sessionStore(entry),

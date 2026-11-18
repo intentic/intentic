@@ -2,7 +2,8 @@ import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
-import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { type Rule, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { MemoryReading } from "@intentic/constants/memory-room";
@@ -36,16 +37,18 @@ const FACTS: AdmittedTurnFacts = {
     declared: undefined,
     installed: [],
     setup: [],
-    personas: [],
+    roles: [],
     areas: [],
-    grant: undefined,
+    profiles: [],
     skillCatalog: undefined,
     contextNote: undefined,
     gates: [],
     releases: createCredentialGrants(),
     reach: REACH_ALL,
+    accessReach: REACH_ALL,
     ceiling: undefined,
-    personaPrompt: undefined,
+    accessCeiling: undefined,
+    rolePrompt: undefined,
     memoryNote: undefined,
     mapNote: undefined,
     landingChecksNote: undefined,
@@ -131,7 +134,7 @@ const NPMJS: Capability = { id: "npmjs", kind: "browser", config: { platform: "n
 test("a turn acting as a card this workspace lacks reaches no account and no tool, and the log names the card", () => {
     const decision = decided({ ...FACTS, installed: [NPMJS] }, turn({ actsAs: "ghost" }));
 
-    expect(decision.warnings).toEqual([{ fields: { actsAs: "ghost" }, message: "persona: no such card, this turn reaches no account and no tools" }]);
+    expect(decision.warnings).toEqual([{ fields: { actsAs: "ghost" }, message: "role: no such card, this turn reaches no account and no tools" }]);
     expect(decision.granted).toEqual([]);
     expect(decision.context.base.policy.disallowedTools).toEqual([
         "Read",
@@ -151,16 +154,16 @@ test("a turn acting as a card this workspace lacks reaches no account and no too
         "Workflow",
         "Skill(npmjs)",
     ]);
-    expect(decision.context.persona?.reason).toBe("unknown-persona");
+    expect(decision.context.role?.reason).toBe("unknown-role");
 });
 
 test.each([
     ["no card named", undefined],
     ["a card the workspace holds", "writer"],
 ] as const)("%s owes the log nothing", (_case, actsAs) => {
-    const writer: Persona = { id: "writer", capabilities: ["npmjs"], powers: PersonaPowersSchema.parse({}) };
+    const writer: Role = { id: "writer", capabilities: ["npmjs"] };
 
-    const decision = decided({ ...FACTS, installed: [NPMJS], personas: [writer] }, turn({ actsAs }));
+    const decision = decided({ ...FACTS, installed: [NPMJS], roles: [writer] }, turn({ actsAs }));
 
     expect(decision.warnings).toEqual([]);
     expect(decision.granted).toEqual([NPMJS]);
@@ -221,7 +224,7 @@ const MAP_ON = SandboxSettingsSchema.parse({ workspaceMap: true, ...TOOLS_UNMEAS
 const MAP_MEASURED = SandboxSettingsSchema.parse({ workspaceMap: true, workspaceMapHoldout: 0.5, ...TOOLS_UNMEASURED });
 const MAP_TREATED = conversationIn("workspace-map-or-none", true);
 const MAP_CONTROL = conversationIn("workspace-map-or-none", false);
-const LEAN: Persona = { id: "lean", capabilities: [], briefing: { omit: ["map"] } };
+const LEAN: Role = { id: "lean", capabilities: [], briefing: { omit: ["map"] } };
 // A conversation cut from another, on its first turn.
 const FORK = { conversationId: "parent", keep: 2, files: "now" } as const;
 
@@ -288,7 +291,7 @@ test.each([
     const entry =
         turns === undefined ? undefined : turns === "spawned" ? conversationAfter(0, { identity: { startedBy: "agent:parent" } }) : conversationAfter(turns);
 
-    const decision = decided({ ...FACTS, settings, entry, personas: [LEAN], mapNote: MAP }, turn(input));
+    const decision = decided({ ...FACTS, settings, entry, roles: [LEAN], mapNote: MAP }, turn(input));
 
     expect(titles(decision).includes(WORKSPACE_MAP_NOTE_TITLE)).toBe(sent);
     expect(decision.experiments).toEqual(experiments);
@@ -299,7 +302,7 @@ test.each([
 
 // The note as gatherTurnFacts reads it for a turn that owes it, with the main tree passing.
 const LANDING_NOTE = LANDING_CHECKS_NOTE;
-const QUIET: Persona = { id: "quiet", capabilities: [], briefing: { omit: ["checks"] } };
+const QUIET: Role = { id: "quiet", capabilities: [], briefing: { omit: ["checks"] } };
 const IN_WORKTREE: TurnContext = { ...context, localCwd: `${ROOT}-worktree`, effectiveCwd: `${ROOT}-worktree` };
 
 test.each([
@@ -331,7 +334,7 @@ test("a turn whose facts carry no checks note is told nothing about checks, what
 });
 
 test("a card that drops the checks note never shows it, even where the facts carry one", () => {
-    const decision = decided({ ...FACTS, personas: [QUIET], landingChecksNote: LANDING_NOTE }, turn({ actsAs: "quiet", conversationId: "c-quiet" }));
+    const decision = decided({ ...FACTS, roles: [QUIET], landingChecksNote: LANDING_NOTE }, turn({ actsAs: "quiet", conversationId: "c-quiet" }));
 
     expect(titles(decision)).not.toContain(LANDING_CHECKS_NOTE_TITLE);
 });
@@ -479,22 +482,23 @@ test("a turn with no conversation is in no experiment, and still stamps what its
     expect(decided(MEASURED_FACTS).experiments).toEqual({ mapChars: MAP.length });
 });
 
-// the spawn door: the delegate shelf and full agency, on a conversation with a supervisor handed down
+// the spawn door: the delegate shelf and full agency, on a conversation with a supervisor handed down. A card's shelves
+// come from the ceiling its access holds it to (an access profile listing it, resolved upstream into `ceiling`).
 
 test.each([
     ["an open turn in a conversation with a supervisor", undefined, withChildren, "c-spawn", true],
     ["no supervisor handed down", undefined, context, "c-spawn", false],
     ["no conversation to arm", undefined, withChildren, undefined, false],
-    ["a card without the delegate shelf", { delegate: false }, withChildren, "c-spawn", false],
-    ["a card without a shell", { shell: false }, withChildren, "c-spawn", false],
-    ["a card that may only read", { files: "read" }, withChildren, "c-spawn", false],
-    ["a card with every shelf", {}, withChildren, "c-spawn", true],
-] as const)("the spawn door for %s", (_case, powers, turnContext, conversationId, spawn) => {
-    const card: Persona = { id: "card", capabilities: [], powers: PersonaPowersSchema.parse(powers ?? {}) };
+    ["a card held without the delegate shelf", { delegate: false }, withChildren, "c-spawn", false],
+    ["a card held without a shell", { shell: false }, withChildren, "c-spawn", false],
+    ["a card held to reading", { files: "read" }, withChildren, "c-spawn", false],
+    ["a card held to nothing", {}, withChildren, "c-spawn", true],
+] as const)("the spawn door for %s", (_case, held: ToolCeiling | undefined, turnContext, conversationId, spawn) => {
+    const card: Role = { id: "card", capabilities: [] };
 
     const decision = decided(
-        { ...FACTS, personas: [card] },
-        turn({ actsAs: powers === undefined ? undefined : "card", conversationId }),
+        { ...FACTS, roles: [card], ceiling: held },
+        turn({ actsAs: held === undefined ? undefined : "card", conversationId }),
         turnContext,
     );
 
@@ -526,13 +530,13 @@ test("the spawn teaching goes only to a loop the daemon's tools cannot reach, an
     expect(spawnNoteFor(true, { capabilities: withMcp("full"), conversationTurns: 0 })).toBeUndefined();
 });
 
-// 2026-10-25: a persona's limits bind every runtime that checks each call; one that cannot is refused, as a tool list is.
+// 2026-10-25: a role's limits bind every runtime that checks each call; one that cannot is refused, as a tool list is.
 test.each([
     ["Claude Code checks every call", "claude", "native", true],
     ["an ACP agent cannot", "devin", "native", false],
-] as const)("a persona with limits: %s", (_case, agent, harness, runs) => {
-    const reader: Persona = { id: "reader", capabilities: [], powers: PersonaPowersSchema.parse({ files: "read", shell: false }) };
-    const decision = decideTurn({ ...FACTS, personas: [reader] }, turn({ actsAs: "reader", agent, harness }), context);
+] as const)("a role with limits: %s", (_case, agent, harness, runs) => {
+    const reader: Role = { id: "reader", capabilities: [] };
+    const decision = decideTurn({ ...FACTS, roles: [reader], ceiling: { files: "read", shell: false } }, turn({ actsAs: "reader", agent, harness }), context);
     expect(decision.ok).toBe(runs);
     if (!decision.ok) {
         expect(decision.code).toBe("tools-unenforced");

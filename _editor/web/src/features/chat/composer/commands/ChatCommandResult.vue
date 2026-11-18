@@ -3,7 +3,7 @@ import { formatTokens, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { here, page } from "../../../../lib/routes/links";
 import { contextPct } from "../../../../models/agent-status/agentStatus-meta";
 import { commandResultOf } from "../../../../models/conversations/commands/commandResult";
@@ -24,7 +24,7 @@ import ChatTodoList from "../../transcript/ChatTodoList.vue";
 const t = useT();
 const view = usePaneView();
 const { conversation, provider, account, model, contextUsage, mode, messages, availableCommands } = view;
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 const held = computed(() => commandResultOf(conversation.value));
 const result = computed(() => held.value.value);

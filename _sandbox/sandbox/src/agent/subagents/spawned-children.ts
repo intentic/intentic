@@ -38,7 +38,7 @@ const ChildSpecSchema = z.object({
     result: z.object({ schema: z.record(z.string(), z.json()) }).optional(),
     // The workflow run it works for (script-runs.ts), whose endings it reads.
     run: z.object({ id: z.string() }).optional(),
-    // Its parent's persona, which every later turn of it wears too (child-spec.ts wearingParent).
+    // Its parent's role, which every later turn of it wears too (child-spec.ts wearingParent).
     actsAs: z.string().optional(),
 });
 type ChildSpecOnFile = z.infer<typeof ChildSpecSchema>;

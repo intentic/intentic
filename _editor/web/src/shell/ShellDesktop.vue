@@ -12,7 +12,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRouter } from "vue-router";
 import { askForAttention } from "../models/fleet/board/attentionOutside";
-import { useRole } from "../client/sandbox/useRole";
+import { useTier } from "../client/sandbox/useTier";
 import { useHeldDoor } from "../components/heldPlace";
 import { useTerminalPanel } from "../models/terminal/useTerminalPanel";
 import { CARD_METRICS_KEY, LIVE_METRICS_KEY, useLiveMetrics } from "../models/sandbox/liveMetrics";
@@ -90,7 +90,7 @@ const tileTip = (tile: SectionTile, extra?: string): TooltipValue => {
 
 const { panels } = usePanels();
 // A guest has no More door and no + (see the rail's foot below).
-const { isGuest } = useRole();
+const { isGuest } = useTier();
 const layout = useLayout();
 // When chat floats, this column collapses everywhere else; the panel itself mounts above the router.
 const { floats: chatFloats } = useChatFloating();

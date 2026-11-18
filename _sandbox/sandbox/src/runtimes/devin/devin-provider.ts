@@ -21,7 +21,7 @@ import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
-import { turnPersona } from "../../personas/personas.js";
+import { turnRole } from "../../roles/roles.js";
 import type { AcpConnections } from "../acp/acp-connection.js";
 import { type DaemonServersDeps, daemonServersFor } from "../daemon-tools/daemon-servers.js";
 import { type DevinAccountDeps, devinAccountDoor } from "./accounts/devin-accounts.js";
@@ -142,15 +142,15 @@ export const planDevinTurn = async (
     // share the conversation's bearer.
     const mounted = await turnToolsOf(services, granted, {
         conversationId: input.conversationId,
-        anonymousBrowser: context.persona?.powers.browser ?? true,
-        shell: context.persona?.powers.shell ?? true,
-        extensions: context.persona?.powers.extensions,
+        anonymousBrowser: context.role?.powers.browser ?? true,
+        shell: context.role?.powers.shell ?? true,
+        extensions: context.role?.powers.extensions,
         warmSession: true,
     });
     // The daemon's own servers on the same lease, as the ACP floor mounts them (acp-adapter.ts).
-    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    const role = context.role ?? turnRole({ roles: [], actsAs: undefined, unattended: false });
     const settings = context.settings ?? (await services.sandboxSettings.get());
-    const daemon = daemonServersFor(services, { input, context, persona, granted, settings, mounted, gate: false });
+    const daemon = daemonServersFor(services, { input, context, role, granted, settings, mounted, gate: false });
     const tools = [...mounted.tools, ...daemon.tools];
     return armPlan(
         releasingMounts(

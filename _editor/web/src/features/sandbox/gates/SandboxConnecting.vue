@@ -44,7 +44,7 @@ const known = computed(() => {
         sandboxName: box?.name,
         // A machine the platform started for this sandbox, which earns the gate the right to name a cause.
         hostedMachine: (box?.hosted ?? null) !== null,
-        owner: box?.role === `owner`,
+        owner: box?.tier === `owner`,
         // The machine that deleted this sandbox's container reported it on the way out; nothing else can establish this.
         removed: (box?.removedAt ?? null) !== null,
         removedBy: box?.removedBy ?? null,

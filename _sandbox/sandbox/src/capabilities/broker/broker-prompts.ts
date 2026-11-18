@@ -1,12 +1,12 @@
 import { type CardDeps, cardRun, type LiveCard, raiseRequest } from "../../guard/card-offers.js";
 import { type HeldAnswer, type HoldDeps, createHeldAsks } from "../../guard/held-asks.js";
 import { wakeWords } from "../../guard/held-cards.js";
-import type { ConversationGrants } from "../../personas/conversation-grants.js";
+import type { ConversationGrants } from "../../roles/conversation-grants.js";
 import type { GatewayAnswer, RuleAsk, RulePrompts } from "./broker-gateway.js";
 
 // The person behind a card's `ask` rules: a permission card in the conversation the request's address was minted for,
 // and the "allow requests like this in this conversation" it can leave behind. A pass is a person's yes, so it is kept
-// as every other one is (personas/conversation-grants.ts `rules`): it survives a restart, it is listed on Needs you →
+// as every other one is (roles/conversation-grants.ts `rules`): it survives a restart, it is listed on Needs you →
 // What you have allowed, and taking it back there asks again from the next request. 2026-10-12: passes lived in a Set
 // for the daemon's life, so a restart dropped a yes the owner could not see or take back; rejected for that.
 //

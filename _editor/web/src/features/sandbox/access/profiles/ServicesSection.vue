@@ -9,7 +9,7 @@ import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { idFromName } from "../../../../lib/idFromName";
 import ServicesExplainer from "./ServicesExplainer.vue";
 import { useServices } from "./useServices";
-import { useAccessProfiles } from "./useAccessProfiles";
+import { useAccessProfiles } from "../../../../models/sandbox/access/useAccessProfiles";
 const t = useT();
 const { available, loaded, services, save, remove } = useServices();
 const { available: profilesAvailable, profiles } = useAccessProfiles();

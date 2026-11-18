@@ -28,7 +28,7 @@ export const automationsContract = {
             description: "Every automation with its recent runs, what its check saw last, and when it fires next.",
         })
         .output(AutomationsListSchema),
-    // A source only, never a guard command: a command run here would carry whichever persona's credentials the caller
+    // A source only, never a guard command: a command run here would carry whichever role's credentials the caller
     // named, and the agent can run its own command in its own shell.
     check: procedure
         .meta({ agent: true })

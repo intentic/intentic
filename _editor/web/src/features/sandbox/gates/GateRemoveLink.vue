@@ -12,7 +12,7 @@ import { askRemoveSandbox } from "../../../models/sandbox/removeSandbox";
 
 const t = useT();
 const { active } = useSandbox();
-const owner = computed(() => active.value?.role === `owner`);
+const owner = computed(() => active.value?.tier === `owner`);
 
 const ask = (): void => {
     if (active.value !== undefined) {

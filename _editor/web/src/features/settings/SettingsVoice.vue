@@ -4,7 +4,7 @@ import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { useWakeListener } from "../../models/voice/useWakeListener";
 import { wakeStatus } from "../../models/voice/wakeStatus";
 import SettingsVoiceMic from "./SettingsVoiceMic.vue";
@@ -18,7 +18,7 @@ import { here, page } from "../../lib/routes/links";
 const t = useT();
 
 const listener = useWakeListener();
-const { canShip } = useRole();
+const { canShip } = useTier();
 const now = useNow(
     computed(() => listener.pausedUntil.value !== undefined),
     30_000,

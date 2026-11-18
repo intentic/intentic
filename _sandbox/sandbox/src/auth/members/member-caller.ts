@@ -18,14 +18,14 @@ export const memberCaller = (member: Member): Caller => {
     const areas = access.see === undefined ? {} : { areas: access.see };
     const assistants = member.assistants === undefined ? {} : { assistants: member.assistants };
     const manages = access.manages === undefined ? {} : { manages: access.manages };
-    const caller: Caller = { email: member.email, role: tierOf(access), agents: access.agents, edits: access.edit, ...areas, ...assistants, ...manages };
+    const caller: Caller = { email: member.email, tier: tierOf(access), agents: access.agents, edits: access.edit, ...areas, ...assistants, ...manages };
     return access.lands === true ? { ...caller, lands: true } : caller;
 };
 
 /** The person behind an address as the roster admits them now: the bound owner, a member's row, or nobody. */
 const rosterCaller = (owner: string | undefined, members: readonly Member[], email: string): Caller | undefined => {
     if (owner !== undefined && sameEmail(owner, email)) {
-        return { email: owner, role: "owner" };
+        return { email: owner, tier: "owner" };
     }
     const member = members.find((row) => sameEmail(row.email, email));
     return member === undefined ? undefined : memberCaller(member);

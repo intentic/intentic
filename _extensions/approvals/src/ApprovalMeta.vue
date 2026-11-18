@@ -8,7 +8,7 @@ const { name, target, actsAs, runAs, note } = defineProps<{
     /** The platform's display name, or "Action": capitalized here, since an unknown platform arrives as its bare id. */
     name: string;
     target?: string;
-    /* The metadata identifies the persona acting on the item. */
+    /* The metadata identifies the role acting on the item. */
     actsAs?: string;
     runAs?: string;
     /** One trailing fact the section cares about ("proposed 3h ago"). */

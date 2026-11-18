@@ -46,15 +46,15 @@ const mounted = (id: string, refusing: { value: boolean }) => {
 };
 
 test(`a refusal held only by files the Sandbox pages wrote names those pages, as the review heading does`, () => {
-    reported(`a1`, held(`${STATE_DIR}/config/personas.json`, `${STATE_DIR}/config/settings.json`));
+    reported(`a1`, held(`${STATE_DIR}/config/roles.json`, `${STATE_DIR}/config/settings.json`));
 
     const card = mounted(`a1`, ref(true));
 
-    expect(card.pages()).toBe(`Personas, Agent`);
+    expect(card.pages()).toBe(`Roles, Agent`);
 });
 
 test(`one file of the owner's own among them names no page`, () => {
-    reported(`a1`, held(`${STATE_DIR}/config/personas.json`, `src/config.ts`));
+    reported(`a1`, held(`${STATE_DIR}/config/roles.json`, `src/config.ts`));
 
     expect(mounted(`a1`, ref(true)).pages()).toBeUndefined();
     expect(settingsPagesOf(held(`src/config.ts`))).toBeUndefined();

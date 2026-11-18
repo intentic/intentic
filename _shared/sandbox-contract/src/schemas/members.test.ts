@@ -5,16 +5,16 @@ import { accessRefusal, holdsRight, landsHere, memberAccess, peopleChangeRefusal
 
 describe(`memberAccess`, () => {
     it(`reads a row written before agents and edit as its role meant`, () => {
-        expect(memberAccess({ role: `guest`, areas: [`support`] })).toEqual({ manage: false, agents: `chat`, see: [`support`], edit: `none` });
-        expect(memberAccess({ role: `viewer` })).toEqual({ manage: false, agents: `off`, see: undefined, edit: `none` });
-        expect(memberAccess({ role: `collaborator`, areas: [`web`] })).toEqual({ manage: false, agents: `run`, see: [`web`], edit: `none` });
-        expect(memberAccess({ role: `writer`, areas: [`web`] })).toEqual({ manage: false, agents: `run`, see: [`web`], edit: [`web`] });
-        expect(memberAccess({ role: `maintainer`, areas: [`web`] })).toEqual({ manage: true, agents: `run`, see: undefined, edit: `all` });
+        expect(memberAccess({ tier: `guest`, areas: [`support`] })).toEqual({ manage: false, agents: `chat`, see: [`support`], edit: `none` });
+        expect(memberAccess({ tier: `viewer` })).toEqual({ manage: false, agents: `off`, see: undefined, edit: `none` });
+        expect(memberAccess({ tier: `collaborator`, areas: [`web`] })).toEqual({ manage: false, agents: `run`, see: [`web`], edit: `none` });
+        expect(memberAccess({ tier: `writer`, areas: [`web`] })).toEqual({ manage: false, agents: `run`, see: [`web`], edit: [`web`] });
+        expect(memberAccess({ tier: `maintainer`, areas: [`web`] })).toEqual({ manage: true, agents: `run`, see: undefined, edit: `all` });
     });
 
     it(`takes what a row says when it says it, and never lets a chat edit`, () => {
-        expect(memberAccess({ role: `writer`, agents: `off`, edit: [`web`] })).toEqual({ manage: false, agents: `off`, see: undefined, edit: [`web`] });
-        expect(memberAccess({ role: `guest`, agents: `chat`, areas: [`support`], edit: `all` }).edit).toBe(`none`);
+        expect(memberAccess({ tier: `writer`, agents: `off`, edit: [`web`] })).toEqual({ manage: false, agents: `off`, see: undefined, edit: [`web`] });
+        expect(memberAccess({ tier: `guest`, agents: `chat`, areas: [`support`], edit: `all` }).edit).toBe(`none`);
     });
 });
 
@@ -49,8 +49,8 @@ describe(`accessRefusal`, () => {
 // Home only: a guest whose one conversation is its home, and whose home lands by itself exactly when they may land it.
 describe(`home-only access`, () => {
     it(`is a guest that edits nothing and needs no area, carrying its answer to landing`, () => {
-        expect(memberAccess({ role: `guest`, agents: `home` })).toEqual({ manage: false, agents: `home`, see: undefined, edit: `none` });
-        expect(memberAccess({ role: `guest`, agents: `home`, edit: `all`, lands: true })).toEqual({
+        expect(memberAccess({ tier: `guest`, agents: `home` })).toEqual({ manage: false, agents: `home`, see: undefined, edit: `none` });
+        expect(memberAccess({ tier: `guest`, agents: `home`, edit: `all`, lands: true })).toEqual({
             manage: false,
             agents: `home`,
             see: undefined,
@@ -76,18 +76,18 @@ describe(`home-only access`, () => {
 
 describe(`rights`, () => {
     test(`the owner and Full access run every part; anyone else what their row names`, () => {
-        expect(holdsRight({ role: `owner` }, `people`)).toBe(true);
-        expect(holdsRight({ role: `maintainer` }, `secrets`)).toBe(true);
-        expect(holdsRight({ role: `collaborator`, manages: [`people`] }, `people`)).toBe(true);
-        expect(holdsRight({ role: `collaborator`, manages: [`people`] }, `secrets`)).toBe(false);
-        expect(holdsRight({ role: `writer` }, `privacy`)).toBe(false);
+        expect(holdsRight({ tier: `owner` }, `people`)).toBe(true);
+        expect(holdsRight({ tier: `maintainer` }, `secrets`)).toBe(true);
+        expect(holdsRight({ tier: `collaborator`, manages: [`people`] }, `people`)).toBe(true);
+        expect(holdsRight({ tier: `collaborator`, manages: [`people`] }, `secrets`)).toBe(false);
+        expect(holdsRight({ tier: `writer` }, `privacy`)).toBe(false);
     });
 
     test(`a row's rights ride on its access, and never make a tier`, () => {
-        const access = memberAccess({ role: `collaborator`, agents: `run`, manages: [`people`, `ownAccounts`] });
+        const access = memberAccess({ tier: `collaborator`, agents: `run`, manages: [`people`, `ownAccounts`] });
         expect(access.manages).toEqual([`people`, `ownAccounts`]);
         expect(tierOf(access)).toBe(`collaborator`);
-        expect(memberAccess({ role: `collaborator`, agents: `run`, manages: [] }).manages).toBeUndefined();
+        expect(memberAccess({ tier: `collaborator`, agents: `run`, manages: [] }).manages).toBeUndefined();
     });
 
     test(`someone who only chats or works through their home holds none`, () => {
@@ -98,30 +98,30 @@ describe(`rights`, () => {
 });
 
 describe(`peopleChangeRefusal`, () => {
-    const lead = { email: `lead@example.com`, role: `collaborator` as const, manages: [`people` as const, `ownAccounts` as const] };
+    const lead = { email: `lead@example.com`, tier: `collaborator` as const, manages: [`people` as const, `ownAccounts` as const] };
 
     test(`the owner and Full access change anyone, themselves included`, () => {
-        expect(peopleChangeRefusal({ email: `o@example.com`, role: `owner` }, { email: `x@example.com`, after: { role: `maintainer` } })).toBeUndefined();
-        const full = { email: `m@example.com`, role: `maintainer` as const };
-        expect(peopleChangeRefusal(full, { email: `m@example.com`, before: { role: `maintainer` }, after: { role: `collaborator` } })).toBeUndefined();
-        expect(peopleChangeRefusal(full, { email: `x@example.com`, before: { role: `maintainer` } })).toBeUndefined();
+        expect(peopleChangeRefusal({ email: `o@example.com`, tier: `owner` }, { email: `x@example.com`, after: { tier: `maintainer` } })).toBeUndefined();
+        const full = { email: `m@example.com`, tier: `maintainer` as const };
+        expect(peopleChangeRefusal(full, { email: `m@example.com`, before: { tier: `maintainer` }, after: { tier: `collaborator` } })).toBeUndefined();
+        expect(peopleChangeRefusal(full, { email: `x@example.com`, before: { tier: `maintainer` } })).toBeUndefined();
     });
 
     test(`People & access changes anyone below Full access but its holder`, () => {
-        expect(peopleChangeRefusal(lead, { email: `new@example.com`, after: { role: `writer` } })).toBeUndefined();
-        expect(peopleChangeRefusal(lead, { email: `x@example.com`, before: { role: `viewer` } })).toBeUndefined();
-        expect(peopleChangeRefusal(lead, { email: `LEAD@example.com`, before: { role: `collaborator` }, after: { role: `writer` } })).toContain(`your own access`);
-        expect(peopleChangeRefusal(lead, { email: `x@example.com`, after: { role: `maintainer` } })).toContain(`Full access is granted`);
-        expect(peopleChangeRefusal(lead, { email: `x@example.com`, before: { role: `maintainer` } })).toContain(`Full access person`);
-        expect(peopleChangeRefusal({ ...lead, manages: [] }, { email: `x@example.com`, after: { role: `viewer` } })).toContain(`People & access`);
+        expect(peopleChangeRefusal(lead, { email: `new@example.com`, after: { tier: `writer` } })).toBeUndefined();
+        expect(peopleChangeRefusal(lead, { email: `x@example.com`, before: { tier: `viewer` } })).toBeUndefined();
+        expect(peopleChangeRefusal(lead, { email: `LEAD@example.com`, before: { tier: `collaborator` }, after: { tier: `writer` } })).toContain(`your own access`);
+        expect(peopleChangeRefusal(lead, { email: `x@example.com`, after: { tier: `maintainer` } })).toContain(`Full access is granted`);
+        expect(peopleChangeRefusal(lead, { email: `x@example.com`, before: { tier: `maintainer` } })).toContain(`Full access person`);
+        expect(peopleChangeRefusal({ ...lead, manages: [] }, { email: `x@example.com`, after: { tier: `viewer` } })).toContain(`People & access`);
     });
 
     test(`it hands out only the rights its holder has, and leaves the ones already held alone`, () => {
-        expect(peopleChangeRefusal(lead, { email: `x@example.com`, after: { role: `viewer`, manages: [`people`, `ownAccounts`] } })).toBeUndefined();
-        expect(peopleChangeRefusal(lead, { email: `x@example.com`, after: { role: `viewer`, manages: [`secrets`] } })).toContain(`secrets`);
+        expect(peopleChangeRefusal(lead, { email: `x@example.com`, after: { tier: `viewer`, manages: [`people`, `ownAccounts`] } })).toBeUndefined();
+        expect(peopleChangeRefusal(lead, { email: `x@example.com`, after: { tier: `viewer`, manages: [`secrets`] } })).toContain(`secrets`);
         expect(
-            peopleChangeRefusal(lead, { email: `x@example.com`, before: { role: `viewer`, manages: [`secrets`] }, after: { role: `writer`, manages: [`secrets`] } }),
+            peopleChangeRefusal(lead, { email: `x@example.com`, before: { tier: `viewer`, manages: [`secrets`] }, after: { tier: `writer`, manages: [`secrets`] } }),
         ).toBeUndefined();
-        expect(peopleChangeRefusal(lead, { email: `x@example.com`, before: { role: `viewer`, manages: [`secrets`] }, after: { role: `writer` } })).toBeUndefined();
+        expect(peopleChangeRefusal(lead, { email: `x@example.com`, before: { tier: `viewer`, manages: [`secrets`] }, after: { tier: `writer` } })).toBeUndefined();
     });
 });

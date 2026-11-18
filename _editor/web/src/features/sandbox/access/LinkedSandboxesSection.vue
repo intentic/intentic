@@ -10,15 +10,15 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { useRoute } from "vue-router";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useMintedTokens } from "../../../workbench/operations/useMintedTokens";
-import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import { useRoles } from "../../../models/sandbox/roles/useRoles";
 import { LINKED_SANDBOXES_ANCHOR } from "../../../models/sandbox/sandboxNav";
 import { inboundLinksChanged } from "../../../models/sandbox/useInboundLinks";
 
 // INBOUND LINKS: the owner's other sandboxes allowed to hand this one tasks. Each link's terms are written here and
-// enforced here: the persona its tasks wear, whether each waits for the owner, how many turns an hour it may start, and
+// enforced here: the role its tasks wear, whether each waits for the owner, how many turns an hour it may start, and
 // whether it may read this sandbox's records (its conversations, logs and diagnostics) without starting a turn, and
 // whether it may operate this sandbox (run commands, read and write files, as the owner's own terminal would). A task
 // that waits is answered on its link's row. Usually minted by the editor while pairing two sandboxes (the other sandbox's
@@ -26,8 +26,8 @@ import { inboundLinksChanged } from "../../../models/sandbox/useInboundLinks";
 
 const t = useT();
 const { daemonUrl, active } = useSandbox();
-const { canShip } = useRole();
-const { personas } = usePersonas();
+const { canShip } = useTier();
+const { roles } = useRoles();
 const { available: servicesAvailable, labelOf: serviceName } = useServices();
 const runAs = ref<string>();
 
@@ -91,19 +91,19 @@ const settle = async (id: string, answer: () => Promise<InboundLinkSummary>, fai
     }
 };
 
-const NO_PERSONA = ``;
-const personaOptions = computed<readonly PickerOption<string>[]>(() => [
-    { value: NO_PERSONA, label: t(`sandbox.linkedSandboxes.noPersona`), hint: t(`sandbox.linkedSandboxes.noPersonaHint`) },
-    ...personas.value.map((persona) => ({ value: persona.id, label: persona.label ?? persona.id })),
+const NO_ROLE = ``;
+const roleOptions = computed<readonly PickerOption<string>[]>(() => [
+    { value: NO_ROLE, label: t(`sandbox.linkedSandboxes.noRole`), hint: t(`sandbox.linkedSandboxes.noRoleHint`) },
+    ...roles.value.map((role) => ({ value: role.id, label: role.label ?? role.id })),
 ]);
-const personaName = (id: string | undefined): string | undefined =>
-    id === undefined ? undefined : (personas.value.find((persona) => persona.id === id)?.label ?? id);
+const roleName = (id: string | undefined): string | undefined =>
+    id === undefined ? undefined : (roles.value.find((role) => role.id === id)?.label ?? id);
 
 const taskTermsLine = (terms: LinkTerms): string =>
     [
         terms.actsAs === undefined
             ? t(`sandbox.linkedSandboxes.wearsNothing`)
-            : t(`sandbox.linkedSandboxes.wears`, { persona: personaName(terms.actsAs) ?? `` }),
+            : t(`sandbox.linkedSandboxes.wears`, { role: roleName(terms.actsAs) ?? `` }),
         ...(servicesAvailable.value ? [t(`sandbox.accessServices.runsAsValue`, { name: terms.runAs === undefined ? t(`sandbox.accessServices.owner`) : serviceName(terms.runAs) })] : []),
         terms.approve ? t(`sandbox.linkedSandboxes.eachWaits`) : t(`sandbox.linkedSandboxes.startsAtOnce`),
         t(`sandbox.linkedSandboxes.perHour`, { count: terms.turnsPerHour }),
@@ -142,13 +142,13 @@ const editing = ref<string>();
 type TermsDraft = { runAs?: string | undefined; actsAs: string; approve: boolean; turnsPerHour: number; records: boolean; operate: boolean };
 const draftOf = (terms: LinkTerms): TermsDraft => ({
     runAs: terms.runAs,
-    actsAs: terms.actsAs ?? NO_PERSONA,
+    actsAs: terms.actsAs ?? NO_ROLE,
     approve: terms.approve,
     turnsPerHour: terms.turnsPerHour,
     records: terms.records,
     operate: terms.operate,
 });
-const draft = ref<TermsDraft>({ actsAs: NO_PERSONA, approve: false, turnsPerHour: 20, records: false, operate: false });
+const draft = ref<TermsDraft>({ actsAs: NO_ROLE, approve: false, turnsPerHour: 20, records: false, operate: false });
 const edit = (link: InboundLinkSummary): void => {
     if (editing.value === link.id) {
         editing.value = undefined;
@@ -168,7 +168,7 @@ const write = async (link: InboundLinkSummary, change: Partial<TermsDraft>): Pro
     }
     // Owner again is a null, which takes the service off; absence would keep the one the link had.
     const input: InboundLinkTermsUpdate = { approve, turnsPerHour, records, operate, runAs: service ?? null };
-    if (actsAs !== NO_PERSONA) {
+    if (actsAs !== NO_ROLE) {
         input.actsAs = actsAs;
     }
     await settle(link.id, () => sandboxRaw(`POST /system/links/{id}`, { params: { id: link.id }, input }), t(`sandbox.linkedSandboxes.couldntSave`));
@@ -193,7 +193,7 @@ const startCreate = (): void => {
     creating.value = true;
 };
 const label = ref(``);
-const actsAs = ref<string | undefined>(NO_PERSONA);
+const actsAs = ref<string | undefined>(NO_ROLE);
 const approve = ref(true);
 const submit = async (): Promise<void> => {
     const named = label.value.trim();
@@ -205,7 +205,7 @@ const submit = async (): Promise<void> => {
     if (runAs.value !== undefined) {
         terms.runAs = runAs.value;
     }
-    if (actsAs.value !== undefined && actsAs.value !== NO_PERSONA) {
+    if (actsAs.value !== undefined && actsAs.value !== NO_ROLE) {
         terms.actsAs = actsAs.value;
     }
     await mint({ label: named, terms });
@@ -249,10 +249,10 @@ const address = computed(() => daemonUrl.value ?? ``);
                         />
                         <Picker
                             v-model="actsAs"
-                            :options="personaOptions"
+                            :options="roleOptions"
                             variant="input"
-                            :aria-label="t(`sandbox.linkedSandboxes.persona`)"
-                            :header="t(`sandbox.linkedSandboxes.persona`)"
+                            :aria-label="t(`sandbox.linkedSandboxes.role`)"
+                            :header="t(`sandbox.linkedSandboxes.role`)"
                             class="ui-field-sm w-44"
                         />
                         <ServicePicker v-model="runAs" />
@@ -341,10 +341,10 @@ const address = computed(() => daemonUrl.value ?? ``);
                         <div class="flex flex-wrap items-center gap-3">
                             <Picker
                                 :model-value="draft.actsAs"
-                                :options="personaOptions"
+                                :options="roleOptions"
                                 variant="input"
-                                :aria-label="t(`sandbox.linkedSandboxes.persona`)"
-                                :header="t(`sandbox.linkedSandboxes.persona`)"
+                                :aria-label="t(`sandbox.linkedSandboxes.role`)"
+                                :header="t(`sandbox.linkedSandboxes.role`)"
                                 class="ui-field-sm w-48"
                                 @update:model-value="write(link, { actsAs: $event })"
                             />

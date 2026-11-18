@@ -94,7 +94,7 @@ const draftSelection = (servingState?: AccountState) => ({
 const draft = { value: { conversationId: `c1`, selection: draftSelection() } };
 jest.mock("../conversations/panel/useChat-reveal", () => ({
     // `actsAs` is on the stub since startAgent pins the draft before summoning it, including to `undefined` when
-    // pressing Anyone un-pins a persona.
+    // pressing Anyone un-pins a role.
     draftConversation: () => ({
         ...draft.value,
         turn: {
@@ -134,7 +134,7 @@ jest.mock("../../client/sandbox/useSandbox", () => ({
 }));
 // The rail's Attention count asks whether the reader runs the sandbox (useAgents-fleet.ts); an owner hears every card.
 jest.mock("../../client/sandbox/access/useAccess", () => ({
-    useAccess: () => ({ known: { value: true }, role: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
+    useAccess: () => ({ known: { value: true }, tier: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
 }));
 jest.mock("../../client/session/sandboxSession", () => ({
     useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }),
@@ -427,21 +427,21 @@ it("still starts an empty one when there is nothing to say", () => {
     expect(chat.enqueued).toEqual([]);
 });
 
-// Under a project, a press naming no persona wears the project's own card (projectPersona.ts), made on the spot when
-// the list lacks it; the prompt goes only once the card exists, or the daemon would answer an unknown persona with an
+// Under a project, a press naming no role wears the project's own card (projectRole.ts), made on the spot when
+// the list lacks it; the prompt goes only once the card exists, or the daemon would answer an unknown role with an
 // ordinary chat.
-it("starts an agent under the open project wearing the project's own persona, made first if missing", async () => {
+it("starts an agent under the open project wearing the project's own role, made first if missing", async () => {
     setProjectScope(`web`);
-    stubDaemon({ [`GET /personas`]: { personas: [], connected: [] }, [`POST /personas`]: { ok: true } });
+    stubDaemon({ [`GET /personas`]: { roles: [], connected: [] }, [`POST /personas`]: { ok: true } });
     startAgent(`Fix the footer.`);
     expect(draft.value.selection.actsAs.value).toBe(`project-web`);
     expect(draft.value.selection.startIn.value).toBe(`web`);
     await waitFor(() => expect(chat.enqueued).toEqual([`Fix the footer.`]));
     const posted = sent.find((request) => request.method === `POST` && request.url === `https://daemon.test/personas`);
-    expect(await posted?.json()).toMatchObject({ id: `project-web`, workspace: { startIn: `web`, folders: [`web`] }, context: { repos: [`web`] } });
+    expect(await posted?.json()).toMatchObject({ id: `project-web`, workspace: { startIn: `web` }, context: { repos: [`web`] } });
 });
 
-it("keeps the persona a press named over the project's own", () => {
+it("keeps the role a press named over the project's own", () => {
     setProjectScope(`web`);
     stubDaemon({});
     startAgent(undefined, `maya-support`);

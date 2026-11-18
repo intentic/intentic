@@ -81,9 +81,9 @@
         "onlyAllowedSitesDaily": "Solo quedan los sitios permitidos y el límite diario.",
         "onlyRepoOptional": "Solo este repo (opcional)",
         "peopleRuleNames": "Nombres de la regla de personas {index}",
-        "persona": "Habla como",
-        "personaAutomationRuns": "Habla como",
-        "personaRuleAnswers": "La regla de persona {index} responde como",
+        "role": "Habla como",
+        "roleAutomationRuns": "Habla como",
+        "roleRuleAnswers": "La regla de rol {index} responde como",
         "pickAtLeastOne": "Elige al menos un día.",
         "pickModel": "Elige un modelo",
         "readGrepGlob": "Read, Grep, Glob",
@@ -108,12 +108,12 @@
         "standard5FieldCron": "Cron estándar de 5 campos: minuto hora día mes día-de-semana.",
         "starter": "Iniciador de {recipeNote}.",
         "staysInSandboxOnly": "Se queda en tu sandbox: al navegador de un visitante solo llega la clave de sitio.",
-        "strangersWritePromptsSaving": "Estas indicaciones las escriben desconocidos, así que guardar añade una recepción de solo lectura a tus personas.",
+        "strangersWritePromptsSaving": "Estas indicaciones las escriben desconocidos, así que guardar añade una recepción de solo lectura a tus roles.",
         "sun": "Dom",
         "then": "Entonces",
         "theyTalkTo": "Habla como",
         "thu": "Jue",
-        "toolNamesCommaSeparated": "Nombres de herramientas, separados por comas. Vacío deja en paz la lista propia de la persona.",
+        "toolNamesCommaSeparated": "Nombres de herramientas, separados por comas. Vacío deja en paz la lista propia del rol.",
         "toolNamesJobMay": "Nombres de herramientas que esta tarea puede llamar",
         "tue": "Mar",
         "turnSettles": "Un turno se asienta",
@@ -136,8 +136,8 @@
         "retired": "retirado",
         "retiredNeverFires": "Ya nada envía esto: la comprobación que se ejecutaba tras cada integración ya no existe, así que esta automatización nunca se dispara. Elige uno de los momentos de arriba, o haz que la despierte una pipeline de CI que falle.",
         "othersCaption": {
-            "allow": "A quien no figure se le responde con la persona de arriba, como hacía esta automatización antes de tener reglas.",
-            "hold": "Quien no figure espera tu aprobación y se ejecuta con la persona de arriba cuando lo autorices.",
+            "allow": "A quien no figure se le responde con el rol de arriba, como hacía esta automatización antes de tener reglas.",
+            "hold": "Quien no figure espera tu aprobación y se ejecuta con el rol de arriba cuando lo autorices.",
             "ignore": "Quien no figure no recibe respuesta. Seguirá apareciendo en «vistos recientemente», para que añadirlo después sea cuestión de un clic."
         },
         "kindCaption": {
@@ -217,7 +217,7 @@
         "aiDisclosure": "Informar a los visitantes de que responde una IA",
         "aiDisclosureText": "Aviso personalizado (opcional)",
         "aiDisclosureDefault": "Las respuestas las escribe un asistente de IA y pueden contener errores.",
-        "personaGoneHint": "Esa persona ya no existe, así que sus ejecuciones no tendrían herramientas ni cuentas. Elige otra."
+        "roleGoneHint": "Ese rol ya no existe, así que sus ejecuciones no tendrían herramientas ni cuentas. Elige otro."
     },
     "automationRow": {
         "alreadyFired": "Ya se disparó",
@@ -295,10 +295,10 @@
         "lastSaw": "Último resultado",
         "lastSawSince": "Último resultado, sin cambios desde {when}",
         "checkedAt": "Comprobado {at}",
-        "personaMissing": "Persona eliminada",
-        "personaMissingNote": "{ids} ya no existe, así que sus ejecuciones no tienen herramientas ni cuentas. Elige otra persona.",
+        "roleMissing": "Rol eliminado",
+        "roleMissingNote": "{ids} ya no existe, así que sus ejecuciones no tienen herramientas ni cuentas. Elige otro rol.",
         "noAccounts": "Sin cuentas",
-        "noAccountsNote": "Sus ejecuciones tienen todas las herramientas, pero ninguna de tus cuentas con sesión iniciada. Elige Acceso completo o una persona si tiene que publicar o navegar como tú."
+        "noAccountsNote": "Sus ejecuciones no llegan a ninguna de tus cuentas con sesión iniciada. Elige Todas las cuentas o un rol si tiene que publicar o navegar como tú."
     },
     "automationsView": {
         "addAutomation": "Añadir una automatización",
@@ -466,7 +466,7 @@
         "failing": "Con fallos",
         "group": "Grupo",
         "groups": "Grupos",
-        "howFiled": "Ordenadas por el grupo que nombra cada una o, si no, por la persona con la que se ejecuta.",
+        "howFiled": "Ordenadas por el grupo que nombra cada una o, si no, por el rol con el que se ejecuta.",
         "on": "Activadas",
         "show": "Mostrar",
         "total": "Total"
@@ -489,15 +489,15 @@
     },
     "automationLabels": {
         "group": "Grupo",
-        "groupHint": "Las automatizaciones de un mismo grupo se listan juntas. En blanco, se ordena por su persona.",
+        "groupHint": "Las automatizaciones de un mismo grupo se listan juntas. En blanco, se ordena por su rol.",
         "groupOptional": "Grupo (opcional)",
         "groupPlaceholder": "Marketing"
     },
-    "builtInPersonas": {
-        "fullAccess": "Acceso completo",
-        "fullAccessNote": "todas las herramientas y todas las cuentas con sesión iniciada",
+    "builtInRoles": {
+        "fullAccess": "Todas las cuentas",
+        "fullAccessNote": "todas las cuentas con sesión iniciada",
         "noAccounts": "Sin cuentas",
-        "noAccountsNote": "todas las herramientas, ninguna cuenta con sesión iniciada"
+        "noAccountsNote": "ninguna cuenta con sesión iniciada"
     },
     "scheduleWords": {
         "daysAt": "Cada {days} a las {times}",
@@ -524,7 +524,7 @@
         "schedule": "Horario",
         "trigger": "Empieza con"
     },
-    "personaProperty": {
+    "roleProperty": {
         "runsAs": "Habla como"
     },
     "modelProperty": {
@@ -552,10 +552,10 @@
     "groupProperty": {
         "byChore": "Una tarea de código",
         "byNothing": "Aún sin grupo",
-        "byPersona": "Por su persona",
+        "byRole": "Por su rol",
         "change": "Cambiar grupo: {now}",
         "group": "Grupo",
-        "hint": "Déjalo en blanco para ordenarla por su persona.",
+        "hint": "Déjalo en blanco para ordenarla por su rol.",
         "placeholder": "Marketing"
     },
     "instructionsSection": {
@@ -579,8 +579,8 @@
     },
     "service": {
         "runsAs": "Se ejecuta como",
-        "owner": "Propietario (limitado solo por su persona)",
-        "authority": "Autoridad: acceso del responsable, limitado por su perfil. Las personas solo lo restringen más.",
+        "owner": "Propietario (limitado solo por su rol)",
+        "authority": "Autoridad: acceso del responsable, limitado por su perfil. Los roles solo lo restringen más.",
         "inherit": "Igual que la automatización",
         "steward": "Responsable: {email}",
         "stewardLimits": "Todo el acceso del responsable",

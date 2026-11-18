@@ -45,7 +45,7 @@ const summary = (id: string): SandboxSummary => ({
     removedBy: null,
     hosted: null,
     token: `token-${id}`,
-    role: `owner`,
+    tier: `owner`,
     providedAddress: false,
     localHostname: null,
 });
@@ -167,7 +167,7 @@ describe(`removing a sandbox from the account`, () => {
     it(`has a member leave through the leave action, and says how the sandbox's own side went`, async () => {
         const sandbox = useSandbox();
         const a = summary(`a`);
-        const shared = { ...summary(`b`), role: `collaborator` as const };
+        const shared = { ...summary(`b`), tier: `collaborator` as const };
         listMock.mockResolvedValue({ sandboxes: [a, shared] });
         await sandbox.refresh();
         leaveSandbox.mockResolvedValue({ grant: `kept`, reason: `offline` });
@@ -195,7 +195,7 @@ describe(`removing a sandbox from the account`, () => {
     it(`puts the row back when the leave fails, and passes the failure on`, async () => {
         const sandbox = useSandbox();
         const a = summary(`a`);
-        const shared = { ...summary(`b`), role: `viewer` as const };
+        const shared = { ...summary(`b`), tier: `viewer` as const };
         listMock.mockResolvedValue({ sandboxes: [a, shared] });
         await sandbox.refresh();
         leaveSandbox.mockRejectedValue(new Error(`platform refused`));

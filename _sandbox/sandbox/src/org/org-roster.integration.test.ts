@@ -27,8 +27,8 @@ const membersOnly = (people: readonly string[], version = 1): OrgPolicy => ({
 
 const roster = async () => {
     const file = fileMembersStore(join(mkdtempSync(join(tmpdir(), "org-roster-")), membersDocument.path));
-    await file.add("clerk@gmina.test", { role: "viewer" });
-    await file.add("leaver@gmina.test", { role: "viewer" });
+    await file.add("clerk@gmina.test", { tier: "viewer" });
+    await file.add("leaver@gmina.test", { tier: "viewer" });
     return file;
 };
 
@@ -101,7 +101,7 @@ test("a grant to someone the organisation does not list is refused, and one to a
     const orgPolicy = await holder(membersOnly(["clerk@gmina.test", "new@gmina.test"]));
     const app = createApp(services({ orgPolicy, members: fencedMembers(file, orgPolicy) }));
     const grant = (email: string) =>
-        app.request("/members", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, role: "viewer" }) });
+        app.request("/members", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, tier: "viewer" }) });
     const outsider = await grant("outsider@example.com");
     expect(outsider.status).toBe(403);
     expect(await outsider.json()).toMatchObject({ reason: "org-members-only", org: "Urząd Gminy" });

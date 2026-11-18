@@ -348,7 +348,7 @@ const delegateRefusal = async (engine: Engine, parent: ChildParent, ask: Delegat
     }
     const standing = engine.deps.standingOf(parent.conversationId);
     if (standing !== undefined && !standing.granted.includes(card.id)) {
-        return `This conversation's turn was not given the "${card.id}" link: its persona or the people it works for leave it out. Do the work here, or say what you left undone.`;
+        return `This conversation's turn was not given the "${card.id}" link: its role or the people it works for leave it out. Do the work here, or say what you left undone.`;
     }
     return undefined;
 };
@@ -422,7 +422,7 @@ const listLinks = async (engine: Engine, conversationId: string, only?: string):
                 // The name the owner knows it by, from pairing; what it calls itself is only its container's name.
                 sandbox: card.config.name ?? hello.value.sandbox,
                 online: true,
-                ...opt("persona", terms.persona),
+                ...opt("role", terms.role),
                 approve: terms.approve,
                 turnsPerHour: terms.turnsPerHour,
                 records: terms.records === true,

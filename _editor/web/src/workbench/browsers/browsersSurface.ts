@@ -9,7 +9,7 @@ import { isPage } from "../../lib/routes/links";
 import { openBeside, sideDocked, type SideInput } from "../side/sideTabs";
 import { handOffToMainWindow } from "../window/mainWindow";
 import { useSandbox } from "../../client/sandbox/useSandbox";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { browsersPath, parseTabKey, sameTab, tabKey, WEB_FRONT, type LiveTab, type PinnedTab } from "./browsersPaths";
 
 // THE BROWSERS VIEW'S OWN STATE: which tabs its strip holds besides the web pages of the window in front, which tab is in
@@ -171,7 +171,7 @@ export const openPreview = (router: Router, targetId?: string): void => {
 // a reader the view is closed to, goes to that page; a popped-out panel hands it to the app's own window. Kept, not a
 // peek: replacing it with the next file looked at would reload the app.
 export const openBrowsersBeside = (router: Router, tab?: LiveTab): void => {
-    const beside = sideDocked.value && !isPage(router.currentRoute.value, `browsers`) && (!useRole().isGuest.value || guestAllowedPath(browsersPath()));
+    const beside = sideDocked.value && !isPage(router.currentRoute.value, `browsers`) && (!useTier().isGuest.value || guestAllowedPath(browsersPath()));
     if (!beside) {
         if (!handOffToMainWindow({ kind: `browsers`, tab: tab === undefined ? undefined : tabKey(tab) })) {
             openBrowsers(router, tab);

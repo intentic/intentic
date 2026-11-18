@@ -19,16 +19,16 @@ import { contextNote, outsideCheckoutNote, withBranchNote } from "./context-note
 // turn's preamble from the same record the route wrote, so the note and the tree can't disagree.
 
 // What the conversation should carry, or undefined for everything. A named-but-missing card is undefined too:
-// turnPersona already denies that turn accounts and tools, so the tree may as well be the whole one.
+// turnRole already denies that turn accounts and tools, so the tree may as well be the whole one.
 export const decideComposition = async (services: Services, input: AgentTurn): Promise<Composition | undefined> => {
     if (input.actsAs === undefined) {
         return undefined;
     }
-    const card = await services.personas.get(input.actsAs);
+    const card = await services.roles.get(input.actsAs);
     if (card?.context === undefined) {
         return undefined;
     }
-    return { persona: card.id, repos: [...card.context.repos] };
+    return { role: card.id, repos: [...card.context.repos] };
 };
 
 // Whether two records name the same repos; bases move (pre-turn rebase) without the composition changing, so this is
@@ -109,7 +109,7 @@ export const ensureComposedWorktree = async (
     if (opening || !sameRepos(recorded, worktree.repos)) {
         const branches = cut?.branches;
         if (branches?.some(({ repo }) => !worktree.repos.some((composed) => composed.repo === repo)) === true) {
-            throw new Error("The selected branch's repository is outside this conversation's checkout. Choose a persona and area that include it before starting from that branch.");
+            throw new Error("The selected branch's repository is outside this conversation's checkout. Choose a role and area that include it before starting from that branch.");
         }
         await services.agents.recordWorktree(conversationId, worktree.repos, composition, cut?.parent, branches);
     }
@@ -120,7 +120,7 @@ export const ensureComposedWorktree = async (
 // it, and a home's fresh session (`fresh`, home-rollover.ts), which opens with none of it. Reads the just-recorded
 // composition, so the note matches the tree the turn opens on.
 export const contextNoteIfDue = (
-    services: Pick<Services, "agents" | "workspace" | "personas" | "areas">,
+    services: Pick<Services, "agents" | "workspace" | "roles" | "areas">,
     input: AgentTurn,
     entry: { readonly compactedTurn?: number | undefined } | undefined,
     conversationTurns: number,
@@ -172,13 +172,13 @@ const outsideNoteFor = async (
 // undefined when there is nothing to tell. The card is re-read for its label only — repos come from the record, so an
 // edited card changes nothing here.
 export const contextNoteFor = async (
-    services: Pick<Services, "agents" | "workspace" | "personas" | "areas">,
+    services: Pick<Services, "agents" | "workspace" | "roles" | "areas">,
     conversationId: string,
 ): Promise<TurnNote | undefined> =>
     withBranchNote(await compositionNoteFor(services, conversationId), worktreeOf(services.agents.entry(conversationId))?.branches ?? []);
 
 const compositionNoteFor = async (
-    services: Pick<Services, "agents" | "workspace" | "personas" | "areas">,
+    services: Pick<Services, "agents" | "workspace" | "roles" | "areas">,
     conversationId: string,
 ): Promise<TurnNote | undefined> => {
     const composition = worktreeOf(services.agents.entry(conversationId))?.composition;
@@ -186,9 +186,9 @@ const compositionNoteFor = async (
     if (composition === undefined) {
         return outsideNoteFor(services, conversationId, live);
     }
-    const card = composition.persona === undefined ? undefined : await services.personas.get(composition.persona);
+    const card = composition.role === undefined ? undefined : await services.roles.get(composition.role);
     return contextNote({
-        persona: card?.label ?? composition.persona,
+        role: card?.label ?? composition.role,
         carried: composition.repos.filter((repo) => live.includes(repo)),
         absent: live.filter((repo) => !composition.repos.includes(repo)),
         missing: composition.repos.filter((repo) => !live.includes(repo)),

@@ -15,7 +15,7 @@ import { supervisorOf } from "./principal.js";
 // own areas are among theirs. Everyone else sees the fleet whole, which is what the board's Everyone/Mine row is for.
 // Neither narrowing is a preference: the transcript of someone else's wider conversation is the brain in prose, and
 // fencing the files while leaving the transcripts open would be a fence with a door in it.
-// Which persona cards that same fence hands over is the other half of it, and lives in personas/persona-reach.ts
+// Which role cards that same fence hands over is the other half of it, and lives in roles/role-reach.ts
 // because it has to resolve area ids to folders, which is a file read this file cannot afford.
 
 // The provenance fields every registry shape carries, which is all this needs to read.
@@ -80,14 +80,14 @@ export const listedTo = (caller: Caller | undefined, agent: Provenance): boolean
     if (caller.agents === "home") {
         return ((agent.home === true && theirs(caller, agent)) || supervisorOf(agent) === homeConversationId(caller.email)) && withinFence(caller, agent);
     }
-    if ((caller.role === "guest" || agent.home === true) && caller.role !== "owner" && !theirs(caller, agent)) {
+    if ((caller.tier === "guest" || agent.home === true) && caller.tier !== "owner" && !theirs(caller, agent)) {
         return false;
     }
     return withinFence(caller, agent);
 };
 
 // Whether the caller may read this conversation: its transcript, its title, anything it said. Everything `listedTo` shows
-// them, less a private conversation they are not a reader of (seal-scope.ts), whatever their role: a seal is the one
+// them, less a private conversation they are not a reader of (seal-scope.ts), whatever their tier: a seal is the one
 // narrowing the sandbox's owner and Full access are held to as well, and a program reads past none.
 export const visibleTo = (caller: Caller | undefined, agent: Provenance): boolean => listedTo(caller, agent) && !sealedFrom(caller, agent.seal);
 

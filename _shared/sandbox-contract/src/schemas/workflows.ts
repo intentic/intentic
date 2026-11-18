@@ -70,7 +70,7 @@ export const WorkflowStepSchema = z.object({
     actsAs: entryId
         .optional()
         .describe(
-            "Which persona it acts as. Unpinned, a step gets the strict unwatched default: every tool, and no signed-in accounts at all. Pinning one is how a release check gets a voice, a folder to work in, or the single account it may post from.",
+            "Which role it acts as. Unpinned, a step gets the strict unwatched default: every tool, and no signed-in accounts at all. Pinning one is how a release check gets a voice, a folder to work in, or the single account it may post from.",
         ),
 });
 export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;

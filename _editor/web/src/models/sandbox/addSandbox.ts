@@ -4,7 +4,7 @@ import { useRouter, type RouteLocationRaw } from "vue-router";
 import { localFace } from "../../app/environments/local";
 import { localHost } from "../../app/environments/localHost";
 import { useAccount } from "../../client/auth/useAccount";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { toHome } from "../../lib/routes/links";
 import { signInAt } from "../../lib/routes/signIn";
@@ -94,7 +94,7 @@ export const requestAddSandbox = (authenticated: boolean, onHome: boolean, navig
 /** Whether this window adds on Home (above), as its shell and its role stand now. */
 export const useAddsOnHome = (): (() => boolean) => {
     const { mobile } = useDevice();
-    const { isGuest, homeOnly } = useRole();
+    const { isGuest, homeOnly } = useTier();
     return () => addsOnHome({ mobile: mobile.value, isGuest: isGuest.value, homeOnly: homeOnly.value });
 };
 

@@ -18,7 +18,7 @@ const RUNTIME: TurnRuntime = { provider: "claude", harness: "claude-code", capab
 
 const premise = (settings: object, conversationId: string | undefined) =>
     premiseOf(
-        { entry: undefined, settings: SandboxSettingsSchema.parse(settings), personas: [], areas: [] },
+        { entry: undefined, settings: SandboxSettingsSchema.parse(settings), roles: [], areas: [] },
         { prompt: "hi", ...(conversationId === undefined ? {} : { conversationId }) } as AgentTurn,
         RUNTIME,
     );
@@ -44,7 +44,7 @@ test("a spawned child is not sent the map, a fresh session on another conversati
             {
                 entry: { id: "conversation-0", totals: { costUsd: 0, inputTokens: 0, outputTokens: 0, turns: 0, toolUses: 0, subagents: 0 }, profile: { provider: "claude", harness: "claude-code" }, identity },
                 settings: SandboxSettingsSchema.parse({ workspaceMap: true }),
-                personas: [],
+                roles: [],
                 areas: [],
             },
             opening,

@@ -5,7 +5,7 @@ import { ACCOUNTS_ALL, REACH_ALL } from "../../secrets/credential-reach.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Role } from "@intentic/sandbox-contract/schemas/roles";
 import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
@@ -92,6 +92,8 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         credentialReach: async () => REACH_ALL,
         accountReach: async () => ACCOUNTS_ALL,
         toolCeiling: async () => undefined,
+        // No access profiles: no role is held to anything of its own.
+        accessProfiles: unstubbed<Services["accessProfiles"]>("accessProfiles", { list: async () => [] }),
         // Where planning records what the turn reaches (turn-standing.ts), for the needs door to read.
         conversations: memoryFleet().conversations,
         // No conversation-level grants: what a conversation nobody has widened reads.
@@ -99,7 +101,7 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse(settings),
         }),
-        personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
+        roles: unstubbed<Services["roles"]>("roles", { list: async () => [] }),
         // No areas: the unfenced workspace, which is what a turn an owner started carries.
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [] }),
         // Where this turn's checklist is read back from; the shared store, matching the unfenced `areas` above.
@@ -215,14 +217,14 @@ test("an isolated turn is mapped against its own tree, not the shared checkout",
 // The fifth gate, and the only per-card one: the sandbox switch says yes and the card still says no. Its conversation
 // leaves the experiment rather than joining the control group, since an arm on a conversation that was never going to
 // be sent a map would read as a measured nothing.
-test("a persona that drops the map gets none of it, however the sandbox is set", async () => {
+test("a role that drops the map gets none of it, however the sandbox is set", async () => {
     const root = await projectAt("wsmap-card-", "shared");
-    const lean: Persona = { id: "lean", capabilities: [], briefing: { omit: ["map"] } };
+    const lean: Role = { id: "lean", capabilities: [], briefing: { omit: ["map"] } };
     const services = servicesIn(
         root,
         { workspaceMap: true, workspaceMapHoldout: 0.5 },
         {
-            personas: unstubbed<Services["personas"]>("personas", { list: async () => [lean] }),
+            roles: unstubbed<Services["roles"]>("roles", { list: async () => [lean] }),
             agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
         },
     );

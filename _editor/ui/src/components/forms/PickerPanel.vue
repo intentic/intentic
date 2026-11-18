@@ -2,8 +2,8 @@
 <script setup lang="ts" generic="T extends string">
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useListNavigation } from "../../composables/useListNavigation.js";
-import { FACE_SIZES } from "../brand/personaFace.js";
-import PersonaFace from "../brand/PersonaFace.vue";
+import { FACE_SIZES } from "../brand/roleFace.js";
+import RoleFace from "../brand/RoleFace.vue";
 import SectionHeader from "../rows/SectionHeader.vue";
 import SearchBar from "./SearchBar.vue";
 import { nextPickerId, normalizePickerGroups, type PickerOption, type PickerOptions } from "./picker.js";
@@ -161,7 +161,7 @@ onMounted(() => {
                 >
                     <slot name="icon" :option="row.option">
                         <!-- A row naming a person wears their face, bigger than the trigger's: a form field must not grow, a panel row can. -->
-                        <PersonaFace v-if="row.option.face !== undefined" :persona="row.option.face" :size="FACE_SIZES.row" />
+                        <RoleFace v-if="row.option.face !== undefined" :role="row.option.face" :size="FACE_SIZES.row" />
                         <Icon
                             v-else-if="row.option.icon !== undefined"
                             :name="row.option.icon"

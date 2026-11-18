@@ -1,7 +1,7 @@
 import type { AttentionReading } from "./homeFacts";
 import { clusterOf, type OtherBox } from "./otherSandboxes";
 
-const box = (id: string, role = `owner`): OtherBox => ({ id, name: id.toUpperCase(), role });
+const box = (id: string, tier = `owner`): OtherBox => ({ id, name: id.toUpperCase(), tier });
 const none = new Map<string, AttentionReading>();
 
 describe(`clusterOf`, () => {

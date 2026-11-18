@@ -9,7 +9,7 @@ import { useHostRunning } from "../../models/sandbox/devices/useDevices";
 import { updateCommand } from "../../models/sandbox/environment/updateCommand";
 
 // A SANDBOX TOO OLD FOR A VIEW: one calm note wherever a section is drawn from fields its daemon does not send yet (the
-// persona a conversation speaks as now), in place of the guesses the editor used to rebuild from what an older daemon did
+// role a conversation speaks as now), in place of the guesses the editor used to rebuild from what an older daemon did
 // send. What the view goes without is the caller's sentence. How to update is the same everywhere: the sandbox page,
 // whose Update card is the one press for a hosted sandbox or one on a connected machine, or, for one installed by hand,
 // the `update/<slug>` one-liner on the device that runs it (a desktop install reinstalls). The slug is named because a

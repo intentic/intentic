@@ -86,7 +86,7 @@ watch(
     },
 );
 
-const owner = computed(() => shown.value?.role === `owner`);
+const owner = computed(() => shown.value?.tier === `owner`);
 
 // The container slug on the hosting machine: the hostname's first label, or a sha256(token)-derived fallback.
 const cleanupSlug = ref<string | undefined>(undefined);
@@ -94,7 +94,7 @@ watch(
     shown,
     async (row) => {
         // Owner rows only, and an owner's row is the one that carries the token (a member's says null).
-        if (row === undefined || row.role !== `owner` || row.token === null) {
+        if (row === undefined || row.tier !== `owner` || row.token === null) {
             cleanupSlug.value = undefined;
             return;
         }
@@ -278,7 +278,7 @@ const failedSentence = (plan: Plan, step: RemovalStep): string => {
     if (step === `device`) {
         return t(`sandbox.sandboxSwitcher.couldntDeleteThere`, { machine: plan.door?.machineLabel ?? `` });
     }
-    return plan.row.role === `owner`
+    return plan.row.tier === `owner`
         ? t(`sandbox.removeSandbox.couldntRemove`, { name: plan.row.name })
         : t(`sandbox.removeSandbox.couldntLeave`, { name: plan.row.name });
 };
@@ -287,7 +287,7 @@ const failedSentence = (plan: Plan, step: RemovalStep): string => {
 // the failure where the reader is, with the way back to the retry.
 const announce = (row: SandboxSummary, outcome: { readonly state: string; readonly failure: NoticeModel | undefined }): void => {
     const watching = mounted && target?.id === row.id;
-    const ownRow = row.role === `owner`;
+    const ownRow = row.tier === `owner`;
     if (outcome.state === `done`) {
         if (watching) {
             emit(`close`);
@@ -323,7 +323,7 @@ const execute = async (plan: Plan): Promise<void> => {
     const left = stepsLeft(plan);
     const begun = (): RemovalProgress => startProgress(plan.steps, plan.done, Date.now());
     const outcome = await removal.run({
-        what: row.role === `owner` ? t(`sandbox.removeSandbox.removing`, { name: row.name }) : t(`sandbox.removeSandbox.leaving`, { name: row.name }),
+        what: row.tier === `owner` ? t(`sandbox.removeSandbox.removing`, { name: row.name }) : t(`sandbox.removeSandbox.leaving`, { name: row.name }),
         progress: begun(),
         expectedMs: expectedMs(left),
         giveUpMs: left.includes(`device`) ? REMOVAL_GIVE_UP_MS : undefined,
@@ -468,7 +468,7 @@ const confirmLabel = computed(() => {
                 <p class="text-content">{{ lead }}</p>
 
                 <!-- Only the owner's removal takes anything or promises anything back; a member leaving has the one line. -->
-                <template v-if="shown.role === 'owner'">
+                <template v-if="shown.tier === 'owner'">
                     <RemovalTakes :hosted="shown.hosted !== null" />
 
                     <!-- The hosted lane's machine goes with it anyway, so the choice below is only for a box of the reader's own. -->

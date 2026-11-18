@@ -4,26 +4,26 @@ import { OPEN_BOUNDS, panelBounds, type PeopleManager } from "./accessBounds";
 // change anyone's, their own included; People & access changes anyone's below Full access but its holder's own, never
 // grants Full access, and hands out only the rights its holder has.
 
-const ADA: PeopleManager = { email: `ada@acme.dev`, role: `collaborator`, manages: [`people`, `secrets`] };
+const ADA: PeopleManager = { email: `ada@acme.dev`, tier: `collaborator`, manages: [`people`, `secrets`] };
 
 describe(`panelBounds`, () => {
     it(`leaves everything to the owner and Full access, their own access included`, () => {
-        const owner = { email: `owner@acme.dev`, role: `owner` as const };
-        expect(panelBounds(owner, `max@acme.dev`, { role: `maintainer` }, `maintainer`)).toEqual(OPEN_BOUNDS);
-        const max = { email: `max@acme.dev`, role: `maintainer` as const };
-        expect(panelBounds(max, `max@acme.dev`, { role: `maintainer` }, `maintainer`)).toEqual(OPEN_BOUNDS);
+        const owner = { email: `owner@acme.dev`, tier: `owner` as const };
+        expect(panelBounds(owner, `max@acme.dev`, { tier: `maintainer` }, `maintainer`)).toEqual(OPEN_BOUNDS);
+        const max = { email: `max@acme.dev`, tier: `maintainer` as const };
+        expect(panelBounds(max, `max@acme.dev`, { tier: `maintainer` }, `maintainer`)).toEqual(OPEN_BOUNDS);
     });
 
     it(`lets People & access change someone below Full access, handing out only the rights it holds`, () => {
-        const bounds = panelBounds(ADA, `jo@acme.dev`, { role: `collaborator` }, `collaborator`);
+        const bounds = panelBounds(ADA, `jo@acme.dev`, { tier: `collaborator` }, `collaborator`);
         expect(bounds.locked).toBeUndefined();
         expect(bounds.full).toBe(false);
         expect([...bounds.rights]).toEqual([`people`, `secrets`]);
     });
 
     it(`keeps a People & access holder's own access, and a Full access person's, read-only`, () => {
-        expect(panelBounds(ADA, `ADA@acme.dev`, { role: `collaborator`, manages: [`people`] }, `collaborator`)).toMatchObject({ locked: `own`, full: false });
-        const full = panelBounds(ADA, `max@acme.dev`, { role: `maintainer` }, `maintainer`);
+        expect(panelBounds(ADA, `ADA@acme.dev`, { tier: `collaborator`, manages: [`people`] }, `collaborator`)).toMatchObject({ locked: `own`, full: false });
+        const full = panelBounds(ADA, `max@acme.dev`, { tier: `maintainer` }, `maintainer`);
         expect(full).toMatchObject({ locked: `full`, full: false });
         expect(full.rights.size).toBe(0);
     });

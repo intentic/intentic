@@ -1,6 +1,6 @@
 import type { InviteRecord } from "@intentic/api-contract";
 import { type ManageRight, ManageRightSchema } from "@intentic/sandbox-contract/schemas/members";
-import { type GrantedRole, GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
+import { type GrantedTier, GrantedTierSchema } from "@intentic/sandbox-contract/schemas/shared";
 
 // Long enough for the invitee to get to it; short enough that a stale link in an inbox goes dead.
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -8,7 +8,7 @@ export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // The invite row's derived state; the only place pending/accepted/expired rules live, so roster and accept gate agree.
 interface InviteRow {
     email: string;
-    role: string;
+    tier: string;
     manages: string[];
     acceptedAt: Date | null;
     inviteExpiresAt: Date | null;
@@ -25,10 +25,10 @@ export const inviteStatus = (member: Pick<InviteRow, "acceptedAt" | "inviteExpir
     return `pending`;
 };
 
-// A row's grant as the wire and `peopleChangeRefusal` read it. Parsed rather than cast: a role this build does not know
-// degrades to the safest tier, and a right it does not know is dropped, so neither reaches the wire or widens a check.
-export const storedGrant = (member: Pick<InviteRow, "role" | "manages">) => ({
-    role: GrantedRoleSchema.catch(`viewer`).parse(member.role),
+// A row's grant as the wire and `peopleChangeRefusal` read it. Parsed rather than cast: a tier this build does not know
+// degrades to the safest one, and a right it does not know is dropped, so neither reaches the wire or widens a check.
+export const storedGrant = (member: Pick<InviteRow, "tier" | "manages">) => ({
+    tier: GrantedTierSchema.catch(`viewer`).parse(member.tier),
     manages: member.manages.flatMap((right) => {
         const parsed = ManageRightSchema.safeParse(right);
         return parsed.success ? [parsed.data] : [];
@@ -37,14 +37,16 @@ export const storedGrant = (member: Pick<InviteRow, "role" | "manages">) => ({
 
 // The rights a grant leaves on the row, by the daemon's rule (member-row.ts `managesOfRow`): never on Full access, who runs
 // every part, and never on a guest, who sees none of it. Kept off here too, so the mirror never lets a guest manage invites.
-export const rightsOnRow = (role: GrantedRole, manages: readonly ManageRight[]): ManageRight[] =>
-    role === `maintainer` || role === `guest` ? [] : [...new Set(manages)];
+export const rightsOnRow = (tier: GrantedTier, manages: readonly ManageRight[]): ManageRight[] =>
+    tier === `maintainer` || tier === `guest` ? [] : [...new Set(manages)];
 
 export const toInviteRecord = (member: InviteRow, now: Date): InviteRecord => {
-    const { role, manages } = storedGrant(member);
+    const { tier, manages } = storedGrant(member);
     return {
         email: member.email,
-        role,
+        tier,
+        // Beside `tier` for one release (2026-11-18), for an editor from before the rename.
+        role: tier,
         // Absent is none, as the daemon's row reads it.
         ...(manages.length > 0 && { manages }),
         status: inviteStatus(member, now),

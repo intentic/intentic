@@ -103,7 +103,7 @@
         "enabledIn": "activado en {where}",
         "filesPinned": "La aprobación también cubre estos archivos, byte a byte:",
         "fromExtension": "traído por una extensión",
-        "fromPersona": "el kit de una persona",
+        "fromRole": "el kit de un rol",
         "fromPlugin": "una conexión de plugin",
         "fromProjectSettings": ".claude/settings.json del espacio de trabajo",
         "fromSkills": "una carpeta de plugin entre las skills",

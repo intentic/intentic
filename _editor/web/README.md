@@ -167,13 +167,14 @@ flowchart LR
   in `_site/demo` shows it.
 - **Map.** `/sandbox/map` (`features/sandbox/map/`, maintainer and up) closes the hub's Reach group and draws the three
   rows above it as one picture. On the left are the ways in: people, control tokens and other sandboxes' links. In the
-  middle is the box, with its areas, personas and secrets. On the right is everything it reaches: services, accounts
+  middle is the box, with its areas, roles and secrets. On the right is everything it reaches: services, accounts
   and browsers, machines, other sandboxes, what it publishes, and models. Pointing at a way in lights what it reaches
-  and dims the rest. Pointing at a thing lights who reaches it, and threads it to what it is tied to (a persona to its
-  accounts, an area to the personas that live there). A click keeps the focus. It opens compact, with each outward group one block that counts what it holds (and, under a focus, how many of them the focus reaches) and opens into rows on a click, and the secrets one chip; Detailed draws every row. The choice is kept per device. Each line is worked out with the rules
-  the daemon refuses on (`reachModel.ts`): a grant's areas and edit scope, the personas its fence holds
-  (`fenceHoldsPersona`), its credential reach, and for someone who only chats or a link's tasks, what their personas
-  allow (`personaAllowsCapability`, shared with the daemon through the contract). A connection whose tile is not loaded
+  and dims the rest. Pointing at a thing lights who reaches it, and threads it to what it is tied to (a role to its
+  accounts, an area to the roles that live there). A click keeps the focus. It opens compact, with each outward group one block that counts what it holds (and, under a focus, how many of them the focus reaches) and opens into rows on a click, and the secrets one chip; Detailed draws every row. The choice is kept per device. Each line is worked out with the rules
+  the daemon refuses on (`reachModel.ts`): a grant's areas and edit scope, the roles its fence holds
+  (`fenceHoldsRole`), its credential reach, and for someone who only chats or a link's tasks, what their roles
+  allow (the accounts they speak through, `roleAllowsCapability`, shared with the daemon through the contract, and
+  the access profiles that list them). A connection whose tile is not loaded
   still appears under its own id. The roster is read by whoever runs people and access (the owner, Full access, or
   People & access), so anyone else's map shows tokens, links and themselves, and says so. It is core rather than an
   extension for the same reason as the audit log: it describes the security model, and a copy of those rules that drifted, or that someone switched off, would misstate it. The public site redraws it on its home page from a sample sandbox
@@ -189,7 +190,7 @@ flowchart LR
   run, `settings.admission`) and Retention (`features/sandbox/retention/`: every record's period, the audit trail's
   included, then the rest of how the audit trail is kept, `settings.audit`: whether reads are recorded, a forward
   address and the stored secret sent with it). A setting about one thing stays with that thing (a gate on Secrets, a
-  role on Access). An organisation's Agent lock holds the three that write settings (`organisations/useOrgPolicy.ts`),
+  tier on Access). An organisation's Agent lock holds the three that write settings (`organisations/useOrgPolicy.ts`),
   as the daemon files their routes under it. Activity is what happened (`features/sandbox/activity/`, `?section=`): the
   Activity extension's turns, drawn inside it as the one view `intentic.activity` may fill under that name, then every
   command the judge checked and every request the shield handled, which stay when the extension is switched off, then
@@ -221,12 +222,12 @@ flowchart LR
   (`/audit/verify`), a period downloaded as the JSON Lines the daemon stored, and the records, filtered by who and by
   what was touched and paged backwards on asking. How it is kept is Retention's (`audit/AuditKeeping.vue`), which the
   outside-copy chip opens.
-- **Personas.** `/sandbox/personas` shows square selectors with the selected persona's editor below.
-  `PersonaSelector.vue` wraps `components/PersonaTile.vue` (face, label, selected appearance) for renaming and removal
-  directly on the selector. It saves a queued edit against its original persona when the selection changes. A persona
+- **Roles.** `/sandbox/roles` shows square selectors with the selected role's editor below.
+  `RoleSelector.vue` wraps `components/RoleTile.vue` (face, label, selected appearance) for renaming and removal
+  directly on the selector. It saves a queued edit against its original role when the selection changes. A role
   is a posture a chat wears, not someone to talk to: a chat picks it on its composer's **Acts as** pill or with
-  `@persona:`, or routing matches one from its first message. The chat list neither groups nor scopes chats by
-  persona.
+  `@role:`, or routing matches one from its first message. The chat list neither groups nor scopes chats by
+  role.
 - **Live state.** Server state lives in vue-query, mirrored per user to IndexedDB so a reload paints the last-known
   workspace. What the cache cannot paint yet is outlined as it last looked. Each loading placeholder is drawn from an
   imprint `@intentic/ui` took of its content, stored in IndexedDB as one record per sandbox and view
@@ -762,7 +763,7 @@ finished is offered first, and signed out it also offers sign-in, at the rail's 
 A **home-only** member (Access ▸ People, Agents: Home only) reaches nothing else: the shell fence
 (`lib/routes/guestPaths.ts` `homeOnlyAllowedPath`) keeps them on `/home`, the sessions their home started, their own
 settings and their access card, and the rail and command palette offer no chat or board. The access panel's "Lands its
-work" switch decides both whether their home lands by itself and whether they may press Land on it. `useRole`
+work" switch decides both whether their home lands by itself and whether they may press Land on it. `useTier`
 `canLandHome` reads that answer from `/members/self`, and the home view shows the Land press on held work only to
 whoever has it. Anyone else sees a line saying the work waits for a maintainer.
 
@@ -813,8 +814,8 @@ app's window to another face, or sent the workspace to `/setup`.)_
 `/repair` (`local/repair/LocalRepair.vue`) is the Repair view in the desktop app's local shell (no rail tile). Copy: `local.repair.*` in `src/app/i18n/locales/en.json`.
 
 The sandbox Storage card warns when the history volume falls below its checkout floor, separately from the workspace
-volume. It also names repositories whose full checkout costs at least 1 GiB and links to Personas → Runs on → Carries.
-The same cost appears beside those repositories in a persona's selection controls.
+volume. It also names repositories whose full checkout costs at least 1 GiB and links to Roles → Runs on → Carries.
+The same cost appears beside those repositories in a role's selection controls.
 Under its categories it lists every conversation's checkout from the last scan (`overview/storage/StorageCheckouts.vue`,
 2026-11-03): largest first, with its standing, its parts, and the presses the daemon allows it now (free its build
 output, free the checkout, move a leftover nobody owns to the trash, or free every landed one at once). A press writes

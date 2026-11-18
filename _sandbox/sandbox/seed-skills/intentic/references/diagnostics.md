@@ -98,6 +98,6 @@ Nothing. These are reads of the record of what happened.
 ## Report
 
 Findings in causal order with the evidence line for each; the first failure at an owner boundary (a refused token, a
-spent allowance, an outage, a persona's withheld power) named as such; then the next action, split into what you can
+spent allowance, an outage, a role's withheld power) named as such; then the next action, split into what you can
 fix in the workspace and what is the owner's (a setting, a capability, a rebuild, a daemon restart from the host). Say
 plainly that nothing was changed.

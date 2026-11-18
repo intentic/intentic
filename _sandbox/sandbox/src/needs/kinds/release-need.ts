@@ -36,7 +36,7 @@ export const releaseNeed = (deps: ReleaseNeedDeps): NeedKindHandler => {
             return {
                 kind: "refused",
                 code: "not_gated",
-                message: `"${ask.subject}" is not behind an approver, so there is nothing to ask for: it is already yours to use. If this turn cannot reach it, its persona may leave it out, which \`grants request capability ${ask.subject}\` asks about; if a tool still refuses it, read that tool's own error rather than asking again.`,
+                message: `"${ask.subject}" is not behind an approver, so there is nothing to ask for: it is already yours to use. If this turn cannot reach it, its role may leave it out, which \`grants request capability ${ask.subject}\` asks about; if a tool still refuses it, read that tool's own error rather than asking again.`,
             };
         }
         if (gate.scope === "use") {

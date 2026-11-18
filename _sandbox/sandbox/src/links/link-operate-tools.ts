@@ -84,7 +84,7 @@ const operateWords = (sandbox: string) => ({
 });
 
 const NOT_HERE =
-    "This turn may not operate another sandbox: it was started by outside content, or its persona does not delegate. Do the work here, or say what you left undone.";
+    "This turn may not operate another sandbox: it was started by outside content, or its role does not delegate. Do the work here, or say what you left undone.";
 
 /** The operating tools of one linked sandbox's server; `may` says whether this turn may act on another sandbox at all. */
 export const operateTools = (card: LinkCard, sandbox: string, conversationId: string | undefined, may: () => boolean) => {

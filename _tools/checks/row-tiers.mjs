@@ -10,7 +10,7 @@ import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUn
 const PADDING = /(?:^|\s)(?:sm:|md:|lg:|xl:|2xl:|@\w+:|max-\w+:)?(?:p|px|py|pt|pb|pl|pr)-(?!0(?:\s|$))[\w.[\]/-]+/;
 // Components that read the tier, plus the app's own `*Row` components wrapping one of them.
 const ROW_LIKE = (name) => name === `Row` || name === `DisclosureRow` || name === `SkeletonRows` || name === `RowNote` || /.Row$/.test(name);
-const MARKS = new Set([`BrandMark`, `Avatar`, `PersonaFace`]);
+const MARKS = new Set([`BrandMark`, `Avatar`, `RoleFace`]);
 
 // Every surface a view is drawn on: the web app, the desktop app, the kit, and every extension in this repository. Every
 // rule holds on all of them: an extension's list is the same list, mounted through `@intentic/extension-ui`.

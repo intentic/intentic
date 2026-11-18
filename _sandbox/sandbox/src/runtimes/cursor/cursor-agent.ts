@@ -581,7 +581,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         const listed = listedCustomTools(cursorCustomTools(request, { gate, taint }, push, owner), list);
         const customTools = secrets === undefined ? listed : secretMaskedCustomTools(listed, secrets);
         const mcpServers = listedMcpServers(cursorMcpServers(request), list);
-        // The worn persona's own skills, laid out where Cursor's loader reads them (cursor-skills.ts).
+        // The worn role's own skills, laid out where Cursor's loader reads them (cursor-skills.ts).
         const kit = request.policy.sealed === true ? { dirs: [], release: async () => {} } : await projectKit(extras.skills ?? NO_SKILLS, request.spec.isolation);
         const options = await turnOptions({ request, selection, systemPrompt, shield, shielded, list, customTools, mcpServers, dirs: kit.dirs, logger: deps.logger });
 

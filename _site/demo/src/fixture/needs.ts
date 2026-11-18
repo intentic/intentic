@@ -132,8 +132,7 @@ export const provideDemoSecret = (id: string): Need =>
         answeredBy: `demo@intentic.dev`,
     }));
 
-// The yeses still standing, for the inbox's "What you have allowed": a folder the checkout agent was let into beyond its
-// persona's fence, its installs let run without asking, its Stripe key let past its host guard, and its key-rotation
+// The yeses still standing, for the inbox's "What you have allowed": the checkout agent's installs let run without asking, its Stripe key let past its host guard, and its key-rotation
 // helper allowed everything, plus one credential gateway rule it stopped asking, by the same demo person who answers
 // everything here.
 // Taking one back moves this store.
@@ -145,9 +144,6 @@ export const demoGrants = (now: number = Date.now()): StandingGrants => {
     grants ??= [
         {
             conversationId: FEATURED_AGENT_ID,
-            capabilities: [],
-            folders: [`refs/stripe-samples`],
-            shelves: [],
             installs: true,
             secrets: [`stripe/secret-key`],
             everything: false,
@@ -158,9 +154,6 @@ export const demoGrants = (now: number = Date.now()): StandingGrants => {
         },
         {
             conversationId: `sub-keen-moth-5r8t`,
-            capabilities: [],
-            folders: [],
-            shelves: [],
             installs: false,
             secrets: [],
             everything: true,
@@ -189,8 +182,7 @@ const withoutGrant = (conversation: DemoGrantRow, grant: ConversationGrantRevoke
     if (grant.kind === `release`) {
         return { ...conversation, releases: conversation.releases.filter((release) => release.subject !== grant.what) };
     }
-    const field = ({ capability: `capabilities`, folder: `folders`, shelf: `shelves`, secret: `secrets` } as const)[grant.kind];
-    return { ...conversation, [field]: conversation[field].filter((what: string) => what !== grant.what) };
+    return { ...conversation, secrets: conversation.secrets.filter((what) => what !== grant.what) };
 };
 
 // What taking an owner-wide yes back names: the policy line, the hook set's digest, the extension's id.
@@ -208,11 +200,6 @@ export const revokeDemoGrant = (grant: GrantRevoke): void => {
             (conversation) =>
                 conversation.installs ||
                 conversation.everything ||
-                conversation.capabilities.length +
-                    conversation.folders.length +
-                    conversation.shelves.length +
-                    conversation.secrets.length +
-                    conversation.releases.length >
-                    0,
+                conversation.rules.length + conversation.secrets.length + conversation.releases.length > 0,
         );
 };

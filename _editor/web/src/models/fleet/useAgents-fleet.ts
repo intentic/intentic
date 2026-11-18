@@ -7,7 +7,7 @@ import { type FleetLane, laneOf, NO_ATTENTION } from "../agent-status/agentStatu
 import { cardsFor } from "../agent-status/notifyAudience";
 import { useAuth } from "../../client/auth/useAuth";
 import { useAccess } from "../../client/sandbox/access/useAccess";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import {
     awaitingUser,
     blocked,
@@ -329,7 +329,7 @@ export const unread = computed(() => fleet.value.filter((agent) => agent.unread)
 // reader (notifyAudience.ts): a card in a conversation they took no part in is somebody else's to answer, and a held wake
 // is for whoever runs the sandbox.
 export const attention = computed(() => {
-    const reader = { email: useAuth().user.value?.email, operates: roleAtLeast(useAccess().role.value ?? `owner`, `maintainer`) };
+    const reader = { email: useAuth().user.value?.email, operates: tierAtLeast(useAccess().tier.value ?? `owner`, `maintainer`) };
     return cardsFor(fleet.value, reader) + (reader.email === undefined || reader.operates ? heldWakes.value.length : 0);
 });
 

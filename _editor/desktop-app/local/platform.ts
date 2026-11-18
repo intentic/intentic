@@ -55,7 +55,7 @@ const rowOf = (face: LocalFace): SandboxSummary => ({
     // sidecar serves every window from one port, so the window's bearer is what tells them apart.
     token: null,
     // The folder is the person's own: they read and write it with their own rights.
-    role: `owner`,
+    tier: `owner`,
     providedAddress: false,
     localHostname: null,
     hosted: null,

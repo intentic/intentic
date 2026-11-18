@@ -15,7 +15,7 @@ import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import HomeSandboxes from "../../features/home/HomeSandboxes.vue";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { signInAt } from "../../lib/routes/signIn";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import HomeSectionPicker from "./HomeSectionPicker.vue";
 import AccountPanel from "../AccountPanel.vue";
 import RailProcesses from "./RailProcesses.vue";
@@ -28,8 +28,8 @@ const signedOut = computed(() => user.value === null);
 const sandbox = useSandbox();
 const tiled = computed(() => new Set(switchableSandboxes(sandbox.sandboxes.value).map((box) => box.id)));
 // The bookmark holds a sandbox's sections once there is a sandbox to show; never for a member whose Home is all they
-// reach (useRole `homeOnly`), who has no section to open.
-const { homeOnly } = useRole();
+// reach (useTier `homeOnly`), who has no section to open.
+const { homeOnly } = useTier();
 const choosesSection = computed(() => tiled.value.size > 0 && !homeOnly.value);
 </script>
 

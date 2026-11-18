@@ -24,7 +24,7 @@ import { agentDisplayTitle, agentStatusMeta } from "../../models/agent-status/ag
 import { previewOf } from "../../models/conversations/panel/useChat-strip";
 import { sessionIdFrom } from "../../features/agents/fleet/sessionRef";
 import { useAgents } from "../../models/fleet/useAgents";
-import { useRole } from "../../client/sandbox/useRole";
+import { useTier } from "../../client/sandbox/useTier";
 import { useTerminalsQuery } from "../../models/terminal/terminalsQuery";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { fuzzyScore } from "@intentic/base/fuzzy";
@@ -156,7 +156,7 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
     const { fleet, agentById } = useAgents();
     const { tabs } = useWorkspaceTabs();
     const { sessions } = useTerminalsQuery();
-    const { canShip } = useRole();
+    const { canShip } = useTier();
     const terminal = useTerminalPanel();
     // Resolved once so command rows render their shortcut in native form (⇧⌘P vs Ctrl+Shift+P).
     const isMac = isApplePlatform();

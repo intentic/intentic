@@ -3,10 +3,10 @@ import { SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { accessPath } from "../../../models/sandbox/sandboxNav";
-import { useAreas } from "../areas/useAreas";
+import { useAreas } from "../../../models/sandbox/access/useAreas";
 import MultiPick from "./pick/MultiPick.vue";
 import type { PickSection } from "./pick/multiPick";
-import { usePersonaReach } from "./usePersonaReach";
+import { useRoleReach } from "./useRoleReach";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
 
@@ -21,7 +21,7 @@ const { picked, chat, disabled = false } = defineProps<{ picked: readonly string
 const emit = defineEmits<{ change: [areas: string[] | undefined] }>();
 
 const { areas } = useAreas();
-const { namesOf } = usePersonaReach();
+const { namesOf } = useRoleReach();
 
 const held = computed<readonly string[]>(() => picked ?? []);
 const reached = computed<string[]>(() => namesOf(picked));
@@ -98,7 +98,7 @@ const sections = computed<PickSection[]>(() => [
             <!-- Guidance stays quiet until a pick is actually wrong; who each area reaches is on its own row. -->
             <p v-if="nobodyAnywhere" class="text-xs text-muted">
                 {{ t(`sandbox.sandboxAccess.guestHasNobodyAnywhere`) }}
-                <RouterLink :to="here(page.sandboxSettings(`personas`))" class="text-content underline">{{ t(`sandbox.sandboxAccess.giveAssistantFolder`) }}</RouterLink>
+                <RouterLink :to="here(page.sandboxSettings(`roles`))" class="text-content underline">{{ t(`sandbox.sandboxAccess.giveAssistantFolder`) }}</RouterLink>
             </p>
             <p v-else-if="chat && held.length > 0 && reached.length === 0" class="ui-field-error">{{ t(`sandbox.sandboxAccess.noAssistantWorksHere`) }}</p>
         </template>

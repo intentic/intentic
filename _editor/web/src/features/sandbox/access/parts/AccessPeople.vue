@@ -21,7 +21,7 @@ import { useRoute, useRouter } from "vue-router";
 import { selfMember, useMembers } from "../../../../client/sandbox/useMembers";
 import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { useAuth } from "../../../../client/auth/useAuth";
-import { useRole } from "../../../../client/sandbox/useRole";
+import { useTier } from "../../../../client/sandbox/useTier";
 import { identityHue } from "../../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../../workbench/presence/usePresence";
 import AiLiteracySettings from "../../ai-literacy/AiLiteracySettings.vue";
@@ -44,18 +44,18 @@ const access = useAccess();
 const self = selfMember();
 
 // The owner's card says so; everyone else's says their tier.
-const isOwner = computed(() => access.role.value === `owner`);
+const isOwner = computed(() => access.tier.value === `owner`);
 // Whether the reader may see and change who has access, as the daemon's floors decide it (sandbox-contract `holdsRight`).
 const managesPeople = computed(() => access.holds(`people`));
 // Who is editing, as the contract's bound reads them: below Full access, what they may change of each person is bounded
 // (person/accessBounds.ts), so the panel offers exactly what the daemon and the platform will take.
 const manager = computed((): PeopleManager | undefined => {
-    const role = access.role.value;
-    return role === undefined ? undefined : { email: user.value?.email ?? ``, role, manages: self.value?.manages };
+    const tier = access.tier.value;
+    return tier === undefined ? undefined : { email: user.value?.email ?? ``, tier, manages: self.value?.manages };
 });
 const isMe = (email: string): boolean => email.toLowerCase() === user.value?.email?.toLowerCase();
 // Full access and the owner run every control, and set the AI notice.
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 // The platform's invite records: who was invited and how that stands. The daemon's own roster is `grants` below.
 const members = ref<InviteRecord[]>([]);
@@ -63,8 +63,8 @@ const members = ref<InviteRecord[]>([]);
 // A person a link names (`?open=<email>`), handed down by the hub so a reload lands on them.
 const { open = undefined } = defineProps<{ open?: string }>();
 
-// Each tier in the words the rest of the app uses for it; a role this build does not know reads as itself.
-const roleLabel = (role: string): string =>
+// Each tier in the words the rest of the app uses for it; a tier this build does not know reads as itself.
+const tierLabel = (tier: string): string =>
     ({
         guest: t(`sandbox.sandboxAccess.guest`),
         viewer: t(`sandbox.sandboxAccess.viewer`),
@@ -72,9 +72,9 @@ const roleLabel = (role: string): string =>
         writer: t(`sandbox.sandboxAccess.writer`),
         maintainer: t(`sandbox.sandboxAccess.maintainer`),
         owner: t(`sandbox.sandboxAccess.owner`),
-    })[role] ?? role;
+    })[tier] ?? tier;
 // The reader's own tier, for the tile a member sees of themselves.
-const ownRole = computed((): string => roleLabel(access.role.value ?? `viewer`));
+const ownTier = computed((): string => tierLabel(access.tier.value ?? `viewer`));
 
 // Whoever manages people reads the daemon's roster through useMembers. Grant/revoke responses update that shared cache,
 // so the board's Everyone/Mine row and this tab agree; platform invite records carry only the tier and the rights.
@@ -91,7 +91,7 @@ const fencesUnknown = computed(() => grantsUnread.value !== undefined || roster.
 const grantOf = (address: string) => grants.value.find((grant) => grant.email === address.toLowerCase());
 
 // What a person's access is as the panel edits it: the daemon's row, or the platform's tier alone for one it never wrote.
-const accessOf = (member: InviteRecord): AccessDraft => draftOf(grantOf(member.email), member.role);
+const accessOf = (member: InviteRecord): AccessDraft => draftOf(grantOf(member.email), member.tier);
 // The one word under a person's tile.
 const WORDS = {
     manages: () => t(`sandbox.sandboxAccess.wordManages`),
@@ -104,7 +104,7 @@ const WORDS = {
 const wordOf = (member: InviteRecord): string => WORDS[accessWord(accessOf(member))]();
 // What the reader may change of this person: everything for the owner and Full access.
 const boundsOf = (member: InviteRecord): PanelBounds =>
-    manager.value === undefined ? OPEN_BOUNDS : panelBounds(manager.value, member.email, grantOf(member.email), member.role);
+    manager.value === undefined ? OPEN_BOUNDS : panelBounds(manager.value, member.email, grantOf(member.email), member.tier);
 // The reader's own record, when they are on the roster: their own card opens it.
 const ownRecord = computed(() => members.value.find((member) => isMe(member.email)));
 
@@ -222,7 +222,7 @@ watch(
         <!-- What people have asked for, above who they are, at the page's own rhythm: Review opens the person, where a
              grant answers it. -->
         <AccessRequests v-if="managesPeople" @review="(email) => (selected = email)" />
-        <!-- WHO HAS ACCESS, as Personas and Models lay theirs out: a tile per person, and the open one's panel under the
+        <!-- WHO HAS ACCESS, as Roles and Models lay theirs out: a tile per person, and the open one's panel under the
              tiles. Adding asks for an address alone; everything else is decided in the panel, which saves as it goes. -->
         <div class="flex flex-col gap-2.5">
             <Notice v-if="grantsUnread && managesPeople" :of="grantsUnread" />
@@ -265,7 +265,7 @@ watch(
                         v-else
                         :email="user?.email ?? ``"
                         :image="user?.image ?? undefined"
-                        :line="isOwner ? t(`sandbox.sandboxAccess.wordOwner`) : ownRole"
+                        :line="isOwner ? t(`sandbox.sandboxAccess.wordOwner`) : ownTier"
                     />
                     <!-- While the roster is read, the cells after the owner's own card are drawn as they last looked (one
                          run of grid items imprinted together), else as one person-shaped card. -->
@@ -370,8 +370,8 @@ watch(
                         <Avatar :size="mark" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" />
                     </template>
                     <template #meta>
-                        <!-- The role rides presence: who may do what is a fact every member gets to see. -->
-                        <StatusBadge variant="neutral" :label="member.role" size="xs" />
+                        <!-- The tier rides presence: who may do what is a fact every member gets to see. -->
+                        <StatusBadge variant="neutral" :label="member.tier" size="xs" />
                         <span v-if="member.idle">{{ t(`sandbox.sandboxAccess.idle`) }}</span>
                     </template>
                 </Row>

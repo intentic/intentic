@@ -78,7 +78,7 @@ import HostConnectDialog from "../../capabilities/connect/hosts/HostConnectDialo
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { isDefaultName } from "../../../models/capabilities/tiles";
 import { machineGrants } from "../../../models/capabilities/connections";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 
@@ -127,7 +127,7 @@ const scopesOf = (row: DeviceRow): DeviceScopes | undefined => capabilityOf(row)
 // lost, wiped, or someone else's. Minting this machine a fresh pairing has the same floor (the daemon's operating gate,
 // `ownerDenied`, admits a maintainer and refuses anyone below), so the same answer decides whether Reconnect is offered
 // at all.
-const { canShip } = useRole();
+const { canShip } = useTier();
 
 // The door the sandbox list's buttons go through, and what stands between it and them. On a lone device the
 // block is one of its own concerns; on a many-sided machine it is drawn beside the list it is about.

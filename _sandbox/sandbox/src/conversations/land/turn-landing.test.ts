@@ -238,7 +238,7 @@ describe("a home's family", () => {
                 social: { owner, reactions: [] },
                 postures: autoLand === undefined ? {} : { autoLand },
             });
-        const ada = { email: "ada@example.com", role: "guest", agents: "home" } as const;
+        const ada = { email: "ada@example.com", tier: "guest", agents: "home" } as const;
         const withGrant = (lands: boolean) => ({
             ...decideDeps,
             auth: unstubbed<NonNullable<LandingDeps["auth"]>>("auth", {}),

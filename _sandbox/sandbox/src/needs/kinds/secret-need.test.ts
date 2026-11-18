@@ -1,5 +1,5 @@
 import type { Need } from "@intentic/sandbox-contract/schemas/needs";
-import { PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import { RolePowersSchema } from "@intentic/sandbox-contract/schemas/roles";
 import type { TurnStanding } from "../../conversations/actor/turn-standing.js";
 import type { NamedSecret } from "../../secrets/secret-registry.js";
 import { secretNeed } from "./secret-need.js";
@@ -10,13 +10,13 @@ import { secretNeed } from "./secret-need.js";
 const STANDING: TurnStanding = {
     at: 0,
     unattended: false,
-    persona: undefined,
+    role: undefined,
     granted: [],
-    withheldByPersona: [],
+    withheldByRole: [],
     withheldByGate: [],
     withheldByReach: [],
     fence: undefined,
-    powers: PersonaPowersSchema.parse({}),
+    powers: RolePowersSchema.parse({}),
     runtime: "claude-code",
     secrets: "masked",
 };

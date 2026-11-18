@@ -83,7 +83,7 @@ const removeMember = (address: string): Promise<void> =>
     act(() => apiClient.org.removeMember({ orgId: org.id, email: address }), t(`organisations.detail.couldntRemove`));
 
 // THE SANDBOXES. An admin binds one they own; a sandbox already here, or someone else's, is not offered.
-const bindable = computed(() => sandboxes.value.filter((sandbox) => sandbox.role === `owner` && !(org.sandboxes ?? []).some((bound) => bound.id === sandbox.id)));
+const bindable = computed(() => sandboxes.value.filter((sandbox) => sandbox.tier === `owner` && !(org.sandboxes ?? []).some((bound) => bound.id === sandbox.id)));
 const toBind = ref(``);
 const bind = (): Promise<void> =>
     toBind.value === ``

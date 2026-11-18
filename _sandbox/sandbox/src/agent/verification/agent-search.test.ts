@@ -10,7 +10,7 @@ test("a recursive grep reading the filesystem is what earns the notice", () => {
         `grep -R foo .`,
         `grep --recursive foo .`,
         // the wasteful idiom the corpus is full of: walk everything, then discard node_modules afterwards
-        `cd /work/intentic && grep -rn "personaPrompt" --include=*.ts . | grep -v node_modules`,
+        `cd /work/intentic && grep -rn "rolePrompt" --include=*.ts . | grep -v node_modules`,
     ]) {
         expect(walksTreeWithGrep(command), command).toBe(true);
     }
