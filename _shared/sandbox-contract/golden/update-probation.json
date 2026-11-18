@@ -5,7 +5,7 @@
     "graceMs": 600000,
     "journalMs": 900000,
     "strikes": 3,
-    "keptBuilds": 2,
+    "keptBuilds": 0,
     "crashLoopRestarts": 3
   },
   "base": {

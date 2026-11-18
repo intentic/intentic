@@ -27,9 +27,10 @@ export const UPDATE_PROBATION = {
     journalMs: 15 * 60_000,
     // Consecutive failed looks that end a probation in a rollback: never one bad answer.
     strikes: 3,
-    // Rollback targets kept BEYOND `previous`, newest first: older builds `ic sandbox rollback --to` reaches without a
-    // download (record.rs MAX_KEPT). The hosted row keeps only `previous`; see the platform's gate-row.ts.
-    keptBuilds: 2,
+    // Rollback targets kept BEYOND `previous`: older builds `ic sandbox rollback --to` would reach without a download
+    // (record.rs MAX_KEPT). None since 2026-11-18, as each is a whole image pair; `previous` alone is kept, as on the
+    // hosted row (the platform's gate-row.ts).
+    keptBuilds: 0,
     // Restarts that are a crash loop on their own, of the container and of the daemon inside it.
     crashLoopRestarts: CRASH_LOOP_RESTARTS,
 } as const;

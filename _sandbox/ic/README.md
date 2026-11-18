@@ -248,8 +248,9 @@ flowchart LR
   reads keep `container_exists`, where Unknown reads as not there. Rejected: one bool. On 2026-10-31 at 23:35 rog's
   engine stalled ("running but stuck"), the watch's `docker inspect` failed, that read as "the new version's container
   is gone", and a healthy 1.380.0 was rolled back to 1.378.2, killing every turn in flight.
-- **The ways back.** `rollback` returns to `previous` (pressing it twice goes forward again); up to two older builds
-  are kept behind it when the disk allows (on Windows too since 2026-10-05: the free space of the drive Docker Desktop
+- **The ways back.** `rollback` returns to `previous` (pressing it twice goes forward again). Nothing older is kept
+  behind it since 2026-11-18 (`record::MAX_KEPT`): each kept build is a whole base and environment image pair, and on
+  rog four of them held ~101 GB. Raised again, the extra builds are kept only when the disk allows (on Windows too since 2026-10-05: the free space of the drive Docker Desktop
   keeps its data on is read directly, where the check used to skip; since 2026-11-04 the intentic engine's own disk
   instead, whenever it is the engine in use and answers, since sandboxes on it never write to C:), and
   `ic sandbox versions` lists them for

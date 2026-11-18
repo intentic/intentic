@@ -8,9 +8,15 @@ use crate::util::{Fail, Result};
 /* The channel record: which tag this sandbox follows, what it was on before, and what is WAITING for it — an image built for it, a shape saved for it. */
 
 /// How many rollback targets a sandbox keeps BEYOND `previous`: older builds `ic sandbox rollback --to` can reach
-/// without a download. Each is a whole image, so the swap drops them when the disk runs short (see recreate.rs).
+/// without a download. None: each is a whole base and environment build pair, 19–28 GB apiece on a dev sandbox with
+/// Android and Flutter (rog, 2026-11-18), and `previous` is the safe way back an update needs. An older release is
+/// still downloadable by its version. The next swap drops the pins an older ic kept, and tidy removes them.
 /// The contract's `UPDATE_PROBATION.keptBuilds` is this number (pinned by golden/update-probation.json, probation.rs).
-pub const MAX_KEPT: usize = 2;
+pub const MAX_KEPT: usize = 0;
+
+/// How many kept targets the record's text has keys for (`kept_1…`, `kept_2…`): what an older ic wrote is read whole,
+/// so its pins stay named until a swap drops them, and MAX_KEPT can rise to this without a format change.
+const KEPT_SLOTS: usize = 2;
 
 /// One image a rollback can return to: a pinned local tag and what the image said it was when it was pinned.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -271,7 +277,7 @@ pub fn parse(content: &str) -> ChannelRecord {
     // absent from a record an older ic wrote, and reads as the default.
     let mut desired: [Option<String>; 5] = Default::default();
     // So are a kept target's image, version and environment build, and a swap's keys: a half-written group is no group.
-    let mut kept: [[Option<String>; 4]; MAX_KEPT] = Default::default();
+    let mut kept: [[Option<String>; 4]; KEPT_SLOTS] = Default::default();
     let mut swap: [Option<String>; 11] = Default::default();
     let mut rest: [Option<String>; 14] = Default::default();
     let mut egress: Option<String> = None;
@@ -439,7 +445,7 @@ pub fn serialize(record: &ChannelRecord) -> String {
     put("previous_version", record.previous_version.as_deref());
     put("previous_env", record.previous_env.as_deref());
     put("previous_env_hash", record.previous_env_hash.as_deref());
-    for (slot, pin) in record.kept.iter().take(MAX_KEPT).enumerate() {
+    for (slot, pin) in record.kept.iter().take(KEPT_SLOTS).enumerate() {
         put(&format!("kept_{}", slot + 1), Some(&pin.image));
         put(
             &format!("kept_{}_version", slot + 1),
