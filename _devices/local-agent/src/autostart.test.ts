@@ -284,6 +284,16 @@ describe("windowsTaskDrift", () => {
         expect(windowsTaskDrift(exported.replace("<Hidden>", "<Enabled>false</Enabled>\n    <Hidden>"), wanted)).toEqual(["Enabled"]);
     });
 
+    // Windows leaves a below-normal priority (7, its default) out of an export, as it does on a real one (2026-11-18).
+    it("reads an older task's priority as below normal, and rewrites it for an agent a person waits on", () => {
+        expect(wanted).toContain("<Priority>7</Priority>");
+        expect(windowsTaskDrift(exported.replace("<Priority>7</Priority>", ""), wanted)).toEqual([]);
+        const interactive = windowsTaskXml({ ...SPEC, windowsPriority: "normal" }, BINARY, STUB, "OMEN\\radar");
+        expect(interactive).toContain("<Priority>5</Priority>");
+        expect(windowsTaskDrift(exported.replace("<Priority>7</Priority>", ""), interactive)).toEqual(["Priority"]);
+        expect(windowsTaskDrift(interactive, interactive)).toEqual([]);
+    });
+
     // schtasks prints its export as UTF-16 where PowerShell was asked for UTF-8; both must read back as the same text.
     it("reads a tool's output in either encoding", () => {
         expect(decodeToolOutput(Buffer.from("\uFEFF<Task>é</Task>", "utf16le"))).toBe("<Task>é</Task>");

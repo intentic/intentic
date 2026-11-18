@@ -115,6 +115,68 @@ test("before setup a helper is let in unproven, enrols Hello for the service, an
     }
 });
 
+// A state read asks whether Hello could be added, and a prompt holds the helper's one line until the person answers it:
+// waiting its turn there left the desktop app reading Passwords as not answering (2026-11-18).
+test("a cached Hello check answers at once while a prompt holds the helper's line", async () => {
+    const path = join(dir, "door.sock");
+    const token = randomBytes(32).toString("base64url");
+    const link = new HelperLink();
+    let answer: (() => void) | undefined;
+    const slowHands: Hands = {
+        ...hands,
+        passphrase: async () => {
+            await new Promise<void>((resolve) => {
+                answer = resolve;
+            });
+            return { kind: "cancelled" };
+        },
+    };
+    const { server } = await serveDoor(
+        {
+            handler: keyringHarness([]).keyring,
+            link,
+            token,
+            challenge: () => Promise.resolve({ method: "unset" }),
+            proven: (challenge, proof) => Promise.resolve(challenge.method === "unset" && proof.method === "unset"),
+            log: () => undefined,
+        },
+        { kind: "unix", path },
+    );
+    try {
+        const socket = connect(path);
+        await new Promise<void>((resolve) => socket.once("connect", resolve));
+        const helper = new LineSocket(socket);
+        helper.send({ door: token, as: "helper" });
+        helper.send(await proofFor(JSON.parse((await helper.next(5000)) ?? "{}"), slowHands));
+        expect(await helper.next(5000)).toBe(JSON.stringify({ ok: true }));
+        void (async () => {
+            for (;;) {
+                const call = await helper.nextOf(HelperCallSchema, 5000);
+                if (call === undefined) {
+                    return;
+                }
+                helper.send({ id: call.id, reply: await answerCall(slowHands, call) });
+            }
+        })();
+        const hello = remoteHello(link, () => Promise.resolve(undefined));
+        // Nothing known yet: no Hello to add, said at once, and the helper asked behind it.
+        expect(await hello.available({ cached: true })).toBe(false);
+        for (let tries = 0; tries < 100 && !(await hello.available({ cached: true })); tries += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        const prompt = remotePassphrasePrompt(link)({ title: "Unlock", message: "m" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const began = Date.now();
+        expect(await hello.available({ cached: true })).toBe(true);
+        expect(Date.now() - began).toBeLessThan(500);
+        answer?.();
+        expect(await prompt).toEqual({ kind: "cancelled" });
+        helper.end();
+    } finally {
+        server.close();
+    }
+});
+
 test("once a Hello key is pinned, a helper cannot enrol another", async () => {
     const link = new HelperLink();
     const enrolled = await remoteHello(link, () => Promise.resolve({ credential: "c", publicKey: "k" })).enrol("c", "Y2hhbGxlbmdl", { title: "t", message: "m" });

@@ -15,6 +15,10 @@ const requests = ref(0);
 // This computer's vault as last read: unknown until the first read answers.
 const vault = ref<`unknown` | `not-set-up` | `ready` | `unavailable` | `needs-update`>(`unknown`);
 let port: PasswordsPort | undefined;
+// The status reads running now, and when the last one ended: the rail's tick leaves the keyring alone while the page is
+// reading it, since every read is an agent process of its own that asks the keyring, and a busy computer pays for each.
+let reading = 0;
+let readAt = 0;
 
 /** The port the page mounts the app with: this computer's, its list and requests counted as they are read. */
 export const passwordsPort = (): PasswordsPort => {
@@ -23,10 +27,16 @@ export const passwordsPort = (): PasswordsPort => {
         port = {
             ...inner,
             status: async () => {
-                const status = await inner.status();
-                // An existing vault awaiting its separate update keeps its way in on the rail.
-                vault.value = status.kind === `unavailable` && status.fix !== undefined ? `needs-update` : status.kind;
-                return status;
+                reading += 1;
+                try {
+                    const status = await inner.status();
+                    // An existing vault awaiting its separate update keeps its way in on the rail.
+                    vault.value = status.kind === `unavailable` && status.fix !== undefined ? `needs-update` : status.kind;
+                    return status;
+                } finally {
+                    reading -= 1;
+                    readAt = Date.now();
+                }
             },
             list: async () => {
                 const items = await inner.list();
@@ -70,7 +80,8 @@ export const followPasswords = (): void => {
     }
     following = true;
     const read = async (): Promise<void> => {
-        if (document.visibilityState !== `visible`) {
+        // Read just now, or being read: the page is open and keeps the counts current itself.
+        if (document.visibilityState !== `visible` || reading > 0 || Date.now() - readAt < BADGE_MS / 2) {
             return;
         }
         const own = passwordsPort();

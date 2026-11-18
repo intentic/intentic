@@ -8,6 +8,7 @@ import { runService } from "./service-run.js";
 import { linuxServiceRun } from "./linux/service-run-linux.js";
 import { windowsServiceRun } from "./windows/service-run-windows.js";
 import { linuxSession } from "./linux/session-linux.js";
+import { atNormalPriority } from "./priority.js";
 import { NOT_ON_MAC } from "./user.js";
 import { windowsSession } from "./windows/session-windows.js";
 
@@ -50,6 +51,7 @@ export const userIdFits = (user: string, platform: NodeJS.Platform = process.pla
 export const runServiceHere = async (user: string, runner: Runner = realRunner, platform: NodeJS.Platform = process.platform): Promise<never> => {
     switch (platform) {
         case "win32":
+            atNormalPriority();
             return await runService(windowsServiceRun(user, runner), runner);
         case "linux":
             return await runService(linuxServiceRun(user, runner), runner);
@@ -61,6 +63,7 @@ export const runServiceHere = async (user: string, runner: Runner = realRunner, 
 export const runSessionHere = async (runner: Runner = realRunner, platform: NodeJS.Platform = process.platform): Promise<void> => {
     switch (platform) {
         case "win32":
+            atNormalPriority();
             await runSession(windowsSession, runner);
             return;
         case "linux":

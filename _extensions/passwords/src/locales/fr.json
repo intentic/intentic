@@ -273,7 +273,9 @@
         "unavailable": {
             "title": "Mots de passe n'est pas disponible",
             "takesAWhile": "Cela prend une minute ou deux. Gardez cette fenêtre ouverte.",
-            "tryAgain": "Réessayer"
+            "tryAgain": "Réessayer",
+            "checking": "Vérification de Mots de passe…",
+            "stillDown": "Mots de passe ne répond toujours pas. Cet ordinateur est peut-être occupé : réessayez dans un instant."
         },
         "remember": {
             "strip": "Laisser Intentic mémoriser les mots de passe que vous saisissez ?",

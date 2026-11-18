@@ -7,10 +7,16 @@ import { computed, ref } from "vue";
 import { t } from "../i18n.js";
 import type { StatusFix } from "./port.js";
 
-const { reason, fix } = defineProps<{ reason: string; fix?: StatusFix | undefined }>();
-const emit = defineEmits<{ retry: []; settled: [] }>();
+// `recheck` reads the status again after the fix, with this panel waiting on it: the panel stays while it reads, and a
+// status still unavailable once it has is said, rather than the button coming back as if nothing had been pressed.
+const { reason, fix, recheck } = defineProps<{ reason: string; fix?: StatusFix | undefined; recheck: () => Promise<void> }>();
+const emit = defineEmits<{ retry: [] }>();
 
 const running = ref(false);
+// The fix ran and the status is being read again.
+const checking = ref(false);
+// The fix finished, the status was read again, and Passwords is still not available: this panel is still up.
+const stillDown = ref(false);
 const error = ref<string | undefined>(undefined);
 // The stage reached last, by its index in `fix.steps`; -1 before the first.
 const reached = ref(-1);
@@ -37,8 +43,10 @@ const run = async (): Promise<void> => {
     }
     running.value = true;
     error.value = undefined;
+    stillDown.value = false;
     failedAt.value = undefined;
     reached.value = -1;
+    let fixed = false;
     try {
         await fix.run((id) => {
             const index = steps.value.findIndex((step) => step.id === id);
@@ -48,12 +56,19 @@ const run = async (): Promise<void> => {
             }
         });
         reached.value = steps.value.length;
+        fixed = true;
     } catch (failure) {
         error.value = messageOr(failure, t(`app.error.act`));
         failedAt.value = steps.value.length > 0 ? Math.max(reached.value, 0) : undefined;
+    }
+    checking.value = true;
+    try {
+        await recheck();
     } finally {
         running.value = false;
-        emit(`settled`);
+        checking.value = false;
+        // Still here once the status was read again: the fix did not bring Passwords back.
+        stillDown.value = fixed;
     }
 };
 </script>
@@ -61,8 +76,8 @@ const run = async (): Promise<void> => {
 <template>
     <div class="m-auto flex w-full max-w-md flex-col items-center gap-3 px-6 text-center">
         <Icon name="key" class="text-4xl text-subtle" />
-        <p class="text-base font-semibold text-content">{{ running ? (fix?.doing ?? fix?.label) : t(`app.unavailable.title`) }}</p>
-        <p v-if="running && showSteps" class="text-sm text-muted">{{ t(`app.unavailable.takesAWhile`) }}</p>
+        <p class="text-base font-semibold text-content">{{ checking ? t(`app.unavailable.checking`) : running ? (fix?.doing ?? fix?.label) : t(`app.unavailable.title`) }}</p>
+        <p v-if="running && showSteps && !checking" class="text-sm text-muted">{{ t(`app.unavailable.takesAWhile`) }}</p>
         <p v-else class="text-sm text-muted">{{ reason }}</p>
 
         <ol v-if="showSteps" class="mt-1 flex w-full flex-col gap-2.5 rounded-xl border border-line-subtle bg-card px-4 py-3 text-left" :aria-label="fix?.doing ?? fix?.label">
@@ -93,8 +108,9 @@ const run = async (): Promise<void> => {
         </ol>
 
         <p v-if="error" class="text-sm text-danger" role="alert">{{ error }}</p>
+        <p v-else-if="stillDown" class="text-sm text-warning" role="status">{{ t(`app.unavailable.stillDown`) }}</p>
         <template v-if="!running">
-            <Button tier="accent" v-if="fix" :label="error ? t(`app.unavailable.tryAgain`) : fix.label" @click="run()" />
+            <Button tier="accent" v-if="fix" :label="error || stillDown ? t(`app.unavailable.tryAgain`) : fix.label" @click="run()" />
             <Button v-else tier="accent" :label="t(`app.retry`)" @click="emit(`retry`)" />
         </template>
         <Button tier="accent" v-else-if="!showSteps" :label="fix?.label ?? ``" disabled />

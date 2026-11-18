@@ -63,7 +63,9 @@ export interface HelloEnrolment {
 
 // Windows Hello as the keyring drives it (consent-windows.ts); a test passes a fake.
 export interface HelloDriver {
-    readonly available: () => Promise<boolean>;
+    // Whether Hello can sign here. `cached`: the last answer will do where asking would wait (a state read must not sit
+    // behind a prompt the person has not answered yet).
+    readonly available: (options?: { readonly cached?: boolean }) => Promise<boolean>;
     // Create (or replace) the credential and sign `challenge` with it, the person's first gesture at setup.
     readonly enrol: (credential: string, challenge: string, notice: Notice) => Promise<HelloResult<HelloEnrolment>>;
     // Sign `challenge` with the credential: the gesture that unlocks.

@@ -206,6 +206,32 @@ describe(`PasswordsApp`, () => {
         expect(button(el, `Try again`).disabled).toBe(false);
     });
 
+    // Start Passwords finished, the status read again, and it still does not answer: said, rather than the button simply
+    // coming back as if nothing had been pressed (2026-11-18).
+    it(`says so when a fix ran and Passwords still is not available`, async () => {
+        let reads = 0;
+        let finishRead: (() => void) | undefined;
+        const { port } = fakePort({ status: READY });
+        const status: PasswordsPort[`status`] = async () => {
+            reads += 1;
+            if (reads > 1) {
+                await new Promise<void>((resolve) => { finishRead = resolve; });
+            }
+            return {
+                kind: `unavailable`,
+                reason: `Passwords isn't answering right now.`,
+                fix: { label: `Start Passwords`, doing: `Starting Passwords`, run: async () => undefined },
+            };
+        };
+        const el = mount({ ...port, status });
+        await waitFor(() => expect(el.textContent).toContain(`Passwords isn't answering right now.`));
+        button(el, `Start Passwords`).click();
+        await waitFor(() => expect(el.textContent).toContain(`Checking Passwords…`));
+        finishRead?.();
+        await waitFor(() => expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`still isn't answering`));
+        expect(button(el, `Try again`).disabled).toBe(false);
+    });
+
     it(`draws a long fix's stages as the port reaches them, with what the person does now`, async () => {
         const { port } = fakePort({ status: READY });
         let reach: ((id: string) => void) | undefined;

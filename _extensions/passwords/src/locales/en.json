@@ -273,7 +273,9 @@
         "unavailable": {
             "title": "Passwords isn't available",
             "takesAWhile": "This takes a minute or two. Keep this window open.",
-            "tryAgain": "Try again"
+            "tryAgain": "Try again",
+            "checking": "Checking Passwords…",
+            "stillDown": "Passwords still isn't answering. This computer may be busy: try again in a moment."
         },
         "remember": {
             "strip": "Let Intentic remember the passwords you type?",

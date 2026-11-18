@@ -264,8 +264,8 @@ watch(item, async (found) => {
             v-else-if="status === undefined || status.kind === `unavailable`"
             :reason="(status?.kind === `unavailable` ? status.reason : state.readError.value) ?? ``"
             :fix="status?.kind === `unavailable` ? status.fix : undefined"
+            :recheck="state.load"
             @retry="state.load()"
-            @settled="state.load()"
         />
 
         <FirstRun

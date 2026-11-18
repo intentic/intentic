@@ -4,7 +4,9 @@ import { LOCAL_SERVICE_SID } from "./paths-windows.js";
 // The scheduled task that runs the service: at startup, as LOCAL SERVICE (looked up by SID, so a localised Windows names
 // it right), restarted every minute it stops, never stopped for running long or on battery. A task rather than a Windows
 // service because the keyring is a compiled script, which cannot answer the service manager's start handshake; Task
-// Scheduler runs it as that account all the same. Its input arrives as $KeyringInput (powershell.ts).
+// Scheduler runs it as that account all the same. Its input arrives as $KeyringInput (powershell.ts). At normal priority
+// (5), not Task Scheduler's below-normal default: every unlock, fill and status read waits on it, and a computer busy
+// with containers starved it past its callers' deadlines.
 
 export const REGISTER_TASK_SCRIPT = `
 $ErrorActionPreference = 'Stop'
@@ -13,7 +15,7 @@ try {
   $action = New-ScheduledTaskAction -Execute $KeyringInput.exe -Argument ('service run --user ' + $KeyringInput.sid)
   $trigger = New-ScheduledTaskTrigger -AtStartup
   $principal = New-ScheduledTaskPrincipal -UserId $account -LogonType ServiceAccount -RunLevel Limited
-  $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
+  $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -Priority 5
   Register-ScheduledTask -TaskPath $KeyringInput.taskPath -TaskName $KeyringInput.taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
   Stop-ScheduledTask -TaskPath $KeyringInput.taskPath -TaskName $KeyringInput.taskName -ErrorAction SilentlyContinue
   Start-ScheduledTask -TaskPath $KeyringInput.taskPath -TaskName $KeyringInput.taskName

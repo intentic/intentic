@@ -5,7 +5,7 @@ import type { Item } from "@intentic/local-agent";
 import type { KeyringState } from "@intentic/sandbox-contract/schemas/keyring";
 import { localZone, wallClockIn } from "@intentic/sandbox-contract/time/zone";
 import { askpassStatus } from "./askpass.js";
-import { keyringInstalled, keyringState, serviceDown, serviceHere } from "./service.js";
+import { keyringInstalled, keyringState, raiseRunningKeyring, serviceDown, serviceHere } from "./service.js";
 
 // THE KEYRING AS EVERY SURFACE SAYS IT: `keyring status`, and the one line `status` and `doctor` give it. Installed is
 // the binary beside this agent; running is its pipe answering within a moment; set up and locked are its own answer.
@@ -23,17 +23,18 @@ export interface KeyringSummary {
     readonly serviceInstalled?: true;
 }
 
-// A keyring that did not answer the quick check where Passwords' service is installed is asked once more, for longer,
-// before it reads as not running: a busy helper read as "not running" was read by the desktop app as "not set up".
-const PATIENT_STATE_MS = 8_000;
+// How long the keyring is given to answer, asked once. A computer with no keyring running has no pipe, which says so at
+// once, so only a keyring that is there and slow is waited on. It used to be asked twice, quickly and then for longer,
+// with `whoami` between: a helper slow on a busy computer cost all three and still read as not running, which the
+// desktop app showed as Passwords not answering after ten seconds or more.
+const PATIENT_STATE_MS = 10_000;
 
+// Passwords' service installed, its helper silent: set up or not is unknown, never "not set up". A helper its logon task
+// started below normal priority is raised first, which is what kept it from answering on a busy computer.
 const patientState = async (): Promise<Awaited<ReturnType<typeof keyringState>> | "service-installed"> => {
-    const quick = await keyringState();
-    if (!(quick instanceof KeyringUnavailable) || !(await serviceHere())) {
-        return quick;
-    }
-    const patient = await keyringState(PATIENT_STATE_MS);
-    return patient instanceof KeyringUnavailable ? "service-installed" : patient;
+    await raiseRunningKeyring();
+    const state = await keyringState(PATIENT_STATE_MS);
+    return state instanceof KeyringUnavailable && (await serviceHere()) ? "service-installed" : state;
 };
 
 export const readKeyringSummary = async (): Promise<KeyringSummary> => {
@@ -108,9 +109,14 @@ export const supportOf = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv = pr
 
 const readSupport = async (summary: KeyringSummary): Promise<KeyringSupport> => {
     const base = supportOf(process.platform);
-    // A running service says how it unlocks; before it runs, Windows is asked whether Hello could sign here.
-    const hello = summary.state === undefined ? base.canSetUp && (await helloHere(realRunner)) : summary.state.unlock.includes("hello");
-    return { ...base, hello };
+    // A running service says how it unlocks. Only a computer that may be offered setup asks Windows whether Hello could
+    // sign here, a PowerShell start of a second or more: one whose service is installed and silent is offered a start or
+    // a repair instead, never setup, so it is not asked.
+    if (summary.state !== undefined) {
+        return { ...base, hello: summary.state.unlock.includes("hello") };
+    }
+    const offeredSetup = !summary.setUp && summary.serviceInstalled !== true && summary.serviceDown !== true;
+    return { ...base, hello: offeredSetup && base.canSetUp && (await helloHere(realRunner)) };
 };
 
 // What `keyring status --json` answers.

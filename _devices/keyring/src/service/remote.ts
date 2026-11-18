@@ -17,6 +17,8 @@ import { AvailableSchema, ChosenSchema, EnrolledSchema, InspectedSchema, SignedS
 const PROMPT_DEADLINE_MS = 130_000;
 // "Can Hello sign here?" is one quick PowerShell call on the helper's side, which keeps its answer a while.
 const AVAILABLE_DEADLINE_MS = 20_000;
+// How long the service takes the helper's last answer as it stands, as the helper keeps its own (consent-windows.ts).
+const AVAILABLE_FRESH_MS = 5 * 60_000;
 const TYPING_DEADLINE_MS = 70_000;
 
 type CallBody<C extends HelperCall> = C extends unknown ? Omit<C, "id"> : never;
@@ -100,7 +102,25 @@ export interface HelloPin {
 // Windows Hello, through the helper: a signature the helper returns counts only as the TPM key's (helloSigned). Before
 // setup nothing is pinned, and the helper both says whether Hello can sign and makes the credential setup pins; once a
 // key is pinned the service keeps it, and a helper cannot enrol another.
-export const remoteHello = (link: HelperLink, pin: () => Promise<HelloPin | undefined>): HelloDriver => {
+export const remoteHello = (link: HelperLink, pin: () => Promise<HelloPin | undefined>, now: () => number = Date.now): HelloDriver => {
+    // What the helper last said of Hello, and when: every state read asks (whether Hello could be added), and it must not
+    // wait behind a prompt holding the helper's one line, which left the desktop app reading Passwords as not answering.
+    let known: { readonly available: boolean; readonly at: number } | undefined;
+    let asking: Promise<boolean> | undefined;
+    const ask = async (): Promise<boolean> => {
+        asking ??= (async () => {
+            try {
+                const reply = await link.call({ call: "hello-available" }, AvailableSchema, AVAILABLE_DEADLINE_MS);
+                if (reply !== undefined) {
+                    known = { available: reply.available, at: now() };
+                }
+                return reply?.available === true;
+            } finally {
+                asking = undefined;
+            }
+        })();
+        return await asking;
+    };
     const sign = async (credential: string, challenge: string, title: string, message: string): Promise<HelloResult<Buffer>> => {
         const reply = await link.call({ call: "sign", credential, challenge, title, message }, SignedSchema, PROMPT_DEADLINE_MS);
         if (reply === undefined) {
@@ -109,14 +129,23 @@ export const remoteHello = (link: HelperLink, pin: () => Promise<HelloPin | unde
         return reply.ok ? { ok: true, value: Buffer.from(reply.signature, "base64") } : { ok: false, cancelled: reply.cancelled, reason: reply.reason };
     };
     return {
-        available: async () => {
+        available: async ({ cached = false } = {}) => {
             if (!link.ready) {
                 return false;
             }
             if ((await pin()) !== undefined) {
                 return true;
             }
-            return (await link.call({ call: "hello-available" }, AvailableSchema, AVAILABLE_DEADLINE_MS))?.available === true;
+            if (cached) {
+                // The last answer now, and a fresh one asked for behind whatever holds the line: none yet reads as no
+                // Hello to add, which the next read corrects.
+                if (known === undefined || now() - known.at >= AVAILABLE_FRESH_MS) {
+                    // allow(silent-catch): the next read asks again; this one already answered from what was known
+                    ask().catch(() => undefined);
+                }
+                return known?.available === true;
+            }
+            return await ask();
         },
         enrol: async (credential, challenge, notice) => {
             if ((await pin()) !== undefined) {

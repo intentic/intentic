@@ -39,6 +39,10 @@ export interface AutostartSpec {
     readonly beforeSignInArgs?: readonly string[];
     // What the user is told when registration fails; agent-specific, since what's lost and how to retry differs.
     readonly failureNote: (reason: string) => string;
+    // How Windows schedules its logon task's process. Below normal (Task Scheduler's 7) by default, for background work
+    // that may wait on a busy computer. `normal` is for an agent a person waits on (Passwords' prompts and answers), which
+    // a computer busy with containers would otherwise starve until every caller's deadline passed.
+    readonly windowsPriority?: "normal" | "below-normal";
 }
 
 const WINDOWS_RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
@@ -143,6 +147,7 @@ export const windowsTaskXml = (spec: AutostartSpec, launcher: CliLauncher, stub:
     taskXml(
         {
             name: spec.windowsRunValue,
+            priority: TASK_PRIORITY[spec.windowsPriority ?? "below-normal"],
             description: spec.desktopComment,
             firstTrigger: `    <LogonTrigger>
       <Enabled>true</Enabled>
@@ -157,9 +162,13 @@ export const windowsTaskXml = (spec: AutostartSpec, launcher: CliLauncher, stub:
         account,
     );
 
+// Task Scheduler's priority for each: 5 is a normal process (4 to 6 are), 7 below normal, its default.
+const TASK_PRIORITY = { normal: 5, "below-normal": 7 } as const;
+
 // What differs between the two tasks this file writes: when the first start comes, who it runs as, and what it runs.
 interface SupervisorTask {
     readonly name: string;
+    readonly priority: number;
     readonly description: string;
     // The trigger that starts it the first time: a sign-in, or the machine starting.
     readonly firstTrigger: string;
@@ -215,7 +224,7 @@ ${task.firstTrigger}
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
     <WakeToRun>false</WakeToRun>
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
-    <Priority>7</Priority>
+    <Priority>${String(task.priority)}</Priority>
     <RestartOnFailure>
       <Interval>PT1M</Interval>
       <Count>${WINDOWS_RESTART_COUNT}</Count>
@@ -306,6 +315,7 @@ const SETTING_DEFAULTS: Readonly<Record<string, string>> = {
     StartWhenAvailable: "false",
     ExecutionTimeLimit: "PT72H",
     Enabled: "true",
+    Priority: "7",
 };
 
 // The facts of a task that decide what it starts and whether it supervises it, each by name. Pure, so the comparison is
@@ -426,6 +436,7 @@ export const windowsBeforeSignInTaskXml = (spec: AutostartSpec, launcher: CliLau
     return taskXml(
         {
             name: beforeSignInTaskName(spec),
+            priority: TASK_PRIORITY[spec.windowsPriority ?? "below-normal"],
             description: `${spec.desktopComment}, from the moment this PC starts, before anyone signs in`,
             firstTrigger: `    <BootTrigger>
       <Enabled>true</Enabled>

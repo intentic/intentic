@@ -8,6 +8,7 @@ import { renameOver } from "@intentic/base/fs";
 import { runBounded } from "@intentic/base/process";
 import {
     askKeyring,
+    atNormalPriority,
     keyringPaths,
     type KeyringResponse,
     KeyringUnavailable,
@@ -43,6 +44,12 @@ const STATE_TIMEOUT_MS = 1_500;
 // How long a start may take before the pipe answers: a cold binary on a busy laptop, a logon task winding down.
 const START_TIMEOUT_MS = 20_000;
 const START_POLL_MS = 300;
+// How long one ask may take while a start waits: a pipe not there yet says so at once and is asked again shortly, and a
+// keyring that is there gets this long rather than being cut off and asked again, which only piles work on a busy one.
+const START_ASK_MS = 5_000;
+// How long a keyring that runs, and did not answer at once, gets to answer before it is taken for stuck and started
+// again: a busy computer starves it (a logon task started it below normal priority) more often than it hangs.
+const SLOW_KEYRING_MS = 15_000;
 // A keyring exits within this on a stop; one that does not is waited out no longer.
 const STOP_TIMEOUT_MS = 5_000;
 // A person may take their time with a UAC prompt.
@@ -79,7 +86,7 @@ const waitForKeyring = async (): Promise<KeyringStateAnswer | undefined> => {
     let answer: KeyringStateAnswer | undefined;
     await pollUntil(
         async () => {
-            const state = await keyringState();
+            const state = await keyringState(START_ASK_MS);
             answer = state instanceof KeyringUnavailable ? undefined : state;
             return answer !== undefined;
         },
@@ -276,6 +283,35 @@ const entry = (log: Log) => autostart(KEYRING_AUTOSTART, KEYRING_LAUNCHER, log);
 /** The pid the keyring records for itself, while that process lives. */
 export const keyringPid = async (): Promise<number | undefined> => await livePid(keyringPaths().pid);
 
+/** The running keyring raised to normal priority where its logon task started it below (priority.ts); whether it was. */
+export const raiseRunningKeyring = async (): Promise<boolean> => {
+    const pid = await keyringPid();
+    return pid !== undefined && atNormalPriority(pid);
+};
+
+/**
+ * A keyring that runs and did not answer at once: raised to normal priority where its logon task started it below (a
+ * task registered before 2026-11-18), then given one patient ask. Answers what it said; a keyring still silent is stopped,
+ * so the caller starts a new one where starting it again found this one running and did nothing. `undefined` too where
+ * none runs.
+ */
+const reviveRunning = async (log: Log): Promise<KeyringStateAnswer | undefined> => {
+    const pid = await keyringPid();
+    if (pid === undefined) {
+        return undefined;
+    }
+    if (atNormalPriority(pid)) {
+        log(`The keyring (pid ${String(pid)}) ran below normal priority, where a busy computer starves it: raised it to normal.`);
+    }
+    const state = await keyringState(SLOW_KEYRING_MS);
+    if (!(state instanceof KeyringUnavailable)) {
+        return state;
+    }
+    log(`The keyring (pid ${String(pid)}) runs but did not answer within ${String(SLOW_KEYRING_MS / 1000)} s: starting it again.`);
+    await stopKeyring();
+    return undefined;
+};
+
 /**
  * Registers the session helper's login entry and starts it through that entry, or directly where the entry cannot start
  * one, then waits for its pipe. Answers which entry keeps it running, and its first answer.
@@ -287,6 +323,10 @@ export const startKeyring = async (log: Log): Promise<{ readonly autostart: Auto
     const running = await keyringState();
     if (!(running instanceof KeyringUnavailable)) {
         return { autostart: kind, state: running };
+    }
+    const slow = await reviveRunning(log);
+    if (slow !== undefined) {
+        return { autostart: kind, state: slow };
     }
     if (await helper.start()) {
         const came = await waitForKeyring();
@@ -379,7 +419,8 @@ export const upgradeKeyring = async (version: string, log: Log, step: StepReport
     if (!keyringInstalled()) {
         throw new KeyringCliError("no-keyring", "No keyring is installed on this computer: `intentic-machine keyring setup` installs one.");
     }
-    const before = await keyringState();
+    // Patient: a keyring that is not running has no pipe and says so at once, and a busy one is not read as gone.
+    const before = await keyringState(SLOW_KEYRING_MS);
     if (before instanceof KeyringUnavailable) {
         throw new KeyringCliError("no-keyring", "The keyring is not running, and only a running keyring can ask you about an upgrade: `intentic-machine keyring setup` starts it.");
     }
@@ -444,6 +485,18 @@ export const upgradeKeyring = async (version: string, log: Log, step: StepReport
 
 // ---- the service, set up ----
 
+// A start whose keyring never answered, as `undefined`; any other failure stays one.
+const silentAsUndefined = async <T>(start: Promise<T>): Promise<T | undefined> => {
+    try {
+        return await start;
+    } catch (error) {
+        if (error instanceof KeyringCliError && error.code === "no-keyring") {
+            return undefined;
+        }
+        throw error;
+    }
+};
+
 /**
  * Passwords' protected service installed for this user (`intentic-keyring service install`, as an administrator), the
  * vault of a per-user keyring from before moved into it, and the session helper started. Already installed, only the
@@ -454,19 +507,21 @@ export const ensureService = async (log: Log): Promise<{ readonly autostart: Aut
         throw new KeyringCliError("no-keyring", "No keyring is installed on this computer: `intentic-machine keyring setup` installs one.");
     }
     if (await serviceHere()) {
-        const running = await startKeyring(log);
-        const state = await awaitService(running.state);
-        if (state !== undefined) {
+        const running = await silentAsUndefined(startKeyring(log));
+        const state = running === undefined ? undefined : await awaitService(running.state);
+        if (running !== undefined && state !== undefined) {
             return { ...running, state, installedNow: false };
         }
-        // Installed and silent: its install, run again, puts its folders' access right and starts it afresh.
+        // Installed and silent: its install, run again, puts its folders' access right and starts it afresh. A helper
+        // started afresh that still does not answer is waiting on the service behind it, which only this restarts.
         log("Passwords' service does not answer: asking for an administrator's yes to repair it…");
         await runElevated(["service", "install"]);
-        const repaired = await awaitService((await startKeyring(log)).state);
+        const again = await startKeyring(log);
+        const repaired = await awaitService(again.state);
         if (repaired === undefined) {
             throw new KeyringCliError("no-keyring", SERVICE_SILENT);
         }
-        return { ...running, state: repaired, installedNow: false };
+        return { ...again, state: repaired, installedNow: false };
     }
     // A per-user keyring from before holds the vault until now and writes it on every change: stopped first, so the copy
     // the service takes is the last one written.

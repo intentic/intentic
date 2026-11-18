@@ -273,7 +273,9 @@
         "unavailable": {
             "title": "Passwörter ist nicht verfügbar",
             "takesAWhile": "Das dauert ein bis zwei Minuten. Lass dieses Fenster offen.",
-            "tryAgain": "Erneut versuchen"
+            "tryAgain": "Erneut versuchen",
+            "checking": "Passwörter wird geprüft…",
+            "stillDown": "Passwörter antwortet noch immer nicht. Dieser Computer ist vielleicht ausgelastet: Versuche es gleich noch einmal."
         },
         "remember": {
             "strip": "Soll Intentic sich die Passwörter merken, die du eingibst?",

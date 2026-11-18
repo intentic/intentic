@@ -37,6 +37,9 @@ export const KEYRING_AUTOSTART: AutostartSpec = {
     launchAgent: { label: "dev.intentic.keyring" },
     detachedArgs: ["session"],
     foregroundArgs: ["session"],
+    // A person waits on every answer it carries: below normal, a computer busy with containers starved it past the
+    // desktop app's deadline, which then read Passwords as not answering.
+    windowsPriority: "normal",
     failureNote: (reason) =>
         `Couldn't register Passwords to start at login (${reason}); it runs until this computer restarts, and \`intentic-machine keyring setup\` starts it again. Its log is ${keyringLog}.`,
 };

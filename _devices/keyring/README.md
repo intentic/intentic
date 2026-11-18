@@ -154,6 +154,12 @@ Two processes share the work (`src/service/`):
 - The service is the keyring run by a startup task (`\Intentic\Keyring-<SID>`) as `LOCAL SERVICE` from its own copy in
   `%ProgramData%\Intentic\Keyring\bin`, which only an administrator can replace. A task and not a Windows service
   because a compiled script cannot answer the service manager's start handshake (`src/service/windows/task-windows.ts`).
+  The task runs it at normal priority, and the service and the helper each raise themselves to normal when a task
+  registered before 2026-11-18 started them below it (`src/service/priority.ts`): a person waits on every answer, and a
+  computer busy with containers starved a below-normal keyring past its callers' deadlines.
+- A state read takes the helper's last word on whether Hello could sign here, and asks again behind whatever holds the
+  helper's one line: a prompt the person has not answered can hold it for two minutes, and the read must not wait on it
+  (`src/service/remote.ts`).
 - The helper proves itself with a Windows Hello signature over the service's challenge, and every yes it relays is a
   Hello signature over a fresh challenge, checked by the service against the Hello key pinned at setup
   (`src/service/hello-verify.ts`), so a helper the agent started cannot say yes for the person. Unlocking is a Hello

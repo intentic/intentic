@@ -532,7 +532,8 @@ export class Keyring {
         const keys = await this.#load();
         const held = this.#held();
         const hello = this.deps.consent.hello;
-        const helloHere = hello !== undefined && (await hello.available());
+        // The last answer will do: a state read must not wait behind a prompt on the session helper's one line.
+        const helloHere = hello !== undefined && (await hello.available({ cached: true }));
         const helloReady = helloHere && (file === undefined || helloWrapOf(file.wraps) !== undefined);
         const state: KeyringState = {
             version: this.deps.version,

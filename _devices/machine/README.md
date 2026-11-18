@@ -1090,6 +1090,12 @@ release only through `keyring upgrade`, which downloads and checks the new binar
 the person), and only then swaps it, keeping `.previous` and putting it back if the new one does not answer; the new
 binary's `service install` then runs as an administrator, so the service's own copy follows.
 
+On Windows the service's startup task and the helper's logon task run at normal priority (Task Scheduler's 5,
+2026-11-18), where this agent's own task stays below normal: a person waits on every answer the two carry, and a
+computer busy with containers starved them past the desktop app's deadline, so Passwords read as not answering and
+starting it again found it running. A keyring a task from before started below normal raises itself, and `keyring
+status` and `keyring start` raise a running helper the same way.
+
 - **Relayed for the sandbox** ([`keyring/relay.ts`](src/keyring/relay.ts)): the contract's `keyring*` procedures go
   to the keyring's pipe and back, with the sandbox named from the link the call came in on (`shares`, `copies`) and an
   inbox item naming another sandbox refused (`not-shared`). No keyring answering is a `no-keyring` refusal where the
@@ -1114,8 +1120,8 @@ it reaches the pipe.
 | Command | Success output |
 |---|---|
 | `keyring setup [--no-hello] [--stdin]` | `{ "ok": true, "path", "askpass": { "installed", "path"? }, "autostart", "setUp": true, "alreadySetUp", "recoveryKey"?, "state"? }` (`recoveryKey` only when this run made the vault). The passphrase the person chooses is read from stdin with `--stdin`, typed twice at a terminal otherwise, and left out where there is neither; the recovery key is the backup |
-| `keyring status` | `{ "ok": true, "installed", "running", "setUp", "state"?, "serviceDown"?, "serviceInstalled"?, "askpass": { "installed", "path"? }, "support": { "canSetUp", "why"?, "hello", "platform" } }` (`serviceInstalled`: the protected service is there and its session helper did not answer, so set up or not is unknown) |
-| `keyring start` | `{ "ok": true, "autostart", "setUp", "state" }`: the session helper started where the service is installed, the service repaired if silent |
+| `keyring status` | `{ "ok": true, "installed", "running", "setUp", "state"?, "serviceDown"?, "serviceInstalled"?, "askpass": { "installed", "path"? }, "support": { "canSetUp", "why"?, "hello", "platform" } }` (`serviceInstalled`: the protected service is there and its session helper did not answer within 10 s, asked once, so set up or not is unknown) |
+| `keyring start` | `{ "ok": true, "autostart", "setUp", "state" }`: the session helper started where the service is installed (one that runs and stays silent for 15 s is stopped and started afresh), the service repaired after an administrator's yes if the helper still gets no answer from it |
 | `keyring unlock [--minutes N]` / `keyring lock` | `{ "ok": true, "unlockedUntil" }` / `{ "ok": true }` |
 | `keyring list` | `{ "ok": true, "entries": [EntryInfo], "backends" }` |
 | `keyring add NAME [--stdin] [rules] [--backend B --ref R [--field F] [--attribute A]] [--replace]` | `{ "ok": true, "name" }` |

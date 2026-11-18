@@ -273,7 +273,9 @@
         "unavailable": {
             "title": "Hasła są niedostępne",
             "takesAWhile": "To potrwa minutę lub dwie. Nie zamykaj tego okna.",
-            "tryAgain": "Spróbuj ponownie"
+            "tryAgain": "Spróbuj ponownie",
+            "checking": "Sprawdzanie Haseł…",
+            "stillDown": "Hasła nadal nie odpowiadają. Ten komputer może być zajęty: spróbuj ponownie za chwilę."
         },
         "remember": {
             "strip": "Niech Intentic zapamiętuje hasła, które wpisujesz?",
