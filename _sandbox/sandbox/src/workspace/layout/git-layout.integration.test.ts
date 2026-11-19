@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
+import { HEAVY_CLASSES_FILE, RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
 import { STATE_DIR } from "@intentic/constants";
 import { convergedExclude, projectExcludes, rootExcludes, syncProjectExcludes } from "./git-layout.js";
 
@@ -32,15 +32,16 @@ const tempWorkspace = async (): Promise<{ root: string; repo: string }> => {
     return { root, repo };
 };
 
-test("the root repo tracks a root project's run targets but none of the sandbox's own state beside them", async () => {
+test("the root repo tracks a root project's run targets and heavy commands and ignores local sandbox state", async () => {
     const root = await mkdtemp(join(tmpdir(), "intentic-root-"));
     tempDirs.push(root);
     await sh(root, "init", "-q", "--initial-branch=main");
     await writeFile(join(root, ".git", "info", "exclude"), `${rootExcludes([]).join("\n")}\n`);
     await mkdir(join(root, STATE_DIR, "local"), { recursive: true });
     await writeFile(join(root, RUN_TARGETS_FILE), `{"targets":[{"name":"play","command":"cargo run"}]}\n`);
+    await writeFile(join(root, HEAVY_CLASSES_FILE), `{"classes":[{"id":"capture","scripts":["scripts/capture.py"]}]}\n`);
     await writeFile(join(root, STATE_DIR, "local", "cache.json"), "{}\n");
-    expect(await sh(root, "status", "--porcelain", "--untracked-files=all")).toBe(`?? ${RUN_TARGETS_FILE}`);
+    expect(await sh(root, "status", "--porcelain", "--untracked-files=all")).toBe(`?? ${HEAVY_CLASSES_FILE}\n?? ${RUN_TARGETS_FILE}`);
 });
 
 test("projectExcludes returns an any-depth directory pattern for the IGNORED_DIRS entries no project versions", () => {

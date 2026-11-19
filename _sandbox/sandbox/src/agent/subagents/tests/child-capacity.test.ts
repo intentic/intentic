@@ -14,6 +14,8 @@ const ended = (code: string | undefined, errored = true): ChildTurnTally => ({
     code,
     substituted: false,
     errored,
+    carriesBrief: false,
+    ceiling: false,
 });
 
 describe("failedOnCapacity", () => {

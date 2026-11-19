@@ -72,7 +72,9 @@ const world = (runners: Record<string, FakeRunner | "offline">, facts: Record<st
             state: (id: string) => (runners[id] === undefined || runners[id] === "offline" ? { online: false } : { online: true, facts: facts[id] }) as never,
         }),
         logger: unstubbed<OffloadDeps["logger"]>("logger", { warn: () => undefined }),
-        heavyCommands: unstubbed<OffloadDeps["heavyCommands"]>("heavyCommands", { read: async () => mergeHeavyRules() }),
+        heavyCommands: unstubbed<OffloadDeps["heavyCommands"]>("heavyCommands", {
+            read: async () => mergeHeavyRules({}, [{ id: "capture", scripts: ["scripts/capture.py", "scripts/render.py"] }]),
+        }),
         // What the fleet reading counts: no turn running anywhere, so only the facts decide.
         conversations: unstubbed<OffloadDeps["conversations"]>("conversations", { inFlightByRunner: () => new Map(), activeTurnCount: () => 0 }),
         resources: unstubbed<OffloadDeps["resources"]>("resources", {}),
@@ -228,6 +230,7 @@ describe("an offloaded run", () => {
 test("the kinds that can run elsewhere are the rules that queue, never the ones that exempt a line", async () => {
     const { kinds } = await call(world({}).kinds, undefined, { context });
     expect(kinds.map(({ id }) => id)).toEqual([
+        "capture",
         "repo-verify",
         "vue-typecheck-changed",
         "editor-typecheck",
@@ -238,4 +241,5 @@ test("the kinds that can run elsewhere are the rules that queue, never the ones 
         "package-script",
         "cargo",
     ]);
+    expect(kinds[0]).toEqual({ id: "capture", pattern: "scripts/capture.py, scripts/render.py" });
 });

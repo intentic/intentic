@@ -85,6 +85,12 @@ it(`answers a waiting question with the words in the box, never with an empty pr
     expect(sendAnyway(blocked)).toBeUndefined();
 });
 
+it(`explains why an edit cannot run on a model the account's plan excludes`, () => {
+    const editing = chat({ staged: true, editing: true, accountBlock: `plan` });
+    expect(sendRefusal(editing)).toBe(`This account's plan doesn't include this model. Choose another model or account. Your message stays here.`);
+    expect(sendRefusalTitle(editing)).toBe(`Model not on plan`);
+});
+
 it(`schedules only a send that would start a turn on a spent account`, () => {
     const spent = { spentUntil: 5_000 };
     expect(sendIntentOf(chat(spent))).toBe(`scheduled`);

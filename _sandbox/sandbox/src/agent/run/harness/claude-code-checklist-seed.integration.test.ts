@@ -135,7 +135,7 @@ test("restoring a session that is immediately refused does not repeat its checkl
         ),
     );
 
-    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "rate_limit" }));
+    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "provider-outage", throttle: true }));
     expect(todos(events)).toEqual([]);
 });
 

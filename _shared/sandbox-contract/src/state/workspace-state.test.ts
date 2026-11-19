@@ -408,8 +408,8 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `${STATE_DIR}/config/templates.json`,
             `${STATE_DIR}/config/workflows.json`,
             `${STATE_DIR}/config/workspace-extensions/`,
-            // A project kept at the workspace root declares its run targets here, as any repository does in its own
-            // `.intentic/`: the project's file, not the sandbox's, landed and committed like code.
+            // Projects commit their heavy commands and run targets alongside their code.
+            `${STATE_DIR}/heavy.json`,
             `${STATE_DIR}/run.json`,
         ]);
     });
@@ -462,7 +462,7 @@ describe(`state groups`, () => {
     it(`agrees with the two lists that were derived before it`, () => {
         // The git exclude reads versioned; the search floor reads versioned||authored. Both must land inside config.
         const written = stateGroupPaths(`config`);
-        // Less a root project's run targets: tracked, but the project's own file rather than any of the sandbox's state.
+        // Root project files are tracked separately from sandbox state.
         for (const path of VERSIONED_STATE_PATHS.filter((tracked) => !ROOT_PROJECT_PATHS.includes(tracked))) {
             expect([path, written.includes(path)]).toEqual([path, true]);
         }

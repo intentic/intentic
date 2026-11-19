@@ -538,7 +538,7 @@ const STATE_FILES = [
 
 export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
 
-// Entries the root repo tracks, which history.ts carves out of the `.intentic` exclusion; a root project's run targets too.
+// Entries and project config files the root repo tracks, which git-layout.ts carves out of the `.intentic` exclusion.
 const versionedFiles = WORKSPACE_STATE_FILES.filter((file) => file.versioned).map((file) => file.path);
 export const VERSIONED_STATE_PATHS: readonly string[] = [...versionedFiles, ...ROOT_PROJECT_PATHS];
 

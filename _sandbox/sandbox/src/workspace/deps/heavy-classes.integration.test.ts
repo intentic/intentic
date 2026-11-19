@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { matchInvocation } from "@intentic/constants/heavy-rules";
+import { HEAVY_CLASSES_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
 import { fileHeavyCommandsStore } from "../../workload/heavy-commands.js";
-import { HEAVY_CLASSES_FILE, readHeavyClasses, workspaceHeavyClasses } from "./heavy-classes.js";
+import { readHeavyClasses, workspaceHeavyClasses } from "./heavy-classes.js";
 
 // A repository's own heavy commands, read from its `.intentic/heavy.json` the way the daemon reads them before every
 // agent command: each repository in the workspace, each class parsed on its own (2026-11-19, the shinobi-society audit).

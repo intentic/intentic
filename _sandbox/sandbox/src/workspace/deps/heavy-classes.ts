@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode, errorMessage, undefinedIfMissing } from "@intentic/base/errors";
-import { STATE_DIR } from "@intentic/constants";
 import { type HeavyClass, memoryMibOf, scriptPathOf, SHIPPED_HEAVY_COMMANDS } from "@intentic/constants/heavy-rules";
+import { HEAVY_CLASSES_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
 import { z } from "zod";
 import { discoverRepos, repoDirOf, ROOT_REPO } from "../layout/repo-discovery.js";
 
@@ -21,7 +21,6 @@ import { discoverRepos, repoDirOf, ROOT_REPO } from "../layout/repo-discovery.js
    Read from the workspace's main tree, the root repository's and every discovered one's, the first class of an id
    winning; a class that does not parse is named and left out, and the rest of its file still counts. */
 
-export const HEAVY_CLASSES_FILE = `${STATE_DIR}/heavy.json`;
 // How long the list of repositories is kept before it is walked again: the read runs before every agent command.
 const REPOS_TTL_MS = 60_000;
 

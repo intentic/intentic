@@ -185,7 +185,7 @@ export const createOffloadRoutes = (deps: OffloadDeps) => {
             // back only a patch, so the tree here would stay uninstalled.
             kinds: (await deps.heavyCommands.read()).rules
                 .filter((rule) => rule.exempt !== true && rule.pool !== "install")
-                .map(({ id, pattern }) => ({ id, pattern })),
+                .map(({ id, pattern, scripts }) => ({ id, pattern: pattern ?? scripts?.join(", ") ?? "" })),
         })),
     };
 };

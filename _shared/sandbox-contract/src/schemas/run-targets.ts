@@ -17,10 +17,11 @@ export const RUN_TARGETS_FILE = `${STATE_DIR}/run.json`;
 // The longest a target may ask a stop to wait before forcing it (the machine's app_start takes the same bound).
 export const MAX_STOP_GRACE_SECONDS = 600;
 
-// The files under the workspace root's `.intentic/` that are the project's rather than the sandbox's, which no store of
-// the daemon's owns: a project kept at the workspace root declares its targets there, as any repository does in its own.
+export const HEAVY_CLASSES_FILE = `${STATE_DIR}/heavy.json`;
+
+// Project files under `.intentic/` live at each repository's root, including a project kept at the workspace root.
 // The root repo tracks them (VERSIONED_STATE_PATHS in state/workspace-state.ts), so an agent's edit lands like code.
-export const ROOT_PROJECT_PATHS: readonly string[] = [RUN_TARGETS_FILE];
+export const ROOT_PROJECT_PATHS: readonly string[] = [RUN_TARGETS_FILE, HEAVY_CLASSES_FILE];
 
 const RepoPathSchema = z
     .string()

@@ -72,6 +72,7 @@ test("the retention passes are periodic chores, scoped by role", () => {
         ...dataRetention,
         hourly("agents-aged-archive"),
         quarterHourly("agents-build-outputs"),
+        hourly("base-checkouts"),
         hourly("state-aged"),
         hourly("log-retention"),
         hourly("finished-terminal-sessions"),
@@ -83,6 +84,7 @@ test("the retention passes are periodic chores, scoped by role", () => {
         ...dataRetention,
         hourly("agents-aged-archive"),
         quarterHourly("agents-build-outputs"),
+        hourly("base-checkouts"),
         hourly("state-aged"),
         hourly("log-retention"),
     ]);
