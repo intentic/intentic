@@ -12,7 +12,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import {
     bindingWindow,
     type FleetCapacity,
-    fleetCapacity,
+    fleetOf,
     judgedReading,
     type ModelRef,
     newestRefusal,
@@ -478,6 +478,7 @@ export const routedAccountFacts = (account: TranslatorAccounts[keyof TranslatorA
     cooling: account.cooling,
     cooldowns: account.cooldowns,
     label: account.label,
+    models: account.models,
 });
 
 // Every connection a provider holds (native and routed are one list to the reader, as they are to the daemon's
@@ -512,9 +513,10 @@ export const accountState = (provider: AgentProvider, facts: AccountFacts, model
  * answer the daemon's spawn listing, role ladder and Auto offer read: a picker row is drawn spent exactly when a subagent
  * asking for it would be refused, and a job's button names the rung its run opens on (roleModel.ts).
  */
-// `usable` narrows the accounts asked to the ones a turn may run on (aiReach.ts), as the daemon narrows a person's turn.
+// `usable` narrows the accounts asked to the ones a turn may run on (aiReach.ts), as the daemon narrows a person's turn,
+// after judging them all: which plans include the model is read across the whole provider (plan-pools.ts serviceStates).
 export const modelCapacity = (provider: AgentProvider, model: ModelRef | undefined, now = Date.now(), usable = (_account: string) => true): FleetCapacity =>
-    fleetCapacity(providerFacts(provider).filter((facts) => usable(facts.account)), refusalsOf(provider), model, now);
+    fleetOf(providerFacts(provider).filter((facts) => usable(facts.account)), serviceStates(providerFacts(provider), refusalsOf(provider), model, now));
 
 // Common shape a row is built from: the daemon's facts, its label/identity. Named fields, not positionals — label and
 // identity are both strings and easy to swap by accident.
@@ -763,18 +765,7 @@ export const unreadGroups = (rows: readonly PlanLimitRow[]): PlanLimitUnread[] =
 };
 
 /** What a blocked account is waiting on, by who can fix it: the heading a group of them is named by, in the reader's language. */
-export const accountFixLabel = (fix: AccountFix): string => {
-    switch (fix) {
-        case `reconnect`:
-            return t(`chat.accountFix.reconnect`);
-        case `admin`:
-            return t(`chat.accountFix.admin`);
-        case `verify`:
-            return t(`chat.accountFix.verify`);
-        case `wait`:
-            return t(`chat.accountFix.wait`);
-    }
-};
+export const accountFixLabel = (fix: AccountFix): string => t(`chat.accountFix.${fix}`);
 
 // Accounts held back until a person acts, grouped by who that is, since the instruction belongs to the fix and not to
 // each name: thirty expired sign-ins are one instruction, not thirty. Each row's own reason stays on the row. A bench

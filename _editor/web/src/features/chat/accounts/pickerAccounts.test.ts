@@ -91,6 +91,20 @@ test("draws what can take a turn first, then what waits on a clock, then what a 
     expect(pickerOrder(`claude`, listed).map((entry) => entry.label)).toEqual([`room`, `tight`, `unread`, `spent`, `bench`, `seatless`]);
 });
 
+// An account whose plan does not include the model runs other models: it is neither broken nor waiting, so it goes last,
+// and a folded list counts it apart, never as a fullness of the model's.
+test("sets the accounts whose plan lacks the model apart: last in the list, and counted on their own", () => {
+    const offPlan: AccountState = { kind: `blocked`, fix: `plan`, reason: `GPT-6.2-Sol is not on this account's plan` };
+    const seatless: AccountState = { kind: `blocked`, fix: `admin`, reason: `No seat.` };
+    const listed = [row(`free`, undefined, undefined, offPlan), row(`seatless`, undefined, undefined, seatless), row(`team`, 100)];
+    expect(pickerOrder(`codex`, listed).map((entry) => entry.label)).toEqual([`team`, `seatless`, `free`]);
+    expect(capacityCounts(`codex`, listed).map((count) => [count.band, count.count, count.label])).toEqual([
+        [`blocked`, 1, `can't serve`],
+        [`spent`, 1, `spent`],
+        [`offPlan`, 1, `not on plan`],
+    ]);
+});
+
 // A switch between a sign-in and its vendor's key keeps the model: the same id where both list it, else the same model
 // under the other's id (a key lists dated API ids), else its family's newest there, else that one's default.
 test("a credential switch lands on the same model under the id the other one lists", () => {

@@ -20,6 +20,9 @@ export interface ServiceFacts {
     // How the account is named to a person (its label, a routed credential's address); a surface that quotes a figure
     // says whose it is.
     readonly label?: string | undefined;
+    // The model ids the account runs, where its source can say (TranslatorAccount.models). Absent or empty: unknown,
+    // never none.
+    readonly models?: readonly string[] | undefined;
 }
 
 /** Every refusal on file for one provider: what its accounts are judged against, each standing until something answers it. */

@@ -258,6 +258,30 @@ const benched = (cooling: NonNullable<ServiceFacts["cooling"]>, plan: AccountSta
     return { kind: "blocked", fix: "wait", reason: cooling.reason ?? "cooling down", until };
 };
 
+/* A MODEL AN ACCOUNT'S PLAN DOES NOT INCLUDE IS NOT ITS TO SERVE, HOWEVER MUCH ROOM IT HAS. Two ChatGPT Free sign-ins
+   back from their monthly reset read 100% left while the translator routed GPT-6.2-Sol only to the Team one, spent for
+   two hours: every Sol request skipped both Free ones and met the Team one's bench, the turn was refused, the re-read
+   showed both Free ones full of room, the held turn was re-timed to now, and it went round again every two minutes
+   (2026-11-19). So an account the source lists models for, without this one, is `blocked` with the `plan` fix for it,
+   and for no other model. Judged only where some account of the provider lists the model under exactly this id: a
+   listing that names it otherwise (an alias, a thinking suffix) or none at all says nothing about any account. */
+const offPlan = (accounts: readonly ServiceFacts[], model: ModelRef | undefined): ((facts: ServiceFacts) => boolean) => {
+    const listed = (facts: ServiceFacts): facts is ServiceFacts & { readonly models: readonly string[] } => (facts.models?.length ?? 0) > 0;
+    if (model === undefined || !accounts.some((facts) => listed(facts) && facts.models.includes(model.id))) {
+        return () => false;
+    }
+    return (facts) => listed(facts) && !facts.models.includes(model.id);
+};
+
+const offPlanState = (model: ModelRef): AccountState => ({
+    kind: "blocked",
+    fix: "plan",
+    reason: `${model.label ?? humanizeModelId(model.id)} is not on this account's plan`,
+});
+
+/** Whether a verdict says the account's plan does not include the model it was judged on: outside that model's fleet. */
+export const offPlanVerdict = (state: AccountState): boolean => state.kind === "blocked" && state.fix === "plan";
+
 /** Every account of one provider, judged together, since a refusal naming no account is answered by any of them. */
 export const serviceStates = (
     accounts: readonly ServiceFacts[],
@@ -266,7 +290,13 @@ export const serviceStates = (
     now: number = Date.now(),
 ): ReadonlyMap<string, AccountState> => {
     const standing = standingOver(accounts, refusals, now);
-    return new Map(accounts.map((facts) => [facts.account, serviceState(facts, standing(facts.account), model, now)]));
+    const excluded = offPlan(accounts, model);
+    return new Map(
+        accounts.map((facts) => [
+            facts.account,
+            model !== undefined && excluded(facts) ? offPlanState(model) : serviceState(facts, standing(facts.account), model, now),
+        ]),
+    );
 };
 
 /** When an account that cannot serve says it can again, in epoch seconds; undefined where its verdict names no instant. */
@@ -291,16 +321,21 @@ export type FleetCapacity =
     // says when, and `pool` what holds that one.
     | { readonly kind: "spent"; readonly accounts: number; readonly reopensAt?: number | undefined; readonly pool?: string | undefined };
 
-/** A provider's capacity for one model from its accounts as already judged on that model (serviceStates). */
+/**
+ * A provider's capacity for one model from its accounts as already judged on that model (serviceStates). An account whose
+ * plan does not include the model is no part of its fleet: never counted, never the reopen.
+ */
 export const fleetOf = (accounts: readonly ServiceFacts[], states: ReadonlyMap<string, AccountState>): FleetCapacity => {
-    if (accounts.length === 0) {
+    const judged = accounts
+        .map((facts) => ({ facts, state: states.get(facts.account) ?? ({ kind: "unknown" } as const) }))
+        .filter(({ state }) => !offPlanVerdict(state));
+    if (judged.length === 0) {
         return { kind: "unknown" };
     }
-    const judged = accounts.map((facts) => ({ facts, state: states.get(facts.account) ?? ({ kind: "unknown" } as const) }));
     const serving = judged.filter(({ state }) => state.kind === "ready" || state.kind === "unknown");
     if (serving.length > 0) {
         const room = serving.flatMap(({ facts, state }) => (state.kind === "ready" && facts.usage !== undefined ? [facts.usage.measuredAt] : []));
-        return { kind: "serving", serving: serving.length, accounts: accounts.length, roomMeasuredAt: room.length === 0 ? undefined : Math.max(...room) };
+        return { kind: "serving", serving: serving.length, accounts: judged.length, roomMeasuredAt: room.length === 0 ? undefined : Math.max(...room) };
     }
     // The soonest instant any account names; one with none only decides the pool where nothing names an instant.
     const soonest = judged.reduce<AccountState | undefined>((best, { state }) => {
@@ -310,7 +345,7 @@ export const fleetOf = (accounts: readonly ServiceFacts[], states: ReadonlyMap<s
     }, undefined);
     return {
         kind: "spent",
-        accounts: accounts.length,
+        accounts: judged.length,
         reopensAt: soonest === undefined ? undefined : reopensAtOf(soonest),
         pool: soonest?.kind === "spent" ? soonest.pool : undefined,
     };

@@ -3113,7 +3113,8 @@
             "admin": "brak stanowiska",
             "reconnect": "wymaga ponownego połączenia",
             "verify": "czeka na weryfikację",
-            "wait": "chwilowo wstrzymane"
+            "wait": "chwilowo wstrzymane",
+            "plan": "poza planem"
         },
         "cardStatus": {
             "allowed": "Dozwolone",
@@ -4238,7 +4239,9 @@
             "verify": "Zweryfikuj to konto u dostawcy lub wybierz inne konto albo model. Twoja wiadomość pozostanie tutaj.",
             "verifyTitle": "Zweryfikuj konto",
             "wait": "To konto jest tymczasowo zablokowane; czas odblokowania jest nieznany. Wybierz inne konto lub model albo poczekaj.",
-            "waitTitle": "Konto tymczasowo zablokowane"
+            "waitTitle": "Konto tymczasowo zablokowane",
+            "plan": "Plan tego konta nie obejmuje tego modelu. Wybierz inny model lub konto. Twoja wiadomość pozostanie tutaj.",
+            "planTitle": "Model poza planem"
         },
         "composerIntent": {
             "alsoReplaced": "Też zastąpione",
@@ -4458,6 +4461,7 @@
             "allAccounts": "Wszystkie konta ({count})",
             "allowanceUsedUp": "Limit wyczerpany",
             "allowanceUsedUpReopens": "Limit wyczerpany, odnawia się {when}",
+            "notOnPlanNote": "Poza planem tego konta",
             "poolUsedUp": "Limit {pool} wyczerpany",
             "poolUsedUpReopens": "Limit {pool} wyczerpany, odnawia się {when}",
             "autoPicked": "Wybrane automatycznie",

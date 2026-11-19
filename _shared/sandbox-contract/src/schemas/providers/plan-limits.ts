@@ -85,8 +85,9 @@ export const AccountUsageSchema = z.object({
 });
 export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 // Who has to act for a blocked account, which is the only thing a surface chooses its instruction by: the reason is the
-// words for a person, never a key.
-export const AccountFixSchema = z.enum(["reconnect", "admin", "verify", "wait"]);
+// words for a person, never a key. `plan` is nobody here: the account's plan does not include the model asked about, so
+// another model runs on it, or another account runs this model.
+export const AccountFixSchema = z.enum(["reconnect", "admin", "verify", "wait", "plan"]);
 export type AccountFix = z.infer<typeof AccountFixSchema>;
 // Whether an account can serve a turn, judged by one rule (models/plan-pools.ts `serviceStates`) from every fact on file
 // about it: a revoked sign-in, a lost seat, a translator bench, every refusal still standing, and its plan limits. The
@@ -120,7 +121,7 @@ export const AccountStateSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("blocked"),
         fix: AccountFixSchema.describe(
-            "Who can make it serve again: `reconnect` (sign in again on this sandbox), `admin` (an organisation admin hands the seat back), `verify` (the account's owner confirms it on the provider's page, at `url`), or `wait` (it lifts by itself, at `until` where known).",
+            "Who can make it serve again: `reconnect` (sign in again on this sandbox), `admin` (an organisation admin hands the seat back), `verify` (the account's owner confirms it on the provider's page, at `url`), `wait` (it lifts by itself, at `until` where known), or `plan` (nothing does: its plan does not include the model asked about, which other accounts of the provider run).",
         ),
         reason: z.string().describe("Why, in words a person can act on: the provider's own sentence where it gave one."),
         until: z.number().optional().describe("When waiting lifts it, in epoch seconds, for `wait` only."),
@@ -187,6 +188,9 @@ export const TranslatorAccountSchema = z.object({
     // serviceability rule reads like a refusal filed for this account (refusal-verdict.ts cooldownRefusals). A bench on
     // one model never benches the account's others: a Google account out of Claude still serves Gemini.
     cooldowns: z.array(ModelCooldownSchema).optional(),
+    // The model ids the translator routes to this credential: what its plan includes, whatever is benched right now (a
+    // ChatGPT Free sign-in runs Terra and Luna, not Sol). Absent where the translator could not say, which judges nothing.
+    models: z.array(z.string()).optional(),
 });
 export type TranslatorAccount = z.infer<typeof TranslatorAccountSchema>;
 // A list per provider, not a flag: CLIProxyAPI holds several auth files per provider and balances across them. Built

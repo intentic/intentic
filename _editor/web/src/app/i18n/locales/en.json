@@ -3113,7 +3113,8 @@
             "admin": "no seat",
             "reconnect": "needs connecting again",
             "verify": "waiting to be verified",
-            "wait": "benched for now"
+            "wait": "benched for now",
+            "plan": "not on plan"
         },
         "cardStatus": {
             "allowed": "Allowed",
@@ -4238,7 +4239,9 @@
             "verify": "Verify this account with the provider or choose another account or model. Your message stays here.",
             "verifyTitle": "Verify account",
             "wait": "This account is temporarily blocked with no known reopening time. Choose another account or model, or wait.",
-            "waitTitle": "Account temporarily blocked"
+            "waitTitle": "Account temporarily blocked",
+            "plan": "This account's plan doesn't include this model. Choose another model or account. Your message stays here.",
+            "planTitle": "Model not on plan"
         },
         "composerIntent": {
             "alsoReplaced": "Also replaced",
@@ -4458,6 +4461,7 @@
             "allAccounts": "All {count} accounts",
             "allowanceUsedUp": "Allowance used up",
             "allowanceUsedUpReopens": "Allowance used up, reopens {when}",
+            "notOnPlanNote": "Not on this account's plan",
             "poolUsedUp": "{pool} allowance used up",
             "poolUsedUpReopens": "{pool} allowance used up, reopens {when}",
             "autoPicked": "Auto-picked",

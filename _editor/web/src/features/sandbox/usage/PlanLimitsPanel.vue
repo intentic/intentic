@@ -160,6 +160,7 @@ const fixCopy = (fix: AccountFix) => {
         case `admin`:
             return { title: t(`sandbox.planLimitsPanel.fixAdmin`), action: t(`sandbox.planLimitsPanel.fixAdminAction`) };
         case `wait`:
+        case `plan`:
             return { title: accountFixLabel(fix), action: `` };
     }
 };

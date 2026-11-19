@@ -3113,7 +3113,8 @@
             "admin": "kein Sitz",
             "reconnect": "muss neu verbunden werden",
             "verify": "wartet auf Bestätigung",
-            "wait": "vorerst pausiert"
+            "wait": "vorerst pausiert",
+            "plan": "nicht im Tarif"
         },
         "cardStatus": {
             "allowed": "Erlaubt",
@@ -4238,7 +4239,9 @@
             "verify": "Bestätige dieses Konto beim Anbieter oder wähle ein anderes Konto oder Modell. Deine Nachricht bleibt hier.",
             "verifyTitle": "Konto bestätigen",
             "wait": "Dieses Konto ist vorübergehend gesperrt; wann die Sperre aufgehoben wird, ist unbekannt. Wähle ein anderes Konto oder Modell oder warte.",
-            "waitTitle": "Konto vorübergehend gesperrt"
+            "waitTitle": "Konto vorübergehend gesperrt",
+            "plan": "Der Tarif dieses Kontos enthält dieses Modell nicht. Wähle ein anderes Modell oder Konto. Deine Nachricht bleibt hier.",
+            "planTitle": "Modell nicht im Tarif"
         },
         "composerIntent": {
             "alsoReplaced": "Auch ersetzt",
@@ -4458,6 +4461,7 @@
             "allAccounts": "Alle {count} Konten",
             "allowanceUsedUp": "Kontingent aufgebraucht",
             "allowanceUsedUpReopens": "Kontingent aufgebraucht, wieder frei {when}",
+            "notOnPlanNote": "Nicht im Tarif dieses Kontos",
             "poolUsedUp": "{pool}-Kontingent aufgebraucht",
             "poolUsedUpReopens": "{pool}-Kontingent aufgebraucht, wieder frei {when}",
             "autoPicked": "Automatisch gewählt",

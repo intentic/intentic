@@ -3,16 +3,17 @@ import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/
 import { accountServesLoop, reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
-import type { ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
+import { type ModelRef, offPlanVerdict } from "@intentic/sandbox-contract/models/plan-pools";
 import { compareModelIds, familyOf, releaseOf } from "@intentic/sandbox-contract/models/model-order";
 import { keyBeside } from "@intentic/sandbox-contract/models/key-providers";
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { computed, type Ref } from "vue";
 import { offeredLoops, selectedLoop } from "../../../models/providers/offeredLoops";
-import { defaultModelFor, keyedBeside, keysBeside, modelOptionsFor } from "../../../models/providers/providerCatalog";
+import { defaultModelFor, keyedBeside, keysBeside, modelLabelFor, modelOptionsFor } from "../../../models/providers/providerCatalog";
 import { translatorAccounts } from "../../../models/providers/providerAccounts";
 import {
     accountFacts,
+    accountFixLabel,
     accountState,
     formatReset,
     lastRefusalOf,
@@ -41,9 +42,10 @@ import { timeAgo } from "@intentic/ui/format";
 export const ACCOUNT_LIST_LIMIT = 5;
 
 // What a folded list says in place of its rows: counts by band, the same unit the Usage tab's
-// capacity bar uses. Banded off the rows' own rings, so summary and list can't disagree.
+// capacity bar uses. Banded off the rows' own rings, so summary and list can't disagree. The accounts whose plan does not
+// include the model are no fullness of its: counted last, apart, in no colour.
 export interface CapacityCount {
-    readonly band: PlanLimitBand;
+    readonly band: PlanLimitBand | `offPlan`;
     readonly count: number;
     readonly label: string;
     readonly tone: string;
@@ -56,26 +58,30 @@ export const capacityCounts = (
 ): readonly CapacityCount[] => {
     const readable = reportsPlanLimits(provider);
     const counts = new Map<PlanLimitBand, number>();
-    for (const row of rows) {
+    const offPlan = rows.filter((row) => offPlanVerdict(row.state)).length;
+    for (const row of rows.filter((entry) => !offPlanVerdict(entry.state))) {
         const band = planLimitBand({ state: row.state, readable });
         counts.set(band, (counts.get(band) ?? 0) + 1);
     }
     // Worst first; `none` is dropped, since unpublished limits aren't a fullness reading.
-    return PLAN_LIMIT_BANDS.flatMap((band) => {
+    const bands = PLAN_LIMIT_BANDS.flatMap((band) => {
         const count = counts.get(band) ?? 0;
         return count === 0 || band === `none` ? [] : [{ band, count, label: planLimitBandLabel(band), tone: planLimitBandTone(band) }];
     });
+    return offPlan === 0 ? bands : [...bands, { band: `offPlan`, count: offPlan, label: accountFixLabel(`plan`), tone: `text-subtle` }];
 };
 
 // Where a row stands in the list: the accounts that can take a turn, then the ones waiting on a clock (a spent pool, a
-// bench that lifts by itself), then the ones a person has to fix (a sign-in, a seat). Three tiers rather than a sort by
-// room, so rows don't trade places as readings stream in under the pointer; within a tier the provider's own order
-// stands. Display only: which account a turn runs on is read off the provider's order (servingAccount), never this one.
+// bench that lifts by itself), then the ones a person has to fix (a sign-in, a seat), and last the ones whose plan does
+// not include the model at all. Tiers rather than a sort by room, so rows don't trade places as readings stream in under
+// the pointer; within a tier the provider's own order stands. Display only: which account a turn runs on is read off the
+// provider's order (servingAccount), never this one.
 const PICKER_TIER = { room: 0, tight: 0, unread: 0, none: 0, spent: 1, blocked: 2 } as const satisfies Record<PlanLimitBand, number>;
+const OFF_PLAN_TIER = 3;
 
 export const pickerOrder = <T extends { readonly state: AccountState }>(provider: AgentProvider, rows: readonly T[]): T[] => {
     const readable = reportsPlanLimits(provider);
-    const tier = (row: T): number => PICKER_TIER[planLimitBand({ state: row.state, readable })];
+    const tier = (row: T): number => (offPlanVerdict(row.state) ? OFF_PLAN_TIER : PICKER_TIER[planLimitBand({ state: row.state, readable })]);
     return rows.toSorted((left, right) => tier(left) - tier(right));
 };
 
@@ -95,6 +101,29 @@ const spentLine = (state: AccountState): string | undefined => {
     return reopensAt === undefined
         ? t(`chat.pickerAccounts.allowanceUsedUp`)
         : t(`chat.pickerAccounts.allowanceUsedUpReopens`, { when: formatReset(reopensAt) });
+};
+
+// When a credential the translator is resting comes back. Its reason is the hover's: the row's line is when, not why.
+const benchLine = (state: AccountState): string | undefined =>
+    state.kind === `blocked` && state.fix === `wait` && state.until !== undefined ? t(`chat.modelPicker.backAt`, { at: formatReset(state.until) }) : undefined;
+
+/* HOW A ROW SITS, read off its verdict the same way in both lists. An account whose plan does not include the model is
+   set apart rather than flagged: it is not broken and nobody can fix it, it just runs other models, so it carries no
+   meter (its room is for those) and no warning, only a quiet "not on plan" naming the model on hover. Without it, two
+   ChatGPT Free sign-ins read 100% left under Sol, which only a spent Team account runs, and nothing said why every Sol
+   turn was refused (2026-11-19). */
+interface RowStanding {
+    readonly offPlan: boolean;
+    // A spent pool's reopening, or a bench's: the line under a row waiting on a clock.
+    readonly waiting: string | undefined;
+    // Can take no turn on this model now. Dimmed, never disabled, since picking one is an attempt on it.
+    readonly demoted: boolean;
+}
+
+const rowStanding = (state: AccountState, readable: boolean): RowStanding => {
+    const offPlan = offPlanVerdict(state);
+    const band = planLimitBand({ state, readable });
+    return { offPlan, waiting: spentLine(state) ?? benchLine(state), demoted: offPlan || band === `spent` || band === `blocked` };
 };
 
 // Filters a folded list against everything a row shows (label and subtitle), since a pool of
@@ -161,6 +190,28 @@ const keyRowsOf = (family: AgentProvider): readonly { readonly provider: AgentPr
     }));
 };
 
+// A routed provider's credentials as rows, judged for the model and drawn in pickerOrder: nobody picks between them, so
+// their order is all the reading there is. `family` is whose turn it is (a key's sign-in), `routed` whose credentials.
+const routedRowsOf = (family: AgentProvider, routed: KeyedProvider, model: ModelRef | undefined) => {
+    const readable = reportsPlanLimits(routed);
+    const rows = translatorAccounts.value[routed].filter((entry) => mayRunOn(family, entry.name)).map((entry) => {
+        // Whether it can take this model's turn: a bench the proxy holds it on outranks any reading of its pools.
+        const state = accountState(family, routedAccountFacts(entry), model);
+        const standing = rowStanding(state, readable);
+        return {
+            name: entry.name,
+            label: entry.label,
+            headroom: standing.offPlan ? undefined : planHeadroom(liveUsage(family, entry.name, entry.usage, model), model),
+            state,
+            ...standing,
+            // Why it takes no turn where no clock answers it (a sign-in, a seat, a bench with no instant), and why it rests.
+            refused: state.kind === `blocked` && !standing.offPlan && standing.waiting === undefined ? state.reason : undefined,
+            rests: state.kind === `blocked` && state.fix === `wait` ? state.reason : undefined,
+        };
+    });
+    return pickerOrder(routed, rows);
+};
+
 export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<AgentHarness>, model?: Ref<string | undefined>) => {
     // The sign-in whose accounts and keys these rows are: the provider itself, or the one the picked key is filed under.
     // On a key, the accounts are read against their own default loop, the one a pick of one lands on.
@@ -188,17 +239,10 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
             : undefined;
     });
 
-    const routedRows = computed(() =>
-        routedProvider.value === undefined
-            ? []
-            : translatorAccounts.value[routedProvider.value].filter((entry) => mayRunOn(family.value, entry.name)).map((entry) => ({
-                  name: entry.name,
-                  label: entry.label,
-                  headroom: planHeadroom(liveUsage(family.value, entry.name, entry.usage, modelRef.value), modelRef.value),
-                  // Whether it can take this model's turn: a bench the proxy holds it on outranks any reading of its pools.
-                  state: accountState(family.value, routedAccountFacts(entry), modelRef.value),
-              })),
-    );
+    const routedRows = computed(() => (routedProvider.value === undefined ? [] : routedRowsOf(family.value, routedProvider.value, modelRef.value)));
+
+    // The model's own name, for the hover on a row whose plan does not include it.
+    const modelName = computed(() => (model?.value === undefined || model.value === `` ? undefined : modelLabelFor(family.value, model.value)));
 
     // When this provider last refused a turn, the observed half of "can I run" beside the polled rings.
     const providerRefusalNote = computed(() => refusalFor(provider.value));
@@ -238,24 +282,20 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
                       ? t(`chat.pickerAccounts.connectedAgo`, { age: timeAgo(entry.connectedAt, { days: true }) })
                       : undefined;
             const state = accountState(family.value, accountFacts(entry), modelRef.value);
-            const band = planLimitBand({ state, readable });
-            return Object.assign({}, entry, {
+            const standing = rowStanding(state, readable);
+            return Object.assign({}, entry, standing, {
                 subtitle,
                 // liveUsage, not the streamed map alone: the row's own reading is usually the newer of the two.
-                headroom: planHeadroom(liveUsage(family.value, entry.id, entry.usage, modelRef.value), modelRef.value),
+                headroom: standing.offPlan ? undefined : planHeadroom(liveUsage(family.value, entry.id, entry.usage, modelRef.value), modelRef.value),
                 state,
                 // Why no turn runs on it (a lost seat outlives the turn it refused), unless the reconnect button already says
                 // so; any other refusal shows only while it stands, on the account it names.
                 refused:
-                    state.kind === `blocked` && entry.needsReauth !== true
+                    state.kind === `blocked` && !standing.offPlan && entry.needsReauth !== true
                         ? state.reason
                         : note?.current === true && refusal?.account === entry.id
                           ? note.line
                           : undefined,
-                waiting: spentLine(state),
-                // Can take no turn now: a spent pool, a bench, a sign-in or seat to give back. Dimmed, never disabled, since
-                // picking one is an attempt on it; its reason stays legible, since that is what says why it is dimmed.
-                demoted: band === `spent` || band === `blocked`,
             });
         });
     });
@@ -280,6 +320,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
         choosable,
         routedRows,
         routedCapacity,
+        modelName,
         unplacedRefusal,
         hasContent,
     };

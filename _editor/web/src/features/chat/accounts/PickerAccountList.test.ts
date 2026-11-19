@@ -15,13 +15,15 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandbox
 jest.mock("../../../models/conversations/accounts/useChat-accounts", () => ({
     accountsOf: (provider: AgentProvider) => (provider === `claude` ? listed : []),
     refreshConnections: jest.fn(async () => {}),
-    subscriptionOnly: () => false,
+    // Codex runs on the translator's subscriptions alone, as it does in a sandbox.
+    subscriptionOnly: (provider: AgentProvider) => provider === `codex`,
 }));
 // A sandbox new enough to judge its own accounts, which is every one this list is drawn for.
 jest.mock("../../../models/providers/accountsOutdated", () => ({ accountsOutdated: computed(() => false) }));
 const { default: PickerAccounts } = await import("./PickerAccounts.vue");
+const { default: PickerStatus } = await import("./PickerStatus.vue");
 const { endpointProviders, providerModels } = await import("../../../models/providers/providerCatalog");
-const { providerAccounts } = await import("../../../models/providers/providerAccounts");
+const { providerAccounts, translatorAccounts } = await import("../../../models/providers/providerAccounts");
 
 // An account as the daemon lists it: the facts the one rule judges (a seat mark, a reading), never a verdict.
 
@@ -74,6 +76,7 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     endpointProviders.value = [];
+    translatorAccounts.value = { codex: [], gemini: [], grok: [], kimi: [] };
 });
 
 it(`ticks the account a turn naming none runs on, says the runtime picked it, and never the first one listed`, () => {
@@ -197,5 +200,60 @@ describe(`an API key beside the accounts`, () => {
 
         expect(rows(element).find((row) => labelOf(row) === `API key`)?.hasAttribute(`disabled`)).toBe(true);
         expect(rows(element).find((row) => labelOf(row) === `personal@example.com`)?.hasAttribute(`disabled`)).toBe(false);
+    });
+});
+
+// 2026-11-19 (shinobi-society): two ChatGPT Free sign-ins back from their monthly reset read 100% left under Sol, which only
+// the Team account runs, and that one was spent: nothing on screen said why every Sol turn was refused.
+describe(`a subscription whose plans differ by model`, () => {
+    const FREE = [`gpt-6-luna`, `gpt-6.1-terra`];
+    const monthly = (used: number) => ({ measuredAt: Date.now(), windows: [{ kind: `monthly`, utilization: used, resetsAt: 1_900_000_000, gates: `all` as const }] });
+    beforeEach(() => {
+        translatorAccounts.value = {
+            codex: [
+                { name: `free-a.json`, label: `spam@example.com`, usage: monthly(0), models: FREE },
+                { name: `free-b.json`, label: `me@example.com`, usage: monthly(0), models: FREE },
+                { name: `team.json`, label: `team@example.com`, usage: monthly(100), models: [`gpt-6.2-sol`, ...FREE] },
+            ],
+            gemini: [],
+            grok: [],
+            kimi: [],
+        };
+    });
+
+    const mountCodex = (model: string): HTMLElement => {
+        const element = document.createElement(`div`);
+        document.body.append(element);
+        app = createApp({
+            render: () => [h(PickerStatus, { provider: `codex`, harness: `native`, model }), h(PickerAccounts, { provider: `codex`, harness: `native`, model })],
+        });
+        app.component(`Icon`, IconStub);
+        app.directive(`tooltip`, {});
+        app.mount(element);
+        return element;
+    };
+    const routed = (element: HTMLElement): HTMLElement[] => [...element.querySelectorAll<HTMLElement>(`#picker-routed-list > *`)];
+
+    it(`sets the accounts whose plan lacks the model apart, last and quiet, with no meter claiming room for it`, () => {
+        const element = mountCodex(`gpt-6.2-sol`);
+        const [first, ...rest] = routed(element);
+
+        expect(routed(element).map(labelOf)).toEqual([`team@example.com`, `spam@example.com`, `me@example.com`]);
+        expect(first?.textContent).toContain(`Allowance used up, reopens`);
+        for (const row of rest) {
+            expect(row.textContent).toContain(`not on plan`);
+            expect(row.querySelector(`.text-content`)?.className).toContain(`opacity-50`);
+            expect(row.querySelector(`.text-warning`)).toBeNull();
+        }
+        // One account runs Sol: nothing is spread.
+        expect(element.textContent).not.toContain(`spread automatically`);
+    });
+
+    it(`draws every account as usual for a model all their plans include`, () => {
+        const element = mountCodex(`gpt-6-luna`);
+
+        expect(element.textContent).not.toContain(`not on plan`);
+        expect(routed(element).map(labelOf).slice(0, 2)).toEqual([`spam@example.com`, `me@example.com`]);
+        expect(element.textContent).toContain(`3 accounts, spread automatically`);
     });
 });

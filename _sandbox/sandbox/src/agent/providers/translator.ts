@@ -23,6 +23,7 @@ import type { AnswerWatch } from "../../usage/drift/answer-vocabulary.js";
 import { superviseTranslator } from "./translator-supervisor.js";
 import { authFilesOnDisk, cliProxyAuthDir, connectedTranslatorProviders } from "./translator-auth-files.js";
 import { createAccountPinning, logPins, type PinReport } from "./translator-prefixes.js";
+import { createCredentialModels } from "./translator-models.js";
 
 // CLIProxyAPI: a bundled Go proxy holding the user's Codex/Grok/Kimi/Gemini subscriptions and re-serving them keyed by
 // model id, on every wire a loop here speaks: Anthropic Messages (the Claude Code harness), OpenAI Responses (native
@@ -207,6 +208,9 @@ export interface CliProxyClient {
     // whatever the proxy has benched right now. The proxy's /v1/models drops a model for as long as its only credential is
     // suspended, which for a spent ChatGPT allowance is days; this is the list that does not. Empty on any failure.
     readonly planModels: (provider: KeyedProvider) => Promise<string[]>;
+    // Reads one credential's model list again (translator-models.ts): the translator turned a request for a model away
+    // from it, so the list its row carries may be out of date.
+    readonly recheckModels: (name: string) => void;
     // Replaces the running proxy's whole endpoint list, since the daemon owns every entry; rejects when the proxy can't
     // be reached, and answers how it took the list otherwise.
     readonly putCompat: (entries: readonly CompatEntry[]) => Promise<{ readonly ok: boolean; readonly status: number }>;
@@ -260,6 +264,8 @@ export const createCliProxyClient = (params: {
     const auth = { authorization: `Bearer ${token}` };
     // Read off the files, since the listing does not say which carry their prefix.
     const pinning = createAccountPinning({ managementUrl, auth, files: () => authFilesOnDisk(authDir), fetchFn });
+    // What each credential's plan includes, kept between reads of the rows (translator-models.ts).
+    const credentialLists = createCredentialModels({ read: (name) => credentialModels(fetchFn, managementUrl, auth, name) });
 
     // No binary in the image needs a rebuild; a binary that's present but not answering is mid-boot or mid-restart and
     // just needs a moment.
@@ -573,6 +579,8 @@ export const createCliProxyClient = (params: {
     return {
         accounts: async () => {
             const [files, stored] = await Promise.all([listFiles(), usageStore.read()]);
+            const routedNames = KeyedProviderSchema.options.flatMap((provider) => providerFiles(files, provider).map((file) => file.name));
+            const lists = await credentialLists.of(routedNames);
             const of = (provider: KeyedProvider) =>
                 providerFiles(files, provider).map((file) => {
                     const usage = stored[usageKey(provider, file.name)];
@@ -586,6 +594,10 @@ export const createCliProxyClient = (params: {
                     const cooldowns = modelCooldowns(file);
                     if (cooldowns.length > 0) {
                         row.cooldowns = cooldowns;
+                    }
+                    const models = lists.get(file.name);
+                    if (models !== undefined) {
+                        row.models = [...models];
                     }
                     return row;
                 });
@@ -633,9 +645,10 @@ export const createCliProxyClient = (params: {
         },
         planModels: async (provider) => {
             const files = providerFiles(await listFiles(), provider).filter((file) => file.disabled !== true);
-            const lists = await Promise.all(files.map(async (file) => credentialModels(fetchFn, managementUrl, auth, file.name)));
-            return [...new Set(lists.flat())];
+            const lists = await credentialLists.of(files.map((file) => file.name));
+            return [...new Set([...lists.values()].flat())];
         },
+        recheckModels: (name) => credentialLists.recheck(name),
         putCompat: async (entries) => {
             const response = await fetchFn(`${managementUrl}/openai-compatibility`, {
                 method: "PUT",

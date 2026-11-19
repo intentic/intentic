@@ -1,4 +1,4 @@
-import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { ProviderRefusal, TranslatorAccount } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { z } from "zod";
 import { signedPayloads } from "../../../auth/signed-payload.js";
 import type { RefusalAnswer } from "../../../usage/provider-refusals.js";
@@ -58,6 +58,8 @@ interface HarnessOptions {
     readonly covers?: (provider: string, account: string, model: string) => Promise<(other: string) => boolean>;
     // The Google accounts connected, best first; two unless a test needs more.
     readonly accounts?: readonly string[];
+    // The models the translator routes to each account, where a test names them (TranslatorAccount.models).
+    readonly models?: Readonly<Record<string, readonly string[]>>;
 }
 
 const harness = (answer: (model: string | undefined) => Response, options: HarnessOptions = {}) => {
@@ -78,13 +80,26 @@ const harness = (answer: (model: string | undefined) => Response, options: Harne
         logger: pino({ level: "silent" }),
         providerAccounts: async () => [],
         cliProxy: unstubbed<ServiceabilityDeps["cliProxy"]>("cliProxy", {
-            accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: (options.accounts ?? [A, B]).map((name) => ({ name, label: `${name}@example.com` })) }),
+            accounts: async () => ({
+                codex: [],
+                grok: [],
+                kimi: [],
+                gemini: (options.accounts ?? [A, B]).map((name) => {
+                    const row: TranslatorAccount = { name, label: `${name}@example.com` };
+                    const models = options.models?.[name];
+                    if (models !== undefined) {
+                        row.models = [...models];
+                    }
+                    return row;
+                }),
+            }),
             accountPrefix: (name: string) => accountPrefix(name),
         }),
     });
     const upstream = translator(answer);
     const warned: string[] = [];
     const said: string[] = [];
+    const unrouted: string[] = [];
     const gateway = createTranslatorGateway({
         translator: { url: "http://127.0.0.1:8789/", token: TOKEN },
         loopbackBase: LOOPBACK,
@@ -93,6 +108,7 @@ const harness = (answer: (model: string | undefined) => Response, options: Harne
         refusals: providerRefusals,
         covers: options.covers,
         reread: (provider, account) => reread.push([provider, account]),
+        unrouted: (_provider, account) => unrouted.push(account),
         logger: { info: (_fields: object, message?: string) => said.push(message ?? ""), warn: (_fields: object, message?: string) => warned.push(message ?? "") },
         fetch: upstream.fetchFn,
     });
@@ -113,7 +129,7 @@ const harness = (answer: (model: string | undefined) => Response, options: Harne
         }
         return app.request(`/translator-gateway/${base}${path}`, request);
     };
-    return { ledger, settled, reread, warned, said, gateway, upstream, send };
+    return { ledger, settled, reread, warned, said, unrouted, gateway, upstream, send };
 };
 
 const chat = { model: MODEL, stream: true, messages: [{ role: "user", content: "hi" }] };
@@ -280,13 +296,39 @@ test("a request naming no model goes through unpinned", async () => {
 test("a prefix the translator does not route yet sends the request unpinned rather than failing it", async () => {
     const unknownModel = (model: string | undefined): Response =>
         Response.json({ error: { message: `unknown provider for model ${model ?? ""}`, type: "invalid_request_error", code: "model_not_found" } }, { status: 400 });
-    const { ledger, upstream, send } = harness((model) => (model === MODEL ? sse() : unknownModel(model)));
+    const { ledger, upstream, send, unrouted, said } = harness((model) => (model === MODEL ? sse() : unknownModel(model)));
 
     const response = await send("/v1/chat/completions", { body: chat });
 
     expect(response.status).toBe(200);
     expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix(A)}/${MODEL}`, `${accountPrefix(B)}/${MODEL}`, MODEL]);
     expect(await filed(ledger)).toStrictEqual([]);
+    // Each account turned away has its model list re-read, and the request that found no account says so.
+    expect(unrouted).toStrictEqual([A, B]);
+    expect(said.filter((line) => line.startsWith("translator gateway: no account would take the request"))).toHaveLength(1);
+});
+
+// 2026-11-19: two ChatGPT Free sign-ins with all their allowance read ready for Sol, which their plan does not include, and
+// were asked for it ahead of the one account that runs it.
+test("an account whose plan does not include the model is never asked for it", async () => {
+    const { upstream, send } = harness(() => sse(), { models: { [A]: ["gemini-3.1-flash-lite"], [B]: [MODEL, "gemini-3.1-flash-lite"] } });
+
+    const response = await send("/v1/chat/completions", { body: chat });
+
+    expect(response.status).toBe(200);
+    expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix(B)}/${MODEL}`]);
+});
+
+test("the one account that runs the model resting in the translator: the loop gets its bench, and the line names it", async () => {
+    const bench = (): Response => Response.json({ error: { type: "model_cooldown", message: "All credentials are cooling down", reset_seconds: 7_000 } }, { status: 429 });
+    const { ledger, upstream, send, said } = harness(() => bench(), { models: { [A]: ["gemini-3.1-flash-lite"], [B]: [MODEL] } });
+
+    const response = await send("/v1/chat/completions", { body: chat });
+
+    expect(response.status).toBe(429);
+    expect(upstream.seen.map(({ model }) => model)).toStrictEqual([`${accountPrefix(B)}/${MODEL}`]);
+    expect(await filed(ledger)).toStrictEqual([]);
+    expect(said.filter((line) => line.startsWith("translator gateway: no account would take the request"))).toHaveLength(1);
 });
 
 // A spent allowance this gateway filed names its account, and only an answer pinned to that account settles it: a ChatGPT

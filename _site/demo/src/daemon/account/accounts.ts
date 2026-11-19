@@ -61,17 +61,31 @@ export const demoCursorAccount = (): OauthAccount => ({
 });
 
 export const demoTranslatorAccounts = (): TranslatorAccounts => ({
-    codex: [{
-        name: `chatgpt-ada`,
-        label: `ada@acme.dev`,
-        usage: homeRecording ? {
-            measuredAt: STARTED_AT - 4 * 60_000,
-            windows: [
-                { kind: `seven_day`, utilization: 18, resetsAt: Math.round(STARTED_AT / 1000) + 4 * 24 * 3600, gates: `all` },
-                { kind: `five_hour`, utilization: 24, resetsAt: Math.round(STARTED_AT / 1000) + 3 * 3600, gates: `all` },
-            ],
-        } : undefined,
-    }],
+    codex: [
+        {
+            name: `chatgpt-ada`,
+            label: `ada@acme.dev`,
+            usage: homeRecording ? {
+                measuredAt: STARTED_AT - 4 * 60_000,
+                windows: [
+                    { kind: `seven_day`, utilization: 18, resetsAt: Math.round(STARTED_AT / 1000) + 4 * 24 * 3600, gates: `all` },
+                    { kind: `five_hour`, utilization: 24, resetsAt: Math.round(STARTED_AT / 1000) + 3 * 3600, gates: `all` },
+                ],
+            } : undefined,
+            models: CODEX_MODELS.map((model) => model.id),
+        },
+        // A ChatGPT Free sign-in with its whole month left, whose plan runs GPT-5.2 but not GPT-5.2 Codex: under Codex the
+        // picker sets it apart as not on plan, under GPT-5.2 it is one more account the turns spread over.
+        ...(homeRecording ? [] : [{
+            name: `chatgpt-ada-free`,
+            label: `ada.personal@example.com`,
+            usage: {
+                measuredAt: STARTED_AT - 4 * 60_000,
+                windows: [{ kind: `monthly`, utilization: 0, resetsAt: Math.round(STARTED_AT / 1000) + 30 * 24 * 3600, gates: `all` as const }],
+            },
+            models: [`gpt-5.2`],
+        }]),
+    ],
     grok: [],
     kimi: [],
     // One of every state a Google row can be in, so the Agent tab shows what each says: serving, waiting on its owner

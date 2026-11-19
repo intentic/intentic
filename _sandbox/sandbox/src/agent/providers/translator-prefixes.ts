@@ -17,6 +17,9 @@ import type { TranslatorAuthFile } from "../../usage/translator-usage.js";
 // How many hex digits of the name's hash the prefix keeps: enough that a sandbox's few dozen files never collide.
 const PREFIX_HEX_DIGITS = 10;
 
+/** A model id already pinned to one credential (`<prefix>/<model>`), as the translator lists it beside the bare one. */
+export const PINNED_MODEL_ID = /^ic-[0-9a-f]{10}\//u;
+
 /** The prefix that pins a request to the credential in this file. */
 export const accountPrefix = (name: string): string => `ic-${createHash("sha1").update(name).digest("hex").slice(0, PREFIX_HEX_DIGITS)}`;
 

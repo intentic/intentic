@@ -54,13 +54,18 @@ const {
     providerLocked?: boolean;
 }>();
 
-const { family, onKey, accountRows, accountCapacity, keyRows, choosable, routedRows, routedCapacity } = usePickerAccounts(
+const { family, onKey, accountRows, accountCapacity, keyRows, choosable, routedRows, routedCapacity, modelName } = usePickerAccounts(
     toRef(() => provider),
     toRef(() => harness),
     toRef(() => model),
 );
 
 const { mobile } = useDevice();
+
+// The hover on a row whose plan does not include the model: which model, and that its plan is why.
+const offPlanTip = computed(() => ({ title: modelName.value ?? ``, note: t(`chat.pickerAccounts.notOnPlanNote`) }));
+// The hover on a row the translator is resting: its own words for why.
+const restTip = (reason: string | undefined) => (reason === undefined ? undefined : { title: t(`chat.accountFix.wait`), quote: reason });
 
 // The row ticked is the one the next turn runs on: the window's one reading of it (runServing), which the composer's
 // Send and the account a chat's first turn names read too, so the tick can never name another account than the turn's.
@@ -235,6 +240,8 @@ const pickProvider = (target: AgentProvider): void => {
                 </span>
                 <!-- Spend against this account's tightest limit; absent means unmeasured or unavailable, distinct from a measured zero. -->
                 <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="ml-auto" :class="{ 'opacity-50': a.demoted }" />
+                <!-- A plan without the model has no room for it to show: it says so where the meter would be, quietly, since nothing is wrong. -->
+                <span v-else-if="a.offPlan" class="ml-auto shrink-0 text-2xs text-subtle" v-tooltip.top="offPlanTip">{{ t(`chat.accountFix.plan`) }}</span>
                 <Icon
                     v-if="a.needsReauth"
                     name="exclamation-triangle"
@@ -317,8 +324,17 @@ const pickProvider = (target: AgentProvider): void => {
                 :class="{ 'ui-row-select ui-off max-md:min-h-11': onKey }"
                 @click="onKey && pickProvider(family)"
             >
-                <span class="min-w-0 truncate text-content">{{ a.label }}</span>
-                <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
+                <!-- The same reading as the choosable rows: dimmed when it takes no turn on this model, and a line saying why or until when. -->
+                <span class="flex min-w-0 flex-col items-start leading-tight">
+                    <span class="max-w-full truncate text-content" :class="{ 'opacity-50': a.demoted }">{{ a.label }}</span>
+                    <span v-if="a.refused" class="flex max-w-full items-start gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
+                        <Icon name="exclamation-triangle" class="shrink-0 text-2xs" aria-hidden="true" />
+                        <span class="truncate">{{ a.refused }}</span>
+                    </span>
+                    <span v-else-if="a.waiting" class="max-w-full truncate text-2xs text-subtle" v-tooltip.top="restTip(a.rests)">{{ a.waiting }}</span>
+                </span>
+                <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="ml-auto" :class="{ 'opacity-50': a.demoted }" />
+                <span v-else-if="a.offPlan" class="ml-auto shrink-0 text-2xs text-subtle" v-tooltip.top="offPlanTip">{{ t(`chat.accountFix.plan`) }}</span>
             </component>
             <p v-if="routedOpen && routedShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">
                 {{ t(`chat.pickerAccounts.noAccountsMatch`) }}

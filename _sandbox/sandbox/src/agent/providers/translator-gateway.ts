@@ -19,7 +19,7 @@ import { namedReset, RETRY_HORIZON_S } from "../../usage/reset-sentences.js";
 import { serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
 import { usageKey } from "./translator.js";
-import { logPins } from "./translator-prefixes.js";
+import { logPins, PINNED_MODEL_ID } from "./translator-prefixes.js";
 import { type TranslatorGatewaySessions, translatorGatewaySessions } from "./translator-gateway-session.js";
 
 /* THE DAEMON PLACES EVERY ROUTED REQUEST ON ONE ACCOUNT, so every refusal names the account that gave it.
@@ -53,9 +53,6 @@ const PIN_MAX_AGE_MS = 10 * 60_000;
 
 // Where the gateway's signing key is kept, under the auth root beside the privacy gateway's (privacy-gateway.key).
 const SESSION_KEY_FILE = "translator-gateway.key";
-
-// A model id the gateway already pinned (translator-prefixes.ts accountPrefix), which is never pinned again.
-const PINNED_MODEL = /^ic-[0-9a-f]{10}\//u;
 
 /** One account a request may be pinned to: its auth file's name and the prefix the translator knows it by. */
 export interface PinCandidate {
@@ -91,6 +88,9 @@ export interface TranslatorGatewayDeps {
     readonly covers?: ((provider: KeyedProvider, account: string, model: string) => Promise<(other: string) => boolean>) | undefined;
     // Re-measures one account that just refused, while its refusal is the freshest thing known about it.
     readonly reread: (provider: KeyedProvider, account: string) => void;
+    // Re-reads the models one account runs: the translator turned a request for a model away from it (`unroutable`), so
+    // the list its row carries, which keeps it out of that model's candidates, may be out of date.
+    readonly unrouted?: ((provider: KeyedProvider, account: string) => void) | undefined;
     readonly logger: Pick<Logger, "info" | "warn">;
     readonly fetch?: typeof fetch;
     readonly now?: () => number;
@@ -170,7 +170,7 @@ const pinnableOf = (provider: KeyedProvider, contentType: string | null, raw: Ui
     }
     // A body this cannot read is the translator's to refuse, sent exactly as it came.
     const body = PinnableBodySchema.safeParse(parseJsonOr(new TextDecoder().decode(raw), undefined));
-    return !body.success || PINNED_MODEL.test(body.data.model) ? undefined : { provider, model: body.data.model, body: body.data };
+    return !body.success || PINNED_MODEL_ID.test(body.data.model) ? undefined : { provider, model: body.data.model, body: body.data };
 };
 
 // The same request with its model asked for on one account.
@@ -348,12 +348,23 @@ const handedThrottle = (g: Gateway, asked: Pinnable, refusal: ReadRefusal, tried
     return handedOn(refusal);
 };
 
+// The line a request no account would take leaves: which accounts the translator is resting, and which do not run the
+// model. Both are skipped without a word of their own, so without it a turn refused that way named nobody (2026-11-19).
+const nobodyTook = (g: Gateway, asked: Pinnable, benched: readonly string[], unrouted: readonly string[]): void => {
+    g.logger.info(
+        { provider: asked.provider, model: asked.model, benched, unrouted },
+        "translator gateway: no account would take the request (benched: the translator is resting it; unrouted: it does not run this model)",
+    );
+};
+
 // Asks each candidate in turn, at most once, until one answers or refuses for something other than a spent allowance, a
 // translator's bench or a throttle (causeOf). Past THROTTLED_ASKS throttles, the last one as it came. Every one refused:
 // the last refusal as it came. None routed the prefix at all: undefined, and the caller sends unpinned.
 const placed = async (g: Gateway, outgoing: Outgoing, asked: Pinnable, candidates: readonly PinCandidate[]): Promise<Response | undefined> => {
     let last: { readonly refusal: ReadRefusal; readonly cause: RefusalCause } | undefined;
     let throttles = 0;
+    const benched: string[] = [];
+    const unrouted: string[] = [];
     for (const candidate of candidates) {
         const askedAt = g.clock();
         const { url, method, headers, signal } = outgoing;
@@ -363,6 +374,8 @@ const placed = async (g: Gateway, outgoing: Outgoing, asked: Pinnable, candidate
         }
         const refusal = await readRefusal(response);
         if (unroutable(refusal, candidate.prefix)) {
+            unrouted.push(candidate.account);
+            g.unrouted?.(asked.provider, candidate.account);
             continue;
         }
         const cause = causeOf(refusal, g.clock());
@@ -370,6 +383,9 @@ const placed = async (g: Gateway, outgoing: Outgoing, asked: Pinnable, candidate
             return handedOn(refusal);
         }
         last = { refusal, cause };
+        if (cause === "benched") {
+            benched.push(candidate.account);
+        }
         if (cause === "spent") {
             await fileRefusal(g, asked, candidate, refusal);
         } else if (cause === "throttled" && ++throttles >= THROTTLED_ASKS) {
@@ -377,7 +393,13 @@ const placed = async (g: Gateway, outgoing: Outgoing, asked: Pinnable, candidate
         }
     }
     if (last === undefined) {
+        if (unrouted.length > 0) {
+            nobodyTook(g, asked, benched, unrouted);
+        }
         return undefined;
+    }
+    if (last.cause === "benched") {
+        nobodyTook(g, asked, benched, unrouted);
     }
     return last.cause === "throttled" ? handedThrottle(g, asked, last.refusal, throttles) : handedOn(last.refusal);
 };
@@ -470,6 +492,7 @@ export const translatorGatewaySlice = defineSlice<TranslatorGatewaySlice>({
             },
             reread: (provider, account) =>
                 void whole().headroom.refresh({ scope: { providers: [provider], account: usageKey(provider, account) }, maxAgeMs: 0 }),
+            unrouted: (_provider, account) => whole().cliProxy.recheckModels(account),
             logger,
         }),
     }),

@@ -3113,7 +3113,8 @@
             "admin": "sans siège",
             "reconnect": "à reconnecter",
             "verify": "en attente de vérification",
-            "wait": "en pause pour l'instant"
+            "wait": "en pause pour l'instant",
+            "plan": "hors forfait"
         },
         "cardStatus": {
             "allowed": "Autorisé",
@@ -4238,7 +4239,9 @@
             "verify": "Vérifiez ce compte auprès du fournisseur ou choisissez un autre compte ou modèle. Votre message est conservé ici.",
             "verifyTitle": "Vérifier le compte",
             "wait": "Ce compte est temporairement bloqué et la date de déblocage est inconnue. Choisissez un autre compte ou modèle, ou attendez.",
-            "waitTitle": "Compte temporairement bloqué"
+            "waitTitle": "Compte temporairement bloqué",
+            "plan": "Le forfait de ce compte n'inclut pas ce modèle. Choisissez un autre modèle ou compte. Votre message est conservé ici.",
+            "planTitle": "Modèle hors forfait"
         },
         "composerIntent": {
             "alsoReplaced": "Aussi remplacés",
@@ -4458,6 +4461,7 @@
             "allAccounts": "Les {count} comptes",
             "allowanceUsedUp": "Quota épuisé",
             "allowanceUsedUpReopens": "Quota épuisé, rouvre {when}",
+            "notOnPlanNote": "Absent du forfait du compte",
             "poolUsedUp": "Quota {pool} épuisé",
             "poolUsedUpReopens": "Quota {pool} épuisé, rouvre {when}",
             "autoPicked": "Choisi automatiquement",

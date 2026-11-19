@@ -169,6 +169,23 @@ test("a provider that publishes no reading is judged from its door's accounts an
     expect(preferredAccount(await serviceabilities(one, "cursor", { id: "composer-2.5" }))?.id).toBe("y");
 });
 
+// 2026-11-19 (rice-t7kz, hippo-5w4q): two ChatGPT Free sign-ins back from their monthly reset read ready for Sol, which
+// only the spent Team one runs, and a held Sol turn was re-timed to now every two minutes.
+test("a routed credential whose plan does not include the model is outside that model's fleet", async () => {
+    const free = ["gpt-6-luna", "gpt-6.1-terra"];
+    const services = deps({
+        routed: {
+            codex: [
+                { name: "free", label: "f", usage: reading(window({ kind: "monthly", utilization: 0 })), models: free },
+                { name: "team", label: "t", usage: reading(window({ utilization: 100, resetsAt: 9_000_000_000 })), models: ["gpt-6.2-sol", ...free] },
+            ],
+        },
+    });
+    expect(await serviceability(services, "codex", "free", { id: "gpt-6.2-sol" })).toMatchObject({ kind: "blocked", fix: "plan" });
+    expect(await fleetCapacityOf(services, "codex", { id: "gpt-6.2-sol" })).toEqual({ kind: "spent", accounts: 1, reopensAt: 9_000_000_000, pool: undefined });
+    expect(await fleetCapacityOf(services, "codex", { id: "gpt-6-luna" })).toMatchObject({ kind: "serving", serving: 1 });
+});
+
 test("a routed refusal naming no credential covers them all until one reads with room after it", async () => {
     const services = deps({
         refusals: { codex: [{ at: 1_000, kind: "limit", message: "Limit reached.", model: "gpt-6.1-sol" }] },

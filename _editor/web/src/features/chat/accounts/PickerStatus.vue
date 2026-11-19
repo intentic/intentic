@@ -32,8 +32,10 @@ const { onKey, routedRows, unplacedRefusal } = usePickerAccounts(
 );
 
 // Rows nobody picks between read as a broken list unless something says so; a choosable list needs no caption. On a key
-// they are the way back to the subscription, not where the turn spreads.
-const spread = computed(() => (accounts && !onKey.value && routedRows.value.length > 1 ? routedRows.value.length : undefined));
+// they are the way back to the subscription, not where the turn spreads. Turns spread only over the accounts whose plan
+// includes the model; the rest say so on their own rows.
+const spreadOver = computed(() => routedRows.value.filter((row) => !row.offPlan).length);
+const spread = computed(() => (accounts && !onKey.value && spreadOver.value > 1 ? spreadOver.value : undefined));
 const refusal = computed(() => (accounts ? unplacedRefusal.value : undefined));
 
 const left = computed(() => note !== undefined || spread.value !== undefined);

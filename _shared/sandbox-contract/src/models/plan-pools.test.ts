@@ -757,6 +757,32 @@ test("a provider's capacity for a model is spent only when no account can serve 
     expect(fleetCapacity([{ account: "x" }], [refusal({ kind: "entitlement", account: "x" })], { id: "gpt-6" }, 2_000).kind).toBe("spent");
 });
 
+test("an account whose plan does not include a model is outside that model's fleet, and only that model's", () => {
+    // 2026-11-19: two ChatGPT Free sign-ins back from their monthly reset, and the Team one, the only one running Sol, spent.
+    const free = at(5_000, window({ kind: "monthly", utilization: 0, resetsAt: 9_000_000 }));
+    const spentTeam = at(5_000, window({ kind: "five_hour", utilization: 100, resetsAt: 9_000 }));
+    const freeModels = ["gpt-6-luna", "gpt-6.1-terra"];
+    const accounts: ServiceFacts[] = [
+        { account: "free-a", usage: free, models: freeModels },
+        { account: "free-b", usage: free, models: freeModels },
+        { account: "team", usage: spentTeam, models: ["gpt-6.2-sol", ...freeModels] },
+    ];
+    const sol = serviceStates(accounts, [], { id: "gpt-6.2-sol", label: "GPT-6.2-Sol" }, 6_000_000);
+    expect(sol.get("free-a")).toEqual({ kind: "blocked", fix: "plan", reason: "GPT-6.2-Sol is not on this account's plan" });
+    expect(sol.get("team")?.kind).toBe("spent");
+    // Sol is back when the Team account is, and the Free ones are not counted toward it.
+    expect(fleetCapacity(accounts, [], { id: "gpt-6.2-sol" }, 6_000_000)).toEqual({ kind: "spent", accounts: 1, reopensAt: 9_000, pool: undefined });
+    // Every account runs Luna: the Free ones' room serves it.
+    expect(fleetCapacity(accounts, [], { id: "gpt-6-luna" }, 6_000_000)).toEqual({ kind: "serving", serving: 2, accounts: 3, roomMeasuredAt: 5_000 });
+    // With no model asked about, nothing is off any plan.
+    expect(serviceStates(accounts, [], undefined, 6_000_000).get("free-a")?.kind).toBe("ready");
+    // A model no account lists under this id (an alias, a suffix) judges nobody off plan, and neither does a missing list.
+    expect(serviceStates(accounts, [], { id: "gpt-6.2-sol-high" }, 6_000_000).get("free-a")?.kind).toBe("ready");
+    const unlisted = [{ account: "fresh", usage: free }, ...accounts];
+    expect(serviceStates(unlisted, [], { id: "gpt-6.2-sol" }, 6_000_000).get("fresh")?.kind).toBe("ready");
+    expect(fleetCapacity(unlisted, [], { id: "gpt-6.2-sol" }, 6_000_000)).toMatchObject({ kind: "serving", serving: 1, accounts: 2 });
+});
+
 test("an answer on one model covers another only where every pool the other spends gates it too", () => {
     const codex = usage(window({ kind: "five_hour", utilization: 0 }), window({ kind: "seven_day", utilization: 0 }));
     expect(answerCovers(codex, { id: "gpt-6-luna" }, { id: "gpt-6.1-sol" })).toBe(true);

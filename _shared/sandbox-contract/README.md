@@ -54,9 +54,10 @@ flowchart LR
   refusal: its queued words remain owed, not consumed as an executed failure.
 - Some rules live here as code, not only shapes, because both ends must reach the same answer. The main one is
   whether an account can serve a turn: `serviceStates` in `src/models/plan-pools.ts` turns a revoked sign-in, a lost
-  seat, a translator bench, every refusal still standing and the plan limits into one `AccountState` (`ready` · `spent`
-  · `blocked` with its `fix` · `unknown`), and `fleetCapacity` folds a provider's accounts into one answer per model
-  (`serving` · `spent` until when · `unknown`). `SPENT_UTILIZATION` is the only spent line. The daemon and the editor both
+  seat, a translator bench, every refusal still standing, the plan limits and the models its plan includes into one
+  `AccountState` (`ready` · `spent` · `blocked` with its `fix` · `unknown`; `plan` is the fix for a model other accounts
+  of the provider run and this one's plan lacks), and `fleetCapacity` folds a provider's accounts into one answer per
+  model (`serving` · `spent` until when · `unknown`), leaving out the accounts whose plan lacks it. `SPENT_UTILIZATION` is the only spent line. The daemon and the editor both
   run it, on the same account rows and the same refusals on file (`ProviderRefusalsSchema`, every refusal per provider);
   no account row carries a verdict, so no surface can read a stale one.
 - So is which lane the board files a conversation in and what of a fleet calls the person (`src/models/agent-standing.ts`,

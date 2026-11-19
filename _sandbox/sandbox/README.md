@@ -340,7 +340,8 @@ flowchart LR
   shield refused Cursor's for its runtime, a conversation's grant never reached it, and Cursor kept its own account loop.
 - Whether an account, or a provider's accounts together, can serve a model now, and until when, is one rule over one
   set of facts (2026-10-20). The facts are the account rows (a revoked sign-in, a seat mark, a translator bench, the
-  polled reading) and every refusal on file in one ledger (`usage/provider-refusals.ts`), each the latest of its kind for
+  polled reading, the models the translator routes to the credential, `agent/providers/translator-models.ts`) and every
+  refusal on file in one ledger (`usage/provider-refusals.ts`), each the latest of its kind for
   the account and model it names. The rule is the contract's (`models/plan-pools.ts`: `serviceStates` per account,
   `fleetCapacity` per model), which lays every standing refusal on the reading it covers (`judgedReading`). The daemon
   reads it through `usage/serviceability/serviceability.ts` for placement, holds, the role ladder, the spawn listing and

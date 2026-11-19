@@ -1,5 +1,5 @@
 import { accountServesLoop } from "@intentic/sandbox-contract/models/agent-catalog";
-import { flappingAccounts, preferredAccount, reopensAtOf } from "@intentic/sandbox-contract/models/plan-pools";
+import { flappingAccounts, offPlanVerdict, preferredAccount, reopensAtOf } from "@intentic/sandbox-contract/models/plan-pools";
 import { type AgentHarness, AgentHarnessSchema, type AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { subscriptionProviderOn } from "../../providers/access";
@@ -59,8 +59,11 @@ const accountRows = (target: RunTarget, subscription: ReturnType<typeof subscrip
 };
 
 // The translator balances its subscriptions, independently of any account pick: any usable credential keeps the pool
-// runnable, and when none can serve, the earliest reopening is the pool's, never the first row's.
-const poolState = (rows: readonly { readonly state: AccountState }[]): AccountState | undefined => {
+// runnable, and when none can serve, the earliest reopening is the pool's, never the first row's. A credential whose plan
+// does not include the model is no part of its pool (plan-pools.ts fleetOf).
+const poolState = (all: readonly { readonly state: AccountState }[]): AccountState | undefined => {
+    const fleet = all.filter((row) => !offPlanVerdict(row.state));
+    const rows = fleet.length > 0 ? fleet : all;
     const preferred = preferredAccount(rows)?.state;
     if (preferred?.kind === `ready` || preferred?.kind === `unknown`) {
         return preferred;

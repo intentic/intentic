@@ -45,6 +45,7 @@ const routedFacts = (account: TranslatorAccount): ServiceFacts => ({
     usage: account.usage,
     cooling: account.cooling,
     cooldowns: account.cooldowns,
+    models: account.models,
 });
 
 /**

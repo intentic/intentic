@@ -3113,7 +3113,8 @@
             "admin": "sin puesto",
             "reconnect": "hay que volver a conectarla",
             "verify": "pendiente de verificar",
-            "wait": "en pausa por ahora"
+            "wait": "en pausa por ahora",
+            "plan": "fuera del plan"
         },
         "cardStatus": {
             "allowed": "Permitido",
@@ -4238,7 +4239,9 @@
             "verify": "Verifica esta cuenta con el proveedor o elige otra cuenta o modelo. Tu mensaje se conservará aquí.",
             "verifyTitle": "Verificar la cuenta",
             "wait": "Esta cuenta está bloqueada temporalmente y se desconoce cuándo se desbloqueará. Elige otra cuenta o modelo, o espera.",
-            "waitTitle": "Cuenta bloqueada temporalmente"
+            "waitTitle": "Cuenta bloqueada temporalmente",
+            "plan": "El plan de esta cuenta no incluye este modelo. Elige otro modelo u otra cuenta. Tu mensaje se conservará aquí.",
+            "planTitle": "Modelo fuera del plan"
         },
         "composerIntent": {
             "alsoReplaced": "También reemplazados",
@@ -4458,6 +4461,7 @@
             "allAccounts": "Las {count} cuentas",
             "allowanceUsedUp": "Cuota agotada",
             "allowanceUsedUpReopens": "Cuota agotada, se reabre {when}",
+            "notOnPlanNote": "No incluido en su plan",
             "poolUsedUp": "Cuota de {pool} agotada",
             "poolUsedUpReopens": "Cuota de {pool} agotada, se reabre {when}",
             "autoPicked": "Elegida sola",
