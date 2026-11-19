@@ -8,6 +8,7 @@ import { type RuleCommandRun, runRuleCommand } from "../../rules/rule-command.js
 import { PUSH_SESSION } from "../../terminal/terminal-session.js";
 import { pushRefusal, pushRefusalReason } from "../git.js";
 import { pushPlan } from "../remote/remote.js";
+import type { TerminalRunner, TerminalRunOptions } from "../../terminal/terminal-run.js";
 
 // Started and answered at once, executed in the `job-push` terminal, polled for its verdict; the repository's own
 // pre-push hook is the only gate a push passes. One per repo (a second start for a running repo joins it), and pushes
@@ -90,11 +91,27 @@ const announceSettled = (services: PushRunDeps, settled: PushRun, tell: Audience
     }
 };
 
+// The push's terminal, its commands run with the credential gateway's git rewrites under them, so Back up reaches a
+// remote only the gateway holds the credential for (capabilities/broker/daemon-git-env.ts). A call's own env still wins.
+const gatewayTerminal = (services: PushRunDeps & Pick<Services, "daemonGitEnv">): TerminalRunner => {
+    const terminal = services.terminalRun;
+    const routed = async (options: TerminalRunOptions): Promise<TerminalRunOptions> => ({
+        ...options,
+        env: { ...(await services.daemonGitEnv()), ...options.env },
+    });
+    return {
+        visible: terminal.visible,
+        running: terminal.running,
+        run: async (session, command, options) => terminal.run(session, command, await routed(options)),
+        tryRun: async (session, command, options) => terminal.tryRun(session, command, await routed(options)),
+    };
+};
+
 // The daemon's own set (GitSlice.pushRuns), composed before the services it reads: each is fetched through `whole` per run.
-export const daemonPushRuns = (whole: () => PushRunDeps): PushRuns =>
+export const daemonPushRuns = (whole: () => PushRunDeps & Pick<Services, "daemonGitEnv">): PushRuns =>
     createPushRuns({
         get logger() { return whole().logger; },
-        get terminalRun() { return whole().terminalRun; },
+        get terminalRun() { return gatewayTerminal(whole()); },
         get pushSender() { return whole().pushSender; },
         get activity() { return whole().activity; },
         get workspace() { return whole().workspace; },

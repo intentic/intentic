@@ -84,6 +84,7 @@ const originFollowDeps = (services: BootPhase["services"], logger: BootPhase["lo
     agentWorktrees: services.agentWorktrees,
     history: services.history,
     logger,
+    gitEnv: services.daemonGitEnv,
 });
 
 // What delivering landed work to the owner's folder reads off the daemon (land/project-delivery.ts): the machines and

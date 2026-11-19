@@ -13,6 +13,7 @@ import { brokerOf, brokerRoutes } from "./broker-routes.js";
 import { type CredentialPolicyStore, credentialPolicyDocument, fileCredentialPolicy } from "./broker-policy.js";
 import { createRulePrompts } from "./broker-prompts.js";
 import { brokerSessions, type BrokerSessions } from "./broker-session.js";
+import { daemonGitEnvOrNone } from "./daemon-git-env.js";
 import type { RulePrompts } from "./broker-gateway.js";
 import type { SshSignUse } from "./ssh-agent.js";
 import { heldSshKeys } from "./ssh-agent-keys.js";
@@ -41,6 +42,9 @@ export interface BrokerSlice {
     readonly sshKeys: SshKeyStore;
     // The ssh agent's sockets: the owner's, and one per conversation (SSH_AUTH_SOCK in its turns).
     readonly sshAgent: SshAgentSockets;
+    // The gateway's git rewrites for the git the daemon runs by itself (daemon-git-env.ts): a remote follow, the
+    // turn-start sync, Fetch, Pull, Back up. Never throws; none when it cannot be read.
+    readonly daemonGitEnv: () => Promise<Record<string, string>>;
 }
 
 export interface BrokerDeps {
@@ -124,12 +128,22 @@ export const createBrokerSlice = ({ authRoot, cards, hold, conversationGrants, h
         const suffix = envSuffix(id);
         return { capability: id, vars: routes.flatMap((route) => (route.env === undefined ? [] : [`${route.env}_${suffix}`])) };
     };
+    const gatewayOrigin = `http://127.0.0.1:${String(BROKER_PORT)}`;
     return {
         gatewayHeld,
+        daemonGitEnv: () => daemonGitEnvOrNone({
+            workspace: host.workspace,
+            files: host.files,
+            capabilities: host.capabilities,
+            config: host.config,
+            brokerSessions: sessions,
+            gatewayOrigin,
+            credentialPolicy,
+        }),
         brokerSessions: sessions,
         credentialPolicy,
         rulePrompts: createRulePrompts({ ...cards, grants: conversationGrants, hold, warn }),
-        gatewayOrigin: `http://127.0.0.1:${String(BROKER_PORT)}`,
+        gatewayOrigin,
         sshKeys,
         sshAgent: createSshAgentSockets({
             dir: sshAgentDir ?? sshAgentDirFor(process.getuid?.()),

@@ -49,7 +49,7 @@ import { type UndoableAction, undoableAction, undoLastAction } from "./ops/undo.
 import { fetchRemote, pullRemote, remoteState } from "./remote/remote.js";
 import { remoteProjectOf } from "./remote/remote-urls.js";
 import type { CommitSigner } from "../git-identity.js";
-import type { CompositionCore } from "../composition.js";
+import type { CompositionCore, Services } from "../composition.js";
 import { daemonPushRuns, type PushRuns } from "./ops/push-run.js";
 
 // Git as the daemon runs it on the workspace's repositories: status, history, changes, branches and remotes.
@@ -162,6 +162,13 @@ export interface GitSlice {
     };
 }
 
+// `defaultGit` with the credential gateway's rewrites under every call (capabilities/broker/daemon-git-env.ts), for the
+// verbs that reach a remote; a call's own env still wins.
+const daemonGit = async (services: Pick<Services, "daemonGitEnv">, extra: Readonly<Record<string, string>> = {}): Promise<GitRunner> => {
+    const env = { ...(await services.daemonGitEnv()), ...extra };
+    return (dir, args, own) => defaultGit(dir, args, { ...env, ...own });
+};
+
 // The slice as the daemon runs it: every verb is the real subprocess function, so a new one is a line here and its
 // declaration above, never a line in composition.ts.
 const createGitSlice = ({ whole }: CompositionCore): GitSlice => ({
@@ -179,7 +186,8 @@ const createGitSlice = ({ whole }: CompositionCore): GitSlice => ({
         // which the feed tells apart.
         head: (dir) => readOnFeed("head-short", dir, defaultGit, () => gitHead(dir)),
         fullHead: (dir) => readOnFeed("head-full", dir, defaultGit, () => gitFullHead(dir)),
-        sync: gitSync,
+        // Never prompting (nobody is at a turn-start sync to answer), and through the gateway for a remote only it reaches.
+        sync: async (dir) => gitSync(dir, await daemonGit(whole(), { GIT_TERMINAL_PROMPT: "0" })),
         changedFiles,
         stagePaths,
         stageAll,
@@ -195,8 +203,8 @@ const createGitSlice = ({ whole }: CompositionCore): GitSlice => ({
         createBranch,
         deleteBranch,
         remoteState,
-        fetchRemote,
-        pullRemote,
+        fetchRemote: async (dir) => fetchRemote(dir, await daemonGit(whole())),
+        pullRemote: async (dir, author) => pullRemote(dir, author, await daemonGit(whole())),
         remoteProjectOf: (dir) => remoteProjectOf(dir, defaultGit),
         publishFile,
         stagedFileDiff,

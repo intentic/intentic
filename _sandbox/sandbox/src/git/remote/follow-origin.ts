@@ -54,7 +54,10 @@ export interface OriginFollowDeps {
     readonly history: Pick<Services["history"], "snapshot" | "notifyUserWrite">;
     readonly logger: Logger;
     readonly git?: GitRunner;
-    readonly fetch?: (dir: string, remote: string) => Promise<ActionResult>;
+    readonly fetch?: (dir: string, remote: string, gitEnv: Readonly<Record<string, string>>) => Promise<ActionResult>;
+    // What the fetches run with: the credential gateway's git rewrites (capabilities/broker/daemon-git-env.ts), read once a
+    // round. Absent, none.
+    readonly gitEnv?: () => Promise<Record<string, string>>;
 }
 
 export interface OriginFollow {
@@ -123,7 +126,7 @@ export const createOriginFollow = (deps: OriginFollowDeps): OriginFollow => {
     const fetch = deps.fetch ?? fetchTracked;
     const told = createFollowReport(deps.logger);
 
-    const followOne = async (repo: string): Promise<RepoFollowOutcome> => {
+    const followOne = async (repo: string, gitEnv: Readonly<Record<string, string>>): Promise<RepoFollowOutcome> => {
         const dir = join(deps.workspace.root, repo);
         const tracked = await trackedBranch(dir, git);
         if (tracked === undefined) {
@@ -132,7 +135,7 @@ export const createOriginFollow = (deps: OriginFollowDeps): OriginFollow => {
         if (!told.fetchDue(repo)) {
             return { status: "deferred", why: "backoff" };
         }
-        const fetched = await fetch(dir, tracked.remote);
+        const fetched = await fetch(dir, tracked.remote, gitEnv);
         if (!fetched.ok) {
             return { status: "fetch-failed", reason: fetched.reason };
         }
@@ -180,10 +183,11 @@ export const createOriginFollow = (deps: OriginFollowDeps): OriginFollow => {
             return [];
         }
         const repos = await discoverRepos(deps.workspace.root);
+        const gitEnv = (await deps.gitEnv?.()) ?? {};
         const results = await Promise.all(
             repos.map(async (repo): Promise<RepoFollow> => {
                 try {
-                    return { repo, outcome: await followOne(repo) };
+                    return { repo, outcome: await followOne(repo, gitEnv) };
                 } catch (cause) {
                     return { repo, outcome: { status: "error", reason: gitFailureReason(cause, "git failed") } };
                 }
