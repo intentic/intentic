@@ -7,10 +7,11 @@ import { sandboxNow } from "../../../models/agent-status/sandboxClock";
 import { ANY_MOMENT } from "../../../models/fleet/board/activePhase";
 import { type LaneGroup, toggleFold } from "./view/laneGroups";
 
-// The head of one of the Active lane's groups (activePhase.ts): its name, and a press that folds it. Quiet type over the
-// cards, a step under the lane's own header, no band or box. No count while open, since its cards are the tally; folded,
-// it says how many it holds and, for Up next, when the first of them goes, which is the one fact the folded cards'
-// corners would have answered.
+// The head of one of the Active lane's waiting groups (activePhase.ts): its name on a hairline drawn inside the gap that
+// already parts one group from the next, so it takes no row of its own, and a press that folds the group. Working has
+// none (laneGroups.ts): it is always first, right under the lane's own header. No count while open, since its cards are
+// the tally; folded, it says how many it holds and, for Up next, when the first of them goes, which is the one fact the
+// folded cards' corners would have answered.
 
 const props = defineProps<{
     group: LaneGroup;
@@ -22,8 +23,6 @@ const t = useT();
 
 const label = computed(() => {
     switch (props.group.key) {
-        case `working`:
-            return t(`agents.activeGroups.working`);
         case `next`:
             return t(`agents.activeGroups.next`);
         case `draft`:
@@ -49,24 +48,25 @@ const when = computed(() => {
 </script>
 
 <template>
-    <!-- Pulled toward the group it heads (`-mb-2` against the lane's gap), and parted from the group above it by more
-         than a card is from a card. -->
+    <!-- Sunk into the lane's gaps (`-my-3`) so the groups stand only a little further apart than two cards do; the first
+         keeps its top margin, since above it is the lane's header, not a gap. -->
     <component
         :is="group.foldable ? `button` : `div`"
         :type="group.foldable ? `button` : undefined"
         :aria-expanded="group.foldable ? !group.folded : undefined"
-        class="-mb-2 flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-2xs text-muted"
-        :class="[first ? `` : `mt-3`, group.foldable ? `transition-colors hover:text-content` : ``]"
+        class="flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-2xs text-muted"
+        :class="[first ? `-mb-3` : `-my-3`, group.foldable ? `transition-colors hover:text-content` : ``]"
         @click="group.foldable && toggleFold(group.key)"
     >
         <span class="shrink-0 font-semibold">{{ label }}</span>
         <span v-if="group.folded" class="shrink-0 tabular-nums text-subtle">{{ group.cards.length }}</span>
         <span v-if="when !== undefined" class="min-w-0 truncate text-subtle">· {{ when }}</span>
+        <span class="h-px min-w-4 flex-1 bg-line" aria-hidden="true" />
         <!-- Rotation, not an icon swap, as every disclosure in the app turns (DisclosureRow). -->
         <Icon
             v-if="group.foldable"
             name="chevron-right"
-            class="ml-auto shrink-0 text-2xs text-subtle transition-transform"
+            class="shrink-0 text-2xs text-subtle transition-transform"
             :class="group.folded ? `` : `rotate-90`"
             aria-hidden="true"
         />

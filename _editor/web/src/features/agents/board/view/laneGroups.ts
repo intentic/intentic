@@ -8,7 +8,8 @@ import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 // THE RUNS OF CARDS A LANE DRAWS, EACH UNDER ITS OWN HEAD. A lane is one run, save Active once it holds more than one
 // phase (activePhase.ts) and is long enough to need folding: working, up next and drafts each draw under a head the
 // reader can fold. A lane of twenty is mostly one group they are not reading right now (eight messages booked for
-// tonight, drafts from last week), and folding it gives the screen back to the turns under way. A lane of three fits on
+// tonight, drafts from last week), and folding it gives the screen back to the turns under way. Working itself takes no
+// head: it always leads, right under the lane's header. A lane of three fits on
 // the screen already: heads there are three lines of chrome over three cards, and the order (working first) and the
 // row-sized cards for what waits already say which is which.
 
@@ -26,7 +27,7 @@ export interface LaneGroup {
     readonly cards: readonly FleetAgent[];
     // What it draws: every card, or folded, only the one wearing the ring (as Finished's window keeps it).
     readonly shown: readonly FleetAgent[];
-    // Drawn under a head: Active holds more than one phase.
+    // Drawn under a head: Active holds more than one phase, and this is one of its waiting groups (never Working).
     readonly headed: boolean;
     // Its cards are drawn as rows (AgentCard `dense`) wherever the board is wide enough for the bigger card: only work in
     // flight wears that, so what waits to go by itself and a draft read a step down from the turns under way.
@@ -85,10 +86,13 @@ export const useLaneGroups = (host: LaneGroupsHost) => {
     const active = computed((): readonly LaneGroup[] => {
         const all = host.cardsFor(`active`);
         const groups = activeGroups(all, (card) => readingOf(card).phase);
-        const keptFold = !host.filtering.value && groups.some(({ phase }) => folded.value.has(phase));
-        const headed = groups.length > 1 && (all.length >= HEADS_FROM || keptFold);
-        const foldable = headed && !host.filtering.value;
+        const keptFold = !host.filtering.value && groups.some(({ phase }) => phase !== `working` && folded.value.has(phase));
+        const split = groups.length > 1 && (all.length >= HEADS_FROM || keptFold);
         return groups.map(({ phase, cards }) => {
+            // Working takes no head, so it has no fold either: it is always first, right under the lane's header, and the
+            // turns under way are what the folds give the screen back to.
+            const headed = split && phase !== `working`;
+            const foldable = headed && !host.filtering.value;
             const shut = foldable && folded.value.has(phase);
             return {
                 key: phase,

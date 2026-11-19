@@ -582,7 +582,6 @@
             "finishedFirst": "Les agents terminés attendent ici votre relecture. Rien n'arrive dans votre espace de travail sans votre accord."
         },
         "activeGroups": {
-            "working": "En cours",
             "next": "À venir",
             "drafts": "Brouillons",
             "firstIn": "le premier dans {when}",

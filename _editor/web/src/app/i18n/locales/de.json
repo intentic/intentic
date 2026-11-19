@@ -582,7 +582,6 @@
             "finishedFirst": "Fertige Agenten warten hier auf Ihre Prüfung. Nichts landet in Ihrem Workspace, bevor Sie es sagen."
         },
         "activeGroups": {
-            "working": "In Arbeit",
             "next": "Als Nächstes",
             "drafts": "Entwürfe",
             "firstIn": "erster in {when}",

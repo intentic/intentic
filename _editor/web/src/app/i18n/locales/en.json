@@ -582,7 +582,6 @@
             "finishedFirst": "Finished agents wait here for your review. Nothing lands in your workspace until you say so."
         },
         "activeGroups": {
-            "working": "Working",
             "next": "Up next",
             "drafts": "Drafts",
             "firstIn": "first in {when}",

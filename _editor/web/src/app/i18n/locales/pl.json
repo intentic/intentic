@@ -582,7 +582,6 @@
             "finishedFirst": "Skończone agenty czekają tu na Twój przegląd. Nic nie trafia do Twojej przestrzeni roboczej bez Twojej zgody."
         },
         "activeGroups": {
-            "working": "W toku",
             "next": "Następne",
             "drafts": "Szkice",
             "firstIn": "pierwsze za {when}",

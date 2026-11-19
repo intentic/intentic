@@ -35,11 +35,11 @@ const boardOf = (lanes: Partial<Record<FleetLane, FleetAgent[]>>, folded: Active
 const ids = (agents: readonly FleetAgent[]): string[] => agents.map((agent) => agent.id);
 
 describe(`the Active lane's groups`, () => {
-    it(`heads each kind once a long lane holds more than one, drawing all but work in flight as rows`, () => {
+    it(`heads each waiting kind once a long lane holds more than one, drawing all but work in flight as rows`, () => {
         const running = Array.from({ length: HEADS_FROM - 2 }, (_, at) => card(`r${at}`));
         const { groupsFor } = boardOf({ active: [...running, booked(`b`, 9), draft(`d`)] });
         expect(groupsFor(`active`).map((group) => [group.key, group.headed, group.rows, ids(group.shown)])).toEqual([
-            [`working`, true, false, ids(running)],
+            [`working`, false, false, ids(running)],
             [`next`, true, true, [`b`]],
             [`draft`, true, true, [`d`]],
         ]);
@@ -57,8 +57,16 @@ describe(`the Active lane's groups`, () => {
     it(`keeps the heads of a short lane whose group the reader folded, so what they put away stays away`, () => {
         const { groupsFor } = boardOf({ active: [card(`r`), draft(`d`)] }, [`draft`]);
         expect(groupsFor(`active`).map((group) => [group.key, group.headed, group.folded, ids(group.shown)])).toEqual([
-            [`working`, true, false, [`r`]],
+            [`working`, false, false, [`r`]],
             [`draft`, true, true, []],
+        ]);
+    });
+
+    it(`never folds Working, which has no head to unfold it from, even under a fold this browser kept`, () => {
+        const { groupsFor } = boardOf({ active: [card(`r`), draft(`d`)] }, [`working`]);
+        expect(groupsFor(`active`).map((group) => [group.key, group.headed, group.foldable, group.folded, ids(group.shown)])).toEqual([
+            [`working`, false, false, false, [`r`]],
+            [`draft`, false, false, false, [`d`]],
         ]);
     });
 

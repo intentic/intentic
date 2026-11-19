@@ -582,7 +582,6 @@
             "finishedFirst": "Los agentes terminados esperan aquí tu revisión. Nada entra en tu espacio de trabajo hasta que lo digas."
         },
         "activeGroups": {
-            "working": "En curso",
             "next": "A continuación",
             "drafts": "Borradores",
             "firstIn": "el primero en {when}",
