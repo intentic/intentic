@@ -19,6 +19,8 @@ export interface FleetMessage {
     readonly role: TranscriptRow["role"];
     readonly text: string;
     readonly sentAt?: number;
+    // When a notice opened: a notice has no send time, and one read without a clock is dated by whatever is near it.
+    readonly openedAt?: number;
     readonly at: number;
     // Each call this message made, as `name target`, one line each and at most TOOL_LINES of them.
     readonly tools?: readonly string[];
@@ -63,6 +65,7 @@ const lineOf = (row: TranscriptRow, at: number): FleetMessage | undefined => {
         at,
         ...present({
             sentAt: row.sentAt,
+            openedAt: row.role === "notice" ? row.openedAt : undefined,
             tools: tools.length === 0 ? undefined : tools.slice(0, TOOL_LINES),
             moreTools: tools.length > TOOL_LINES ? tools.length - TOOL_LINES : undefined,
             asked: asked.length === 0 ? undefined : asked,

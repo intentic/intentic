@@ -109,7 +109,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                 "timeline",
                 "Everything recorded about ONE conversation, oldest first, one line per event: the daemon.log lines that name it (in " +
                     "`ctx.conversationId`, a field, or the message), its activity entries (turn started, completed or failed, " +
-                    "dependency checks, CI repairs, refused pushes), its turns from the spend ledger, and the daemon boots in between. " +
+                    "dependency checks, CI repairs, refused pushes), its turns from the spend ledger, and the daemon boots and machine sleeps in between (a `pause` row: the host slept or its clock jumped, and nothing ran until it ends). " +
                     "Use it instead of grepping /history for a conversation id. What was said is in `agents show <id> --transcript`.",
                 DiagnosticsTimelineArgs,
                 async (args) => answer(deps, { query: "timeline", ...args }),

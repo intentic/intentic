@@ -7,7 +7,10 @@ import { spawnBlocked, spawnCatalogText, type SpawnableProvider, spawnableProvid
 import { mentionsSpentAllowance } from "../../engines/failure-sentences.js";
 import { spentRung } from "../models/role-model-quota.js";
 import type { LandResult } from "@intentic/sandbox-contract/schemas/agents";
-import type { ChildActionResult, ChildSpawnSpec } from "./children.js";
+import type { ChildActionResult, ChildRecord, ChildSpawnSpec, ChildTurnTally } from "./children.js";
+import { bookedRerunWords, sayToParent } from "../../conversations/land/child-lands.js";
+import { sameModel, taskLine } from "./child-spec.js";
+import { CANCELLED } from "./child-words.js";
 
 // What the records say a child can still run on, and what a failed one leaves behind: the spawn preflight against a
 // spent model, and the words that name a child's work and the doors that keep it.
@@ -151,4 +154,53 @@ export const mergeOutcome = (result: LandResult, where: string, childId: string)
         ok: false,
         message: `Nothing was written: ${blocked.length === 0 ? "the merge could not run" : blocked.join("; ")}. Its work stays on its branch \`agent/${childId}\`.`,
     };
+};
+
+/** How a child's turn ended, in the words its parent reads, and whether a re-run is booked past it. */
+export interface ChildEnding {
+    // The whole sentence: what ended it, then the re-run or where else the task could go.
+    readonly error: string | undefined;
+    // Set only where the sandbox booked one, which is what makes the child paused rather than failed.
+    readonly rerun: string | undefined;
+}
+
+// A cancel and an outside kill each explain themselves; anything else is the child's own ending, dressed with the
+// re-run that is coming or, where none is, somewhere the task could go instead.
+export const childEnding = async (
+    services: Services,
+    childId: string,
+    kid: ChildRecord | undefined,
+    tally: ChildTurnTally,
+    outside: { readonly cancelled: boolean; readonly killed: string | undefined },
+): Promise<ChildEnding> => {
+    if (outside.cancelled) {
+        return { error: CANCELLED, rerun: undefined };
+    }
+    if (outside.killed !== undefined) {
+        return { error: outside.killed, rerun: undefined };
+    }
+    const failure = tally.failure;
+    if (failure === undefined) {
+        return { error: undefined, rerun: undefined };
+    }
+    const rerun = tally.rerun === undefined ? undefined : bookedRerunWords(tally.rerun, childId);
+    // Only where nothing is bringing it back: with a re-run booked, where else it could go is noise.
+    const elsewhere = rerun !== undefined ? undefined : await elsewhereFor(services, childId, kid?.spec, failure);
+    return { error: [failure, rerun, elsewhere].filter((part) => part !== undefined).join(" "), rerun };
+};
+
+// A turn that opens on another model than its child was spawned on is said to the parent at once, never left to the
+// row: a re-run of a Kimi child once ran on kimi-k3 after kimi-k3-256k was taken off the list, and nothing said so
+// (2026-10-17).
+export const takeServedModel = (services: Services, childId: string, kid: ChildRecord | undefined, tally: ChildTurnTally, served: string): void => {
+    const asked = kid?.spec.model;
+    if (kid === undefined || tally.substituted || asked === undefined || asked === "" || sameModel(served, asked)) {
+        return;
+    }
+    tally.substituted = true;
+    void sayToParent(
+        services,
+        kid.parent,
+        `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") runs this turn on ${served}, not on ${asked} as it was spawned: ${asked} was not offered when the turn started. Cancel it if that model will not do.`,
+    );
 };

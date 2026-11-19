@@ -15,8 +15,9 @@ log lines around a moment you already know, which a window reaching back from no
   `--message <n>` for one message whole with its tool calls; the handle may also be a session-id prefix, a terminal log
   name, a run id or a subagent id; `agents find` also searches commands and question cards), then
   `mcp__diagnostics__timeline` with its `conversationId`: its daemon.log lines, activity entries (turn started,
-  completed or failed, dependency checks, CI repairs, refused pushes), its turns and the daemon boots in between,
-  oldest first. Use it instead of grepping `/history` for the id.
+  completed or failed, dependency checks, CI repairs, refused pushes), its turns, and the daemon boots and machine
+  sleeps in between (a `pause` row: the host slept or its clock jumped, and nothing ran until it says), oldest first.
+  Use it instead of grepping `/history` for the id.
 - Turns were interrupted, a session vanished, or the editor reconnected by itself → `mcp__diagnostics__restarts`: each
   boot, and whether the run before stopped cleanly or was killed, on which signal, and who asked for it.
 - A turn failed, died, or answered with the wrong provider's error → `mcp__diagnostics__turns` (`only: "failed"`, or a

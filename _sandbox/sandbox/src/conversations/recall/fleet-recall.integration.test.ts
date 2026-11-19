@@ -257,6 +257,21 @@ test("the last notice is dated by the turn it came in, and says how much came af
     });
     const recall = await fleetRecall(deps, FAIR, HISTORY_ROOT, { diff: false });
     expect(recall.digest).toMatchObject({ lastNotice: "Claude usage limit reached.", lastNoticeSentAt: 1_000, sinceLastNotice: 2 });
+    expect(recall.digest.lastNoticeAt).toBeUndefined();
+});
+
+// 2026-11-19: a refusal eight hours into a turn sent at 01:20 read only as "in the turn sent 01:20", and was dated to the
+// middle of the night by the agent reading it.
+test("the last notice carries its own time too, apart from the turn it came in", async () => {
+    const deps = depsOver(ROSTER, {
+        "fair-sage-ey2r": [
+            { role: "user", text: "Go for all of it.", sentAt: 1_000 },
+            { role: "assistant", text: "Spawning five children.", openedAt: 2_000 },
+            { role: "notice", text: "Failed to authenticate: OAuth token revoked.", openedAt: 30_000_000 },
+        ],
+    });
+    const recall = await fleetRecall(deps, FAIR, HISTORY_ROOT, { diff: false });
+    expect(recall.digest).toMatchObject({ lastNoticeAt: 30_000_000, lastNoticeSentAt: 1_000, sinceLastNotice: 0 });
 });
 
 const ANSWER: TranscriptRow = { role: "assistant", text: "The socket refuses connections." };

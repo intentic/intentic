@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
+import { PAUSED_LINE } from "../system/resources/loop/loop-watchdog.js";
 import { createDiagnosticsServer, type DiagnosticsToolDeps } from "./diagnostics-tools.js";
 
 // Tools as the model meets them: called by name, answered in text. Pins the wording, not just the filtering: the answer
@@ -474,6 +475,27 @@ test("restarts falls back to bare boot times on a daemon that keeps no restart l
     // The boot both records name is one boot; the older run's own start comes from its uptime.
     expect(text).toContain("2 daemon boots");
     expect(text).toContain(new Date(NOW - 200 * 60_000 - 6_000_000).toISOString());
+});
+
+// 2026-11-19: the machine slept four hours mid-turn; the conversation's record showed only the gap, and the refused
+// credential that came first after the wake was blamed for all of it.
+test("timeline says where the whole machine stood still, placed where the gap began", async () => {
+    const deps = await setup({
+        "daemon.log": [
+            JSON.stringify({ time: at(50), level: "info", ctx: { conversationId: "wise-fern" }, message: "turn: accepted" }),
+            JSON.stringify({ time: at(10), level: "warn", pausedMs: 35 * 60_000, from: at(45), to: at(10), message: PAUSED_LINE }),
+            JSON.stringify({ time: at(9), level: "warn", conversationId: "wise-fern", message: "turn refused: OAuth token revoked" }),
+            // A pause before anything of the conversation's says nothing about it.
+            JSON.stringify({ time: at(55), level: "warn", pausedMs: 5 * 60_000, from: at(60), to: at(55), message: PAUSED_LINE }),
+        ],
+    });
+
+    const text = await call(deps, "timeline", { conversationId: "wise-fern" });
+    expect(text).toContain("3 events (2 daemon.log lines, 0 activity entries, 0 turns, 0 daemon boots, 1 pauses of the whole machine)");
+    const order = ["turn: accepted", "stood still for 35m, until", "OAuth token revoked"].map((part) => text.indexOf(part));
+    expect(order.every((index) => index > 0)).toBe(true);
+    expect(order).toEqual(order.toSorted((a, b) => a - b));
+    expect(text).not.toContain("stood still for 5m");
 });
 
 test("timeline puts one conversation's log lines, activity and turns in time order, and skips lines that only list it", async () => {

@@ -28,7 +28,7 @@ const USAGE = `diagnostics — what this sandbox's daemon recorded, read-only. A
                                  window, for the lines around a moment you already know (--to is --until)
   diagnostics timeline <conversation> [--level <lvl>] [--since <minutes>] [--limit <n>]
                                  everything recorded about one conversation, oldest first: its log lines,
-                                 activity, turns and the daemon boots in between
+                                 activity, turns, and the daemon boots and machine sleeps in between
   diagnostics turns [--conversation <id>] [--only failed|unproven|silent|interrupted] [--since <minutes>] [--limit <n>]
                                  how recent turns ended: the model that ran, the error and the provider's
                                  sentence, and whether anything checked the work

@@ -266,19 +266,22 @@ export interface FleetDigest {
     readonly asked: readonly string[];
     readonly lastSaid?: string;
     readonly lastNotice?: string;
-    // When the turn the last notice came in was sent (a notice has no clock of its own), and how many messages were
-    // recorded after it: a refusal from five turns ago read as the conversation's present state otherwise.
+    // When the last notice came (its row's own stamp, absent on rows recorded before rows were stamped), when the turn
+    // it came in was sent, and how many messages were recorded after it: a refusal from five turns ago read as the
+    // conversation's present state otherwise. Both clocks, since a turn can run for hours before its notice: a refusal
+    // eight hours into a turn sent at 01:20 was read as dating from 05:40, and blamed for a four-hour sleep (2026-11-19).
+    readonly lastNoticeAt?: number;
     readonly lastNoticeSentAt?: number;
     readonly sinceLastNotice?: number;
 }
 
-const noticeAge = (messages: readonly TranscriptRow[]): Pick<FleetDigest, "lastNoticeSentAt" | "sinceLastNotice"> => {
+const noticeAge = (messages: readonly TranscriptRow[]): Pick<FleetDigest, "lastNoticeAt" | "lastNoticeSentAt" | "sinceLastNotice"> => {
     const at = messages.findLastIndex((row) => row.role === "notice" && collapse(row.text) !== "");
     if (at === -1) {
         return {};
     }
     const sentAt = messages.slice(0, at).findLast((row) => row.sentAt !== undefined)?.sentAt;
-    return present({ lastNoticeSentAt: sentAt, sinceLastNotice: messages.length - at - 1 });
+    return present({ lastNoticeAt: messages[at]?.openedAt, lastNoticeSentAt: sentAt, sinceLastNotice: messages.length - at - 1 });
 };
 
 const digestOf = (messages: readonly TranscriptRow[]): FleetDigest => {

@@ -1801,8 +1801,8 @@ describe("a turn the child did not get from its parent", () => {
     beforeEach(() => {
         told.length = 0;
     });
-    const parentHears = (stream: TurnStarter["stream"]): Services => {
-        const driven = drivenBy(spawnServices({}, [], actors), stream);
+    const parentHears = (stream: TurnStarter["stream"], base: Services = spawnServices({}, [], actors)): Services => {
+        const driven = drivenBy(base, stream);
         return unstubbed<Services>("services", {
             ...driven,
             conversations: { ...driven.conversations, running: (id: string) => id === parent.conversationId || driven.conversations.running(id) },
@@ -1951,6 +1951,63 @@ describe("a turn the child did not get from its parent", () => {
             description: "Port the parser",
         });
         gate.resolve();
+        expect(await settled(result.id)).toMatchObject({ outcome: "finished", matched: { status: "completed", summary: "Done on the re-run." } });
+    });
+
+    // The order three children of one parent lived through at once (2026-11-19): the turn let go of the conversation on a
+    // refused credential, its re-run started while that turn's transcript was still being written, and only then did the
+    // turn settle. The re-run went unfollowed for hours, the child reading as paused while it worked.
+    it("a re-run that starts while the turn before it is still being written down is still followed for the parent", async () => {
+        const recording = Promise.withResolvers<void>();
+        const gate = Promise.withResolvers<void>();
+        let writes = 0;
+        const base = spawnServices({}, [], actors);
+        const slowRecord = unstubbed<Services>("services", {
+            ...base,
+            transcripts: unstubbed<Services["transcripts"]>("transcripts", {
+                append: async () => {
+                    writes += 1;
+                    if (writes === 1) {
+                        await recording.promise;
+                    }
+                },
+            }),
+        });
+        const body = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
+            if (input.prompt === "go (sent again)") {
+                await gate.promise;
+                yield { kind: "delta", text: "Done on the re-run." };
+                yield { kind: "text_end" };
+            } else {
+                yield { kind: "error", message: "Failed to authenticate: OAuth token revoked.", autoResume: "scheduled" };
+            }
+            yield { kind: "done" };
+        };
+        const services = parentHears(body, slowRecord);
+        const result = await spawnChild(services, parent, { prompt: "go", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        // The turn let go of the conversation; its record is still being written.
+        await waitFor(() => expect(turnRunOf(actors, result.id)?.done).toBe(true), SETTLES);
+        expect(writes).toBe(1);
+        expect(services.turns.run({ conversationId: result.id, prompt: "go (sent again)" })).not.toBe("busy");
+        adoptChildTurn(services, { conversationId: result.id, speaker: { kind: "sandbox" }, prompt: "go (sent again)", resume: "auth", errand: undefined });
+        recording.resolve();
+
+        try {
+            // Told once the turn before it settled, and its row live again rather than paused.
+            await waitFor(
+                () =>
+                    expect(told).toContain(
+                        `Your subagent \`${result.id}\` ("Port the parser") is working: the sandbox sent its turn again by itself because its Claude sign-in was renewed. Its report reaches you when it ends, like any turn of its: do not send it the task again or give the task to another agent meanwhile.`,
+                    ),
+                SETTLES,
+            );
+            expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.status).toBe("running");
+        } finally {
+            gate.resolve();
+        }
         expect(await settled(result.id)).toMatchObject({ outcome: "finished", matched: { status: "completed", summary: "Done on the re-run." } });
     });
 

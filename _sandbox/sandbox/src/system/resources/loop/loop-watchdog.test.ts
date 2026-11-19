@@ -1,4 +1,4 @@
-import { parseDnsSocketInodes } from "./loop-watchdog.js";
+import { parseDnsSocketInodes, pausedFor } from "./loop-watchdog.js";
 
 // Real /proc/net/udp rows, captured in the container. The remote column is little-endian hex, so Docker's
 // embedded resolver at 127.0.0.11:53 reads as `0B00007F:0035`: that row is a lookup still awaiting an answer.
@@ -20,4 +20,18 @@ test("a table with no lookup open yields nothing: the quiet case must not read a
         .join("\n");
     expect(parseDnsSocketInodes(idle)).toEqual([]);
     expect(parseDnsSocketInodes("")).toEqual([]);
+});
+
+// 2026-11-19: a laptop's lid closed for four hours. Inside its VM the monotonic clock stood still and the wall clock was
+// set right on waking, so the tick that saw it came back half a second late by one clock and four hours by the other.
+test("a wall clock far ahead of the monotonic one is the machine stopped under the daemon, said as the gap it left", () => {
+    const fourHours = 4 * 3_600_000;
+    expect(pausedFor(fourHours + 500, 500)).toBe(fourHours);
+});
+
+test("ordinary ticks, a stall the monotonic clock saw too, and a clock set back are no pause", () => {
+    expect(pausedFor(510, 500)).toBeUndefined();
+    expect(pausedFor(30_000, 500)).toBeUndefined();
+    expect(pausedFor(90_000, 90_000)).toBeUndefined();
+    expect(pausedFor(-3_600_000, 500)).toBeUndefined();
 });

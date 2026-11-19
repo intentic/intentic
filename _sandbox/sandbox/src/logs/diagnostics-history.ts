@@ -10,6 +10,7 @@ import { openDocument } from "../store/open-document.js";
 import { bootHistoryDocument } from "../system/boot/restarts/boot-history.js";
 import { crashesDuring, describePreviousRun, type PreviousRun, RESTARTS_FILE, RUN_ENDINGS, type RunEnding } from "../system/boot/restarts/restart-record.js";
 import { PostMortemSchema } from "../system/resources/memory-records.js";
+import { PAUSED_LINE } from "../system/resources/loop/loop-watchdog.js";
 import { type HostCrashRow, readHostCrashes } from "../system/boot/restarts/host-crash-rows.js";
 import { utcDay, type UsageStore } from "../usage/usage-store.js";
 import { compactRecord } from "./diagnostics-shape.js";
@@ -158,7 +159,7 @@ export const readRestarts = async (historyRoot: string, query: { readonly sinceM
 
 export interface TimelineEvent {
     readonly at: number;
-    readonly source: "log" | "activity" | "turn" | "boot";
+    readonly source: "log" | "activity" | "turn" | "boot" | "pause";
     readonly text: string;
 }
 
@@ -224,13 +225,44 @@ const activityEvents = async (historyRoot: string, id: string, sinceMs: number |
     return events;
 };
 
+// "4h04m", "12m", "45s": a pause as a person reads it.
+const spanText = (ms: number): string => {
+    const minutes = Math.round(ms / 60_000);
+    if (minutes === 0) {
+        return `${Math.round(ms / 1000)}s`;
+    }
+    return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}m`;
+};
+
+// The machine standing still under the daemon (loop-watchdog.ts), placed where it began, so the gap it left in a
+// conversation's record reads as the sleep it was rather than as whatever came first after it.
+const PauseLineSchema = z.object({ pausedMs: z.number(), from: z.string(), to: z.string() });
+
+const pauseEvents = (lines: readonly JsonObject[]): TimelineEvent[] =>
+    lines.flatMap((line): TimelineEvent[] => {
+        const pause = PauseLineSchema.safeParse(line);
+        const from = pause.success ? Date.parse(pause.data.from) : Number.NaN;
+        const to = pause.success ? Date.parse(pause.data.to) : Number.NaN;
+        if (!pause.success || Number.isNaN(from) || Number.isNaN(to)) {
+            return [];
+        }
+        const { pausedMs } = pause.data;
+        return [
+            {
+                at: from,
+                source: "pause",
+                text: `the whole sandbox stood still for ${spanText(pausedMs)}, until ${new Date(to).toISOString()}: the machine it runs on slept (a lid closed, a host suspended) or its clock was set forward. Nothing ran in between, turns included.`,
+            },
+        ];
+    });
+
 export const readTimeline = async (
     historyRoot: string,
     usage: Pick<UsageStore, "turns">,
     query: { readonly conversationId: string; readonly sinceMs?: number | undefined; readonly level: LevelName; readonly limit: number },
 ): Promise<TimelineResult> => {
     const id = query.conversationId;
-    const [log, activity, ledger, restarts] = await Promise.all([
+    const [log, activity, ledger, restarts, paused] = await Promise.all([
         readLogLines(historyRoot, {
             file: "daemon.log",
             level: query.level,
@@ -242,6 +274,7 @@ export const readTimeline = async (
         activityEvents(historyRoot, id, query.sinceMs),
         usage.turns(query.sinceMs === undefined ? {} : { from: utcDay(query.sinceMs) }),
         readRestarts(historyRoot, { sinceMs: query.sinceMs }),
+        readLogLines(historyRoot, { file: "daemon.log", level: "warn", sinceMs: query.sinceMs, contains: "sandbox paused", where: (line) => line["message"] === PAUSED_LINE, limit: 200 }),
     ]);
     const logEvents = log.lines.flatMap((line): TimelineEvent[] => {
         const at = Date.parse(String(line["time"] ?? ""));
@@ -255,10 +288,11 @@ export const readTimeline = async (
     const first = Math.min(...all.map((event) => event.at));
     const last = Math.max(...all.map((event) => event.at));
     const boots = restarts.rows.filter((row) => row.at >= first && row.at <= last).map((row): TimelineEvent => ({ at: row.at, source: "boot", text: row.text }));
-    const merged = [...all, ...boots].toSorted((a, b) => a.at - b.at);
+    const pauses = pauseEvents(paused.lines).filter((pause) => pause.at >= first && pause.at <= last);
+    const merged = [...all, ...boots, ...pauses].toSorted((a, b) => a.at - b.at);
     return {
         events: merged.slice(-query.limit),
-        found: { log: logEvents.length, activity: activity.length, turn: turnEvents.length, boot: boots.length },
+        found: { log: logEvents.length, activity: activity.length, turn: turnEvents.length, boot: boots.length, pause: pauses.length },
         logCoverage: log.coverage,
     };
 };

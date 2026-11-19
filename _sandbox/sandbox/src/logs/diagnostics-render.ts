@@ -209,7 +209,7 @@ export const renderRestarts = (result: RestartsResult, window: Window, limit: nu
 };
 
 export const renderTimeline = (result: TimelineResult, conversationId: string, window: Window): string => {
-    const total = result.found.log + result.found.activity + result.found.turn + result.found.boot;
+    const total = result.found.log + result.found.activity + result.found.turn + result.found.boot + result.found.pause;
     const reach = reachText(result.logCoverage, window, "daemon.log");
     if (total === 0) {
         return `Nothing names ${conversationId} ${windowText(window)} in daemon.log, activity.jsonl or the turn ledger. ${reach} Check the id with \`agents show ${conversationId}\`.`;
@@ -217,7 +217,7 @@ export const renderTimeline = (result: TimelineResult, conversationId: string, w
     const shown = result.events.length;
     return capped(
         [
-            `${conversationId} ${windowText(window)}: ${total} events (${result.found.log} daemon.log lines, ${result.found.activity} activity entries, ${result.found.turn} turns, ${result.found.boot} daemon boots)${shown < total ? `; the newest ${shown}` : ""}, oldest first. ${reach} What was said is in \`agents show ${conversationId} --transcript\`.`,
+            `${conversationId} ${windowText(window)}: ${total} events (${result.found.log} daemon.log lines, ${result.found.activity} activity entries, ${result.found.turn} turns, ${result.found.boot} daemon boots${result.found.pause === 0 ? "" : `, ${result.found.pause} pauses of the whole machine`})${shown < total ? `; the newest ${shown}` : ""}, oldest first. ${reach} What was said is in \`agents show ${conversationId} --transcript\`.`,
             "",
         ],
         result.events.map((event) => `${iso(event.at)} ${event.source.padEnd(8)} ${event.text}`),

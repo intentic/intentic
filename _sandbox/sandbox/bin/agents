@@ -636,8 +636,10 @@ const writeRecall = (agent) => {
         process.stdout.write(`last said:\n  ${agent.digest.lastSaid}\n`);
     }
     if (agent.digest.lastNotice !== undefined) {
-        // Dated by the turn it came in, so a refusal from five turns ago does not read as the present.
+        // Dated by its own clock and by the turn it came in, so a refusal from five turns ago does not read as the
+        // present, nor one that came hours into a long turn as dating from its start.
         const age = [
+            agent.digest.lastNoticeAt === undefined ? undefined : `at ${stamp(agent.digest.lastNoticeAt)} (${ago(agent.digest.lastNoticeAt)} ago)`,
             agent.digest.lastNoticeSentAt === undefined ? undefined : `in the turn sent ${stamp(agent.digest.lastNoticeSentAt)} (${ago(agent.digest.lastNoticeSentAt)} ago)`,
             agent.digest.sinceLastNotice > 0 ? `${agent.digest.sinceLastNotice} ${plural(agent.digest.sinceLastNotice, "message", "messages")} since` : undefined,
         ].filter(Boolean);
@@ -651,7 +653,8 @@ const writeTranscript = (agent, transcript) => {
     process.stdout.write(`transcript: ${transcript.messages.length} of ${transcript.total} messages (#n is what --message takes)\n`);
     for (const message of transcript.messages) {
         const who = message.role === "user" ? "user" : message.role === "assistant" ? agent.id : "note";
-        const when = message.sentAt === undefined ? "" : ` ${stamp(message.sentAt)}`;
+        const sent = message.sentAt ?? message.openedAt;
+        const when = sent === undefined ? "" : ` ${stamp(sent)}`;
         process.stdout.write(`  #${message.at}${when} ${who}: ${message.text}\n`);
         for (const asked of message.asked ?? []) {
             process.stdout.write(`      asked: ${asked}\n`);

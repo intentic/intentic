@@ -31,7 +31,7 @@ import {
     type SubagentTurn,
     type SubagentWaitOptions,
 } from "./subagents.js";
-import { bookedRerunWords, childLandingWords, sayToParent } from "../../conversations/land/child-lands.js";
+import { childLandingWords, sayToParent } from "../../conversations/land/child-lands.js";
 import {
     type ChildStanding,
     descendantsOf,
@@ -53,9 +53,9 @@ import { dispatchOf, placementOf } from "../../runners/child-placement.js";
 import { childPlacementRefusal, placeStartingChild } from "./child-placement-live.js";
 import type { DelegateAsk } from "../../links/linked-children.js";
 import type { LinkListing } from "../../links/link-listing.js";
-import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, failedOnCapacity, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, wearingParent, withRun } from "./child-spec.js";
+import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, failedOnCapacity, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, taskLine, wearingParent, withRun } from "./child-spec.js";
 import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
-import { elsewhereFor, spentAsked } from "./child-listing.js";
+import { childEnding, spentAsked, takeServedModel } from "./child-listing.js";
 import { seatLine } from "./child-admission.js";
 import { type HeldChild, heldChildrenOf, mergeChild, noSuchChild, settleHeldChild } from "./child-held.js";
 import { resultContract, type ResultSchema, type ResultValue, turnResult } from "./child-result.js";
@@ -190,6 +190,10 @@ export interface ChildRecord {
     // stops the watch that ends the pause as failed if the re-run never comes (paused-children.ts). Written on its file
     // as `paused`, so a restart brings it back with the child.
     paused: { readonly failure: string; readonly run: string | undefined; readonly stop: () => void } | undefined;
+    // A turn not its parent's that started on it while its record still read running: the run, and how it started. The
+    // turn it follows lets go of the conversation before it is on the record, and a held re-run starts in that gap, so
+    // this run is taken once that turn settles (adoptLateStart). This process's alone, never written to its file.
+    lateStart?: { readonly run: string; readonly started: DomainEventMap["run.started"] } | undefined;
 }
 
 // The run a person started in a spawned child's own chat, held by the child under its own id. A parent leaving stops the
@@ -516,55 +520,6 @@ const freeSeat = (services: Services, parent: string): void => {
     SEAT_LINE.freed(parent);
 };
 
-/** How a child's turn ended, in the words its parent reads, and whether a re-run is booked past it. */
-interface ChildEnding {
-    // The whole sentence: what ended it, then the re-run or where else the task could go.
-    readonly error: string | undefined;
-    // Set only where the sandbox booked one, which is what makes the child paused rather than failed.
-    readonly rerun: string | undefined;
-}
-
-// A cancel and an outside kill each explain themselves; anything else is the child's own ending, dressed with the
-// re-run that is coming or, where none is, somewhere the task could go instead.
-const childEnding = async (
-    services: Services,
-    childId: string,
-    kid: ChildRecord | undefined,
-    tally: ChildTurnTally,
-    outside: { readonly cancelled: boolean; readonly killed: string | undefined },
-): Promise<ChildEnding> => {
-    if (outside.cancelled) {
-        return { error: CANCELLED, rerun: undefined };
-    }
-    if (outside.killed !== undefined) {
-        return { error: outside.killed, rerun: undefined };
-    }
-    const failure = tally.failure;
-    if (failure === undefined) {
-        return { error: undefined, rerun: undefined };
-    }
-    const rerun = tally.rerun === undefined ? undefined : bookedRerunWords(tally.rerun, childId);
-    // Only where nothing is bringing it back: with a re-run booked, where else it could go is noise.
-    const elsewhere = rerun !== undefined ? undefined : await elsewhereFor(services, childId, kid?.spec, failure);
-    return { error: [failure, rerun, elsewhere].filter((part) => part !== undefined).join(" "), rerun };
-};
-
-// A turn that opens on another model than its child was spawned on is said to the parent at once, never left to the
-// row: a re-run of a Kimi child once ran on kimi-k3 after kimi-k3-256k was taken off the list, and nothing said so
-// (2026-10-17).
-const takeServedModel = (services: Services, childId: string, kid: ChildRecord | undefined, tally: ChildTurnTally, served: string): void => {
-    const asked = kid?.spec.model;
-    if (kid === undefined || tally.substituted || asked === undefined || asked === "" || sameModel(served, asked)) {
-        return;
-    }
-    tally.substituted = true;
-    void sayToParent(
-        services,
-        kid.parent,
-        `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") runs this turn on ${served}, not on ${asked} as it was spawned: ${asked} was not offered when the turn started. Cancel it if that model will not do.`,
-    );
-};
-
 // Onto the first fallback the records do not call spent and the owner's rules let through without a card (a move the
 // owner must allow is theirs to make, not the sandbox's), its seat given back first since the move takes one of its own.
 // Answers whether it moved; a child that could not is put back on what it ran on.
@@ -646,6 +601,7 @@ const settleChildTurn = async (
     if (moving === "stayed" && error !== undefined && kid !== undefined) {
         void sayToParent(services, parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: none of its fallbacks could take it. ${error}`);
     }
+    adoptLateStart(services, childId, kid);
 };
 
 // A child whose refusal its fallbacks answer is moved before its turn settles: `moved` ends the settle there, `stayed`
@@ -800,9 +756,19 @@ export const adoptChildTurn = (services: Services, started: DomainEventMap["run.
     if (started.speaker?.kind === "person" && run !== undefined && parentOfActor(services.agents.entry(childId)?.identity.startedBy) !== undefined) {
         services.conversations.holdings(PERSON_RUNS).hold(childId, childId, run.id);
     }
-    if (kid === undefined || kid.running || run === undefined || started.speaker?.kind === "person") {
+    if (kid === undefined || run === undefined || started.speaker?.kind === "person") {
         return;
     }
+    // Still running by its record: a run its parent started, which is followed already, or one that started while the
+    // turn it follows was still being written down. Noted, and taken once that turn settles if it is this run.
+    if (kid.running) {
+        kid.lateStart = { run: run.id, started };
+        return;
+    }
+    adoptRun(services, childId, kid, run, started);
+};
+
+const adoptRun = (services: Services, childId: string, kid: ChildRecord, run: LiveRun, started: DomainEventMap["run.started"]): void => {
     followAdopted(services, childId, kid, run);
     void sayToParent(
         services,
@@ -811,11 +777,31 @@ export const adoptChildTurn = (services: Services, started: DomainEventMap["run.
     );
 };
 
+/* A RE-RUN THAT BEATS ITS OWN TURN'S RECORD IS STILL THE PARENT'S. A run lets go of its conversation the moment it
+   finishes and is on the record only after its transcript is written (turn-runs.ts), and a refused credential's re-run
+   fires in that gap. Adoption then read the child as running and let the re-run go, the settle that followed marked the
+   child paused and told the parent so, and the re-run worked on for hours with nobody following it: three children of
+   one parent at once, the daemon's own invariant saying so every sweep (2026-11-19). Taken here, once the settle closed
+   the turn it follows, if that run is still the live one. */
+const adoptLateStart = (services: Services, childId: string, kid: ChildRecord | undefined): void => {
+    const late = kid?.lateStart;
+    if (kid === undefined || late === undefined) {
+        return;
+    }
+    kid.lateStart = undefined;
+    const run = liveRunOf(services.conversations, childId);
+    if (kid.running || run === undefined || run.id !== late.run) {
+        return;
+    }
+    adoptRun(services, childId, kid, run, late.started);
+};
+
 // Takes a turn its parent did not start under the parent's supervision: live again, a seat taken, its row reopened (or,
 // restored at boot as waiting to see whether its turn resumes, marked working), and its frames followed to their end.
 export const followAdopted = (services: Services, childId: string, kid: ChildRecord, run: LiveRun): void => {
     endPause(kid);
     FAN_OUT.adopt(childId, childRouting(kid.spec));
+    kid.lateStart = undefined;
     kid.running = true;
     kid.startedAt = Date.now();
     kid.submitted = undefined;

@@ -16,6 +16,22 @@ const STALL_THRESHOLD_MS = 1_500;
 // One warn per window; a burst's later stalls only bump the counter the next logged one reports.
 const LOG_WINDOW_MS = 10_000;
 
+/* A SLEEPING HOST IS SAID, NOT LEFT AS A GAP (2026-11-19). A laptop's lid closed at 05:43 and opened at 09:47: the
+   sandbox's VM stood still four hours, its monotonic clock with it, so no stall was logged and the resource series just
+   stopped. The first thing after the wake was a refused credential, and an agent asked why the night's work took so
+   long blamed the sign-in for the whole gap. The wall clock is set right on waking, so a tick whose wall clock ran far
+   ahead of its monotonic one is the machine stopped under the daemon: a sleep, or a clock set forward. Said once, as
+   the gap it was; a conversation's timeline reads it back (diagnostics-history.ts). */
+const PAUSE_MS = 60_000;
+export const PAUSED_LINE =
+    "sandbox paused: the wall clock jumped ahead while the monotonic clock stood still, so the machine this sandbox runs on slept (a lid closed, a host suspended) or its clock was set forward; nothing here ran in between, and a turn's duration counts the gap";
+
+/** How long the machine stood still under one tick: the wall clock's lead over the monotonic one, past PAUSE_MS. */
+export const pausedFor = (wallMs: number, monotonicMs: number): number | undefined => {
+    const lead = wallMs - monotonicMs;
+    return lead >= PAUSE_MS ? Math.round(lead) : undefined;
+};
+
 // The remote-port column of /proc/net/udp{,6} is hex, so a DNS query reads as `:0035`; the inode column ties such a row
 // back to its owning process.
 const DNS_REMOTE_PORT = ":0035";
@@ -80,14 +96,22 @@ const spanSummary = (span: SpanActivity, now: number) => ({
 
 export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
     let last = process.hrtime.bigint();
+    let lastWall = Date.now();
     let lastCpu = process.cpuUsage();
     let suppressedSince: number | undefined;
     let suppressedCount = 0;
     let perf: Pick<PerfTracker, "during"> | undefined;
     const timer = setInterval(() => {
         const now = process.hrtime.bigint();
-        const lagMs = Number(now - last) / 1e6 - TICK_MS;
+        const tickMs = Number(now - last) / 1e6;
+        const lagMs = tickMs - TICK_MS;
         last = now;
+        const wall = Date.now();
+        const paused = pausedFor(wall - lastWall, tickMs);
+        if (paused !== undefined) {
+            logger.warn({ pausedMs: paused, from: new Date(lastWall).toISOString(), to: new Date(wall).toISOString() }, PAUSED_LINE);
+        }
+        lastWall = wall;
         const cpu = process.cpuUsage(lastCpu);
         lastCpu = process.cpuUsage();
         if (lagMs < STALL_THRESHOLD_MS) {
