@@ -5,9 +5,10 @@
 // packs:pre-trees pinned installs, above the tree COPYs
 // packs:post-trees packs that read /opt/sandbox or COPY a per-commit tree --from=trees
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
+import { imageTop, imageTopLabel, RUNTIME_STAGE } from "./image-top.mjs";
 
 const root = repoRoot(import.meta.url);
 const packsDir = join(root, "_sandbox/sandbox/image-packs");
@@ -117,8 +118,39 @@ lines = splice(
     POST_MARKER,
     sections.filter((entry) => entry.postTrees).map((entry) => entry.text),
 );
-lines = splice(lines, PRE_MARKER, [
-    ...sections.filter((entry) => !entry.postTrees).map((entry) => entry.text),
-    ...sections.flatMap((entry) => (entry.hoisted === undefined ? [] : [entry.hoisted])),
-]);
-process.stdout.write(lines.join("\n"));
+// A post-trees pack's static layer roots go just below the stage line: the first layers of `runtime`, under every
+// per-commit one, and out of `tools`, which they would move whenever their lockfile entries do.
+lines = splice(
+    lines,
+    RUNTIME_STAGE,
+    sections.flatMap((entry) => (entry.hoisted === undefined ? [] : [entry.hoisted])),
+);
+lines = splice(
+    lines,
+    PRE_MARKER,
+    sections.filter((entry) => !entry.postTrees).map((entry) => entry.text),
+);
+
+// What an environment build replays of this image onto its `tools` stage (image-top.mjs says why and how). A COPY source
+// is a file or a directory as the trees context or the repository has it, so both must be in place: prepare-image-trees.sh
+// runs first wherever an image is built. Without the trees (composing only to read or count the Dockerfile, as
+// image-layers.integration.test.ts does) the label is left out, and an image built so gets the classic overlay build.
+// The core profile is never labelled: publish-images.sh builds the core image from the Dockerfile itself, so its
+// composition stays that file unmodified.
+const inspect = (source, from) => {
+    const path = from === "trees" ? join(root, ".image-out", source) : join(root, source);
+    if (!existsSync(path)) {
+        return undefined;
+    }
+    return statSync(path).isDirectory() ? { entries: readdirSync(path).toSorted() } : {};
+};
+const composed = lines.join("\n");
+if (profileName === "core") {
+    process.stdout.write(composed);
+} else if (existsSync(join(root, ".image-out"))) {
+    const top = imageTopLabel(imageTop(composed, inspect));
+    process.stdout.write(`${composed.trimEnd()}\n\n# What an environment build replays of this image onto \`tools\` (image-top.mjs).\n${top}\n`);
+} else {
+    console.error("compose-image-dockerfile: no .image-out, so the image-top label is left out (run prepare-image-trees.sh first to build)");
+    process.stdout.write(composed);
+}

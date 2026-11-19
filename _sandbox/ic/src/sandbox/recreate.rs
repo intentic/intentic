@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::checks;
@@ -12,8 +13,8 @@ use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::outcome::{self, Kind, Outcome};
 use crate::sandbox::side::{self, Side, Unattended};
 use crate::sandbox::{
-    at_rest, compose, composition, desired, identity, mirror, now_ms, preparing, probation,
-    resolve_slug, resume, staged, storage, versions, CONTAINER_PREFIX, PARKED_SUFFIX,
+    at_rest, compose, composition, desired, identity, layered, mirror, now_ms, preparing,
+    probation, resolve_slug, resume, staged, storage, versions, CONTAINER_PREFIX, PARKED_SUFFIX,
 };
 use crate::shape::{self, Ask, Shape, GPUS_TOKEN, PRIVILEGED_TOKEN};
 use crate::ui;
@@ -1761,16 +1762,46 @@ pub(crate) fn build_overlay(
     }
     keep_running_build(tag, slug, log);
     log.section(&format!("docker build {tag}"));
-    let content = std::fs::read(overlay).unwrap_or_default();
+    let content = std::fs::read_to_string(overlay).unwrap_or_default();
+    /* In layers where the base says how (layered.rs): the recipe on the base's tools stage, the per-commit stage replayed
+    on top, so a new daemon leaves the recipe's layers cached. The base's own labels ride along, since FROM its tools
+    stage the build inherits none of them. */
+    let previous = docker::inspect(&crate::sandbox::container_of(slug), "{{.Image}}");
+    let (dockerfile, carried) = match layered::plan(&content, base, previous.as_deref(), pull, log)
+    {
+        Some((built, carried)) => {
+            ui::note(&format!(
+                "building in layers: {} of the recipe's steps on {base}'s tools stage, {} after its daemon.",
+                built.below, built.above
+            ));
+            log.line(&built.dockerfile);
+            (built.dockerfile, carried)
+        }
+        None => (content, BTreeMap::new()),
+    };
+    let carried: Vec<String> = carried
+        .iter()
+        .filter(|(key, _)| key.as_str() != identity::BASE_ID_LABEL)
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect();
     let label = docker::image_id(base).map(|id| format!("{}={id}", identity::BASE_ID_LABEL));
     let ours = labels::here(slug, LabelKind::Environment);
     let mut args: Vec<&str> = vec!["build"];
+    for carried in &carried {
+        args.extend_from_slice(&["--label", carried]);
+    }
     if let Some(label) = label.as_deref() {
         args.extend_from_slice(&["--label", label]);
     }
     args.extend(ours.iter().map(String::as_str));
-    args.extend_from_slice(&["-t", tag, "-"]);
-    let built = docker::stream(&args, Some(&content), docker::Shown::Raw, log)?;
+    // zstd for its new layers where the build compresses them (docker.rs local_image_output says what it saves).
+    let output = docker::local_image_output(tag);
+    if docker::containerd_image_store() {
+        args.extend_from_slice(&["--output", &output, "-"]);
+    } else {
+        args.extend_from_slice(&["-t", tag, "-"]);
+    }
+    let built = docker::stream(&args, Some(dockerfile.as_bytes()), docker::Shown::Raw, log)?;
     if !built.ok {
         bail!(
             "{}",

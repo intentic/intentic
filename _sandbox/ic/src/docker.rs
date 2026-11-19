@@ -781,6 +781,28 @@ pub fn image_exists(image: &str) -> bool {
     ok(&["image", "inspect", image])
 }
 
+/// Whether the engine keeps images in the containerd image store (Docker 29's default, Docker Desktop's, ic's engine):
+/// there a build compresses each new layer into the content store before it unpacks it, which the classic graph-driver
+/// store never does. Read off `docker info`'s storage driver status; false when docker cannot say.
+pub fn containerd_image_store() -> bool {
+    try_capture(&["info", "--format", "{{json .DriverStatus}}"])
+        .is_some_and(|status| is_containerd_store(&status))
+}
+
+/// Whether `docker info`'s DriverStatus names the containerd snapshotter. Pure.
+fn is_containerd_store(driver_status_json: &str) -> bool {
+    driver_status_json.contains("io.containerd.snapshotter")
+}
+
+/// The `--output` a local build exports its image with on the containerd store: new layers as zstd at level 1, not
+/// gzip. A build there writes every new layer compressed before it unpacks it, and gzip is the slow part: measured on rog
+/// (2026-11-19), 2.2 GB of new layers exported in 49 to 62 s as gzip and 8 to 27 s as zstd level 1, the same size on disk
+/// (the overlay rebuilt that day spent 188 s exporting 28.5 GB). No force-compression, so the base's layers keep the
+/// blobs they have. Docker unpacks zstd from Engine 23, which ic already requires to pull the published image. Pure.
+pub fn local_image_output(tag: &str) -> String {
+    format!("type=image,name={tag},oci-mediatypes=true,compression=zstd,compression-level=1")
+}
+
 pub fn image_id(image: &str) -> Option<String> {
     try_capture(&["image", "inspect", "--format", "{{.Id}}", image])
 }
@@ -1511,9 +1533,26 @@ fn observe_pull(line: &str) {
 mod tests {
     use super::{
         confirm_gone, docker_last_words, engine_trouble, gone_engine, gone_stop,
-        mount_source_format, presence_of, pull_refusal, pull_retrying, pull_stop, refusal_of,
-        too_old_to_unpack, wrong_container_platform, Presence, PullRefusal, Streamed,
+        is_containerd_store, local_image_output, mount_source_format, presence_of, pull_refusal,
+        pull_retrying, pull_stop, refusal_of, too_old_to_unpack, wrong_container_platform,
+        Presence, PullRefusal, Streamed,
     };
+
+    #[test]
+    fn the_containerd_store_is_read_off_the_driver_status_and_its_builds_export_zstd() {
+        // `docker info --format '{{json .DriverStatus}}'` on Docker 29's default store, and on a classic one.
+        assert!(is_containerd_store(
+            r#"[["driver-type","io.containerd.snapshotter.v1"]]"#
+        ));
+        assert!(!is_containerd_store(
+            r#"[["Backing Filesystem","extfs"],["Supports d_type","true"]]"#
+        ));
+        assert!(!is_containerd_store("null"));
+        assert_eq!(
+            local_image_output("intentic-sandbox-env-abc:123"),
+            "type=image,name=intentic-sandbox-env-abc:123,oci-mediatypes=true,compression=zstd,compression-level=1"
+        );
+    }
 
     #[test]
     fn a_container_is_absent_only_when_docker_says_so_and_an_engine_that_did_not_answer_is_unknown()

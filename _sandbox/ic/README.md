@@ -278,6 +278,23 @@ flowchart LR
   composes what it was built from. A plain rebuild still builds the approved file by its reviewed hash, since the
   running daemon is the target. `ic features [--json]` lists the optional ops this ic implements in the contract's words
   (`features.rs`, golden `ic-features.json`), which the machine agent advertises in its facts.
+- **An overlay is built in layers where its base says how** (`layered.rs`, 2026-11-19). The sandbox image has two
+  stages: `tools` (the OS, the CLIs, the feature packs) and the per-commit `runtime` on it. An image built from a
+  checkout or released since names the image of its `tools` stage in its `dev.intentic.tools` label, and carries a
+  replay of `runtime` in `dev.intentic.image-top` (one `COPY --link --parents` of every path it writes, out of the image
+  itself, and the RUNs that link them in; `_tools/scripts/image/image-top.mjs` composes it). `build_overlay` then builds
+  the recipe's leading steps FROM `tools`, the replay after them, and the rest of the recipe above it, so a swap onto a
+  new daemon keeps every recipe layer cached while `tools` is unchanged. Before, every commit's daemon invalidated the
+  whole overlay: on rog, 2026-11-19, a dev rebuild spent 16 of its 30 minutes re-installing an unchanged Android SDK,
+  Flutter and JDK. A step goes below the replay only if it names no path the replay writes, no command its RUNs install
+  and no variable its ENVs set; the first that does stays above, with every step after it. The replay is not free (a
+  copy of the ~3 GB per-commit stage on every new daemon, about three minutes with its export, kept unpacked in each
+  environment), so only a recipe heavier than it is built this way: one whose last build (the image the sandbox runs,
+  less its base) holds more than the base holds beyond its tools image (`worth_layering`). A first build, a light recipe,
+  an image without the labels (published before them, the core profile), a recipe whose first step must stay above, or
+  a tools image that cannot be pulled builds FROM the whole image as before. The overlay's content, hash and stamp are the composed recipe's either
+  way, and the build carries the base's labels, which FROM `tools` it would not inherit. Hosted rebuilds still build
+  FROM the whole image.
 - **One record, one run at a time.** The channel record is fsynced, and copied onto the sandbox's own `/history`
   volume so every `ic` that drives the same Docker engine (the Windows side and a WSL distro, `sudo`) reads the same one
   (`mirror.rs`). A per-sandbox lock (`lock.rs`) orders ic runs from a terminal, the desktop app and the machine agent;
@@ -335,8 +352,8 @@ flowchart LR
   `{side, env, at, snapshot, scope}`), and its worker container is named per side (`intentic-backup-<slug>-<side>`)
   (2026-10-05: one shared name let each side's `rm -f` kill the other's backup mid-run).
 - `ic sandbox tidy` removes what updates leave behind (images and records of sandboxes that are gone, superseded
-  environment builds and the ones a rebuild left dangling, build cache no build has used in a week and then the least
-  recently used past 40 GB of it, the trash past its window) and names volumes and networks that belong to no sandbox (all four families,
+  environment builds and the ones a rebuild left dangling, build cache no build has used in a week (cache mounts: 30
+  days) and then the least recently used past 40 GB of it, layers before cache mounts, the trash past its window) and names volumes and networks that belong to no sandbox (all four families,
   `intentic-{workspace,history,docker,dind-docker}-<slug>`, and the network; never a runner's). Unattended (`--auto`,
   or no terminal: the machine agent's daily round) it moves a set nothing claims (no container, no record here, no
   trash entry, not labelled by another side) into the trash, which
@@ -345,8 +362,13 @@ flowchart LR
   sandbox gone 30 days (counted from the later of its record's archiving and the last backup), or of one another side
   keeps whose `/history/.ic/backup.json` is newer than this side's copy; never the only copy of a live sandbox, and
   every decision is in the tidy log. (2026-10-05: none of these had a retention rule; rog held a 40.9 GB duplicate.)
-  Build cache goes by `docker builder prune --force --filter until=168h` on the builder `docker build` uses: a rebuild
-  onto a newer base matches none of the old cache, and what a rebuild does reuse was used within days. Without `--all`
+  Build cache goes by `docker builder prune --force --filter until=168h --filter type=<type>` on the builder `docker
+  build` uses, once for each of layers, build contexts and git checkouts: a rebuild onto a newer base matches none of the
+  old layers, and what a rebuild does reuse was used within days. Cache mounts (`RUN --mount=type=cache`: apt's and npm's
+  downloads, a recipe's toolchain archive) go after 30 days instead (`until=720h --filter type=exec.cachemount`): a mount
+  is touched only when its step runs, which is when its layer missed, so a week's bound took exactly what the next miss
+  needed (rog, 2026-11-19: the Android SDK's 8.6 GB and Flutter's 2.5 GB downloaded again). The 40 GB cap is two prunes,
+  `--max-used-space` filtered to `type=regular` first, then not, so old layers go before any cache mount. Without `--all`
   it keeps cache an image shares, which would free nothing. A dry run adds up the same records from `docker buildx du
   --verbose`, since `du` ignores `until`, and a docker that cannot read or prune its cache skips that step, never the
   tidy. (2026-11: rog held 39.45 GB of build cache, all of it reclaimable.)

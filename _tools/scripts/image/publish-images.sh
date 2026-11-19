@@ -141,8 +141,26 @@ case " $IMAGES " in
         # and re-running steps the first had just run. Concurrent builds on one BuildKit share its solver, so a
         # step both Dockerfiles have runs once. Each build's lines carry its profile, since both number their steps
         # from #1, and the script fails when either does, after both have finished.
-        ( ZSTD=1 publish sandbox "$root/.image-out/Dockerfile.standard" "$root" --build-context "trees=$root/.image-out" 2>&1 \
-            | sed -u 's/^/[standard] /' ) &
+        # THE TOOLS STAGE FIRST, pushed as `tools-<tag>`, and named by digest in the standard image's `dev.intentic.tools`
+        # label: ic builds a sandbox's environment overlay FROM it and replays the per-commit stage on top
+        # (image-top.mjs), so an update that changed only the daemon keeps the overlay's layers. Its layers are the
+        # standard image's own lower ones, built on the same builder with the same compression, so they upload and
+        # download once. No attestations on it: their per-build provenance gave an unchanged stage a new digest every
+        # time, and the overlay's FROM keys on it. Only the first registry is named; every registry holds the same bytes.
+        ( ( set -e
+            tools_meta="$(mktemp)"
+            ZSTD=1 TAG_PREFIX="tools-" publish sandbox "$root/.image-out/Dockerfile.standard" "$root" --build-context "trees=$root/.image-out" \
+                --target tools --provenance=false --sbom=false --metadata-file "$tools_meta"
+            first_registry="${REGISTRIES%% *}"
+            first_tag="${TAGS%% *}"
+            tools_ref="$first_registry/sandbox:tools-$first_tag$ARCH_SUFFIX"
+            tools_digest="$(node -e 'const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.stdout.write(m["containerimage.digest"] ?? "")' "$tools_meta")"
+            rm -f "$tools_meta"
+            # A loaded dry build has no registry digest: the tag it was loaded under names it.
+            if [ "$PUSH" != "0" ] && [ -n "$tools_digest" ]; then tools_ref="$tools_ref@$tools_digest"; fi
+            ZSTD=1 publish sandbox "$root/.image-out/Dockerfile.standard" "$root" --build-context "trees=$root/.image-out" \
+                --label "dev.intentic.tools=$tools_ref"
+        ) 2>&1 | sed -u 's/^/[standard] /' ) &
         standard=$!
         ( ZSTD=1 TAG_PREFIX="core-" publish sandbox "$root/_sandbox/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out" 2>&1 \
             | sed -u 's/^/[core] /' ) &

@@ -3,17 +3,22 @@
 # compose-image-dockerfile.mjs splices profile packs at the markers below and stamps /opt/packs so the daemon can detect them.
 # Runtime mounts /work; provider credentials are created inside the running sandbox and must never enter this image.
 
-FROM node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS runtime
+# TWO STAGES, and the line between them is what an environment overlay is built under. `tools` is the operating system,
+# the CLIs and the pinned feature packs: it changes when a version below is bumped, not with every commit. `runtime`
+# adds the daemon and everything else compiled from the commit. ic builds an overlay FROM `tools` (the image names it
+# in its `dev.intentic.tools` label) and copies the commit's paths back on top (`dev.intentic.image-top`, composed by
+# compose-image-dockerfile.mjs), so a new release no longer invalidates the overlay's own layers.
+FROM node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS tools
 # Links the GHCR package to the repo (inherits its visibility/permissions, shows under its Packages).
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 
 # THE BUILD-CACHE CONTRACT, set once here and relied on by every apt block downstream: in this file, in every
 # feature pack, and in every environment-overlay fragment. Each of those mounts /var/cache/apt and
 # /var/lib/apt/lists as BuildKit caches, so a re-run that misses the layer cache still does not re-download.
-# That matters because an overlay is `FROM` this image: publishing a new sandbox image changes this image's
-# digest, which invalidates EVERY overlay layer above it, so a sandbox re-installs its whole environment on
-# every update. The layer miss is unavoidable (the parent chain really did change); paying for the bytes twice
-# is not. _tools/checks/build-cache-mounts.mjs enforces the mounts, and enforcement is what makes removing
+# That matters because an overlay extends this image: a release that changes the `tools` stage below invalidates
+# every overlay layer above it, so a sandbox re-installs its whole environment on that update (one that changes only
+# the `runtime` stage keeps them; see the stage line). That layer miss is unavoidable (the parent chain really did
+# change); paying for the bytes twice is not. _tools/checks/build-cache-mounts.mjs enforces the mounts, and enforcement is what makes removing
 # docker-clean safe: Debian's drop-in deletes the archives after each install, which would empty the very cache
 # mount it is meant to fill, but with it gone an UNMOUNTED apt block would commit its .debs into the image.
 RUN rm -f /etc/apt/apt.conf.d/docker-clean \
@@ -201,17 +206,28 @@ RUN set -eu; arch="$(dpkg --print-architecture)"; \
 # ---- packs:pre-trees ---- (spliced by compose-image-dockerfile.mjs — pinned pack installs land here, ABOVE
 # the tree COPYs, so a source change never evicts a pack download; the core profile carries none)
 
+# Bake a ready-to-seed starter so first boot copies it into /work and starts the preview without paying an install delay.
+# prepare-image-trees.sh builds starter/starter.Dockerfile through the same scaffolder as Add app, with runtime Node/pnpm paths.
+# normalize-starter.mjs removes volatile install metadata so unchanged templates/lockfiles retain layer digests across releases.
+# In `tools`, not `runtime`: its node_modules are hard links into pnpm's store (/usr/local/share/pnpm/store), and the
+# copy that replays `runtime` onto an environment keeps hard links only within one source tree, so out of `tools` every
+# environment would carry the starter twice. It is a static layer, so it moves `tools` only when the template does.
+COPY --link --from=trees layers/starter/ /
+
+# ---- runtime: what each commit compiles. Everything from here down is per-commit (or a static layer root, which
+# compose-image-dockerfile.mjs hoists to just below this line) and must stay replayable onto an environment built on
+# `tools`: COPY and RUN that write only their own paths, ENV, WORKDIR, EXPOSE, ENTRYPOINT. A static layer root's COPY says
+# which paths it carries in an `# image-top: <path>...` comment, since `/` is its destination.
+FROM tools AS runtime
+
 # The daemon's third-party node_modules, a layer apart from the rest of its tree (prepare-image-trees.sh moves them into
 # this static layer root and fixes every timestamp). --link builds it apart from the layers under it, so it is the same
 # bytes on every release whose lockfile moved none of them, and an update reuses it rather than downloading ~950 MiB of
 # unchanged packages with each commit's daemon. Placed here, below the first per-commit layer (the CLI tree just after),
 # because Docker's classic store re-downloads every layer above the first changed one whatever its digest. The tree
 # COPY'd into /opt/sandbox below merges over it: the workspace's own packages, the .pnpm index and the daemon itself.
+# image-top: /opt/sandbox/node_modules/.pnpm
 COPY --link --from=trees layers/sandbox-deps/ /
-# Bake a ready-to-seed starter so first boot copies it into /work and starts the preview without paying an install delay.
-# prepare-image-trees.sh builds starter/starter.Dockerfile through the same scaffolder as Add app, with runtime Node/pnpm paths.
-# normalize-starter.mjs removes volatile install metadata so unchanged templates/lockfiles retain layer digests across releases.
-COPY --link --from=trees layers/starter/ /
 # The intentic CLI on PATH — ic runs it via `--entrypoint intentic` for the sandbox's own run command, and
 # the Apps panel shells out to `intentic scaffold add-app`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as
@@ -220,8 +236,9 @@ COPY --from=trees cli /opt/intentic-cli
 RUN chmod +x /opt/intentic-cli/dist/cli.js \
     && ln -s /opt/intentic-cli/dist/cli.js /usr/local/bin/intentic
 # The registry's metadata for the `pnpm` package, from the starter's build: pnpm resolves the starter's pinned pnpm
-# through it before running the copy the starter layer above carries, so without it a seeded starter's first `pnpm`
+# through it before running the copy the starter layer (in `tools`) carries, so without it a seeded starter's first `pnpm`
 # needs the network. Here among the per-commit layers, since it changes whenever pnpm publishes (starter.Dockerfile).
+# image-top: /root/.cache/pnpm
 COPY --link --from=trees layers/pnpm-metadata/ /
 # `tsx` as a shim over node's own type stripping. Agents reach for tsx to run a one-off .ts script because that
 # is what the ecosystem taught them, and a project that lists it in devDependencies resolves its own — but a

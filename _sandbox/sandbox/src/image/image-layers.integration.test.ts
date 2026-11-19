@@ -24,10 +24,11 @@ const profiles = Object.keys(
         .parse(JSON.parse(readFileSync(join(repoRoot, "_sandbox/sandbox/image-packs/profiles.json"), "utf8"))).profiles,
 );
 
-// The instructions that each commit a layer in BuildKit's image, in the stage that ships (the last FROM). Every one
-// starts a line: a continuation is indented, and the Dockerfile carries no heredoc whose body could start one.
+// The instructions that each commit a layer in BuildKit's image, in the stages that ship: `tools` and the `runtime` built
+// on it (an environment build stacks on `tools` and replays `runtime` in fewer layers, image-top.mjs). Every one starts a
+// line: a continuation is indented, and the Dockerfile carries no heredoc whose body could start one.
 const layersOf = (dockerfile: string): number => {
-    const shipped = dockerfile.slice(dockerfile.lastIndexOf("\nFROM "));
+    const shipped = dockerfile.slice(dockerfile.indexOf("\nFROM "));
     return shipped.split("\n").filter((line) => /^(RUN|COPY|ADD|WORKDIR) /.test(line)).length;
 };
 

@@ -20,6 +20,7 @@ pub mod inside;
 pub mod inspect;
 pub mod intent;
 pub mod labels;
+pub mod layered;
 pub mod ledger;
 pub mod listing;
 pub mod lock;

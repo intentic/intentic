@@ -14,6 +14,7 @@
 # an update keeps the layer. compose-image-dockerfile.mjs splices this COPY above the per-commit trees with the
 # pre-trees packs; the trees below merge over it. What they share with the daemon's tree is not here at all: it is a
 # link into /opt/sandbox's copy (the dedupe in prepare-image-trees.sh).
+# image-top: /opt/extensions
 COPY --link --from=trees layers/messaging-deps/ /
 
 COPY --from=trees extensions/discord /opt/extensions/discord
