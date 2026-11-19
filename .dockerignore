@@ -15,6 +15,11 @@
 **/.astro
 **/out-tsc
 **/*.tsbuildinfo
+# Rust build output (ic, netd, the desktop app): ~16 GB on a dev machine that no COPY reads, and BuildKit uploads the
+# whole context before the first COPY (162 s measured on rog, 2026-11-19). netd builds from its own context.
+**/target
+# The workspace's own sandbox config and records, never an image input.
+.intentic
 **/.env
 **/.env.local
 **/.env.*.local
