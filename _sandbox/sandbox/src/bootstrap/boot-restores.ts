@@ -11,6 +11,7 @@ import { startAllExtensionProcesses } from "../extensions/extension-processes.js
 import { applyTmuxLogHooks } from "../logs/log-files.js";
 import { remountNetdisks } from "../netdisk/netdisk-links.js";
 import { restoreExecBits, SANDBOX_INSTALL_DIR } from "../system/boot/exec-bits.js";
+import { startVpnKeepAlive, vpnKeepAliveDeps } from "../vpn/vpn-keepalive.js";
 import { reconnectVpns } from "../vpn/vpn-links.js";
 import type { BootPhase } from "./boot-phase.js";
 
@@ -30,7 +31,7 @@ const startTranslatorIfPacked = async ({ config, logger, services }: BootPhase):
 
 // Container role only: ~/.ssh, the docker socket and the tmux server are shared, so only the claiming daemon converges them.
 export const startBootRestores = (phase: BootPhase): void => {
-    const { config, logger, role, services } = phase;
+    const { config, logger, role, services, shutdown } = phase;
     if (!role.container) {
         return;
     }
@@ -41,9 +42,17 @@ export const startBootRestores = (phase: BootPhase): void => {
         logger.warn({ err: error }, "environment: the approved environment could not be composed at boot"),
     );
     // Disks after tunnels: a share behind a VPN is unreachable until it is up.
-    void reconnectVpns(services.capabilities, services.logger)
+    const vpnsRestored = reconnectVpns(services.capabilities, services.logger);
+    void vpnsRestored
         .then(() => remountNetdisks(services.capabilities, services.logger, services.deviceTunnels))
         .catch((error: unknown) => logger.warn({ err: error }, "vpn: tunnels and network disks could not be restored at boot"));
+    // Then keep them up: a tunnel that drops mid-session (a network blip, a gateway restart) is redialled rather than
+    // left down until the next restart. Started once the boot dial is done, so the two never dial one tunnel at once.
+    // Either way the boot dial ends: its failure is logged on the chain above.
+    const keepVpnsUp = (): void => {
+        shutdown.push(startVpnKeepAlive(vpnKeepAliveDeps(services.capabilities), { logger: services.logger }).stop);
+    };
+    void vpnsRestored.then(keepVpnsUp, keepVpnsUp);
     // A tunnel exit's client survives the daemon; only its SOCKS proxy is republished.
     void restoreExits(services.capabilities, services.logger).catch((error: unknown) =>
         logger.warn({ err: error }, "exit: tunnel exits could not be restored at boot"),

@@ -58,7 +58,8 @@ Notes:
 - A one-time code cannot be guessed or stored: if a connect fails asking for one, ask the user for a current code.
 - A tunnel marked \`unavailable\` needs a sandbox rebuild (the user does this from Sandbox ▸ Environment); say so
   rather than trying to install a VPN client yourself.
-- A tunnel the user set to auto-connect comes back on its own after a sandbox restart: only toggle it when asked.
+- A tunnel the user set to auto-connect comes back on its own after a sandbox restart, and the daemon redials it
+  within a minute or so when it drops mid-session (\`vpn disconnect\` keeps it down): only toggle it when asked.
 `;
 
 export const vpnHandler = tunnelHandler<VpnConfig>({
