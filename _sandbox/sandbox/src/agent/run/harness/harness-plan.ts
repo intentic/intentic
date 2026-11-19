@@ -176,6 +176,7 @@ const surroundingsOf = (
                   runtime: claudeCodeRuntime(context.toolSearch === true),
                   unattended: context.base.policy.unattended === true,
                   night: context.base.policy.night,
+                  proceed: context.base.policy.proceed === true,
                   hostDevices: tools.hostDevices,
                   ownBrowsers: tools.ownBrowsers,
                   ownPhones: tools.ownPhones,

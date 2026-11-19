@@ -373,6 +373,12 @@
             "stopKeepingWarmHint": "Warm gehalten bis {time}",
             "tryLandAgain": "Erneut landen",
             "landsIfConflictsGone": "Landet, wenn die Konflikte weg sind",
+            "proceedWithoutAsking": "Ohne Rückfrage weitermachen",
+            "proceedHint": "Seine Durchläufe und die seiner Subagenten folgen ihrer eigenen Empfehlung, statt auf dein Okay zu warten",
+            "askBeforeGoingAhead": "Vor dem Weitermachen fragen",
+            "proceedingHint": "Es macht jetzt ohne Rückfrage weiter und hält vor allem Zerstörerischen oder nach außen Gerichteten weiterhin an",
+            "proceedLabel": "Ob es vorher fragt",
+            "proceedFailed": "Konnte nicht ändern, ob es vorher fragt",
             "notifyLabel": "Benachrichtigen",
             "notifyAll": "Über alles",
             "notifyAllHint": "Jeder beendete Zug und jede Karte, die auf dich wartet",
@@ -6262,6 +6268,11 @@
             "rebuildToFinish": "Genehmigt. {tool} kommt beim nächsten Neubau der Sandbox an.",
             "openRebuild": "Neu bauen"
         },
+        "instruction": {
+            "approve": "Zu {file} hinzufügen",
+            "everyConversation": "Die Genehmigung fügt dies zu {file} hinzu. Jede Unterhaltung, die dort beginnt, folgt der Regel ab ihrem nächsten Durchlauf.",
+            "creates": "{file} gibt es noch nicht: Die Genehmigung legt die Datei mit dieser Regel an."
+        },
         "automation": {
             "name": "Name",
             "for": "Für",
@@ -6464,6 +6475,11 @@
             "scheduleTimesAreIn": "Zeitpläne richten sich nach",
             "whatAnAutomations": "Was „09:00“ bei einer Automatisierung bedeutet. Angezeigte Zeiten folgen immer deiner eigenen Uhr; diese hier entscheidet, wann etwas ausgelöst wird.",
             "yourOwnClockIs": "Was „09:00“ bei einer Automatisierung bedeutet. Dein Rechner läuft auf {zone}, die Zeiten hier stimmen also nicht mit dem überein, was du dort abliest."
+        },
+        "agentProceed": {
+            "group": "Weitermachen",
+            "title": "Ohne Rückfrage weitermachen",
+            "description": "Agenten folgen ihrer eigenen Empfehlung, statt auf dein Okay zu warten, und halten vor allem Zerstörerischen oder nach außen Gerichteten weiterhin an. Nachts entscheiden die Nachtstunden."
         },
         "agentNightHours": {
             "group": "Nachtruhe",
@@ -6704,6 +6720,9 @@
             "turnCap": "Längster Zug in einer von der Sandbox gesteuerten Schleife",
             "turnCapNote": "Minuten, die ein Zug auf OpenCode, einem ACP-Agenten, Pi oder Muse laufen darf, bevor er beendet wird; ein Subagent, der sie erreicht, wird fortgesetzt statt als fehlgeschlagen gewertet. Claude Code und Codex haben keine solche Grenze.",
             "turnCapLabel": "Längster Zug, in Minuten",
+            "contextContinues": "Über einen großen Kontext hinaus weitermachen",
+            "contextContinuesNote": "Wie oft hintereinander ein Gespräch von selbst in einer frischen Sitzung weitermacht, nachdem sein Zug angehalten hat, weil sein Kontext groß geworden war und noch Arbeit offen ist. Bei 0 steht es nur im Chat.",
+            "contextContinuesLabel": "Frische Sitzungen hintereinander",
             "turnBreaks": "Wenn ein Zug abbricht",
             "keepWarmGroup": "Ruhende Chats",
             "keepWarm": "Caches nach einem Zug warm halten",

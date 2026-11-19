@@ -171,6 +171,20 @@ test("a churning terminals directory never evicts the files beside it", async ()
     expect((await listLogFiles(join(root, "terminals"))).length).toBe(200);
 });
 
+// The record of test runs (output-cleaners' test-outcomes.mjs) is a file per run and bounds itself; counted with the
+// shared hundred, a busy day of test runs would evict the profiles beside it, and the baselines with them.
+test("the record of test runs counts apart, so a day of runs evicts neither its baselines nor the files beside it", async () => {
+    const root = await tempRoot();
+    await mkdir(join(root, "test-outcomes"), { recursive: true });
+    await writeFile(join(root, "boot-2026-10-11.cpuprofile"), "{}");
+    await utimes(join(root, "boot-2026-10-11.cpuprofile"), new Date(Date.now() - 3_600_000), new Date(Date.now() - 3_600_000));
+    await Promise.all(Array.from({ length: 300 }, (_, index) => writeFile(join(root, "test-outcomes", `0123456789ab-b-${index.toString(36)}-00.json`), "{}")));
+    await pruneLogFiles(root);
+
+    expect(await readFile(join(root, "boot-2026-10-11.cpuprofile"), "utf8")).toBe("{}");
+    expect((await listLogFiles(join(root, "test-outcomes"))).length).toBe(300);
+});
+
 // Cutting a profile or a report to its tail leaves a file nothing can parse.
 test("a file that is one JSON document is kept whole past the line cap", async () => {
     const root = await tempRoot();

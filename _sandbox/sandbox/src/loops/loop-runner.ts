@@ -8,7 +8,8 @@ import type { Holding, Holdings } from "../conversations/actor/conversation-hold
 import type { Services } from "../composition.js";
 import { briefForIteration, loopDirIn } from "./loop-brief.js";
 import { treeDigest } from "./loop-progress.js";
-import { evaluateStop } from "./loop-stop.js";
+import { evaluateStop, type StopVerdict } from "./loop-stop.js";
+import { opt } from "../opt.js";
 
 // Runs a conversation's turn, checks whether the goal is met, and reruns it if not. Daemon-side so a loop survives a
 // closed browser; drives an ordinary AgentTurn so it gets the same fleet card, worktree, and cost ledger a composer's
@@ -101,6 +102,19 @@ const publish = (services: Pick<Services, "conversations">, loop: Loop, state: L
     });
 };
 
+// One round's row as the ledger keeps it. Turn failure outranks the check's verdict unless the check says done: a refused
+// turn writes nothing, so the check's "no output file" is a symptom, not the cause.
+const iterationRow = (n: number, judged: { readonly done: boolean; readonly changed: boolean }, outcome: IterationOutcome, verdict: StopVerdict): LoopIteration => ({
+    n,
+    at: Date.now(),
+    outcome: judged.done ? "done" : outcome.failure !== undefined ? "error" : "continue",
+    changed: judged.changed,
+    ...opt("detail", judged.done ? verdict.detail : (outcome.failure ?? verdict.detail)),
+    ...opt("costUsd", outcome.usage?.costUsd),
+    ...opt("remaining", verdict.document?.remaining),
+    ...opt("sessionId", outcome.sessionId),
+});
+
 // How a loop ended, returned directly rather than re-read from the store (this is the one moment everything is already
 // in hand). A route may ignore it; a workflow step is built entirely from it.
 export interface LoopSettlement {
@@ -170,6 +184,8 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
     // Kept across iterations: an exhausted loop's last iteration is often the one that produced the least.
     let report = "";
     let document: LoopDocument | undefined;
+    // The round before the next one, whose ending goes into its brief; a resumed loop's from its record.
+    let previous: LoopIteration | undefined = record.iterations.at(-1);
     let ended: { readonly state: LoopState; readonly detail?: string } | undefined;
     try {
         while (ended === undefined) {
@@ -194,7 +210,7 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
             publish(services, record, "running", iteration, abort.signal);
             const before = await treeDigest(tree);
             const turn: AgentTurn & { conversationId: string } = {
-                prompt: briefForIteration(record, iteration),
+                prompt: briefForIteration(record, iteration, previous),
                 conversationId,
                 // The loop's own pick of runtime, role and placement, the same for every round.
                 ...profileOf(record),
@@ -235,24 +251,9 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
             const verified = record.output.kind !== "none" || record.checks.length > 0;
             const refused = !verified && outcome.failure !== undefined;
             const done = verdict.done && !refused;
-            const entry: LoopIteration = {
-                n: iteration,
-                at: Date.now(),
-                outcome: done ? "done" : outcome.failure !== undefined ? "error" : "continue",
-                changed,
-                // Turn failure outranks the check's verdict unless the check says done: a refused turn writes nothing,
-                // so the check's "no output file" is a symptom, not the cause.
-                ...(done
-                    ? verdict.detail !== undefined
-                        ? { detail: verdict.detail }
-                        : {}
-                    : (outcome.failure ?? verdict.detail) !== undefined
-                      ? { detail: (outcome.failure ?? verdict.detail) as string }
-                      : {}),
-                ...(cost !== undefined ? { costUsd: cost } : {}),
-                ...(outcome.sessionId !== undefined ? { sessionId: outcome.sessionId } : {}),
-            };
+            const entry = iterationRow(iteration, { done, changed }, outcome, verdict);
             await services.loops.recordIteration(conversationId, entry);
+            previous = entry;
             if (done) {
                 ended = { state: "done", ...(verdict.detail !== undefined ? { detail: verdict.detail } : {}) };
                 break;

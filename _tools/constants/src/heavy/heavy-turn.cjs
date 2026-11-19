@@ -11,13 +11,18 @@
 //
 // The daemon hands the table in INTENTIC_HEAVY, as JSON: { rules (heavy-rules.cjs mergeHeavyRules), queue, queueRun,
 // offloadRun, offload: { <rule id>: <runner> }, klass: { oomScoreAdj, nice, lowIo } }. Every failure here is a program
-// that runs as if nothing had looked at it.
+// that runs as if nothing had looked at it. A match that needs more than a slot (cargo's jobs, a declared class's cores,
+// the quiet lane) runs through heavy-launch.cjs, after queue-run has let it in.
 "use strict";
 
 const { spawnSync } = require("node:child_process");
 const { accessSync, constants, readFileSync, writeFileSync } = require("node:fs");
 const { getPriority, setPriority } = require("node:os");
-const { heldPoolsOf, matchInvocation, queueArgs, sizeArgs } = require("./heavy-rules.cjs");
+const { isAbsolute, join, resolve } = require("node:path");
+const { heldPoolsOf, matchInvocation, queueArgs, ruleById, sizeArgs } = require("./heavy-rules.cjs");
+
+// What a match needing more than a slot is started through, after queue-run's `--` (heavy-launch.cjs).
+const LAUNCH = join(__dirname, "heavy-launch.cjs");
 
 // The spec the daemon handed down, or undefined when this program is not under it.
 const handedSpec = (env) => {
@@ -86,32 +91,74 @@ const become = (argv, env) => {
     process.exit(run.status ?? (run.signal === null ? 1 : 128));
 };
 
+// The program's arguments that may name a file, as absolute paths against its working directory, and the script node
+// was asked to run: what a declared class's `scripts` are matched against (heavy-rules.cjs scriptHit). A flag, a word
+// with whitespace (an inline `-c` script) or an empty one names no file.
+const pathsOf = (args, cwd, script) =>
+    [...(script === undefined ? [] : [script]), ...args]
+        .filter((arg) => arg !== "" && !arg.startsWith("-") && !/\s/u.test(arg))
+        .map((arg) => (isAbsolute(arg) ? arg : resolve(cwd, arg)));
+
+// heavy-launch.cjs's flags for a match that needs more than a slot; empty for one that does not.
+const launchFlags = (match) => {
+    const flags = [
+        ...(match.parallel === undefined ? [] : ["--parallel", match.parallel, "--slots", String(match.limit)]),
+        ...(match.cpus === undefined ? [] : ["--cpus", String(match.cpus)]),
+        ...(match.pin === true ? ["--pin"] : []),
+        ...(match.quiet === true ? ["--quiet"] : []),
+    ];
+    return flags.length === 0 ? [] : [process.execPath, LAUNCH, ...flags, "--label", match.id, "--"];
+};
+
+// The one line a project's declared class is announced with as it queues, so whoever ran it sees the project's rule
+// taking effect and needs no lock or `nice` of their own.
+const declaredWords = (match, rule) => {
+    const mib = /^(\d+)m$/u.exec(match.size ?? "")?.[1];
+    const how = [
+        match.limit === 1 ? "one at a time" : `up to ${match.limit} at once`,
+        match.pool === match.id ? undefined : `with the rest of group "${match.pool}"`,
+        match.exclusive === true ? "with nothing else heavy beside it" : undefined,
+        match.quiet === true ? "once the machine is calm" : undefined,
+        match.cpus === undefined ? undefined : `on ${match.cpus} cores`,
+        mib === undefined ? undefined : `priced at ${(Number(mib) / 1024).toFixed(1)} GiB`,
+    ].filter((part) => part !== undefined);
+    return `[heavy] ${match.id}: a heavy command this project declares (.intentic/heavy.json${rule.scripts === undefined ? "" : `, ${rule.scripts.join(", ")}`}); it runs through this sandbox's queue, ${how.join(", ")}.\n`;
+};
+
 /**
  * Judges one program as it starts. Returns false for one that is not heavy (or not under the daemon's table), true for
- * one that was classed and runs in place; a queued or offloaded one does not return.
+ * one that was classed and runs in place; a queued or offloaded one does not return. `script` is the file node was asked
+ * to run, for a node program; `unless` passes over a match its caller already covered (a `cargo run`'s prebuild).
  */
-const takeTurn = ({ program, args, command, env = process.env, cwd = process.cwd() }) => {
+const takeTurn = ({ program, args, command, env = process.env, cwd = process.cwd(), script, unless }) => {
     const spec = handedSpec(env);
     if (spec === undefined) {
         return false;
     }
     const invocation = [program, ...args].join(" ");
-    const match = matchInvocation(invocation, spec.rules, undefined, { cwd, heldPools: heldPoolsOf(env, spec.rules) });
-    if (match === undefined) {
+    const match = matchInvocation(invocation, spec.rules, undefined, { cwd, paths: pathsOf(args, cwd, script), heldPools: heldPoolsOf(env, spec.rules) });
+    if (match === undefined || unless?.(match) === true) {
         return false;
     }
     env.INTENTIC_HEAVY_HELD = match.id;
     applyClass(spec.klass);
     const queue = spec.queue === true && typeof spec.queueRun === "string" && runnable(spec.queueRun) ? [spec.queueRun, ...queueArgs(match, spec.rules), ...sizeArgs(match, invocation), "--"] : [];
-    const runner = spec.offload?.[match.id];
+    const launch = queue.length === 0 ? [] : launchFlags(match);
+    // INTENTIC_OFFLOAD=0 keeps one command here, behind this sandbox's queue, when the owner sends its kind to a runner:
+    // what offload-run names when it says where a command went (never INTENTIC_HEAVY_HELD, which skips the queue too).
+    const runner = env.INTENTIC_OFFLOAD === "0" ? undefined : spec.offload?.[match.id];
     if (runner !== undefined && typeof spec.offloadRun === "string") {
-        const here = queue.length === 0 ? "" : `${queue.map(quote).join(" ")} `;
+        const here = queue.length === 0 ? "" : `${[...queue, ...launch].map(quote).join(" ")} `;
         become([spec.offloadRun, "--to", runner, "--label", match.id, "--here", here, "--", ...remoteArgv(program, args)], env);
     }
     if (queue.length > 0) {
-        become([...queue, ...command], env);
+        const rule = ruleById(spec.rules, match.id);
+        if (rule?.declared === true) {
+            process.stderr.write(declaredWords(match, rule));
+        }
+        become([...queue, ...launch, ...command], env);
     }
     return true;
 };
 
-module.exports = { takeTurn, pendingSpec, remoteArgv };
+module.exports = { takeTurn, pendingSpec, remoteArgv, pathsOf };

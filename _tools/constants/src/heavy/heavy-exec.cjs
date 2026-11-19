@@ -10,7 +10,7 @@ const { delimiter, join, resolve } = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { constants: osConstants } = require("node:os");
 const { takeTurn, pendingSpec } = require("./heavy-turn.cjs");
-const { cargoBuildArgs, matchInvocation } = require("./heavy-rules.cjs");
+const { cargoBuildArgs, matchInvocation, ruleById } = require("./heavy-rules.cjs");
 
 const [shims = "", program = "", ...args] = process.argv.slice(2);
 
@@ -37,8 +37,9 @@ if (real === undefined) {
 // so a server inherits neither the build's slot nor its toolchain priority. This build stays local to warm its artifacts.
 let build;
 let buildEnv = process.env;
+let spec;
 try {
-    const spec = pendingSpec();
+    spec = pendingSpec();
     const translated = program === "cargo" ? cargoBuildArgs(args) : undefined;
     if (spec !== undefined && translated !== undefined &&
         matchInvocation([program, ...translated].join(" "), spec.rules, undefined, { cwd: process.cwd() })?.id === "cargo") {
@@ -57,9 +58,10 @@ if (build !== undefined) {
     }
 }
 try {
-    if (build === undefined) {
-        takeTurn({ program, args, command: [real, ...args] });
-    }
+    // After its prebuild, a `cargo run` is judged again only for a class a project declared (`cargo run --bin capture`):
+    // any other rule would hold a slot for as long as a server it starts keeps running.
+    const declaredOnly = (match) => ruleById(spec?.rules ?? { rules: [] }, match.id)?.declared !== true;
+    takeTurn({ program, args, command: [real, ...args], unless: build === undefined ? undefined : declaredOnly });
 } catch {
     // allow(silent-catch): a table that does not parse runs the program as if unjudged
 }

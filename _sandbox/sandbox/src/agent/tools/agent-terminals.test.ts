@@ -21,9 +21,9 @@ const actors = memoryFleet().conversations;
 const script = (command: string): string => `${PIPESTATUS_TRAP}${command}\n`;
 
 // Demotes a command via nice/ionice and ranks it for the OOM killer, turns off the prompts that wait in a pane for good,
-// then `bash` runs its file, before tmux-run sees it.
+// then `bash` runs its file with nothing on stdin, before tmux-run sees it.
 const demoted = (file: string, heavyEnv = ""): string =>
-    `nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- ${NO_PROMPTS}${heavyEnv}bash ${shellQuote(file)}`;
+    `nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- ${NO_PROMPTS}${heavyEnv}bash ${shellQuote(file)} </dev/null`;
 
 // Carries the conversation id; every forked process inherits it, marking the run as agent-started, not the sandbox's
 // own.

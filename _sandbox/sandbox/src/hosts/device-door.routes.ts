@@ -9,6 +9,7 @@ import { soleLiveConversation } from "../conversations/actor/conversation-holdin
 import { callTool } from "./device-reports.js";
 import { startedRun } from "./runs/device-runs.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
+import { opt } from "../opt.js";
 
 // WHO MAY ACT ON ONE OF THE OWNER'S COMPUTERS FROM A SHELL IN THE SANDBOX: the `devices` command's routes (push a build,
 // start it, reach its ports). Two callers, one rule each:
@@ -166,6 +167,22 @@ const createDeviceDoorRoutes = (services: DeviceDoorServices) => ({
     },
     // GET /devices/tunnels: every tunnel open now.
     listTunnels: (c: Context<AppEnv>): Response => c.json({ tunnels: services.deviceTunnels.list() }),
+    // GET /devices/{name}/facts: what the computer said of itself when it connected (its `describe`): the OS, the shell,
+    // its home, the folders it allows and its WSL distros, so `devices exec` writes for that shell and keeps its mirror
+    // inside those folders.
+    facts: (c: Context<AppEnv>): Response => {
+        const device = c.req.param("name") ?? "";
+        const refused = refusalFor(services, c, device);
+        if (refused !== undefined) {
+            return c.json({ error: refused.error }, refused.status);
+        }
+        const facts = services.hostHub.state(device).facts;
+        if (facts === undefined || !services.hostHub.online(device)) {
+            return c.json({ error: `"${device}" is not connected right now: the computer is asleep, offline, or its agent isn't running` }, 409);
+        }
+        const { os, arch, shell, home, roots, wsl, wslDistros } = facts;
+        return c.json({ device, os, arch, shell, home, roots, ...opt("wsl", wsl), ...opt("wslDistros", wslDistros) });
+    },
 });
 
 // The rest of the `devices` command, and a device's end of a `devices reach` tunnel, redeeming its one-time ticket.
@@ -176,6 +193,7 @@ export const deviceDoorRawRoutes = defineRawRoutes((services: DeviceDoorServices
         "POST /devices/{name}/tunnels": deviceDoor.openTunnel,
         "DELETE /devices/{name}/tunnels/{port}": deviceDoor.closeTunnel,
         "GET /devices/tunnels": deviceDoor.listTunnels,
+        "GET /devices/{name}/facts": deviceDoor.facts,
         "GET /system/hosts/tunnel": services.deviceTunnels.route,
     };
 });

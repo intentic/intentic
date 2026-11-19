@@ -265,7 +265,11 @@ costs (a rebuild, a dockerd restart) and applies it with one press: `capabilitie
 
 Nothing in the sandbox uses the GPU unless it asks: a command gets it through `gpu-run <command…>` (the whole GPU,
 no wall limit unless `--timeout` or the owner's `gpu.timeoutMinutes`), and every other process, browsers
-included, runs on the CPU. `gpu-run --status` says whether it is there and whether GPU work is paused. The owner
+included, runs on the CPU: the sandbox pins OpenGL to llvmpipe and Vulkan to lavapipe for all of them, so a project
+needs no `soft.sh` of its own and nothing to unset. `gpu-run --status` says whether the GPU is there, whether GPU
+work is paused, and what renders where (a Vulkan program still lands on lavapipe through gpu-run when the image has
+no Dozen driver for a WSL GPU). For a real GPU this sandbox cannot give, `gpu-run --on <device> -- <command>` builds
+and runs this checkout on one of the owner's computers (`devices exec`, below its own `--help`). The owner
 can give it to every agent command instead (settings `gpu.shells: "all"`, the Overview's Host GPU switch). After
 the computer reports a GPU reset (LiveKernelEvent 141/117/116, Display 4101) the sandbox pauses GPU work and
 gpu-run refuses until the owner resumes it from the Overview: do not route around it by setting

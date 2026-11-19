@@ -166,6 +166,12 @@ export const RAW_ROUTES = {
     "GET /fleet": { agent: true },
     "POST /fleet/message": { agent: true },
     "POST /fleet/resume": { agent: true },
+    // Repeating a prompt until a check passes or nothing is left (`agents loop`), making the round in flight the last, and
+    // carrying a conversation on in a fresh session (`agents continue`): what a person does with a conversation's card
+    // (the sandbox's loops/fleet-loop.routes.ts).
+    "POST /fleet/loop": { agent: true },
+    "POST /fleet/loop/stop": { agent: true },
+    "POST /fleet/continue": { agent: true },
     "GET /fleet/{handle}": { agent: true },
     // One conversation's debug bundle (schemas/diagnostics.ts): `agents bundle`, and the editor's download of it. It
     // carries the daemon's log lines about it, so a person reads it at the floor the logs are read at.
@@ -196,6 +202,9 @@ export const RAW_ROUTES = {
     "POST /devices/{name}/tunnels": { agent: true, control: "never" },
     "DELETE /devices/{name}/tunnels/{port}": { agent: true, control: "never" },
     "GET /devices/tunnels": { agent: true },
+    // What a computer said of itself (its OS, shell, home, allowed folders, WSL distros), for `devices exec` to write for
+    // it; held to the same rule.
+    "GET /devices/{name}/facts": { agent: true, control: "never" },
     // Where a device dials back with a tunnel's one-time ticket; the ticket is the whole credential, checked by the route.
     "GET /system/hosts/tunnel": { auth: "door", control: "never" },
     // An extension gateway's realtime-listener control: /state hands back its connectors' stored credentials, so only the

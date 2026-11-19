@@ -28,6 +28,8 @@ word “agent” in the UI.
 | Page or reconstruct a transcript | [conversations/transcript-page-answer.ts](src/conversations/transcript-page-answer.ts) | [session storage](src/sessions/session-store.ts), [session readers](src/sessions/sessions.ts) |
 | Change a turn's prompt | [agent/prompt/system-prompt.ts](src/agent/prompt/system-prompt.ts) | [guidance assembly](src/agent/prompt/guidance.ts) and the selected runtime's prompt adapter |
 | Create a worktree or land work | [worktrees/worktrees.ts](src/conversations/worktrees/worktrees.ts) | [landing](src/conversations/land/land.ts) and [turn placement](src/agent/run/placement/turn-placement.ts) |
+| Know who else changes a file, or held work the main line moved under | [files-in-flight.ts](src/conversations/files-in-flight.ts) | [drift](src/conversations/overlap/branch-drift.ts), [who is told](src/conversations/overlap/branch-drift-news.ts), [the fleet's view](src/conversations/recall/fleet-overlap.ts) |
+| Carry a conversation on by itself: a loop's rounds, or a turn stopped on a large context | [loops/loop-runner.ts](src/loops/loop-runner.ts) | [context stops](src/loops/context-continue.ts), [`agents loop` and `agents continue`](src/loops/fleet-loop.routes.ts), [what a round is told](src/loops/loop-brief.ts) |
 | Schedule or fire an automation | [automations/scheduler.ts](src/automations/scheduler.ts) | [admission and concurrency](src/automations/fire/automation-fire.ts), [wake execution](src/automations/fire/run-fire.ts), [fire options](src/automations/fire/fire-options.ts) |
 
 From the repository root, locate source first and then read the tests beside the owning seam:
@@ -245,6 +247,20 @@ flowchart LR
   against the computer's sha256 before it passes on the last piece. Each chunk waits up to two minutes, and packing or
   unpacking a folder up to ten. (In the shinobi-society audit, agents moved a 12 MB tarball with `docker cp` through
   rog's `run_command`.)
+- (2026-11-19) `devices exec <device> [--in wsl] [--fetch <path>] -- <command>` (`bin/devices-exec.mjs`, also `gpu-run --on
+  <device>`) runs a command on one of the owner's computers in a mirror of the shell's checkout kept there. It mirrors
+  what git tracks plus untracked files it does not ignore, sends only the files whose sha256 changed since its last run
+  (a manifest per mirror under `~/.cache/intentic/device-mirrors`), and the computer unpacks them with fresh
+  modification times, so an incremental build rebuilds them. It deletes there what was deleted here. It carries a
+  stage folder over `/devices/{name}/files` and starts the computer's own script (`bin/devices-exec-scripts.mjs`:
+  PowerShell on Windows, a login `sh` on Linux, macOS or through `wsl.exe` in a distro) with the command on its
+  command line, where the computer's switches judge it. It streams the output over `/devices/{name}/apps/{id}/output`
+  and copies `--fetch` paths home. `GET /devices/{name}/facts` (`hosts/device-door.routes.ts`) tells it the OS, home,
+  allowed folders and WSL distros. The mirror keeps a generation mark: a mirror changed or lost there, or a manifest
+  lost here, shows as a mismatch, and the run sends everything again. Runs on one computer go one at a time (a lock per
+  device here, and the computer's own run list), and a program the command needs that is missing there is named before
+  anything runs. (In the shinobi-society audit, one agent copied 208 MB to a laptop and built for 9 minutes by hand, and
+  another spent 25 calls and 17 minutes of `app_status` on 5 rounds, touching LastWriteTime so cargo would rebuild.)
 - (2026-11-19) The Deployments board reads, drives and deploys Docker compose stacks on the owner's computers with no
   Komodo in between (`hosts/stacks/device-stacks.ts`, `/system/devices/{id}/stacks…`). The daemon only relays to the
   machine's own stack tools, which check its switches, so a refusal arrives in the machine's words. A deploy carries a
@@ -318,7 +334,9 @@ flowchart LR
   What the fixer read of each failed job (the run, its commit, when, and the error lines of its log excerpt) stays on
   the job's finding, and `GET /ci/main` (`ci/known/main-known.ts`, printed by `agents ci`) serves it to agents from the CI
   store alone, so an agent tells whether a failing test is main's without re-running main or asking the forge. A main
-  line nothing is known of reads `unread`, and a workspace wired to no CI says so.
+  line nothing is known of reads `unread`, and a workspace wired to no CI says so. Beside CI's it lists what the
+  sandbox's own test runs on clean trees at main commits saw fail (`local`, read from the output filter's record under
+  `logs/test-outcomes/`, output-cleaners' README), which covers suites CI does not run.
 - The Pi capability uses its own RPC probe (`runtimes/pi/pi-probe.ts`), shared by the card's status and runtime
   health. A missing CLI stays pending so adding the card can save its image fragment before the install rebuild;
   an installed Pi with no configured models asks for sign-in. The probe sends no model prompt and creates no session.
@@ -790,7 +808,9 @@ flowchart LR
 - A heavy program (a build, a test run, a typecheck) is recognised by what it is as it starts, not by the words of
   the line that started it: the daemon hands every agent command the table (`workload/heavy-commands.ts`,
   the shared rules in `@intentic/constants/heavy-rules`), and the program queues itself through `bin/queue-run`.
-  Agent commands reach their pane by file (`bin/tmux-run -f`), so no command line carries their words. A rule may
+  Agent commands reach their pane by file (`bin/tmux-run -f`), so no command line carries their words, and run with
+  stdin from `/dev/null` (`agentScript` in `agent/tools/agent-terminals.ts`): a program that reads stdin ends at once
+  instead of waiting on the pane, and one a person must type into is run with `</dev/tty`. A rule may
   name its memory price (`size`, which `queue-run --size` hands the gate by name), and the editor's typecheck has a lane
   of its own, one at a time at 7 GiB, taken even under a `pnpm -r typecheck` that already holds a heavy slot.
   Supported `cargo run` invocations build under the queue at the `cargo-build` price (7 GiB), then start the original
@@ -799,6 +819,16 @@ flowchart LR
   foreground window and names the queue position and holders if it returns while still queued. The Bash hook gives
   queue waits room under the SDK's ten-minute ceiling and returns at 590 wall seconds; explicit short deadlines stay. Process metrics
   classify Rust tools and native compilers and linkers beneath them as toolchain.
+- (2026-11-19) A repository declares its own heavy commands in `.intentic/heavy.json` (`workspace/deps/heavy-classes.ts`
+  reads every repository's, under the owner's `heavy-commands.json`): scripts matched by path through wrappers for
+  python3, bash, sh, uv and make (`bin/heavy-shims/interpreters`, put on PATH only while a class is declared) or
+  commands by their first words, each with a pool, limit, memory price, and `exclusive` or `quiet`. `queue-run
+  --exclusive` holds a gate every queued command takes the other side of (a turnstile, then a shared lock it keeps), so
+  nothing else heavy runs beside such a command; `bin/quiet` is that lane for timing runs, waiting for calm and
+  printing the conditions beside the result. Cargo starts through `heavy-launch.cjs`, which picks its jobs and test
+  threads from the room it was given. `memory-room` never starts a command below a person's turn's room: it holds it to
+  its ceiling and then exits 75. `offload-run` says how to keep an offloaded command here (`INTENTIC_OFFLOAD=0`). Agents'
+  guide: `seed-skills/intentic/references/heavy-commands.md`.
 - One `ResourceBudget` (`workload/resource-budget.ts`) decides whether there is room for more work: the turn door, a
   child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one
   snapshot, taken by the formula in `@intentic/constants/memory-room`. (2026-11-02) That reading is the sandbox's cgroup
@@ -1041,6 +1071,11 @@ flowchart LR
   GPU row and the attention list say so, and only the owner's resume clears it. gpu-run reads what it needs from
   `/run/intentic/gpu-state` (`hosts/gpu/gpu-state.ts`, rewritten on every settings write), and refuses browser flags
   that override the GPU safety list. A turn on such a sandbox is told all of this (`agent/prompt/guidance/host-gpu.ts`).
+  (2026-11-19) Every other process renders on the CPU by name: the entrypoint exports `gpu-run --software-env`
+  (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`, and `VK_DRIVER_FILES`/`VK_ICD_FILENAMES` on lavapipe where the
+  image has it), leaving out any the image already sets. gpu-run takes back the ones the sandbox set, while each still
+  holds the sandbox's value, for the command it runs, and `gpu-run --status` says what renders where. (shinobi-society
+  wrapped 316 commands in its own soft.sh to do the same.)
 - A turn parked on a person comes back after a restart as the same run (2026-10-06): while a card is up, the turn
   journal's `run` column holds the run's id and the rows it has drawn (`store/journals/turn-journal.ts`), and the boot
   carries that run on with its own id, start time and rows, raising each card again on the row it already had
@@ -1117,11 +1152,39 @@ flowchart LR
   sweep and the disk-pressure watch retire snapshots nothing reads any more (`retireAllWarmSnapshots`). The Storage scan
   counts a layer as its conversation's build output (`isWarmLayer`) and the snapshots once, with the checkouts, as
   protected as they are: a file clean of a snapshot a live overlay reads would corrupt every checkout reading it.
+- A new checkout's Cargo targets start warm, without privilege (2026-11-19, the shinobi-society audit: 15 conversations
+  rsynced a parent's `target/` by hand, 279 s for one copy). Behind a conversation's first turn
+  (`agent/context/conversation-context.ts`), and for every base below, `conversations/worktrees/build-outputs/warm-checkout.ts`
+  picks for each folder holding a `Cargo.toml` a lender: the spawned child's parent when it built there, else the main
+  checkout or another conversation's checkout with the same `Cargo.lock`, one on the staging folder's mount (links)
+  before one it must copy, the most recently built first.
+  `build-outputs/warm-seed.ts` copies its target into a staging folder in `/history/warm-seeds/` and moves it into place
+  by one rename only if the checkout has no `target/` by then. Every unit of a package a `Cargo.toml` in either checkout
+  declares is left out, in cargo 1.100's `build/<package>/<hash>/` layout and the older `.fingerprint/`, `build/` and
+  hashed `deps/` one, as are `incremental/`, uplifted files and `examples/`: Cargo judges a path crate by mtimes, and a
+  copied record of a crate the lender built after the new checkout's files were written read as fresh (measured: a child
+  ran its parent's uncommitted edit). `.rlib` and `.rmeta` are hard-linked (rustc and an sccache hit both replace them
+  with a new inode, measured), everything else copied with `--reflink=auto`, all of it at the command class's priority
+  under the lender profile's `.cargo-lock` with a 30-second wait (a build running there leaves the profile out). One
+  seed at a time across the daemon, at most 8 GiB copied (links are free; a lender on another mount, like the main
+  checkout where `/work` and `/history` are separate volumes, is copied whole), above the history volume's floor, within
+  10 minutes. Not when `sharedCargoTargets` is on, not for a runner's mirror, and never where git would not ignore the
+  target. Measured on a 20-unit serde workspace (`-j2`, ext4, no compiler cache): cold, 4.4 s; seeded in 61 ms (35 MB
+  linked, 37 MB copied), then 0.23 s, its 3 workspace units compiled and the 17 registry ones reused.
+- `base` (`bin/base`, `conversations/worktrees/bases/`) is "before" in one command: a read-only detached worktree of the
+  repository the shell stands in, at the fork point (`git merge-base HEAD <main line>`), `--at main` or any commit, at
+  `/history/bases/<repo>/<sha12>/`, made under the repository's lock and Cargo-seeded as above. `base run <cmd>` runs a
+  command there in the folder matching the caller's, exiting with its code (125 when there is no base); `base path`,
+  `base ls`, `base drop`. One base per commit, shared: a conversation asking holds it (a file in `<sha12>.holds/`), it is
+  restored to its commit whenever handed out, and it goes when its last holder lets go, at the hourly sweep once no live
+  conversation asked for a day and nothing runs inside it, or under disk pressure, unheld and least recently used first.
+  Nothing is mirrored into a base: a JavaScript base runs its own install there.
 - The disk-pressure watch (`system/resources/storage/disk-pressure.ts`, 2026-11-03) reads the history volume once a
   minute. Under the settings' `diskReapBelowPercent` free (15% by default) it removes settled checkouts' build output
   at once, landed ones first and then the longest idle, until the volume is back over it. Still short, it goes on to
   its reliefs (2026-11-12), in order and only while the disk stays short: the main checkout's
-  Cargo `incremental/` caches (`build-outputs/main-incremental.ts`; none while any Cargo or rustc runs), then browser captures and artifacts untouched for a
+  Cargo `incremental/` caches (`build-outputs/main-incremental.ts`; none while any Cargo or rustc runs), then base
+  checkouts nothing runs in (`bases/base-checkouts.ts`, made again by the next `base` that asks), then browser captures and artifacts untouched for a
   week, oldest first, by the Storage cleaner's own rules (`storage/pressure-reliefs.ts`). Both only where the workspace shares the history volume's
   filesystem, since freeing a separate disk gives the history volume nothing. Under 10% and under 5% it
   tells the sandbox's owner and maintainers once per level, whatever the threshold, with a push
@@ -1289,7 +1352,13 @@ answer, with a file handle for the full report. Its status, verification and lan
 structured. It accepts Claude's `agentId` as well as the spawning call's id. A helper resumed with `SendMessage` runs
 again under the same record, so `wait` blocks until the resumed run ends and returns its report. Explicit `targets` may mix
 child ids and background command ids; the answer includes children in `agents` and commands in `jobs`, returning early
-for trouble. Waits shorter than five seconds are clamped to five seconds. This bound also applies when general output
+for trouble. Waits shorter than five seconds are clamped to five seconds. On one command, `until` may be a regular
+expression: the wait returns `matched` at the first complete line of its output that matches (colours removed, `(?i)` to
+ignore case), read from the output's start or just past the line the last pattern wait matched (`agent/subagents/waiting/output-lines.ts`). A
+timeout answers `progress`, a few lines per target on what moved since the last answer about it: a command's new lines
+and bytes, last lines and silence; a child's tool calls since, last words, what holds it and the files it changed
+(`subagents/waiting/wait-progress.ts`). A question or pause a wait already handed over is not handed over again by a
+named wait either: it parks until the child moves on (2026-11-19). This bound also applies when general output
 cleaning is off. Device shell collection
 keeps its existing limits; only the model-facing copy is cleaned in the daemon.
 

@@ -129,6 +129,32 @@ test("a written verdict of done stops the loop on that iteration", async () => {
     expect(settled?.iterations.at(-1)).toMatchObject({ outcome: "done", detail: "pass 2" });
 });
 
+// 2026-11-19: a backlog worked through by hand in nine conversations, each ending "N groups remain" and the next one
+// re-reading the backlog and the history to learn where things stood.
+test("a backlog's count ends the loop at zero, and each round is told where the last one left it", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    await mkdir(join(root, LOOP_DIR, "c9"), { recursive: true });
+    const prompts: string[] = [];
+    const turn: TurnStarter["stream"] = async function* counting(input: AgentTurn) {
+        prompts.push(input.prompt);
+        const n = Number(/iteration-(\d+)\.json/.exec(input.prompt)?.[1] ?? "1");
+        const remaining = 2 - n;
+        await writeFile(join(root, LOOP_DIR, "c9", `iteration-${String(n)}.json`), JSON.stringify({ done: false, reason: `group ${String(n)} landed`, remaining }));
+        const ended: AgentEvent = { kind: "done" };
+        yield ended;
+    };
+    const record = await services.loops.start({ ...baseLoop("c9"), maxIterations: 5 }, 1);
+    await runLoop(drivenBy(services, turn), record);
+
+    const settled = await services.loops.get("c9");
+    expect(settled?.state).toBe("done");
+    expect(settled?.iterations.map((row) => row.remaining)).toEqual([1, 0]);
+    expect(prompts[0]).not.toContain("Where the last round left it");
+    expect(prompts[1]).toContain("> group 1 landed");
+    expect(prompts[1]).toContain("It counted 1 still open.");
+});
+
 test("a missing output file reads as not-done rather than as done, the safe direction", async () => {
     const root = tempRoot();
     const services = fakeServices(root);

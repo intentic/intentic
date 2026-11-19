@@ -257,6 +257,11 @@ const patch = (actors: Actors, id: string, fields: Partial<SubagentRecord>): Age
     }
     Object.assign(record, Object.fromEntries(changed));
     record.activityAt = Date.now();
+    // A move handed over (a question, a pause) stays handed over only while the child is still in it: once it moves on,
+    // the next question or pause is a new move to hand over, and an ending after it is still to be told.
+    if (record.reported !== undefined && LIVE.has(record.reported) && record.reported !== record.status) {
+        record.reported = undefined;
+    }
     // The one place a child's end is recorded, whichever arrival got here first; read once, never re-stamped.
     if (record.endedAt === undefined && !subagentRunning(record)) {
         record.endedAt = record.activityAt;
@@ -799,11 +804,8 @@ export const noteSpawnedChild = (
     if (move.status === "paused") {
         takeReportedAhead(record, "paused");
     }
-    // A card parked after an earlier one was answered is a new move: what a wait or a wake handed over of the last one
-    // must not stand for it, or the second question of a child would reach nobody.
-    if (move.status === "blocked" && record.status !== "blocked" && record.reported === "blocked") {
-        record.reported = undefined;
-    }
+    // A card parked after an earlier one was answered is a new move: `patch` let go of the last one's handing over as the
+    // child moved on from it, so the second question of a child reaches its parent too.
     toParent(actors, record.conversationId, patch(actors, id, move));
 };
 
@@ -886,9 +888,14 @@ export interface SubagentWaitOutcome {
     readonly matched?: SubagentSession;
 }
 
+/* A MOVE ALREADY HANDED OVER IS NOT HANDED OVER AGAIN (2026-11-19, the shinobi-society audit). A named child answered
+   with its state however often it was asked, so a parent that had been handed a pause, or a question it had just
+   answered while the child's runtime had not yet said so, got the same `blocked` back at once from every wait: four in
+   0 s in one conversation, with the child running. A wait on "any" or on several already skipped what it had handed
+   over; a named wait now does the same for a live move and parks until the child moves on (its re-run ends, the answer
+   lands, the owner decides), while an ending still answers a named wait however often it is asked. */
 const waitMatch = (record: SubagentRecord, until: readonly SubagentWaitUntil[], any: boolean): SubagentWaitUntil | undefined => {
-    // A named child answers with its state however often it is asked.
-    if (any && record.reported === record.status) {
+    if (record.reported === record.status && (any || LIVE.has(record.status))) {
         return undefined;
     }
     // A spawned child paused for the sandbox's own re-run is a move its parent acts on (it may cancel the re-run), not

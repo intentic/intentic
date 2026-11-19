@@ -10,7 +10,8 @@ import type { Admission, ResourceBudget } from "./resource-budget.js";
 // _tools/scripts/verify/test-workers.mjs), on a Unix socket of its own: never the daemon's socket, which netd
 // relays to the internet. `GET /room?class=toolchain&wait=120&label=…` admits one more of that class, holding the
 // answer up to `wait` seconds for room; `size=<name>` prices a toolchain command by a shape SIZE_BYTES names
-// (`targeted`, `editor-typecheck`, `scoped-typecheck`) instead of its class, any other name being the class, and
+// (`targeted`, `editor-typecheck`, `scoped-typecheck`) or a MiB count (`6144m`, a project's declared class) instead of
+// its class, any other name being the class, and
 // `pid=N` names the process the work runs as, whose exit hands its reservation back; `GET /snapshot` is the reading and what admitted work holds, for a caller that
 // sizes itself to the free memory without asking to start anything.
 

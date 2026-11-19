@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
+import { holdAtFloor, notStartedWords, START_FLOOR_BYTES } from "./heavy/memory-floor.mjs";
 
 const GIB = 1024 ** 3;
 const MIB = 1024 ** 2;
@@ -49,8 +50,11 @@ export const SIZE_BYTES = Object.freeze({
     "scoped-typecheck": 4 * GIB,
 });
 
-/** Whether `size` is a price the gate knows; any other word is priced as its class. */
-export const isRoomSize = (size) => Object.hasOwn(SIZE_BYTES, size);
+// A price in MiB (`6144m`): what a project declares its own heavy command holds (heavy-rules.cjs classRules).
+const MIB_SIZE = /^[1-9]\d{0,6}m$/u;
+
+/** Whether `size` is a price the gate knows, by name or in MiB; any other word is priced as its class. */
+export const isRoomSize = (size) => Object.hasOwn(SIZE_BYTES, size) || MIB_SIZE.test(size);
 
 // What one test or typecheck process holds at its peak, for the scripts that size a fan-out to the free memory
 // (_tools/scripts/verify/test-workers.mjs) and the ceiling that stops a runaway one (_tools/scripts/lib/memory-ceiling.mjs).
@@ -255,7 +259,9 @@ const gib = (bytes) => `${(bytes / GIB).toFixed(1)} GiB`;
 
 /** What one more of `workload` costs: its class's cost, or a named toolchain shape's where `size` names one. */
 export const costBytesOf = (workload, size) =>
-    workload === "toolchain" && size !== undefined && isRoomSize(size) ? SIZE_BYTES[size] : (COST_BYTES[workload] ?? COST_BYTES.agentRuntime);
+    workload === "toolchain" && size !== undefined && isRoomSize(size)
+        ? (SIZE_BYTES[size] ?? Number(size.slice(0, -1)) * MIB)
+        : (COST_BYTES[workload] ?? COST_BYTES.agentRuntime);
 
 /** What starting one more of `workload` needs free: its own cost, plus a person's turn when nobody is waiting on it. */
 export const needBytes = (workload, attended, size) => costBytesOf(workload, size) + (attended ? 0 : PERSON_RESERVE_BYTES);
@@ -367,16 +373,11 @@ export const freeBytesOf = (reading) => {
 
 // ---- asking the daemon, with the formula itself as the fallback ----
 
-const askSocket = (workload, waitSeconds, label, socketPath, size, pid) =>
+// One GET on the room socket, as parsed JSON; undefined for any failure. No socket (CI, a plain checkout), a daemon
+// restarting, a hung or unparsable answer: the formula decides instead.
+const getJson = (socketPath, path, timeoutMs) =>
     new Promise((resolve) => {
-        const query = new URLSearchParams({ class: workload, wait: String(waitSeconds), label });
-        if (size !== undefined) {
-            query.set("size", size);
-        }
-        if (pid !== undefined) {
-            query.set("pid", String(pid));
-        }
-        const asked = request({ socketPath, path: `/room?${query}`, method: "GET", timeout: (waitSeconds + 15) * 1000 }, (response) => {
+        const asked = request({ socketPath, path, method: "GET", timeout: timeoutMs }, (response) => {
             let body = "";
             response.setEncoding("utf8");
             response.on("data", (chunk) => (body += chunk));
@@ -389,31 +390,23 @@ const askSocket = (workload, waitSeconds, label, socketPath, size, pid) =>
                 }
             });
         });
-        // No socket (CI, a plain checkout), a daemon restarting, a hung answer: the formula below decides instead.
         asked.on("error", () => resolve(undefined));
         asked.on("timeout", () => asked.destroy());
         asked.end();
     });
 
-const askSnapshot = (socketPath) =>
-    new Promise((resolve) => {
-        const asked = request({ socketPath, path: "/snapshot", method: "GET", timeout: 3_000 }, (response) => {
-            let body = "";
-            response.setEncoding("utf8");
-            response.on("data", (chunk) => (body += chunk));
-            response.on("end", () => {
-                try {
-                    resolve(response.statusCode === 200 ? JSON.parse(body) : undefined);
-                } catch {
-                    // allow(silent-catch): an answer that does not parse is no answer; the formula below decides instead
-                    resolve(undefined);
-                }
-            });
-        });
-        asked.on("error", () => resolve(undefined));
-        asked.on("timeout", () => asked.destroy());
-        asked.end();
-    });
+const askSocket = (workload, waitSeconds, label, socketPath, size, pid) => {
+    const query = new URLSearchParams({ class: workload, wait: String(waitSeconds), label });
+    if (size !== undefined) {
+        query.set("size", size);
+    }
+    if (pid !== undefined) {
+        query.set("pid", String(pid));
+    }
+    return getJson(socketPath, `/room?${query}`, (waitSeconds + 15) * 1000);
+};
+
+const askSnapshot = (socketPath) => getJson(socketPath, "/snapshot", 3_000);
 
 /**
  * Free memory as the daemon counts it (the reading less what work it admitted still holds), for a caller that sizes
@@ -473,7 +466,8 @@ export const stuckWait = ({ stuckMs = STUCK_MS, easedBytes = EASED_BYTES } = {})
 
 /**
  * What `memory-room` prints for a command it held, or undefined for one it never held. Says why it waited (`waitedFor`,
- * the first short reading's diagnosis) and, for one that starts short of room, why it starts anyway.
+ * the first short reading's diagnosis) and, for one that starts short of room (never below the floor, heavy/memory-floor.mjs),
+ * why it starts anyway.
  */
 export const waitWords = (label, answer) => {
     if (!(answer.waitedMs > 0)) {
@@ -489,7 +483,7 @@ export const waitWords = (label, answer) => {
     const still = answer.diagnosis === undefined ? "" : ` Still: ${answer.diagnosis}.`;
     return answer.stuck === true
         ? `[memory-room] ${label}: short of memory for ${seconds}s, and waiting longer would not help: nothing admitted is about to let memory go and the shortage has not eased (${free} free) — starting now.${still}`
-        : `[memory-room] ${label}: still short of memory after ${seconds}s (${free} free) — starting anyway.${still}`;
+        : `[memory-room] ${label}: still short of memory after ${seconds}s (${free} free, above the ${gib(START_FLOOR_BYTES)} floor it needs to start) — starting with what there is.${still}`;
 };
 
 /**
@@ -536,10 +530,13 @@ export const askRoom = async ({
     return answer;
 };
 
-// `memory-room --class toolchain --wait 120 --label NAME [--size targeted|editor-typecheck|…] [--pid PID]` holds a command until there is
-// room, printing why it waited, and always exits 0: a gate that cannot read the sandbox must not be the reason a command
-// did not run. `--json` prints the answer instead; `--free` prints the free memory as the daemon counts it, for a caller
-// that sizes itself to it.
+// `memory-room --class toolchain --wait 120 [--ceiling 900] --label NAME [--size targeted|cargo-build|6144m|…] [--pid PID]
+// [--admitted]` holds a command until there is room, printing why it waited. Short of room at `--wait` it starts anyway,
+// unless less than the floor is free: then it goes on waiting up to `--ceiling` and, still below it, exits 75 so the
+// command is not started (heavy/memory-floor.mjs). Every other outcome exits 0: a gate that cannot read the sandbox must not
+// be the reason a command did not run. `--admitted` prints what the daemon holds for the command (0 for none), for its
+// launcher to size its jobs to; `--json` prints the answer instead; `--free` prints the free memory as the daemon counts
+// it, for a caller that sizes itself to it.
 const main = async (args) => {
     const option = (name, fallback) => {
         const at = args.indexOf(`--${name}`);
@@ -547,27 +544,40 @@ const main = async (args) => {
     };
     if (args.includes("--free")) {
         process.stdout.write(`${JSON.stringify(await askFree({ socketPath: option("socket", ROOM_SOCKET) }))}\n`);
-        return;
+        return 0;
     }
     const waitSeconds = Math.max(0, Number(option("wait", "0")) || 0);
     const label = option("label", "command");
     const pid = Number(option("pid", ""));
-    const answer = await askRoom({
+    const startedAt = Date.now();
+    const asked = {
         workload: option("class", "toolchain"),
-        waitSeconds,
         label,
         intervalMs: Math.max(50, Number(option("interval-ms", "5000")) || 5000),
         size: isRoomSize(option("size", "")) ? option("size", "") : undefined,
         pid: Number.isInteger(pid) && pid > 1 ? pid : undefined,
-    });
+    };
+    let answer = await askRoom({ ...asked, waitSeconds });
+    if (answer.verdict !== "run") {
+        const ceilingSeconds = Math.max(waitSeconds, Number(option("ceiling", "0")) || 0);
+        const say = (line) => process.stderr.write(`${line}\n`);
+        answer = await holdAtFloor({ answer, ask: (seconds) => askRoom({ ...asked, waitSeconds: seconds }), label, ceilingSeconds, say, startedAt });
+        if (answer.notStarted === true && !args.includes("--json")) {
+            say(notStartedWords(label, answer, answer.waitedMs));
+        }
+    }
+    if (args.includes("--admitted")) {
+        process.stdout.write(`${answer.verdict === "run" && answer.source === "daemon" ? costBytesOf(asked.workload, asked.size) : 0}\n`);
+    }
     if (args.includes("--json")) {
         process.stdout.write(`${JSON.stringify(answer)}\n`);
-        return;
+    } else if (answer.notStarted !== true) {
+        const words = waitWords(label, answer);
+        if (words !== undefined) {
+            process.stderr.write(`${words}\n`);
+        }
     }
-    const words = waitWords(label, answer);
-    if (words !== undefined) {
-        process.stderr.write(`${words}\n`);
-    }
+    return answer.notStarted === true ? 75 : 0;
 };
 
 const invokedAs = process.argv[1] === undefined ? undefined : (() => {
@@ -579,6 +589,9 @@ const invokedAs = process.argv[1] === undefined ? undefined : (() => {
     }
 })();
 if (invokedAs === import.meta.url) {
-    await main(process.argv.slice(2)).catch((error) => process.stderr.write(`[memory-room] skipped: ${error instanceof Error ? error.message : String(error)}\n`));
-    process.exit(0);
+    const code = await main(process.argv.slice(2)).catch((error) => {
+        process.stderr.write(`[memory-room] skipped: ${error instanceof Error ? error.message : String(error)}\n`);
+        return 0;
+    });
+    process.exit(code);
 }

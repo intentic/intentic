@@ -1,6 +1,7 @@
 import { askedAudience } from "../push/push-audience.js";
 import { childActor } from "../auth/principal.js";
-import { join } from "node:path";
+import { readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 import { grantSite } from "@intentic/sandbox-contract/schemas/needs";
@@ -24,6 +25,9 @@ import { defineSlice } from "../seams/slice.js";
 import { capabilityNeed } from "./kinds/capability-need.js";
 import { automationNeed } from "./kinds/automation-need.js";
 import { environmentNeed } from "./kinds/environment-need.js";
+import { instructionNeed, type InstructionNeedDeps } from "./kinds/instruction-need.js";
+import { resolveRealWithin } from "../workspace/files/workspace-files-paths.js";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { refuseInvalidAutomation, saveAutomation } from "../automations/automation-save.js";
 import { checkSource } from "../automations/watch/watch-sources.js";
 import { sourceEnv } from "../automations/watch/watch-condition.js";
@@ -74,6 +78,27 @@ const usableNow = async (services: Services, capability: Capability): Promise<re
     );
     const suffix = envSuffix(capability.id);
     return Object.entries(contributionEnv(connector.spec, config)).map(([key, value]) => `${key}_${suffix}=${value}`);
+};
+
+// An AGENTS.md on the main tree, through the escape guard: a path, or a symlinked folder, that leads out of the
+// workspace is refused rather than read or written.
+const mainTreeFiles = (workspaceRoot: string): InstructionNeedDeps => {
+    const within = async (file: string): Promise<string> => {
+        const resolved = await resolveRealWithin(workspaceRoot, file);
+        if (resolved === undefined) {
+            throw new Error(`${file} leads outside the workspace`);
+        }
+        return resolved.path;
+    };
+    return {
+        read: async (file) => readFile(await within(file), "utf8").catch(undefinedIfMissing),
+        write: async (file, text) => writeFile(await within(file), text),
+        // The root itself is no path inside it (resolveWithin), so it is named here.
+        folder: async (file) => {
+            const at = dirname(file) === "." ? workspaceRoot : (await resolveRealWithin(workspaceRoot, dirname(file)))?.path;
+            return at !== undefined && (await stat(at).catch(undefinedIfMissing))?.isDirectory() === true;
+        },
+    };
 };
 
 // A secret need over the finished services: the registry, the stores a value is kept in, and the keyrings.
@@ -202,6 +227,8 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
                     return { pass: checked.pass, saw: checked.pass ? checked.output : checked.detail, at: Date.now() };
                 },
             }),
+            // On the main tree, the owner's own copy, never a conversation's checkout.
+            instruction: instructionNeed(mainTreeFiles(workspaceRoot)),
         },
         logger,
         raisingConversation: (named) => liveRequestRun(whole().conversations)(named)?.conversationId,

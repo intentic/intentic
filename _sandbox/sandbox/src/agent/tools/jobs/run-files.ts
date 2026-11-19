@@ -38,6 +38,41 @@ export const appendRunFile = (dir: string, name: string, content: string): void 
 /** Renames within `dir`; a rename replaces a link at the target rather than following it. */
 export const renameRunFile = (dir: string, from: string, to: string): void => withDir(dir, (at) => renameSync(at(from), at(to)));
 
+/** Part of a file, read from an offset, and how long the whole file was then. */
+export interface FileRange {
+    readonly data: Buffer;
+    readonly size: number;
+}
+
+/** At most `bytes` of `name` in `dir` from byte `offset` on, with the file's whole size; never through a link. */
+export const readRunFileAt = (dir: string, name: string, offset: number, bytes: number): FileRange =>
+    withDir(dir, (at) => {
+        const fd = openSync(at(name), constants.O_RDONLY | constants.O_NOFOLLOW);
+        try {
+            return readFrom(fd, offset, bytes);
+        } finally {
+            closeSync(fd);
+        }
+    });
+
+/** The same read of a file the job's processes write to outside its dir (job-redirects.ts), which is theirs, not planted. */
+export const readFileAt = (path: string, offset: number, bytes: number): FileRange => {
+    const fd = openSync(path, constants.O_RDONLY);
+    try {
+        return readFrom(fd, offset, bytes);
+    } finally {
+        closeSync(fd);
+    }
+};
+
+const readFrom = (fd: number, offset: number, bytes: number): FileRange => {
+    const { size } = fstatSync(fd);
+    const start = Math.min(Math.max(0, offset), size);
+    const buffer = Buffer.alloc(Math.max(0, Math.min(size - start, bytes)));
+    const read = readSync(fd, buffer, 0, buffer.length, start);
+    return { data: buffer.subarray(0, read), size };
+};
+
 /** `name` in `dir` and when it last changed, or its last `bytes` only; never through a link. */
 export const readRunFile = (dir: string, name: string, bytes = Number.POSITIVE_INFINITY): { readonly text: string; readonly mtimeMs: number } =>
     withDir(dir, (at) => {

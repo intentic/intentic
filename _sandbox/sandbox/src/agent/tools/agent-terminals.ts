@@ -98,6 +98,15 @@ export const POLITE_PREFIX = shellPrefix({ class: "command" });
 // left alone; input-wait.ts catches whatever asks anyway.
 export const NO_PROMPTS = "env npm_config_yes=false GIT_TERMINAL_PROMPT=0 UV_THREADPOOL_SIZE=4 ";
 
+/* AN AGENT'S COMMAND READS NOTHING IT WAS NOT GIVEN (2026-11-19, the shinobi-society audit). The pane's terminal was every
+   command's stdin, so a program that reads stdin when nothing was piped in sat there until the soft timeout moved it
+   into tmux for good: a stray `python3 -` twice in 100 conversations, and every `vitest` that reads a terminal as "watch
+   me". Its stdin is now empty, so such a program reads end-of-input and finishes at once, as it would under a CI runner;
+   a heredoc, a pipe or a redirect the command writes itself still feeds it. The pane is still its terminal: a prompt that
+   opens /dev/tty (ssh, sudo, git's credential prompt) is followed for an input wait as before (input-wait.ts), and a
+   command that needs a person to type into it says so with `</dev/tty`, which request_help then hands over. */
+export const agentScript = (file: string): string => `bash ${shellQuote(file)} </dev/null`;
+
 // Leaves the last pipeline's per-stage statuses where bin/tmux-run's pane exports INTENTIC_PIPESTATUS_FILE. An EXIT
 // trap on the command's first line: its text, line numbers and exit status stay the agent's own.
 export const PIPESTATUS_TRAP = `trap 'printf "%s " "\${PIPESTATUS[@]}" 2>/dev/null >"\${INTENTIC_PIPESTATUS_FILE:-/dev/null}"' EXIT; `;
@@ -446,7 +455,7 @@ export const bashTmuxHooks = (
                         // Through run-files.ts: for a fenced turn this dir is in the turn's own temp dir.
                         writeRunFile(dir, "agent", `${PIPESTATUS_TRAP}${executed}\n`);
                         // gpu-run in front only where the owner gave every agent command the GPU (settings gpu.shells).
-                        const run = `${POLITE_PREFIX}${NO_PROMPTS}${heavyEnv}${gpuShellPrefix()}bash ${shellQuote(agentFile)}`;
+                        const run = `${POLITE_PREFIX}${NO_PROMPTS}${heavyEnv}${gpuShellPrefix()}${agentScript(agentFile)}`;
                         // Namespace hop and demotion sit inside the wrapper; the forked tree inherits both, tmux-run
                         // stays outside.
                         const inner = `${stamp}${paneHop(isolation)}${run}`;

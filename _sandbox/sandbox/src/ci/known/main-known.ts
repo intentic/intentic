@@ -1,4 +1,5 @@
-import type { CiMainBranch, CiMainJob, CiMainResponse } from "@intentic/sandbox-contract/schemas/ci";
+import { type MainBaseline, mainBaselines } from "@intentic/output-cleaners/outcomes";
+import type { CiLocalMain, CiMainBranch, CiMainJob, CiMainResponse } from "@intentic/sandbox-contract/schemas/ci";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
 import type { CiFailure, CiFinding } from "../ci-store.js";
@@ -13,7 +14,10 @@ import { ciProjects, type CiProject } from "../projects.js";
    each job failing on a main line now, the run and commit it last failed in, when that was read, and what its log named.
    Read from the CI store alone, never the forge: the answer is as fresh as the last run a webhook or the poller brought,
    and says when that was. Where nothing is known (no repository wired to CI, no run of main heard yet) it says so, so
-   silence never reads as a passing main. */
+   silence never reads as a passing main.
+   Beside CI's, what the sandbox's own test runs saw fail at main (2026-11-19: `agents ci` said "nothing known to fail"
+   while sixteen tests failed on main, in suites CI does not run): the output filter records every test run, and one on
+   a clean tree at a main commit is that commit's baseline (output-cleaners' test-outcomes.mjs). */
 
 type KnownServices = Pick<Services, "workspace" | "capabilities" | "ciStore">;
 
@@ -116,22 +120,63 @@ const branchLines = (branch: CiMainBranch, now: number): string[] => {
     return [`${name}: FAILING since ${when(branch.since ?? 0, now)}${heard}${fixer}`, ...branch.jobs.flatMap((job) => jobLines(job, now))];
 };
 
-/** The answer in words, as `agents ci` prints it. */
-export const mainText = (branches: readonly CiMainBranch[], now: number): string => {
-    if (branches.length === 0) {
-        return "No repository in this workspace is wired to CI (a GitHub or GitLab remote on a connected account), so nothing is known of what fails on main. That is not a passing main.";
+// A recorded baseline as the contract carries it.
+const localOf = (baseline: MainBaseline): CiLocalMain => ({
+    repo: baseline.repo,
+    sha: baseline.sha,
+    at: baseline.at,
+    runs: baseline.runs.map((run) => ({ command: run.command, at: run.at, ...opt("by", run.by), failed: run.counts.failed, passed: run.counts.passed })),
+    failed: baseline.failed.map((failure) => ({ test: failure.test, ...opt("line", failure.line), at: failure.at })),
+});
+
+// How many of one commit's failing tests the words name before counting the rest.
+const LOCAL_SHOWN = 20;
+
+const localRepoLines = (local: CiLocalMain, now: number): string[] => {
+    const newest = local.runs[0];
+    const by = newest?.by === undefined ? "" : ` by ${newest.by}`;
+    const head = `${local.repo} · main@${local.sha.slice(0, SHA_CHARS)}: ${local.runs.length} run${local.runs.length === 1 ? "" : "s"} there, newest \`${newest?.command ?? ""}\`${by}, ${when(local.at, now)}`;
+    if (local.failed.length === 0) {
+        return [`${head}; none failed a test.`];
     }
-    return [
-        "What main's CI is known to fail on, from the runs this sandbox heard (no forge was asked now):",
-        "",
-        ...branches.flatMap((branch) => branchLines(branch, now)),
-        "",
-        "A failure matching a job or line above is main's, not yours. One matching nothing here is only not known to be main's: main may have moved since the times above, and a repository not listed is not wired to CI.",
-    ].join("\n");
+    const more = local.failed.length > LOCAL_SHOWN ? [`    … and ${local.failed.length - LOCAL_SHOWN} more`] : [];
+    const failed = local.failed.slice(0, LOCAL_SHOWN).map((failure) => `    - ${failure.test}${failure.line === undefined ? "" : ` — ${failure.line}`}`);
+    return [`${head}; failing:`, ...failed, ...more];
 };
 
-/** GET /ci/main: what main's CI is known to fail on, in words and as rows. */
-export const mainKnown = async (services: KnownServices, now: number = Date.now()): Promise<CiMainResponse> => {
+const localLines = (local: readonly CiLocalMain[], now: number): string[] =>
+    local.length === 0
+        ? []
+        : [
+              "",
+              "What this sandbox's own test runs saw fail on clean trees at main commits (not CI, so suites CI does not run are here too):",
+              "",
+              ...local.flatMap((entry) => localRepoLines(entry, now)),
+              "",
+              "A test failing at the commit your worktree forked from is not your change's. A failed test run in your worktree ends with a digest that labels each failure against these.",
+          ];
+
+const ciLines = (branches: readonly CiMainBranch[], now: number): string[] =>
+    branches.length === 0
+        ? ["No repository in this workspace is wired to CI (a GitHub or GitLab remote on a connected account), so nothing is known of what fails on main. That is not a passing main."]
+        : [
+              "What main's CI is known to fail on, from the runs this sandbox heard (no forge was asked now):",
+              "",
+              ...branches.flatMap((branch) => branchLines(branch, now)),
+              "",
+              "A failure matching a job or line above is main's, not yours. One matching nothing here is only not known to be main's: main may have moved since the times above, and a repository not listed is not wired to CI.",
+          ];
+
+/** The answer in words, as `agents ci` prints it: CI's, then what the sandbox's own runs at main saw fail. */
+export const mainText = (branches: readonly CiMainBranch[], now: number, local: readonly CiLocalMain[] = []): string =>
+    [...ciLines(branches, now), ...localLines(local, now)].join("\n");
+
+/**
+ * GET /ci/main: what main's CI is known to fail on, in words and as rows, and what the test runs recorded under
+ * `outcomes` saw fail at main.
+ */
+export const mainKnown = async (services: KnownServices, now: number = Date.now(), outcomes?: string): Promise<CiMainResponse> => {
     const branches = await mainBranches(services);
-    return { text: mainText(branches, now), branches };
+    const local = outcomes === undefined ? [] : mainBaselines(outcomes).map(localOf);
+    return { text: mainText(branches, now, local), branches, ...opt("local", outcomes === undefined ? undefined : local) };
 };

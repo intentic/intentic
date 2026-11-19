@@ -149,6 +149,15 @@ export const diskLow = (level: "low" | "critical", state: DiskPressure): PushNot
     };
 };
 
+// Work stopped and never landed for a day or more (conversations/recall/fleet-left-off.ts), said once a day at most: one
+// tag, so the day's count replaces yesterday's.
+export const unlandedWork = (count: number, hours: number): PushNotification => ({
+    title: count === 1 ? "A conversation's work was never landed" : `${String(count)} conversations' work was never landed`,
+    body: `Stopped for over ${String(hours)} hours with work still on its branch. Land it, or archive what you no longer want.`,
+    url: legacyPathOf(page.agents()),
+    tag: "unlanded-work",
+});
+
 // Where every automation's news opens: the Automations view, which is the automations extension's own. Until 2026-11-04
 // these pointed at `/automations`, a page the app does not have, so a tap opened nothing in particular.
 const AUTOMATIONS_URL = legacyPathOf(page.extension(`automations`));

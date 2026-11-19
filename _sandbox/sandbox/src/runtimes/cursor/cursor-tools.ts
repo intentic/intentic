@@ -18,6 +18,11 @@ import { jsToolDescription, runJsTool } from "../../execution/js-tool.js";
 import { JS_TOOL_NAME } from "../../seams/js-tool-names.js";
 import type { CursorOwner, CursorToolAsk } from "./turn/cursor-approvals.js";
 import { SETTLE_WORDS } from "../../agent/subagents/child-held.js";
+import { AFTER_WORDS } from "../../agent/subagents/starting/child-after.js";
+import { CHILD_BRIEF_WORDS } from "../../agent/subagents/starting/child-preamble.js";
+
+// The siblings a spawn waits for, as the spawn tool's own schema takes them.
+const AfterSchema = z.array(z.string().min(1)).max(16).optional();
 
 // What the turn's gate answers with and what it marks, the two halves a tool needs to run a program safely. Carried
 // together because a runtime that consults without marking would launder outside content past the judge.
@@ -99,7 +104,8 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
         "Returns the subagent's id " +
         "immediately: supervise it with the wait tool (target: that id); if your turn ends first, its report wakes " +
         "this conversation when it finishes. Give it a self-contained prompt with " +
-        "every path, requirement, and constraint — it sees none of this conversation. You must name the provider " +
+        `every path, requirement, and constraint — it sees none of this conversation. ${CHILD_BRIEF_WORDS} To have it ` +
+        "start only once other subagents of yours are done and their work is in your checkout, name them in `after`. You must name the provider " +
         "AND the model: this spends a real allowance and nothing is chosen for you. Call the providers tool for " +
         "what is connected and what still has room.",
     inputSchema: {
@@ -115,6 +121,7 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
                     "only means anything to the provider that vends it.",
             },
             effort: { type: "string", description: "How hard it should think, where the provider offers a choice." },
+            after: { type: "array", items: { type: "string" }, description: AFTER_WORDS },
         },
         required: ["prompt", "provider", "model"],
     },
@@ -138,10 +145,13 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
                 providers: await children.providers(),
             });
         }
+        // Ids only, as the spawn tool's own schema takes them (subagent-wait.ts): anything else names no sibling.
+        const after = AfterSchema.safeParse(args["after"]);
         const result = await children.spawn({
             prompt,
             provider,
             model,
+            ...opt("after", after.success ? after.data : undefined),
             ...(description !== undefined ? { description } : {}),
             ...(effort !== undefined ? { effort } : {}),
         });

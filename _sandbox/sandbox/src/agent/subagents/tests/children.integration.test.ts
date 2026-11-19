@@ -46,12 +46,16 @@ import {
     type ChildSupervisor,
 } from "../children.js";
 import { mergeChild, settleHeldChild } from "../child-held.js";
+import { withBrief } from "../starting/child-brief.js";
+import { ROOM_CEILING_MS } from "../starting/child-room.js";
+import { budgetOn } from "../../run/turn/turn-plan.testing.js";
 import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { recordTurnStanding, type TurnStanding } from "../../../conversations/actor/turn-standing.js";
 import { RolePowersSchema } from "@intentic/sandbox-contract/schemas/roles";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import type { Fleet } from "../../../conversations/registry/agents-registry.js";
-import { conversationProfile, type Postures } from "../../../conversations/registry/agents-store.js";
+import { conversationProfile, type Postures, worktreeOf } from "../../../conversations/registry/agents-store.js";
+import { RUNNER_PREP_FAILED } from "../../../runners/runner-dispatch.js";
 import { createDomainEvents, type DomainEventMap } from "../../../seams/domain-events.js";
 import type { RoutedTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
@@ -275,6 +279,62 @@ describe("what a child's conversation opens with", () => {
             postures: { limit: "move" },
             social: { title: { text: "Test audit reviewer, batch 24", source: "model" } },
         });
+    });
+});
+
+// The shinobi-society audit (2026-11-17): six children placed on a runner died at once on "Preparing the runner's
+// workspace failed", each with only a re-spawn left. Nothing ran there, so the child goes on here by itself.
+describe("a child whose runner could not prepare its workspace", () => {
+    it("runs here instead, in the same conversation, opening on its brief, and its parent is told where it went", async () => {
+        const fleet = memoryFleet();
+        await fleet.agents.init();
+        const turns: { readonly prompt: string; readonly runner: string | undefined }[] = [];
+        // The daemon's turn as it opens on a runner placement, the runner's sync refusing before anything runs there.
+        const body: TurnStarter["stream"] = async function* placed(input) {
+            const conversationId = input.conversationId ?? "";
+            const runner = input.placement?.kind === "runner" ? input.placement.id : undefined;
+            await beginTurn(fleet.conversations, conversationIdentity(input, conversationId, { isolated: true, runner }), Date.now());
+            const on = worktreeOf(fleet.agents.entry(conversationId))?.runner;
+            turns.push({ prompt: input.prompt, runner: on });
+            async function* runtime(): AsyncGenerator<AgentEvent> {
+                if (on === undefined) {
+                    yield { kind: "delta", text: "Ported, here." };
+                    yield { kind: "text_end" };
+                } else {
+                    yield { kind: "error", message: `${RUNNER_PREP_FAILED}: Command failed: git checkout -B main refs/runner-parent/main. Nothing ran there. To run this task anyway, run it here, in this sandbox.` };
+                }
+                yield { kind: "done" };
+            }
+            yield* placedTurn(fleet.conversations, conversationId, mainTreePlacement(runtime));
+        };
+        const told: string[] = [];
+        const driven = drivenBy(unstubbed<Services>("services", { ...spawnServices({}, [{ id: "rig", online: true }], fleet.conversations), agents: fleet.agents }), body);
+        const services = unstubbed<Services>("services", {
+            ...driven,
+            conversations: { ...driven.conversations, running: (id: string) => id === parent.conversationId || driven.conversations.running(id) },
+            turns: {
+                ...driven.turns,
+                say: async (said) => {
+                    told.push(said.turn.prompt);
+                    return { delivered: "steered", run: "run-parent" };
+                },
+            },
+        });
+        // The parent is a conversation on the same fleet, which its child's news is said into.
+        await beginTurn(fleet.conversations, { conversationId: parent.conversationId, isolated: false, prompt: "Port everything", profile: {} }, 1_000);
+        await fleet.conversations.send(parent.conversationId, { kind: "settle" }, 2_000).settled;
+        const result = await spawnChild(services, parent, { prompt: "Port the parser", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await waitFor(() => expect(turns).toHaveLength(2), SETTLES);
+        expect(await finishedIn(fleet, result.id)).toMatchObject({ outcome: "finished", matched: { status: "completed", summary: "Ported, here." } });
+        expect(turns.map((turn) => turn.runner)).toEqual(["rig", undefined]);
+        expect(turns[1]?.prompt.startsWith("Port the parser\n\n")).toBe(true);
+        expect(turns[1]?.prompt).toContain('The runner "rig" could not prepare its copy of the workspace');
+        expect(told).toEqual([
+            `Your subagent \`${result.id}\` ("Port the parser") could not start on the runner "rig": ${RUNNER_PREP_FAILED}: Command failed: git checkout -B main refs/runner-parent/main. Nothing ran there. To run this task anyway, run it here, in this sandbox. It runs here, in this sandbox, instead, and its report reaches you when it ends.`,
+        ]);
     });
 });
 
@@ -2034,6 +2094,7 @@ describe("a turn the child did not get from its parent", () => {
         expect(told.some((said) => said.startsWith(`Your subagent \`${result.id}\` ("Port the parser") stays stopped:`))).toBe(true);
     });
 
+    // Its first turn was refused before a model said a word, so the message opens on the task it never read.
     it("a message to a paused child is the turn it waits on from then, taking over the row", async () => {
         const turns: AgentTurn[] = [];
         const body = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
@@ -2056,7 +2117,7 @@ describe("a turn the child did not get from its parent", () => {
         await waitForSubagent(actors, parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 });
         expect(await sendToChild(services, parent, result.id, "Carry on on another account.")).toMatchObject({ ok: true });
         expect(await settled(result.id)).toMatchObject({ outcome: "finished", matched: { status: "completed", description: "Port the parser" } });
-        expect(turns.map((turn) => turn.prompt)).toEqual(["go", "Carry on on another account."]);
+        expect(turns.map((turn) => turn.prompt)).toEqual(["go", withBrief({ spec: { prompt: "go" } }, "Carry on on another account.")]);
     });
 });
 
@@ -2122,7 +2183,7 @@ describe("a child whose allowance runs out", () => {
         return { fleet, services };
     };
 
-    it("books its own re-run at the reset, and its parent hears it is coming from its report and its wait", async () => {
+    it("books its own re-run at the reset, and its parent hears it is coming from its report, which a wait does not hand back again", async () => {
         const { fleet, services } = await refusingFleet();
         // The parent is a conversation on the same fleet, which its child's report is delivered to.
         await beginTurn(
@@ -2180,13 +2241,15 @@ describe("a child whose allowance runs out", () => {
         const cancelWords = ` To have it not run again, cancel it (the cancel tool, or \`agents cancel ${result.id}\`), then decide yourself.`;
         // The re-run leads, ahead of the failure, so the parent reads it before it reads that the turn failed.
         expect(report).toContain(`Paused, not finished. ${BOOKED}${cancelWords}\n\nThe turn failed: You've hit your usage limit.`);
+        // The report handed the pause over, so a wait parks until the child moves on rather than handing the same pause
+        // back at once (the 0 s loop of identical answers, subagents.ts waitMatch). Its timeout still shows where it stands.
         const moved = await waitForSubagent(fleet.conversations, parent.conversationId, {
             target: result.id,
             until: ["blocked", "finished"],
-            timeoutMs: 5_000,
+            timeoutMs: 300,
         });
         expect(moved).toMatchObject({
-            outcome: "blocked",
+            outcome: "timeout",
             matched: { status: "paused", error: `You've hit your usage limit. ${BOOKED}${cancelWords}` },
         });
     });
@@ -2334,18 +2397,132 @@ describe("on a box short of memory", () => {
         }
         expect(await rosterReads(result.id, "pending")).toMatchObject({
             status: "pending",
-            summary: "Waiting for memory: Sandbox memory is low: 15.0 GiB of 16.0 GiB used.",
+            summary: expect.stringMatching(
+                /^Waiting for memory since \d\d:\d\d UTC: Sandbox memory is low: 15\.0 GiB of 16\.0 GiB used\. It starts by itself as soon as there is room \(it gives up after 6 hours\)/u,
+            ),
         });
         expect(turns).toEqual([]);
         // Queued is not mid-turn: there is nothing to steer yet, and it says what to do instead.
         expect(await sendToChild(services, parent, result.id, "also do the docs")).toEqual({
             ok: false,
-            message: "It is waiting for memory and has not started: wait for it, then send again.",
+            message: "It is waiting for memory and has not started: it starts by itself, on its task, as soon as there is room (wait covers that). Send again once it has started, if there is more to say.",
         });
         free = 8;
         await settled(result.id);
         expect(turns.map((turn) => turn.prompt)).toEqual(["go"]);
         expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.status).toBe("completed");
+    });
+
+    // Each child's row reads off the line of children waiting for room.
+    const rowOf = (id: string): SubagentSession | undefined => listSubagentSessions(actors).find((session) => session.id === id);
+
+    // 2026-11-17, the shinobi-society audit: children "waited 10 minutes for room and did not start", seven times, one of
+    // them four times in a row, each handed to its parent as failed. A child now waits for room as long as the ceiling,
+    // where it stands in line on its row, and starts by itself once there is room; a cancel takes it out of line at once.
+    it("a child keeps waiting past the budget's own deadline, says where it stands in line, and a cancel takes it out at once", async () => {
+        let free = 1;
+        const turns: AgentTurn[] = [];
+        const base = spawnServices({}, [], actors);
+        // Work nobody waits on is held 20 ms here before it is turned away; a child is not.
+        const services = drivenBy(unstubbed<Services>("services", { ...base, resources: budgetOn(() => box(free)(), { waitDeadlineMs: 20 }) }), fakeTurn(turns));
+        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" });
+        // On another provider, so the fan-out governor does not hold it until the first one's provider answers.
+        const second = await spawnChild(services, parent, { prompt: "two", provider: "cursor", model: "composer-2.5" });
+        if (!first.ok || !second.ok) {
+            throw new Error("not spawned");
+        }
+        await waitFor(() => expect(rowOf(second.id)?.summary).toContain(", second of 2 subagents waiting for room: Sandbox memory is low"), SETTLES);
+        expect(rowOf(first.id)?.summary).toContain(", first of 2 subagents waiting for room: ");
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect([rowOf(first.id)?.status, rowOf(second.id)?.status]).toEqual(["pending", "pending"]);
+
+        expect(await cancelChild(services, parent, first.id)).toMatchObject({ ok: true });
+        await waitFor(() => expect(rowOf(first.id)?.status).toBe("killed"), SETTLES);
+        await waitFor(() => expect(rowOf(second.id)?.summary).toMatch(/^Waiting for memory since \d\d:\d\d UTC: Sandbox memory is low/u), SETTLES);
+
+        free = 8;
+        services.resources.changed();
+        await settled(second.id);
+        expect(turns.map((turn) => turn.prompt)).toEqual(["two"]);
+        expect(rowOf(second.id)?.status).toBe("completed");
+    });
+
+    // sub-pillow-27hp (shinobi-society, 2026-11-17) was refused for room before its first turn; its parent then sent it
+    // exactly this, and it answered "I don't have the original brief … Please send the brief again." A child no model
+    // has read the brief of opens every turn with it, its parent's words after it.
+    it("a child refused for room before its first turn reads its brief first when its parent sends it on", async () => {
+        const BRIEF =
+            "You are adding performance guards for the VFX system of the `integra` game engine, in your own checkout of the workspace. Do not commit; leave your work uncommitted (the orchestrator merges it).";
+        const SENT =
+            "There is room on the machine now: please carry out the task you were given when you were spawned (VFX performance guards in `integra/bench`: integra-vfx's stateless evaluator vs PlayCanvas's CPU particle updater and three.quarks, native and wasm, guards and a results table). If you do not have that brief in front of you, say so at once and stop, and I will send it again. Memory is tight: `-j 3`, check `free -g` before each build and wait if under 4 GB available, one heavy thing at a time, and time things only when `uptime` shows the load has dropped.";
+        const prompts: string[] = [];
+        const body = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
+            prompts.push(input.prompt);
+            yield { kind: "delta", text: "On it." };
+            yield { kind: "text_end" };
+            yield { kind: "done" };
+        };
+        const driven = drivenBy(spawnServices({}, [], actors), body);
+        let admissions = 0;
+        const services = unstubbed<Services>("services", {
+            ...driven,
+            resources: {
+                ...driven.resources,
+                admit: (request) =>
+                    request.forTurn === true && (admissions += 1) === 1
+                        ? Promise.resolve({ verdict: "refuse" as const, message: "radarsu-rog, the machine this sandbox runs on, is low on memory", waitedMs: 600_000 })
+                        : driven.resources.admit(request),
+            },
+        });
+        const result = await spawnChild(services, parent, { prompt: BRIEF, description: "Bench: VFX performance guards", provider: "claude", model: "claude-opus-5-5" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(prompts).toEqual([]);
+
+        await sendToChild(services, parent, result.id, SENT);
+        await settled(result.id);
+        expect(prompts).toHaveLength(1);
+        expect(prompts[0]?.startsWith(`${BRIEF}\n\n`)).toBe(true);
+        expect(prompts[0]?.endsWith(`\n\n${SENT}`)).toBe(true);
+        // A model answered a turn that carried it: what its parent says next is its own words again.
+        await sendToChild(services, parent, result.id, "Now the results table.");
+        await settled(result.id);
+        expect(prompts[1]).toBe("Now the results table.");
+    });
+
+    // Past the ceiling an unstarted child ends, nothing spent; it has no run, so no report of its own would reach a parent
+    // whose turn ended hours ago: the parent is woken to hear it.
+    it("a child that waits out the ceiling ends unstarted, and its parent is woken to hear it", async () => {
+        const said: string[] = [];
+        const driven = drivenBy(spawnServices({}, [], actors), fakeTurn([]));
+        const services = unstubbed<Services>("services", {
+            ...driven,
+            agents: unstubbed<Services["agents"]>("agents", { entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : undefined) }),
+            turns: {
+                ...driven.turns,
+                say: async (wake) => {
+                    said.push(wake.turn.prompt);
+                    return { delivered: "steered", run: "run-parent" };
+                },
+            },
+            resources: {
+                ...driven.resources,
+                admit: (request) =>
+                    request.forTurn === true
+                        ? Promise.resolve({ verdict: "refuse" as const, message: "held", diagnosis: "Sandbox memory is low: 15.0 GiB of 16.0 GiB used", waitedMs: ROOM_CEILING_MS })
+                        : driven.resources.admit(request),
+            },
+        });
+        const result = await spawnChild(services, parent, { prompt: "Port the parser", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        const why =
+            "Not started: it waited 6 hours for memory and there was still no room (Sandbox memory is low: 15.0 GiB of 16.0 GiB used). Nothing was spent on it, and its task is kept: send it a message once there is room and it starts from its task, or cancel it.";
+        await waitFor(() => expect(said).toEqual([`Your subagent \`${result.id}\` ("Port the parser") did not start. ${why}`]), SETTLES);
+        expect(rowOf(result.id)).toMatchObject({ status: "failed", error: expect.stringContaining(why) });
     });
 
     // A child sent to a runner uses that machine's memory, not this one's: it neither waits on this box nor holds any of it.
@@ -2897,6 +3074,7 @@ describe("a child across a daemon restart", () => {
             spec: { prompt: "Port the parser", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" },
             depth: 1,
             cwd: WORKSPACE_ROOT,
+            sessionId: "session-1",
             startedAt: 1_000,
             state: "running",
             turns: 1,
@@ -2918,6 +3096,67 @@ describe("a child across a daemon restart", () => {
         expect(told).toEqual([`Your subagent \`sub-cut\` ("Port the parser") stays stopped: ${RESTART_CUT}`]);
         const [onFile] = await spawnedChildren(root, { warn: () => {} }).list();
         expect(onFile).toMatchObject({ id: "sub-cut", state: "settled", ending: { status: "failed", error: RESTART_CUT } });
+    });
+
+    // sub-pillow-27hp's case across an update of the sandbox: what says its brief was never read is on its file, so the
+    // message its parent sends after the restart still opens on it.
+    it("refused for room before its first turn still opens on its brief when sent on after a restart", async () => {
+        const turns: TurnInput[] = [];
+        const { services: running, root } = await restartable(fakeTurn(turns));
+        let admissions = 0;
+        const services = unstubbed<Services>("services", {
+            ...running,
+            resources: {
+                ...running.resources,
+                admit: (request) =>
+                    request.forTurn === true && (admissions += 1) === 1
+                        ? Promise.resolve({ verdict: "refuse" as const, message: "The machine is short of memory", waitedMs: ROOM_CEILING_MS })
+                        : running.resources.admit(request),
+            },
+        });
+        const result = await spawnChild(services, parent, { prompt: "Port the parser", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        await restart(root);
+        const [restoring] = await readKinds(services, [spawnedChildrenInFlight]);
+        await restoring?.recover(RESUMES);
+
+        await sendToChild(services, parent, result.id, "There is room on the machine now: please carry out the task you were given when you were spawned.");
+        await waitFor(() => expect(turns).toHaveLength(1), SETTLES);
+        expect(turns[0]?.prompt).toBe(withBrief({ spec: { prompt: "Port the parser" } }, "There is room on the machine now: please carry out the task you were given when you were spawned."));
+    });
+
+    // A child waiting for room when the restart came had read nothing and spent nothing: it starts again by itself, from
+    // its task, rather than staying stopped until its parent sends it "carry on" (child-restore.ts).
+    it("whose brief no model had read when the restart cut it starts again by itself, from its task", async () => {
+        const turns: TurnInput[] = [];
+        const { services, root } = await restartable(fakeTurn(turns, [{ kind: "delta", text: "Ported." }, { kind: "text_end" }, { kind: "done" }]));
+        spawnedChildren(root, { warn: () => {} }).write("sub-unread", {
+            parent: parent.conversationId,
+            spec: { prompt: "Port the parser", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" },
+            depth: 1,
+            cwd: WORKSPACE_ROOT,
+            startedAt: 1_000,
+            state: "running",
+            turns: 1,
+            briefRead: false,
+            at: 2_000,
+        });
+        await restart(root);
+
+        const [restoring, cut] = await readKinds(services, [spawnedChildrenInFlight, cutChildrenInFlight]);
+        await restoring?.recover(RESUMES);
+        await cut?.recover(RESUMES);
+
+        expect(await settled("sub-unread")).toMatchObject({ outcome: "finished", matched: { status: "completed", summary: "Ported." } });
+        expect(turns.map((turn) => turn.prompt)).toEqual(["Port the parser"]);
+        expect(told).toEqual([
+            'Your subagent `sub-unread` ("Port the parser") had not started when the sandbox restarted, so it starts again by itself, from its task: its report reaches you when it ends.',
+        ]);
+        const [onFile] = await spawnedChildren(root, { warn: () => {} }).list();
+        expect(onFile).toMatchObject({ id: "sub-unread", state: "settled", briefRead: true });
     });
 
     // 2026-11-07: a Continue booked for a reopen made glad-falcon-puep's record unreadable to 1.403.1, which left it off

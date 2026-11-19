@@ -19,6 +19,8 @@ import { type NightAnswers, type ParkedCards, parkedCards } from "./actor/parked
 import { createLandedPresences } from "./land/landed-presence.js";
 import { type AgentOrigins, createAgentOrigins } from "./land/origins.js";
 import { createLandStandings } from "./land/standing.js";
+import { createFilesInFlight, type FilesInFlight } from "./files-in-flight.js";
+import { unlandedPaths } from "./land/branch/unlanded-paths.js";
 import { type AgentsRegistry, createFleet } from "./registry/agents-registry.js";
 import { type ComposerDrafts, registryDrafts } from "./drafts/composer-drafts.js";
 import { sqliteAgentsStore } from "./registry/agents-store.js";
@@ -66,6 +68,9 @@ export interface ConversationsSlice {
     readonly workspaceScope: WorkspaceScopeDeps;
     // Every member's unsent composer words, per conversation; a card's `unsentAt` follows from them.
     readonly drafts: ComposerDrafts;
+    // Which files each live conversation changed and has not landed (files-in-flight.ts): what a turn opening or an
+    // edit is told about the others changing them, and what `agents ls --touching` answers.
+    readonly inFlight: FilesInFlight;
 }
 
 export interface ConversationsDeps {
@@ -211,6 +216,8 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
             promptRecord: filePromptRecord(historyRoot),
             agentOrigins,
             drafts,
+            // Read with polite git, as the worktrees are: a reading is bulk agent-plane IO, never the daemon's own loop.
+            inFlight: createFilesInFlight({ agents, read: (entry) => unlandedPaths(agentWorktrees, entry, politeGit), logger }),
             turnIsolation,
             workspaceScope: {
                 main: workspace.root,

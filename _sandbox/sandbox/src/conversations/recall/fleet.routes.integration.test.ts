@@ -16,6 +16,7 @@ import { reportPeerMessageOutcome } from "./fleet-message-outcome.js";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { turnStartsDocument } from "../../store/start-window.js";
+import { noteSpawnedChild, openSpawnedChild } from "../../agent/subagents/subagents.js";
 
 // The hourly ceiling on the starts one sender may make elsewhere is kept on the history volume, which every run of this
 // suite shares (testConfig.historyRoot is one fixed directory): a few runs inside an hour spent the ceiling, and the
@@ -318,6 +319,40 @@ test("a handle several conversations answer to is refused with the candidates, n
     const missing = await fleet(app, "/fleet/nothing-like-this");
     expect(missing.status).toBe(404);
     expect(missing.body.message).toContain("agents find");
+});
+
+// A spawned child waiting for room has no conversation until its first turn begins; looking it up names where it stands.
+test("a subagent that has not started yet is named with where it stands, not as no conversation", async () => {
+    const built = services({
+        auth: { authorize: async () => proven("owner@example.com", "owner") },
+        async *agent() {
+            yield { kind: "done" };
+        },
+    });
+    const app = createApp(built);
+    // The parent is a conversation of this sandbox's; its child has only its row on the parent's roster so far.
+    await runAgentTurn(clientFor(app), { prompt: "Fan out the port", conversationId: "conv-parent", isolated: true });
+    openSpawnedChild(
+        { conversationId: "conv-parent", conversations: built.conversations, subagentsDir: undefined },
+        { id: "sub-wait-a1b2", description: "Port the parser", agentType: "Claude Code", provider: "claude", spawnDepth: 1, model: "claude-sonnet-4-6" },
+    );
+    noteSpawnedChild(built.conversations, "sub-wait-a1b2", { status: "pending", summary: "Waiting for memory since 10:02 UTC: Sandbox memory is low." });
+    const { status, body } = await fleet(app, "/fleet/sub-wait-a1b2");
+    expect(status).toBe(404);
+    expect(body.message).toBe(
+        "`sub-wait-a1b2` is a subagent of `conv-parent` that has not started yet, so it has no conversation to show. It is pending: Waiting for memory since 10:02 UTC: Sandbox memory is low.",
+    );
+
+    // One that ran before and waits again for its next turn shows it beside the rest of what holds it now.
+    await runAgentTurn(clientFor(app), { prompt: "Port the parser", conversationId: "sub-later-c3d4", isolated: true });
+    openSpawnedChild(
+        { conversationId: "conv-parent", conversations: built.conversations, subagentsDir: undefined },
+        { id: "sub-later-c3d4", description: "Port the parser", agentType: "Claude Code", provider: "claude", spawnDepth: 1, model: "claude-sonnet-4-6" },
+    );
+    noteSpawnedChild(built.conversations, "sub-later-c3d4", { status: "pending", summary: "Waiting for memory since 10:05 UTC: Sandbox memory is low." });
+    const again = await fleet(app, "/fleet/sub-later-c3d4");
+    expect(again.status).toBe(200);
+    expect(again.body.agent?.now?.waiting).toBe("Waiting for memory since 10:05 UTC: Sandbox memory is low.");
 });
 
 test("a message to an idle conversation opens a turn on it, carrying whose words they are", async () => {

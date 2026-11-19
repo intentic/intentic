@@ -149,6 +149,8 @@ export interface SdkSystemPromptInput {
     readonly unattended: boolean;
     // The owner's night hours, where they were in force as the turn was planned (agent/night).
     readonly night?: NightNow | undefined;
+    // The owner's standing go-ahead, where the turn was planned with it (decide/proceed.ts).
+    readonly proceed?: boolean;
     // Enforced screenshot path (the browser router places every written file there), stated as fact, not convention.
     readonly browserOutputDir: string | undefined;
     // Whether an account stands behind the routed browser, so the browser sentence can name it. The `mcp__browser__`
@@ -188,7 +190,7 @@ export interface SdkSystemPromptInput {
 // sends the prompt and the disclosure that shows it (prompt-disclosure.ts) — map a request one way.
 export interface PromptRequest {
     readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "stablePrompt">;
-    readonly policy: Pick<TurnPolicy, "unattended" | "night" | "toolSearch">;
+    readonly policy: Pick<TurnPolicy, "unattended" | "night" | "proceed" | "toolSearch">;
     readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "browserPorts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones" | "fleetPressure" | "pages">;
 }
 
@@ -208,6 +210,7 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
     append: spec.systemAppend,
     unattended: policy.unattended === true,
     ...opt("night", policy.night),
+    ...opt("proceed", policy.proceed),
     browserOutputDir: tools.browserOutputDir,
     browserAccounts: holdsBrowserAccounts(tools.browserAccounts),
     // Read off the ports the browser stack reserved: no port map at all says nothing either way, and reads as mounted.
@@ -233,6 +236,7 @@ export const harnessGuidance = ({
     trim,
     unattended,
     night,
+    proceed,
     browserOutputDir,
     browserAccounts,
     anonymousBrowser,
@@ -255,6 +259,7 @@ export const harnessGuidance = ({
                       runtime: claudeCodeRuntime(deferredTools),
                       unattended,
                       night,
+                      ...opt("proceed", proceed),
                       browserOutputDir,
                       browserAccounts: browserAccounts === true,
                       ...opt("anonymousBrowser", anonymousBrowser),

@@ -11,6 +11,15 @@ into the turn's instructions under "Standing instructions for this workspace" on
 discovery decides. The whole block is capped at 20,000 characters: a file that would cross it is left out whole and
 named. An `AGENTS.md` inside a repository is that repository's own, added only for turns that start inside it.
 
+**A rule the owner states in chat** ("from now on…", "always…", "never…", "remember…") is kept with
+`instructions propose --text "…" --why "…"` (`--file <repo>` for a repository's own `AGENTS.md`, `--text -` from
+stdin). It raises a card in the chat showing the exact change as a diff; nothing is written until the owner approves,
+and the yes appends the rule to that file in the owner's tree (the main tree, never the conversation's checkout). It
+then reaches every conversation that starts there from its next turn, an isolated one once the file is committed (the
+catch below). The call answers like every asking command: exit 0 when the file already says it, 3 while the card
+waits. Not for an instruction about the task at hand, and never by editing an `AGENTS.md` yourself unless the owner
+asked you to edit that file.
+
 **The system prompt.** Sandbox ▸ Agent ▸ Instructions, **System prompt** (`systemPromptMode`, `systemPrompt` in
 settings.json):
 
@@ -104,6 +113,23 @@ with the question. A plan the agent chose to make is approved under the first an
 owner launched the turn in plan mode for, permissions, held commands and cards for a named person always wait. The
 turn is told under "Connected right now", and the frozen card says **Picked for you** or **Saved for morning**. Someone
 at the editor in the middle of the night is asked as usual.
+
+**Proceed without asking** (Sandbox ▸ Agent ▸ Finishing, setting `proceedWithoutAsking`, off by default): every
+turn is told (under "Connected right now" when it changes, on a stable prompt) to carry on with its own recommendation
+instead of stopping to propose or to ask for a go-ahead, to stop only before something destructive or outward-facing,
+and to end with what it decided.
+It is words, not a gate: permission cards, held commands and requests to connect something still wait. One
+conversation can say otherwise from its card's menu (**Proceed without asking** / **Ask before going ahead**, route
+`POST /agents/{id}/proceed`, `null` to follow again), and a subagent follows the conversation that started it unless
+it has an answer of its own. While night hours are in force, they decide instead.
+
+**Carrying on past a large context** (Sandbox ▸ Agent ▸ Finishing, setting `contextContinues`, 0 by default): a turn
+that ends by itself saying it stopped because the conversation's context is large, with work still open, is carried on
+in a fresh session of the same conversation, at most this many times in a row (a message from anyone else starts the
+count again). The fresh session opens with the latest messages, where the work stands, and the stopped turn's closing
+words, quoted. At 0 the chat only records a notice saying so; `agents continue <handle>` does the same by hand. A
+subagent, a home and a loop's round are left to whatever drives them. A turn the provider refused for overflowing its
+window is a different thing, re-run fresh by itself on no setting.
 
 To go to bed early, the moon in the Agents board's header begins the night now (**Good night**), whether or not night
 hours are switched on: it lasts until the night's end time (the morning), then ends by itself. While it is night the

@@ -1,9 +1,14 @@
+import { rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { unstubbed } from "@intentic/testing";
 import type { ConversationActors } from "../../../../conversations/actor/conversation-actors.js";
 import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import type { ChildSupervisor } from "../../children.js";
 import { subagentWaitServer } from "../subagent-wait.js";
+import { AFTER_WORDS } from "../../starting/child-after.js";
+import { CHILD_BRIEF_WORDS } from "../../starting/child-preamble.js";
+import { openBackgroundJob } from "../../../tools/jobs/background-jobs.js";
 
 // The fields of a JSON-RPC answer these tests read.
 interface Reply {
@@ -192,6 +197,30 @@ test("spawn passes a result schema on, and refuses one that is no JSON object be
     expect(spawned).toHaveLength(1);
 });
 
+// What the sandbox already gives every child (child-preamble.ts) is said where the parent writes its prompt, and a
+// spawn's `after` reaches the engine as named (child-after.ts).
+test("spawn says what every child is given already, and passes the siblings named in after on", async () => {
+    const asked: unknown[] = [];
+    const children = unstubbed<ChildSupervisor>("children", {
+        spawn: async (spec) => {
+            asked.push(spec.after);
+            return { ok: true, id: "sub-y", held: true, note: "Waiting after `sub-x`." };
+        },
+    });
+    const call = await connect(serverWith(children));
+    const listed = await call("tools/list", {});
+    // SAFETY: tools/list answers each tool's description and JSON Schema; only those two fields are read.
+    const spawn = (listed.result?.tools as readonly { name: string; description: string; inputSchema: { properties: Record<string, { description?: string }> } }[] | undefined)?.find(
+        (tool) => tool.name === "spawn",
+    );
+    expect(spawn?.description).toContain(CHILD_BRIEF_WORDS);
+    expect(spawn?.inputSchema.properties["after"]?.description).toBe(AFTER_WORDS);
+
+    await call("tools/call", { name: "spawn", arguments: { prompt: "Build on it", provider: "claude", model: "claude-sonnet-4-6", after: ["sub-x"] } });
+    await call("tools/call", { name: "spawn", arguments: { prompt: "Start now", provider: "claude", model: "claude-sonnet-4-6" } });
+    expect(asked).toEqual([["sub-x"], undefined]);
+});
+
 // `target` was required although the description says `targets` replaces it, so `{targets: [...]}` failed input validation
 // before the tool ran (26 failed calls in 25 conversations, 2026-10-16..10-26).
 test("wait takes `targets` alone, and says what to name when given neither", async () => {
@@ -234,4 +263,28 @@ test("wait accepts a timeout over its ceiling and clamps it instead of rejecting
     timers.mockRestore();
     // SAFETY: the tool answers one JSON text block; `unknown` only narrows JSON.parse's `any` for toMatchObject to compare.
     expect(reply.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toMatchObject([{ outcome: "unknown-target" }]);
+});
+
+// 2026-11-19, the shinobi-society audit: `tail -f log | grep -m1 "done in|FAILED"` by hand, and waits that timed out on it.
+test("wait reads one command's output for `until` as a pattern, and says why it refuses one anywhere else", async () => {
+    const conversations = memoryFleet().conversations;
+    const job = openBackgroundJob({ conversationId: "parent", profile: {}, conversations }, { command: "pnpm dev", session: "agent-parent", toolUseId: "tu-dev" });
+    if (job === undefined) {
+        throw new Error("the job dir could not be minted");
+    }
+    try {
+        writeFileSync(join(job.dir, "out"), "vite v6\n  ➜  Local:   http://localhost:5173/\n");
+        const call = await connect(subagentWaitServer({ conversationId: "parent", conversations, signal: new AbortController().signal }));
+        // SAFETY: the tool answers one JSON text block; `unknown` only narrows JSON.parse's `any` for toMatchObject to compare.
+        const said = async (args: object): Promise<unknown> => JSON.parse((await call("tools/call", { name: "wait", arguments: args })).result?.content?.[0]?.text ?? "null") as unknown;
+        expect(await said({ target: job.id, until: "(?i)local:\\s+(http\\S+)", timeoutSeconds: 5 })).toMatchObject({
+            outcome: "matched",
+            match: { line: "  ➜  Local:   http://localhost:5173/", lineNumber: 2 },
+        });
+        expect(await said({ target: job.id, until: "ready(", timeoutSeconds: 5 })).toMatchObject({ outcome: "refused", note: expect.stringContaining("not a regular expression") });
+        expect(await said({ target: "any", until: "ready", timeoutSeconds: 5 })).toMatchObject({ outcome: "refused", note: expect.stringContaining("one background command") });
+        expect(await said({ targets: [job.id], until: "ready", timeoutSeconds: 5 })).toMatchObject({ outcome: "refused" });
+    } finally {
+        rmSync(job.dir, { recursive: true, force: true });
+    }
 });

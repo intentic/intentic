@@ -35,12 +35,24 @@ flowchart LR
   a build; `heavy-exec.cjs` queues that build in a child and starts the original run once its slot is released.
   Unknown arguments retain the original invocation. The prebuild stays local even when ordinary Cargo builds
   are offloaded, so its artifacts warm the original run.
+- (2026-11-19) A repository declares its own heavy commands in `.intentic/heavy.json` (`classes`), which
+  `classRules` turns into rules matched before the shipped ones: by script path (`scripts`, the program's arguments
+  resolved against its directory, so `python3 scripts/x.py`, `./scripts/x.py` and a worktree's copy are one file) or by
+  first words (`commands`), each with its own pool (`group`), limit, MiB price and `exclusive` / `quiet` flag. The
+  sandbox's wrappers for interpreters (python3, bash, sh, uv, make) ask node only about an argument named like a
+  declared script (`heavyWords`). `heavy-launch.cjs` runs after queue-run's `--` for a match that needs more than a
+  slot: it sets cargo's jobs and test threads from the cores and memory it was given (the command's, the
+  environment's or the project's own choice wins), waits for a class's idle `cpus` and pins it, and runs the quiet
+  lane (`quiet` in the sandbox), printing the load and CPU conditions beside the result.
 - `memory-room`'s `SIZE_BYTES` prices a toolchain command by its measured shape instead of its class: `targeted` (a test
   run aimed at named files), `editor-typecheck` (the editor's full `vue-tsc`, 7 GiB) and `scoped-typecheck` (`lsp diag`
   on a Vue package, 4 GiB), and `cargo-build` (7 GiB per admission, based on Shinobi's 2026-11-02 Rust build peaks).
   Two Cargo reservations fit an 18 GiB sandbox with headroom; the price does not cap compiler RSS.
 - `memory-room` is the one formula for whether the sandbox has room (limit, used, free, stall, and what each workload
-  class costs). The daemon's resource budget judges by it, and it is also the `memory-room` command `queue-run` asks:
+  class costs). A size may also be a MiB count (`6144m`), a declared class's price. `heavy/memory-floor.mjs` is what the
+  `memory-room` command does with a command still short at its deadline: below `START_FLOOR_BYTES` free (a person's
+  turn's room) it goes on waiting, naming the biggest processes, and at its `--ceiling` exits 75 so queue-run does not
+  start it; above it, it starts as before. The daemon's resource budget judges by it, and it is also the `memory-room` command `queue-run` asks:
   it asks the daemon's room socket, and applies the formula itself where no daemon answers. (2026-11-02) A reading may
   carry `host`, the machine the sandbox runs on as the daemon last heard from it: work nobody waits on then also waits
   while its cost would take that machine under `host.reserveBytes`. Only the daemon adds it, so the fallback formula

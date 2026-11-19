@@ -124,6 +124,33 @@ const nightText = (facts: GuidanceFacts): string => {
     );
 };
 
+// The owner's standing go-ahead (settings `proceedWithoutAsking`, or the conversation's own answer, or the one that
+// started it: decide/proceed.ts). 2026-11-19, the shinobi-society audit: 12 of the owner's messages were a bare "go for
+// all of it" arriving 5 to 47 minutes after a turn stopped to propose, and parents wrote "the owner is asleep, don't
+// ask" into their children's prompts. Words, not a gate: a permission card or a held command still waits.
+const proceedText = (facts: GuidanceFacts): string => {
+    const plan = facts.runtime.planMode ? " Do not enter plan mode to have a plan approved first." : "";
+    const children = facts.subagents === false ? "" : " Subagents you spawn are told the same, so your prompts to them need not say it.";
+    return (
+        "The owner has asked agents here to proceed without asking: carry on with your own recommendation instead of " +
+        "stopping to propose, to offer options or to ask for a go-ahead. Where a decision is theirs, take the option you " +
+        `would recommend, keep it easy to undo, and do it.${plan} Stop and ask only before something destructive (deleting ` +
+        "or overwriting work or data that cannot be recovered, rewriting shared history) or outward-facing (publishing, " +
+        "sending a message as the owner, a payment, a deploy, a push). End your final message with what you decided for " +
+        `them, one line each, so they can overturn any of it.${children}`
+    );
+};
+
+// A rule the owner states once is kept by their approval, not by the conversation it was said in (needs/kinds/
+// instruction-need.ts). 2026-11-19, the same audit: one preference restated in six conversations, and rules given in
+// replies ("don't overdo tests") that died with the conversation they were said in.
+const REMEMBER =
+    'When the owner states a lasting rule or preference about how work is done here ("from now on…", "always…", ' +
+    '"never…", "remember…"), keep it for every later conversation: `instructions propose --text "…" --why "…"` puts it ' +
+    "on a card showing the exact change to the workspace's AGENTS.md (`--file <repo>` for one repository's own), and " +
+    "their approval writes it. Not for an instruction about the task at hand; and unless they asked you to edit that " +
+    "file, do not write the rule into an AGENTS.md yourself.";
+
 // How a turn waits: on a background command and the `keep`/`wait` tools where its shell has them, on the daemon's
 // `watch` and `subagents` servers wherever they are mounted, and never on `sleep`. Kept to the rules (2026-11-17): the
 // why (a sleep bills the turn) and the tools' own details (which ids `stop` takes) are their descriptions' and the
@@ -238,6 +265,13 @@ const ENTRIES: readonly GuidanceEntry[] = [
         text: nightText,
     },
     {
+        id: "proceed",
+        volatile: true,
+        // While night hours are in force they say what a question gets; the two would otherwise disagree under `defer`.
+        when: ({ proceed, night }) => proceed === true && night === undefined,
+        text: proceedText,
+    },
+    {
         id: "checklist",
         // Where schemas are deferred the Task tools are too, and this line is what makes a turn load them; where every
         // tool is loaded there is no ToolSearch to load them with.
@@ -329,6 +363,7 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "secret, `environment propose <tool>` for a tool, `grants request` for reach this conversation's role " +
             "withholds. The answer continues this conversation by itself, so carry on with what does not need it and never poll.",
     },
+    { id: "remember", text: REMEMBER },
     // Only while ic says the owner's fence is enforced here (guidance/egress-fence.ts).
     { id: "egress", when: () => egressFenced(), text: EGRESS_FENCE_GUIDANCE },
     // Only where this sandbox has the host's GPU (guidance/host-gpu.ts): on a Windows PC, the owner's display GPU.
@@ -384,12 +419,15 @@ const SURROUNDINGS_HEADER = `## ${SURROUNDINGS_TITLE}`;
 // What a turn says when an earlier note under this heading named something that no longer holds, and nothing does now.
 export const SURROUNDINGS_CLEARED =
     `${SURROUNDINGS_HEADER}\n\nNothing an earlier note under this heading named holds any more: none of the owner's own ` +
-    "computers, browsers or phones is connected to this turn, a person is at the composer, it is not the owner's night, and this " +
-    "sandbox is not full.";
+    "computers, browsers or phones is connected to this turn, a person is at the composer, it is not the owner's night, the " +
+    "owner has not asked you to proceed without asking, and this sandbox is not full.";
 
 // The facts the volatile entries read, and the runtime they spell tools for; every other fact is the session's own and
 // stays in the system block.
-export type SurroundingsFacts = Pick<GuidanceFacts, "runtime" | "unattended" | "night" | "hostDevices" | "ownBrowsers" | "ownPhones" | "fleetPressure" | "subagents">;
+export type SurroundingsFacts = Pick<
+    GuidanceFacts,
+    "runtime" | "unattended" | "night" | "proceed" | "hostDevices" | "ownBrowsers" | "ownPhones" | "fleetPressure" | "subagents"
+>;
 
 // The note's text for these facts, under its heading; undefined when no volatile entry applies.
 export const surroundingsText = (facts: SurroundingsFacts): string | undefined => {

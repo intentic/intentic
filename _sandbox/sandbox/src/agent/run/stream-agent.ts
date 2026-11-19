@@ -221,7 +221,7 @@ const placementOf = (
         services,
         { input, conversationId: id, snapshot, signal, reach },
         {
-            compose: (base) => ensureComposedWorktree(services, input, id, base, entersNamespace(input), { fromParent: true }),
+            compose: (base) => ensureComposedWorktree(services, input, id, base, entersNamespace(input), { fromParent: true, warm: true }),
             versionMain: (repos) => versionMainTree(services, repos),
             run: (worktree) => runTurn(services, input, admission, signal, worktree, steering, snapshot, reach, conversation.coldTrimBasis),
             settleLanding: (conversationId, land) => settleLandingInBackground(services, conversationId, land),

@@ -1,14 +1,18 @@
 import {
     cargoBuildArgs,
+    classRules,
     EARLIER_SHIPPED_RULES,
     type HeavyCommandOverrides,
+    heavyWords,
     heldPoolsOf,
     holdWarnSeconds,
     MATCH_LIMIT,
     matchInvocation,
+    memoryMibOf,
     mergeHeavyRules,
     overridesOf,
     queueArgs,
+    scriptPathOf,
     SHIPPED_HEAVY_COMMANDS,
     sizeArgs,
     targetedRun,
@@ -419,4 +423,97 @@ describe("the build before cargo run", () => {
         expect(match === undefined ? [] : sizeArgs(match, "cargo build --release")).toEqual(["--size", "cargo-build"]);
         expect(matched("cargo run --release -- --watch")).toBeUndefined();
     });
+});
+
+// (2026-11-19, the shinobi-society audit) A project's own heavy commands, declared in its `.intentic/heavy.json`, were a
+// lock inside the capture script and prose in AGENTS.md. Each class is a rule judged like any other as the program starts.
+describe("a project's declared heavy classes", () => {
+    const capture = { id: "motion-capture", scripts: ["./scripts/capture.py"], memory: "6G", cpus: 4, exclusive: true, quiet: true, maxHoldSeconds: 3600 };
+    const render = { id: "vfx-render", scripts: ["scripts/vfxp/run.sh"], memory: "512M", group: "render", limit: 2 };
+    const frames = { id: "frame-export", commands: ["npm run export-frames", "cargo run --release --bin frames"], group: "render" };
+    const config = mergeHeavyRules({}, [capture, render, frames]);
+    const at = (invocation: string, paths: string[], cwd = "/srv/game") => matchInvocation(invocation, config, undefined, { cwd, paths });
+
+    test("a script is the same file however it was named, from the repository or a worktree, by whatever runs it", () => {
+        for (const [invocation, paths] of [
+            ["python3 scripts/capture.py --frames 600", ["/srv/game/scripts/capture.py", "/srv/game/600"]],
+            ["uv run ./scripts/capture.py", ["/srv/game/run", "/srv/game/scripts/capture.py"]],
+            ["python3 capture.py", ["/srv/game/scripts/capture.py"]],
+            ["capture /srv/worktrees/ab12/game/scripts/capture.py", ["/srv/worktrees/ab12/game/scripts/capture.py"]],
+        ] as const) {
+            expect(at(invocation, [...paths])).toEqual({ id: "motion-capture", pool: "motion-capture", limit: 1, maxHold: 3600, onDeadline: "run", size: "6144m", cpus: 4, exclusive: true, quiet: true });
+        }
+    });
+
+    test("a file that only ends in the same name, or an inline script that mentions it, is not the script", () => {
+        expect(at("python3 other_capture.py", ["/srv/game/other_capture.py"])).toBeUndefined();
+        expect(at("python3 tools/capture.py", ["/srv/game/tools/capture.py"])).toBeUndefined();
+        expect(at("bash -c python3 scripts/capture.py", [])).toBeUndefined();
+    });
+
+    test("a command is matched by its first words, its program by name; a class sharing a group shares its pool at its lowest limit", () => {
+        expect(at("npm run export-frames -- --all", [])).toMatchObject({ id: "frame-export", pool: "render", limit: 1 });
+        expect(at("cargo run --release --bin frames", [])).toMatchObject({ id: "frame-export", pool: "render" });
+        expect(at("npm run export-framesx", [])?.id).toBeUndefined();
+        expect(at("bash scripts/vfxp/run.sh", ["/srv/game/scripts/vfxp/run.sh"])).toMatchObject({ id: "vfx-render", pool: "render", limit: 1, size: "512m" });
+    });
+
+    test("declared classes come after the owner's own rules and before the shipped table, and the owner can tune or drop one", () => {
+        expect(config.rules.map((rule) => rule.id).slice(0, 3)).toEqual(["motion-capture", "vfx-render", "frame-export"]);
+        const tuned = mergeHeavyRules({ ruleEdits: [{ id: "motion-capture", maxHoldSeconds: 7200 }, { id: "vfx-render", disabled: true }] }, [capture, render]);
+        expect(matchInvocation("python3 scripts/capture.py", tuned, undefined, { paths: ["/w/scripts/capture.py"] })?.maxHold).toBe(7200);
+        expect(tuned.rules.map((rule) => rule.id)).not.toContain("vfx-render");
+        // A class may not take a built-in rule's id: the shipped rule stands.
+        expect(mergeHeavyRules({}, [{ id: "cargo", commands: ["cargo build"] }]).rules.filter((rule) => rule.id === "cargo")).toHaveLength(1);
+    });
+
+    test("an exclusive class asks queue-run to hold everything else; the rest pass no new flag", () => {
+        const match = at("python3 scripts/capture.py", ["/w/scripts/capture.py"]);
+        expect(match === undefined ? [] : queueArgs(match, config).slice(-3)).toEqual(["--label", "motion-capture", "--exclusive"]);
+        const plain = matchInvocation("pnpm test", config);
+        expect(plain === undefined ? [] : queueArgs(plain, config)).not.toContain("--exclusive");
+        expect(match === undefined ? [] : sizeArgs(match, "python3 scripts/capture.py")).toEqual(["--size", "6144m"]);
+    });
+
+    test("the interpreters' wrapper looks for each script's file name and each command's last word, and for nothing without a class", () => {
+        expect(heavyWords(config).toSorted()).toEqual(["capture.py", "export-frames", "frames", "run.sh"]);
+        expect(heavyWords(mergeHeavyRules())).toEqual([]);
+    });
+
+    test("a class naming nothing it can match is no rule", () => {
+        expect(classRules([{ id: "empty" }, { id: "outside", scripts: ["../x.py", "/abs/x.py"] }])).toEqual([]);
+    });
+
+    test.each([
+        ["6G", 6144],
+        ["512M", 512],
+        ["1.5GiB", 1536],
+        ["2048", 2048],
+        ["6 gb", 6144],
+        ["huge", undefined],
+        ["0", undefined],
+    ] as const)("memory %s reads as %p MiB", (text, mib) => {
+        expect(memoryMibOf(text)).toBe(mib);
+    });
+
+    test.each([
+        ["./scripts/capture.py", "scripts/capture.py"],
+        ["scripts//vfxp/./run.sh", "scripts/vfxp/run.sh"],
+        ["../escape.py", undefined],
+        ["/abs/x.py", undefined],
+        ["has space.py", undefined],
+    ] as const)("the script %s is kept as %p", (text, kept) => {
+        expect(scriptPathOf(text)).toBe(kept);
+    });
+});
+
+test("the owner's own rule may be quiet, which is exclusive too, without any repository declaring it", () => {
+    const config = mergeHeavyRules({ ruleEdits: [{ id: "bench", pattern: "^cargo\\s+bench\\b", quiet: true, cpus: 4 }] });
+    const match = matchInvocation("cargo bench -p kernels", config);
+    expect(match).toMatchObject({ id: "bench", quiet: true, cpus: 4 });
+    expect(match === undefined ? [] : queueArgs(match, config)).toContain("--exclusive");
+});
+
+test("cargo's build, check, clippy and tests start through the launcher that sets their jobs", () => {
+    expect(matchInvocation("cargo test -p engine", mergeHeavyRules())).toMatchObject({ id: "cargo", parallel: "cargo" });
 });

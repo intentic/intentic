@@ -14,7 +14,7 @@ import { flatKeyed, readCgroup, readText } from "./cgroup.js";
 import { type KnownProcess, knownOf, type OomDetector, startDaemonOomDetector } from "./cgroup-oom.js";
 import { MEMORY_KILLS_FILE } from "./memory-records.js";
 import { scanProcesses, type ScannedProcess } from "./process-scan.js";
-import { queueSnapshot } from "./queue-slots.js";
+import { queueSnapshot } from "./queue/queue-slots.js";
 import { holdWarnSeconds, SHIPPED_HEAVY_COMMANDS } from "@intentic/constants/heavy-rules";
 
 // Durable, one-line-per-minute account of the sandbox's resources: what was growing before an event-loop stall,

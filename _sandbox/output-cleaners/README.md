@@ -16,7 +16,7 @@ flowchart LR
 - Plain node-builtin `.mjs` with hand-written `.d.mts` beside each, so the sandbox image copies the files as written
   (`/usr/local/bin/agent-output-filter`, `cleaners.mjs` and every module it imports, `retrieve-output`) while TypeScript
   consumers import them typed. A new module needs a place on the Dockerfile's COPY line: one missing there kills the filter
-  at load, and every command falls back to raw output without a sound. A test in `agent-output-filter.test.mjs` holds the line to the
+  at load, and every command falls back to raw output without a sound. A test in `src/tests/agent-output-filter.test.mjs` holds the line to the
   import graph.
 - `filterRun` is one command's whole pass with its inputs resolved. The sandbox's adapter is `main` in
   `agent-output-filter.mjs` (argv, `INTENTIC_OUTPUT_CLEANERS`, `INTENTIC_OUTPUT_HOLDOUT`, the pane log);
@@ -34,7 +34,7 @@ flowchart LR
   shared keys, with consistent non-null column types. A table starts with `[N]{key1,key2,...}`, then exactly N CSV
   records and a newline. Every present cell contains compact JSON inside RFC-4180 CSV quoting; an empty cell means a
   missing key. This distinguishes null, empty strings, numbers and nested values without guessing types. Surrounding
-  objects stay compact JSON. [The round-trip tests](src/structured-cleaners.test.mjs) include an independent decoder.
+  objects stay compact JSON. [The round-trip tests](src/tests/structured-cleaners.test.mjs) include an independent decoder.
   Mixed arrays, unusual keys, more than 40 columns, cells over 2000 characters, unsafe numbers and credential-bearing
   JSON stay in their original shape. A rewrite must be strictly smaller. Other shape folds skip the resulting table.
 - `search` shares an oversized grep/rg/git-grep result's budget across files, one hit per file per pass, then context.
@@ -65,6 +65,36 @@ flowchart LR
   `src/secrets/terminal-masking-parity.test.ts` fails when either copy parts from the contract's. Beside a
   credential-shaped name an issuer prefix alone marks a value; elsewhere only the whole token shape does.
 
+## Test runs and compiler output
+
+- `rustc` ([src/rust-diagnostics.mjs](src/rust-diagnostics.mjs)) runs before every other stage, on success and failure
+  alike, on output with a cargo/rustc diagnostic that points at code (`--> file:line:col`). Errors with their spans move
+  first. A warning printed more than once (a lint at many call sites, a workspace-wide manifest warning) becomes one
+  line with its count and up to three places; one printed once stays whole. A note line at the top says what moved.
+- A test command's run is read as tests ([src/test-runs.mjs](src/test-runs.mjs)): cargo test and nextest by crate and
+  test, bun test by file and name, and vitest, jest, pytest and go test from their default reporters, best-effort. The
+  command must name a runner (`cargo test`, `bun test`, `suites`, `pnpm test`, …) and the output must be one a parser
+  recognises. Then [src/test-digest.mjs](src/test-digest.mjs) reads git where it ran (the command's leading `cd`s
+  followed): HEAD, whether the tree is clean, the main line (`intentic.mainBranch`, else `main`, `master`,
+  `origin/HEAD`) and the fork point from it.
+- Every such run is recorded under `logsDir/test-outcomes/` ([src/test-outcomes.mjs](src/test-outcomes.mjs)): one JSON
+  file per run, named by its commit, holding its failures with their first line and its passes as short hashes. A run
+  on a clean tree at a commit on the main line is that commit's **baseline**, and so is `base run <cmd>`, run at the
+  fork point. The record keeps at most 1000 files, 32 MiB and 21 days, dropping work runs before baselines. The daemon's
+  log pruner counts the directory on its own.
+- A run with a failing test ends with a digest after the footer, ledgered as `tests`: the counts, then one line per
+  failure with its first panic, assert or error line. Each failure is labelled against the baseline at the fork point,
+  or the nearest recorded main commit within 50 commits. A label is `also fails at main@X (seen 2h ago)`,
+  `new: passes at main@X` or `new: not seen failing at main@X`. New failures are listed first; past 15 lines the rest
+  are counted by label. A run that is itself a baseline says its failures are
+  main's. With no baseline, the digest names the command that makes one: `base run <cmd>` when `base` is on `PATH`,
+  else a clean checkout of that commit.
+- `agents ci` (`GET /ci/main`, the daemon's `ci/known/main-known.ts`) lists each repository's newest baselined main
+  commit and what failed there, beside CI's failures, through `mainBaselines` (`@intentic/output-cleaners/outcomes`).
+- The sandbox adapter records under the logs directory and names the run's conversation (`INTENTIC_TURN_OWNER`).
+  A turn with no logs directory (an agent domain) gets the digest without the record. `INTENTIC_TEST_OUTCOMES=0` turns
+  both off. The plugin's hook passes no `outcomes`, so it makes neither.
+
 ## MCP output
 
 The daemon also uses the generic dedup, wide-line and head/tail stages for new MCP text results.
@@ -90,7 +120,9 @@ MCP conversations raw and records them as the control. The dedup, wide and cap s
 - [src/text-shaping.mjs](src/text-shaping.mjs) — `cleanToolText`, the same generic stages applied to an MCP tool's text, which
   has no command to classify.
 - [src/agent-output-filter.mjs](src/agent-output-filter.mjs) — `filterOutput`, `filterRun` and the sandbox's adapter.
-- [src/filter-stats.mjs](src/filter-stats.mjs) — the savings summary every report shares.
+- [src/stats/filter-stats.mjs](src/stats/filter-stats.mjs) — the savings summary every report shares.
+- [src/test-runs.mjs](src/test-runs.mjs), [src/test-outcomes.mjs](src/test-outcomes.mjs), [src/test-digest.mjs](src/test-digest.mjs) and
+  [src/rust-diagnostics.mjs](src/rust-diagnostics.mjs) — test runs read as tests, their record and digest, and folded rustc diagnostics.
 - [src/retrieve-output.mjs](src/retrieve-output.mjs) — reads back what a footer said was elided.
 - [bench/cleaner-bench.mjs](bench/cleaner-bench.mjs) — replays fixtures or real transcripts through cleaner configs.
 

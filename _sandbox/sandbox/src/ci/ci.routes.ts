@@ -1,4 +1,6 @@
+import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import { OUTCOMES_DIR } from "@intentic/output-cleaners/outcomes";
 import { ciContract } from "@intentic/sandbox-contract/contracts/ci.contract";
 import type { CiRepo, CiRunParam, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { implement, ORPCError } from "@orpc/server";
@@ -6,6 +8,7 @@ import { areasOf, runAsOf } from "../auth/principal.js";
 import { speakerOf, spokenBy } from "../seams/turn-speaker.js";
 import { opt } from "../opt.js";
 import { operatorHere } from "../auth/operator.js";
+import { logsRoot } from "../seams/logs-root.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
@@ -154,8 +157,9 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
             const listed = await Promise.all(projects.map(listRuns));
             return { repos, runs: services.ciRuns.replace(listed.flat()), failures, ownerSteps: steps };
         }),
-        // From the CI store alone: an agent asking whether a failure is main's costs the forge nothing (main-known.ts).
-        main: i.main.handler(() => mainKnown(services)),
+        // From the CI store and the sandbox's own record of test runs: an agent asking whether a failure is main's costs
+        // the forge nothing (main-known.ts).
+        main: i.main.handler(() => mainKnown(services, Date.now(), join(logsRoot(services.config.historyRoot), OUTCOMES_DIR))),
         rerun: i.rerun.handler(onRun("rerun")),
         cancel: i.cancel.handler(onRun("cancel")),
         dispatch: i.dispatch.handler(onRun("dispatch")),

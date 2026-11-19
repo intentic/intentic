@@ -18,6 +18,7 @@ import { startWorkspaceWatch, subscribeUnwatchedWrites, subscribeWorkspaceChange
 import { closeCheckoutFollow } from "../workspace/watch/checkout-follow.js";
 import type { BootPhase } from "./boot-phase.js";
 import { inBackground } from "../system/background-git.js";
+import { startWorkOverlap } from "../conversations/overlap/overlap-watch.js";
 
 // Three watchers, none of which sees what the others see: files (ignores .git), repos (clones and deletions), refs.
 // Nothing polls. Each starts under its own name, so the git its reactions run is counted as that watch's
@@ -110,6 +111,10 @@ export const startChangeReactions = ({ logger, role, services, shutdown, traits 
         }),
     );
     shutdown.push(inBackground("vanished-repos", () => startVanishedRepoSweep(services, subscribeRepoChanges)));
+    // Which files each conversation has in flight, and held work that stopped merging into its line (conversations/overlap/).
+    if (role.container) {
+        shutdown.push(inBackground("work-overlap", () => startWorkOverlap(services, subscribeRefChanges)).stop);
+    }
     // A repo cloned mid-session gets the file-mode rule boot gave the rest, not a boot later.
     if (traits.relocateGitDirs) {
         shutdown.push(

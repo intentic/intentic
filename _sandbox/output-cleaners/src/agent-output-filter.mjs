@@ -23,6 +23,9 @@ import {
     sessionKeyFromLog,
 } from "./cleaners.mjs";
 import { pointCutMarkers } from "./output-cap.mjs";
+import { rustcStage } from "./rust-diagnostics.mjs";
+import { testDigest } from "./test-digest.mjs";
+import { OUTCOMES_DIR } from "./test-outcomes.mjs";
 
 // Lines a trim must drop before the footer adds the retrieval handle, not just the counts.
 const RETRIEVAL_MIN_DROPPED = 20;
@@ -229,9 +232,11 @@ export const filterOutput = (
     const keep = () => retain?.(input.join("\n"));
     const rawCount = input.length;
     const stages = [{ id: "ansi", saved: raw.length - bodyBytes(input) }];
-    const cleaned = cleanLines(input, { command, exitCode, enabled, values });
+    // cargo/rustc diagnostics folded before every other stage, on success and failure alike (rust-diagnostics.mjs).
+    const rust = rustcStage(input, enabled);
+    const cleaned = cleanLines(rust.lines, { command, exitCode, enabled, values });
     const lines = cleaned.lines;
-    stages.push(...cleaned.stages);
+    stages.push(...rust.stages, ...cleaned.stages);
     const body = bodyFromLines(lines, raw, exitCode);
     const { exit, telling } = exitClause(exitCode, pipeline, command);
     // Below rewrites the whole body, weighed the same way the line stages are. `guard`: if the result is longer than
@@ -337,6 +342,29 @@ export const retainIn =
         }
     };
 
+// Programs that hand a test run's output on whole; any other stage after the first may have dropped some of it.
+const WHOLE_STAGES = new Set(["tee", "cat"]);
+const narrowedOutput = (command) => pipelinesOf(command).some((stages) => stages.slice(1).some((words) => !WHOLE_STAGES.has(programOf(words))));
+
+// A test run's digest after everything the filter emitted (test-digest.mjs), weighed on the ledger as `tests`. `outcomes`
+// names where runs are recorded (`dir`, absent to record none), the directory the command started in and who ran it;
+// absent, no digest is made at all.
+const withTestDigest = (raw, filtered, { command, outcomes, now }) => {
+    let digest = "";
+    try {
+        const input = raw.replaceAll(ANSI, "").split("\n").map(collapseCr);
+        digest = outcomes === undefined ? "" : testDigest(input, { ...outcomes, command, narrowed: narrowedOutput(command), now: now() });
+    } catch {
+        // allow(silent-catch): the digest is an addition to the trimmed output, so a digest that cannot be made costs
+        // the digest alone; the trim and everything after it still run.
+    }
+    if (digest === "") {
+        return filtered;
+    }
+    const out = `${filtered.out === "" || filtered.out.endsWith("\n") ? filtered.out : `${filtered.out}\n`}${digest}\n`;
+    return { out, stages: [...filtered.stages, { id: "tests", saved: filtered.out.length - out.length }] };
+};
+
 // One command's whole pass, every input already resolved by the runtime calling it. `logsDir` holds what a pass keeps:
 // `raw-output/` (the unfiltered text a footer points at), `output-cache/` (the per-session repeat detector) and
 // `filter-stats.jsonl` (the savings ledger); undefined keeps none of them. `runName` names this run's raw-output file
@@ -357,6 +385,7 @@ export const filterRun = (
         sessionKey,
         values = [],
         tags = {},
+        outcomes,
         random = Math.random,
         now = Date.now,
     } = {},
@@ -374,7 +403,11 @@ export const filterRun = (
         if (!heldOut) {
             const retain =
                 logsDir !== undefined && runName !== undefined && runName !== "" ? retainIn(join(logsDir, "raw-output"), runName, values) : undefined;
-            const filtered = filterOutput(raw, { command, exitCode, durationS, retain, enabled, cacheStore, values, pipeline });
+            const filtered = withTestDigest(raw, filterOutput(raw, { command, exitCode, durationS, retain, enabled, cacheStore, values, pipeline }), {
+                command,
+                outcomes,
+                now,
+            });
             out = filtered.out;
             stages = filtered.stages;
         }
@@ -418,6 +451,16 @@ export const filterRun = (
     return { out, heldOut, stages };
 };
 
+// Where the sandbox records test runs and who is running this one: beside the other logs, unless
+// INTENTIC_TEST_OUTCOMES=0 turns digests off. A turn with no logs directory (an agent domain) still gets its digest.
+const testOutcomesOf = (terminalsDir) => {
+    if (process.env["INTENTIC_TEST_OUTCOMES"] === "0") {
+        return undefined;
+    }
+    const dir = terminalsDir === undefined || terminalsDir === "" ? undefined : join(terminalsDir, "..", OUTCOMES_DIR);
+    return { dir, cwd: process.cwd(), by: process.env["INTENTIC_TURN_OWNER"] };
+};
+
 const main = async () => {
     const [command = "", exitCode = "0", durationS = "0", logPath = "", pipeline = ""] = process.argv.slice(2);
     const chunks = [];
@@ -447,6 +490,7 @@ const main = async () => {
         // Every command of a session runs in a new pane, so the session is the pane log's name minus the pane.
         sessionKey: sessionKeyFromLog(logPath),
         values,
+        outcomes: testOutcomesOf(terminalsDir),
     });
     process.stdout.write(out);
 };

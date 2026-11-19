@@ -37,6 +37,9 @@ export interface FilterRunOptions {
     readonly values?: readonly SecretValue[];
     // Extra fields for the ledger row (a project, a session); the pass's own fields win on a clash.
     readonly tags?: Readonly<Record<string, string>>;
+    // Test runs: where they are recorded (`dir`, absent to record none), the directory the command started in and who ran
+    // it. A test run that failed ends with its digest (test-digest.mjs); absent, no digest is made.
+    readonly outcomes?: { readonly dir?: string | undefined; readonly cwd: string; readonly by?: string | undefined } | undefined;
     readonly random?: () => number;
     readonly now?: () => number;
 }

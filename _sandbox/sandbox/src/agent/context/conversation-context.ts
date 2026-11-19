@@ -12,6 +12,7 @@ import { headSha } from "../../git/changes/changes.js";
 import { conversationFence } from "../../areas/area-scope.js";
 import { checkpointWorktree } from "../checkpoints/checkpoint-worktree.js";
 import { contextNote, outsideCheckoutNote, withBranchNote } from "./context-note.js";
+import { warmCheckout } from "../../conversations/worktrees/build-outputs/warm-checkout.js";
 
 // Composition is decided once, by the route, on the turn that creates the conversation's worktrees — the one moment it
 // can still change what's checked out. No card, or none naming context, means everything. Static: the pick is a list on
@@ -84,6 +85,41 @@ interface OpeningCut {
 const openingCut = async (services: Services, input: AgentTurn, entry: PersistedAgent | undefined, id: string, fromParent: boolean): Promise<OpeningCut | undefined> =>
     (fromParent ? await parentCut(services, entry, id) : undefined) ?? (await branchCut(services, input.fromBranch));
 
+// Seeds the Cargo targets a checkout this call just made lacks, for a caller that asks (`warm`, a turn's own compose),
+// unless it is a runner's mirror (which builds nothing here) or the shared-target prototype (cargo-warm.ts) lends them
+// instead: its overlay mounts only over a target the checkout has not built into.
+const warmNewCheckout = (
+    services: Services,
+    id: string,
+    repos: readonly { readonly repo: string }[],
+    made: { readonly opening: boolean; readonly mirror: boolean; readonly warm: boolean; readonly cut: OpeningCut | undefined },
+): void => {
+    if (!made.opening || made.mirror || !made.warm) {
+        return;
+    }
+    const parent = made.cut?.parent;
+    void (async () => {
+        try {
+            if ((await services.sandboxSettings.get()).sharedCargoTargets) {
+                return;
+            }
+            const historyRoot = services.config.historyRoot;
+            const { agentWorktrees, logger } = services;
+            await warmCheckout(
+                { historyRoot, worktreesRoot: join(historyRoot, "worktrees"), mainDir: agentWorktrees.mainDir, worktreeDir: agentWorktrees.worktreeDir, logger },
+                {
+                    checkouts: repos.map(({ repo }) => ({ repo, dir: agentWorktrees.worktreeDir(id, repo) })),
+                    preferred: parent,
+                    exclude: [id],
+                    label: id,
+                },
+            );
+        } catch (error) {
+            services.logger.warn({ err: error, id }, "warm builds: could not start seeding a new checkout");
+        }
+    })();
+};
+
 // Brings the checkout to what the conversation carries, for both the local turn and the runner's mirror. The opening
 // turn decides and records the composition; later turns reconcile the checkout to it. A local spawned child with no base
 // of its own opens on its parent's current work (`fromParent`); a runner's child opens on the main line, since the runner
@@ -95,7 +131,7 @@ export const ensureComposedWorktree = async (
     conversationId: string,
     base: readonly { repo: string; base: string }[] | undefined,
     namespaced: boolean,
-    { fromParent = false, mirror = false }: { readonly fromParent?: boolean; readonly mirror?: boolean } = {},
+    { fromParent = false, mirror = false, warm }: { readonly fromParent?: boolean; readonly mirror?: boolean; readonly warm?: boolean } = {},
 ): Promise<ConversationWorktree> => {
     const entry = services.agents.entry(conversationId);
     const recorded = worktreeOf(entry)?.repos ?? [];
@@ -106,6 +142,9 @@ export const ensureComposedWorktree = async (
     // so editing an area narrows an existing conversation's checkout on its next turn.
     const fence = conversationFence(await services.areas.list(), entry?.identity);
     const worktree = await services.agentWorktrees.ensure(conversationId, recorded, cut?.base ?? base, namespaced, composition?.repos, fence, !mirror);
+    // A new checkout that builds here starts from a target that already built, its parent's for a spawned child: in the
+    // background, so the turn never waits on it (warm-checkout.ts).
+    warmNewCheckout(services, conversationId, worktree.repos, { opening, mirror, warm: warm === true, cut });
     if (opening || !sameRepos(recorded, worktree.repos)) {
         const branches = cut?.branches;
         if (branches?.some(({ repo }) => !worktree.repos.some((composed) => composed.repo === repo)) === true) {

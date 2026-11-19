@@ -7,7 +7,18 @@ import type { PersistedAgent } from "./agents-store.js";
 // tree still owes (land/version-landed.ts), and the land a turn's close skipped because a wake was armed
 // (land/wake-held.ts). Both are kept on the conversation's record, written the moment they begin and cleared the moment
 // they are answered, so the boot finds exactly what was still owed. Added 2026-10-19, optional: a row written before it
-// owes nothing.
+// owes nothing. A third (2026-11-19): held work found no longer merging, kept so a restart does not tell it again.
+
+// One repo of a held branch that stopped merging into what it lands on (overlap/branch-drift.ts): the commit of that line it was
+// tried onto, and the files that would not merge, each with the conversations whose landed commits changed it since.
+export const DriftRepoSchema = z.object({
+    repo: z.string(),
+    onto: z.string(),
+    paths: z.array(z.object({ path: z.string(), by: z.array(z.string()).optional() })),
+    // How many conflicting files past the ones named.
+    more: z.number().optional(),
+});
+export type DriftRepo = z.infer<typeof DriftRepoSchema>;
 
 export const LandMarksSchema = z.object({
     // When a land reached the main tree whose version commit (and drafted subject) has not been written yet; cleared by
@@ -16,6 +27,11 @@ export const LandMarksSchema = z.object({
     // The land the last close skipped because the conversation would run again by itself, with that turn's own answer
     // to landing by itself (TurnInput.autoLand; absent left it to the posture and the rules) (wake-held.ts).
     wakeHeld: z.object({ autoLand: z.boolean().optional() }).optional(),
+    // Finished work on its branch that no longer merges into what it lands on, found when that line moved (overlap/branch-drift.ts);
+    // cleared by the first check that finds it merging again. `tips` is the branch as it was found, so one finding is told
+    // once; `asked` says a resolve turn, or its parent, was asked to fix it this time, which is asked once until it clears.
+    // Added 2026-11-19, optional: a row from before it has never been found drifting.
+    drift: z.object({ at: z.number(), tips: z.string(), asked: z.boolean().optional(), repos: z.array(DriftRepoSchema) }).optional(),
 });
 export type LandMarks = z.infer<typeof LandMarksSchema>;
 
@@ -30,8 +46,10 @@ export const owesVersionCommit = (outcome: { readonly landed: boolean; readonly 
     outcome.landed && outcome.changed && outcome.into === undefined;
 
 // The marks with every absent one left out, none at all when nothing is owed: what a record keeps.
-const kept = ({ versionPending, wakeHeld }: LandMarks): LandMarks | undefined =>
-    versionPending === undefined && wakeHeld === undefined ? undefined : { ...opt("versionPending", versionPending), ...opt("wakeHeld", wakeHeld) };
+const kept = ({ versionPending, wakeHeld, drift }: LandMarks): LandMarks | undefined =>
+    versionPending === undefined && wakeHeld === undefined && drift === undefined
+        ? undefined
+        : { ...opt("versionPending", versionPending), ...opt("wakeHeld", wakeHeld), ...opt("drift", drift) };
 
 // The record with these marks, the field dropped when none is left, so a record that owes nothing reads as before.
 const withLandMarks = (entry: PersistedAgent, marks: LandMarks): PersistedAgent => {

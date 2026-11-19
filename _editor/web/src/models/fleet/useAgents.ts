@@ -1,4 +1,4 @@
-import { open, rename, resumeHeldTurn, setAutoLand, setBreakPolicy, setKeepWarm, stopJob, stopWatching } from "./useAgents-actions";
+import { open, rename, resumeHeldTurn, setAutoLand, setBreakPolicy, setKeepWarm, setProceed, stopJob, stopWatching } from "./useAgents-actions";
 import { archive, archivedFlash, busyIds, dismissNotice, notice, purgeArchived, restore, undoable, undoArchive } from "./useAgents-archive";
 import { agentById, attention, blocking, fleet, forgetFleet, lanes, unread } from "./useAgents-fleet";
 import { archived, archiveFailure, archiveLoading, desyncRegistry, heldWakes, loadArchived, markAllSeen, markSeen, refresh, releaseHeld, rosterKnown } from "./useAgents-registry";
@@ -43,6 +43,7 @@ export function useAgents() {
         setAutoLand,
         setBreakPolicy,
         setKeepWarm,
+        setProceed,
         resumeHeldTurn,
         stopWatching,
         stopJob,

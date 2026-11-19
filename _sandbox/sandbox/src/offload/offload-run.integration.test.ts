@@ -74,7 +74,33 @@ const offloadRun = (cwd: string, port: number, args: readonly string[], env: Rec
         writeFileSync(token, "test-token\n");
         const child = spawn(process.execPath.endsWith("bun") ? "node" : process.execPath, [OFFLOAD_RUN, ...args], {
             cwd,
-            env: { ...process.env, SANDBOX_PORT: String(port), INTENTIC_AGENT_TOKEN_PATH: token, WORKSPACE_ROOT: cwd, ...env },
+            // Under no agent's line (this suite may itself run under one): only --env travels.
+            env: { ...process.env, SANDBOX_PORT: String(port), INTENTIC_AGENT_TOKEN_PATH: token, WORKSPACE_ROOT: cwd, INTENTIC_AGENT_SESSION: "", ...env },
+        });
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+        child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+        child.on("close", (code) => resolve({ code, stdout, stderr }));
+    });
+
+// The same, started from an agent's line as the sandbox runs one: a shell stamped with its session, the command a child
+// of it, with `line` (which names offload-run as "$OFFLOAD") setting what it sets.
+const offloadRunUnderAgent = (cwd: string, port: number, line: string) =>
+    new Promise<{ readonly code: number | null; readonly stdout: string; readonly stderr: string }>((resolve) => {
+        const token = join(mkdtempSync(join(tmpdir(), "offload-run-token-")), "agent.token");
+        writeFileSync(token, "test-token\n");
+        const child = spawn("bash", ["-c", `${line}; exit $?`], {
+            cwd,
+            env: {
+                ...process.env,
+                SANDBOX_PORT: String(port),
+                INTENTIC_AGENT_TOKEN_PATH: token,
+                WORKSPACE_ROOT: cwd,
+                INTENTIC_AGENT_SESSION: `offload-test-${String(port)}`,
+                OFFLOAD: OFFLOAD_RUN,
+                NODE: process.execPath.endsWith("bun") ? "node" : process.execPath,
+            },
         });
         let stdout = "";
         let stderr = "";
@@ -144,6 +170,24 @@ describe("offload-run", () => {
         expect(again.code).toBe(0);
         expect(Object.keys(asked[1]?.have ?? {})).toEqual(["target/debug/app"]);
         expect(again.stderr).toContain("1 already here unchanged");
+    });
+
+    // The shinobi-society audit (2026-11-17): `FRAMES_WRITE=/tmp/frames-base cargo test …` went to a runner without its
+    // variable, and the traces it was to write would have landed in the runner's /tmp anyway.
+    test("carries what the agent's own line set, and runs here when what it set names this machine's files", async () => {
+        const root = repo();
+        const { port, asked } = await daemon(root, true);
+        const before = asked.length;
+        const carried = await offloadRunUnderAgent(root, port, `FRAMES_WRITE=fists "$NODE" "$OFFLOAD" --to r1 --label cargo -- bash -c 'echo "frames: $FRAMES_WRITE"'`);
+        expect(carried.stdout).toBe("frames: fists\n");
+        expect(carried.stderr).toContain("running on omen");
+        expect(carried.stderr).toContain("that ran on omen, not here (exit 0)");
+        expect(asked[before]?.env).toEqual({ FRAMES_WRITE: "fists" });
+
+        const local = await offloadRunUnderAgent(root, port, `FRAMES_WRITE=/tmp/frames-base "$NODE" "$OFFLOAD" --to r1 --label cargo -- bash -c 'echo "frames: $FRAMES_WRITE"'`);
+        expect(local.stdout).toBe("frames: /tmp/frames-base\n");
+        expect(local.stderr).toContain("it names /tmp/frames-base, a path on this machine that omen's copy of this tree does not have; running it here");
+        expect(asked).toHaveLength(before + 1);
     });
 
     test("runs here, saying why, when an --out could never come back", async () => {

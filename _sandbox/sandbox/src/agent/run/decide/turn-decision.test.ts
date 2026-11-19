@@ -23,7 +23,7 @@ import { sharedTreeNote, WORKTREE_NOTE_TITLE } from "../../prompt/turn-preamble.
 import { base, budgetOn, context, memoryReading, ROOT, turn } from "../turn/turn-plan.testing.js";
 import { decideTurn, spawnNoteFor, type TurnDecision } from "./turn-decision.js";
 import type { AdmittedTurnFacts, TurnFacts } from "./turn-facts.js";
-import { SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE, LANDING_CHECKS_NOTE_TITLE } from "../../../sessions/vocabulary/prompt-envelope.js";
+import { SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE, LANDING_CHECKS_NOTE_TITLE,IN_FLIGHT_NOTE_HEADER,IN_FLIGHT_NOTE_TITLE } from "../../../sessions/vocabulary/prompt-envelope.js";
 
 // decideTurn over facts stated as values: no services, no disk, no clock. Which reads a turn pays for is
 // turn-facts.integration.test.ts's subject, and that planTurn joins the two up is turn-plan.test.ts's.
@@ -333,6 +333,14 @@ test("a turn whose facts carry no checks note is told nothing about checks, what
     expect(titles(decision)).not.toContain(LANDING_CHECKS_NOTE_TITLE);
 });
 
+// The owner's standing go-ahead reaches the turn's policy, which both prompt composers read it off (decide/proceed.ts
+// resolves whose answer it is); off, the policy carries nothing, which is what every turn read before it.
+test("a turn planned with the owner's go-ahead carries it on its policy, and one without carries nothing", () => {
+    expect(decided({ ...FACTS, proceed: true }).context.base.policy.proceed).toBe(true);
+    expect(Object.keys(decided({ ...FACTS, proceed: false }).context.base.policy)).not.toContain("proceed");
+    expect(Object.keys(decided(FACTS).context.base.policy)).not.toContain("proceed");
+});
+
 test("a card that drops the checks note never shows it, even where the facts carry one", () => {
     const decision = decided({ ...FACTS, roles: [QUIET], landingChecksNote: LANDING_NOTE }, turn({ actsAs: "quiet", conversationId: "c-quiet" }));
 
@@ -542,4 +550,15 @@ test.each([
         expect(decision.code).toBe("tools-unenforced");
         expect(decision.message).toContain("no Edit, Write, NotebookEdit, Bash");
     }
+});
+
+// Who else is changing the files this conversation changed (conversations/files-in-flight.ts): told to every runtime
+// alike whenever the facts carry the note, which they do only for the pairs not told yet.
+test("the files-in-flight note reaches every runtime's turn whenever its facts carry one", () => {
+    const note = { title: IN_FLIGHT_NOTE_TITLE, text: `${IN_FLIGHT_NOTE_HEADER}\n\n- \`jet-dewt\` ("Wasm loop"): \`client/src/loop.rs\`` };
+    for (const agent of ["claude", "codex", "grok"] as const) {
+        const decision = decided({ ...FACTS, inFlightNote: note }, turn({ agent, conversationId: "c-flight" }));
+        expect(decision.context.base.spec.notes?.filter((each) => each.title === IN_FLIGHT_NOTE_TITLE)).toEqual([note]);
+    }
+    expect(titles(decided(FACTS))).not.toContain(IN_FLIGHT_NOTE_TITLE);
 });

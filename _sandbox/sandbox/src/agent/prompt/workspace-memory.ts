@@ -67,6 +67,19 @@ const withinBudget = (files: readonly MemoryFile[]): { readonly kept: readonly M
     return { kept, dropped };
 };
 
+// The standing-instruction files a turn is told, root-relative: those composed into it, and those dropped for length.
+export interface MemoryFiles {
+    readonly kept: readonly string[];
+    readonly dropped: readonly string[];
+}
+
+/** The files a turn starting at `cwd` is told: what a subagent's opening note names as already in its instructions
+ *  (agent/subagents/starting/child-preamble.ts). */
+export const workspaceMemoryFiles = ({ root, cwd }: { readonly root: string; readonly cwd: string }): MemoryFiles => {
+    const { kept, dropped } = withinBudget(foldersFrom(root, cwd).flatMap((folder) => readMemory(root, folder) ?? []));
+    return { kept: kept.map(({ path }) => path), dropped };
+};
+
 // What the turn is told, or undefined when the workspace has no standing instructions on the path it starts from.
 // `root` and `cwd` are the daemon's own paths (an isolated turn's worktree, not the shared tree); the labels inside are
 // root-relative, so they name the same file the agent would open.

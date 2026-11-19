@@ -9,6 +9,7 @@ import { RepoBranchSchema } from "./shared.js";
 import { LoopStateSchema } from "./loops.js";
 import { LimitPolicySchema, MemoryKillPolicySchema, RetryPolicySchema, RoomPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
 import { KeepWarmSchema } from "./keep-warm.js";
+import { proceedOverride } from "./proceed-without-asking.js";
 import { AgentNeedSchema } from "./needs.js";
 import { StrandedCloneSchema } from "./stranded-clone.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
@@ -374,6 +375,7 @@ export const AgentSummarySchema = z.object({
     memoryKillPolicy: MemoryKillPolicySchema.optional().describe(
         "This conversation's own answer to a turn the sandbox killed because it ran out of memory: `resume` sends it again by itself once memory has stayed free, `wait` holds it for a press. Absent means it follows the sandbox-wide setting.",
     ),
+    proceedWithoutAsking: proceedOverride,
     // A collaborator's ask to land (collaborators can't merge themselves); cleared by whichever merge or discard
     // answers it.
     landRequested: z

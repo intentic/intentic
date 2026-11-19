@@ -73,7 +73,8 @@ export const devicesFull = (facts: Facts, { ids, self, slug, machines, onDemand 
         `reach: \`run_command\` takes a working directory and a deadline of up to ten minutes, ` +
         `\`read_file\`/\`write_file\`/\`list_dir\` reach that machine's own tree, \`devices copy <from> <to>\` in your shell moves a ` +
         `file or a folder between this sandbox and one of them either way without its bytes passing through you (one side ` +
-        `written \`${ids[0] ?? "<device>"}:<path>\`; never \`docker cp\`), and \`list_sandboxes\`, ` +
+        `written \`${ids[0] ?? "<device>"}:<path>\`; never \`docker cp\`), \`devices exec <device> -- <command>\` builds or tests this checkout there ` +
+        `in a mirror it keeps in step (changed files only, results back with --fetch; \`gpu-run --on <device>\` for its GPU), and \`list_sandboxes\`, ` +
         `\`manage_sandbox\`, \`swap_sandbox\` and \`sandbox_logs\` act on this sandbox's own container; ` +
         `\`inspect_sandbox\` reads another sandbox's conversations and logs there, never \`docker exec\`. ` +
         `Two limits ride with it: anything that restarts, updates, rebuilds or removes THIS sandbox ends your ` +
@@ -171,4 +172,6 @@ export const terminalFull = (facts: Facts): string =>
     `running, hand the terminal to the owner: ${facts.runtime.deferredTools ? "load " : "call "}${toolName(facts, "terminal", "request_help")}` +
     `${facts.runtime.deferredTools ? " with ToolSearch (`+terminal`)" : ""} and say precisely what needs typing, ` +
     "rather than writing the " +
-    "command out for them to run in their own shell next to a pane that is already waiting for them.";
+    "command out for them to run in their own shell next to a pane that is already waiting for them. A command's " +
+    "stdin is empty, so a prompt that reads stdin ends at once instead of waiting: run one the owner should answer " +
+    "(npm's one-time password) with `</dev/tty`.";

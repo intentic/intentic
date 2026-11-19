@@ -7,7 +7,8 @@
 // A rule's `pattern` is matched against the program that actually runs and its arguments, `<program> <args…>` (`pnpm
 // --filter web test`, `vitest run`, `tsc -b`), never against the shell line an agent typed: quotes, heredocs, globs and
 // assignments are gone by then, and a line that only mentions a program never starts it. First match wins; an `exempt`
-// rule stops the search for what it matches.
+// rule stops the search for what it matches. A project's declared class may match by `scripts` instead, the program's
+// arguments resolved to files (scriptHit).
 "use strict";
 
 // What queue-run exits with when it ran nothing because the wait was up and the rule said `skip`: EX_TEMPFAIL, so a
@@ -118,7 +119,9 @@ const SHIPPED_HEAVY_COMMANDS = Object.freeze({
         { id: "typechecker", pattern: "(?<![-.])\\b(tsc|tsgo|vue-tsc)\\b(?![-.])" },
         { id: "turbo-fanout", pattern: "\\bturbo\\b.*\\brun\\b.*\\b(build|test|typecheck|check)\\b" },
         { id: "package-script", pattern: "\\b(pnpm|npm|yarn|bun)\\b.*\\b(test|typecheck|verify|check|build)\\b" },
-        { id: "cargo", pattern: "^cargo\\s+(\\+\\S+\\s+)?(build|test|check|clippy|bench|doc)\\b", size: "cargo-build" },
+        // `parallel`: started through heavy-launch.cjs, which sets its jobs and test threads from the room it was given
+        // unless the command or the project already chose them.
+        { id: "cargo", pattern: "^cargo\\s+(\\+\\S+\\s+)?(build|test|check|clippy|bench|doc)\\b", size: "cargo-build", parallel: "cargo" },
     ]),
 });
 
@@ -126,6 +129,7 @@ const SHIPPED_HEAVY_COMMANDS = Object.freeze({
 // equal to one of these was seeded, not chosen, so converting a stored file drops it and the current rule takes over.
 const EARLIER_SHIPPED_RULES = Object.freeze([
     { id: "cargo", pattern: "^cargo\\s+(\\+\\S+\\s+)?(build|test|check|clippy|bench|doc)\\b" },
+    { id: "cargo", pattern: "^cargo\\s+(\\+\\S+\\s+)?(build|test|check|clippy|bench|doc)\\b", size: "cargo-build" },
     {
         id: "read-only",
         pattern: "^\\s*(grep|rg|iq|ag|cat|bat|head|tail|less|ls|find|fd|wc|which|echo|git\\s+(log|status|diff|show|blame))\\b",
@@ -144,24 +148,113 @@ const EARLIER_SHIPPED_RULES = Object.freeze([
 
 const SETTING_KEYS = Object.freeze(["limit", "defaultPool", "waitSeconds", "memoryGateSeconds", "maxHoldSeconds", "onDeadline"]);
 // `cwd`: a regex the program's working directory must match too, for what its arguments cannot name. `size`: the
-// memory gate's price for it (memory-room.mjs SIZE_BYTES) instead of its class's. `nests`: judged even under a program
-// already holding a slot of another pool.
-const RULE_KEYS = Object.freeze(["id", "pattern", "pool", "limit", "maxHoldSeconds", "exempt", "onDeadline", "cwd", "size", "nests"]);
+// memory gate's price for it (memory-room.mjs SIZE_BYTES, or `<MiB>m`) instead of its class's. `nests`: judged even
+// under a program already holding a slot of another pool. The rest come from a project's declared classes
+// (classRules): `scripts` (matched by path, scriptHit), `cpus`, `pin`, `exclusive`, `quiet`, and `parallel`, which
+// starts it through heavy-launch.cjs to choose its jobs.
+const RULE_KEYS = Object.freeze([
+    "id", "pattern", "pool", "limit", "maxHoldSeconds", "exempt", "onDeadline", "cwd", "size", "nests",
+    "scripts", "cpus", "pin", "exclusive", "quiet", "parallel",
+]);
 
 // Two rules are the same when every field either names is equal; key order and absent-versus-undefined do not count.
 const sameRule = (left, right) => RULE_KEYS.every((key) => left[key] === right[key]);
 
-// The rules and settings in force: the shipped table with the owner's overrides on top. A setting the overrides name
-// replaces the shipped one; an edit naming a shipped rule's id changes the fields it names, or removes that rule
-// (`disabled`); an edit naming any other id, with a pattern, is the owner's own rule, and the owner's own rules are
-// matched before the shipped ones. `queue: false` stops queueing without touching how heavy programs are ranked.
-const mergeHeavyRules = (overrides = {}) => {
+// ---- a project's own heavy commands ----
+//
+// (2026-11-19, the shinobi-society audit) A project's heaviest work is often its own script: a motion capture that plays
+// and renders the game in software for half an hour, a VFX render, an e2e suite. Projects kept those apart with a lock
+// inside the script and AGENTS.md prose ("one at a time, nothing else heavy beside it"), and agents added `flock`,
+// `nice` and `-j 1` by hand. A repository declares them instead, in `.intentic/heavy.json` (the daemon reads it from
+// every repository in the workspace, workload/heavy-classes.ts), and each becomes a rule here, judged like any other
+// as the program starts: by script path for an interpreter's script (`python3 scripts/capture.py`, `bash
+// scripts/x.sh`, `uv run scripts/x.py`, `./scripts/x.py` behind a `#!/usr/bin/env` line), or by the command's first
+// words (`npm run e2e`). A class shares its pool with the classes naming the same `group`, at the lowest limit any of
+// them gives, and is priced at its own `memory`.
+
+// `6G`, `512M`, `1.5GiB`, or a bare number of MiB, as MiB; undefined for anything else.
+const memoryMibOf = (text) => {
+    const parsed = /^\s*(\d+(?:\.\d+)?)\s*(?:([mg])(?:i?b)?)?\s*$/iu.exec(String(text ?? ""));
+    if (parsed === null) {
+        return undefined;
+    }
+    const mib = Math.ceil(Number(parsed[1]) * ((parsed[2] ?? "m").toLowerCase() === "g" ? 1024 : 1));
+    return mib >= 1 && mib <= 1_048_576 ? mib : undefined;
+};
+
+// A script as a class names it: repo-relative, POSIX, no `./` and no `..`; undefined for one that is not.
+const scriptPathOf = (text) => {
+    const parts = String(text ?? "").trim().split("/").filter((part) => part !== "" && part !== ".");
+    return parts.length === 0 || parts.includes("..") || String(text).trim().startsWith("/") || parts.some((part) => /\s/u.test(part)) ? undefined : parts.join("/");
+};
+
+const escaped = (word) => word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+// A command's first words as the pattern the program's invocation starts with; its program by name, never by path.
+const commandPattern = (command) => {
+    const words = String(command).trim().split(/\s+/u).filter((word) => word !== "");
+    const program = (words[0] ?? "").split("/").pop() ?? "";
+    return `^${[program, ...words.slice(1)].map(escaped).join("\\s+")}(?=\\s|$)`;
+};
+
+// The words an interpreter's wrapper looks for before it asks node to judge its arguments (INTENTIC_HEAVY_WORDS): a
+// script's file name, and a command's last word.
+const wordsOf = (scripts, commands) => [
+    ...scripts.map((script) => script.split("/").pop() ?? script),
+    ...commands.map((command) => String(command).trim().split(/\s+/u).pop() ?? ""),
+].filter((word) => word !== "" && !word.includes(":"));
+
+/**
+ * A project's declared classes as rules, in declaration order; a class naming nothing it can match is left out. Its
+ * entries come parsed (workload/heavy-classes.ts in the daemon checks each against its schema first).
+ */
+const classRules = (classes = []) => {
+    const poolOf = (entry) => entry.group ?? entry.id;
+    const lowest = new Map();
+    for (const entry of classes) {
+        const limit = entry.limit ?? 1;
+        lowest.set(poolOf(entry), Math.min(limit, lowest.get(poolOf(entry)) ?? limit));
+    }
+    return classes.flatMap((entry) => {
+        const scripts = (entry.scripts ?? []).map(scriptPathOf).filter((script) => script !== undefined);
+        const commands = (entry.commands ?? []).filter((command) => command.trim() !== "");
+        if (scripts.length === 0 && commands.length === 0) {
+            return [];
+        }
+        const rule = { id: entry.id, pool: poolOf(entry), limit: lowest.get(poolOf(entry)), declared: true, words: wordsOf(scripts, commands) };
+        const mib = entry.memory === undefined ? undefined : memoryMibOf(entry.memory);
+        const optional = {
+            pattern: commands.length === 0 ? undefined : commands.map(commandPattern).join("|"),
+            scripts: scripts.length === 0 ? undefined : scripts,
+            size: mib === undefined ? undefined : `${mib}m`,
+            cpus: entry.cpus,
+            pin: entry.pin === true ? true : undefined,
+            exclusive: entry.exclusive === true || entry.quiet === true ? true : undefined,
+            quiet: entry.quiet === true ? true : undefined,
+            maxHoldSeconds: entry.maxHoldSeconds,
+            onDeadline: entry.onDeadline,
+        };
+        return [{ ...rule, ...Object.fromEntries(Object.entries(optional).filter(([, value]) => value !== undefined)) }];
+    });
+};
+
+/** Every word the interpreters' wrapper looks for, across the declared classes in force: none means no wrapper. */
+const heavyWords = (config) => [...new Set(config.rules.flatMap((rule) => (rule.declared === true ? (rule.words ?? []) : [])))];
+
+// The rules and settings in force: the shipped table with a project's declared classes (classRules) and the owner's
+// overrides on top. A setting the overrides name replaces the shipped one; an edit naming a shipped rule's or a declared
+// class's id changes the fields it names, or removes that rule (`disabled`); an edit naming any other id, with a pattern,
+// is the owner's own rule. The owner's own rules are matched first, then the declared classes, then the shipped table.
+// `queue: false` stops queueing without touching how heavy programs are ranked.
+const mergeHeavyRules = (overrides = {}, classes = []) => {
     const settings = Object.fromEntries(SETTING_KEYS.map((key) => [key, overrides[key] ?? SHIPPED_HEAVY_COMMANDS[key]]));
     const edits = Array.isArray(overrides.ruleEdits) ? overrides.ruleEdits : [];
     const shippedIds = new Set(SHIPPED_HEAVY_COMMANDS.rules.map((rule) => rule.id));
-    const editOf = new Map(edits.filter((edit) => shippedIds.has(edit.id)).map((edit) => [edit.id, edit]));
-    const own = edits.filter((edit) => !shippedIds.has(edit.id) && edit.disabled !== true && typeof edit.pattern === "string");
-    const shipped = SHIPPED_HEAVY_COMMANDS.rules.flatMap((rule) => {
+    const declared = classRules(classes).filter((rule) => !shippedIds.has(rule.id));
+    const knownIds = new Set([...shippedIds, ...declared.map((rule) => rule.id)]);
+    const editOf = new Map(edits.filter((edit) => knownIds.has(edit.id)).map((edit) => [edit.id, edit]));
+    const own = edits.filter((edit) => !knownIds.has(edit.id) && edit.disabled !== true && edit.pattern !== undefined);
+    const edited = (rule) => {
         const edit = editOf.get(rule.id);
         if (edit === undefined) {
             return [rule];
@@ -171,8 +264,12 @@ const mergeHeavyRules = (overrides = {}) => {
         }
         const { disabled: _disabled, ...fields } = edit;
         return [{ ...rule, ...fields }];
-    });
-    return { ...settings, queue: overrides.queue !== false, rules: [...own.map(({ disabled: _disabled, ...rule }) => rule), ...shipped] };
+    };
+    return {
+        ...settings,
+        queue: overrides.queue !== false,
+        rules: [...own.map(({ disabled: _disabled, ...rule }) => rule), ...declared.flatMap(edited), ...SHIPPED_HEAVY_COMMANDS.rules.flatMap(edited)],
+    };
 };
 
 // A stored file of the earlier shape (every setting and the whole rule list) as overrides: only what differs from what
@@ -243,9 +340,19 @@ const judgedUnder = (rule, held, nesting) => {
     return rule.nests === true && held.every((pool) => !nesting.has(pool));
 };
 
+// What a rule hands on to the match beyond its pool and deadlines, where it names it.
+const MATCH_EXTRAS = Object.freeze(["size", "cpus", "pin", "exclusive", "quiet", "parallel"]);
+
+// Whether one of the program's arguments, resolved against its working directory (`where.paths`, heavy-turn.cjs
+// pathsOf), is a script a declared class names: the same file whether it was named `scripts/x.py`, `./scripts/x.py`,
+// by its absolute path, or as `x.py` from inside `scripts/`, in the main checkout or a conversation's worktree.
+const scriptHit = (rule, paths) =>
+    rule.scripts !== undefined && (paths ?? []).some((path) => rule.scripts.some((script) => path === script || path.endsWith(`/${script}`)));
+
 // The rule a program's invocation falls under, with what the queue does with it; undefined for one that is not heavy.
-// `where.cwd` is the program's working directory, for a rule with a `cwd`; `where.heldPools` the pools programs above
-// this one already hold slots of (heldPoolsOf), which narrows the rules judged (judgedUnder).
+// `where.cwd` is the program's working directory, for a rule with a `cwd`; `where.paths` its arguments as absolute paths,
+// for a declared class's `scripts`; `where.heldPools` the pools programs above this one already hold slots of
+// (heldPoolsOf), which narrows the rules judged (judgedUnder).
 const matchInvocation = (invocation, config, report, where = {}) => {
     const text = invocation.slice(0, MATCH_LIMIT);
     const held = where.heldPools ?? [];
@@ -254,8 +361,9 @@ const matchInvocation = (invocation, config, report, where = {}) => {
         if (!judgedUnder(rule, held, nesting)) {
             continue;
         }
-        const compiled = compileRule(rule, report);
-        if (compiled === undefined || !compiled.regex.test(text) || !inDirectory(rule, where.cwd, report)) {
+        const compiled = rule.pattern === undefined ? undefined : compileRule(rule, report);
+        const hit = compiled?.regex.test(text) === true || scriptHit(rule, where.paths);
+        if (!hit || !inDirectory(rule, where.cwd, report)) {
             continue;
         }
         if (rule.exempt === true) {
@@ -268,8 +376,10 @@ const matchInvocation = (invocation, config, report, where = {}) => {
             maxHold: rule.maxHoldSeconds ?? config.maxHoldSeconds,
             onDeadline: rule.onDeadline ?? config.onDeadline,
         };
-        if (rule.size !== undefined) {
-            match.size = rule.size;
+        for (const key of MATCH_EXTRAS) {
+            if (rule[key] !== undefined) {
+                match[key] = rule[key];
+            }
         }
         return match;
     }
@@ -293,7 +403,7 @@ const heldPoolsOf = (env, config) => {
     return [...pools];
 };
 
-// queue-run's flags for a match (bin/queue-run), before its `--`.
+// queue-run's flags for a match (bin/queue-run), before its `--`. An older queue-run ignores a flag it does not know.
 const queueArgs = (match, config) => [
     "--pool",
     match.pool,
@@ -309,6 +419,9 @@ const queueArgs = (match, config) => [
     match.onDeadline,
     "--label",
     match.id,
+    // Nothing else heavy in this sandbox beside it: queue-run holds new heavy commands and waits out the running ones. A
+    // quiet one is exclusive too, whoever marked it.
+    ...(match.exclusive === true || match.quiet === true ? ["--exclusive"] : []),
 ];
 
 // A test run that names what it runs: a word after the test verb that reads as a path, a test file or a filter
@@ -408,4 +521,8 @@ module.exports = {
     ruleById,
     heldPoolsOf,
     cargoBuildArgs,
+    classRules,
+    heavyWords,
+    memoryMibOf,
+    scriptPathOf,
 };

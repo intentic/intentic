@@ -14,20 +14,14 @@ import type { ChildResultDoor } from "../child-records.js";
 import { ResultSchemaSchema, ResultValueSchema, resultValidator } from "../child-result.js";
 import { HALF_A_MOVE } from "../child-words.js";
 import { SETTLE_WORDS } from "../child-held.js";
-import type { SubagentWaitUntil } from "../subagents.js";
-import { type ChildrenWaitAnswer, childrenWaitAnswer, waitForChildren, waitForNamedWork, waitForWork, workWaitAnswer } from "./work-wait.js";
-import { NO_TARGET, waitTargetOf, waitTargetsOf } from "./wait-targets.js";
+import { AFTER_WORDS } from "../starting/child-after.js";
+import { CHILD_BRIEF_WORDS } from "../starting/child-preamble.js";
+import type { ChildLookups } from "./work-wait.js";
+import { waitTool } from "./wait-tool.js";
 import { opt } from "../../../opt.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { backgroundJobOf, jobFinished, keepBackgroundJob, type KeepOutcome, stopBackgroundJob } from "../../tools/jobs/background-jobs.js";
-import { type JobReport, jobReport } from "../../tools/jobs/job-report.js";
-
-// A tool, not a CLI: a blocking shell command would hit the soft-timeout and become the polling it replaces.
-
-// Long enough for a real run, short enough to return if forgotten; a longer wait means calling again. Out-of-range
-// timeouts are clamped in the handler, never refused by the schema: a refused call costs the model a retry.
-const DEFAULT_TIMEOUT_S = 600;
-const MAX_TIMEOUT_S = 1800;
+import { jobReport } from "../../tools/jobs/job-report.js";
 
 // One tool as the SDK's server takes it.
 export type ServerTool = NonNullable<Parameters<ReturnType<typeof sdk>["createSdkMcpServer"]>[0]["tools"]>[number];
@@ -81,7 +75,14 @@ const reportOf = (deps: SubagentWaitDeps, childId: string): string | undefined =
         deps.conversationId !== undefined && isHomeConversationId(deps.conversationId) ? HOME_REPORT_BOUND : REPORT_BOUND,
     );
 
-const UNTIL = z.enum(["blocked", "finished"]);
+// What a wait reads of a spawned child beyond its row, from the child engine where this turn has one.
+const lookupsOf = (deps: SubagentWaitDeps): ChildLookups => ({
+    pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
+    report: (childId) => reportOf(deps, childId),
+    landing: (childId) => deps.children?.landing(childId),
+    machine: (childId) => deps.children?.machine?.(childId),
+    result: (childId) => deps.children?.result(childId),
+});
 
 // Every provider offering more than one loop, said with its loops by name, so the parameter's own words say which values
 // mean anything for which provider; derived from the provider table, so a new pair reaches this text by itself.
@@ -89,9 +90,6 @@ const CHOOSABLE_LOOPS = PROVIDERS.filter((provider) => harnessChoosable(provider
     .map((provider) => `${provider.value}: ${loopsOf(provider.value).join(` or `)}`)
     .join(`; `);
 const SPAWN_HARNESS_WORDS = `Which agentic loop runs it. Leave it out for the provider's own. ${CHOOSABLE_LOOPS} (the first is its own). A loop the provider doesn't offer runs its own instead.`;
-
-const NOTHING_TO_WAIT_FOR =
-    "Nothing to wait for: no subagent or background command of this conversation is still running under that id, or its ending was already reported.";
 
 const KEEP_ANSWERS = {
     kept: "Kept: it keeps running for the person after your turn ends. Give them its address in your reply.",
@@ -207,6 +205,24 @@ const settleTool = (children: ChildSupervisor) =>
         { annotations: toolAnnotations("write") },
     );
 
+// What the spawn tool tells the model, kept outside the server it is mounted on.
+const SPAWN_WORDS =
+    "Spawn a subagent: a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor — e.g. " +
+    "Cursor's Composer models) to work on a task of its own. It runs as a separate conversation in its own isolated " +
+    "worktree cut from your own current work, visible on the board, and keeps working after your turn ends. " +
+    "Its finished work comes back into your checkout, as an in-process subagent's edits do, and reaches the " +
+    "workspace with your land; where it clashes with your edits it is held, and merge brings it in. " +
+    "Returns the subagent's id immediately: supervise it with the wait tool (target: that id), " +
+    "which returns when it is blocked on input or finished, with its report. On a sandbox short of memory it " +
+    "holds as pending until there is room, and wait covers that too. A start the owner must allow also returns " +
+    "at once, held, and waits on their card the same way; you carry on meanwhile. If your turn ends first, its " +
+    "report wakes this conversation when it finishes, and a question it stops on wakes it to answer. Give it a self-contained prompt " +
+    `with every path, requirement, and constraint — it sees none of this conversation. ${CHILD_BRIEF_WORDS} To have it start only once ` +
+    "other subagents of yours are done and their work is in your checkout, name them in `after`. You must name the " +
+    "provider AND the model: this spends a real allowance and nothing is chosen for you. Call the providers " +
+    "tool for what is connected and what still has room. A provider nobody has connected fails with the " +
+    "words to say so.";
+
 // The spawn tool's arguments.
 const SPAWN_FIELDS = {
     prompt: z.string().min(1).describe("The subagent's whole task, self-contained."),
@@ -230,6 +246,7 @@ const SPAWN_FIELDS = {
         ),
     fallbacks: FALLBACKS_FIELD,
     schema: SCHEMA_FIELD,
+    after: z.array(z.string().min(1)).max(16).optional().describe(AFTER_WORDS),
     freshOf: z
         .object({
             conversationId: z.string().min(1).describe("The subagent whose finished work it judges: one you spawned."),
@@ -262,68 +279,7 @@ const spawnAsked = (args: SpawnArgs): ChildSpawnSpec | { readonly refused: strin
         ...opt("fallbacks", args.fallbacks),
         ...opt("result", schema?.data === undefined ? undefined : { schema: schema.data }),
         ...opt("freshOf", args.freshOf),
-    };
-};
-
-// What the wait tool tells the model it does, in one place outside the server it is mounted on.
-const WAIT_WORDS =
-    "Wait until work you started here needs you: a subagent you started, or a command you ran with " +
-    "run_in_background. Blocks until the target is blocked on input (a question or permission), or " +
-    "finishes, whichever comes first. For an agent it returns its status, its last report (capped at 12k characters with a full-file retrieval handle, as " +
-    "`report`, where the row's `summary` is only its head), and " +
-    "`verification` — whether anything actually checked the work that report describes (`verified` / " +
-    "`unproven` / `failing` / `no-code`, with the check that spoke). Read it before you build on what it " +
-    "says: an agent's own account of its work is a claim, not a result. A spawned one's `landing` says where " +
-    "its work went: into your checkout already, or held on its branch where it clashed with your edits " +
-    "(merge brings it in). For a command it returns the " +
-    "exit code, the tail of its output and the file holding all of it, and while it runs how long it has " +
-    "been quiet; a command sitting at a prompt (blocked reading its terminal, nothing moving) returns " +
-    "`blocked` with `waitingForInput`, since nothing in your turn can type into it and waiting again will " +
-    "not end it. Target a subagent your runtime's own " +
-    "tool started by that call's id, one you spawned by the id spawn returned, a background command by " +
-    'the ID its Bash call returned, or "any" for whichever of these moves first (each is reported once; ' +
-    "a background command counts only while a child is still running, so with no child left it answers at once and " +
-    "lists the commands still running in `running`). " +
-    "An agent `paused` has not finished: its turn stopped on a spent allowance or stopped short, the sandbox " +
-    "runs it again by itself (its `error` says when), and its report comes after that; cancel it before " +
-    "giving its task to another agent. " +
-    'To wait on several children or commands as one, name them in `targets` (or pass target "all" for every child ' +
-    "still running): the wait comes back early only for trouble (a child blocked on a question, paused, " +
-    "failed or stopped, as `agent`), and otherwise once every one has finished, each in `agents` with its " +
-    "whole report (commands in `jobs`), so a fan-out costs you one wake instead of one per child. " +
-    "Use this instead of sleeping or polling in a loop. On timeout it returns the current state: call it " +
-    "again to keep waiting. It also returns early, with outcome `message`, when something is said into your " +
-    "turn while it waits (the owner, a watch, a subagent's report, a land of a subagent's work), so you read it " +
-    "now rather than when the wait runs out.";
-
-// A wait on several children as one (work-wait.ts waitForChildren): `targets`, or every live child for "all".
-const waitOnMany = async (
-    deps: SubagentWaitDeps,
-    conversationId: string,
-    targets: readonly string[] | undefined,
-    timeoutMs: number,
-): Promise<ChildrenWaitAnswer & { readonly jobs?: readonly JobReport[]; readonly job?: JobReport }> => {
-    const mixed = targets?.some((id) => backgroundJobOf(deps.conversations, conversationId, id) !== undefined) === true;
-    const many = mixed && targets !== undefined
-        ? await waitForNamedWork(deps.conversations, conversationId, { targets, until: ["blocked", "finished"], timeoutMs, signal: deps.signal })
-        : await waitForChildren(deps.conversations, conversationId, { ...opt("targets", targets), timeoutMs, signal: deps.signal });
-    const lookups = {
-        pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
-        report: (childId) => reportOf(deps, childId),
-        landing: (childId) => deps.children?.landing(childId),
-        machine: (childId) => deps.children?.machine?.(childId),
-        result: (childId) => deps.children?.result(childId),
-    } satisfies import("./work-wait.js").ChildLookups;
-    const said = childrenWaitAnswer(many, lookups);
-    const command = "job" in many && many.job !== undefined
-        ? workWaitAnswer({ outcome: many.outcome === "failed" ? "finished" : many.outcome, job: many.job }, lookups)
-        : {};
-    return {
-        ...said,
-        ...command,
-        outcome: said.outcome,
-        ...("jobs" in many ? { jobs: many.jobs, ...opt("job", many.job) } : {}),
-        ...(many.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),
+        ...opt("after", args.after),
     };
 };
 
@@ -415,20 +371,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                       ),
                       sdk().tool(
                           "spawn",
-                          "Spawn a subagent: a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor — e.g. " +
-                              "Cursor's Composer models) to work on a task of its own. It runs as a separate conversation in its own isolated " +
-                              "worktree cut from your own current work, visible on the board, and keeps working after your turn ends. " +
-                              "Its finished work comes back into your checkout, as an in-process subagent's edits do, and reaches the " +
-                              "workspace with your land; where it clashes with your edits it is held, and merge brings it in. " +
-                              "Returns the subagent's id immediately: supervise it with the wait tool (target: that id), " +
-                              "which returns when it is blocked on input or finished, with its report. On a sandbox short of memory it " +
-                              "holds as pending until there is room, and wait covers that too. A start the owner must allow also returns " +
-                              "at once, held, and waits on their card the same way; you carry on meanwhile. If your turn ends first, its " +
-                              "report wakes this conversation when it finishes, and a question it stops on wakes it to answer. Give it a self-contained prompt " +
-                              "with every path, requirement, and constraint — it sees none of this conversation. You must name the " +
-                              "provider AND the model: this spends a real allowance and nothing is chosen for you. Call the providers " +
-                              "tool for what is connected and what still has room. A provider nobody has connected fails with the " +
-                              "words to say so.",
+                          SPAWN_WORDS,
                           SPAWN_FIELDS,
                           async (args) => {
                               const children = deps.children;
@@ -535,62 +478,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                       ),
                       settleTool(deps.children),
                   ]),
-            sdk().tool(
-                "wait",
-                WAIT_WORDS,
-                {
-                    // Optional because `targets` stands in for it: required, it refused every call naming only `targets`, the
-                    // way the description tells the model to wait on several (26 failed calls in 25 conversations, 10-16..10-26).
-                    target: z
-                        .string()
-                        .min(1)
-                        .optional()
-                        .describe(
-                            'The subagent\'s id (its call\'s, Claude\'s agentId, or the one spawn returned), a background command\'s ID, "any", or "all" for every child still running. Leave it out when you name `targets`.',
-                        ),
-                    targets: z
-                        .array(z.string().min(1))
-                        .min(1)
-                        .optional()
-                        .describe("Several subagent or background command ids, waited on as one; `target` is then ignored. Returns early only for trouble."),
-                    until: z.array(UNTIL).min(1).optional().describe('Which states end the wait; default ["blocked","finished"]'),
-                    timeoutSeconds: z.number().optional().describe(`Default ${DEFAULT_TIMEOUT_S}; clamped to 5..${MAX_TIMEOUT_S} seconds`),
-                },
-                async (args) => {
-                    const until: readonly SubagentWaitUntil[] = args.until ?? ["blocked", "finished"];
-                    const timeoutMs = Math.round(Math.min(Math.max(5, args.timeoutSeconds ?? DEFAULT_TIMEOUT_S), MAX_TIMEOUT_S) * 1000);
-                    if (deps.conversationId === undefined) {
-                        return answer({ outcome: "unknown-target", note: "This turn has no conversation, so it has no children to wait on." });
-                    }
-                    if (args.targets !== undefined || args.target === "all") {
-                        const targets = await waitTargetsOf(deps.conversations, deps.conversationId, args.targets, deps.signal);
-                        return answer({ ...(await waitOnMany(deps, deps.conversationId, targets, timeoutMs)) });
-                    }
-                    const target = await waitTargetOf(deps.conversations, deps.conversationId, args.target, deps.signal);
-                    if (target === undefined) {
-                        return answer({ outcome: "unknown-target", note: NO_TARGET });
-                    }
-                    const result = await waitForWork(deps.conversations, deps.conversationId, {
-                        ...opt("target", target === "any" ? undefined : target),
-                        until,
-                        timeoutMs,
-                        signal: deps.signal,
-                    });
-                    // The shared answer's own note, where it has one, says more than the generic one.
-                    return answer({
-                        ...(result.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),
-                        ...workWaitAnswer(result, {
-                            pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
-                            report: (childId) => reportOf(deps, childId),
-                            landing: (childId) => deps.children?.landing(childId),
-        machine: (childId) => deps.children?.machine?.(childId),
-                            result: (childId) => deps.children?.result(childId),
-                        }),
-                    });
-                },
-                // Moves only which endings this conversation was told, marked as a wait settles, so parallel waits never share one.
-                { annotations: toolAnnotations("read") },
-            ),
+            waitTool({ conversationId: deps.conversationId, conversations: deps.conversations, signal: deps.signal, lookups: lookupsOf(deps) }),
             ...(deps.result === undefined ? [] : [resultTool(deps.result)]),
             ...(deps.extraTools ?? []),
             ...commandTools(deps),

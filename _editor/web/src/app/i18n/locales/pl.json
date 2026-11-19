@@ -373,6 +373,12 @@
             "stopKeepingWarmHint": "Utrzymywana ciepła do {time}",
             "tryLandAgain": "Spróbuj scalić ponownie",
             "landsIfConflictsGone": "Scala, jeśli konflikty zniknęły",
+            "proceedWithoutAsking": "Działaj bez pytania",
+            "proceedHint": "Jego tury i tury jego podagentów idą za własną rekomendacją, zamiast czekać na twoją zgodę",
+            "askBeforeGoingAhead": "Pytaj przed działaniem",
+            "proceedingHint": "Teraz działa bez pytania i nadal zatrzymuje się przed czymś niszczącym lub skierowanym na zewnątrz",
+            "proceedLabel": "Czy pyta najpierw",
+            "proceedFailed": "Nie udało się zmienić, czy pyta najpierw",
             "notifyLabel": "Powiadamiaj mnie",
             "notifyAll": "O wszystkim",
             "notifyAllHint": "Każda zakończona tura i każda karta, która na ciebie czeka",
@@ -5866,6 +5872,11 @@
             "whatAnAutomations": "Który zegar liczy „09:00” automatyzacji; na ekranie widzisz swój, uruchomienia idą według tej strefy.",
             "yourOwnClockIs": "Co znaczy „09:00” w automatyzacji. Twój komputer jest w strefie {zone}, więc te godziny nie będą się zgadzać z tym, co na nim widzisz."
         },
+        "agentProceed": {
+            "group": "Działanie bez czekania",
+            "title": "Działaj bez pytania",
+            "description": "Agenci idą za własną rekomendacją, zamiast czekać na twoją zgodę, i nadal zatrzymują się przed czymś niszczącym lub skierowanym na zewnątrz. W nocy decydują godziny nocne."
+        },
         "agentNightHours": {
             "group": "Godziny nocne",
             "keep": "Przestrzegaj godzin nocnych",
@@ -6105,6 +6116,9 @@
             "turnCap": "Najdłuższa tura w pętli prowadzonej przez sandbox",
             "turnCapNote": "Ile minut może trwać jedna tura w OpenCode, agencie ACP, Pi lub Muse, zanim zostanie zakończona; subagent, który dojdzie do tego limitu, jest kontynuowany, a nie oznaczany jako nieudany. Claude Code i Codex nie mają takiego limitu.",
             "turnCapLabel": "Najdłuższa tura, w minutach",
+            "contextContinues": "Kontynuuj mimo dużego kontekstu",
+            "contextContinuesNote": "Ile razy z rzędu rozmowa sama kontynuuje w nowej sesji, gdy jej tura zatrzymała się, bo kontekst urósł, a praca nie była skończona. Przy 0 jest to tylko odnotowane na czacie.",
+            "contextContinuesLabel": "Nowe sesje z rzędu",
             "turnBreaks": "Gdy tura się załamie",
             "keepWarmGroup": "Bezczynne czaty",
             "keepWarm": "Utrzymuj pamięć podręczną ciepłą po turze",
@@ -13559,6 +13573,11 @@
             "approve": "Zatwierdź",
             "rebuildToFinish": "Zatwierdzone. {tool} pojawi się po przebudowie sandboxa.",
             "openRebuild": "Przebuduj"
+        },
+        "instruction": {
+            "approve": "Dodaj do {file}",
+            "everyConversation": "Zatwierdzenie dopisuje to do {file}. Każda rozmowa, która tam się zaczyna, trzyma się tego od następnej tury.",
+            "creates": "{file} jeszcze nie istnieje: zatwierdzenie utworzy go z tą regułą."
         },
         "automation": {
             "name": "Nazwa",

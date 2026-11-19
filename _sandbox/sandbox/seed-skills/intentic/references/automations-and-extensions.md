@@ -50,6 +50,12 @@ connected Gmail but reaches no signed-in site account). `automations check --npm
 the page that designs them (and saved loops) is the Workflows extension, installed from Sandbox ▸ Extensions ▸ Browse.
 A workflow an agent writes itself (the `workflow` tool beside `spawn`) is in `roles-and-models.md`.
 
+A **loop** repeats one conversation's prompt in fresh sessions until it is done, and is started from a composer or from a
+shell with `agents loop '<prompt>' [--until '<command>'] [--on <handle>|self]` (`agents loop --help`). Each round writes
+whether it is done and, for a list of items, how many `remaining`; zero, or `--until` exiting 0, ends it, and so do its
+round, stall and spend ceilings. Rounds land, or are held, by the land policy. `agents ls` and `agents show` say which
+round it is on; `agents loop --stop <handle>` makes the round in flight the last.
+
 ## Approvals
 
 **Approvals** hold what the owner says yes to before it happens: posts to publish on X, Reddit, Discord, YouTube…, and

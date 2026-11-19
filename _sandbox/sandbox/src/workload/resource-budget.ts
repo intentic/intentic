@@ -45,6 +45,33 @@ const HOLDER_CHECK_MS = 1_000;
 // How long work nobody is waiting on is held for room before it is turned away.
 export const WAIT_DEADLINE_MS = 10 * 60_000;
 
+/* AN AGENT TURN ANSWERS TO THE MACHINE UNDER THE SANDBOX ONLY DOWN TO ITS FLOOR (2026-11-19). Work nobody waits on waits
+   while starting it would take the host below its reserve line (memory-room.mjs `hostShortOf`): a tenth of its memory,
+   3.2 GiB on a 32 GB laptop. That line is for heavy work (a cargo build is priced at 7 GiB); an agent turn's own runtime
+   is a few hundred megabytes, and its heavy commands each queue for the host on their own (the room socket). Held to the
+   reserve, the shinobi-society sandbox's subagents waited ten minutes and failed, again and again, while the laptop's
+   other sandboxes left 1.5 to 3.7 GiB of its 31.4 GiB, which no waiting in here could change. So an agent turn nobody
+   waits on is judged on the sandbox's own room, which its own work frees, and on the host only down to that host's hard
+   floor, the 1.5 GiB under which Windows thrashed (hosts.ts hostMemoryLowBytes), after the turn's own cost and what was
+   admitted just before it: two turns at most start into a host with 3.5 GiB available. Heavy work keeps the reserve. */
+const AGENT_HOST_FLOOR_BYTES = 1.5 * 1024 ** 3;
+
+// The formula's verdict on one request, but for an agent turn the host's reserve line alone holds: judged without the
+// host while the host keeps its floor (above), and held as the formula said otherwise.
+const verdictOf = (request: AdmitRequest, reading: MemoryReading, reservedBytes: number): RoomJudgement => {
+    const asked = { workload: request.workload, attended: request.attended, reservedBytes, size: request.size };
+    const held = judge(reading, asked);
+    const { host } = reading;
+    if (held.verdict !== "wait" || request.workload !== "agentRuntime" || request.attended || host === undefined) {
+        return held;
+    }
+    if (host.availableBytes - reservedBytes < AGENT_HOST_FLOOR_BYTES + costBytesOf(request.workload, request.size)) {
+        return held;
+    }
+    const sandboxOnly = judge({ ...reading, host: undefined }, asked);
+    return sandboxOnly.verdict === "run" ? sandboxOnly : held;
+};
+
 // Where admitted work runs: this sandbox, or a runner by id, which holds nothing here.
 export type WorkPlace = "local" | { readonly runner: string };
 
@@ -337,12 +364,7 @@ export const createResourceBudget = ({
 
     // One verdict on one reading, with no await between it and the claim, so the next request's verdict counts this one.
     const decide = (request: AdmitRequest, taken: { readonly at: number; readonly reading: MemoryReading }): RoomJudgement => {
-        const judged = judge(taken.reading, {
-            workload: request.workload,
-            attended: request.attended,
-            reservedBytes: localHeld(taken, request.owner),
-            size: request.size,
-        });
+        const judged = verdictOf(request, taken.reading, localHeld(taken, request.owner));
         if (judged.verdict === "run") {
             claim(request, taken);
         }

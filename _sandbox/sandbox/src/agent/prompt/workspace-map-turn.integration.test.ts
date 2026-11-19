@@ -121,6 +121,8 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         hostReach: async () => undefined,
         webextReach: async () => undefined,
         phoneReach: async () => undefined,
+        // No other conversation changing this one's files (conversations/files-in-flight.ts): read on every turn.
+        inFlight: unstubbed<Services["inFlight"]>("inFlight", { turnNote: () => undefined }),
         // Leased by every planned turn: its browsers, peers and extension cards mount here.
         ...testTurnMounts(),
         async *codexAgent() {},

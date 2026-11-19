@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] [--size NAME] -- <command> [args...]
+# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] [--size NAME] [--exclusive] -- <command> [args...]
 #
 # Runs <command> once a slot in <pool> is free, so the expensive commands several agent sessions each decide to
 # run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
@@ -35,7 +35,9 @@
 # EVERY FAILURE RUNS THE COMMAND. No flock, no slot directory, a bad argument, an unreadable cgroup: all of it
 # degrades to running the command plainly. This wrapper sits between an agent and its shell, and the one thing
 # it must never become is the reason a command did not run. The wait running out is not a failure: it is the one
-# outcome a rule may answer with `--on-deadline skip`, for a command whose overlap with a holder IS the incident.
+# outcome a rule may answer with `--on-deadline skip`, for a command whose overlap with a holder IS the incident. The
+# other is a sandbox still short of even a person's turn's room at the ceiling (memory-room exits 75, below): a command
+# started into that is killed anyway, and takes others with it.
 set -u
 
 pool="heavy"
@@ -46,6 +48,7 @@ max_hold=0
 label="command"
 on_deadline="run"
 size=""
+exclusive=0
 # Only where the wait cannot be woken by the kernel (a bash before 5.1, see `next_slot`); fractions allowed.
 poll_seconds="${INTENTIC_QUEUE_POLL:-0.25}"
 
@@ -86,6 +89,7 @@ while [ "$i" -lt "${#flags[@]}" ]; do
         --label) label="${flags[$((i + 1))]:-command}"; i=$((i + 2)) ;;
         --on-deadline) on_deadline="${flags[$((i + 1))]:-run}"; i=$((i + 2)) ;;
         --size) size="${flags[$((i + 1))]:-}"; i=$((i + 2)) ;;
+        --exclusive) exclusive=1; i=$((i + 1)) ;;
         *) i=$((i + 1)) ;;
     esac
 done
@@ -111,7 +115,7 @@ held_run() {
     # not pass it on, and a script deciding whether it must queue (heavy-slot.mjs) may sit several spawns down.
     [ -n "${slot:-}" ] && export INTENTIC_QUEUE_SLOT="$slot"
     # How long this holder may keep the slot, read back by the daemon's minute log to say when a hold has gone on
-    # too long for its own rule (src/system/resources/queue-slots.ts), not by one number for every pool.
+    # too long for its own rule (src/system/resources/queue/queue-slots.ts), not by one number for every pool.
     [ -n "${slot:-}" ] && export INTENTIC_QUEUE_MAX_HOLD="$max_hold"
     if [ "$max_hold" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
         exec timeout --kill-after="$kill_grace" "$max_hold" "$@"
@@ -133,8 +137,8 @@ case "$poll_seconds" in *[1-9]*) ;; *) poll_seconds=0.25 ;; esac
 # Two words only; anything else is "run", since an unknown mode must not become the reason a command did not run.
 case "$on_deadline" in run | skip) ;; *) on_deadline="run" ;; esac
 # One word of lowercase letters, digits and dashes, or none: memory-room knows the names (SIZE_BYTES in
-# @intentic/constants/memory-room: targeted, editor-typecheck, scoped-typecheck) and prices one it does not know as the
-# whole class, so the list is not repeated here, where an image's copy would lag the daemon's.
+# @intentic/constants/memory-room: targeted, editor-typecheck, scoped-typecheck, or a MiB count like 6144m) and prices
+# one it does not know as the whole class, so the list is not repeated here, where an image's copy would lag the daemon's.
 case "$size" in '' | *[!a-z0-9-]*) size="" ;; esac
 
 # The memory half of the gate, before the slot rather than after: a box with no room should not burn a slot
@@ -147,14 +151,23 @@ case "$size" in '' | *[!a-z0-9-]*) size="" ;; esac
 # "Permission denied" and the memory half of this gate silently never ran).
 # `--pid $$` names this very process, which the command becomes at the `exec` below (or `timeout`, its parent, under
 # --max-hold): the budget hands the reservation back when it exits, not 90 seconds later.
+#
+# THE ONE OUTCOME THAT DOES NOT RUN THE COMMAND (2026-11-19): memory-room exits 75 when it held the command to its
+# ceiling (the slot's own wait) with less free than a person's turn needs, under which a heavy command was started only
+# to be killed by the memory guard, taking others with it (@intentic/constants src/heavy/memory-floor.mjs). It has said why; this
+# leaves with the same code a skipped deadline does. `--admitted` prints what its admission holds for the command, which
+# its launcher adds to the free memory it sizes cargo's jobs to (INTENTIC_ROOM_ADMITTED).
 if [ "$memory_gate" -gt 0 ] && gate="$(command -v memory-room 2>/dev/null)" && [ -n "$gate" ]; then
-    gate_args=(--class toolchain --wait "$memory_gate" --label "$label" --pid "$$")
+    gate_args=(--class toolchain --wait "$memory_gate" --ceiling "$wait_seconds" --label "$label" --pid "$$" --admitted)
     [ -n "$size" ] && gate_args+=(--size "$size")
+    room_status=0
     if [ -x "$gate" ]; then
-        "$gate" "${gate_args[@]}" || true
+        admitted=$("$gate" "${gate_args[@]}") || room_status=$?
     else
-        node "$gate" "${gate_args[@]}" || true
+        admitted=$(node "$gate" "${gate_args[@]}") || room_status=$?
     fi
+    [ "$room_status" = 75 ] && exit 75
+    case "$admitted" in '' | *[!0-9]*) ;; *) export INTENTIC_ROOM_ADMITTED="$admitted" ;; esac
 fi
 
 command -v flock >/dev/null 2>&1 || run "$@"
@@ -193,13 +206,10 @@ acquire() {
     return 1
 }
 
-acquire && held_run "$@"
-
 # WHO HOLDS THE POOL, said while a command waits on it. "waiting for a free slot" alone left an agent nothing to act on:
 # whose command, from which conversation, held for how long. The kernel keeps the answer: a holder is any process with
 # fd 9 open on one of the pool's slots (a pipeline inherits it to every member; the oldest of them took it). Read off
-# /proc, as the daemon's own minute log reads it (src/system/resources/queue-slots.ts), so nothing here can go stale.
-ticks=$(getconf CLK_TCK 2>/dev/null || echo 100)
+# /proc, as the daemon's own minute log reads it (src/system/resources/queue/queue-slots.ts), so nothing here can go stale.
 uptime_now() { local up _; read -r up _ </proc/uptime 2>/dev/null || up=0; echo "${up%.*}"; }
 # Seconds the process has lived, which is as long as it has held what it took at its start.
 age_of() {
@@ -207,6 +217,8 @@ age_of() {
     stat=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
     rest=${stat##*) }
     set -- $rest
+    # Read once, and only by a command that waits: the fast path forks nothing it does not need.
+    : "${ticks:=$(getconf CLK_TCK 2>/dev/null || echo 100)}"
     # Field 22 of stat(5), the 20th after the name: start time in clock ticks since boot.
     echo $(($(uptime_now) - ${20:-0} / ticks))
 }
@@ -215,7 +227,7 @@ env_of() { tr '\0' '\n' <"/proc/$1/environ" 2>/dev/null | sed -n "s/^$2=//p" | h
 json_string() { printf '"%s"' "$(printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
 # One line per held slot, its oldest holder: slot, pid, the holder's age in seconds, conversation, rule, command, split
 # by the unit separator (a tab is whitespace to `read`, and an empty field between two would vanish).
-sep=$(printf '\037')
+sep=$'\037'
 holders() {
     local fd target pid age best_slot=() line
     for fd in /proc/[0-9]*/fd/9; do
@@ -237,6 +249,131 @@ say_holders() {
         printf '[queue-run]   %s: pid %s, running %s%s%s: %s\n' "$slot" "$pid" "$(minutes "$age")" "${rule:+ by rule $rule}" "${owner:+ for conversation $owner}" "$command" >&2
     done
 }
+
+# THE GATE: A COMMAND THAT MUST HAVE THE SANDBOX'S HEAVY WORK TO ITSELF (2026-11-19, the shinobi-society audit). A
+# project's motion capture rendered its game in software for half an hour, and its frames came out unsteady whenever
+# anything heavy ran beside it (6 of 20 captures replayed); a benchmark kernel measured 2.43 ns at load 30 and 1.65 ns
+# at load 7. A pool bounds how many of ONE kind run, never that nothing else does, so the project kept a lock inside its
+# script and "nothing else heavy beside a capture" in its AGENTS.md. A class declared exclusive (heavy-rules.cjs), and the
+# quiet lane (bin/quiet), pass `--exclusive`; every command queue-run starts takes the gate's other side:
+# - an ordinary command passes the TURNSTILE (fd 7) shared, an instant, then holds RUNNING (fd 8) shared for as long as
+#   it lives, inherited by everything it starts like the slot's fd 9;
+# - an exclusive command holds the turnstile EXCLUSIVE, so a new command waits at it, then takes `running` exclusive,
+#   which it gets once every command already past the turnstile has ended, and holds both until it ends.
+# The turnstile is what lets it in at all under a stream of ordinary commands: flock gives a waiting exclusive lock no
+# priority over new shared ones. Both are taken BEFORE the slot, by an exclusive command too, so nothing ever waits on the
+# gate while holding a slot that something past the gate needs. A command under one that already took a side of the
+# gate (INTENTIC_QUEUE_GATE) never takes it again: a heavy program a quiet run starts would wait on its own parent.
+# Bounded like every wait here: a command waits at the turnstile for up to INTENTIC_QUEUE_GATE_WAIT (an hour, past every
+# max-hold the shipped table gives), an exclusive one for the commands let in before it up to its own --wait; then
+# --on-deadline decides, as at a slot. Every failure here (no flock, a planted link) skips the gate, never the command.
+gate_dir="${dir%/*}/.gate"
+gate_wait=$(number "${INTENTIC_QUEUE_GATE_WAIT:-3600}" 3600)
+gate_say_every=$(number "${INTENTIC_QUEUE_SAY_EVERY:-30}" 30)
+[ "$gate_say_every" -lt 1 ] && gate_say_every=30
+# The exclusive holder, as it wrote itself down (`<pid> <since> <label> <conversation>`), while that pid lives.
+gate_holder() {
+    local line pid
+    line=$(head -n 1 "$gate_dir/holder" 2>/dev/null) || return 1
+    pid=${line%% *}
+    [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && printf '%s\n' "$line"
+}
+say_gate_holder() {
+    local pid since name owner
+    read -r pid since name owner < <(gate_holder) || { printf '[queue-run]   (it has just ended)\n' >&2; return 0; }
+    printf '[queue-run]   %s: pid %s, running %s%s\n' "$name" "$pid" "$(minutes $(($(date +%s) - since)))" "${owner:+ for conversation $owner}" >&2
+}
+# The commands past the turnstile, one line each: a process holding `running` whose parent does not.
+say_running() {
+    local fd pid stat rest rule owner
+    for fd in /proc/[0-9]*/fd/8; do
+        [ "$(readlink "$fd" 2>/dev/null)" = "$gate_dir/running" ] || continue
+        pid=${fd#/proc/}
+        pid=${pid%%/*}
+        [ "$pid" = "$$" ] && continue
+        stat=$(cat "/proc/$pid/stat" 2>/dev/null) || continue
+        rest=${stat##*) }
+        set -- $rest
+        [ "$(readlink "/proc/$2/fd/8" 2>/dev/null)" = "$gate_dir/running" ] && continue
+        rule=$(env_of "$pid" INTENTIC_HEAVY_HELD)
+        owner=$(env_of "$pid" INTENTIC_TURN_OWNER)
+        printf '[queue-run]   pid %s, running %s%s%s: %s\n' "$pid" "$(minutes "$(age_of "$pid" || echo 0)")" "${rule:+ by rule $rule}" "${owner:+ for conversation $owner}" \
+            "$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | cut -c1-120)" >&2
+    done
+}
+gate_say_turnstile() {
+    if [ "$1" = first ]; then
+        printf '[queue-run] %s: waiting: a command that must run with nothing else heavy beside it holds this sandbox, and this starts when it ends (at most %s):\n' "$label" "$(minutes "$gate_wait")" >&2
+    else
+        printf '[queue-run] %s: still waiting after %s for the command running alone:\n' "$label" "$(minutes $((SECONDS - gate_started)))" >&2
+    fi
+    say_gate_holder
+}
+gate_say_running() {
+    if [ "$1" = first ]; then
+        printf '[queue-run] %s: runs alone: holding new heavy commands in this sandbox, and waiting for the ones already let in to finish:\n' "$label" >&2
+    else
+        printf '[queue-run] %s: still waiting after %s for the heavy commands let in before it:\n' "$label" "$(minutes $((SECONDS - gate_started)))" >&2
+    fi
+    say_running
+}
+# Takes lock mode $1 (-s or -x) on fd $2 within $3 seconds, saying so through $4 at once and every gate_say_every seconds.
+gate_lock() {
+    local mode=$1 fd=$2 ceiling=$3 say=$4 round
+    gate_started=$SECONDS
+    flock -n "$mode" "$fd" && return 0
+    : "${ticks:=$(getconf CLK_TCK 2>/dev/null || echo 100)}"
+    "$say" first
+    while [ $((SECONDS - gate_started)) -lt "$ceiling" ]; do
+        round=$((ceiling - (SECONDS - gate_started)))
+        [ "$round" -gt "$gate_say_every" ] && round=$gate_say_every
+        [ "$round" -lt 1 ] && round=1
+        flock "$mode" -w "$round" "$fd" && return 0
+        [ $((SECONDS - gate_started)) -lt "$ceiling" ] && "$say" again
+    done
+    return 1
+}
+# A wait on the gate ran out: `skip` leaves without running anything, anything else starts beside what it waited for.
+gate_deadline() {
+    if [ "$on_deadline" = skip ]; then
+        printf '[queue-run] %s: %s did not end within %s — not started.\n' "$label" "$1" "$(minutes "$2")" >&2
+        exit 75
+    fi
+    printf '[queue-run] %s: %s did not end within %s — starting beside it.\n' "$label" "$1" "$(minutes "$2")" >&2
+}
+take_gate() {
+    [ -n "${INTENTIC_QUEUE_GATE:-}" ] && return 0
+    [ -d "$gate_dir" ] || mkdir -p "$gate_dir" 2>/dev/null || return 0
+    { [ -L "$gate_dir" ] || [ -L "$gate_dir/turnstile" ] || [ -L "$gate_dir/running" ] || [ -L "$gate_dir/holder" ]; } && return 0
+    exec 7>>"$gate_dir/turnstile" || return 0
+    if [ "$exclusive" = 1 ]; then
+        if ! gate_lock -x 7 "$gate_wait" gate_say_turnstile; then
+            exec 7>&-
+            gate_deadline "the command running alone" "$gate_wait"
+            export INTENTIC_QUEUE_GATE=none
+            return 0
+        fi
+        local tmp
+        tmp=$(mktemp "$gate_dir/.tmp.XXXXXX" 2>/dev/null) && printf '%s %s %s %s\n' "$$" "$(date +%s)" "$label" "${INTENTIC_TURN_OWNER:-}" >"$tmp" && mv -f "$tmp" "$gate_dir/holder"
+        export INTENTIC_QUEUE_GATE=exclusive
+        exec 8>>"$gate_dir/running" || return 0
+        gate_lock -x 8 "$wait_seconds" gate_say_running || gate_deadline "the heavy commands let in before it" "$wait_seconds"
+        return 0
+    fi
+    if ! gate_lock -s 7 "$gate_wait" gate_say_turnstile; then
+        exec 7>&-
+        gate_deadline "the command running alone" "$gate_wait"
+        export INTENTIC_QUEUE_GATE=none
+        return 0
+    fi
+    # Past the turnstile, `running` is free to share: an exclusive command holds it only while it holds the turnstile.
+    exec 8>>"$gate_dir/running" && flock -s -w 10 8
+    exec 7>&-
+    export INTENTIC_QUEUE_GATE=shared
+}
+take_gate
+
+acquire && held_run "$@"
 
 # WHO WAITS, AND THE POOL AS A WHOLE, for a reader that is not this pane (an agent's `cat`, a diagnostics read):
 # `wait.<pid>` names each waiter while it waits, and `state.json` is the pool's holders and waiters as the latest waiter
@@ -384,6 +521,7 @@ next_slot() {
 # empty for the minutes it lasts. Then wait for a slot (next_slot) until the deadline.
 say_every=$(number "${INTENTIC_QUEUE_SAY_EVERY:-30}" 30)
 [ "$say_every" -lt 1 ] && say_every=30
+: "${ticks:=$(getconf CLK_TCK 2>/dev/null || echo 100)}"
 put "wait.$$" "{\"pid\":$$,\"label\":$(json_string "$label"),\"conversation\":$(json_string "$owner_here"),\"since\":$waiting_since,\"command\":$(json_string "$(printf '%s ' "$@" | cut -c1-120)")}"
 trap 'queue_record leaving; rm -f "$dir/wait.$$"' EXIT
 trap 'stop_waiting; exit 130' INT

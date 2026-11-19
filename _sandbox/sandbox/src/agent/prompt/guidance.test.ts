@@ -208,3 +208,29 @@ test("only a runtime whose shell resolves a secret reference is told to write on
     expect(guidanceBlock({ ...OTHER_MOUNTED, runtime: otherRuntime("none") })).not.toContain("{{secret:");
 });
 
+
+// 2026-11-19, the shinobi-society audit: a preference restated in six conversations, rules that died with the reply they
+// were said in. Every runtime is told how to keep one, and never to write it into the file unasked.
+test("every runtime is told to keep a lasting rule through an approved proposal, not by editing AGENTS.md", () => {
+    for (const facts of [NOTHING_MOUNTED, OTHER_MOUNTED]) {
+        const text = guidanceBlock(facts);
+        expect(text).toContain('`instructions propose --text "…" --why "…"`');
+        expect(text).toContain("Not for an instruction about the task at hand");
+        expect(text).toContain("do not write the rule into an AGENTS.md yourself");
+    }
+});
+
+// Off by default, and then every turn reads as it did before the setting; on, every runtime is told in the same words,
+// with the plan-mode sentence only where the loop has plan mode.
+test("only a turn planned with the owner's go-ahead is told to proceed without asking", () => {
+    expect(guidanceBlock(NOTHING_MOUNTED)).not.toContain("proceed without asking");
+    expect(guidanceBlock({ ...NOTHING_MOUNTED, proceed: false })).not.toContain("proceed without asking");
+    const claude = guidanceBlock({ ...NOTHING_MOUNTED, proceed: true });
+    expect(claude).toContain("The owner has asked agents here to proceed without asking");
+    expect(claude).toContain("Do not enter plan mode to have a plan approved first.");
+    expect(claude).toContain("Subagents you spawn are told the same");
+    const other = guidanceBlock({ ...OTHER_MOUNTED, proceed: true });
+    expect(other).toContain("End your final message with what you decided for them");
+    expect(other).not.toContain("plan mode");
+    expect(guidanceBlock({ ...OTHER_MOUNTED, proceed: true, subagents: false })).not.toContain("Subagents you spawn");
+});

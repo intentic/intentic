@@ -1,0 +1,397 @@
+#!/usr/bin/env node
+// glance: pictures laid out for an agent to read in one go. A contact sheet of many images, a before/after pair with the
+// difference measured, the frames of a video, or a zoomed crop, each written to the artifacts folder as one image that
+// an image Read shows whole (see BUDGET), with its path printed. Universal: any project's screenshots, renders, sprites
+// or recordings.
+//
+// WHY (2026-11-19). An audit of 100 conversations found agents building contact sheets by hand, 52 times in 8 of them:
+// ffmpeg hstack/vstack/tile/drawtext chains, PIL through `uv`, a project script, because ImageMagick's montage was not
+// in the image. Sheets came out over 10 MB and were redone as JPEG, and before/after pairs were laid out by hand and
+// then eyeballed. Named glance, not look: bsdextrautils' dictionary `look` is in the base image.
+//
+// Pixels are composed here (glance-raster.mjs, labels in a built-in font) and only decoded and encoded by ffmpeg, or by
+// ImageMagick where ffmpeg is absent (glance-engine.mjs), so the output is the same on either.
+import { globSync, readdirSync, statSync } from "node:fs";
+import { basename, extname, join, relative } from "node:path";
+import { parseArgs } from "node:util";
+import { decode, detectEngines, GlanceError, probe, save } from "./glance-engine.mjs";
+import { BUDGET, canvas, cellOrigin, COLORS, diffImages, drawDiff, drawRgba, drawText, fillRect, fitGrid, fitInside, fitText, GLYPH_W, LABEL_H, median } from "./glance-raster.mjs";
+
+const KB = (bytes) => (bytes < 1024 ? `${bytes} B` : `${Math.round(bytes / 1024)} KB`);
+
+const USAGE = `glance — pictures laid out for one image Read
+
+  glance sheet <file|dir|glob>... [--cols N] [--labels name|none] [--width W]
+        one labelled contact sheet of every picture (a directory: its pictures, not recursive; a quoted glob is
+        expanded here). Too many to stay legible on one sheet: several sheets, every path printed.
+  glance pair <before> <after> [--diff] [--tolerance T]
+        the two side by side and labelled, with the difference measured and printed: changed-pixel %, max and mean
+        channel delta (0-255), and the changed region, so "unchanged" needs no eyeballing. --diff adds a third panel
+        with every changed pixel lit and the region boxed. --tolerance ignores deltas up to T (JPEG noise).
+  glance frames <video> [--count N | --every S]
+        a sheet of N frames spread over the video (default 12), or one every S seconds, each with its timestamp
+  glance crop <image> <x,y,w,h> [--zoom Z]
+        that region, enlarged (by whole factors, pixels kept sharp; default: as large as fits) and labelled
+
+  every command: [--format auto|png|jpg]   (auto: PNG, or JPEG when the PNG would pass the byte budget)
+
+Output goes to ${"$"}{WORKSPACE_ROOT:-/work}/.intentic/records/artifacts/glance/ (GLANCE_DIR overrides), a new file
+each time (never overwritten), and its path is printed first. Every output fits the budget one image Read shows at
+full detail: longest side <= ${BUDGET.maxSide} px, <= ${(BUDGET.maxPixels / 1e6).toFixed(2)} megapixels, <= ${BUDGET.maxBytes / 1e6} MB. Mixed sizes are
+letterboxed, never stretched; transparency shows as a checkerboard. Needs ffmpeg (frames always does), or ImageMagick
+for still images.`;
+
+const OPTIONS = {
+    cols: { type: "string" },
+    labels: { type: "string" },
+    width: { type: "string" },
+    diff: { type: "boolean" },
+    tolerance: { type: "string" },
+    count: { type: "string" },
+    every: { type: "string" },
+    zoom: { type: "string" },
+    format: { type: "string" },
+    help: { type: "boolean", short: "h" },
+};
+
+const PICTURES = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif", ".heic", ".svg", ".ico", ".tga", ".qoi", ".ppm", ".pgm", ".exr", ".dds", ".psd", ".jxl"]);
+
+class UsageError extends Error {}
+
+const out = (line) => process.stdout.write(`${line}\n`);
+
+const outDir = () => process.env["GLANCE_DIR"] ?? join(process.env["WORKSPACE_ROOT"] || "/work", ".intentic/records/artifacts/glance");
+
+const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+
+const slugOf = (file) =>
+    basename(file, extname(file))
+        .replace(/[^\w.-]+/g, "_")
+        .slice(0, 32);
+
+const number = (flags, name, { min, max, integer = true }) => {
+    const raw = flags[name];
+    if (raw === undefined) {
+        return undefined;
+    }
+    const value = Number(raw);
+    if (!Number.isFinite(value) || (integer && !Number.isInteger(value)) || value < min || value > max) {
+        throw new UsageError(`--${name} must be ${integer ? "a whole number" : "a number"} from ${min} to ${max}, not "${raw}"`);
+    }
+    return value;
+};
+
+const naturally = (a, b) => a.localeCompare(b, undefined, { numeric: true });
+
+const isPicture = (file) => PICTURES.has(extname(file).toLowerCase());
+
+// Every file the arguments name: a file as given, a directory's pictures, a glob's matches (a shell that did not
+// expand it, or a quoted one).
+const expandInputs = (args) =>
+    args.flatMap((arg) => {
+        const stat = statSync(arg, { throwIfNoEntry: false });
+        if (stat?.isDirectory()) {
+            const pictures = readdirSync(arg)
+                .filter(isPicture)
+                .sort(naturally)
+                .map((name) => join(arg, name));
+            if (pictures.length === 0) {
+                throw new GlanceError(`${arg}: no pictures in this directory (${[...PICTURES].slice(0, 6).join(" ")} ...)`);
+            }
+            return pictures;
+        }
+        if (stat !== undefined || !/[*?[{]/.test(arg)) {
+            return [arg];
+        }
+        const matches = globSync(arg)
+            .filter((path) => statSync(path).isFile())
+            .sort(naturally);
+        if (matches.length === 0) {
+            throw new GlanceError(`${arg}: matches no file`);
+        }
+        return matches;
+    });
+
+// The shortest path tail that tells each file apart from the others: a.png, unless two directories each hold one.
+const distinctNames = (files) => {
+    const parts = files.map((file) => relative(process.cwd(), file).split("/"));
+    return parts.map((own) => {
+        for (let depth = 1; depth < own.length; depth++) {
+            const tail = own.slice(-depth).join("/");
+            if (parts.filter((other) => other.slice(-depth).join("/") === tail).length === 1) {
+                return tail;
+            }
+        }
+        return own.join("/");
+    });
+};
+
+const drawLabel = (c, text, x, y, width) => {
+    drawText(c, fitText(text, Math.floor((width - 4) / GLYPH_W)), x + 2, y + 2);
+};
+
+// A picture cell: the file decoded at the size its box allows, centred in it.
+const pictureCell = (engines, { file, info, at }) => (c, x, y, boxW, boxH) => {
+    const fit = fitInside(info.width, info.height, boxW, boxH);
+    const pixels = decode(engines, file, info, { ...fit, at });
+    if (pixels === undefined) {
+        drawText(c, "no frame", x + 4, y + 4, COLORS.dim);
+        return;
+    }
+    drawRgba(c, pixels, fit.width, fit.height, x + Math.floor((boxW - fit.width) / 2), y + Math.floor((boxH - fit.height) / 2));
+};
+
+// Cells laid out on as many sheets as keep each cell at least MIN_CELL wide, each saved; answers what was written.
+const MIN_CELL = 200;
+const SMALL_CELL = 256;
+const renderSheets = (engines, cells, { aspect, nativeWidth, cols, labels, maxWidth, kind, slug, format }) => {
+    const labelH = labels ? LABEL_H : 0;
+    // No credit for cells wider than the pictures (or than a small one enlarged to SMALL_CELL): past that, a smaller sheet.
+    const target = Math.max(nativeWidth, SMALL_CELL);
+    let pages = 1;
+    let grid = fitGrid({ n: cells.length, aspect, cols, labelH, maxWidth, target });
+    while (grid.cellW < MIN_CELL && pages < cells.length) {
+        pages++;
+        grid = fitGrid({ n: Math.ceil(cells.length / pages), aspect, cols, labelH, maxWidth, target });
+    }
+    const perPage = Math.ceil(cells.length / pages);
+    const stem = `${kind}-${stamp()}${slug === "" ? "" : `-${slug}`}`;
+    const written = [];
+    for (let page = 0; page < pages; page++) {
+        const mine = cells.slice(page * perPage, (page + 1) * perPage);
+        const sheet = fitGrid({ n: mine.length, aspect, cols: grid.cols, labelH, maxWidth, target });
+        const c = canvas(sheet.width, sheet.height);
+        mine.forEach((cell, index) => {
+            const { x, y } = cellOrigin(sheet, index);
+            fillRect(c, x, y, sheet.cellW, sheet.cellH, COLORS.cell);
+            cell.draw(c, x, y, sheet.cellW, sheet.cellH);
+            if (labels) {
+                drawLabel(c, cell.label, x, y + sheet.cellH, sheet.cellW);
+            }
+        });
+        written.push({ ...save(engines, c, { dir: outDir(), stem: pages === 1 ? stem : `${stem}-p${page + 1}`, format, maxBytes: BUDGET.maxBytes }), first: page * perPage, count: mine.length });
+    }
+    return written;
+};
+
+const printWritten = (written, legend) => {
+    for (const page of written) {
+        out(`${page.path}  (${page.width}x${page.height}, ${KB(page.bytes)})`);
+        legend.slice(page.first, page.first + page.count).forEach((line, index) => out(`  ${page.first + index + 1}  ${line}`));
+    }
+};
+
+const formatOf = (flags) => {
+    const format = flags.format ?? "auto";
+    if (!["auto", "png", "jpg"].includes(format)) {
+        throw new UsageError(`--format is auto, png or jpg, not "${format}"`);
+    }
+    return format;
+};
+
+const sheet = (engines, flags, args) => {
+    if (args.length === 0) {
+        throw new UsageError("sheet needs at least one file, directory or glob");
+    }
+    const labels = flags.labels ?? "name";
+    if (!["name", "none"].includes(labels)) {
+        throw new UsageError(`--labels is name or none, not "${labels}"`);
+    }
+    const files = expandInputs(args);
+    const infos = files.map((file) => probe(engines, file));
+    const names = distinctNames(files);
+    const cells = files.map((file, index) => ({ label: names[index], draw: pictureCell(engines, { file, info: infos[index] }) }));
+    const written = renderSheets(engines, cells, {
+        aspect: median(infos.map((info) => info.width / info.height)),
+        nativeWidth: median(infos.map((info) => info.width)),
+        cols: number(flags, "cols", { min: 1, max: 64 }),
+        labels: labels === "name",
+        maxWidth: number(flags, "width", { min: 64, max: BUDGET.maxSide }) ?? BUDGET.maxSide,
+        kind: "sheet",
+        slug: slugOf(files.length === 1 ? files[0] : basename(args[0])),
+        format: formatOf(flags),
+    });
+    printWritten(
+        written,
+        files.map((file, index) => `${file}  ${infos[index].width}x${infos[index].height}`),
+    );
+};
+
+const percent = (part, whole) => `${((100 * part) / whole).toFixed(part === 0 || part === whole ? 0 : 3)}%`;
+
+// The difference as one line an agent can quote: "identical", or how much changed and where.
+const diffLine = (stats, tolerance, note) => {
+    const scope = note === undefined ? "" : ` (${note})`;
+    if (stats.changed === 0) {
+        return `identical${tolerance > 0 ? ` within tolerance ${tolerance}` : ""}: 0 of ${stats.total} pixels differ (max delta ${stats.max})${scope}`;
+    }
+    const region = `${stats.region.x},${stats.region.y},${stats.region.width},${stats.region.height}`;
+    const large = tolerance < 16 ? `; above 16: ${percent(stats.large, stats.total)}` : "";
+    return `changed: ${percent(stats.changed, stats.total)} of pixels (${stats.changed} of ${stats.total}), max delta ${stats.max}, mean delta ${stats.mean.toFixed(2)}${large}; changed region x,y,w,h ${region}${scope}`;
+};
+
+// Both pictures at the before's size (shrunk past 40 megapixels), compared pixel by pixel.
+const MAX_COMPARED = 40_000_000;
+const compare = (engines, before, after, tolerance) => {
+    const scale = Math.min(1, Math.sqrt(MAX_COMPARED / (before.info.width * before.info.height)));
+    const width = Math.max(1, Math.round(before.info.width * scale));
+    const height = Math.max(1, Math.round(before.info.height * scale));
+    const request = { width, height, sampling: scale < 1 ? "area" : "nearest" };
+    const a = decode(engines, before.file, before.info, request);
+    const b = decode(engines, after.file, after.info, { ...request, sampling: after.info.width > width ? "area" : "nearest" });
+    const notes = [
+        ...(after.info.width === before.info.width && after.info.height === before.info.height ? [] : [`sizes differ: after ${after.info.width}x${after.info.height} was scaled to ${width}x${height}`]),
+        ...(scale < 1 ? [`compared at ${width}x${height}`] : []),
+    ];
+    return { after: b, width, height, tolerance, note: notes.length === 0 ? undefined : notes.join("; "), ...diffImages(a, b, width, height, tolerance) };
+};
+
+const diffCell = (stats) => (c, x, y, boxW, boxH) => {
+    const fit = fitInside(stats.width, stats.height, boxW, boxH);
+    drawDiff(c, stats, x + Math.floor((boxW - fit.width) / 2), y + Math.floor((boxH - fit.height) / 2), fit.width, fit.height);
+};
+
+// Side by side, unless stacking makes each panel a third larger (wide pictures stack).
+const sideBySide = (n, { aspect, nativeWidth }) => {
+    const target = Math.max(nativeWidth, SMALL_CELL);
+    const row = fitGrid({ n, aspect, cols: n, labelH: LABEL_H, target });
+    const best = fitGrid({ n, aspect, labelH: LABEL_H, target });
+    return row.cellW * 4 >= best.cellW * 3 ? n : undefined;
+};
+
+const pair = (engines, flags, args) => {
+    if (args.length !== 2) {
+        throw new UsageError("pair needs exactly two files: <before> <after>");
+    }
+    const [before, after] = args.map((file) => ({ file, info: probe(engines, file) }));
+    const tolerance = number(flags, "tolerance", { min: 0, max: 254 }) ?? 0;
+    const stats = compare(engines, before, after, tolerance);
+    const names = distinctNames(args);
+    const cells = [
+        { label: `before: ${names[0]}`, draw: pictureCell(engines, before) },
+        { label: `after: ${names[1]}`, draw: pictureCell(engines, after) },
+        ...(flags.diff ? [{ label: stats.changed === 0 ? "diff: identical" : `diff: ${percent(stats.changed, stats.total)} changed`, draw: diffCell(stats) }] : []),
+    ];
+    const layout = { aspect: before.info.width / before.info.height, nativeWidth: Math.max(before.info.width, after.info.width), labels: true, maxWidth: BUDGET.maxSide };
+    const written = renderSheets(engines, cells, { ...layout, cols: sideBySide(cells.length, layout), kind: "pair", slug: slugOf(after.file), format: formatOf(flags) });
+    printWritten(written, [`before  ${before.file}  ${before.info.width}x${before.info.height}`, `after   ${after.file}  ${after.info.width}x${after.info.height}`, ...(flags.diff ? ["diff    changed pixels lit, changed region boxed"] : [])]);
+    out(`diff: ${diffLine(stats, tolerance, stats.note)}`);
+};
+
+const clock = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}:${(seconds - minutes * 60).toFixed(3).padStart(6, "0")}`;
+};
+
+// When to take each frame: N spread from the first to just before the end, or every S seconds from the start.
+const MAX_FRAMES = 200;
+const frameTimes = (duration, count, every) => {
+    const last = Math.max(0, duration - 0.05);
+    if (every !== undefined) {
+        const times = Array.from({ length: Math.floor(last / every) + 1 }, (_, index) => index * every);
+        if (times.length > MAX_FRAMES) {
+            throw new UsageError(`--every ${every} takes ${times.length} frames of a ${duration.toFixed(1)}s video; at most ${MAX_FRAMES}: use a larger interval`);
+        }
+        return times;
+    }
+    const n = count ?? 12;
+    return n === 1 ? [duration / 2] : Array.from({ length: n }, (_, index) => (index * last) / (n - 1));
+};
+
+const frames = (engines, flags, args) => {
+    if (args.length !== 1) {
+        throw new UsageError("frames needs exactly one video");
+    }
+    if (flags.count !== undefined && flags.every !== undefined) {
+        throw new UsageError("give --count or --every, not both");
+    }
+    if (!engines.ffmpeg) {
+        throw new GlanceError("frames needs ffmpeg, which this sandbox lacks: `environment propose ffmpeg`");
+    }
+    const [file] = args;
+    const info = probe(engines, file);
+    if (info.duration === undefined || info.duration <= 0) {
+        throw new GlanceError(`${file}: has no duration, so it is not a video (a still picture? use glance sheet)`);
+    }
+    const times = frameTimes(info.duration, number(flags, "count", { min: 1, max: MAX_FRAMES }), number(flags, "every", { min: 0.01, max: 86_400, integer: false }));
+    const cells = times.map((at, index) => ({ label: `#${index + 1} ${clock(at)}`, draw: pictureCell(engines, { file, info, at }) }));
+    const written = renderSheets(engines, cells, { aspect: info.width / info.height, nativeWidth: info.width, labels: true, maxWidth: BUDGET.maxSide, kind: "frames", slug: slugOf(file), format: formatOf(flags) });
+    printWritten(
+        written,
+        times.map((at) => `${clock(at)}  (${at.toFixed(3)}s)`),
+    );
+    out(`video: ${file}  ${info.width}x${info.height}, ${info.duration.toFixed(3)}s`);
+};
+
+const parseRegion = (text, info) => {
+    const parts = text.split(",").map(Number);
+    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part)) || parts[2] <= 0 || parts[3] <= 0) {
+        throw new UsageError(`region is x,y,w,h in whole pixels with w and h above 0, not "${text}"`);
+    }
+    const [x, y, w, h] = parts;
+    const x0 = Math.max(0, x);
+    const y0 = Math.max(0, y);
+    const x1 = Math.min(info.width, x + w);
+    const y1 = Math.min(info.height, y + h);
+    if (x1 <= x0 || y1 <= y0) {
+        throw new GlanceError(`region ${text} lies outside the ${info.width}x${info.height} picture`);
+    }
+    return { x: x0, y: y0, width: x1 - x0, height: y1 - y0, clipped: x0 !== x || y0 !== y || x1 !== x + w || y1 !== y + h };
+};
+
+const crop = (engines, flags, args) => {
+    if (args.length !== 2) {
+        throw new UsageError("crop needs a picture and a region: <image> <x,y,w,h>");
+    }
+    const [file, regionText] = args;
+    const info = probe(engines, file);
+    const region = parseRegion(regionText, info);
+    const asked = number(flags, "zoom", { min: 0.01, max: 64, integer: false });
+    const room = Math.min(BUDGET.maxSide / region.width, (BUDGET.maxSide - LABEL_H) / region.height, Math.sqrt(BUDGET.maxPixels / (region.width * (region.height + LABEL_H))));
+    const most = room >= 1 ? Math.min(16, Math.floor(room)) : room;
+    const zoom = Math.min(asked ?? most, room);
+    const width = Math.max(1, Math.round(region.width * zoom));
+    const height = Math.max(1, Math.round(region.height * zoom));
+    const pixels = decode(engines, file, info, { width, height, sampling: zoom >= 1 ? "nearest" : "area", crop: region });
+    const c = canvas(Math.max(width, 8 * GLYPH_W), height + LABEL_H);
+    drawRgba(c, pixels, width, height, 0, LABEL_H);
+    const label = `${basename(file)} ${region.x},${region.y},${region.width},${region.height} x${Number(zoom.toFixed(2))}`;
+    drawLabel(c, label, 0, 0, c.width);
+    const written = save(engines, c, { dir: outDir(), stem: `crop-${stamp()}-${slugOf(file)}`, format: formatOf(flags), maxBytes: BUDGET.maxBytes });
+    out(`${written.path}  (${written.width}x${written.height}, ${KB(written.bytes)})`);
+    const notes = [...(region.clipped ? ["region clipped to the picture"] : []), ...(asked !== undefined && zoom < asked ? [`zoom ${asked} capped to ${Number(zoom.toFixed(2))} by the size budget`] : [])];
+    out(`  region x,y,w,h ${region.x},${region.y},${region.width},${region.height} of ${info.width}x${info.height}, zoom ${Number(zoom.toFixed(2))}${notes.length === 0 ? "" : `; ${notes.join("; ")}`}`);
+};
+
+const COMMANDS = { sheet, pair, frames, crop };
+
+const main = () => {
+    const { values: flags, positionals } = parseArgs({ args: process.argv.slice(2), options: OPTIONS, allowPositionals: true, strict: true });
+    const [command, ...args] = positionals;
+    if (flags.help || command === undefined || command === "help") {
+        out(USAGE);
+        return;
+    }
+    const run = COMMANDS[command];
+    if (run === undefined) {
+        throw new UsageError(`unknown command "${command}"`);
+    }
+    run(detectEngines(), flags, args);
+};
+
+// A reader that stops early (`glance sheet dir | head`) is not an error.
+process.stdout.on("error", (error) => process.exit(error.code === "EPIPE" ? 0 : 1));
+
+try {
+    main();
+} catch (error) {
+    if (error instanceof GlanceError) {
+        process.stderr.write(`glance: ${error.message}\n`);
+        process.exit(1);
+    }
+    if (error instanceof UsageError || error.code?.startsWith?.("ERR_PARSE_ARGS")) {
+        process.stderr.write(`glance: ${error.message} (glance --help for usage)\n`);
+        process.exit(2);
+    }
+    throw error;
+}

@@ -1,16 +1,19 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+    type HeavyClass,
     type HeavyCommandOverrides,
     type HeavyCommands,
     type HeavyCommandSettings,
     type HeavyCommandRule,
     type HeavyMatch,
+    heavyWords,
     matchInvocation,
     mergeHeavyRules,
     overridesOf,
     QUEUE_SKIPPED_EXIT_CODE,
 } from "@intentic/constants/heavy-rules";
+import { errorMessage } from "@intentic/base/errors";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { drop, isJsonObject, transform } from "../store/evolution/conversions.js";
@@ -53,7 +56,14 @@ const RuleEditSchema = z.object({
     size: z.string().min(1).optional(),
     // Judged even under a program that already holds a slot (heavy-rules.cjs judgedUnder).
     nests: z.boolean().optional(),
-    // Removes the shipped rule of this id.
+    // Nothing else heavy beside it; also wait for a calm machine and report (bin/quiet); the cores it keeps busy, and
+    // whether it is pinned to them (heavy-launch.cjs). What a repository's `.intentic/heavy.json` class says, for a rule
+    // of the owner's own or any rule by id.
+    exclusive: z.boolean().optional(),
+    quiet: z.boolean().optional(),
+    cpus: z.number().int().positive().optional(),
+    pin: z.boolean().optional(),
+    // Removes the shipped rule (or the declared class) of this id.
     disabled: z.boolean().optional(),
 });
 
@@ -92,7 +102,8 @@ export const heavyCommandsDocument = defineDocument({
 });
 
 export interface HeavyCommandsStore {
-    // The shipped table with the file's overrides on top; the shipped table alone when the file is absent or invalid.
+    // The shipped table with the repositories' declared classes and the file's overrides on top; the shipped table alone
+    // when the file is absent or invalid and nothing is declared.
     readonly read: () => Promise<HeavyCommands>;
 }
 
@@ -101,7 +112,13 @@ const reportBadPatterns = (config: HeavyCommands, report: (problem: ManifestProb
     matchInvocation("", config, (detail) => report({ kind: "invalidEntry", detail }));
 };
 
-export const fileHeavyCommandsStore = (path: string, onInvalid?: (detail: string) => void): HeavyCommandsStore => {
+// `classes` is what the workspace's repositories declare in their `.intentic/heavy.json` (workspace/deps/heavy-classes.ts),
+// read with the file on every read, so a commit that changes a declaration binds the next command.
+export const fileHeavyCommandsStore = (
+    path: string,
+    onInvalid?: (detail: string) => void,
+    classes?: () => Promise<readonly HeavyClass[]>,
+): HeavyCommandsStore => {
     const file = openDocument<typeof heavyCommandsDocument, HeavyCommandOverrides>(heavyCommandsDocument, path, {
         // A file the schema refuses reads as no overrides, named to `onInvalid`, rather than as unreadable: the built-in
         // rules stand either way.
@@ -116,11 +133,23 @@ export const fileHeavyCommandsStore = (path: string, onInvalid?: (detail: string
         },
         fallback: () => ({}),
     });
-    return { read: async () => mergeHeavyRules(await file.read()) };
+    // A declaration that cannot be read costs its own classes, never the shipped table.
+    const declared = async (): Promise<readonly HeavyClass[]> => {
+        try {
+            return (await classes?.()) ?? [];
+        } catch (error) {
+            onInvalid?.(`declared heavy classes: ${errorMessage(error)}`);
+            return [];
+        }
+    };
+    return { read: async () => mergeHeavyRules(await file.read(), await declared()) };
 };
 
 // The wrappers for heavy programs that are not node scripts (bin/heavy-shims in the image).
 export const HEAVY_SHIMS_DIR = "/opt/sandbox/heavy-shims";
+// The interpreters' wrappers (python3, bash, sh, uv, make), ahead of the rest only while a repository declares a class:
+// they catch `python3 scripts/capture.py` by its script, and nothing at all for a sandbox that declares none.
+export const INTERPRETER_SHIMS_DIR = `${HEAVY_SHIMS_DIR}/interpreters`;
 const HEAVY_HOOK = fileURLToPath(import.meta.resolve("@intentic/constants/heavy-hook"));
 const HEAVY_EXEC = fileURLToPath(import.meta.resolve("@intentic/constants/heavy-exec"));
 
@@ -148,8 +177,18 @@ const heavySpec = (config: HeavyCommands, options: HeavyEnvOptions) => ({
  * a runner as the table says.
  */
 export const heavyEnvPrefix = (config: HeavyCommands, options: HeavyEnvOptions): string => {
-    const shims = existsSync(HEAVY_SHIMS_DIR) ? `PATH=${HEAVY_SHIMS_DIR}:"$PATH" INTENTIC_HEAVY_EXEC=${shellQuote(HEAVY_EXEC)} ` : "";
+    const words = interpreterWords(config);
+    const dirs = words === undefined ? HEAVY_SHIMS_DIR : `${INTERPRETER_SHIMS_DIR}:${HEAVY_SHIMS_DIR}`;
+    const declared = words === undefined ? "" : `INTENTIC_HEAVY_WORDS=${shellQuote(words)} `;
+    const shims = existsSync(HEAVY_SHIMS_DIR) ? `PATH=${dirs}:"$PATH" INTENTIC_HEAVY_EXEC=${shellQuote(HEAVY_EXEC)} ${declared}` : "";
     return `env INTENTIC_HEAVY=${shellQuote(JSON.stringify(heavySpec(config, options)))} NODE_OPTIONS="--require ${HEAVY_HOOK} \${NODE_OPTIONS:-}" ${shims}`;
+};
+
+// What the interpreters' wrappers look for (heavy-rules.cjs heavyWords), `:`-joined; undefined when no repository
+// declares a class or the image has no wrappers for them, and then they stay off the PATH.
+const interpreterWords = (config: HeavyCommands): string | undefined => {
+    const words = heavyWords(config);
+    return words.length === 0 || !existsSync(INTERPRETER_SHIMS_DIR) ? undefined : words.join(":");
 };
 
 /**
@@ -161,9 +200,15 @@ export const heavyEnvPrefix = (config: HeavyCommands, options: HeavyEnvOptions):
 export const heavyEnvVariables = (config: HeavyCommands, options: HeavyEnvOptions, inherited: Readonly<Record<string, string | undefined>>): Record<string, string> => {
     const nodeOptions = inherited["NODE_OPTIONS"];
     const path = inherited["PATH"];
-    return {
+    const words = interpreterWords(config);
+    const dirs = words === undefined ? HEAVY_SHIMS_DIR : `${INTERPRETER_SHIMS_DIR}:${HEAVY_SHIMS_DIR}`;
+    const judged = {
         INTENTIC_HEAVY: JSON.stringify(heavySpec(config, options)),
         NODE_OPTIONS: nodeOptions === undefined || nodeOptions === "" ? `--require ${HEAVY_HOOK}` : `--require ${HEAVY_HOOK} ${nodeOptions}`,
-        ...(existsSync(HEAVY_SHIMS_DIR) ? { PATH: path === undefined || path === "" ? HEAVY_SHIMS_DIR : `${HEAVY_SHIMS_DIR}:${path}`, INTENTIC_HEAVY_EXEC: HEAVY_EXEC } : {}),
     };
+    if (!existsSync(HEAVY_SHIMS_DIR)) {
+        return judged;
+    }
+    const wrapped = { ...judged, PATH: path === undefined || path === "" ? dirs : `${dirs}:${path}`, INTENTIC_HEAVY_EXEC: HEAVY_EXEC };
+    return words === undefined ? wrapped : { ...wrapped, INTENTIC_HEAVY_WORDS: words };
 };

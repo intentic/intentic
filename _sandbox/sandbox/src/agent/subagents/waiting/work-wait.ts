@@ -16,7 +16,9 @@ import {
 } from "../../tools/jobs/background-jobs.js";
 import { type JobReport, jobReport } from "../../tools/jobs/job-report.js";
 import { followRun } from "../../tools/jobs/input-wait-follow.js";
+import { followOutput, matchShown, type OutputMatch } from "./output-lines.js";
 import { type SubagentWaitOptions, type SubagentWaitUntil, listSubagentSessions, waitForSubagent } from "../subagents.js";
+import { anyWaitedOn, matchMarkOf, noteChildLook, noteMatchMark, progressOf, type WaitedOn } from "./wait-progress.js";
 import { type SubagentsWaitOptions, type SubagentsWaitOutcome, waitForSubagents } from "./subagent-waits.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { whenSteered } from "../../../conversations/actor/conversation-holdings.js";
@@ -28,8 +30,8 @@ import { withdrawQueuedReport } from "./queued-reports.js";
 
 export interface WorkWaitOutcome {
     // `message`: words were said into the waiting turn (a person, a watch, a child's report, the sandbox), which its
-    // runtime reads only once this tool call returns.
-    readonly outcome: SubagentWaitUntil | "timeout" | "aborted" | "unknown-target" | "message";
+    // runtime reads only once this tool call returns. `matched`: a line of the command's output matched the pattern.
+    readonly outcome: SubagentWaitUntil | "timeout" | "aborted" | "unknown-target" | "message" | "matched";
     // The child that moved, or the target's snapshot on a timeout.
     readonly agent?: SubagentSession;
     // The command that finished, or the target's snapshot on a timeout.
@@ -37,7 +39,14 @@ export interface WorkWaitOutcome {
     // On an `unknown-target` for "any": the background commands still running, which "any" stops waiting on once no
     // child is left, so the caller can name one.
     readonly running?: readonly RunningCommand[];
+    // The first line of the command's output the pattern matched, on `matched` (or on `finished`, when its last output did).
+    readonly match?: OutputMatch;
+    // On a timeout: what moved on each thing waited on since the last answer about it (wait-progress.ts).
+    readonly progress?: readonly string[];
 }
+
+/** A wait's options, with the pattern a wait on one command reads its output for. */
+export type WorkWaitOptions = SubagentWaitOptions & { readonly pattern?: RegExp };
 
 /** A background command still running, as a wait on "any" names it once no child is left to wait on. */
 export interface RunningCommand {
@@ -58,7 +67,7 @@ type Actors = Pick<ConversationActors, "holdings">;
 const waitForJobs = (
     actors: Actors,
     jobs: readonly BackgroundJob[],
-    options: Pick<SubagentWaitOptions, "timeoutMs" | "signal"> & { readonly until?: SubagentWaitOptions["until"] },
+    options: Pick<WorkWaitOptions, "timeoutMs" | "signal" | "pattern"> & { readonly until?: SubagentWaitOptions["until"] },
 ): Promise<WorkWaitOutcome> =>
     new Promise((resolve) => {
         if (options.signal?.aborted === true) {
@@ -77,10 +86,11 @@ const waitForJobs = (
             held.dispose();
             resolve(outcome);
         };
+        const reading = patternReading(actors, jobs, options.pattern);
         const look = (): void => {
             const done = jobs.find(jobFinished);
             if (done !== undefined) {
-                settle(jobReport(actors, done).then((job) => ({ outcome: "finished", job })));
+                settle(reading.ended(done));
                 return;
             }
             const asking = options.until?.includes("blocked") === true ? jobs.find((job) => jobInputWait(job) !== undefined) : undefined;
@@ -125,7 +135,82 @@ const waitForJobs = (
                 held.push(() => clearInterval(poll));
             }
         }
+        held.push(reading.scan(settle));
     });
+
+// What a wait reads of one command's output for a pattern (the tool refuses one on anything else), from its start or just
+// past the line a pattern last matched there: how an ending is answered, with the match its last output made if it made one, and the
+// reading itself, which answers through `hand` once a line matches. Without a pattern, an ending is its report alone.
+const patternReading = (actors: Actors, jobs: readonly BackgroundJob[], pattern: RegExp | undefined) => {
+    const only = jobs.length === 1 ? jobs[0] : undefined;
+    const follow = pattern === undefined || only === undefined ? undefined : followOutput(only.dir, matchMarkOf(actors, only), pattern);
+    // A match handed over is filed, so the next pattern wait reads on past it.
+    const answer = async (job: BackgroundJob, outcome: "finished" | "matched", match: OutputMatch | undefined): Promise<WorkWaitOutcome> => {
+        if (follow !== undefined && match !== undefined) {
+            noteMatchMark(actors, job, follow.mark());
+        }
+        return { outcome, job: await jobReport(actors, job), ...opt("match", match) };
+    };
+    const ended = async (job: BackgroundJob): Promise<WorkWaitOutcome> => answer(job, "finished", await follow?.look(true));
+    const scan = (hand: (outcome: Promise<WorkWaitOutcome>) => void): (() => void) =>
+        follow === undefined || only === undefined
+            ? () => undefined
+            : scanOutput(follow, JOB_POLL_MS, (match) => hand(jobFinished(only) ? ended(only) : answer(only, "matched", match)));
+    return { ended, scan };
+};
+
+// Reads a followed command's output on every `ms` until the pattern matches, then hands the match over once; answers
+// the stop.
+const scanOutput = (follow: ReturnType<typeof followOutput>, ms: number, matched: (match: OutputMatch) => void): (() => void) => {
+    let busy = false;
+    let stopped = false;
+    const scan = (): void => {
+        if (busy || stopped) {
+            return;
+        }
+        busy = true;
+        void follow.look(false).then(
+            (match) => {
+                busy = false;
+                if (match !== undefined && !stopped) {
+                    stopped = true;
+                    matched(match);
+                }
+            },
+            () => {
+                busy = false;
+            },
+        );
+    };
+    const every = setInterval(scan, ms);
+    every.unref();
+    scan();
+    return () => {
+        stopped = true;
+        clearInterval(every);
+    };
+};
+
+// What a wait was parked on, for the progress its timeout says.
+const waitedOn = (actors: Actors, conversationId: string, options: SubagentWaitOptions): WaitedOn => {
+    if (options.target === undefined) {
+        return anyWaitedOn(actors, conversationId, options.until.includes("finished"));
+    }
+    const job = backgroundJobOf(actors, conversationId, options.target);
+    return job === undefined ? { jobs: [], children: [options.target] } : { jobs: [job], children: [] };
+};
+
+// A timeout says what moved on everything it waited on; any other answer about a child files it as the last look.
+const described = async (actors: Actors, conversationId: string, options: SubagentWaitOptions, result: WorkWaitOutcome): Promise<WorkWaitOutcome> => {
+    if (result.outcome !== "timeout") {
+        if (result.agent !== undefined) {
+            noteChildLook(actors, result.agent);
+        }
+        return result;
+    }
+    const progress = await progressOf(actors, conversationId, waitedOn(actors, conversationId, options));
+    return progress.length === 0 ? result : { ...result, progress };
+};
 
 const fromSubagent = async (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
     const result = await waitForSubagent(actors, conversationId, options);
@@ -163,7 +248,14 @@ export const wordsSaid = (actors: Actors, conversationId: string, signal: AbortS
 export const waitForWork = async (
     actors: Pick<ConversationActors, "holdings" | "queued" | "send">,
     conversationId: string,
-    options: SubagentWaitOptions,
+    options: WorkWaitOptions,
+): Promise<WorkWaitOutcome> => described(actors, conversationId, options, await awaitWork(actors, conversationId, options));
+
+// The same, answered without the progress a timeout says: a wait on several says it once, for all of them.
+const awaitWork = async (
+    actors: Pick<ConversationActors, "holdings" | "queued" | "send">,
+    conversationId: string,
+    options: WorkWaitOptions,
 ): Promise<WorkWaitOutcome> => {
     if (options.signal?.aborted === true) {
         return { outcome: "aborted" };
@@ -184,12 +276,24 @@ export const waitForWork = async (
     }
 };
 
+// A wait's answer with what moved on each thing it waited on, said when it timed out (wait-progress.ts).
+type WithProgress<T> = T & { readonly progress?: readonly string[] };
+
+// The progress a timed-out wait on several says, once for all of them.
+const withProgress = async <T extends { readonly outcome: string }>(actors: Actors, conversationId: string, waited: WaitedOn, result: T): Promise<WithProgress<T>> => {
+    if (result.outcome !== "timeout") {
+        return result;
+    }
+    const progress = await progressOf(actors, conversationId, waited);
+    return progress.length === 0 ? result : { ...result, progress };
+};
+
 /** A wait on several children as one (subagent-waits.ts waitForSubagents), handed back early for words said into the turn. */
 export const waitForChildren = async (
     actors: Pick<ConversationActors, "holdings" | "queued" | "send">,
     conversationId: string,
     options: SubagentsWaitOptions,
-): Promise<SubagentsWaitOutcome | { readonly outcome: "message"; readonly agents: readonly SubagentSession[] }> => {
+): Promise<WithProgress<SubagentsWaitOutcome | { readonly outcome: "message"; readonly agents: readonly SubagentSession[] }>> => {
     const heard = new AbortController();
     const signal = anySignal(heard.signal, options.signal);
     // Fixed here, as the wait fixes them: words said into the turn hand back the children waited on as they stand, not an
@@ -208,9 +312,10 @@ export const waitForChildren = async (
                 if (ENDED.has(agent.status) || agent.status === "blocked") {
                     withdrawQueuedReport(actors, agent.id);
                 }
+                noteChildLook(actors, agent);
             }
         }
-        return result;
+        return await withProgress(actors, conversationId, { jobs: [], children: targets }, result);
     } finally {
         heard.abort();
     }
@@ -223,6 +328,7 @@ export interface NamedWorkOutcome {
     readonly jobs: readonly JobReport[];
     readonly matched?: SubagentSession;
     readonly job?: JobReport;
+    readonly progress?: readonly string[];
 }
 
 export const waitForNamedWork = async (
@@ -242,7 +348,7 @@ export const waitForNamedWork = async (
         const result = await new Promise<WorkWaitOutcome>((resolve, reject) => {
             let remaining = targets.length;
             for (const target of targets) {
-                void waitForWork(actors, conversationId, { ...options, target, signal }).then((answer) => {
+                void awaitWork(actors, conversationId, { ...options, target, signal }).then((answer) => {
                     remaining -= 1;
                     const failed = answer.agent?.status === "failed" || answer.agent?.status === "killed" ||
                         (answer.job?.exitCode !== undefined && answer.job.exitCode !== 0);
@@ -255,14 +361,18 @@ export const waitForNamedWork = async (
         });
         const failed = result.agent?.status === "failed" || result.agent?.status === "killed" ||
             (result.job?.exitCode !== undefined && result.job.exitCode !== 0);
-        return {
-            outcome: failed ? "failed" : result.agent?.status === "paused" ? "blocked" : result.outcome,
+        if (result.agent !== undefined) {
+            noteChildLook(actors, result.agent);
+        }
+        const outcome = failed ? "failed" : result.agent?.status === "paused" ? "blocked" : result.outcome === "matched" ? "finished" : result.outcome;
+        return await withProgress(actors, conversationId, { jobs, children }, {
+            outcome,
             agents: listSubagentSessions(actors).filter((agent) => agent.conversationId === conversationId &&
                 children.some((id) => id === agent.id || actors.holdings(ROSTER).get(agent.id)?.agentId === id)),
             jobs: await Promise.all([...new Set(jobs)].map((job) => jobReport(actors, job))),
             ...opt("matched", result.agent),
             ...opt("job", result.job),
-        };
+        });
     } finally {
         ended.abort();
     }
@@ -286,6 +396,8 @@ export interface ChildrenWaitAnswer {
     readonly question?: PendingChildCard;
     readonly agents: readonly WaitedChild[];
     readonly note?: string;
+    // On a timeout: what moved on each child since the last answer about it (wait-progress.ts).
+    readonly progress?: readonly string[];
 }
 
 const waitedChild = (agent: SubagentSession, lookups: ChildLookups): WaitedChild => {
@@ -301,7 +413,7 @@ const waitedChild = (agent: SubagentSession, lookups: ChildLookups): WaitedChild
 
 /** The answer a wait on several gives: each child with its whole report and where its work went, once it has ended. */
 export const childrenWaitAnswer = (
-    result: SubagentsWaitOutcome | { readonly outcome: "message"; readonly agents: readonly SubagentSession[] },
+    result: WithProgress<SubagentsWaitOutcome | { readonly outcome: "message"; readonly agents: readonly SubagentSession[] }>,
     lookups: ChildLookups,
 ): ChildrenWaitAnswer => {
     const matched = "matched" in result ? result.matched : undefined;
@@ -311,6 +423,7 @@ export const childrenWaitAnswer = (
         ...opt("question", matched !== undefined && result.outcome === "blocked" ? lookups.pendingQuestion(matched.id) : undefined),
         agents: result.agents.map((agent) => waitedChild(agent, lookups)),
         ...opt("note", result.outcome === "message" ? WORDS_SAID : undefined),
+        ...opt("progress", result.progress),
     };
 };
 
@@ -322,7 +435,7 @@ const stillRunning = (actors: Actors, conversationId: string): readonly RunningC
    left running in the background (a dev server, a watcher) never ends by itself: once every child had ended and been
    reported, such a wait sat out its whole timeout, up to half an hour, on a server (2026-10-20). A command that ends
    while a child is still running still answers it; with no child left the wait answers at once and names the commands. */
-const parkOnWork = async (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
+const parkOnWork = async (actors: Actors, conversationId: string, options: WorkWaitOptions): Promise<WorkWaitOutcome> => {
     // A command finishes, which answers a named wait whatever `until` asks for, or sits at a prompt, which answers one
     // that counts `blocked`.
     const named = options.target === undefined ? undefined : backgroundJobOf(actors, conversationId, options.target);
@@ -404,6 +517,12 @@ const answerNote = (result: WorkWaitOutcome): string | undefined => {
     return commandsLeft(result) === undefined ? undefined : ONLY_COMMANDS_LEFT;
 };
 
+/** A command as a timed-out wait hands it over: its progress already says its last lines, which its 4 KB tail repeats. */
+export const untailed = (job: JobReport): Omit<JobReport, "outputTail"> => {
+    const { outputTail: _said, ...rest } = job;
+    return rest;
+};
+
 /** The answer every wait door gives: a blocked child's whole question, and an ended one's whole report where its row cut it. */
 export const workWaitAnswer = (result: WorkWaitOutcome, lookups: ChildLookups): Record<string, unknown> => {
     const agent = result.agent;
@@ -416,7 +535,9 @@ export const workWaitAnswer = (result: WorkWaitOutcome, lookups: ChildLookups): 
         outcome: result.outcome,
         ...(agent === undefined ? {} : { agent }),
         ...resultFields(lookups, agent),
-        ...(result.job === undefined ? {} : { job: result.job }),
+        ...(result.job === undefined ? {} : { job: result.progress === undefined ? result.job : untailed(result.job) }),
+        ...opt("match", result.match === undefined ? undefined : matchShown(result.match)),
+        ...opt("progress", result.progress),
         ...opt("running", commandsLeft(result)),
         ...(question === undefined ? {} : { question }),
         ...opt("report", report),

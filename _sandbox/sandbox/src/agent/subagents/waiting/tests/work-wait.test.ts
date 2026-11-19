@@ -1,8 +1,9 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SteeringQueue } from "../../../checkpoints/agent-steering.js";
 import { type BackgroundJob, noteJobShell, openBackgroundJob } from "../../../tools/jobs/background-jobs.js";
 import { noteSpawnedChild, openSpawnedChild, resetSubagents, settleSpawnedChild, subagentEndingReporter } from "../../subagents.js";
+import { noteChildWork } from "../../child-verification.js";
 import { noteQueuedReport } from "../queued-reports.js";
 import { waitForChildren, waitForWork, workWaitAnswer } from "../work-wait.js";
 import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
@@ -265,5 +266,140 @@ describe("what a wait answers with", () => {
         expect(said).toMatchObject({ outcome: "unknown-target", running: [{ id: "bsh-1", command: "pnpm dev" }] });
         expect(said["note"]).toContain("only while a child runs");
         expect(workWaitAnswer({ outcome: "unknown-target", running: [] }, lookups(undefined))).toEqual({ outcome: "unknown-target" });
+    });
+});
+
+// 2026-11-19, the shinobi-society audit: children built "until this line" waits by hand (`tail -f log | grep -m1 "done
+// in|FAILED"`) and read their logs with tail and cat between waits, 164 times.
+describe("a wait on a command for a line of its output", () => {
+    const BOTH = ["blocked", "finished"] as const;
+    const print = (target: BackgroundJob, text: string): void => appendFileSync(join(target.dir, "out"), text);
+
+    it("returns at the first line that matches, with the lines around it, while the command runs on", async () => {
+        const build = job("conv-p1", "tu-p1", "bsh-p1");
+        print(build, "Compiling a\n");
+        const wait = waitForWork(actors, "conv-p1", { target: "bsh-p1", until: BOTH, timeoutMs: 5_000, pattern: /Finished|error/u });
+        print(build, "Compiling b\n    Finished dev in 3.1s\n     Running target/debug/app\n");
+        const answered = await wait;
+        expect(answered).toMatchObject({ outcome: "matched", job: { id: "bsh-p1", running: true } });
+        expect(workWaitAnswer(answered, { pendingQuestion: () => undefined, report: () => undefined, landing: () => undefined })["match"]).toEqual({
+            line: "    Finished dev in 3.1s",
+            lineNumber: 3,
+            context: "  1: Compiling a\n  2: Compiling b\n> 3:     Finished dev in 3.1s\n  4:      Running target/debug/app",
+        });
+    });
+
+    it("counts a line printed before the first wait, and after a match reads on to the next one", async () => {
+        const server = job("conv-p2", "tu-p2", "bsh-p2");
+        print(server, "ready on :3000\nreloaded\nready on :3000\n");
+        const wait = (): ReturnType<typeof waitForWork> => waitForWork(actors, "conv-p2", { target: "bsh-p2", until: BOTH, timeoutMs: 300, pattern: /^ready/u });
+        expect((await wait()).match?.line.number).toBe(1);
+        expect((await wait()).match?.line.number).toBe(3);
+        expect(await wait()).toMatchObject({ outcome: "timeout" });
+    });
+
+    it("still finds a line a timeout's progress read past without showing it", async () => {
+        const server = job("conv-p4", "tu-p4", "bsh-p4");
+        print(server, `listening on :3000\n${"GET / 200\n".repeat(10)}`);
+        const timedOut = await waitForWork(actors, "conv-p4", { target: "bsh-p4", until: ["finished"], timeoutMs: 20 });
+        expect(timedOut.progress?.[0]).not.toContain("listening");
+        expect(await waitForWork(actors, "conv-p4", { target: "bsh-p4", until: BOTH, timeoutMs: 300, pattern: /^listening/u })).toMatchObject({
+            outcome: "matched",
+            match: { line: { number: 1 } },
+        });
+    });
+
+    it("ends when the command exits, with the match its last output made", async () => {
+        const test = job("conv-p3", "tu-p3", "bsh-p3");
+        const wait = waitForWork(actors, "conv-p3", { target: "bsh-p3", until: BOTH, timeoutMs: 5_000, pattern: /(\d+) failed/u });
+        finish(test, "1", "12 passed, 2 failed");
+        expect(await wait).toMatchObject({ outcome: "finished", job: { exitCode: 1 }, match: { line: { text: "12 passed, 2 failed" } } });
+    });
+});
+
+// 2026-11-19, the shinobi-society audit: parents hit the 1800 s cap 66 times and read their children with `agents show`
+// between waits; a timeout now says what moved.
+describe("what a wait that ran out says", () => {
+    const opened = (conversationId: string, id: string): void =>
+        openSpawnedChild({ conversationId, conversations: actors, subagentsDir: undefined }, { id, description: "port the parser" });
+
+    it("for a command: its new lines and bytes since the last look, and its last lines, in place of its whole tail", async () => {
+        const build = job("conv-t1", "tu-t1", "bsh-t1");
+        writeFileSync(join(build.dir, "out"), "step 1\nstep 2\n");
+        const first = await waitForWork(actors, "conv-t1", { target: "bsh-t1", until: ["finished"], timeoutMs: 20 });
+        expect(first.progress?.[0]).toContain("2 new lines (14 B) so far");
+        expect(first.progress?.[0]).toContain("\n  step 2");
+        appendFileSync(join(build.dir, "out"), "step 3\n");
+        const second = await waitForWork(actors, "conv-t1", { target: "bsh-t1", until: ["finished"], timeoutMs: 20 });
+        expect(second.progress?.[0]).toContain("1 new line (7 B) since your last look");
+        expect(second.progress?.[0]).not.toContain("step 2");
+        const said = workWaitAnswer(second, { pendingQuestion: () => undefined, report: () => undefined, landing: () => undefined });
+        expect(said["job"]).not.toHaveProperty("outputTail");
+    });
+
+    it("for a child: its tool calls since the last look, its last tool and the files it changed", async () => {
+        opened("conv-t2", "sub-t2");
+        noteSpawnedChild(actors, "sub-t2", { toolUses: 5, lastTool: "Edit" });
+        noteChildWork(actors, { kind: "tool_call", id: "call-t2", name: "Edit", category: "edit", status: "completed", locations: [{ path: "src/parser.ts" }] }, "sub-t2");
+        const first = await waitForWork(actors, "conv-t2", { target: "sub-t2", until: ["finished"], timeoutMs: 20 });
+        expect(first.progress?.[0]).toMatch(/^child sub-t2 \("port the parser"\): running \d+s · 5 tool calls, last Edit · 1 file changed \(src\/parser\.ts\)$/u);
+        noteSpawnedChild(actors, "sub-t2", { toolUses: 9, lastTool: "Bash" });
+        const second = await waitForWork(actors, "conv-t2", { target: "sub-t2", until: ["finished"], timeoutMs: 20 });
+        expect(second.progress?.[0]).toContain("9 tool calls (4 since your last look), last Bash");
+    });
+
+    it("for a child held for room: what holds it, read off its row", async () => {
+        opened("conv-t3", "sub-t3");
+        noteSpawnedChild(actors, "sub-t3", { status: "pending", summary: "Waiting for memory: 1.2 GiB free, it needs 4 GiB." });
+        const answered = await waitForWork(actors, "conv-t3", { until: ["blocked", "finished"], timeoutMs: 20 });
+        expect(answered.progress).toEqual([expect.stringContaining("pending 0s · held: Waiting for memory: 1.2 GiB free, it needs 4 GiB.")]);
+    });
+});
+
+// 2026-11-19, the shinobi-society audit: `wait` handed a parent the same `blocked` four times in 0 s while the child ran.
+describe("a move a named wait already handed over", () => {
+    const opened = (conversationId: string, id: string): void =>
+        openSpawnedChild({ conversationId, conversations: actors, subagentsDir: undefined }, { id, description: "port it" });
+    const BOTH = ["blocked", "finished"] as const;
+    // Whether the wait is still parked a moment later, or has answered.
+    const parked = async (wait: Promise<unknown>): Promise<boolean> =>
+        Promise.race([wait.then(() => false), new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 100))]);
+
+    it("a question it handed over is not handed back while the answer lands; the child's next move is", async () => {
+        opened("conv-s1", "sub-s1");
+        noteSpawnedChild(actors, "sub-s1", { status: "blocked", summary: "Which database?" });
+        expect(await waitForWork(actors, "conv-s1", { target: "sub-s1", until: BOTH, timeoutMs: 5_000 })).toMatchObject({ outcome: "blocked" });
+        // The parent answered; the child's runtime has not said so yet, so its row still reads blocked.
+        const again = waitForWork(actors, "conv-s1", { target: "sub-s1", until: BOTH, timeoutMs: 5_000 });
+        expect(await parked(again)).toBe(true);
+        noteSpawnedChild(actors, "sub-s1", { status: "running" });
+        settleSpawnedChild(actors, "sub-s1", { status: "completed", report: "used postgres" });
+        expect(await again).toMatchObject({ outcome: "finished", agent: { id: "sub-s1", status: "completed" } });
+    });
+
+    it("a pause it handed over parks the next wait instead of answering paused at once", async () => {
+        opened("conv-s2", "sub-s2");
+        noteSpawnedChild(actors, "sub-s2", { status: "paused", summary: "Paused, not finished.", error: "out of usage until 14:00" });
+        expect(await waitForWork(actors, "conv-s2", { target: "sub-s2", until: BOTH, timeoutMs: 5_000 })).toMatchObject({ outcome: "blocked", agent: { status: "paused" } });
+        expect(await waitForWork(actors, "conv-s2", { target: "sub-s2", until: BOTH, timeoutMs: 50 })).toMatchObject({ outcome: "timeout" });
+    });
+
+    it("a second question, after the first was answered, is handed over too", async () => {
+        opened("conv-s3", "sub-s3");
+        noteSpawnedChild(actors, "sub-s3", { status: "blocked", summary: "First?" });
+        expect(await waitForWork(actors, "conv-s3", { target: "sub-s3", until: BOTH, timeoutMs: 5_000 })).toMatchObject({ outcome: "blocked" });
+        noteSpawnedChild(actors, "sub-s3", { status: "running" });
+        noteSpawnedChild(actors, "sub-s3", { status: "blocked", summary: "Second?" });
+        expect(await waitForWork(actors, "conv-s3", { target: "sub-s3", until: BOTH, timeoutMs: 5_000 })).toMatchObject({
+            outcome: "blocked",
+            agent: { summary: "Second?" },
+        });
+    });
+
+    it("an ending answers a named wait however often it is asked", async () => {
+        opened("conv-s4", "sub-s4");
+        settleSpawnedChild(actors, "sub-s4", { status: "completed", report: "done" });
+        expect(await waitForWork(actors, "conv-s4", { target: "sub-s4", until: BOTH, timeoutMs: 5_000 })).toMatchObject({ outcome: "finished" });
+        expect(await waitForWork(actors, "conv-s4", { target: "sub-s4", until: BOTH, timeoutMs: 5_000 })).toMatchObject({ outcome: "finished" });
     });
 });

@@ -53,6 +53,11 @@ export const HISTORY_FILES_WITHOUT_DOCUMENT: readonly StateFile[] = [
     // worktree is re-attached on the target, so its restore points stay behind with the checkout they were taken in.
     { path: "checkout-history/", portability: "derived", note: "Restore points for edits made in a branch's or agent's checkout stay behind." },
     { path: "overlays/", portability: "derived" },
+    // Read-only checkouts of the commits conversations compare against (worktrees/bases/base-checkouts.ts), and the
+    // staging folders a new checkout's seeded build output is assembled in (build-outputs/warm-seed.ts): made again on
+    // the next ask, and nothing a bundle needs.
+    { path: "bases/", portability: "derived", note: "A base checkout is made again by the next `base` that asks for its commit." },
+    { path: "warm-seeds/", portability: "derived" },
     { path: "logs/", portability: "derived" },
     { path: "trash/", portability: "derived" },
     { path: ".isolation-probe", portability: "derived" },

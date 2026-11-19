@@ -128,6 +128,9 @@ export interface TurnPolicy {
     // The owner's night hours, where they were in force as the turn was planned (agent/night): the prompt tells the turn
     // not to stop and ask. A card raised later is judged again as it is raised (parked-cards.ts), whatever this says.
     readonly night?: NightNow;
+    // The owner's standing go-ahead, as the turn was planned (decide/proceed.ts): the prompt tells the turn to carry on with
+    // its own recommendation rather than stop to ask. Words only; every card still waits as it would.
+    readonly proceed?: boolean;
     // Whether the role may install a missing dependency itself, read by the install-steering and deps hooks.
     readonly dependencyInstallAllowed?: boolean;
     // What the settings-hook gate found (guard/hook-approvals.ts): `held` runs the turn with every hook off; otherwise

@@ -168,10 +168,11 @@ const COMMAND_CLEANERS = [
     { id: "hits", apply: foldHitRuns },
 ];
 
-// Every registry cleaner id plus the global stages: dedup and redact run on all output, wide cuts machine-generated
-// blobs out of a line, cap is head/tail truncation, cache collapses an identical repeat (owned by agent-output-filter).
+// Every registry cleaner id plus the global stages: dedup and redact run on all output, wide cuts blobs out of a line, cap
+// is head/tail truncation; agent-output-filter owns cache (an identical repeat) and rustc (rust-diagnostics.mjs).
 export const CLEANERS = [
     ...COMMAND_CLEANERS.map((cleaner) => cleaner.id),
+    "rustc",
     "templates",
     "csv-schema",
     "search",
@@ -290,8 +291,7 @@ const SECRET_PATTERNS = [
 // the matching footer, or through its last body line when the output was cut short; a PuTTY key keeps its first line's
 // label. Already-masked text is skipped, so masking twice changes nothing.
 const MASKED_NEXT = String.raw`(?!(?:\s|\\[nr])*\*\*\*)`;
-// One armored body line after a newline or a `\n` escape: a whole line of base64, or a `Proc-Type: 4,ENCRYPTED` style
-// header.
+// One armored body line after a newline or a `\n` escape: a whole line of base64, or a `Proc-Type: 4,ENCRYPTED` header.
 const ARMOR_LINES = String.raw`(?:(?:\s|\\[nr])+(?:[A-Za-z-]+:[^\n\\]*|[A-Za-z0-9+/=]+(?=[ \t]*(?:[\r\n"'\x60<>,;})\]]|\\[nr]|$))))*`;
 const PRIVATE_KEY_BLOCK = new RegExp(
     String.raw`(-----BEGIN ((?:[A-Z0-9]+ )*)PRIVATE KEY( BLOCK)?-----)${MASKED_NEXT}(?:[\s\S]*?(-----END \2PRIVATE KEY\3-----)|${ARMOR_LINES})`,

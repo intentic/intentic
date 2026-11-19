@@ -21,6 +21,7 @@ import AgentMemory from "../agent-settings/skills/AgentMemory.vue";
 import AgentMemoryImport from "../agent-settings/skills/AgentMemoryImport.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
 import AgentNightHours from "../agent-settings/behaviour/AgentNightHours.vue";
+import AgentProceed from "../agent-settings/behaviour/AgentProceed.vue";
 import AgentRecovery from "../agent-settings/behaviour/AgentRecovery.vue";
 import AgentRepoChecks from "../agent-settings/behaviour/AgentRepoChecks.vue";
 import AgentSkills from "../agent-settings/skills/AgentSkills.vue";
@@ -188,6 +189,8 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
                 <AgentClock />
                 <!-- Under the clock its hours are read on: what a question an agent asks gets while the owner sleeps. -->
                 <AgentNightHours />
+                <!-- After the night: whether an agent stops for a go-ahead at all, which night hours override while they last. -->
+                <AgentProceed />
             </template>
         </Await>
     </div>

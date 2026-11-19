@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { exitCodeOf } from "@intentic/base/errors";
@@ -167,6 +167,32 @@ const setAsideLocalEdits = async (identity: RunnerIdentity, cwd: string, said: (
     };
 };
 
+// The same files when the mirror does not track them yet (a fresh mirror, its first pull, or one behind the commit that
+// added them) while the parent's main line does: the checkout refuses with "untracked working tree files would be
+// overwritten", which no rescue ref above can keep. The runner's daemon writes them before any pull, so a runner's first
+// placement failed every time. They are moved aside and written back as the runner had them once the checkout is done;
+// from then on they are tracked, and a later pull keeps them as the edits above.
+const setAsideOwnUntracked = async (identity: RunnerIdentity, cwd: string): Promise<() => Promise<void>> => {
+    const kept: { readonly path: string; readonly bytes: Buffer }[] = [];
+    for (const path of DEFINITION_SOURCES) {
+        const file = join(cwd, path);
+        // allow(silent-catch): a file the runner has not written is nothing to keep
+        const bytes = await readFile(file).catch(() => undefined);
+        const tracked = await git(identity, cwd, ["ls-files", "--error-unmatch", "--", path]).then(() => true, () => false);
+        const incoming = await git(identity, cwd, ["cat-file", "-e", `${PARENT_MAIN_REF}:${path}`]).then(() => true, () => false);
+        if (bytes !== undefined && !tracked && incoming) {
+            kept.push({ path, bytes });
+            await rm(file);
+        }
+    }
+    return async () => {
+        for (const { path, bytes } of kept) {
+            await mkdir(dirname(join(cwd, path)), { recursive: true });
+            await writeFile(join(cwd, path), bytes);
+        }
+    };
+};
+
 export const syncFromParent = (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> =>
     exclusively(() => pullFromParent(deps, identity, input, onLine));
 
@@ -180,10 +206,12 @@ const pullFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, in
         onLine(`${repo}: fetching from the parent…`);
         await git(identity, workingDir, ["fetch", "--no-tags", url, `+refs/heads/${mainBranch}:${PARENT_MAIN_REF}`]);
         const putBack = await setAsideLocalEdits(identity, workingDir, (kept) => onLine(`${repo}: kept uncommitted edits in the runner's copy under ${kept} before syncing`));
+        const putBackOwn = await setAsideOwnUntracked(identity, workingDir);
         // Moves this mirror onto the parent's own branch name, converging rather than growing a second history.
         try {
             await git(identity, workingDir, ["checkout", "-B", mainBranch, PARENT_MAIN_REF]);
         } finally {
+            await putBackOwn();
             await putBack();
         }
         // Tolerates a branch the parent hasn't created yet: this repo just starts at main instead of failing. Any other

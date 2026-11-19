@@ -140,6 +140,7 @@ const childOnFile = (kid: ChildRecord, row: SubagentRecordLike | undefined, now:
         startedAt: kid.startedAt,
         state,
         turns: kid.turns,
+        briefRead: kid.briefRead === true,
         at: now,
     };
     if (kid.sessionId !== undefined) {
@@ -175,8 +176,8 @@ export const keepChild = (services: KeepDeps, childId: string): void => {
     if (kid === undefined) {
         return;
     }
-    if (kid.held === "seat" || kid.held === "lane" || kid.held === "start") {
-        kid.startHold ??= { kind: kid.held, order: ++startOrder };
+    if (kid.held === "seat" || kid.held === "lane" || kid.held === "start" || kid.held === "after") {
+        kid.startHold ??= { kind: kid.held, order: ++startOrder, ...opt("after", kid.after === undefined ? undefined : [...kid.after]) };
         startOrder = Math.max(startOrder, kid.startHold.order);
     }
     bindChildFile(services, childId, kid);

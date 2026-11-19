@@ -703,6 +703,27 @@ describe("agents registry", () => {
         expect(registry.entry("c1")?.postures.outage).toBeUndefined();
     });
 
+    // Whether its turns proceed without asking (agent/run/decide/proceed.ts): the card carries the answer, a restart
+    // keeps it, and null hands the conversation back to whoever started it, or the sandbox.
+    it("holds its own answer to proceeding without asking, on the card and across a reload, and clears it on null", async () => {
+        const store = memoryStore();
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        await registry.setAutoLand("c1", false);
+        expect((await registry.setProceed("c1", true))?.proceedWithoutAsking).toBe(true);
+        // The other answers carry through untouched.
+        expect(registry.entry("c1")?.postures).toEqual({ autoLand: false, proceed: true });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        const { agents: reloaded } = createFleet(store, standings(), presences());
+        await reloaded.init();
+        expect(reloaded.get("c1")?.proceedWithoutAsking).toBe(true);
+        expect((await registry.setProceed("c1", false))?.proceedWithoutAsking).toBe(false);
+        expect((await registry.setProceed("c1", null))?.proceedWithoutAsking).toBeUndefined();
+        expect(registry.entry("c1")?.postures).toEqual({ autoLand: false });
+        expect(await registry.setProceed("nope", true)).toBeUndefined();
+    });
+
     // A spawned child opens with its own answer to a spent allowance (children.ts). Only the opening turn's is read, so
     // what the owner answers since, a cleared override included, is never overwritten by a later turn carrying it again.
     it("opens with the answers its opening turn gives, and no later turn's replaces what the owner answered since", async () => {

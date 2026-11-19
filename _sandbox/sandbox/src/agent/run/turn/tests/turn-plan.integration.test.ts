@@ -78,6 +78,8 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         resources: budgetOn(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
+        // No other conversation changing this one's files (conversations/files-in-flight.ts): read on every turn.
+        inFlight: unstubbed<Services["inFlight"]>("inFlight", { turnNote: () => undefined }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", {
             status: () => workspaceSetup(root, unstubbed<Services["processes"]>("processes", { running: () => false })),
             issueAt: async () => undefined,

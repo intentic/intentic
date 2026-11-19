@@ -151,6 +151,30 @@ on each spawn: both are required, and no setting picks them. So "spawn the cheap
   which the spawn rule does not cover. A spawn past **Subagents at once** waits as pending and starts by itself when
   one of the parent's children ends; past **Subagents per conversation** it is refused, a count that survives a
   restart.
+- A subagent the sandbox has no memory for yet waits as pending, its row saying since when, why and where it stands
+  among the subagents waiting for room, and starts by itself once there is room; work people send goes first. It
+  waits up to six hours, then ends unstarted with nothing spent and its parent is woken to hear it. Its wait counts
+  the sandbox's own memory, and the computer under it only down to that computer's floor (1.5 GiB), since its heavy
+  commands queue for that computer on their own. `agents show <id>` on one that has not started says where it stands.
+- A subagent's spawn prompt is its brief for good: until a model has read it, every turn the sandbox starts on it (a
+  `send`, a move to another provider, a fallback, a re-run) opens with that brief and then the new words, so a
+  "there is room now, carry on" never reaches a child that never saw its task. One a restart caught before it started
+  starts again by itself.
+- The sandbox opens that brief with a note of its own (**You are a subagent**), so a parent writes only the task. It
+  is computed as the turn starts: which `AGENTS.md` files are already in the child's instructions (the daemon composes
+  them for every loop) and which repositories' own it must read; not to commit, and where its work lands; its
+  artifacts folder, `.intentic/records/artifacts/subagents/<id>/`; the parent's other subagents with their status and
+  the files each has changed and not landed; the build and test tools installed (the queue's parallelism, `quiet`,
+  `base run`, the test digest); and a four-part report (files changed, checks with new-vs-main failures, decisions,
+  what is unverified). It rides every turn that carries the brief and no other, once.
+- `after: [ids]` on a spawn names other subagents of the same parent that must finish first: the child is filed at
+  once, pending ("Waiting after …" in `wait` and `agents show`), and starts by itself once each has finished and its
+  work is in the parent's checkout, so its worktree is cut with that work in it. One whose work is held on its branch
+  keeps it waiting for the parent's `merge` or `settle`; one that failed or was cancelled keeps it waiting for the
+  parent, who is told. A message sent to it starts it at once, its task first; a cancel drops it. An id the parent did
+  not spawn is refused. `agents spawn --after <id>,<id>` from a shell.
+- A subagent placed on a runner whose copy of the workspace cannot be prepared runs here instead, in the same
+  conversation, and its parent is told; nothing had run there.
 - **Wait for a reset** is how long a subagent refused for a spent allowance waits for the provider's reset before it
   goes again by itself (six hours unless changed, 0 for never); one spawned with fallbacks moves to them after 90
   minutes instead.

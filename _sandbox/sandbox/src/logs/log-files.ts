@@ -37,6 +37,9 @@ const GROUP_CAPS = new Map([
     ["terminals", 200],
     ["raw-output", 100],
     ["output-cache", 100],
+    // The record of test runs (output-cleaners' test-outcomes.mjs), one small file per run, which holds itself to 1000 by
+    // its own rule (work runs pruned before baselines); this only keeps it out of the shared count.
+    ["test-outcomes", 1200],
 ]);
 
 // The agents' failed commands and clean runs (command-runs-log.ts); named here, where its retention is, so the pruner

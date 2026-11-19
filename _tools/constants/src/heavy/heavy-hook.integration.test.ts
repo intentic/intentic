@@ -17,7 +17,10 @@ const run = promisify(execFile);
 const NODE = "node";
 const HOOK = join(import.meta.dirname, "heavy-hook.cjs");
 const EXEC = join(import.meta.dirname, "heavy-exec.cjs");
+const LAUNCH = join(import.meta.dirname, "heavy-launch.cjs");
 const SHIMS = join(repoRoot(import.meta.url), "_sandbox/sandbox/bin/heavy-shims");
+// The launcher asks the daemon for free memory; these runs judge by the formula, never by this sandbox's daemon.
+const NO_DAEMON = { INTENTIC_ROOM_SOCKET: "/nonexistent/room.sock" };
 
 let dir: string;
 
@@ -184,7 +187,7 @@ describe.skipIf(!kernel.runs)(kernel.title("cargo run behind its wrapper"), () =
         await writeFile(join(dir, "cargo.cjs"), `
 const { appendFileSync } = require("node:fs");
 const args = process.argv.slice(2);
-appendFileSync(${JSON.stringify(join(dir, "calls"))}, JSON.stringify({ args, held: process.env.INTENTIC_HEAVY_HELD ?? null, slot: process.env.INTENTIC_QUEUE_SLOT ?? null }) + "\\n");
+appendFileSync(${JSON.stringify(join(dir, "calls"))}, JSON.stringify({ args, held: process.env.INTENTIC_HEAVY_HELD ?? null, slot: process.env.INTENTIC_QUEUE_SLOT ?? null, jobs: process.env.CARGO_BUILD_JOBS ?? null }) + "\\n");
 if (args.includes("build")) process.exit(${buildExit});
 // The run can acquire the same lock before it starts serving, proving the build slot was released.
 if (require("node:child_process").spawnSync("flock", ["-n", ${JSON.stringify(join(dir, "slot.1"))}, "true"]).status !== 0) process.exit(98);
@@ -197,7 +200,7 @@ console.log("server-started");
         let code = 0;
         try {
             await run(join(shims, "cargo"), args, { env: {
-                ...env, NODE_OPTIONS: "", PATH: `${shims}:${bin}:${env["PATH"] ?? ""}`, INTENTIC_HEAVY_EXEC: EXEC,
+                ...env, ...NO_DAEMON, NODE_OPTIONS: "", PATH: `${shims}:${bin}:${env["PATH"] ?? ""}`, INTENTIC_HEAVY_EXEC: EXEC,
                 INTENTIC_HEAVY: spec({ queue: true, queueRun, ...heavyOverrides }),
             } });
         } catch (error) {
@@ -212,35 +215,123 @@ console.log("server-started");
         const args = ["+nightly", "run", "--release", "--bin", "web server", "--", "--watch", "a b", "$(literal)"];
         const result = await cargoRun(args);
         expect(result.code).toBe(0);
+        // The build's jobs were chosen for it, from the cores and memory here; the run's are cargo's own again.
         expect(result.calls).toEqual([
-            { args: ["+nightly", "build", "--release", "--bin", "web server"], held: "cargo", slot: join(dir, "slot.1") },
-            { args, held: null, slot: null },
+            { args: ["+nightly", "build", "--release", "--bin", "web server"], held: "cargo", slot: join(dir, "slot.1"), jobs: expect.stringMatching(/^[1-9]\d*$/u) },
+            { args, held: null, slot: null, jobs: null },
         ]);
-        expect(result.queueArgs.split("\n").slice(0, 18)).toEqual([
+        const queued = result.queueArgs.split("\n");
+        expect(queued.slice(0, 17)).toEqual([
             "--pool", "heavy", "--limit", "2", "--wait", "900", "--memory-gate", "120", "--max-hold", "1800",
-            "--on-deadline", "run", "--label", "cargo", "--size", "cargo-build", "--", join(dir, "real-bin", "cargo"),
+            "--on-deadline", "run", "--label", "cargo", "--size", "cargo-build", "--",
+        ]);
+        expect(queued.slice(18, 27)).toEqual([LAUNCH, "--parallel", "cargo", "--slots", "2", "--label", "cargo", "--", join(dir, "real-bin", "cargo")]);
+    });
+
+    test("a -j of the agent's own is left as it is", async () => {
+        const result = await cargoRun(["run", "-j", "3"]);
+        expect(result.calls).toEqual([
+            { args: ["build", "-j", "3"], held: "cargo", slot: join(dir, "slot.1"), jobs: null },
+            { args: ["run", "-j", "3"], held: null, slot: null, jobs: null },
         ]);
     });
 
     test("a failed build returns its code and never starts the program", async () => {
         const result = await cargoRun(["run", "--bin", "server"], 42);
         expect(result.code).toBe(42);
-        expect(result.calls).toEqual([{ args: ["build", "--bin", "server"], held: "cargo", slot: join(dir, "slot.1") }]);
+        expect(result.calls).toEqual([{ args: ["build", "--bin", "server"], held: "cargo", slot: join(dir, "slot.1"), jobs: expect.any(String) }]);
     });
 
     test.each([["run", "--future-option"], ["run", "--help"]])("an unsafe translation runs unchanged: %j", async (...args) => {
         const result = await cargoRun(args);
         expect(result.code).toBe(0);
-        expect(result.calls).toEqual([{ args, held: null, slot: null }]);
+        expect(result.calls).toEqual([{ args, held: null, slot: null, jobs: null }]);
         expect(result.queueArgs).toBe("");
     });
 
     test("the prebuild stays local when ordinary Cargo builds are offloaded, warming the local run", async () => {
         const result = await cargoRun(["run"], 0, { offload: { cargo: "runner" } });
         expect(result.calls).toEqual([
-            { args: ["build"], held: "cargo", slot: join(dir, "slot.1") },
-            { args: ["run"], held: null, slot: null },
+            { args: ["build"], held: "cargo", slot: join(dir, "slot.1"), jobs: expect.any(String) },
+            { args: ["run"], held: null, slot: null, jobs: null },
         ]);
         expect(result.queueArgs).toContain("cargo-build");
+    });
+});
+
+// (2026-11-19, the shinobi-society audit) A project's own heavy script, declared in its `.intentic/heavy.json`, takes the
+// queue the way a build does, whatever starts it: an interpreter's wrapper by the script's path, node's hook by the file
+// it runs.
+describe.skipIf(!kernel.runs)(kernel.title("a project's declared script"), () => {
+    const capture = { id: "capture", scripts: ["scripts/capture.py"], memory: "6G", exclusive: true };
+
+    const interpreter = async (args: readonly string[], words: string): Promise<{ report: Record<string, unknown>; queued: string[] | undefined; stderr: string }> => {
+        const bin = join(dir, "real-bin");
+        const shims = join(dir, "interpreters");
+        await mkdir(bin, { recursive: true });
+        await mkdir(shims, { recursive: true });
+        await writeFile(join(dir, "report.js"), reporter);
+        await writeFile(join(bin, "python3"), `#!/usr/bin/env bash\nexec node ${JSON.stringify(join(dir, "report.js"))} "$@"\n`);
+        await chmod(join(bin, "python3"), 0o755);
+        await copyFile(join(SHIMS, "interpreters", "python3"), join(shims, "python3"));
+        await chmod(join(shims, "python3"), 0o755);
+        const queueRun = await standIn("queue-run");
+        const { INTENTIC_QUEUE_SLOT: _slot, INTENTIC_HEAVY_HELD: _held, ...env } = process.env;
+        const { stdout, stderr } = await run(join(shims, "python3"), args, {
+            cwd: dir,
+            env: {
+                ...env,
+                NODE_OPTIONS: "",
+                PATH: `${shims}:${bin}:${env["PATH"] ?? ""}`,
+                INTENTIC_HEAVY_EXEC: EXEC,
+                INTENTIC_HEAVY_WORDS: words,
+                INTENTIC_HEAVY: JSON.stringify({ rules: mergeHeavyRules({}, [capture]), queue: true, queueRun, klass: KLASS }),
+            },
+        });
+        const queued = await readFile(join(dir, "queue-run.args"), "utf8").then(
+            (text) => text.trim().split("\n"),
+            () => undefined,
+        );
+        // SAFETY: the reporter prints one JSON object as its last line.
+        return { report: JSON.parse(stdout.trim().split("\n").at(-1) ?? "{}") as Record<string, unknown>, queued, stderr };
+    };
+
+    test("python3 running it is queued in its class's own pool, alone, at its declared price, and says so", async () => {
+        const { report, queued, stderr } = await interpreter(["./scripts/capture.py", "--frames", "600"], "capture.py");
+        expect(report).toMatchObject({ argv: ["./scripts/capture.py", "--frames", "600"], held: "capture" });
+        expect(queued?.slice(0, queued.indexOf("--"))).toEqual([
+            "--pool", "capture", "--limit", "1", "--wait", "900", "--memory-gate", "120", "--max-hold", "1800",
+            "--on-deadline", "run", "--label", "capture", "--exclusive", "--size", "6144m",
+        ]);
+        expect(queued?.slice(queued.indexOf("--") + 1)).toEqual([join(dir, "real-bin", "python3"), "./scripts/capture.py", "--frames", "600"]);
+        expect(stderr).toContain("[heavy] capture: a heavy command this project declares (.intentic/heavy.json, scripts/capture.py)");
+    });
+
+    test("the interpreter is the real one at once for anything else: an inline script, or a file no class names", async () => {
+        const inline = await interpreter(["-c", "import scripts.capture"], "capture.py");
+        expect(inline).toMatchObject({ report: { held: null }, queued: undefined });
+        const other = await interpreter(["tools/capture.py"], "capture.py");
+        expect(other).toMatchObject({ report: { held: null }, queued: undefined });
+    });
+
+    test("a node script is matched by the file node runs", async () => {
+        const queueRun = await standIn("queue-run");
+        await mkdir(join(dir, "scripts"));
+        await writeFile(join(dir, "scripts", "render.mjs"), reporter.replace(`const { readFileSync } = require("node:fs");`, `import { readFileSync } from "node:fs";`));
+        const rules = mergeHeavyRules({}, [{ id: "render", scripts: ["scripts/render.mjs"] }]);
+        const report = await underHook(join(dir, "scripts", "render.mjs"), ["--all"], spec({ rules, queue: true, queueRun }));
+        expect(report).toMatchObject({ argv: ["--all"], held: "render" });
+    });
+});
+
+describe.skipIf(!kernel.runs)(kernel.title("a kind the owner sends to a runner"), () => {
+    test("INTENTIC_OFFLOAD=0 keeps one command here, behind this sandbox's queue", async () => {
+        const queueRun = await standIn("queue-run");
+        const offloadRun = await standIn("offload-run", false);
+        const { INTENTIC_QUEUE_SLOT: _slot, INTENTIC_HEAVY_HELD: _held, ...env } = process.env;
+        const heavy = spec({ queue: true, queueRun, offloadRun, offload: { vitest: "runner-omen" } });
+        await run(NODE, [await publish("vitest"), "run"], { env: { ...env, INTENTIC_OFFLOAD: "0", INTENTIC_HEAVY: heavy, NODE_OPTIONS: `--require ${HOOK}` } });
+        await expect(readFile(join(dir, "offload-run.args"), "utf8")).rejects.toThrow();
+        expect(await readFile(join(dir, "queue-run.args"), "utf8")).toContain("--label\nvitest\n");
     });
 });

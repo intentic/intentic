@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { Services } from "../../composition.js";
 import { liveRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { heldReopen } from "../../conversations/actor/limit-booking.js";
@@ -7,10 +8,11 @@ import { opt } from "../../opt.js";
 import { defineInFlight } from "../../seams/restart/in-flight.js";
 import { bindChildFile, CHILDREN, keepChild, ledgerOf, SEATS, settleChild } from "./child-records.js";
 import { childRecordOf, childRouting, taskLine } from "./child-spec.js";
-import { type ChildRecord, followAdopted, resumeHeldChild, rosterHandle } from "./children.js";
+import { type ChildRecord, followAdopted, resumeHeldChild, rosterHandle, startUnread } from "./children.js";
 import { labelOf } from "./child-gates.js";
 import { endPause, pauseChild } from "./paused-children.js";
 import { restoredFate, type SpawnedChild, specFromFile, UNREADABLE } from "./spawned-children.js";
+import { afterSummary } from "./starting/child-after.js";
 import { type RestoredChildRow, restoreSpawnedChild } from "./roster-restore.js";
 
 // A parent's children brought back at boot from their own files (spawned-children.ts), before any turn the restart cut
@@ -34,11 +36,13 @@ const restoredRecord = (entry: SpawnedChild): ChildRecord => {
     kid.running = false;
     kid.startedAt = entry.startedAt;
     kid.sessionId = entry.sessionId;
+    kid.briefRead = entry.briefRead ?? entry.sessionId !== undefined;
     kid.report = entry.report;
     kid.result = entry.result;
     kid.turns = entry.turns;
     kid.startHold = entry.startHold;
     kid.held = entry.startHold?.kind;
+    kid.after = entry.startHold?.after;
     // Still paused, as its file says, until the boot looks whether its re-run came back (settleCutChild): no watch yet.
     kid.paused = entry.state === "paused" ? { failure: entry.pausedOn ?? "", run: undefined, stop: () => undefined } : undefined;
     return kid;
@@ -51,7 +55,8 @@ const restoredRow = (id: string, entry: SpawnedChild): RestoredChildRow => {
     const { provider, model } = childRouting(spec);
     const birth = { id, description: taskLine(spec), agentType: labelOf(provider), provider, model, spawnDepth: entry.depth, startedAt: entry.startedAt };
     if (entry.state === "held") {
-        return { ...birth, status: "pending", summary: `Waiting to start: ${entry.startHold?.kind ?? "unknown hold"}.` };
+        const after = entry.startHold?.kind === "after" ? entry.startHold.after : undefined;
+        return { ...birth, status: "pending", summary: after === undefined ? `Waiting to start: ${entry.startHold?.kind ?? "unknown hold"}.` : afterSummary(after) };
     }
     if (entry.state === "running") {
         return { ...birth, status: "pending", summary: RESTARTED_SUMMARY };
@@ -151,8 +156,27 @@ const settleCutChild = (services: Services, childId: string): void => {
         pauseChild(services, childId, kid.parent, kid, failure, `${failure} ${bookedRerunWords({ at: heldReopen(held) }, childId)}`);
         return;
     }
+    // Its brief never reached a model and nothing of it is booked: it spent nothing, so it goes again by itself, from its
+    // task, rather than waiting for its parent to send it one (a child waiting for room when the restart came).
+    if (kid.paused === undefined && kid.briefRead !== true) {
+        void startAgain(services, childId, kid);
+        return;
+    }
     const error = kid.paused === undefined ? RESTART_CUT : restartCutPause(failure);
     endPause(kid);
+    settleChild(services.conversations, childId, { status: "failed", report: kid.report ?? "", error });
+    keepChild(services, childId);
+    void sayToParent(services, kid.parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${error}`);
+};
+
+// A child a restart cut before any model read its brief, started again on it; one that cannot start stays stopped.
+const startAgain = async (services: Services, childId: string, kid: ChildRecord): Promise<void> => {
+    const started = await startUnread(services, childId, kid).catch((error: Error) => ({ ok: false as const, message: errorMessage(error) }));
+    if (started.ok) {
+        void sayToParent(services, kid.parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") had not started when the sandbox restarted, so it starts again by itself, from its task: its report reaches you when it ends.`);
+        return;
+    }
+    const error = `${RESTART_CUT} ${started.message}`;
     settleChild(services.conversations, childId, { status: "failed", report: kid.report ?? "", error });
     keepChild(services, childId);
     void sayToParent(services, kid.parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${error}`);

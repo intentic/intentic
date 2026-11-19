@@ -20,6 +20,7 @@ import { conversationsSliceFake } from "../conversations/conversations-slice.tes
 import { deriveBytes } from "../derived/derived-blob.js";
 import { deriveText, readDerivedText } from "../derived/derived-text.js";
 import { extensionsSliceFake } from "../extensions/extensions-slice.testing.js";
+import { loopsSliceFake } from "../loops/loops-slice.testing.js";
 import { type GitFakeOverrides, gitSliceFake } from "../git/git-slice.testing.js";
 import { hostsSliceFake } from "../hosts/hosts-slice.testing.js";
 import { createLogger } from "../logger.js";
@@ -171,6 +172,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         ...brokerSliceFake(),
         ...conversationsFake,
         ...extensionsSliceFake(),
+        ...loopsSliceFake(context),
         ...gitSliceFake({ git }),
         ...hostsSliceFake(context),
         ...depsSliceFake(),

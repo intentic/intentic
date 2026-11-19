@@ -28,8 +28,10 @@ import { startDiskPressureWatch } from "../system/resources/storage/disk-pressur
 import { readLastStorageScan, resolveStorageRoots } from "../system/resources/storage/disk-storage.js";
 import { leftoversRelief } from "../system/resources/storage/pressure-reliefs.js";
 import { mainIncrementalRelief } from "../conversations/worktrees/build-outputs/main-incremental.js";
+import { baseCheckoutsOf } from "../conversations/worktrees/bases/base-checkouts.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import { diskLow } from "../push/notifications.js";
+import { diskLow, unlandedWork } from "../push/notifications.js";
+import { unlandedWorkChore } from "../conversations/recall/fleet-left-off.js";
 import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-session.js";
 import { pruneStore, sweepAgedState } from "../workspace/watch/state-janitor.js";
 import type { BootPhase } from "./boot-phase.js";
@@ -161,6 +163,8 @@ export const retentionChores = (phase: BootPhase): Chore[] => {
                       // No sandbox-wide quiet moment: each checkout is judged by its own conversation (archive.ts).
                       run: async (): Promise<void> => retireUnpinned(phase, (await reaperOf(phase).sweep(Date.now())).length),
                   },
+                  // Base checkouts no live conversation asked for in a day (conversations/worktrees/bases/base-checkouts.ts).
+                  { name: "base-checkouts", everyMs: HOUR_MS, run: async (): Promise<void> => void (await baseCheckoutsOf(services).sweep(Date.now())) },
                   { name: "state-aged", everyMs: HOUR_MS, run: () => sweepAgedState(services.workspace.root, Date.now(), logger) },
                   // Root-scoped: a guest sharing the history root prunes nothing.
                   { name: "log-retention", everyMs: HOUR_MS, run: () => pruneLogFiles(logsRoot(config.historyRoot)) },
@@ -217,6 +221,15 @@ const choresOf = (phase: BootPhase): Chore[] => {
               ]
             : []),
         ...(role.container ? [dockerPruneChore({ processes: services.processes, conversations: services.conversations, logger })] : []),
+        // Work stopped and never landed for a day, told to the operators once a day (recall/fleet-left-off.ts).
+        unlandedWorkChore({
+            agents: services.agents,
+            conversations: services.conversations,
+            logger,
+            tell: async (count, hours) => {
+                await services.pushSender.notifyIfAway(unlandedWork(count, hours), OPERATORS);
+            },
+        }),
         ...(role.roots ? [runnerReleaseChore(phase)] : []),
     ];
 };
@@ -252,6 +265,8 @@ const startDiskPressure = (phase: BootPhase): (() => void) => {
         },
         reliefs: [
             mainIncrementalRelief({ workspaceRoot: services.workspace.root, historyRoot: config.historyRoot }),
+            // Made again by the next `base` that asks for one, warm where a build already ran.
+            { name: "base checkouts", free: (enough) => baseCheckoutsOf(services).relieve(enough) },
             leftoversRelief({ roots: () => resolveStorageRoots(services.workspace.root, config.historyRoot), historyRoot: config.historyRoot, now: Date.now }),
         ],
         lastScan: () => readLastStorageScan(config.historyRoot),

@@ -302,9 +302,44 @@ export const CiMainBranchSchema = z.object({
     fixer: z.string().optional().describe("The fix agent on its failure, when one is."),
 });
 export type CiMainBranch = z.infer<typeof CiMainBranchSchema>;
+// 2026-11-19, the shinobi-society audit: `agents ci` said "nothing known to fail" while sixteen tests failed on main,
+// in suites CI does not run. The sandbox's own record of test runs (output-cleaners' test-outcomes.mjs) knows those: a
+// run on a clean tree at a main commit is that commit's baseline.
+export const CiLocalMainSchema = z.object({
+    repo: z.string().describe("Which repository, by the name of its git directory."),
+    sha: z.string().describe("The main commit, the newest one with a recorded run in this repository."),
+    at: z.number().describe("When the newest run there ended, in milliseconds."),
+    runs: z
+        .array(
+            z.object({
+                command: z.string().describe("The command as the agent wrote it."),
+                at: z.number().describe("When it ended, in milliseconds."),
+                by: z.string().optional().describe("The conversation that ran it, where known."),
+                failed: z.number().describe("How many tests it counted failing."),
+                passed: z.number().describe("How many it counted passing."),
+            }),
+        )
+        .describe("Every recorded run at that commit, newest first."),
+    failed: z
+        .array(
+            z.object({
+                test: z.string().describe("The test, by the id the digest names it with: `crate name`, `file > name`, a node id."),
+                line: z.string().optional().describe("The first line of why it failed, where the output said."),
+                at: z.number().describe("When the newest run that failed it ended, in milliseconds."),
+            }),
+        )
+        .describe("Each test those runs failed. Empty when they failed none."),
+});
+export type CiLocalMain = z.infer<typeof CiLocalMainSchema>;
 export const CiMainResponseSchema = z.object({
     text: z.string().describe("The whole answer in words, as `agents ci` prints it."),
     branches: z.array(CiMainBranchSchema).describe("Each repository wired to CI, and any main line still failing in one no longer wired."),
+    local: z
+        .array(CiLocalMainSchema)
+        .optional()
+        .describe(
+            "What this sandbox's own test runs on clean trees at main commits saw fail, newest main commit per repository: suites CI does not run included. Absent from a daemon that keeps no such record.",
+        ),
 });
 export type CiMainResponse = z.infer<typeof CiMainResponseSchema>;
 // Re-resolves repo → project + token on every call, so a stale card can't act on a mapping the workspace no longer has.

@@ -4,10 +4,13 @@ import type { AppEnv } from "../../app-env.js";
 import type { ConversationReader } from "../../auth/scope/conversation-reader.js";
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
+import { ROSTER } from "../actor/subagent-roster.js";
 import { type BundlePromptReader, conversationBundle } from "./fleet-bundle.js";
 import { resolveFleetHandle } from "./fleet-handles.js";
 import { type HandleResolution, candidateOf, fleetRecall, fleetRosterPage, fleetSearchPage, present, type RosterOptions } from "./fleet-recall.js";
 import { fleetMessageDetail, fleetMessages, fleetRows } from "./fleet-transcript.js";
+import { fleetLoopOf, UNLANDED_HOURS, unlandedBefore, withLoops } from "./fleet-left-off.js";
+import { indexedPath, worktreesRootOf } from "./fleet-overlap.js";
 
 // The fleet's READS, apart from the routes that serve them (fleet.routes.ts for this sandbox's own agents, and a link's
 // records doors, links/link-records.ts, for another sandbox reading this one): the roster or a phrase search, one
@@ -48,12 +51,28 @@ const rosterOptionsOf = (c: Context<AppEnv>): RosterOptions => {
     const limit = numberQuery(c, "limit", MAX_LIMIT);
     const repo = c.req.query("repo");
     const owner = c.req.query("owner");
+    // `?unlanded=<hours>`: only work stopped and never landed for at least that long (fleet-left-off.ts).
+    const unlanded = numberQuery(c, "unlanded", MAX_UNLANDED_HOURS);
     return present({
         all: flagQuery(c, "all") === true ? true : undefined,
         limit,
         repo: repo === "" ? undefined : repo,
         owner: owner === "" ? undefined : owner,
+        unlandedBefore: unlanded === undefined ? undefined : unlandedBefore(unlanded, Date.now()),
     });
+};
+
+// A year: past it, every stopped conversation is forgotten anyway.
+const MAX_UNLANDED_HOURS = 24 * 365;
+
+// How much work sits stopped and never landed for a day or more, on a roster read that is not already asking for it, so
+// `agents ls` says it is there; undefined when none does.
+const forgottenOf = (services: Services, options: RosterOptions, reads: ConversationReader): { readonly hours: number; readonly count: number } | undefined => {
+    if (options.unlandedBefore !== undefined) {
+        return undefined;
+    }
+    const count = fleetRosterPage(services, { ...present({ all: options.all }), unlandedBefore: unlandedBefore(UNLANDED_HOURS, Date.now()), limit: 1 }, reads).total;
+    return count === 0 ? undefined : { hours: UNLANDED_HOURS, count };
 };
 
 // How many of a conversation's files a stored read lists; the count past it says how many more there are.
@@ -79,6 +98,18 @@ export const readableHandle = (resolved: HandleResolution, reads: ConversationRe
 // records (links/link-records.ts).
 export type FleetReaderOf = (c: Context<AppEnv>) => Promise<ConversationReader>;
 
+// A spawned child whose first turn has not begun (waiting for room, a seat or the owner) has no conversation yet, only its
+// row on its parent's roster: said with where it stands, not as no such conversation, since a child that has not started
+// is the one a parent most needs to look up (2026-11-19).
+const unstartedChild = (services: Pick<Services, "conversations">, handle: string, reads: ConversationReader): string | undefined => {
+    const row = services.conversations.holdings(ROSTER).get(handle);
+    if (row?.kind !== "spawned" || !reads(row.conversationId)) {
+        return undefined;
+    }
+    const standing = row.summary === undefined || row.summary === "" ? row.status : `${row.status}: ${row.summary}`;
+    return `\`${handle}\` is a subagent of \`${row.conversationId}\` that has not started yet, so it has no conversation to show. It is ${standing}`;
+};
+
 // A handle as the caller may follow it, or the refusal it is answered with.
 const resolvedFor = async (
     services: Services,
@@ -99,7 +130,8 @@ const resolvedFor = async (
         );
     }
     if (resolved.kind === "unknown") {
-        return c.json({ ok: false, message: `No conversation answers to \`${handle}\`. Search for one with \`agents find "<text>"\`.` }, 404);
+        const message = unstartedChild(services, handle, reads) ?? `No conversation answers to \`${handle}\`. Search for one with \`agents find "<text>"\`.`;
+        return c.json({ ok: false, message }, 404);
     }
     return { entry: resolved.entry, ...present({ via: resolved.via }) };
 };
@@ -110,7 +142,12 @@ export const createFleetReads = (services: Services, readerOf: FleetReaderOf, re
     /** GET /fleet: paginated roster, newest first; `?q=` switches it to a phrase search, `?owner=` narrows to one member's. */
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const query = c.req.query("q")?.trim();
-        const options = rosterOptionsOf(c);
+        // `?touching=` names a path as the asking shell saw it; the index keys it workspace-relative (fleet-overlap.ts).
+        const touching = c.req.query("touching");
+        const options = {
+            ...rosterOptionsOf(c),
+            ...present({ touching: touching === undefined || touching === "" ? undefined : indexedPath(touching, services.workspace.root, worktreesRootOf(services.agentWorktrees)) }),
+        };
         // Only the conversations this caller may read, kept before the page is cut: a row is a title, and a search hit a
         // line of the transcript.
         const reads = await readerOf(c);
@@ -123,7 +160,8 @@ export const createFleetReads = (services: Services, readerOf: FleetReaderOf, re
         // `indexing` marks a backfill still running, so an empty result may still grow rather than mean nothing exists;
         // `coverage` says how far through the conversations that pass has got.
         if (query === undefined || query === "") {
-            return c.json({ agents, ...counted });
+            // What each row's loop has got to, and how much stopped work never landed (fleet-left-off.ts).
+            return c.json({ agents: withLoops(agents, await services.loops.list()), ...counted, ...present({ unlanded: forgottenOf(services, options, reads) }) });
         }
         const coverage = services.saidIndex.coverage?.();
         return c.json({ agents, ...counted, indexing: services.saidIndex.indexing(), ...present({ coverage }) });
@@ -143,7 +181,8 @@ export const createFleetReads = (services: Services, readerOf: FleetReaderOf, re
             flagQuery(c, "diff") === false ? { diff: false } : {},
         );
         // How a handle that is none of its own names led here (a retired session, a subagent), said once with the answer.
-        const answer = { agent: recall, ...present({ via: resolved.via }) };
+        const loop = await services.loops.get(resolved.entry.id);
+        const answer = { agent: loop === undefined ? recall : { ...recall, loop: fleetLoopOf(loop) }, ...present({ via: resolved.via }) };
         if (flagQuery(c, "stored") === true) {
             return c.json({ ...answer, stored: await storedState(services, resolved.entry.id) });
         }

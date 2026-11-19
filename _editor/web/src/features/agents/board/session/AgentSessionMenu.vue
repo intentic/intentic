@@ -57,7 +57,7 @@ const { changes, agentId, phone, retryLand = false, renameable, sessionName, str
 // and `identity` are the header's own presses, handed back to it.
 const emit = defineEmits<{ selected: []; discard: []; forceLand: []; rename: []; identity: []; handOver: [] }>();
 
-const { agentById, restore, busyIds, setBreakPolicy, setKeepWarm } = useAgents();
+const { agentById, restore, busyIds, setBreakPolicy, setKeepWarm, setProceed } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
 // The card, when a fresh session can be cut from its work (freshSession.canStartFresh), or a check booked for the end of
 // its turn still at work (canScheduleFresh); with the kinds it takes, each said as it goes.
@@ -112,6 +112,23 @@ const toggleAutoLand = async (): Promise<void> => {
         return;
     }
     await changes.setAutoLand(next === sandboxLands.value ? null : next);
+};
+
+// Whether its turns carry on with their own recommendation instead of stopping for a go-ahead (`proceedWithoutAsking`):
+// its own answer, else the sandbox's. Same grammar as the land toggle: choosing the sandbox's value clears its own, so it
+// follows the conversation that started it, or the sandbox, again. Read as each turn is planned, so legal mid-turn.
+const sandboxProceeds = computed(() => sandboxSettings.value?.proceedWithoutAsking ?? false);
+const proceedOn = computed(() => agentById(agentId)?.proceedWithoutAsking ?? sandboxProceeds.value);
+const toggleProceed = (): void => {
+    const next = !proceedOn.value;
+    emit(`selected`);
+    void startOperation(`${agentWork(agentId)}/proceed`, {
+        what: t(`agents.agentSessionMenu.proceedLabel`),
+        // The row's words flipping are the answer; only a refusal says anything.
+        quiet: true,
+        failed: t(`agents.agentSessionMenu.proceedFailed`),
+        task: () => setProceed(agentId, next === sandboxProceeds.value ? null : next),
+    });
 };
 
 // Shown only on a card actually held at a wall that takes a standing answer: a spent allowance, or a message held because
@@ -357,6 +374,15 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 <span class="text-2xs text-subtle">
                     {{ autoLandOn ? t(`agents.agentSessionMenu.finishedTurnsLandInto`) : t(`agents.agentSessionMenu.holdingFinishedWorkWaits`) }}
                 </span>
+            </span>
+        </button>
+        <button v-if="marked && supportsRoute(`agents.proceed`) && can(`agents.proceed`)" type="button" :class="ITEM" :disabled="archived" @click="toggleProceed">
+            <Icon :name="proceedOn ? 'pause' : 'play'" class="text-xs" :class="proceedOn ? 'text-subtle' : 'text-link'" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">{{
+                    proceedOn ? t(`agents.agentSessionMenu.askBeforeGoingAhead`) : t(`agents.agentSessionMenu.proceedWithoutAsking`)
+                }}</span>
+                <span class="text-2xs text-subtle">{{ proceedOn ? t(`agents.agentSessionMenu.proceedingHint`) : t(`agents.agentSessionMenu.proceedHint`) }}</span>
             </span>
         </button>
         <!-- Only where a hold can be kept or is running: a cold cache or one this sandbox cannot replay has nothing to offer. -->

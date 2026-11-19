@@ -78,6 +78,9 @@ export interface GuidanceFacts {
     readonly unattended: boolean;
     // The owner's night hours, where they are in force as the turn starts (agent/night/night-hours.ts).
     readonly night?: NightNow | undefined;
+    // The owner's standing go-ahead, as the turn was planned (decide/proceed.ts): carry on rather than stop to ask.
+    // Absent reads as off, which every turn was before it.
+    readonly proceed?: boolean;
     // Set beside a mounted browser server (`web`, `browser`): where its screenshots land.
     readonly browserOutputDir: string | undefined;
     // Whether the credential-free `web` browser is among them; absent reads as mounted, as it was before this fact.

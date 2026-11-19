@@ -5,9 +5,11 @@ export const COST_BYTES: Readonly<Record<RoomWorkload, number>>;
 export const PERSON_RESERVE_BYTES: number;
 export const TARGETED_RUN_BYTES: number;
 // A toolchain command priced by its named shape instead of its class's cost (SIZE_BYTES): one aimed at named files,
-// the editor's full typecheck, a changed-files Vue typecheck, a Cargo build.
-export type RoomSize = "targeted" | "editor-typecheck" | "scoped-typecheck" | "cargo-build";
-export const SIZE_BYTES: Readonly<Record<RoomSize, number>>;
+// the editor's full typecheck, a changed-files Vue typecheck, a Cargo build; or by MiB (`6144m`), what a project
+// declares its own heavy command holds.
+export type NamedRoomSize = "targeted" | "editor-typecheck" | "scoped-typecheck" | "cargo-build";
+export type RoomSize = NamedRoomSize | `${number}m`;
+export const SIZE_BYTES: Readonly<Record<NamedRoomSize, number>>;
 export function isRoomSize(size: string): size is RoomSize;
 export const TEST_PROCESS_BYTES: Readonly<{ fanOutWorker: number; standaloneWorker: number; typecheck: number; ceiling: number }>;
 export const STALL_PERCENT: number;
@@ -82,6 +84,8 @@ export interface RoomAnswer extends RoomJudgement {
     readonly waitedFor?: string;
     // The wait was given up before its deadline, since waiting could not help (stuckWait).
     readonly stuck?: boolean;
+    // Held to its ceiling below the floor (heavy/memory-floor.mjs): the command must not start.
+    readonly notStarted?: boolean;
 }
 
 export const STUCK_MS: number;

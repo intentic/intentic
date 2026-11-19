@@ -1,0 +1,253 @@
+import { describe, it, expect } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join, posix } from "node:path";
+import { filterOutput, maskedFailure } from "../agent-output-filter.mjs";
+
+// A retain that keeps nothing on disk and answers with `log`: the path the footer should then name.
+const keptAt = (log) => (log === "" ? undefined : () => log);
+
+// run() reads only `.out`; `stagesOf` is for tests that check the per-mechanism attribution.
+const filtered = (raw, { command = "some-cmd", exit = "0", duration = "1", log = "", pipeline = "" } = {}) =>
+    filterOutput(raw, { command, exitCode: exit, durationS: duration, retain: keptAt(log), pipeline });
+const run = (raw, options) => filtered(raw, options).out;
+const stagesOf = (raw, options) => filtered(raw, options).stages;
+
+describe("filterOutput", () => {
+    it("strips ANSI codes and collapses \\r progress frames to the final frame", () => {
+        const raw = "\x1b[32mgreen\x1b[0m\nprogress 10%\rprogress 50%\rprogress 100%\n";
+        expect(run(raw)).toBe("green\nprogress 100%\n");
+    });
+
+    it("returns unchanged output verbatim with no footer", () => {
+        const raw = "line one\nline two\n";
+        expect(run(raw)).toBe(raw);
+    });
+
+    it("drops pnpm progress noise on success and appends the footer counts", () => {
+        const noise = Array.from({ length: 6 }, (_, i) => `Progress: resolved ${i}00, reused ${i}00, downloaded 0, added 0`);
+        const raw = `${[...noise, "added 100 packages in 2s"].join("\n")}\n`;
+        const out = run(raw, { command: "pnpm install", log: "/logs/terminals/agent-abc-%1.log" });
+        expect(out).toContain("added 100 packages in 2s");
+        expect(out).not.toContain("Progress:");
+        expect(out).toContain("--- [exit 0, 1s] 7 lines filtered to 1");
+        expect(out).not.toContain("retrieve-output");
+    });
+
+    it("appends the retrieval handle once the trim is big enough to be worth following", () => {
+        const noise = Array.from({ length: 40 }, (_, i) => `Progress: resolved ${i}00, reused ${i}00, downloaded 0, added 0`);
+        const raw = `${[...noise, "added 100 packages in 2s"].join("\n")}\n`;
+        const out = run(raw, { command: "pnpm install", log: "/logs/terminals/agent-abc-%1.log" });
+        expect(out).toContain("--- [exit 0, 1s] 41 lines filtered to 1 · full: retrieve-output /logs/terminals/agent-abc-%1.log [pattern]");
+    });
+
+    it("keeps pnpm progress lines on failure", () => {
+        const raw = "Progress: resolved 100, reused 100, downloaded 0, added 0\nERR_PNPM_FETCH_404\n";
+        expect(run(raw, { command: "pnpm install", exit: "1" })).toBe(raw);
+    });
+
+    it("caps long success output to head + tail with an elision marker", () => {
+        const raw = `${Array.from({ length: 300 }, (_, i) => `line ${i}`).join("\n")}\n`;
+        const out = run(raw);
+        expect(out).toContain("line 0");
+        expect(out).toContain("line 29");
+        expect(out).toContain("… 220 lines elided …");
+        expect(out).not.toContain("line 100\n");
+        expect(out).toContain("line 299");
+        expect(out).toContain("300 lines filtered to 81");
+    });
+
+    // The shinobi-society audit (2026-11-17): the marker mid-output never said where the cut lines went.
+    it("points the elision marker at the retained output once there is one", () => {
+        const raw = `${Array.from({ length: 300 }, (_, i) => `line ${i}`).join("\n")}\n`;
+        const out = run(raw, { log: "/logs/raw-output/agent-abc-%1.log" });
+        expect(out).toContain("\n… 220 lines elided: retrieve-output /logs/raw-output/agent-abc-%1.log [pattern] prints them …\n");
+        expect(run(raw)).toContain("\n… 220 lines elided …\n");
+    });
+
+    it("keeps failures whole up to a generous tail cap", () => {
+        const raw = `${Array.from({ length: 600 }, (_, i) => `line ${i}`).join("\n")}\n`;
+        const out = run(raw, { exit: "2" });
+        expect(out).not.toContain("line 50\n");
+        expect(out).toContain("… 100 earlier lines elided …");
+        expect(out).toContain("line 599");
+        const short = `${raw.split("\n").slice(0, 300).join("\n")}\n`;
+        expect(run(short, { exit: "2" })).toBe(short);
+    });
+
+    it("names an all-noise success instead of returning emptiness", () => {
+        const raw = `${Array.from({ length: 6 }, (_, i) => `Progress: resolved ${i}00, reused ${i}00, downloaded 0, added 0`).join("\n")}\n`;
+        const out = run(raw, { command: "pnpm install" });
+        expect(out).toContain("(no notable output)");
+        expect(out).toContain("6 lines filtered to 0");
+    });
+
+    it("omits the log pointer when no log path is known", () => {
+        const raw = `${[...Array.from({ length: 6 }, (_, i) => `Progress: resolved ${i}00, reused 0, downloaded 0, added 0`), "ok"].join("\n")}\n`;
+        const out = run(raw, { command: "pnpm i" });
+        expect(out).toContain("filtered to 1");
+        expect(out).not.toContain("retrieve-output");
+    });
+
+    it("attributes every byte between raw and emitted to a stage", () => {
+        const raw = `\x1b[32m${Array.from({ length: 6 }, (_, i) => `Progress: resolved ${i}00, reused 0, downloaded 0, added 0`).join("\n")}\x1b[0m\nadded 100 packages in 2s\n`;
+        const { out, stages } = filtered(raw, { command: "pnpm install", log: "/logs/x.log" });
+        const attributed = stages.reduce((sum, stage) => sum + stage.saved, 0);
+        expect(attributed).toBe(raw.length - out.length);
+        expect(stages.map((stage) => stage.id)).toContain("ansi");
+        expect(stages.map((stage) => stage.id)).toContain("pnpm");
+    });
+
+    it("records the retrieval footer as a cost, not a saving", () => {
+        const raw = `${[...Array.from({ length: 6 }, (_, i) => `Progress: resolved ${i}00, reused 0, downloaded 0, added 0`), "added 100 packages"].join("\n")}\n`;
+        const footer = stagesOf(raw, { command: "pnpm install", log: "/logs/x.log" }).find((stage) => stage.id === "footer");
+        expect(footer.saved).toBeLessThan(0);
+    });
+
+    it("names a cut inside lines with a footer and the retained copy, which keeps every character", () => {
+        const blob = "q".repeat(20_000);
+        const raw = `{"data":"${blob}"}\n`;
+        let kept;
+        const { out } = filterOutput(raw, {
+            command: "curl -s http://api/x",
+            retain: (text) => {
+                kept = text;
+                return "/logs/raw-output/agent-abc-%1.log";
+            },
+        });
+        expect(out).toMatch(/… \d+ chars elided …/);
+        expect(out.endsWith("--- [exit 0, 0s] long runs cut inside lines · full: retrieve-output /logs/raw-output/agent-abc-%1.log [pattern]\n")).toBe(true);
+        expect(kept).toBe(`{"data":"${blob}"}`);
+    });
+
+    it("keeps nothing when nothing was removed", () => {
+        let asked = false;
+        const out = filterOutput("one\ntwo\n", {
+            retain: () => {
+                asked = true;
+                return "/logs/x.log";
+            },
+        }).out;
+        expect(out).toBe("one\ntwo\n");
+        expect(asked).toBe(false);
+    });
+
+    it("reports an earlier pipeline stage's failure that the exit code hides", () => {
+        const raw = "Tests  3 failed | 40 passed (43)\n";
+        expect(run(raw, { command: "pnpm vitest run | tail -1", pipeline: "1 0" })).toBe(
+            `${raw}--- [exit 0 (pipeline: 1 0 — an earlier stage failed), 1s]\n`,
+        );
+    });
+
+    it("says it inside the footer when there is one", () => {
+        const raw = `${Array.from({ length: 300 }, (_, i) => `line ${i}`).join("\n")}\n`;
+        const out = run(raw, { pipeline: "2 0 0" });
+        expect(out.split("\n").at(-2)).toBe("--- [exit 0 (pipeline: 2 0 0 — an earlier stage failed), 1s] 300 lines filtered to 81");
+    });
+
+    it("reads a SIGPIPE'd writer, a clean pipeline and a failed last stage as nothing masked", () => {
+        const raw = "match\n";
+        expect(run(raw, { command: "rg x | head -1", pipeline: "141 0" })).toBe(raw);
+        expect(run(raw, { pipeline: "0 0" })).toBe(raw);
+        expect(run(raw, { pipeline: "0" })).toBe(raw);
+        expect(run(raw, { exit: "1", pipeline: "1 1" })).toBe(raw);
+        expect(maskedFailure("0", "1 141 0")).toBe("1 141 0");
+        expect(maskedFailure("0", "garbage 0")).toBeUndefined();
+    });
+
+    // The shinobi-society audit: `cargo test | grep FAILED | head` passing was footed as an earlier stage that failed.
+    it("reads a grep or rg stage's 1 as a filter that matched nothing", () => {
+        expect(run("ok\n", { command: "cargo test 2>&1 | grep FAILED | head", pipeline: "0 1 0" })).toBe("ok\n");
+        expect(run("", { command: "pnpm test 2>&1 | rg FAIL", exit: "1", pipeline: "0 1" })).toBe(
+            "--- [exit 1 (pipeline: 0 1 — the filter matched nothing), 1s]\n",
+        );
+        expect(run("", { command: "pnpm test 2>&1 | grep FAIL", exit: "1", pipeline: "1 1" })).toBe(
+            "--- [exit 1 (pipeline: 1 1 — an earlier stage failed), 1s]\n",
+        );
+        expect(maskedFailure("0", "101 1 0", "cargo test | grep -c x | head")).toBe("101 1 0");
+        expect(maskedFailure("0", "1 0", "grep -n x a.txt | head")).toBe("1 0");
+        expect(maskedFailure("0", "0 1 0", "cargo test | sort | head")).toBe("0 1 0");
+        expect(maskedFailure("0", "0 1 0", "bash -lc 'cargo test | grep \"a|b\" | head'")).toBeUndefined();
+        expect(maskedFailure("0", "0 1 0", "cargo test | grep x | head; echo done")).toBe("0 1 0");
+    });
+
+    it("keeps the masked-failure line even when the guard hands back the raw capture", () => {
+        const { out, stages } = filtered("a\na\na\n", { command: "cat flags.txt | cat", pipeline: "1 0" });
+        expect(out).toBe("a\na\na\n--- [exit 0 (pipeline: 1 0 — an earlier stage failed), 1s]\n");
+        expect(stages.reduce((sum, stage) => sum + stage.saved, 0)).toBe("a\na\na\n".length - out.length);
+    });
+
+    it("names rg's -r as --replace when a grep-style cluster rewrote the matches", () => {
+        const raw = "package.json:        \"ci:audit\": \"node _tools/scripts/n.mjs\",\n";
+        expect(run(raw, { command: 'cd /work/intentic && rg -rn "ci-audit" package.json | head -5' })).toBe(
+            `${raw}--- note: \`-rn\` is not recursive in rg: -r is --replace, so matched text above was rewritten (rg recurses by default)\n`,
+        );
+        // A deliberate replacement, grep itself, and a search with no output say nothing.
+        expect(run(raw, { command: "rg 'ci-(\\w+)' -r '$1' package.json" })).toBe(raw);
+        expect(run(raw, { command: "grep -rn ci-audit ." })).toBe(raw);
+        expect(run("", { command: "rg -rl ci-audit .", exit: "1" })).toBe("");
+    });
+
+    it("books nothing when the guard returns the raw capture", () => {
+        // Three one-char lines: dedup's marker text would be longer than the output it replaces, tripping guard.
+        const raw = "a\na\na\n";
+        const { out, stages } = filtered(raw, { command: "cat flags.txt", log: "/logs/terminals/agent-abc-%1.log" });
+        expect(out).toBe(raw);
+        expect(stages.reduce((sum, stage) => sum + stage.saved, 0)).toBe(0);
+        expect(stages.map((stage) => stage.id)).toContain("guard");
+    });
+});
+
+// The sandbox image copies the filter and the modules it imports into /usr/local/bin one file at a time
+// (_sandbox/sandbox/Dockerfile), each into the directory its relative import names. A module left off that list, or
+// put in another directory, does not fail the build: the filter dies at load and tmux-run hands every command's output
+// back raw, so trimming, redaction and the savings ledger all stop without a sound. That happened with path-runs.mjs
+// from 2026-10-20 to 11-06. This holds the list to the import graph.
+describe("the image's copy of the filter", () => {
+    // The package's src/, which this file sits one directory below.
+    const src = join(import.meta.dirname, "..");
+    const SOURCE_PREFIX = "_sandbox/output-cleaners/src/";
+    const BIN = "/usr/local/bin";
+
+    // Every output-cleaners source a COPY instruction puts under /usr/local/bin: its path below src/ to the image
+    // directory it lands in (a destination without a trailing slash renames the one file it copies).
+    const copiedToBin = () => {
+        const copied = new Map();
+        for (const line of readFileSync(join(src, "../../sandbox/Dockerfile"), "utf8").split("\n")) {
+            const parts = line.trim().split(/\s+/);
+            const destination = parts.at(-1);
+            if (parts[0] !== "COPY" || !destination?.startsWith(BIN)) {
+                continue;
+            }
+            const directory = destination.endsWith("/") ? destination.slice(0, -1) : posix.dirname(destination);
+            for (const part of parts.slice(1, -1)) {
+                if (part.startsWith(SOURCE_PREFIX)) {
+                    copied.set(part.slice(SOURCE_PREFIX.length), directory);
+                }
+            }
+        }
+        return copied;
+    };
+
+    // The relative modules a file reaches, itself included, by path below src/, following static imports (single- and
+    // multi-line alike).
+    const reached = (entry) => {
+        const seen = new Set();
+        const visit = (file) => {
+            if (seen.has(file)) {
+                return;
+            }
+            seen.add(file);
+            for (const match of readFileSync(join(src, file), "utf8").matchAll(/\bfrom\s+"(\.\.?\/[^"]+\.mjs)"/g)) {
+                visit(posix.join(posix.dirname(file), match[1]));
+            }
+        };
+        visit(entry);
+        return seen;
+    };
+
+    it.each(["agent-output-filter.mjs", "retrieve-output.mjs"])("copies every module %s imports where its import looks", (entry) => {
+        const copied = copiedToBin();
+        const misplaced = [...reached(entry)].filter((file) => copied.get(file) !== posix.join(BIN, posix.dirname(file)));
+        expect(misplaced.map((file) => `${file} -> ${copied.get(file) ?? "not copied"}`)).toEqual([]);
+    });
+});

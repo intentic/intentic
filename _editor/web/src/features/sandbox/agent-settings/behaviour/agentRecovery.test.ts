@@ -103,6 +103,20 @@ test("the keep-warm token threshold accepts values above ten million, as the dae
     expect(box.value).toBe(`20000000`);
 });
 
+// A turn that stopped on a large context with work open: off (0) by default, written as its own key within its bounds.
+test("the large-context row opens at 0 and writes how many fresh sessions in a row, kept to its ceiling", async () => {
+    const host = mount();
+    const box = host.querySelector<HTMLInputElement>(`input[aria-label="Fresh sessions in a row"]`)!;
+    expect(box.value).toBe(`0`);
+
+    await change(box, `3`);
+    expect(patch).toHaveBeenLastCalledWith({ contextContinues: 3 });
+
+    await change(box, `99`);
+    expect(patch).toHaveBeenLastCalledWith({ contextContinues: 10 });
+    expect(box.value).toBe(`10`);
+});
+
 // Simple keeps the one answer per ending and the restart switch; Advanced adds the hand-off, the turn cap and the
 // automation ceilings, and the choice is kept for this section alone.
 test("Simple keeps each ending's answer, and Advanced adds the tuning and the automation ceilings", async () => {

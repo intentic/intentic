@@ -7,7 +7,7 @@ import type { JsonValue } from "@intentic/base/fetch-json";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { z } from "zod";
-import { followForeground, type ForegroundCall, NO_PROMPTS, PIPESTATUS_TRAP, settleForeground } from "../../../agent/tools/agent-terminals.js";
+import { agentScript, followForeground, type ForegroundCall, NO_PROMPTS, PIPESTATUS_TRAP, settleForeground } from "../../../agent/tools/agent-terminals.js";
 import type { BackgroundJobSeed } from "../../../agent/tools/jobs/background-jobs.js";
 import { maskDeep, maskTargets, withheld } from "../../../agent/tools/agent-redaction.js";
 import { STATUS_FILE } from "../../../agent/tools/jobs/job-files.js";
@@ -111,7 +111,7 @@ const paneArgv = (pane: ShellPane, said: string, executed: string, runRoot: stri
     const agent = join(dir, "agent");
     writeRunFile(dir, "agent", `${PIPESTATUS_TRAP}${executed}\n`);
     const owner = pane.owner !== undefined && /^[A-Za-z0-9_-]+$/u.test(pane.owner) ? `${WORKLOAD_ENV}=${pane.owner} ` : "";
-    writeRunFile(dir, "line", `${AGENT_SESSION_ENV}=${shellQuote(pane.agentSession)} ${owner}${POLITE}${NO_PROMPTS}bash ${shellQuote(agent)}\n`);
+    writeRunFile(dir, "line", `${AGENT_SESSION_ENV}=${shellQuote(pane.agentSession)} ${owner}${POLITE}${NO_PROMPTS}${agentScript(agent)}\n`);
     writeRunFile(dir, "said", said);
     writeRunFile(dir, "name", windowOf(said));
     return { argv: [TMUX_RUN_BIN, ...forwardFlags(pane.forward), "-f", join(dir, "line"), pane.session], dir };

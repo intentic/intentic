@@ -373,6 +373,12 @@
             "stopKeepingWarmHint": "Mantenida caliente hasta las {time}",
             "tryLandAgain": "Volver a integrar",
             "landsIfConflictsGone": "Integra si ya no hay conflictos",
+            "proceedWithoutAsking": "Seguir sin preguntar",
+            "proceedHint": "Sus turnos, y los de sus subagentes, siguen con su propia recomendación en lugar de esperar tu visto bueno",
+            "askBeforeGoingAhead": "Preguntar antes de seguir",
+            "proceedingHint": "Ahora sigue sin preguntar, y aun así se detiene antes de algo destructivo o hacia fuera",
+            "proceedLabel": "Si pregunta antes",
+            "proceedFailed": "No se pudo cambiar si pregunta antes",
             "notifyLabel": "Avisarme",
             "notifyAll": "De todo",
             "notifyAllHint": "Cada turno terminado y cada tarjeta que espera por ti",
@@ -6262,6 +6268,11 @@
             "rebuildToFinish": "Aprobado. {tool} llega cuando se reconstruya el sandbox.",
             "openRebuild": "Reconstruir"
         },
+        "instruction": {
+            "approve": "Añadir a {file}",
+            "everyConversation": "Aprobar lo añade a {file}. Toda conversación que empiece ahí lo sigue desde su próximo turno.",
+            "creates": "{file} aún no existe: aprobar lo crea con esta regla."
+        },
         "automation": {
             "name": "Nombre",
             "for": "Para",
@@ -6464,6 +6475,11 @@
             "scheduleTimesAreIn": "Las programaciones se rigen por",
             "whatAnAutomations": "Lo que significa «09:00» en una automatización. Las horas en pantalla siempre se muestran en tu propio reloj; este es el que decide cuándo se ejecuta algo.",
             "yourOwnClockIs": "Lo que significa «09:00» en una automatización. Tu equipo está en {zone}, así que estas horas no coincidirán con las que ves en él."
+        },
+        "agentProceed": {
+            "group": "Seguir adelante",
+            "title": "Seguir sin preguntar",
+            "description": "Los agentes siguen con su propia recomendación en lugar de esperar tu visto bueno, y aun así se detienen antes de algo destructivo o hacia fuera. De noche deciden las horas de noche."
         },
         "agentNightHours": {
             "group": "Horas de sueño",
@@ -6704,6 +6720,9 @@
             "turnCap": "Turno más largo en un bucle gestionado por el sandbox",
             "turnCapNote": "Minutos que puede durar un turno en OpenCode, un agente ACP, Pi o Muse antes de terminarlo; un subagente que lo alcanza continúa en vez de fallar. Claude Code y Codex no tienen ese límite.",
             "turnCapLabel": "Turno más largo, en minutos",
+            "contextContinues": "Seguir pese a un contexto grande",
+            "contextContinuesNote": "Cuántas veces seguidas una conversación continúa sola, en una sesión nueva, después de que su turno se detuvo porque su contexto había crecido con trabajo aún pendiente. Con 0 solo se indica en el chat.",
+            "contextContinuesLabel": "Sesiones nuevas seguidas",
             "turnBreaks": "Cuando un turno se rompe",
             "keepWarmGroup": "Chats inactivos",
             "keepWarm": "Mantener las cachés calientes tras un turno",

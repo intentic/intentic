@@ -61,12 +61,23 @@ const SpawnedChildSchema = z.object({
     cwd: z.string(),
     // What a follow-up resumes, as its last turn reported it.
     sessionId: z.string().optional(),
+    // Whether a model has read its brief (child-brief.ts); absent on a file from before, read as whether it has a session.
+    briefRead: z.boolean().optional(),
     startedAt: z.number(),
     // `running` while a turn of it is under way, `paused` while its turn waits on a re-run the sandbox booked, `settled`
     // once its last turn ended: what the next boot looks for, since a running one's turn may or may not come back.
     state: z.enum(["running", "paused", "settled", "held"]),
-    // A start accepted before it could run, with its original place in the waiting order.
-    startHold: z.object({ kind: z.enum(["seat", "lane", "start"]), order: z.number(), reason: z.string().optional(), requestId: z.string().optional() }).optional(),
+    // A start accepted before it could run, with its original place in the waiting order; `after`, the siblings a start
+    // of that kind waits for (child-after.ts).
+    startHold: z
+        .object({
+            kind: z.enum(["seat", "lane", "start", "after"]),
+            order: z.number(),
+            reason: z.string().optional(),
+            requestId: z.string().optional(),
+            after: z.array(z.string()).optional(),
+        })
+        .optional(),
     ending: ChildEndingSchema.optional(),
     // On `paused`, the wall its turn stopped at.
     pausedOn: z.string().optional(),

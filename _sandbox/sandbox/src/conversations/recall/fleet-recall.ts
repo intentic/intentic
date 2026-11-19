@@ -8,6 +8,9 @@ import { agentRepoChanges } from "../land/agent-changes.js";
 import type { FoundLine } from "../../sessions/search/search-index.js";
 import { transcriptFile } from "../../sessions/transcript-record.js";
 import { type FleetNow, fleetNow } from "./fleet-now.js";
+import { ROSTER } from "../actor/subagent-roster.js";
+import { stoppedUnlanded } from "./fleet-left-off.js";
+import { type FleetDriftRow, type FleetOverlap, type FleetRefusedBy, fleetDriftRow, fleetOverlapOf, fleetRefusedBy, TOUCHING_SHOWN } from "./fleet-overlap.js";
 import { type Ending, endingStatus, isIsolated, type PersistedAgent, reposOf } from "../registry/agents-store.js";
 import { oneLine } from "@intentic/base/one-line";
 
@@ -15,7 +18,7 @@ import { oneLine } from "@intentic/base/one-line";
 // Read-only; steering is `agents send`, landing, archiving and discarding are the board's own actions. Returns data,
 // not text; the CLI renders it.
 
-export type FleetRecallDeps = Pick<Services, "agents" | "conversations" | "agentWorktrees" | "transcripts" | "saidIndex">;
+export type FleetRecallDeps = Pick<Services, "agents" | "conversations" | "agentWorktrees" | "transcripts" | "saidIndex"> & Partial<Pick<Services, "inFlight">>;
 
 // These spellings resolve to a handle, in this order, first hit wins, exact before fuzzy so an id is never shadowed by a
 // prefix:
@@ -135,9 +138,13 @@ export interface FleetRow {
     // Why this row matched a search; absent on a roster read, and when the title itself was the match. `via` marks a
     // line it did rather than said: a tool call, a question card, a notice, a run.
     readonly snippet?: FoundLine;
+    // Held work found no longer merging into the line it lands on (fleet-overlap.ts); absent while it merges.
+    readonly drift?: FleetDriftRow;
+    // On `--touching`: the paths under the one asked about it has changed and not landed, the first few, and how many.
+    readonly touching?: { readonly paths: readonly string[]; readonly count: number };
 }
 
-const rowOf = (deps: FleetRecallDeps, entry: PersistedAgent, snippet?: FoundLine): FleetRow => ({
+const rowOf = (deps: FleetRecallDeps, entry: PersistedAgent, snippet?: FoundLine, touching?: readonly string[]): FleetRow => ({
     id: entry.id,
     // Projected status when available, matching the board, so the CLI and fleet view never disagree.
     status: deps.agents.get(entry.id)?.status ?? endingStatus(entry.ending),
@@ -154,6 +161,8 @@ const rowOf = (deps: FleetRecallDeps, entry: PersistedAgent, snippet?: FoundLine
         owner: entry.social.owner,
         startedBy: entry.identity.startedBy,
         snippet,
+        drift: fleetDriftRow(entry),
+        touching: touching === undefined ? undefined : { paths: touching.slice(0, TOUCHING_SHOWN), count: touching.length },
     }),
 });
 
@@ -165,6 +174,10 @@ export interface RosterOptions {
     readonly repo?: string;
     // Only conversations a member answers for, by any part of their address (`ania` finds ania@example.com).
     readonly owner?: string;
+    // Only conversations that changed this workspace-relative path, or anything under it, and have not landed it.
+    readonly touching?: string;
+    // Only conversations stopped with work never landed, idle since before this instant (fleet-left-off.ts).
+    readonly unlandedBefore?: number;
 }
 
 const ROSTER_LIMIT = 30;
@@ -180,6 +193,7 @@ const scopedEntries = (deps: FleetRecallDeps, options: RosterOptions): Persisted
             (entry) =>
                 (options.all === true || entry.archivedAt === undefined) &&
                 (options.repo === undefined || reposOf(entry).some((repo) => repo.repo === options.repo)) &&
+                (options.unlandedBefore === undefined || stoppedUnlanded(deps, entry, options.unlandedBefore)) &&
                 ownedBy(entry, options.owner),
         )
         .sort((left, right) => right.updatedAt - left.updatedAt);
@@ -195,8 +209,10 @@ type Keeps = (id: string) => boolean;
 const keepsAll: Keeps = () => true;
 
 export const fleetRosterPage = (deps: FleetRecallDeps, options: RosterOptions = {}, keeps: Keeps = keepsAll): FleetPage => {
-    const entries = scopedEntries(deps, options).filter((entry) => keeps(entry.id));
-    return { rows: entries.slice(0, options.limit ?? ROSTER_LIMIT).map((entry) => rowOf(deps, entry)), total: entries.length };
+    // Read once off the index in memory (conversations/files-in-flight.ts): who holds the path, and what of it.
+    const touching = options.touching === undefined ? undefined : (deps.inFlight?.touching(options.touching) ?? new Map<string, readonly string[]>());
+    const entries = scopedEntries(deps, options).filter((entry) => keeps(entry.id) && (touching === undefined || touching.has(entry.id)));
+    return { rows: entries.slice(0, options.limit ?? ROSTER_LIMIT).map((entry) => rowOf(deps, entry, undefined, touching?.get(entry.id))), total: entries.length };
 };
 
 export const fleetRoster = (deps: FleetRecallDeps, options: RosterOptions = {}): readonly FleetRow[] => fleetRosterPage(deps, options).rows;
@@ -327,6 +343,10 @@ export interface FleetRecall extends FleetRow {
     readonly reach?: TurnReach;
     // What is live or holding it right now; absent for a conversation at rest.
     readonly now?: FleetNow;
+    // The files it changed and has not landed, who else is changing them, and a drift from its line (fleet-overlap.ts).
+    readonly overlap?: FleetOverlap;
+    // For a land refused on conflicts: whose landed work each clashing file met (fleet-overlap.ts); read with the diff.
+    readonly refusedBy?: readonly FleetRefusedBy[];
     readonly repoStates: readonly FleetRepo[];
     readonly digest: FleetDigest;
 }
@@ -368,15 +388,23 @@ const spendOf = (
     return { costUsd, inputTokens, outputTokens, toolUses, usage };
 };
 
+// A spawned child whose next turn waits to start (for memory, a seat, the owner): its parent's roster row says what for.
+const waitingChild = (deps: Pick<FleetRecallDeps, "conversations">, id: string): string | undefined => {
+    const row = deps.conversations.holdings(ROSTER).get(id);
+    return row?.kind === "spawned" && row.status === "pending" ? row.summary : undefined;
+};
+
 export const fleetRecall = async (
     deps: FleetRecallDeps,
     entry: PersistedAgent,
     historyRoot: string,
     options: RecallOptions = {},
 ): Promise<FleetRecall> => {
-    const [repos, messages] = await Promise.all([
+    const [repos, messages, refusedBy] = await Promise.all([
         repoStates(deps, entry, options.diff !== false),
         deps.transcripts.rows(entry).catch((): TranscriptRow[] => []),
+        // allow(silent-catch): who landed the other side is an aid to reading a refusal; git failing to say leaves it out.
+        options.diff === false ? undefined : fleetRefusedBy(deps, entry).catch(() => undefined),
     ]);
     const { placement, totals } = entry;
     const row = rowOf(deps, entry);
@@ -397,7 +425,9 @@ export const fleetRecall = async (
             archivedAt: entry.archivedAt,
             landedSubject: entry.landing.message?.subject,
             reach: entry.reach,
-            now: fleetNow(deps.agents.get(entry.id), deps.conversations.state(entry.id), row.running),
+            now: fleetNow(deps.agents.get(entry.id), deps.conversations.state(entry.id), row.running, waitingChild(deps, entry.id)),
+            overlap: fleetOverlapOf(deps, entry),
+            refusedBy,
         }),
         ...failureOf(entry.ending),
         repoStates: repos,

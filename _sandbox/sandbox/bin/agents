@@ -45,12 +45,14 @@ const USAGE = `agents — every conversation in this workspace: look one up, or 
 LOOK UP — reach for these instead of searching /history by hand
   agents show <handle>                 ONE conversation, whole: what it was asked, where it got to, how it
                                        ended, its branch and worktree, its per-repo delta and whether that
-                                       landed, and where its record is. The HANDLE is anything that names
-                                       it — the id (\`fair-sage-ey2r\`), the branch (\`agent/fair-sage-ey2r\`),
-                                       an id prefix, words from its title, its runtime session id or the
-                                       first 8 hex of it, a terminal named for it (\`agent-126a7bc4-%551\`),
-                                       a session it ran in earlier, a run or turn id, or the id of an
-                                       in-process subagent one of its turns started (\`a8afce09da420285a\`).
+                                       landed, the files it has in flight and who else is changing them, a
+                                       drift from the line it lands on, and where its record is. The HANDLE
+                                       is anything that names it — the id (\`fair-sage-ey2r\`), the branch
+                                       (\`agent/fair-sage-ey2r\`), an id prefix, words from its title, its
+                                       runtime session id or the first 8 hex of it, a terminal named for it
+                                       (\`agent-126a7bc4-%551\`), a session it ran in earlier, a run or turn
+                                       id, or the id of an in-process subagent one of its turns started
+                                       (\`a8afce09da420285a\`).
                                        \`self\` (or \`me\`) is the conversation this shell runs for
           [--transcript] [--last <n>] [--grep <text>]
                                        add the record itself: the last <n> messages (default 20), each with
@@ -68,7 +70,15 @@ LOOK UP — reach for these instead of searching /history by hand
                                        --repo narrows to conversations spanning one repo; --owner to the
                                        ones a member answers for (any part of their address). 30 rows unless
                                        --limit says more, at most 100; a cut page says how many there are, and
-                                       --json carries \`total\` and \`truncated\`
+                                       --json carries \`total\` and \`truncated\`. A row marked
+                                       "no longer merges" is finished work held on its branch that the line it
+                                       lands on has moved under: its land will clash until it is rebased
+          [--touching <path>]          only the conversations that changed this file, or anything under this
+                                       folder, and have not landed it, each with the files it holds there: who
+                                       else is changing what you are about to change
+          [--unlanded [--hours <n>]]   only conversations stopped with work that never landed, idle for at least
+                                       <n> hours (default 24): work nobody came back for. A plain \`ls\` says how
+                                       many there are under its rows. A row running a loop says how far it got
   agents find '<text>' [--all] [--limit <n>] [--repo <name>] [--owner <who>] [--json]
                                        which conversations said or did this, with the line that proves it,
                                        marked by kind: user (asked by its user), said, ran (a tool call's
@@ -82,7 +92,9 @@ LOOK UP — reach for these instead of searching /history by hand
                                        see whether a failure is yours. Each failing job with the run, commit and
                                        time it was read, and the failing tests and errors its log named. From
                                        the runs the daemon already heard, asking no forge; it says when nothing
-                                       is known (no CI wired, no run of main heard yet)
+                                       is known (no CI wired, no run of main heard yet). Then what this
+                                       sandbox's own test runs on clean trees at main commits saw fail (suites
+                                       CI does not run too): the commit, the command, who ran it and when
   ... --on <link>                      ls, find, show and bundle read a LINKED sandbox's conversations
                                        instead, when its owner shares records on the link (\`agents links\`
                                        says which do); \`diagnostics … --on <link>\` reads its logs
@@ -100,6 +112,11 @@ SAY SOMETHING TO ANOTHER CONVERSATION, OR PRESS ITS CONTINUE
                                        one — which is what \`send\` below is limited to. The message is
                                        attributed to this conversation and read as a peer's words, not as
                                        its owner's
+  agents continue <handle>             carry a conversation on in a FRESH session, opened with its latest
+                                       messages, where its work stands and what its last turn said was left: for
+                                       one that stopped because its context grew large. \`resume\` below carries
+                                       on in the same session instead. With the \`contextContinues\` setting
+                                       above 0, the sandbox does this by itself after such a stop
   agents resume <handle> [--provider <id> --model <id>] [--effort <tier>] [--account <id>] [--harness <loop>]
                                        press another conversation's Continue, as the editor's "Send again"
                                        does: a turn a spent allowance or a stop held runs again whole, with
@@ -107,6 +124,22 @@ SAY SOMETHING TO ANOTHER CONVERSATION, OR PRESS ITS CONTINUE
                                        its own session. Name a provider and model to move it off a spent
                                        one (\`agents providers\` lists what has room); left out, it runs on
                                        the conversation's own routing. Archived conversations stay archived
+
+REPEAT A PROMPT UNTIL THE WORK IS DONE
+  agents loop '<prompt>' [--until '<command>'] [--goal '<text>'] [--on <handle>] [--max <n>] [--stall <n>]
+              [--spend <usd>] [--provider <id> --model <id>] [--land | --no-land]
+                                       a chain of rounds instead of "continue" typed by hand: each round is a
+                                       fresh session of one conversation, given the prompt, the latest messages,
+                                       where the work stands and where the last round left it, and writes
+                                       whether it is done and how many items remain. It ends once a round says
+                                       it is done or counts 0 remaining, and --until, when given, exits 0 in the
+                                       conversation's tree; or at --max rounds (default 10), after --stall rounds
+                                       in a row that changed nothing (default 2), or past --spend dollars. Each
+                                       round's work lands, or is held, by the land policy (--land / --no-land
+                                       override it). --on loops an existing conversation (\`self\`: this one,
+                                       starting once this turn ends); left out, a new one is opened. Prints its
+                                       id; \`agents show <id>\` and \`agents ls\` say how far it got
+  agents loop --stop <handle>          make the round in flight the loop's last; the round itself carries on
 
 SPAWN AND SUPERVISE
   agents providers [--all]             what a subagent could run on right now: every connected provider, its
@@ -128,14 +161,17 @@ SPAWN AND SUPERVISE
                                        it is over: the next turn asks the provider, and is refused again,
                                        once, if it was not
   agents spawn --provider <id> --model <id> [--effort <tier>] [--on <runner|here>]
-               [--harness native|claude-code] [--description "one line"] '<task>'
+               [--harness native|claude-code] [--description "one line"] [--after <id>,<id>] '<task>'
                                        spawn a subagent; prints its id and returns immediately.
                                        --provider and --model are REQUIRED: a subagent spends a real
                                        allowance and nothing is chosen for you. \`agents providers\`
                                        lists what you can name.
                                        --on names the machine: a runner, or "here" for this sandbox.
                                        Left out, the fleet decides, which is what spreads a fan-out
-                                       across every machine you have connected
+                                       across every machine you have connected.
+                                       --after names other subagents of yours: it waits, pending, and
+                                       starts by itself once each has finished and its work is in
+                                       your checkout
   agents links                         the owner's other sandboxes this conversation may hand tasks to, whether
                                        each answers now, and the terms each holds its tasks to
   agents delegate <link> [--description "one line"] '<task>'
@@ -177,8 +213,10 @@ work, on the named provider's connected account (claude, codex, grok, kimi, gemi
 --model composer-2.5). Its finished work comes back into your conversation's checkout, as an in-process subagent's
 edits do, and reaches the workspace with your land; where it clashes with your edits it is held, and \`agents merge\`
 brings it in. It sees nothing of this shell or its conversation: give it a self-contained task with every path,
-requirement and constraint. A provider nobody has connected fails
-with the words to say so.`;
+requirement and constraint. The sandbox opens its first turn with a note of its own (the AGENTS.md files already in
+its instructions, not to commit and where its work lands, its artifacts folder, your other subagents and the files
+each is changing, the build and test tools installed, the shape of its report), so leave those out. A provider
+nobody has connected fails with the words to say so.`;
 
 const die = (message) => {
     process.stderr.write(`${message}\n`);
@@ -408,11 +446,35 @@ const whoOf = (agent) => {
 // One roster line. Running is marked on the status rather than in a column of its own: it is the same fact,
 // and a column that is empty for all but one row is a column nobody reads.
 const rosterLine = (agent) =>
-    `${pad(agent.id, 22)} ${pad(agent.running ? `${agent.status}*` : agent.status, 11)} ${pad(whoOf(agent), 12)} ${pad(modelOf(agent), 24)} ${pad(`${agent.turns ?? 0}t`, 5)} ${pad(ago(agent.updatedAt), 5)} ${agent.title ?? "(untitled)"}`;
+    `${pad(agent.id, 22)} ${pad(agent.running ? `${agent.status}*` : agent.status, 11)} ${pad(whoOf(agent), 12)} ${pad(modelOf(agent), 24)} ${pad(`${agent.turns ?? 0}t`, 5)} ${pad(ago(agent.updatedAt), 5)} ${agent.title ?? "(untitled)"}${driftMark(agent.drift)}`;
+
+// Held work the line it lands on moved under (conversations/overlap/branch-drift.ts), said on its row so a morning's landing
+// batch is not where it is first met.
+const driftMark = (drift) =>
+    drift === undefined ? "" : ` · no longer merges: ${drift.files} ${drift.files === 1 ? "file clashes" : "files clash"} (since ${ago(drift.since)} ago)`;
+
+// The files a row holds under the path `--touching` asked about.
+const touchingLine = (touching) =>
+    `${touching.paths.join(", ")}${touching.count > touching.paths.length ? ` and ${touching.count - touching.paths.length} more` : ""}`;
+
+// How far a loop has got (FleetLoop, recall/fleet-left-off.ts): its round, what the last one counted, what ends it.
+const loopLine = (loop) =>
+    [
+        `${loop.state === "running" ? "round" : `${loop.state} after round`} ${loop.round} of ${loop.max}`,
+        ...(loop.remaining === undefined ? [] : [`${loop.remaining} remaining`]),
+        ...(loop.until === undefined ? [] : [`until \`${loop.until}\``]),
+        ...(loop.last === undefined ? [] : [`last: ${loop.last}`]),
+    ].join(" · ");
 
 const writeRoster = (agents) => {
     for (const agent of agents) {
         process.stdout.write(`${rosterLine(agent)}\n`);
+        if (agent.touching !== undefined) {
+            process.stdout.write(`${" ".repeat(23)}changing: ${touchingLine(agent.touching)}\n`);
+        }
+        if (agent.loop !== undefined) {
+            process.stdout.write(`${" ".repeat(23)}loop: ${loopLine(agent.loop)}\n`);
+        }
         if (agent.snippet !== undefined) {
             // Which kind of line matched: words its user typed, words it said, or something it did (snippet.via).
             const kind = agent.snippet.via ?? (agent.snippet.speaker === "user" ? "user" : "said");
@@ -421,13 +483,25 @@ const writeRoster = (agents) => {
     }
 };
 
+// A path as this shell names it, made absolute so the daemon can place it in the shared tree or in a checkout of its
+// own (fleet-overlap.ts indexedPath); one already absolute, or naming the whole tree, goes as typed.
+const touchingPath = (path) => (path === undefined || path === "." || path.startsWith("/") ? path : `${process.cwd()}/${path.replace(/^\.\//u, "")}`);
+
 const ls = async (argv) => {
-    const { flags } = parseFlags(argv, ["all", "limit", "repo", "owner", "json", "on"], ["all", "json"], {});
-    const answer = await read(`/fleet?${query({ all: flags.all, limit: flags.limit, repo: flags.repo, owner: flags.owner, on: flags.on })}`);
+    const { flags } = parseFlags(argv, ["all", "limit", "repo", "owner", "json", "on", "touching", "unlanded", "hours"], ["all", "json", "unlanded"], {});
+    const touching = touchingPath(flags.touching);
+    const unlanded = flags.unlanded === true ? (flags.hours ?? "24") : undefined;
+    const answer = await read(`/fleet?${query({ all: flags.all, limit: flags.limit, repo: flags.repo, owner: flags.owner, touching, unlanded, on: flags.on })}`);
     if (flags.json === true) {
         process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
     } else if (answer.agents.length === 0) {
-        process.stdout.write("No conversations.\n");
+        process.stdout.write(
+            unlanded !== undefined
+                ? `No conversation has work stopped and not landed for ${unlanded}h or more.\n`
+                : touching === undefined
+                  ? "No conversations.\n"
+                  : `No live conversation has changed ${flags.touching} without landing it.\n`,
+        );
     } else {
         writeRoster(answer.agents);
         const note = pageNote(answer, `ls${flags.all === true ? " --all" : ""}`);
@@ -435,6 +509,11 @@ const ls = async (argv) => {
             process.stdout.write(`${note}\n`);
         }
         process.stdout.write(`more: agents show <id>${flags.all === true ? "" : " · agents ls --all includes the archive"}\n`);
+    }
+    // Work nobody came back for, said on every plain roster so it is not left to somebody remembering it.
+    if (flags.json !== true && answer.unlanded !== undefined) {
+        const { count, hours } = answer.unlanded;
+        process.stdout.write(`${count} ${count === 1 ? "conversation has" : "conversations have"} work stopped and not landed for over ${hours}h: agents ls --unlanded\n`);
     }
 };
 
@@ -521,6 +600,35 @@ const reachLines = (reach) => {
     return lines;
 };
 
+// A conversation as these lines name it: its id, and its title where it may be shown.
+const namedOf = (named) => (named.title === undefined ? named.id : `${named.id} ("${named.title}")`);
+
+// The files it changed and has not landed, who else is changing them, and held work its line moved under
+// (FleetOverlap, recall/fleet-overlap.ts).
+const overlapLines = (overlap) => {
+    if (overlap === undefined) {
+        return [];
+    }
+    const lines = [];
+    if (overlap.files > 0) {
+        const more = overlap.files > overlap.paths.length ? ` and ${overlap.files - overlap.paths.length} more` : "";
+        lines.push(`in flight: ${overlap.files} ${plural(overlap.files, "file", "files")} changed, not landed: ${overlap.paths.join(", ")}${more}`);
+    }
+    for (const other of overlap.others) {
+        lines.push(`           also changed by ${namedOf(other)}: ${other.paths.join(", ")}`);
+    }
+    const drift = overlap.drift;
+    if (drift !== undefined) {
+        const who = drift.asked ? "it (or its parent) was asked to resolve it" : "nothing was started: rebase it, or land and resolve";
+        lines.push(`drift: since ${at(drift.since)}, no longer merges into the line it lands on; ${who}`);
+        for (const repo of drift.repos) {
+            const files = repo.paths.map(({ path, by }) => (by === undefined ? path : `${path} ← landed by ${by.map(namedOf).join(", ")}`));
+            lines.push(`       ${repo.repo} onto ${repo.onto.slice(0, 12)}: ${files.join("; ")}${repo.more === undefined ? "" : `; +${repo.more} more`}`);
+        }
+    }
+    return lines;
+};
+
 // What it spent, honestly: a zero nobody measured is not printed as one (FleetUsage, fleet-recall.ts).
 const spendOf = (agent) => {
     if (agent.usage === "unrecorded") {
@@ -557,6 +665,9 @@ const nowLines = (now) => {
         if (turn.run !== undefined) {
             lines.push(`  run ${turn.run}`);
         }
+    }
+    if (now.waiting !== undefined) {
+        lines.push(`waiting to start: ${now.waiting}`);
     }
     if (now.resuming === true) {
         lines.push("resuming: the sandbox is re-running what killed its last turn");
@@ -613,6 +724,9 @@ const writeRecall = (agent) => {
     if (agent.landedSubject !== undefined) {
         process.stdout.write(`  landed as: ${agent.landedSubject}\n`);
     }
+    if (agent.loop !== undefined) {
+        process.stdout.write(`  loop: ${loopLine(agent.loop)}\n`);
+    }
     /* Show changed repositories and summarize the unchanged remainder. */
     const interesting = agent.repoStates.filter((repo) => repo.files !== 0 || repo.landed);
     for (const [index, repo] of interesting.entries()) {
@@ -624,6 +738,14 @@ const writeRecall = (agent) => {
     }
     for (const [index, line] of reachLines(agent.reach).entries()) {
         process.stdout.write(`  ${index === 0 ? "reach:" : "      "} ${line}\n`);
+    }
+    for (const line of overlapLines(agent.overlap)) {
+        process.stdout.write(`  ${line}\n`);
+    }
+    /* A refused land's clashing files, with whose landed work each met (FleetRefusedBy, recall/fleet-overlap.ts). */
+    for (const [index, repo] of (agent.refusedBy ?? []).entries()) {
+        const files = repo.paths.map(({ path, by }) => `${path} ← landed by ${by.map(namedOf).join(", ")}`);
+        process.stdout.write(`  ${index === 0 ? "refused land:" : "             "} ${repo.repo}: ${files.join("; ")}\n`);
     }
     process.stdout.write(`  record ${agent.record} (zstdcat) · ${agent.digest.messages} messages${agent.sessionId === undefined ? "" : ` · session ${agent.sessionId}`}\n`);
     for (const [index, line] of nowLines(agent.now).entries()) {
@@ -860,7 +982,7 @@ const providers = async (argv = []) => {
 };
 
 const spawn = async (argv) => {
-    const { flags, positional } = parseFlags(argv, ["provider", "model", "effort", "harness", "description", "on"]);
+    const { flags, positional } = parseFlags(argv, ["provider", "model", "effort", "harness", "description", "on", "after"]);
     const prompt = positional.join(" ").trim();
     if (prompt === "") {
         return die(`agents: spawn needs a task\n\n${USAGE}`);
@@ -879,6 +1001,8 @@ const spawn = async (argv) => {
         ...(flags.harness !== undefined ? { harness: flags.harness } : {}),
         ...(flags.effort !== undefined ? { effort: flags.effort } : {}),
         ...(flags.on !== undefined ? { on: flags.on } : {}),
+        // The siblings it starts after, comma-separated as the usage spells them.
+        ...(flags.after !== undefined ? { after: flags.after.split(",").map((id) => id.trim()).filter((id) => id !== "") } : {}),
     });
     const { status, text } = await call("POST", "/children/spawn", body);
     if (status !== 200) {
@@ -1132,6 +1256,67 @@ const dieWithCandidates = (text) => {
 };
 
 // Presses ANY conversation's Continue (fleet-resume.ts): its held turn again, on another model when named.
+// `agents loop`: start repeating a prompt on a conversation (loops/fleet-loop.routes.ts), or `--stop` its loop.
+const loop = async (argv) => {
+    const usage = usageOf("loop");
+    const { flags, positional } = parseFlags(
+        argv,
+        ["until", "goal", "on", "max", "stall", "spend", "provider", "model", "land", "no-land", "stop"],
+        ["land", "no-land"],
+        undefined,
+        usage,
+    );
+    if (flags.stop !== undefined) {
+        const { status, text } = await call("POST", "/fleet/loop/stop", JSON.stringify({ to: handleOf(flags.stop) }));
+        if (status !== 200) {
+            return dieWithCandidates(text);
+        }
+        const { conversationId } = JSON.parse(text);
+        process.stdout.write(`${conversationId}: the round in flight is the loop's last.\n`);
+        return;
+    }
+    const prompt = positional.join(" ").trim();
+    if (prompt === "") {
+        return die(`agents: loop needs the prompt each round is given\n\n${usage}`);
+    }
+    if ((flags.provider === undefined) !== (flags.model === undefined)) {
+        return die("agents: name --provider and --model together: a model name only means anything to the provider that serves it");
+    }
+    const whole = (name) => {
+        const value = Number(flags[name]);
+        return flags[name] === undefined ? undefined : Number.isInteger(value) && value > 0 ? value : die(`agents: --${name} takes a whole number above 0\n\n${usage}`);
+    };
+    const spend = flags.spend === undefined ? undefined : Number(flags.spend);
+    if (spend !== undefined && !(spend > 0)) {
+        return die(`agents: --spend takes a dollar amount above 0\n\n${usage}`);
+    }
+    const land = flags.land === true ? true : flags["no-land"] === true ? false : undefined;
+    const ask = { prompt, until: flags.until, goal: flags.goal, on: flags.on === undefined ? undefined : handleOf(flags.on), max: whole("max"), stall: whole("stall"), spendUsd: spend, provider: flags.provider, model: flags.model, land };
+    const body = Object.fromEntries(Object.entries(ask).filter(([, value]) => value !== undefined));
+    const { status, text } = await call("POST", "/fleet/loop", JSON.stringify(body));
+    if (status !== 200) {
+        return dieWithCandidates(text);
+    }
+    const { conversationId, waits, loop: record } = JSON.parse(text);
+    const start = waits === true ? "starts once its running turn ends" : "is running";
+    process.stdout.write(`${conversationId}: a loop of at most ${record.maxIterations} rounds ${start}. Follow it with \`agents show ${conversationId}\`; stop it with \`agents loop --stop ${conversationId}\`.\n`);
+};
+
+// `agents continue`: carry a conversation on in a fresh session (loops/context-continue.ts).
+const continueFresh = async (argv) => {
+    const { positional } = parseFlags(argv, [], [], undefined, usageOf("continue"));
+    const [handle, ...extra] = positional;
+    if (handle === undefined || extra.length > 0) {
+        return die(`agents: continue takes one handle\n\n${usageOf("continue")}`);
+    }
+    const { status, text } = await call("POST", "/fleet/continue", JSON.stringify({ to: handleOf(handle) }));
+    if (status !== 200) {
+        return dieWithCandidates(text);
+    }
+    const { conversationId, run } = JSON.parse(text);
+    process.stdout.write(`${conversationId}: carries on in a fresh session (run ${run}). Follow it with \`agents show ${conversationId}\`.\n`);
+};
+
 const resume = async (argv) => {
     const { flags, positional } = parseFlags(argv, ["provider", "model", "account", "harness", "effort"]);
     const [handle, ...extra] = positional;
@@ -1189,7 +1374,7 @@ const [command, ...rest] = process.argv.slice(2);
 const main = async () => {
     // Before any verb runs, so `agents list --help` is the usage and not the list.
     if (rest.includes("--help") || rest.includes("-h")) {
-        process.stdout.write(`${command === "find" || command === "message" || command === "bundle" || command === "ci" ? usageOf(command) : USAGE}\n`);
+        process.stdout.write(`${["find", "message", "bundle", "ci", "loop", "continue"].includes(command) ? usageOf(command) : USAGE}\n`);
         return;
     }
     if (command === "show") return show(rest);
@@ -1205,6 +1390,8 @@ const main = async () => {
     if (command === "send") return send(rest);
     if (command === "message") return message(rest);
     if (command === "resume") return resume(rest);
+    if (command === "loop") return loop(rest);
+    if (command === "continue") return continueFresh(rest);
     if (command === "answer") return answerChild(rest);
     if (command === "cancel") return cancelChild(rest);
     if (command === "merge") return mergeChild(rest);

@@ -272,6 +272,15 @@ A Windows (or macOS, or Linux desktop) program built in the sandbox runs here, n
 3. \`app_status <id>\` lists its windows: pass a window id to \`screenshot\` and \`ui_elements\` to look at it and drive it.
    \`app_logs\` reads what it printed. \`app_stop\` ends it with every process it started; do that when you are done.
 
+**A build, a test or a benchmark of the sandbox's checkout, run here:** \`devices exec \${id} [--in wsl] [--fetch <path>] -- <command>\`
+in the sandbox shell keeps a mirror of the checkout in this machine's allowed folders (what git tracks, not build
+outputs or .git), sends only the files whose bytes changed since the last run with fresh modification times so an
+incremental build here rebuilds them, deletes here what was deleted there, runs the command (PowerShell on Windows, a
+login shell in a WSL distro or elsewhere) in the matching folder with its output streamed back, and copies \`--fetch\`
+paths home. Runs on one machine go one at a time. Never copy a repository here file by file, or touch timestamps by
+hand, for a build: this is that. Toolchains here are the project's: a program the command needs that is missing is
+named, and installing it is the owner's call. \`gpu-run --on \${id} -- <command>\` is the same, for this machine's GPU.
+
 When the repository has a \`${RUN_TARGETS_FILE}\`, \`devices run [<target>] --device \${id}\` does steps 1 and 2 in one go:
 its build, the push (an .exe gathered with the sidecars and resource folders it expects beside it), the ports it says
 the sandbox needs, the start. While it builds in the owner's tree, lands into that repository wait for it, so the build

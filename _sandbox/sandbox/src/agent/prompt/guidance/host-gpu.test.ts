@@ -18,6 +18,8 @@ test("on a Windows PC the turn is told it is the owner's display GPU, to ask thr
     // shinobi-society, 2026-11-15..17: agents prefixed `env -u LD_LIBRARY_PATH` to cargo, Blender and Chrome 28 times
     // across 5 conversations, though the entrypoint already leaves the GPU's libraries out.
     expect(text).toContain("there is nothing to unset");
+    // The same audit: a GPU run done by hand on the owner's laptop, 25 calls and 17 minutes of app_status.
+    expect(text).toContain("`gpu-run --on <device> -- <command>`");
 });
 
 // A privileged container sees every device node of the VM, /dev/dxg included, with nothing to drive it.

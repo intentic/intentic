@@ -68,6 +68,14 @@ describe(`entrypoint GPU libraries`, () => {
         expect(entrypoint.indexOf("/usr/sbin/sshd")).toBeGreaterThan(strip);
         expect(entrypoint.indexOf("exec /opt/sandbox/netd/intentic-netd")).toBeGreaterThan(strip);
     });
+
+    // shinobi-society, 2026-11-15..17: the project's soft.sh pinned software rendering around 316 commands by hand.
+    it(`exports gpu-run's software-rendering pins for the whole container before sshd or the daemon starts`, () => {
+        const pins = entrypoint.indexOf(`eval "$(gpu-run --software-env)"`);
+        expect(pins).toBeGreaterThan(-1);
+        expect(entrypoint.indexOf("/usr/sbin/sshd")).toBeGreaterThan(pins);
+        expect(entrypoint.indexOf("exec /opt/sandbox/netd/intentic-netd")).toBeGreaterThan(pins);
+    });
 });
 
 /* 2026-11-17, the shinobi-society audit: Node 24's young generation reached 128 MiB in the daemon and in each of its

@@ -182,6 +182,10 @@ const turnNotes = (facts: AdmittedTurnFacts, premise: TurnPremise, spawn: string
     ...[unattendedAccountsNote(premise.role, roleWithheldAccounts(facts.installed, premise.role))].filter((note) => note !== undefined),
     // Every runtime alike, isolated or not: no runtime runs a check at its end any more, so none is told of one.
     ...[facts.landingChecksNote].filter((note) => note !== undefined),
+    // Who else is changing the files this conversation changed, each named once (conversations/files-in-flight.ts).
+    ...[facts.inFlightNote].filter((note) => note !== undefined),
+    // Last, right above the brief it rides with: what a spawned child is told before its task (subagents/starting/child-preamble.ts).
+    ...[facts.childNote].filter((note) => note !== undefined),
 ];
 
 // The posture the route folded into the request, kept only where this runtime's record honours it; anything else
@@ -275,6 +279,8 @@ export const honoured = (
             dependencyInstallAllowed: role.powers.files === "write" && role.powers.shell,
             // Whether the owner is asleep as the turn starts, which its instructions say (agent/night).
             ...opt("night", nightNow(settings, peopleAtEditor(), Date.now())),
+            // Whether the owner has said to carry on without stopping for a go-ahead (decide/proceed.ts).
+            ...opt("proceed", facts.proceed === true ? true : undefined),
             // Anchored at the workspace root, not the start folder: a role may start in one repo and read a sibling.
             ...opt("roleScope", roleScopeOf(role, context.effectiveCwd)),
             ...(access.denied.length > 0 ? { disallowedTools: access.denied } : {}),

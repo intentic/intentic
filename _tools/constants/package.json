@@ -27,6 +27,8 @@
         "src/ci-infra-steps.d.mts",
         "src/memory-room.mjs",
         "src/memory-room.d.mts",
+        "src/heavy/memory-floor.mjs",
+        "src/heavy/memory-floor.d.mts",
         "src/allow.mjs",
         "src/allow.d.mts",
         "src/dev-previews.mjs",
@@ -35,7 +37,9 @@
         "src/heavy/heavy-rules.d.cts",
         "src/heavy/heavy-turn.cjs",
         "src/heavy/heavy-hook.cjs",
-        "src/heavy/heavy-exec.cjs"
+        "src/heavy/heavy-exec.cjs",
+        "src/heavy/heavy-launch.cjs",
+        "src/heavy/heavy-launch.d.cts"
     ],
     "exports": {
         ".": {
@@ -94,7 +98,11 @@
             "default": "./src/heavy/heavy-rules.cjs"
         },
         "./heavy-hook": "./src/heavy/heavy-hook.cjs",
-        "./heavy-exec": "./src/heavy/heavy-exec.cjs"
+        "./heavy-exec": "./src/heavy/heavy-exec.cjs",
+        "./heavy-launch": {
+            "types": "./src/heavy/heavy-launch.d.cts",
+            "default": "./src/heavy/heavy-launch.cjs"
+        }
     },
     "scripts": {
         "build": "tsc",

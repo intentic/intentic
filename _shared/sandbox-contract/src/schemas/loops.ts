@@ -82,6 +82,15 @@ export const LoopDocumentSchema = z.object({
         .record(z.string(), z.unknown())
         .optional()
         .describe("The declared answer, for a loop that asked for one, checked against the shape it declared."),
+    // A backlog's count, read by the program rather than out of the reason's prose: zero is done whatever `done` says.
+    remaining: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe(
+            "How many items are still open after this round, when the work is a list (a backlog, failing tests, unfinished steps). Zero means done. Left out when the work is not countable.",
+        ),
 });
 export type LoopDocument = z.infer<typeof LoopDocumentSchema>;
 // Bounds a misconfigured loop; one that hasn't converged in 50 rounds is not one round short of it.
@@ -175,6 +184,7 @@ export const LoopIterationSchema = z.object({
         .optional()
         .describe("What the check said, in its own words. What a run history is actually read for: why it kept going, and why it stopped."),
     costUsd: z.number().optional().describe("What the round cost, in dollars."),
+    remaining: z.number().int().min(0).optional().describe("How many items the round said were still open, where it counted them."),
     changed: z.boolean().describe("Whether anything on disk moved. Three unchanged rounds in a row is the shape of a loop that is not working."),
     sessionId: z.string().optional().describe("The session it ran on, and the way from a history row to a readable record."),
 });

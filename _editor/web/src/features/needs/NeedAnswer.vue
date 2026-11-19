@@ -10,6 +10,7 @@ import NeedCapabilityBody from "./NeedCapabilityBody.vue";
 import NeedDecline from "./NeedDecline.vue";
 import NeedEnvironmentBody from "./NeedEnvironmentBody.vue";
 import NeedGrantBody from "./NeedGrantBody.vue";
+import NeedInstructionBody from "./NeedInstructionBody.vue";
 import NeedReleaseBody from "./NeedReleaseBody.vue";
 import NeedSecretBody from "./NeedSecretBody.vue";
 import { useNeedAnswer } from "./needAnswer";
@@ -53,6 +54,9 @@ const decline = async (): Promise<void> => {
     <NeedAutomationBody v-else-if="need.subject.kind === `automation`" :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedAutomationBody>
+    <NeedInstructionBody v-else-if="need.subject.kind === `instruction`" :need="need" :subject="need.subject">
+        <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
+    </NeedInstructionBody>
     <NeedEnvironmentBody v-else :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedEnvironmentBody>

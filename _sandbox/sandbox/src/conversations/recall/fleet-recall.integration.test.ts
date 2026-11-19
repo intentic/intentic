@@ -55,6 +55,8 @@ const depsOver = (entries: readonly PersistedAgent[], messages: Record<string, T
             running: () => false,
             sessionIdOf: (id: string) => entries.find((entry) => entry.id === id)?.sessionId,
             state: () => undefined,
+            // No spawned child waiting to start (the roster a parent's row reads, fleet-recall.ts waitingChild).
+            holdings: () => new Map(),
         },
         agentWorktrees: { conversationDir: (id: string) => `/history/worktrees/${id}` },
         transcripts: { rows: async (agent: { id: string }) => messages[agent.id] ?? [] },

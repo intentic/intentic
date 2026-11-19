@@ -145,6 +145,18 @@ const setTurnCap = (event: Event): void => {
     patch({ turnCapMinutes });
 };
 
+// How many fresh sessions in a row carry a conversation on past a large context (the daemon's loops/context-continue.ts).
+const CONTEXT_CONTINUES = numberSetting(SandboxSettingsSchema.shape.contextContinues);
+const setContextContinues = (event: Event): void => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+        return;
+    }
+    const contextContinues = clampCount(Number(input.value) || 0, CONTEXT_CONTINUES);
+    input.value = String(contextContinues);
+    patch({ contextContinues });
+};
+
 const THREADS = numberSetting(SandboxSettingsSchema.shape.automationThreadsAtOnce);
 const setAutomationThreadsAtOnce = (event: Event): void => {
     const input = event.target;
@@ -308,6 +320,28 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                         :model-value="settings?.autoResumeOnRestart ?? false"
                         :disabled="settings === undefined"
                         @update:model-value="(value: boolean) => patch({ autoResumeOnRestart: value })"
+                    />
+                </template>
+            </Row>
+
+            <!-- A turn that ended by itself because its context grew large, with work open: how many fresh sessions in
+                 a row carry it on; 0 only says so in the chat. -->
+            <Row
+                data-setting="agent-context-continues"
+                icon="refresh"
+                :title="t(`sandbox.agentRecovery.contextContinues`)"
+                :description="t(`sandbox.agentRecovery.contextContinuesNote`)"
+            >
+                <template #control>
+                    <input
+                        type="number"
+                        :min="CONTEXT_CONTINUES.min"
+                        :max="CONTEXT_CONTINUES.max"
+                        :aria-label="t(`sandbox.agentRecovery.contextContinuesLabel`)"
+                        class="ui-field-box ui-field-sm w-20 text-right"
+                        :value="settings?.contextContinues ?? CONTEXT_CONTINUES.default"
+                        :disabled="settings === undefined"
+                        @change="setContextContinues"
                     />
                 </template>
             </Row>

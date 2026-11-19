@@ -110,6 +110,17 @@ const socialOf = (held: PersistedAgent, turn: BeginTurn, entryOf: (id: string) =
     return asker === undefined ? social : (joinedEntry({ ...held, social }, asker, "prompt", now)?.social ?? social);
 };
 
+// A conversation's checkout taken off its runner: the one exception to placement latching (below), for a spawned child
+// whose runner could not prepare its workspace, so nothing ran there (children.ts): its turns run here from then on, in
+// the worktree its runner turns mirrored into. Undefined for one on no runner.
+const offRunner = (entry: PersistedAgent): PersistedAgent | undefined => {
+    if (entry.placement.kind !== "worktree" || entry.placement.runner === undefined) {
+        return undefined;
+    }
+    const { runner: _left, ...placement } = entry.placement;
+    return { ...entry, placement };
+};
+
 // What a conversation's first turn starts from. Placement latches with identity from here on: a later turn keeps its
 // workspace or worktree, and its runner, whatever a stale request says; a runner implies a worktree, since a remote
 // conversation is isolated by construction. So do the answers to the sandbox-wide defaults it opens with (a spawned
@@ -328,6 +339,9 @@ export interface AgentsRegistry {
     // hours ago. Refuses an answer the ending does not allow rather than persisting one no pass would ever read. The
     // card's `next` is derived from the answer it now holds, so the write's own broadcast says what the pass will do.
     readonly setBreakPolicy: (id: string, ending: TurnBreak, policy: TurnBreakPolicy | null) => Promise<AgentSummary | undefined>;
+    // Same grammar again, for whether its turns proceed without asking (agent/run/decide/proceed.ts): read as each turn
+    // is planned, so a flip mid-turn holds from the next one, for its subagents too where they have no answer of their own.
+    readonly setProceed: (id: string, proceed: boolean | null) => Promise<AgentSummary | undefined>;
     // Points the conversation at another account of the provider it runs on: the one write that moves who pays
     // (switchAccount). The session goes with the caller's say, separately (`session-cleared`). Leaves `updatedAt` alone.
     // `limit` re-times a spent-allowance ending to the new account's reopen (absent: it reads unspent), so the card states
@@ -356,6 +370,8 @@ export interface AgentsRegistry {
     readonly assign: (id: string, to: { email: string; name?: string }, at: number) => Promise<AgentSummary | undefined>;
     // Rewrites one conversation's seal (conversations/seal/): absent makes it shared. Its own writers decide who may.
     readonly setSeal: (id: string, seal: Seal | undefined) => Promise<AgentSummary | undefined>;
+    // Takes a conversation off the runner it was placed on, for one whose turn could not start there (offRunner).
+    readonly placeHere: (id: string) => Promise<AgentSummary | undefined>;
     // Adds or takes back one person's mark. `on` is the intent, not a flip, so a retried request settles where the
     // first one did. Leaves `updatedAt` alone: somebody reacting is not the conversation doing something.
     readonly react: (id: string, emoji: string, by: { email: string; name?: string }, on: boolean, at: number) => Promise<AgentSummary | undefined>;
@@ -461,6 +477,13 @@ const landFailureOnCard = ({ reason, code, at }: NonNullable<Landing["failure"]>
     ...opt("code", code),
     at,
 });
+
+// One override of a sandbox-wide default set, or cleared with null: absent is the only state that means inherit, so a
+// conversation never holds a frozen copy of a default it has quietly stopped following. The others carry through.
+const withPosture = (entry: PersistedAgent, key: keyof Postures, value: Postures[keyof Postures] | null): PersistedAgent => {
+    const { [key]: _cleared, ...held } = entry.postures;
+    return { ...entry, postures: (value === null ? held : { ...held, [key]: value }) as Postures };
+};
 
 // The registry's own books, as the land recorders below write through them.
 type RecordBooks = LandMarkBooks & { readonly broadcast: () => void };
@@ -1056,24 +1079,16 @@ export const createFleet = (
                 return { ...entry, social: at === null ? social : { ...social, unsentAt: at } };
             }),
         // null strips the override entirely; absent is the inherit state, so the agent keeps following the sandbox toggle.
-        setAutoLand: (id, autoLand) =>
-            amend(id, (entry) => {
-                const { autoLand: _cleared, ...held } = entry.postures;
-                return { ...entry, postures: autoLand === null ? held : { ...held, autoLand } };
-            }),
+        setAutoLand: (id, autoLand) => amend(id, (entry) => withPosture(entry, "autoLand", autoLand)),
         setBreakPolicy: async (id, ending, policy) => {
             // An answer the ending cannot take is refused here rather than stored: no pass would ever read it, and a card
             // showing a policy nothing acts on is worse than one showing none.
             if (policy !== null && !isTurnBreakPolicy(ending, policy)) {
                 return undefined;
             }
-            // Same as `setAutoLand`: null strips the key, since absent is the only state that means inherit. Only the
-            // named ending's key moves; the others carry through untouched.
-            return amend(id, (entry) => {
-                const { [ending]: _cleared, ...held } = entry.postures;
-                return { ...entry, postures: (policy === null ? held : { ...held, [ending]: policy }) as Postures };
-            });
+            return amend(id, (entry) => withPosture(entry, ending, policy));
         },
+        setProceed: (id, proceed) => amend(id, (entry) => withPosture(entry, "proceed", proceed)),
         switchAccount: (id, account, limit, pin) => amend(id, (entry) => switchedEntry(entry, account, limit, pin)),
         wearRole: (id, role) => amend(id, (entry) => ({ ...entry, profile: { ...entry.profile, actsAs: role } })),
         repointAccount: async (from, to) => {
@@ -1096,6 +1111,7 @@ export const createFleet = (
         setNotify: (id, email, level, at) => amendIf(id, (entry) => notifiedEntry(entry, email, level, at)),
         assign: (id, to, at) =>
             amend(id, (entry) => ({ ...entry, social: { ...entry.social, owner: { email: to.email, ...opt("name", to.name), since: at } } })),
+        placeHere: (id) => amendIf(id, offRunner),
         setSeal: (id, seal) =>
             amend(id, ({ seal: _held, ...entry }) => (seal === undefined ? entry : { ...entry, seal })),
         react: async (id, emoji, by, on, at) => {

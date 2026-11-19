@@ -12,6 +12,7 @@ import { approvalsContract } from "./contracts/approvals.contract.js";
 import { areasContract } from "./contracts/areas.contract.js";
 import { auditContract } from "./contracts/audit.contract.js";
 import { automationsContract } from "./contracts/automations.contract.js";
+import { basesContract } from "./contracts/bases.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
 import { choresContract } from "./contracts/chores.contract.js";
 import { ciContract } from "./contracts/ci.contract.js";
@@ -69,6 +70,7 @@ export const sandboxContract: {
     areas: typeof areasContract;
     audit: typeof auditContract;
     automations: typeof automationsContract;
+    bases: typeof basesContract;
     capabilities: typeof capabilitiesContract;
     chores: typeof choresContract;
     ci: typeof ciContract;
@@ -120,6 +122,7 @@ export const sandboxContract: {
     areas: areasContract,
     audit: auditContract,
     automations: automationsContract,
+    bases: basesContract,
     capabilities: capabilitiesContract,
     chores: choresContract,
     ci: ciContract,

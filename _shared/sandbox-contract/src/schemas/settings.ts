@@ -7,8 +7,10 @@ import { MODEL_SETUP_ID, ModelSetupSchema } from "../models/model-setups.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema } from "./command-admission.js";
 import { KeepWarmSettingsSchema } from "./keep-warm.js";
 import { commitAttributionSetting } from "./commit-attribution.js";
+import { autoResumeOnRestartSetting, contextContinuesSetting, continueWhenNeedMetSetting } from "./context-continues.js";
 import { GpuSettingsSchema } from "./gpu-settings.js";
 import { NightHoursSchema } from "./night-hours.js";
+import { proceedWithoutAskingSetting } from "./proceed-without-asking.js";
 import { LimitHandoffSchema } from "./providers/handoff.js";
 import { SessionsPlacementSchema } from "./offload.js";
 import { LimitPolicySchema, MemoryKillPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
@@ -568,26 +570,16 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Which work runs on a runner on one of your machines instead of this sandbox. `commands`: agents' heavy commands by the kind the heavy-command rules sort them into (tests, typechecks, verify…), each sent to one runner, or to `auto`: whichever runner has the most room at the moment the command starts, and only while this sandbox is busy (while it is calm the command runs here as usual). The code travels as it stands, uncommitted work included, the output streams back, and any file the command changed comes back with it, while a machine that is offline, outdated or busy hands the work back to this sandbox, and the output says so. `sessions`: what happens to a new conversation while this machine is busy and one of your runners has room: `suggest` offers that machine above the composer, `auto` starts it there unless you keep it here, `off` says nothing.",
         ),
-    // A person answering a need is exactly the moment they want the work to go on (docs/architecture/needs.md), unlike a
-    // restart nobody watched, so this one is on to begin with.
-    continueWhenNeedMet: z
-        .boolean()
-        .default(true)
-        .describe(
-            "Whether a conversation carries on by itself once something it asked a person for arrives: a connection made, a secret given, access allowed, a tool built into the image. Off leaves the answer on the conversation's card until someone sends a message.",
-        ),
-    autoResumeOnRestart: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Whether a turn killed by the sandbox restarting is re-run once it comes back. A switch rather than one of the policies above, because a restart is the one ending with nobody watching it, so there is no in-chat question to answer. Off to begin with: it would spend your allowance on work you are not watching and edit files while you are still waiting for the sandbox to return. Either way the interruption is recorded rather than silently lost. A restart the sandbox traces to memory running out goes by `memoryKillPolicy` instead, whatever this says.",
-        ),
+    contextContinues: contextContinuesSetting,
+    continueWhenNeedMet: continueWhenNeedMetSetting,
+    autoResumeOnRestart: autoResumeOnRestartSetting,
     // The owner's night (night-hours.ts): with nobody at the editor inside it, an agent's own question is answered by the
     // sandbox rather than parking the turn until morning. Off until the owner sets the hours: a sleep window guessed for
     // them would decide things in their name at an hour they never chose.
     nightHours: NightHoursSchema.prefault({}).describe(
         "The hours you sleep, on this sandbox's clock, and a night you begin early by hand, which lasts until the next morning. While it is night and nobody is at the editor, a question an agent asks no longer stops its turn until morning: it is answered with the agent's own recommendation, or kept for the morning while the agent finishes everything else, as `questions` says. A plan an agent chose to make is approved the same way under `decide`; permissions, held commands and anything asked of a named person still wait for you.",
     ),
+    proceedWithoutAsking: proceedWithoutAskingSetting,
     // Which repositories' own declarations (`<repo>/.intentic/checks.json`) the owner has switched on, each against the
     // fingerprint of what was declared when they did. A declaration that has since changed no longer matches its
     // fingerprint: the daemon finds the version that did in the repository's history, keeps running each check that is

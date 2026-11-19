@@ -87,6 +87,10 @@ export const childVerification = (actors: Pick<ConversationActors, "holdings">, 
     };
 };
 
+/** Every code file the child changed so far, newest last, as a wait's progress names them; empty while none is seen. */
+export const childEditedPaths = (actors: Pick<ConversationActors, "holdings">, child: string): readonly string[] =>
+    actors.holdings(LEDGERS).get(child)?.standing().paths ?? [];
+
 /** The same, once every settled call is folded in: a shell scan can still be out when the child's last frame arrives. */
 export const settledChildVerification = async (actors: Pick<ConversationActors, "holdings">, child: string): Promise<SubagentVerification | undefined> => {
     await actors.holdings(LEDGERS).get(child)?.settled();

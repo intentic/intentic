@@ -4,6 +4,7 @@ import { onChildSettled,childTurnResult,isWorker,resultWords } from "../agent/su
 import { onJobEnded } from "../agent/tools/jobs/job-ended.js";
 import { linkTaskDepsOf, noteLinkTurnAwaiting, noteLinkTurnSettled, noteLinkTurnStarted, startUnstartedTasks } from "../links/link-tasks.js";
 import { childLandingWords, reportChildLanded } from "../conversations/land/child-lands.js";
+import { afterLanded } from "../agent/subagents/starting/child-after.js";
 import { capacityNoticer } from "../agent/subagents/capacity-reopened.js";
 import { type ChildReportDeps, owedReports, reportChildTurn } from "../agent/subagents/child-report.js";
 import { reportPeerMessageOutcome } from "../conversations/recall/fleet-message-outcome.js";
@@ -41,6 +42,7 @@ import { onRuntimeChange } from "../seams/runtime-feed.js";
 import { projectDirOf } from "../system/project-dir.js";
 import { startMemoryKillFollower } from "../agent/tools/jobs/memory-kills.js";
 import { countLandsForRuns } from "../hosts/runs/run-builds.js";
+import { continueAfterContextStops } from "../loops/context-continue.js";
 
 // What a child's report reads off the daemon: the doors a wake goes through, the child's and parent's entries, how a
 // killed runtime reads, and where the child's work went.
@@ -273,6 +275,8 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     const childReports = wireChildReports(services, logger, shutdown);
     // A turn a peer's `agents message` opened that failed or is held is news to the peer that sent it, once.
     shutdown.push(services.events.subscribe("run.settled", (settled) => reportPeerMessageOutcome(services, settled)));
+    // A turn that stopped on a large context with work open carries on fresh, or says it could (loops/context-continue.ts).
+    shutdown.push(continueAfterContextStops(services));
     // An account coming back is news to a parent waiting with children failed or paused on it (capacity-reopened.ts).
     shutdown.push(
         onAccountReopened(
@@ -294,6 +298,8 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // So is its work reaching the main tree, while the parent still supervises (child-lands.ts), and a turn that starts on
     // it without the parent, which the parent supervises like its own (children.ts adoptChildTurn).
     shutdown.push(services.events.subscribe("workspace", (event) => reportChildLanded(services, event)));
+    // A land may be what a subagent waiting after that one was held for (child-after.ts).
+    shutdown.push(services.events.subscribe("workspace", afterLanded));
     shutdown.push(countLandsForRuns(services));
     shutdown.push(services.events.subscribe("run.started", (started) => adoptChildTurn(services, started)));
     startContainerFeeds({ role, services, logger, shutdown });

@@ -83,3 +83,18 @@ test("each hook callback's time is filed under hook.<event>, with the tool it he
     harnessHooks(deps, await isolated(), [], []).hookTimed?.("PreToolUse", 1200, { matcher: "Bash", at: 3, tool: "Bash" });
     expect(spans).toEqual([{ op: "hook.PreToolUse", ms: 1200, fields: { matcher: "Bash", at: 3, tool: "Bash", conversation: "c1" } }]);
 });
+
+test("an edit to a file another conversation has in flight is told, by the path the turn sees, through the edit reviewers", async () => {
+    const edited: { id: string; path: string }[] = [];
+    const inFlight = unstubbed<Services["inFlight"]>("inFlight", {
+        edited: (id: string, path: string) => {
+            edited.push({ id, path });
+            return path === "client/loop.rs" ? "Heads-up: `client/loop.rs` is also changed, not yet landed, by `jet-dewt`." : undefined;
+        },
+    });
+    const turn = await isolated();
+    const reviewers = harnessHooks({ ...depsHolding(undefined), inFlight }, turn, [], []).editReviewers ?? [];
+    const said = await Promise.all(reviewers.map((review) => review(join(turn.localCwd, "client/loop.rs"), "this edit").catch(() => undefined)));
+    expect(said.filter((note) => note !== undefined)).toEqual(["Heads-up: `client/loop.rs` is also changed, not yet landed, by `jet-dewt`."]);
+    expect(edited).toEqual([{ id: "c1", path: "client/loop.rs" }]);
+});

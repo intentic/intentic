@@ -373,6 +373,12 @@
             "stopKeepingWarmHint": "Kept warm until {time}",
             "tryLandAgain": "Try landing again",
             "landsIfConflictsGone": "Lands if the conflicts are gone",
+            "proceedWithoutAsking": "Proceed without asking",
+            "proceedHint": "Its turns, and its subagents', carry on with their own recommendation instead of stopping for your go-ahead",
+            "askBeforeGoingAhead": "Ask before going ahead",
+            "proceedingHint": "It proceeds without asking now, and still stops before anything destructive or outward-facing",
+            "proceedLabel": "Whether it asks first",
+            "proceedFailed": "Couldn't change whether it asks first",
             "notifyLabel": "Notify me",
             "notifyAll": "About everything",
             "notifyAllHint": "Every finished turn and every card it waits on",
@@ -6262,6 +6268,11 @@
             "rebuildToFinish": "Approved. {tool} arrives when the sandbox is rebuilt.",
             "openRebuild": "Rebuild"
         },
+        "instruction": {
+            "approve": "Add to {file}",
+            "everyConversation": "Approving adds this to {file}. Every conversation that starts there follows it from its next turn.",
+            "creates": "{file} does not exist yet: approving creates it with this rule."
+        },
         "automation": {
             "name": "Name",
             "for": "For",
@@ -6464,6 +6475,11 @@
             "scheduleTimesAreIn": "Schedules are set by",
             "whatAnAutomations": "Which clock an automation's \"09:00\" uses; on-screen times show yours, but schedules fire by this zone.",
             "yourOwnClockIs": "What an automation's \"09:00\" means. Your own machine is on {zone}, so times here will not match what you read on it."
+        },
+        "agentProceed": {
+            "group": "Going ahead",
+            "title": "Proceed without asking",
+            "description": "Agents carry on with their own recommendation instead of stopping for your go-ahead, and still stop before anything destructive or outward-facing. Night hours decide at night."
         },
         "agentNightHours": {
             "group": "Night hours",
@@ -6704,6 +6720,9 @@
             "turnCap": "Longest turn on a sandbox-driven loop",
             "turnCapNote": "Minutes one turn may run on OpenCode, an ACP agent, Pi or Muse before it is ended; a subagent that reaches it is carried on rather than failed. Claude Code and Codex have no such cap.",
             "turnCapLabel": "Longest turn, in minutes",
+            "contextContinues": "Carry on past a large context",
+            "contextContinuesNote": "How many times in a row a conversation carries on by itself, in a fresh session, after its turn stopped because its context grew large with work still open. 0 only says so in the chat.",
+            "contextContinuesLabel": "Fresh sessions in a row",
             "turnBreaks": "When a turn breaks",
             "keepWarmGroup": "Idle chats",
             "keepWarm": "Keep caches warm after a turn",

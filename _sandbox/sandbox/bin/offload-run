@@ -19,8 +19,13 @@
 //    changed, writes back the files it wrote to each --export variable (at the path that variable names here), and
 //    exits with the command's code.
 //
-// --env NAME carries this environment's value of NAME to the runner. Nothing else travels, and no secret ever: the hook
-// runs a line that resolved one here.
+// --env NAME carries this environment's value of NAME to the runner, and so does every variable the agent's own command
+// line set or exported (`FRAMES_WRITE=/tmp/x cargo test`), read as what differs from the shell the agent's line runs in
+// (givenEnv). Nothing else travels, and no secret ever: the hook runs a line that resolved one here. A command that names
+// a path on this machine the runner's copy does not have (one under /tmp, /work or /history outside what the snapshot
+// and --out carry, or an absolute path into this repository, which the runner keeps elsewhere) runs here instead, since
+// the runner's answer to it would be about another machine's files (the shinobi-society audit, 2026-11-17: an offloaded
+// test wrote its traces to the runner's /tmp, and its agent read a stale run as its own).
 //
 // --out PATH names something the command makes that has to come back whole, which the patch never carries because git
 // ignores it: a binary it built (`--out target/debug/integra`), a directory of frames it rendered (`--out /tmp/vfx`).
@@ -133,6 +138,61 @@ if (command.length === 0) {
     );
     process.exit(2);
 }
+
+// The variables the agent's command line gave this command: every one that differs from the environment of the shell the
+// agent's line runs in, the outermost process up the tree still carrying this run's agent session stamp
+// (INTENTIC_AGENT_SESSION, set on that shell alone: src/agent/tools/agent-terminals.ts). Bookkeeping the shell keeps by
+// itself, the PATH the wrappers rewrote and the sandbox's own variables are this machine's, not the command's. Undefined
+// when no agent's line is above it (a person's terminal, a test): then only --env travels.
+const AGENT_SESSION = "INTENTIC_AGENT_SESSION";
+const MACHINE_OWN = new Set(["PATH", "PWD", "OLDPWD", "SHLVL", "_", "NODE_OPTIONS", "HOME", "TERM", "HOSTNAME"]);
+const environOf = (pid) => {
+    try {
+        const pairs = readFileSync(`/proc/${pid}/environ`, "utf8").split("\0").filter((pair) => pair.includes("="));
+        return Object.fromEntries(pairs.map((pair) => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]));
+    } catch {
+        return undefined;
+    }
+};
+const parentOf = (pid) => {
+    try {
+        const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+        return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+    } catch {
+        return 0;
+    }
+};
+const givenEnv = (exported) => {
+    const session = process.env[AGENT_SESSION];
+    let shell;
+    for (let pid = process.ppid; session !== undefined && session !== "" && pid > 1; pid = parentOf(pid)) {
+        const environ = environOf(pid);
+        if (environ?.[AGENT_SESSION] !== session) {
+            break;
+        }
+        shell = environ;
+    }
+    if (shell === undefined) {
+        return undefined;
+    }
+    const given = Object.entries(process.env).filter(
+        ([name, value]) => shell[name] !== value && !name.startsWith("INTENTIC_") && !MACHINE_OWN.has(name) && !exported.includes(name) && /^[A-Za-z_][A-Za-z0-9_]*$/u.test(name),
+    );
+    return Object.fromEntries(given);
+};
+
+// The first path a word names on this machine that the runner's copy cannot answer for, else undefined: an absolute path
+// into this repository (the runner checks the snapshot out elsewhere), or one under this machine's own state outside
+// what --out brings back. A toolchain's own paths (/usr, /opt) are on every runner.
+const LOCAL_ROOTS = ["/tmp", "/work", "/history", "/root", "/home", "/var", "/mnt", "/media", "/srv", "/run"];
+const under = (path, root) => path === root || path.startsWith(`${root}/`);
+const localPathIn = (word, toplevel, outputs) =>
+    word
+        .split(/\s+/u)
+        .flatMap((part) => part.slice(part.lastIndexOf("=") + 1).split(":"))
+        .filter((piece) => piece.startsWith("/"))
+        .map((piece) => resolve(piece))
+        .find((path) => under(path, toplevel) || (LOCAL_ROOTS.some((root) => under(path, root)) && !outputs.some((out) => out.startsWith("/") && under(path, out))));
 
 // The command in this sandbox, behind the heavy queue the caller named: what would have run had nothing been offloaded.
 const runHere = (why) => {
@@ -464,6 +524,12 @@ const main = async () => {
         runHere(outputs.refused);
         return;
     }
+    const given = givenEnv(options.exports) ?? {};
+    const local = [...command.slice(1), ...Object.values(given)].map((word) => localPathIn(word, toplevel, outputs.paths)).find((path) => path !== undefined);
+    if (local !== undefined) {
+        runHere(`it names ${local}, a path on this machine that ${target.name}'s copy of this tree does not have`);
+        return;
+    }
 
     const runId = `off-${randomBytes(6).toString("hex")}`;
     let ref;
@@ -480,7 +546,14 @@ const main = async () => {
             // A ref already gone has nothing left to drop.
         }
     };
-    say(`running on ${target.name}`);
+    // Said with how to keep it here, so a command that has to run on this tree's own state (a local build directory, a
+    // device) is not pushed through INTENTIC_HEAVY_HELD, which skips the queue as well (2026-11-19, the shinobi-society
+    // audit: one agent set it on 47 commands). INTENTIC_OFFLOAD=0 keeps the queue (heavy-turn.cjs).
+    say(
+        options.label === "remote-run"
+            ? `running on ${target.name}`
+            : `running on ${target.name}, where the owner's Offloaded work setting sends ${options.label} commands. To run one here instead, behind this sandbox's own queue: INTENTIC_OFFLOAD=0 <command>`,
+    );
 
     let stopped = false;
     const stop = (signal) => {
@@ -494,7 +567,7 @@ const main = async () => {
     process.on("SIGTERM", () => stop("SIGTERM"));
     process.on("SIGINT", () => stop("SIGINT"));
 
-    const env = Object.fromEntries(options.env.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]]));
+    const env = { ...Object.fromEntries(options.env.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]])), ...given };
     const have = haveOf(toplevel, outputs.paths);
     const files = receiver(toplevel, runId);
     let buffer = "";
@@ -580,6 +653,8 @@ const main = async () => {
     }
     bringBack(toplevel, exit);
     sayOutputs(brought, exit, outputs.paths, target.name);
+    // Said last too, where a reader of the end of the output looks: paths in it name the runner's copy, not this tree.
+    say(`that ran on ${target.name}, not here (exit ${exit.code}); paths in its output are the runner's copy of this tree`);
     process.exit(exit.code);
 };
 

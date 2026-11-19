@@ -107,7 +107,8 @@ const instructionsOf = (lines: readonly string[]): string =>
     `The owner's connected computers, one server for all of them: every tool takes \`${DEVICE_ARGUMENT}\`, the computer it acts on. ` +
     `Call describe once on a computer before your first command there. A file or a folder moves between this sandbox and a computer, ` +
     `either way, with \`devices copy <from> <to>\` in your shell, one side written <device>:<path>: its bytes never pass through you, ` +
-    `and it is never docker cp through run_command.\n${lines.map((line) => `- ${line}`).join("\n")}`;
+    `and it is never docker cp through run_command. A build, a test or a GPU run of this checkout on a computer is \`devices exec <device> -- <command>\`: ` +
+    `a mirror of the checkout kept there by content hash, the output streamed back, results brought home with --fetch.\n${lines.map((line) => `- ${line}`).join("\n")}`;
 
 // The call as the named card's bridge reads it: `device` taken out, run_command's `timeout` read as timeoutMs.
 const forwardedCall = (message: RpcMessage, params: z.infer<typeof CallParams>): RpcMessage => {

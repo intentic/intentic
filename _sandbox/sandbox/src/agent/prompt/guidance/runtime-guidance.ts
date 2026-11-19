@@ -68,6 +68,7 @@ const runtimeGuidanceFacts = async (deps: RuntimeGuidanceDeps, turn: RuntimeGuid
         runtime: otherRuntime(capabilities.secrets, request.tools.mcpToolPrefix, filesShellJobs(capabilities, request)),
         unattended: request.policy.unattended === true,
         night: request.policy.night,
+        proceed: request.policy.proceed === true,
         browserOutputDir: browsers ? browserOutputDir(deps.workspace.root) : undefined,
         anonymousBrowser: mounted.has(ANONYMOUS_BROWSER_SERVER),
         browserAccounts: mounted.has(ROUTED_BROWSER_SERVER),

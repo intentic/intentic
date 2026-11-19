@@ -286,6 +286,12 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return framed(context, summary);
         }),
+        // Legal on any conversation, mid-turn too: it is read as each turn is planned (agent/run/decide/proceed.ts).
+        proceed: i.proceed.handler(async ({ input, context }) => {
+            const entry = entryFor(input.id, context);
+            await services.agents.setProceed(entry.id, input.proceed);
+            return framed(context, summaryAfter(services, entry.id));
+        }),
         // Legal on any conversation between turns; a refusal says why nothing can be kept, in words the press can show.
         keepWarm: i.keepWarm.handler(async ({ input, context }) => {
             const entry = entryFor(input.id, context);

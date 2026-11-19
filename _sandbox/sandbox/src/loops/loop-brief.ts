@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { fieldsExample } from "@intentic/sandbox-contract/policy/output-fields";
-import { type Loop, LOOP_DIR } from "@intentic/sandbox-contract/schemas/loops";
+import { type Loop, LOOP_DIR, type LoopIteration } from "@intentic/sandbox-contract/schemas/loops";
 
 // Prompt content only: describes the goal and what will be checked, never the loop's own machinery (iteration count,
 // budget, mode). The goal is restated only when the prompt doesn't already contain it; the progress-file memory note
@@ -66,6 +66,10 @@ const outputNote = (loop: Loop, iteration: number): string | undefined => {
             `remaining item is handled". If it is not met, say in \`reason\` what is left: that line is what ` +
             `whoever picks this up next reads first.`,
         ``,
+        `When the work is a list of items (a backlog, failing tests, open steps), also write \`"remaining"\`: how many ` +
+            `are still open after this round, as a whole number. Zero ends the job, so count what is really left, not ` +
+            `what you meant to get to; leave the key out when the work is not countable.`,
+        ``,
         `Write it even when the work went badly. A missing file is read as "not done", which costs another ` +
             `session on work you may have already finished.`,
     ].join(`\n`);
@@ -89,17 +93,34 @@ const progressNote = (loop: Loop): string =>
 // never a second turn.
 const singleTurn = (loop: Loop): boolean => loop.output.kind === `none` && loop.checks.length === 0;
 
-export const briefForIteration = (loop: Loop, iteration: number): string => {
+// What the round before this one ended on, as its row recorded it: so a round does not spend its opening re-reading the
+// backlog and the history to learn where things stand (2026-11-19: across sixteen hand-chained conversations of one
+// audited sandbox, 169 re-reads of the backlog file and 146 history lookups).
+const previousNote = (previous: LoopIteration | undefined): string | undefined => {
+    if (previous === undefined || (previous.detail === undefined && previous.remaining === undefined)) {
+        return undefined;
+    }
+    const count = previous.remaining === undefined ? [] : [`It counted ${String(previous.remaining)} still open.`];
+    const said = previous.detail === undefined ? [] : [`> ${previous.detail.replaceAll(`\n`, `\n> `)}`, ``];
+    return [`## Where the last round left it`, ``, `Round ${String(previous.n)} ended ${previous.outcome === `error` ? `on an error` : `with the work not done`}:`, ``, ...said, ...count]
+        .join(`\n`)
+        .trimEnd();
+};
+
+// `previous` is the round before this one, when there was one: what it ended on goes into this round's brief.
+export const briefForIteration = (loop: Loop, iteration: number, previous?: LoopIteration): string => {
     // Prompt only; whatever the caller composed is the entire message.
     if (singleTurn(loop)) {
         return loop.prompt;
     }
     const checks = checkNote(loop);
     const output = outputNote(loop, iteration);
+    const before = previousNote(previous);
     return [
         loop.prompt,
         // Skipped when the prompt already carries the goal verbatim, the ordinary case for a workflow step.
         ...(loop.prompt.includes(loop.goal) ? [] : [[`## Done when`, ``, `> ${loop.goal}`].join(`\n`)]),
+        ...(before === undefined ? [] : [before]),
         ...(loop.context === `fresh` ? [progressNote(loop)] : []),
         ...(checks !== undefined ? [[`## What is checked`, ``, checks].join(`\n`)] : []),
         ...(output !== undefined ? [output] : []),

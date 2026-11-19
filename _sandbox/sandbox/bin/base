@@ -1,0 +1,274 @@
+#!/usr/bin/env node
+// The in-sandbox BASE command: "before" in one command. A base is a read-only checkout of the repository you stand in,
+// at the commit your work started from (where HEAD leaves the main line), kept by the daemon outside every
+// conversation's own checkout, shared by every conversation at that commit and removed once none asks for it for a day
+// (src/conversations/worktrees/bases/base-checkouts.ts). Its Cargo targets are seeded from a build that already ran, so
+// its own crates compile and its dependencies do not.
+//
+// It owns no policy: the daemon decides the commit, makes the checkout under the repository's lock and says why it
+// will not. This command reads three things from git where it stands (the repository's git dir, HEAD, and a commit
+// `--at` names), relays them, and runs the command in the base at the folder matching the one it was run from. The
+// command runs as a child of this one with this shell's environment, so a build or a test in it takes its turn in the
+// heavy-command queue exactly as it would in the checkout.
+//
+// EXIT CODES ARE THE CONTRACT for scripts and for the "known failing at main" check that runs `base run <test command>`:
+// `base run` exits with the command's own code (128 + the signal's number when a signal ended it, 127 when it could not
+// be started), and 125 when there is no base to run it in, which no command it runs is likely to exit with on its own
+// (git bisect run's convention). Every other verb exits 0, or 2 with the reason on stdout, where agents read.
+
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { request } from "node:http";
+import { constants } from "node:os";
+import { join, relative } from "node:path";
+
+// Overridable only so a suite can stand the command up against a stub daemon.
+const TOKEN_PATH = process.env.INTENTIC_AGENT_TOKEN_FILE ?? "/run/intentic/agent.token";
+const PORT = process.env.SANDBOX_PORT ?? "8787";
+// The conversation this shell runs for (platform/leftovers.ts workloadStamp): who holds the base.
+const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+const PROOF = process.env.INTENTIC_TURN_PROOF ?? "";
+
+const NO_BASE = 125;
+const FAILED = 2;
+
+const USAGE = `base — the version your work started from, checked out beside it, read-only
+
+  base run [--at <commit|main>] [--] <command> [args…]
+                       run a command in the base, in the folder matching the one you are in; exits with the
+                       command's own code, or ${String(NO_BASE)} when there is no base to run it in
+  base path [--at <commit|main>]
+                       print that folder (cd "$(base path)"); the base is made if none stands
+  base ls              every base on this sandbox: repository, commit, path, who asked for it lately
+  base drop [--at <commit|main>] | --all
+                       let go of a base (or of every base this conversation holds); one nobody holds goes at once
+
+--at picks the commit: by default the fork point, where HEAD leaves the main line (git merge-base HEAD main), so
+uncommitted and committed work alike are left out; \`main\` is the main line's tip; anything else is a commit git
+resolves here (a sha, HEAD~3, a tag).
+
+A base is shared by every conversation at that commit, so never edit it: it is restored to its commit each time one
+is handed out. Its Cargo targets are seeded from a build that already ran (yours first), so a first build there
+compiles the workspace's own crates and reuses its dependencies. A JavaScript base has no node_modules of its own:
+run its install there first (base run pnpm install --offline). Builds run where the base stands, so a "before"
+binary keeps working as long as the base does: one nobody asks for in a day is removed.
+
+Before and after, one command each:
+  base run cargo test -p engine        # at the fork point
+  cargo test -p engine                 # here`;
+
+const say = (line) => process.stdout.write(`${line}\n`);
+
+const die = (message, code) => {
+    // Agents discard stderr, so a failure must survive on the stream they read.
+    say(`base: ${message}`);
+    process.exit(code);
+};
+
+// Read lazily: `--help` must work where the daemon is not running.
+const token = (code) => {
+    try {
+        return readFileSync(TOKEN_PATH, "utf8").trim();
+    } catch {
+        return die(`no daemon token at ${TOKEN_PATH}: is the intentic daemon running in this container?`, code);
+    }
+};
+
+const call = (method, path, body, code) =>
+    new Promise((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port: PORT, path, method }, (response) => {
+            let raw = "";
+            response.on("data", (chunk) => {
+                raw += chunk.toString();
+            });
+            response.on("end", () => resolve({ status: response.statusCode ?? 502, text: raw }));
+        });
+        req.on("error", reject);
+        req.setHeader("x-intentic-agent", token(code));
+        if (CONVERSATION !== "") {
+            req.setHeader("x-intentic-conversation", CONVERSATION);
+            if (PROOF !== "") {
+                req.setHeader("x-intentic-turn-proof", PROOF);
+            }
+        }
+        if (body !== undefined) {
+            req.setHeader("content-type", "application/json");
+        }
+        req.end(body);
+    });
+
+const refusalOf = (text) => {
+    try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed?.message === "string") {
+            return parsed.message;
+        }
+    } catch {
+        // not JSON: the raw text is all there is.
+    }
+    return text || "the daemon did not say why";
+};
+
+const git = (args) => {
+    const ran = spawnSync("git", args, { encoding: "utf8" });
+    return ran.status === 0 ? ran.stdout.trim() : undefined;
+};
+
+// `--at <value>` and `--all` anywhere before the command; the command starts at `--` or the first other word.
+const parse = (args, code) => {
+    const flags = { at: undefined, all: false };
+    let index = 0;
+    for (; index < args.length; index += 1) {
+        const arg = args[index];
+        if (arg === "--") {
+            index += 1;
+            break;
+        }
+        if (arg === "--at") {
+            flags.at = args[index + 1];
+            if (flags.at === undefined) {
+                die("--at needs a commit, `main` or `fork`", code);
+            }
+            index += 1;
+        } else if (arg.startsWith("--at=")) {
+            flags.at = arg.slice("--at=".length);
+        } else if (arg === "--all") {
+            flags.all = true;
+        } else if (arg.startsWith("--")) {
+            die(`unknown option ${arg}\n\n${USAGE}`, code);
+        } else {
+            break;
+        }
+    }
+    return { flags, rest: args.slice(index) };
+};
+
+// Where this shell stands in its repository, and what the daemon needs to find that repository and the commit.
+const here = (at, code) => {
+    const top = git(["rev-parse", "--show-toplevel"]);
+    const gitDir = git(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+    if (top === undefined || gitDir === undefined) {
+        return die("not inside a git checkout: run base from the repository you want the earlier version of.", code);
+    }
+    const head = git(["rev-parse", "--verify", "-q", "HEAD"]);
+    let resolved = at;
+    if (at !== undefined && at !== "main" && at !== "fork") {
+        resolved = git(["rev-parse", "--verify", "-q", "--end-of-options", `${at}^{commit}`]);
+        if (resolved === undefined) {
+            die(`${at} is not a commit git can find here.`, code);
+        }
+    }
+    return { top, rel: relative(top, realpathSync(process.cwd())), ask: { gitDir, ...(head === undefined ? {} : { head }), ...(resolved === undefined ? {} : { at: resolved }) } };
+};
+
+const ensure = async (at, code) => {
+    const where = here(at, code);
+    const { status, text } = await call("POST", "/bases", JSON.stringify(where.ask), code);
+    if (status < 200 || status >= 300) {
+        return die(refusalOf(text), code);
+    }
+    const base = JSON.parse(text);
+    const dir = join(base.path, where.rel);
+    if (!existsSync(base.path)) {
+        die(`the base stands at ${base.path}, which this shell cannot see: a fenced or private conversation's sandbox keeps /history out of reach.`, code);
+    }
+    if (!existsSync(dir)) {
+        die(`${where.rel} does not exist at ${base.commit.slice(0, 12)}: there is no earlier version of this folder. Run from one that existed then.`, code);
+    }
+    return { base, dir };
+};
+
+const warmNote = (base) =>
+    base.warm.map((warm) => (warm.state === "seeded" ? `${warm.rel} seeded from ${warm.from}` : `${warm.rel} left cold: ${warm.reason ?? "no build to seed from"}`));
+
+const describe = (base, verb) => {
+    const lines = [`base: ${verb} ${base.repo} at ${base.commit.slice(0, 12)}, ${base.path}`, ...warmNote(base).map((line) => `base: ${line}`)];
+    return lines.join("\n");
+};
+
+const run = async (args) => {
+    const { flags, rest } = parse(args, NO_BASE);
+    if (rest.length === 0) {
+        die(`run needs a command\n\n${USAGE}`, NO_BASE);
+    }
+    const { base, dir } = await ensure(flags.at, NO_BASE);
+    process.stderr.write(`${describe(base, base.created ? "made" : "in")}\n`);
+    const [command, ...commandArgs] = rest;
+    const child = spawn(command, commandArgs, { cwd: dir, stdio: "inherit", env: { ...process.env, INTENTIC_BASE: base.path, INTENTIC_BASE_COMMIT: base.commit } });
+    // The command owns the terminal: an interrupt reaches it from there, and this waits for its answer. A signal sent
+    // to this process alone is passed on.
+    process.on("SIGINT", () => undefined);
+    for (const signal of ["SIGTERM", "SIGHUP"]) {
+        process.on(signal, () => child.kill(signal));
+    }
+    child.on("error", (error) => die(`could not start ${command}: ${error.message}`, error.code === "ENOENT" ? 127 : 126));
+    child.on("exit", (exitCode, signal) => process.exit(signal === null ? (exitCode ?? 1) : 128 + (constants.signals[signal] ?? 0)));
+};
+
+const path = async (args) => {
+    const { flags, rest } = parse(args, FAILED);
+    if (rest.length > 0) {
+        die(`path takes no command\n\n${USAGE}`, FAILED);
+    }
+    const { base, dir } = await ensure(flags.at, FAILED);
+    if (base.created) {
+        process.stderr.write(`${describe(base, "made")}\n`);
+    }
+    say(dir);
+};
+
+const list = async () => {
+    const { status, text } = await call("GET", "/bases", undefined, FAILED);
+    if (status !== 200) {
+        return die(refusalOf(text), FAILED);
+    }
+    const { bases } = JSON.parse(text);
+    if (bases.length === 0) {
+        say("No base stands on this sandbox.");
+        return;
+    }
+    for (const base of bases) {
+        const used = base.usedAt === 0 ? "never asked for" : `last asked ${new Date(base.usedAt).toISOString()}`;
+        say(`${base.repo}@${base.commit.slice(0, 12)}  ${base.path}  ${used}  held by ${base.holders.join(", ") || "nobody"}`);
+    }
+};
+
+const drop = async (args) => {
+    const { flags, rest } = parse(args, FAILED);
+    if (rest.length > 0) {
+        die(`drop takes no command\n\n${USAGE}`, FAILED);
+    }
+    const body = flags.all ? { all: true } : here(flags.at, FAILED).ask;
+    const { status, text } = await call("POST", "/bases/drop", JSON.stringify(body), FAILED);
+    if (status < 200 || status >= 300) {
+        return die(refusalOf(text), FAILED);
+    }
+    const { released, removed } = JSON.parse(text);
+    if (released.length === 0) {
+        say("This conversation held no such base.");
+        return;
+    }
+    for (const dir of released) {
+        say(`${dir}: ${removed.includes(dir) ? "let go of and removed" : "let go of; others still hold it"}`);
+    }
+};
+
+const main = async () => {
+    const [verb, ...rest] = process.argv.slice(2);
+    if (verb === "run") {
+        return run(rest);
+    }
+    if (verb === "path") {
+        return path(rest);
+    }
+    if (verb === "ls" || verb === "list") {
+        return list();
+    }
+    if (verb === "drop") {
+        return drop(rest);
+    }
+    say(USAGE);
+    process.exit(verb === "--help" || verb === "-h" || verb === "help" ? 0 : FAILED);
+};
+
+main().catch((error) => die(error?.message ?? String(error), process.argv[2] === "run" ? NO_BASE : FAILED));

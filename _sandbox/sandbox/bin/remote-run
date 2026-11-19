@@ -5,7 +5,10 @@
 # brings back what it changed, as if it had run here: its output as it comes, its exit code, every file it edited, and
 # each --out PATH it made whole (a binary it built, a directory of frames it rendered: inside the repository or under
 # /tmp). --needs rules out a machine short of memory or without a GPU. When no runner is connected, or none fits, it
-# runs here, exactly as typed, after one line saying why. A compound line goes as one command:
+# runs here, exactly as typed, after one line saying why. Variables your line sets for it travel with it
+# (`FOO=1 remote-run -- cargo test`); a command or variable naming a path on this machine the runner's copy lacks (under
+# /tmp, /work or /history outside what --out brings back, or an absolute path into this repository: give it relative to
+# where you stand) runs it here instead. A compound line goes as one command:
 #   remote-run --out target/debug/integra -- cargo build -p shinobi-society-native --bin integra
 #   remote-run --out /tmp/vfx -- bash -c 'cargo build --bin integra && target/debug/integra vfx preview --out /tmp/vfx'
 #

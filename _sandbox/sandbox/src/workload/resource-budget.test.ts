@@ -312,6 +312,29 @@ test("heavy work waits for the machine the sandbox runs on while it is short, an
     expect((await budget.admit({ workload: "toolchain", attended: false })).verdict).toBe("run");
 });
 
+// (2026-11-19) The shinobi-society subagents sat "Waiting for memory" for hours with 2.5 to 3.7 GiB free on a 32 GB laptop
+// whose reserve line is 3.2 GiB, which no waiting in the sandbox could change: an agent turn answers to the host only down
+// to its 1.5 GiB floor, after its own cost and what started just before it, while heavy work keeps to the reserve.
+test("an agent turn nobody waits on starts on a host short of its reserve while the host keeps its floor; heavy work still waits", async () => {
+    const laptop = (availableGib: number) => ({ name: "rog", availableBytes: availableGib * GIB, totalBytes: 32 * GIB, reserveBytes: 3.2 * GIB });
+    const on = (availableGib: number, sandbox: MemoryReading = box(16, 4)): ResourceBudget => {
+        const reading = hostAwareReading(async () => sandbox);
+        reading.answerToHost(async () => laptop(availableGib));
+        return createResourceBudget({ read: reading.read, now: ticking(), sampleMs: 0, waitIntervalMs: 1, waitDeadlineMs: 20 });
+    };
+    const budget = on(3);
+    expect((await budget.admit({ workload: "toolchain", attended: false })).verdict).toBe("wait");
+    expect((await budget.admit(background("child-1"))).verdict).toBe("run");
+    // What the first one took counts against the host until the reading shows it: a second would leave it under its floor.
+    expect(await budget.admit(background("child-2"))).toMatchObject({
+        verdict: "wait",
+        message: "rog, the machine this sandbox runs on, is low on memory: it has 3.0 GiB available of 32.0 GiB, 1.0 GiB of it held for work that just started, and heavy work waits while starting it would leave it under 3.2 GiB",
+    });
+    // Under its floor, and a sandbox short of its own room, still hold it.
+    expect((await on(2).admit(background("child"))).verdict).toBe("wait");
+    expect((await on(8, box(16, 14.5)).admit(background("child"))).verdict).toBe("wait");
+});
+
 test("an abort ends a wait without its deadline", async () => {
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 5);

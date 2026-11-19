@@ -259,3 +259,22 @@ test("a pull survives uncommitted edits in the mirror, keeping the runner's own 
     await syncFromParent(runner, identity, sync("pull"), (line) => void again.push(line));
     expect(again.filter((line) => line.includes("kept uncommitted edits"))).toEqual([]);
 });
+
+// The same audit's first placements: the runner's daemon writes its definition into /work before the mirror's first
+// pull, when the mirror tracks nothing yet, and the checkout refused with "untracked working tree files would be
+// overwritten". The pull keeps the runner's own files as it wrote them and goes on.
+test("a first pull into a mirror the runner's daemon already wrote its definition into goes on, keeping the runner's files", async () => {
+    const capabilities = join(STATE_DIR, "config", "capabilities.json");
+    expect(await git(parentWork, ["ls-files", "--", capabilities])).toBe(capabilities);
+    const runner = freshRunner();
+    await mkdir(join(runner.workspaceRoot, STATE_DIR, "config"), { recursive: true });
+    await writeFile(join(runner.workspaceRoot, capabilities), '{"from":"runner, before any pull"}\n');
+
+    await syncFromParent(runner, identity, sync("pull"), () => undefined);
+
+    expect(await git(runner.workspaceRoot, ["rev-parse", "HEAD"])).toBe(await git(parentWork, ["rev-parse", mainBranch]));
+    expect(await readFile(join(runner.workspaceRoot, capabilities), "utf8")).toBe('{"from":"runner, before any pull"}\n');
+    // Tracked from here on, so the next pull keeps it the way it keeps any edit of the runner's own files.
+    await syncFromParent(runner, identity, sync("pull"), () => undefined);
+    expect(await readFile(join(runner.workspaceRoot, capabilities), "utf8")).toBe('{"from":"runner, before any pull"}\n');
+});

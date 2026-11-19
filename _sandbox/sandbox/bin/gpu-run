@@ -3,6 +3,11 @@
 # gpu-run --status                                         say whether the GPU is here, and whether GPU work is paused
 # gpu-run --if-available [--] <command> [args...]          (the daemon's, for settings gpu.shells = "all") the GPU when
 #                                                          it is here and not paused, else the command runs without it
+# gpu-run --on <device> [devices exec options] [--] <command>
+#                                                          run it on one of the owner's computers, on its own GPU, in a
+#                                                          mirror of this checkout kept there (`devices exec`)
+# gpu-run --software-env                                   (the entrypoint's) the variables that keep every other
+#                                                          command's rendering on the CPU, as shell exports
 #
 # WHY A WRAPPER (2026-11-03). On a Windows PC a GPU sandbox's GPU is the owner's DISPLAY GPU, shared through WSL: the
 # device node /dev/dxg, and the driver's user-mode libraries in /usr/lib/wsl/lib, where Mesa's d3d12 driver (OpenGL
@@ -20,6 +25,14 @@
 #
 # The daemon keeps what it knows in a small state file (src/gpu/gpu-state.ts): one `key=value` per line. No file
 # (a dev run, a daemon that has not started) is nothing paused and no limit.
+#
+# EVERY OTHER COMMAND RENDERS ON THE CPU, BY NAME (2026-11-19). Leaving the driver libraries off the path kept Mesa off
+# the GPU only because its d3d12 driver failed to load: the shinobi-society project still wrapped 316 commands in its own
+# soft.sh (LD_LIBRARY_PATH unset, Vulkan pointed at lavapipe, OpenGL at llvmpipe) and agents typed
+# `env -u LD_LIBRARY_PATH` by hand. The entrypoint now exports the same choice for the whole container
+# (`gpu-run --software-env`): OpenGL on llvmpipe, and Vulkan on lavapipe where the image has it. A value the image or
+# the project already set is left alone, and a command run through here gets back whatever the sandbox set, so this is
+# still the one way onto the GPU. CUDA is untouched: on WSL it needs the libraries, which only this hands out.
 set -u
 
 STATE_FILE="${INTENTIC_GPU_STATE:-/run/intentic/gpu-state}"
@@ -28,12 +41,68 @@ GPU_DEVICES="${INTENTIC_GPU_DEVICES:-/dev/dxg /dev/nvidiactl}"
 # Where the engine's CDI spec says the WSL driver libraries are (engine/rootfs/intentic-engine); WSL's own place
 # otherwise, for an engine older than the variable.
 WSL_LIBS="${INTENTIC_GPU_LIBRARY_PATH:-/usr/lib/wsl/lib}"
+# Where Vulkan's loader finds driver manifests.
+ICD_DIRS="${INTENTIC_VULKAN_ICD_DIRS:-/usr/share/vulkan/icd.d /etc/vulkan/icd.d /usr/local/share/vulkan/icd.d}"
+# The devices command beside this one: `--on` hands the run to it.
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 say() { printf 'gpu-run: %s\n' "$*" >&2; }
 
 usage() {
-    say "usage: gpu-run [--timeout DURATION] [--] <command> [args...]   (or gpu-run --status)"
+    say "usage: gpu-run [--timeout DURATION] [--] <command> [args...]   (or gpu-run --status, or gpu-run --on <device> -- <command>)"
     exit 2
+}
+
+# The Vulkan driver manifests whose file name matches $1, one path per line.
+icd_manifests() {
+    local dir file
+    for dir in $ICD_DIRS; do
+        for file in "$dir"/$1; do
+            [ -e "$file" ] && printf '%s\n' "$file"
+        done
+    done
+    return 0
+}
+
+# Lavapipe's manifest (Mesa's Vulkan on the CPU), when the image has one.
+lavapipe() { icd_manifests 'lvp_icd*.json' | head -n 1; }
+
+# What keeps rendering on the CPU, NAME=value per line: Mesa's OpenGL on llvmpipe, Vulkan's loader on lavapipe alone.
+software_pins() {
+    local icd
+    printf '%s\n' LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe
+    icd="$(lavapipe)"
+    if [ -n "$icd" ]; then
+        printf '%s\n' "VK_DRIVER_FILES=$icd" "VK_ICD_FILENAMES=$icd"
+    fi
+}
+
+# The pins as `export` lines for the entrypoint to eval, each one the environment does not already set, and their names in
+# INTENTIC_SOFTWARE_RENDERING so a command run through here gets back exactly those.
+software_env() {
+    local line name value names=""
+    while IFS= read -r line; do
+        name="${line%%=*}"
+        [ -n "${!name+x}" ] && continue
+        value="${line#*=}"
+        printf "export %s='%s'\n" "$name" "${value//\'/\'\\\'\'}"
+        names="$names${names:+ }$name"
+    done < <(software_pins)
+    printf "export INTENTIC_SOFTWARE_RENDERING='%s'\n" "$names"
+    exit 0
+}
+
+# Takes back the pins the sandbox set, each only while it still holds the sandbox's value (one set by hand stays).
+release_software_pins() {
+    local line name
+    while IFS= read -r line; do
+        name="${line%%=*}"
+        case " ${INTENTIC_SOFTWARE_RENDERING:-} " in *" $name "*) ;; *) continue ;; esac
+        if [ "${!name:-}" = "${line#*=}" ]; then
+            unset "$name"
+        fi
+    done < <(software_pins)
+    unset INTENTIC_SOFTWARE_RENDERING
 }
 
 # The device node this sandbox has, or nothing. WSL's counts only with its libraries mounted beside it: a privileged
@@ -74,8 +143,10 @@ paused() {
     exit 75
 }
 
-# The environment the GPU needs: the WSL driver libraries first on the library path (only where the device is WSL's).
+# The environment the GPU needs: the sandbox's software pins taken back, and the WSL driver libraries first on the
+# library path (only where the device is WSL's).
 gpu_env() {
+    release_software_pins
     if [ "${1##*/}" = "dxg" ]; then
         export LD_LIBRARY_PATH="$WSL_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     fi
@@ -90,10 +161,39 @@ unsafe_flag() {
     return 1
 }
 
+# What a command renders on outside gpu-run, and (with the device node, $1) through it.
+rendering() {
+    local icd vulkan gpu
+    icd="$(lavapipe)"
+    if [ -n "$icd" ]; then
+        vulkan="Vulkan on lavapipe ($icd)"
+    else
+        vulkan="Vulkan unpinned, since the image has no lavapipe (Debian's mesa-vulkan-drivers) to pin it to"
+    fi
+    echo "${1:+outside gpu-run, }rendering is on the CPU: OpenGL on llvmpipe, $vulkan. The sandbox sets this for every process (LIBGL_ALWAYS_SOFTWARE, VK_DRIVER_FILES): no wrapper script, nothing to unset."
+    [ -n "${1:-}" ] || return 0
+    gpu="$(icd_manifests '*.json' | grep -v -e '/lvp_icd' -e swiftshader | sed 's|.*/||' | paste -sd, -)"
+    if [ "${1##*/}" = "dxg" ]; then
+        case "$gpu" in
+            *dzn*) vulkan="Vulkan on Mesa's Dozen ($gpu), D3D12 underneath" ;;
+            *) vulkan="Vulkan still on lavapipe: the image has no Vulkan driver for this GPU (Mesa's Dozen, dzn_icd.*.json)" ;;
+        esac
+        echo "through gpu-run: OpenGL on Mesa's d3d12 driver (where the image's Mesa has it), $vulkan, CUDA from $WSL_LIBS."
+    else
+        echo "through gpu-run: OpenGL and Vulkan off the software pins${gpu:+ (Vulkan drivers: $gpu)}; CUDA reaches this NVIDIA GPU with or without gpu-run."
+    fi
+}
+
+on_hint() {
+    echo "a GPU of the owner's: gpu-run --on <device> -- <command> runs it on one of their connected computers, in a mirror of this checkout kept there (devices exec --help)"
+}
+
 status() {
     local device reason
     if ! device="$(gpu_device)"; then
         echo "no GPU in this sandbox"
+        rendering
+        on_hint
         exit 0
     fi
     echo "GPU: $device"
@@ -109,7 +209,23 @@ status() {
     echo "agent commands: ${shells:-on-request} (on-request: only what runs through gpu-run; all: every command)"
     minutes="$(state timeout_minutes)"
     case "$minutes" in '' | 0) echo "wall limit: none" ;; *) echo "wall limit: ${minutes}m" ;; esac
+    rendering "$device"
+    on_hint
     exit 0
+}
+
+# --on: the run goes to one of the owner's computers through `devices exec`. While GPU work here is paused after a GPU
+# reset it is refused too, since that computer may be the one that reset; `devices exec` itself is the owner's call.
+on_device() {
+    local reason
+    reason="$(state paused)"
+    if [ -n "$reason" ]; then
+        say "GPU work is paused: $reason"
+        say "If $1 is not the computer that reset, the same run without this check is: devices exec $1 -- <command>. Otherwise ask the owner, who resumes GPU work in the sandbox's Overview."
+        exit 75
+    fi
+    shift
+    exec node "$BIN_DIR/devices" exec "$@"
 }
 
 timeout=""
@@ -117,6 +233,9 @@ optional=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --status) status ;;
+        --software-env) software_env ;;
+        --on) [ $# -ge 2 ] || usage; on_device "$2" "$2" "${@:3}" ;;
+        --on=*) on_device "${1#--on=}" "${1#--on=}" "${@:2}" ;;
         --if-available) optional=1; shift ;;
         --timeout) [ $# -ge 2 ] || usage; timeout="$2"; shift 2 ;;
         --timeout=*) timeout="${1#--timeout=}"; shift ;;

@@ -54,6 +54,14 @@ case ":${LD_LIBRARY_PATH:-}:" in
         ;;
 esac
 
+# EVERY OTHER PROCESS RENDERS ON THE CPU, BY NAME (2026-11-19): OpenGL on llvmpipe and Vulkan on lavapipe (where the image
+# has it), exported here for the whole container, so no project carries its own wrapper for it (shinobi-society's
+# soft.sh wrapped 316 commands). `gpu-run --software-env` prints the variables, leaving out any the image already sets,
+# and gpu-run takes them back for the one command it puts on the GPU (bin/gpu-run says why).
+if command -v gpu-run >/dev/null 2>&1; then
+    eval "$(gpu-run --software-env)" || true
+fi
+
 # Reachability belongs to the daemon's outbound tunnel, using the signed grant and ingress URL from its environment.
 # The edge derives sandbox ownership from the hostname's ID; replacing a tunnel displaces the old one without hub-side provisioning.
 

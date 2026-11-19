@@ -301,6 +301,16 @@ test("only a name the gate knows is a size; any other is priced as its class", (
     expect(costBytesOf("service", "editor-typecheck")).toBe(costBytesOf("service"));
 });
 
+// What a project declares its own heavy command holds (heavy-rules.cjs classRules), in MiB.
+test("a size in MiB prices a toolchain command at that many MiB", () => {
+    expect(isRoomSize("6144m")).toBe(true);
+    expect(costBytesOf("toolchain", "6144m")).toBe(6 * GIB);
+    expect(costBytesOf("service", "6144m")).toBe(costBytesOf("service"));
+    expect(["0m", "6144", "6g", "-1m", "99999999m"].filter((size) => isRoomSize(size))).toEqual([]);
+    const reading = { limitBytes: 18 * GIB, usedBytes: 10 * GIB, swapBytes: 0, stallPercent: 0, oomKills: 0 };
+    expect(judge(reading, { workload: "toolchain", attended: false, size: "6144m" })).toMatchObject({ verdict: "run", needBytes: 7 * GIB });
+});
+
 test("a live reading of this machine parses to numbers or nothing, never throws", () => {
     const live = readReadingSync();
     expect(typeof live.stallPercent).toBe("number");
@@ -347,7 +357,7 @@ test("what memory-room prints says why it waited and why it starts", () => {
     expect(waitWords("cargo", { verdict: "run", waitedMs: 0, freeBytes: GIB })).toBeUndefined();
     expect(waitWords("cargo", { verdict: "run", waitedMs: 27_000, freeBytes: 10.1 * GIB, waitedFor: why })).toBe(`[memory-room] cargo: waited 27s for memory (${why}), 10.1 GiB free — starting.`);
     expect(waitWords("cargo", { verdict: "refuse", waitedMs: 120_000, freeBytes: 10.1 * GIB, diagnosis: why, waitedFor: why })).toBe(
-        `[memory-room] cargo: still short of memory after 120s (10.1 GiB free) — starting anyway. Still: ${why}.`,
+        `[memory-room] cargo: still short of memory after 120s (10.1 GiB free, above the 1.0 GiB floor it needs to start) — starting with what there is. Still: ${why}.`,
     );
     expect(waitWords("cargo", { verdict: "refuse", waitedMs: 31_000, freeBytes: 6 * GIB, diagnosis: "Sandbox memory is low: 12.0 of 18.0 GiB used", stuck: true })).toMatch(
         /^\[memory-room\] cargo: short of memory for 31s, and waiting longer would not help: .* — starting now\. Still: Sandbox memory is low: 12\.0 of 18\.0 GiB used\.$/u,

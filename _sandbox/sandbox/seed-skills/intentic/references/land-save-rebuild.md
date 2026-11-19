@@ -33,9 +33,14 @@ offers to switch on the two automatic rules in steps 2 and 3 below.
    branch**), a clean turn lands by itself; a failed or stopped one never does. A land that conflicts with what the
    main line committed meanwhile is handed back to the agent once, as a turn of its own, to rebase and resolve; that
    turn lands by itself in turn, and a second conflict waits for the owner. A refused land loses nothing: every
-   worktree keeps everything. Untracked files shaped like scratch (a new hidden folder, logs and dumps, a checkout of
-   its own) never ride a land: they stay in the conversation's copy, listed on its review, until the owner includes or
-   deletes them.
+   worktree keeps everything. Work held on its branch is not left to meet the main line only at its land: when the
+   main line moves under it (a subagent's: its parent's branch), touching a file it changed, it is tried again, and one
+   that no longer merges is said at once, as a notice in its record, an Activity row, and "no longer merges" on its
+   `agents ls` row, with `agents show` naming the files and which conversations' landed work they clash with. Work that
+   lands by itself, and a home, gets one short resolve turn for it; a subagent's parent is told while its turn runs;
+   other held work is only told, so message it to rebase, or Land and then Resolve. Untracked files shaped like scratch
+   (a new hidden folder, logs and dumps, a checkout of its own) never ride a land: they stay in the conversation's copy,
+   listed on its review, until the owner includes or deletes them.
 3. **Save changes / Commit** makes it a version. Until then the landed work is uncommitted, and isolated agents
    start from the last commit, so later agents do not see it. The plain-words **Save** panel commits the whole tree,
    named by the subject written for the landing when the tree holds only that one, else "Your edits". With **Save a

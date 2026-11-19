@@ -14,6 +14,8 @@ export const NEED_ICONS: Readonly<Record<NeedKind, IconName>> = {
     environment: `box`,
     // The rail's own Automations glyph, which a held wake in Needs you already wears.
     automation: `automations`,
+    // A standing rule for AGENTS.md, the workspace's book of instructions.
+    instruction: `book`,
 };
 
 // The header chip of a need that is no longer waiting; undefined while it is, since the card's own buttons say that.

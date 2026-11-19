@@ -1,0 +1,67 @@
+#!/usr/bin/env node
+// The in-sandbox instructions command: keep a rule the owner stated once in an AGENTS.md, which every later conversation
+// is told (docs/architecture/needs.md). Proposing raises a card in this chat showing the exact change; a person's
+// approval is what writes it, on the owner's own tree, so an agent never edits the owner's standing instructions itself.
+
+import { readFileSync } from "node:fs";
+import { relative, resolve, sep } from "node:path";
+import { die, parseArgs, raise, WAIT_HELP } from "./needs-cli.mjs";
+
+const COMMAND = "instructions";
+
+// The workspace as this shell sees it, and where an isolated turn's own checkout of it sits when its runtime reaches it
+// by working directory (the daemon's history root, `worktrees/<conversation>/`). Overridable so a suite can point
+// elsewhere; the image sets WORKSPACE_ROOT.
+const WORKSPACE = process.env.WORKSPACE_ROOT ?? "/work";
+const WORKTREES = process.env.INTENTIC_WORKTREES_ROOT ?? "/history/worktrees";
+
+const USAGE = `instructions — keep a rule the owner stated, in an AGENTS.md every later conversation is told
+
+  instructions propose --text "…" [--file <AGENTS.md or its folder>] [--why "…"] [--wait <seconds>]
+                          ask the owner, on a card in this chat showing the exact change, to add the rule to that
+                          AGENTS.md: the workspace root's by default, a repository's with --file <repo>. --text - reads
+                          the rule from stdin. Nothing is written until they approve; their yes appends it in their
+                          own tree, and every conversation that starts there is told it from its next turn.
+
+Use it when the owner states a lasting rule or preference about how work is done here ("from now on…", "always…",
+"never…", "remember…"), never for an instruction about the task at hand. Write the rule as they meant it, in a sentence
+or two, as a "- " bullet where the file lists its rules that way; the root's file for the whole workspace, a
+repository's for that repository alone. Never edit an AGENTS.md yourself to add one.
+
+${WAIT_HELP}`;
+
+// The file as the workspace names it: relative to the root, from wherever this shell stands, whether that is the shared
+// tree or a checkout of the conversation's own. The daemon checks the rest (an AGENTS.md, inside the workspace).
+const workspaceFile = (raw) => {
+    const absolute = resolve(process.cwd(), raw);
+    const own = relative(WORKTREES, absolute);
+    if (own !== "" && !own.startsWith("..")) {
+        // Past the checkout's own folder, named for its conversation; the checkout itself is the root.
+        return own.includes(sep) ? own.slice(own.indexOf(sep) + 1) : "AGENTS.md";
+    }
+    const shared = relative(WORKSPACE, absolute);
+    if (shared.startsWith("..") || resolve(WORKSPACE, shared) !== absolute) {
+        return die(COMMAND, `${raw} is outside the workspace (${WORKSPACE})`);
+    }
+    return shared === "" ? "AGENTS.md" : shared;
+};
+
+const main = async () => {
+    const [command, ...args] = process.argv.slice(2);
+    if (command !== "propose") {
+        process.stdout.write(`${USAGE}\n`);
+        process.exit(command === undefined || command === "--help" || command === "-h" ? 0 : 2);
+    }
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["text", "file", "why", "wait"] });
+    if (rest.length > 0) {
+        return die(COMMAND, `unexpected ${rest.join(" ")}: the rule goes in --text "…"`);
+    }
+    const text = flags.text === "-" ? readFileSync(0, "utf8") : flags.text;
+    if (text === undefined || text.trim() === "") {
+        return die(COMMAND, 'propose needs the rule: --text "…"');
+    }
+    const file = flags.file === undefined ? "AGENTS.md" : workspaceFile(flags.file);
+    await raise(COMMAND, { kind: "instruction", file, text: text.trim() }, flags);
+};
+
+main().catch((error) => die(COMMAND, error?.message ?? String(error)));

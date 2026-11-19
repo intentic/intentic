@@ -8,11 +8,11 @@ import { entryId } from "./internal.js";
 // it until someone answers, draws it wherever it is waiting, and wakes the conversation when it is met
 // (docs/architecture/needs.md). Every word on a need is the daemon's except `why`, the agent's own case.
 
-export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment", "automation"] as const;
+export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment", "automation", "instruction"] as const;
 export const NeedKindSchema = z
     .enum(NEED_KINDS)
     .describe(
-        "What is being asked for: a connection, a secret's value, wider reach, a gated credential, a tool in the image, or an automation to run unattended.",
+        "What is being asked for: a connection, a secret's value, wider reach, a gated credential, a tool in the image, an automation to run unattended, or a standing rule written into an AGENTS.md.",
     );
 export type NeedKind = z.infer<typeof NeedKindSchema>;
 
@@ -176,6 +176,22 @@ export const AutomationNeedSchema = z.object({
 });
 export type AutomationNeed = z.infer<typeof AutomationNeedSchema>;
 
+// The longest rule one proposal adds: a sentence or two the owner said, never a document. Every turn pays for AGENTS.md.
+export const INSTRUCTION_MAX = 1000;
+
+// A rule the owner stated once ("from now on…", "remember…") that an agent proposes keeping in an AGENTS.md, which the
+// daemon composes into every later conversation's instructions (2026-11-19, the shinobi-society audit: one preference
+// restated in six conversations, rules given in replies that died with them). Nothing is written until a person approves;
+// the yes appends `text` to the file on the main tree, exactly as `diff` shows it.
+export const InstructionNeedSchema = z.object({
+    kind: z.literal("instruction"),
+    file: z.string().min(1).describe("The AGENTS.md it goes into, relative to the workspace root: `AGENTS.md`, or a repository's `<repo>/AGENTS.md`."),
+    text: z.string().min(1).max(INSTRUCTION_MAX).describe("The rule as it would be added, word for word."),
+    diff: z.string().describe("The change as a unified diff against the file as it stood when proposed: what approving writes."),
+    creates: z.boolean().optional().describe("The file does not exist yet: approving creates it holding this rule alone."),
+});
+export type InstructionNeed = z.infer<typeof InstructionNeedSchema>;
+
 export const NeedSubjectSchema = z
     .discriminatedUnion("kind", [
         CapabilityNeedSchema,
@@ -184,6 +200,7 @@ export const NeedSubjectSchema = z
         ReleaseNeedSchema,
         EnvironmentNeedSchema,
         AutomationNeedSchema,
+        InstructionNeedSchema,
     ])
     .describe("What exactly is asked for.");
 export type NeedSubject = z.infer<typeof NeedSubjectSchema>;
@@ -241,6 +258,12 @@ export const NeedAskSchema = z.discriminatedUnion("kind", [
     // Everything the agent proposes, switched on; the daemon checks it as the Automations page would save it, runs a
     // source's check once for the card, and saves it only on a person's approval.
     z.object({ kind: z.literal("automation"), automation: AutomationSchema }),
+    // The file and the words; the daemon checks the file is an AGENTS.md in the workspace and draws the diff itself.
+    z.object({
+        kind: z.literal("instruction"),
+        file: z.string().min(1).max(400).describe("The AGENTS.md, relative to the workspace root."),
+        text: z.string().trim().min(1).max(INSTRUCTION_MAX).describe("The rule, as it should read in the file."),
+    }),
 ]);
 export type NeedAsk = z.infer<typeof NeedAskSchema>;
 

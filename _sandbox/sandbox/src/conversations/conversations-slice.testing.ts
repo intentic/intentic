@@ -18,6 +18,7 @@ import { createBranchCheckouts } from "./worktrees/branches/branch-checkouts.js"
 import { createLogger } from "../logger.js";
 import { parkedCards } from "./actor/parked-cards.js";
 import { sqliteAgentsStore } from "./registry/agents-store.js";
+import { createFilesInFlight } from "./files-in-flight.js";
 import type { ConversationsSlice } from "./conversations-slice.js";
 import { registryDrafts } from "./drafts/composer-drafts.js";
 
@@ -121,6 +122,8 @@ export const conversationsSliceFake = (context: SliceFakeContext) => {
         // Namespace isolation off, what a container without CAP_SYS_ADMIN gets: turns run straight in the worktree
         // path. isolation.integration.test.ts covers the plan when it IS available.
         turnIsolation: noIsolation(WORKSPACE_ROOT),
+        // Nothing read from git: a suite about files in flight builds its own index over its own readings.
+        inFlight: createFilesInFlight({ agents, read: async () => ({ paths: [], tips: new Map() }), logger: SILENT }),
         // No agent has landed anything, so every changed file is the user's and `identify` has nobody to resolve.
         agentOrigins: { forRepo: async () => ({}), identify: () => ({}), metrics: () => ({}) },
         // The engine's own doors over these services, as composition binds them.

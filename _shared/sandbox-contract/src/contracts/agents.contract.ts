@@ -12,6 +12,7 @@ import { OkSchema } from "../schemas/shared.js";
 import { AgentPlacedSchema, AgentPlaceSchema } from "../schemas/agent-place.js";
 import { ComposerDraftsSchema, DraftClearSchema, DraftReactionsSchema, DraftWriteSchema, DraftWrittenSchema } from "../schemas/composer-drafts.js";
 import { AgentKeepWarmSchema } from "../schemas/keep-warm.js";
+import { AgentProceedSchema } from "../schemas/proceed-without-asking.js";
 import { ConversationPromptSchema } from "../schemas/system-prompt.js";
 
 // Every registered conversation-agent (AgentSummarySchema); an unknown {id} is NOT_FOUND across this whole family.
@@ -206,6 +207,18 @@ export const agentsContract = {
         })
         .meta({ floor: "collaborator" })
         .input(AgentBreakPolicySchema)
+        .output(AgentSummarySchema),
+    // Legal for a workspace conversation too, and mid-turn: it is read as each turn is planned, so it holds from the next.
+    proceed: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/proceed",
+            summary: "Whether this conversation proceeds without asking for a go-ahead",
+            description:
+                "Overrides the sandbox-wide `proceedWithoutAsking` for one conversation and the subagents it starts; clear it to follow the conversation that started it, or the sandbox, again. On, its turns are told to carry on with their own recommendation and to stop only before something destructive or outward-facing.",
+        })
+        .meta({ floor: "collaborator" })
+        .input(AgentProceedSchema)
         .output(AgentSummarySchema),
     // Legal for a workspace conversation too, and only between turns in effect: a turn starting ends the hold.
     keepWarm: procedure

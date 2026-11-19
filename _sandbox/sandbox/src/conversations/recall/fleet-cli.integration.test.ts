@@ -55,19 +55,40 @@ describe("against a daemon", () => {
     const answers = {
         "/fleet/fair-sage-ey2r": { agent: { id: "fair-sage-ey2r", status: "idle" } },
         "/fleet": {
-            agents: [{ id: "fair-sage-ey2r", status: "idle", provider: "claude", title: "One", updatedAt: Date.now(), turns: 1 }],
+            agents: [
+                {
+                    id: "fair-sage-ey2r",
+                    status: "idle",
+                    provider: "claude",
+                    title: "One",
+                    updatedAt: Date.now(),
+                    turns: 1,
+                    loop: { state: "running", round: 3, max: 10, remaining: 4, until: "make check" },
+                },
+            ],
             total: 152,
             truncated: true,
             maxLimit: 100,
+            unlanded: { hours: 24, count: 2 },
         },
+        "/fleet/loop": { ok: true, conversationId: "fair-sage-ey2r", waits: true, loop: { maxIterations: 5 } },
     } as const;
+    // What each POST carried, by path.
+    const posted = new Map<string, unknown>();
     const report = `Done.\n${"x".repeat(30_000)}\nThe end.`;
     beforeAll(async () => {
         dir = mkdtempSync(join(tmpdir(), "agents-cli-"));
         writeFileSync(join(dir, "token"), "t");
-        server = createServer((request, response) => {
+        server = createServer(async (request, response) => {
             const url = new URL(request.url ?? "/", "http://stub");
             asked.push(`${url.pathname}${url.search}`);
+            if (request.method === "POST") {
+                const chunks: Buffer[] = [];
+                for await (const chunk of request) {
+                    chunks.push(Buffer.from(chunk));
+                }
+                posted.set(url.pathname, JSON.parse(Buffer.concat(chunks).toString("utf8")));
+            }
             const transcript =
                 url.searchParams.get("raw") === "1"
                     ? {
@@ -82,7 +103,7 @@ describe("against a daemon", () => {
                       }
                     : {};
             response.setHeader("content-type", "application/json");
-            const known = url.pathname === "/fleet" || url.pathname === "/fleet/fair-sage-ey2r" ? answers[url.pathname] : {};
+            const known = url.pathname === "/fleet" || url.pathname === "/fleet/fair-sage-ey2r" || url.pathname === "/fleet/loop" ? answers[url.pathname] : {};
             response.end(JSON.stringify({ ...known, ...transcript }));
         });
         await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -124,5 +145,31 @@ describe("against a daemon", () => {
     test("a cut page says how many there are and how to see more", async () => {
         const { out } = await against({}, "ls");
         expect(out).toContain("showing 1 of 152: agents ls --limit 100 for more, or narrow with --repo, --owner or `agents find`\n");
+    });
+
+    // 2026-11-19: stopped work sat unlanded on its branch until the owner happened to remember it.
+    test("the roster says how far a loop has got, and how much stopped work never landed", async () => {
+        const { out } = await against({}, "ls");
+        expect(out).toContain("loop: round 3 of 10 · 4 remaining · until `make check`\n");
+        expect(out).toContain("2 conversations have work stopped and not landed for over 24h: agents ls --unlanded\n");
+        asked.length = 0;
+        await against({}, "ls", "--unlanded", "--hours", "6");
+        expect(asked).toEqual(["/fleet?unlanded=6"]);
+    });
+
+    test("`agents loop` starts a chain on the conversation it names, `self` included, with its limits", async () => {
+        const { code, out } = await against({ INTENTIC_TURN_OWNER: "fair-sage-ey2r" }, "loop", "Take the next open item in BACKLOG.md", "--until", "make check", "--on", "self", "--max", "5", "--no-land");
+        expect(code).toBe(0);
+        expect(posted.get("/fleet/loop")).toEqual({ prompt: "Take the next open item in BACKLOG.md", until: "make check", on: "fair-sage-ey2r", max: 5, land: false });
+        expect(out).toContain("fair-sage-ey2r: a loop of at most 5 rounds starts once its running turn ends.");
+        const bad = await against({}, "loop", "x", "--max", "0");
+        expect(bad.code).toBe(1);
+        expect(bad.out).toContain("agents: --max takes a whole number above 0");
+    });
+
+    // A subagent that starts once others have landed (agent/subagents/starting/child-after.ts), from a shell as from the tool.
+    test("`agents spawn --after` names the siblings it waits for", async () => {
+        expect((await against({}, "spawn", "--provider", "claude", "--model", "claude-sonnet-4-6", "--after", "sub-a, sub-b,", "Build on both")).code).toBe(0);
+        expect(posted.get("/children/spawn")).toEqual({ prompt: "Build on both", provider: "claude", model: "claude-sonnet-4-6", after: ["sub-a", "sub-b"] });
     });
 });

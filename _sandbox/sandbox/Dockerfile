@@ -343,23 +343,26 @@ COPY _sandbox/sandbox/seed-skills /root/.claude/skills
 # dependencies; both are already in the base, and a missing one degrades to running the command plainly — unqueued,
 # or unbounded. Not on PATH ⇒ nothing queues, and heavy programs are still ranked (terminal-run.ts queueRunEnabled).
 # Both runners above in one COPY: each instruction is a layer, and Docker refuses an image deeper than 125 (see the
-# command block below).
-COPY --chmod=755 _sandbox/sandbox/bin/tmux-run _sandbox/sandbox/bin/queue-run /usr/local/bin/
+# command block below). `quiet`, the queue's lane for timing-sensitive work, rides the same layer: it is queue-run with
+# --exclusive in front of heavy-launch.cjs.
+COPY --chmod=755 _sandbox/sandbox/bin/tmux-run _sandbox/sandbox/bin/queue-run _sandbox/sandbox/bin/quiet /usr/local/bin/
 # The thin wrappers for heavy programs that are not node scripts (pnpm's own binary, bun, cargo), first on an agent
 # command's PATH (src/workload/heavy-commands.ts heavyEnvPrefix) and a login shell's (the profile line above); node
 # programs are judged by the hook node loads for them instead. Each name is a link to the one wrapper. The `git` guard
 # (bin/guard-shims: the shared checkout stays on its main line) rides the same directory and the same layer, since
 # it needs the same place first on those PATHs and the image has no layer to spare. So does `suites`
-# (bin/heavy-shims/suites), which runs the nearest package's own test runner from any directory.
+# (bin/heavy-shims/suites), which runs the nearest package's own test runner from any directory, and the interpreters'
+# wrappers (bin/heavy-shims/interpreters), which the daemon puts on PATH only while a repository declares heavy classes.
 COPY --chmod=755 _sandbox/sandbox/bin/heavy-shims _sandbox/sandbox/bin/guard-shims /opt/sandbox/heavy-shims/
 # The output filter and its cleaner registry come from @intentic/output-cleaners, the same files the Claude Code plugin
 # bundles; plain node-builtin .mjs, so they are copied as written rather than built.
 COPY --chmod=755 _sandbox/output-cleaners/src/agent-output-filter.mjs /usr/local/bin/agent-output-filter
 # The cleaner registry the filter imports (./cleaners.mjs resolves next to the renamed binary at /usr/local/bin), and
-# the modules it imports in turn: one layer, since they share a mode and a directory. A module missing here fails the
-# filter at load and every command falls back to raw output unnoticed (path-runs.mjs, 2026-10-20 to 11-06); the
-# output-cleaners test agent-output-filter.test.mjs holds this list to the import graph.
-COPY --chmod=755 _sandbox/output-cleaners/src/cleaners.mjs _sandbox/output-cleaners/src/cleaner-shapes.mjs _sandbox/output-cleaners/src/log-templates.mjs _sandbox/output-cleaners/src/json-arrays.mjs _sandbox/output-cleaners/src/search-fairness.mjs _sandbox/output-cleaners/src/output-cap.mjs _sandbox/output-cleaners/src/path-runs.mjs _sandbox/output-cleaners/src/repeated-output.mjs _sandbox/output-cleaners/src/text-shaping.mjs _sandbox/output-cleaners/src/short-secrets.mjs /usr/local/bin/
+# the modules it imports in turn, all flat beside it: one layer, since they share a mode and a directory, and the image
+# has no layer to spare (a module the filter reaches belongs in src/ itself, not a subfolder, for this reason). A module
+# missing here fails the filter at load and every command falls back to raw output unnoticed (path-runs.mjs, 2026-10-20
+# to 11-06); the output-cleaners test src/tests/agent-output-filter.test.mjs holds this list to the import graph.
+COPY --chmod=755 _sandbox/output-cleaners/src/cleaners.mjs _sandbox/output-cleaners/src/cleaner-shapes.mjs _sandbox/output-cleaners/src/log-templates.mjs _sandbox/output-cleaners/src/json-arrays.mjs _sandbox/output-cleaners/src/search-fairness.mjs _sandbox/output-cleaners/src/output-cap.mjs _sandbox/output-cleaners/src/path-runs.mjs _sandbox/output-cleaners/src/repeated-output.mjs _sandbox/output-cleaners/src/text-shaping.mjs _sandbox/output-cleaners/src/short-secrets.mjs _sandbox/output-cleaners/src/rust-diagnostics.mjs _sandbox/output-cleaners/src/test-digest.mjs _sandbox/output-cleaners/src/test-outcomes.mjs _sandbox/output-cleaners/src/test-runs.mjs /usr/local/bin/
 # retrieve-output on PATH — the reversible half of the filter (fetch back elided output; the footer names it).
 COPY --chmod=755 _sandbox/output-cleaners/src/retrieve-output.mjs /usr/local/bin/retrieve-output
 # These CLIs relay through daemon routes so shell and UI actions share policy; optional clients such as VPN, netdisk and rtk live in overlays.
@@ -370,6 +373,8 @@ COPY --chmod=644 _sandbox/sandbox/bin/needs-cli.mjs /usr/local/bin/needs-cli.mjs
 # Shell commands relay to the daemon, which owns consent, policy, budgets and credentials; no CLI may bypass those gates.
 # Privacy values go to the daemon without printing; wallet keys stay on the platform and fleet creation requires approval.
 # Offloaded commands snapshot/return changes and fall back locally when the selected runner cannot accept the work.
+# glance (contact sheets, before/after diffs, video frames, crops) needs only node and ffmpeg or ImageMagick; its two
+# modules ride beside it because it imports them relatively.
 # Add commands to this single COPY: separate layers exhausted Docker's 125-depth limit and leave no room for environment overlays.
 COPY --chmod=755 \
     _sandbox/sandbox/bin/vpn \
@@ -383,18 +388,25 @@ COPY --chmod=755 \
     _sandbox/sandbox/bin/needs \
     _sandbox/sandbox/bin/projects \
     _sandbox/sandbox/bin/automations \
+    _sandbox/sandbox/bin/instructions \
     _sandbox/sandbox/bin/wallet \
     _sandbox/sandbox/bin/secrets \
     _sandbox/sandbox/bin/privacy \
     _sandbox/sandbox/bin/agents \
     _sandbox/sandbox/bin/diagnostics \
     _sandbox/sandbox/bin/devices \
+    _sandbox/sandbox/bin/devices-exec.mjs \
+    _sandbox/sandbox/bin/devices-exec-scripts.mjs \
     _sandbox/sandbox/bin/offload-run \
     _sandbox/sandbox/bin/remote-run \
     _sandbox/sandbox/bin/on-screen \
     _sandbox/sandbox/bin/sandboxes \
     _sandbox/sandbox/bin/preview \
     _sandbox/sandbox/bin/gpu-run \
+    _sandbox/sandbox/bin/base \
+    _sandbox/sandbox/bin/glance \
+    _sandbox/sandbox/bin/glance-engine.mjs \
+    _sandbox/sandbox/bin/glance-raster.mjs \
     /usr/local/bin/
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
 COPY --chmod=755 _sandbox/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

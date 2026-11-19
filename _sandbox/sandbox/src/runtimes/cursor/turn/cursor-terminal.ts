@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { TurnPlacement } from "../../../conversations/worktrees/isolation.js";
-import { envKeyFlags, NO_PROMPTS, paneHop, PIPESTATUS_TRAP, POLITE_PREFIX, runRootFor, tmuxRunEnabled } from "../../../agent/tools/agent-terminals.js";
+import { agentScript, envKeyFlags, NO_PROMPTS, paneHop, PIPESTATUS_TRAP, POLITE_PREFIX, runRootFor, tmuxRunEnabled } from "../../../agent/tools/agent-terminals.js";
 import { writeRunFile } from "../../../agent/tools/jobs/run-files.js";
 import { AGENT_SESSION_ENV } from "../../../system/boot/container-owner.js";
 import { TURN_PROOF_ENV, turnProof, WORKLOAD_ENV } from "../../../seams/workload-stamp.js";
@@ -47,7 +47,7 @@ export const paneCommand = (terminal: CursorTerminal, command: string, said: str
     writeRunFile(dir, "agent", `${PIPESTATUS_TRAP}${command}\n`);
     const owner = terminal.owner !== undefined && /^[A-Za-z0-9_-]+$/u.test(terminal.owner) ? `${WORKLOAD_ENV}=${terminal.owner} ${TURN_PROOF_ENV}=${turnProof(terminal.owner)} ` : "";
     const stamp = `${AGENT_SESSION_ENV}=${shellQuote(terminal.sessionId)} ${owner}`;
-    writeRunFile(dir, "line", `${stamp}${paneHop(terminal.isolation)}${POLITE_PREFIX}${NO_PROMPTS}bash ${shellQuote(agentFile)}\n`);
+    writeRunFile(dir, "line", `${stamp}${paneHop(terminal.isolation)}${POLITE_PREFIX}${NO_PROMPTS}${agentScript(agentFile)}\n`);
     writeRunFile(dir, "said", said);
     writeRunFile(dir, "name", "cursor");
     return `${TMUX_RUN_BIN} ${envKeyFlags(terminal.envKeys)}-f ${shellQuote(join(dir, "line"))} ${terminal.session}`;

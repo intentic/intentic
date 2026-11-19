@@ -122,3 +122,23 @@ test("a full sandbox is said with the machines that have room, and the spawn too
     sent(actors, "c2", surroundingsNote(actors, "c2", FRESH, pressed), true);
     expect(surroundingsNote(actors, "c2", RESUMED, QUIET)?.text).toContain("this sandbox is not full");
 });
+
+// The owner's standing go-ahead (settings `proceedWithoutAsking`): said once it is switched on, taken back in words once
+// it is off, and left to night hours while they are in force, which say what a question gets instead.
+test("proceeding without asking is said when it is switched on, taken back when off, and yields to the night", () => {
+    const actors = fleet();
+    const on = surroundingsNote(actors, "c1", FRESH, { ...QUIET, proceed: true });
+    expect(on?.text).toContain("The owner has asked agents here to proceed without asking");
+    expect(on?.text).toContain("Stop and ask only before something destructive");
+    expect(on?.text).toContain("Do not enter plan mode to have a plan approved first.");
+    sent(actors, "c1", on, true);
+    expect(surroundingsNote(actors, "c1", RESUMED, { ...QUIET, proceed: true })).toBeUndefined();
+
+    const off = surroundingsNote(actors, "c1", RESUMED, QUIET);
+    expect(off?.text).toBe(SURROUNDINGS_CLEARED);
+    expect(off?.text).toContain("the owner has not asked you to proceed without asking");
+
+    const night = surroundingsNote(fleet(), "c1", FRESH, { ...UNWATCHED, proceed: true, night: { questions: "defer", until: "07:00" } });
+    expect(night?.text).toContain("Do not decide what is genuinely theirs either");
+    expect(night?.text).not.toContain("proceed without asking");
+});

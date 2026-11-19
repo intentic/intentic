@@ -20,8 +20,12 @@
             "default": "./src/agent-output-filter.mjs"
         },
         "./stats": {
-            "types": "./src/filter-stats.d.mts",
-            "default": "./src/filter-stats.mjs"
+            "types": "./src/stats/filter-stats.d.mts",
+            "default": "./src/stats/filter-stats.mjs"
+        },
+        "./outcomes": {
+            "types": "./src/test-outcomes.d.mts",
+            "default": "./src/test-outcomes.mjs"
         }
     },
     "scripts": {

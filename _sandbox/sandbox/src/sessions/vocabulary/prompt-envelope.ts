@@ -43,6 +43,12 @@ export const FRESH_NOTE_TITLE = "The work this session started from";
 export const FRESH_NOTE_HEADER = `## ${FRESH_NOTE_TITLE}`;
 export const HOME_NOTE_TITLE = "How this home conversation works";
 export const HOME_NOTE_HEADER = `## ${HOME_NOTE_TITLE}`;
+// Who else is changing the files a conversation changed and has not landed (conversations/files-in-flight.ts).
+export const IN_FLIGHT_NOTE_TITLE = "Files other conversations are changing";
+export const IN_FLIGHT_NOTE_HEADER = `## ${IN_FLIGHT_NOTE_TITLE}`;
+// What the sandbox tells every spawned subagent with its brief (agent/subagents/starting/child-preamble.ts), so no parent writes it.
+export const CHILD_NOTE_TITLE = "You are a subagent";
+export const CHILD_NOTE_HEADER = `## ${CHILD_NOTE_TITLE}`;
 export const CHECKPOINT_NOTE_HEADER = "## Your uncommitted work was committed";
 export const CHECKPOINT_NOTE_TITLE = "Uncommitted work committed";
 // Given when a `/`-leading prompt names no command (agent-commands.ts); its job is positional, so the CLI's slash
@@ -81,6 +87,10 @@ export const INJECTED: readonly { readonly header: string; readonly title: strin
     { header: REPO_SYNC_NOTE_HEADER, title: "Repos synced with their remotes" },
     // Says where a checkpoint commit put the agent's uncommitted work, so a clean `git status` doesn't read as lost work.
     { header: CHECKPOINT_NOTE_HEADER, title: CHECKPOINT_NOTE_TITLE },
+    // Which other live conversations change the same files, named once each (conversations/files-in-flight.ts).
+    { header: IN_FLIGHT_NOTE_HEADER, title: IN_FLIGHT_NOTE_TITLE },
+    // How a subagent's work lands, its siblings, its tools and its report's shape (agent/subagents/starting/child-preamble.ts).
+    { header: CHILD_NOTE_HEADER, title: CHILD_NOTE_TITLE },
     // Keep the parser's title aligned with the typed note.
     { header: LANDING_CHECKS_NOTE_HEADER, title: LANDING_CHECKS_NOTE_TITLE },
     // Never sent any more; still parsed out of the prompts records already hold, so they read as notes, not as typing.

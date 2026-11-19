@@ -11,14 +11,15 @@ import {
     queueRunEnabled,
 } from "../../workload/heavy-commands.js";
 import type { WorkspacePaths } from "../workspace.js";
+import { workspaceHeavyClasses } from "./heavy-classes.js";
 import { createDependencyCoordinator, type DependencyCoordinator, dependencyRequestsDocument } from "./reconcile-deps.js";
 
 // The main tree's dependencies and the heavy-command queue.
 export interface DepsSlice {
     // Single owner of dependency status, durable setup requests, watcher reconciliation and installs.
     readonly dependencies: DependencyCoordinator;
-    // Which programs are heavy enough to queue: the shipped table with the owner's overrides; the Bash hook reads it per
-    // command, binding on the next one.
+    // Which programs are heavy enough to queue: the shipped table with the repositories' declared classes and the owner's
+    // overrides; the Bash hook reads it per command, binding on the next one.
     readonly heavyCommands: HeavyCommandsStore;
     // One whole line under the heavy table (agent-terminals.ts queueWhole), its heavy programs queueing as they start: for
     // what the daemon runs itself, here and for a parent on a runner, rather than what an agent types.
@@ -38,8 +39,12 @@ export type QueueMembers = "queueHeavy";
 
 // Builds the slice but for the heavy queue.
 export const createDepsSlice = ({ workspace, historyRoot, processes, logger }: DepsSliceDeps): Omit<DepsSlice, QueueMembers> => {
-    const heavyCommands = fileHeavyCommandsStore(join(workspace.root, heavyCommandsDocument.path), (reason) =>
-        logger.warn(`heavy-commands: ${reason}, falling back to the shipped rules`),
+    // The repositories' own heavy commands (`.intentic/heavy.json`) join the table under the owner's overrides.
+    const declared = workspaceHeavyClasses(workspace.root, (problem) => logger.warn(`heavy-commands: ${problem}; that class is left out`));
+    const heavyCommands = fileHeavyCommandsStore(
+        join(workspace.root, heavyCommandsDocument.path),
+        (reason) => logger.warn(`heavy-commands: ${reason}, falling back to the shipped rules`),
+        declared,
     );
     return {
         dependencies: createDependencyCoordinator({

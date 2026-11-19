@@ -29,7 +29,7 @@ import { endpointConfigOf } from "../../../endpoints/local-model.js";
 import { routingFor } from "../../../conversations/registry/routing.js";
 import { type DeclaredWindow, servedEndpointModel, windowOf } from "../../prompt/window/context-budget.js";
 import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
-import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
+import { workspaceMemoryFiles, workspaceMemoryNote } from "../../prompt/workspace-memory.js";
 import { pinnedAccount } from "../../../conversations/registry/agents-store.js";
 import type { RoutedTurn, TurnInput } from "../../../seams/turn-starter.js";
 import type { TurnContext } from "../../providers/adapter.js";
@@ -38,6 +38,8 @@ import { opt } from "../../../opt.js";
 import { type ConversationEntry, notesDue, type TurnPremise, type TurnRuntime, premiseOf, turnRuntime } from "./turn-premise.js";
 import { skillsUnseen, type TurnSkillCatalog, turnSkillCatalog } from "./turn-skills.js";
 import { runtimeRoute } from "../../../privacy/privacy-trust.js";
+import { proceedsWithoutAsking } from "./proceed.js";
+import { childNoteFor } from "../../subagents/starting/child-preamble.js";
 
 // Every read a turn is planned on, each timed under the `turn.plan.*` span diagnostics read and run beside the others
 // wherever nothing orders them, so the decision after it is pure. A read that hinges on a decision waits for the premise.
@@ -82,6 +84,11 @@ export interface AdmittedTurnFacts {
     readonly fresh?: FreshFacts;
     // A home conversation's policy (conversations/home/home-policy.ts), on the turns that owe it; absent for any other.
     readonly homeNote?: TurnNote;
+    // The other live conversations changing files this one changed and has not landed, those it was not told of yet
+    // (conversations/files-in-flight.ts); absent when there are none.
+    readonly inFlightNote?: TurnNote;
+    // What the sandbox tells a spawned child with its brief (subagents/starting/child-preamble.ts); absent on every other turn.
+    readonly childNote?: TurnNote;
     readonly gates: readonly CredentialGate[];
     // The releases this conversation held for those gates when they were read.
     readonly releases: CredentialGrants;
@@ -104,6 +111,8 @@ export interface AdmittedTurnFacts {
     // What checks the work (nothing here, CI after a push); present only on a turn that owes it.
     readonly landingChecksNote: TurnNote | undefined;
     readonly sessionStore: string;
+    // Whether its turns proceed without asking (decide/proceed.ts): its own answer, an ancestor's, or the sandbox's.
+    readonly proceed?: boolean;
     // Where a turn goes when the account its conversation remembers is blocked, or when the people it works for may not
     // run it where it was routed (account-reach.ts); absent is `keep`.
     readonly accountRoute?: ReachedRoute;
@@ -181,15 +190,32 @@ const releasesOf = (grants: CredentialGrants, gates: readonly CredentialGate[], 
     return held;
 };
 
-// The start folder as the daemon reaches it. One the escape guard refuses maps nothing and reads rules from the root.
+// The start folder as the daemon reaches it; undefined for one the escape guard refuses.
+const startOf = (context: TurnContext, premise: TurnPremise): string | undefined =>
+    premise.startIn === undefined || premise.startIn === "" ? context.localCwd : resolveWithin(context.localCwd, premise.startIn);
+
+// A refused start folder maps nothing and reads rules from the root.
 const treeReads = (context: TurnContext, premise: TurnPremise): Pick<AdmittedTurnFacts, "memoryNote" | "mapNote"> => {
     const root = context.localCwd;
-    const start = premise.startIn === undefined || premise.startIn === "" ? root : resolveWithin(root, premise.startIn);
+    const start = startOf(context, premise);
     return {
         memoryNote: workspaceMemoryNote({ root, cwd: start ?? root }),
         mapNote: premise.send.map && start !== undefined ? workspaceMapNote({ root, cwd: start }) : undefined,
     };
 };
+
+// A spawned child's opening note, read off the same tree its instructions are, on the turns that carry its brief. Not a
+// span of its own: every other turn answers from one in-memory lookup, and a child's reads a folder or two.
+const childNoteOf = (services: TurnFactsDeps, input: RoutedTurn, context: TurnContext, premise: TurnPremise, facts: { readonly runtime: TurnRuntime; readonly settings: SandboxSettings }): Promise<TurnNote | undefined> =>
+    childNoteFor({ conversations: services.conversations, agents: services.agents, inFlight: services.inFlight, memoryFiles: workspaceMemoryFiles }, {
+        conversationId: input.conversationId,
+        prompt: input.prompt,
+        sessionId: context.base.spec.sessionId,
+        root: context.localCwd,
+        start: startOf(context, premise) ?? context.localCwd,
+        runtime: facts.runtime.capabilities.runtime,
+        outputCleaners: facts.settings.outputCleaners,
+    });
 
 // Whether the cache the conversation's next turn would read has expired (account-placement.ts cacheCold), as its actor
 // last heard: undefined state (a conversation this daemon has not run since it started) counts as cold.
@@ -320,7 +346,8 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "privacyShield"
     | "sandboxSettings"
     | "workspace"
->;
+> &
+    Partial<Pick<Services, "inFlight">>;
 
 /* AN ENDPOINT REMOVED UNDER A CONVERSATION (2026-11-09). Three conversations last ran on an endpoint whose capability was
    then removed. A Continue booked on each went out at the next boot, was accepted, set up, and three seconds later failed
@@ -392,7 +419,10 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     const landingChecksNote = premise.send.landingChecks ? LANDING_CHECKS_NOTE : undefined;
     const card = premise.role.role;
     // Only a card that asked for its own prompt is read, so an ordinary turn pays nothing for it.
-    const rolePrompt = card?.systemPromptMode === "custom" ? await readRolePrompt(services.workspace.root, card.id) : undefined;
+    const [rolePrompt, childNote] = await Promise.all([
+        card?.systemPromptMode === "custom" ? readRolePrompt(services.workspace.root, card.id) : Promise.resolve(undefined),
+        childNoteOf(services, input, context, premise, { runtime, settings }),
+    ]);
     return {
         root: services.workspace.root,
         entry,
@@ -411,6 +441,9 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         contextNote,
         ...opt("fresh", fresh),
         ...opt("homeNote", homeNote),
+        // Read off the index in memory, no git: who else is changing what this conversation already changed.
+        ...opt("inFlightNote", input.conversationId === undefined ? undefined : services.inFlight?.turnNote(input.conversationId)),
+        ...opt("childNote", childNote),
         gates,
         releases: releasesOf(services.credentialGrants, gates, input.conversationId),
         reach,
@@ -421,6 +454,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         landingChecksNote,
         ...treeReads(context, premise),
         sessionStore: services.agentWorktrees.sessionStore(entry),
+        proceed: proceedsWithoutAsking(settings, entry, (id) => services.agents.entry(id)),
         ...opt("accountRoute", accountRoute.kind === "keep" ? undefined : accountRoute),
     };
 };

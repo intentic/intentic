@@ -82,11 +82,15 @@ export const notYet = (kid: ChildRecord): string | undefined => {
     if (kid.held === "start") {
         return "It has not started: the owner has not allowed its start yet. Wait for it, then send again.";
     }
+    // Reached only by a move, or in the moment a restart has not re-armed its wait yet: a plain message starts it.
+    if (kid.held === "after") {
+        return "It has not started: it waits for the subagents its spawn named in `after`. Send it a message naming no provider to start it now, or wait for it.";
+    }
     if (kid.held === "message") {
         return "Your last message to it still waits for the owner's approval: wait for that, then send again.";
     }
     if (kid.queued) {
-        return "It is waiting for memory and has not started: wait for it, then send again.";
+        return "It is waiting for memory and has not started: it starts by itself, on its task, as soon as there is room (wait covers that). Send again once it has started, if there is more to say.";
     }
     return kid.behind ? "Your last message is still waiting for the turn already running on it to end: wait for it, then send again." : undefined;
 };

@@ -52,6 +52,9 @@ export interface FleetNow {
     readonly resuming?: boolean;
     // Its work is being carried into the workspace right now.
     readonly landing?: boolean;
+    // A spawned child whose next turn has not started: what it waits for (memory, a seat, the owner), as its parent's
+    // roster row says it.
+    readonly waiting?: string;
 }
 
 // Its own copy of fleet-recall.ts's, which imports this module.
@@ -136,7 +139,7 @@ const limitNow = (summary: AgentSummary): FleetNow["limit"] => {
 };
 
 /** What is live or holding the conversation now; undefined for one that is simply at rest. */
-export const fleetNow = (summary: AgentSummary | undefined, state: ConversationState | undefined, running: boolean): FleetNow | undefined => {
+export const fleetNow = (summary: AgentSummary | undefined, state: ConversationState | undefined, running: boolean, waiting?: string): FleetNow | undefined => {
     if (summary === undefined) {
         return undefined;
     }
@@ -150,6 +153,7 @@ export const fleetNow = (summary: AgentSummary | undefined, state: ConversationS
         limit: limitNow(summary),
         resuming: summary.status === "resuming" ? true : undefined,
         landing: summary.status === "landing" ? true : undefined,
+        waiting,
     });
     return Object.keys(now).length === 0 ? undefined : now;
 };

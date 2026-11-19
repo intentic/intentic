@@ -792,7 +792,7 @@
     "_sandbox/sandbox/src/system/platform-client.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/system/resources/daemon-cgroup.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/system/resources/process-scan.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/sandbox/src/system/resources/queue-slots.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/resources/queue/queue-slots.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/system/resources/resource-metrics.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/system/resources/storage/disk-storage.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/terminal/prompt-signal.ts": "standing when the check arrived (2026-10-16)",

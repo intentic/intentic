@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { packageRoot } from "@intentic/constants/node";
 import { CapabilityConnectableSchema, type NeedRaised, NeedRaiseSchema, NeedsListSchema, NeedSchema } from "@intentic/sandbox-contract/schemas/needs";
 import {
@@ -273,6 +274,40 @@ describe("the asking commands speak the needs contract", () => {
         }
     });
 
+    // A rule the owner stated, named the way the workspace names its file wherever the shell stands: the shared tree, or a
+    // conversation's own checkout under the worktrees root.
+    it("instructions propose asks for the rule in the workspace's AGENTS.md, a repository's by its folder, from either tree", async () => {
+        const before = { workspace: process.env["WORKSPACE_ROOT"], worktrees: process.env["INTENTIC_WORKTREES_ROOT"] };
+        process.env["WORKSPACE_ROOT"] = WORKSPACE_ROOT;
+        process.env["INTENTIC_WORKTREES_ROOT"] = join(HISTORY_ROOT, "worktrees");
+        try {
+            server.answer = raised({ state: "open", message: "Asked.", need: OPEN_NEED });
+            const asked = await run(server.port, "instructions", ["propose", "--text", "  - Don't overdo tests.  ", "--why", "you said it twice"]);
+            expect(asked.code).toBe(3);
+            await run(server.port, "instructions", ["propose", "--file", join(WORKSPACE_ROOT, "game"), "--text", "Beat Bevy on every case."]);
+            await run(server.port, "instructions", ["propose", "--file", join(HISTORY_ROOT, "worktrees", "conv-cli", "game", "AGENTS.md"), "--text", "Port its algorithm if needed."]);
+            expect(server.seen.map((seen) => NeedRaiseSchema.parse(seen.body))).toEqual([
+                { ask: { kind: "instruction", file: "AGENTS.md", text: "- Don't overdo tests." }, why: "you said it twice" },
+                { ask: { kind: "instruction", file: "game", text: "Beat Bevy on every case." } },
+                { ask: { kind: "instruction", file: "game/AGENTS.md", text: "Port its algorithm if needed." } },
+            ]);
+            server.seen.length = 0;
+            const outside = await run(server.port, "instructions", ["propose", "--file", "/etc/AGENTS.md", "--text", "x"]);
+            expect(outside).toEqual({ code: 2, stdout: `instructions: /etc/AGENTS.md is outside the workspace (${WORKSPACE_ROOT})\n`, stderr: "" });
+            const empty = await run(server.port, "instructions", ["propose", "--text", " "]);
+            expect(empty).toEqual({ code: 2, stdout: 'instructions: propose needs the rule: --text "…"\n', stderr: "" });
+            expect(server.seen).toEqual([]);
+        } finally {
+            for (const [name, value] of [["WORKSPACE_ROOT", before.workspace], ["INTENTIC_WORKTREES_ROOT", before.worktrees]] as const) {
+                if (value === undefined) {
+                    delete process.env[name];
+                } else {
+                    process.env[name] = value;
+                }
+            }
+        }
+    });
+
     it("secrets generate asks the route the contract declares and prints the reference, never a value", async () => {
         const body = { key: "SESSION_SECRET", bytes: 48, format: "alnum" as const };
         server.answer = (seen) =>
@@ -468,7 +503,7 @@ describe("the asking commands speak the needs contract", () => {
     });
 
     it("unknown subcommands exit 2 with help on stdout", async () => {
-        for (const command of ["capabilities", "secrets", "environment", "grants", "needs"]) {
+        for (const command of ["capabilities", "secrets", "environment", "grants", "needs", "instructions"]) {
             const result = await run(server.port, command, ["typo"]);
             expect(result.code).toBe(2);
             expect(result.stdout).toContain(command);

@@ -15,7 +15,7 @@ import { gpuStateFile } from "../../hosts/gpu/gpu-state.js";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { SESSION_STATE } from "../../sessions/session-store.js";
 import { stateRelPath } from "../../state-paths.js";
-import { queueRoot } from "../../system/resources/queue-slots.js";
+import { queueRoot } from "../../system/resources/queue/queue-slots.js";
 import { PROMPT_SIGNAL_DIR } from "../../terminal/prompt-signal.js";
 import { registerSandboxEntry } from "../../workload/namespace-entry.js";
 import { namespaceHolderLifetime, namespaceHolderReady } from "../../workload/namespace-holder.js";

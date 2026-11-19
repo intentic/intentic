@@ -48,6 +48,11 @@ export const setAutoLand = (id: string, autoLand: boolean | null): Promise<void>
 export const setBreakPolicy = (id: string, ending: TurnBreak, policy: TurnBreakPolicy | null): Promise<void> =>
     optimistic(id, policyPatch(ending, policy ?? undefined), () => sandboxRpc.agents.breakPolicy({ id, ending, policy }));
 
+// Sets or clears (null: follow the conversation that started it, or the sandbox) whether its turns proceed without
+// stopping for a go-ahead; read as each turn is planned, so it holds from the next one.
+export const setProceed = (id: string, proceed: boolean | null): Promise<void> =>
+    optimistic(id, { proceedWithoutAsking: proceed ?? undefined }, () => sandboxRpc.agents.proceed({ id, proceed }));
+
 // Keeps this conversation's prompt cache warm until `until`, or stops (null); the daemon shortens `until` to what it can keep, so only a stop is drawn before it answers.
 export const setKeepWarm = (id: string, until: number | null): Promise<void> =>
     optimistic(id, until === null ? { keepWarm: undefined } : {}, () => sandboxRpc.agents.keepWarm({ id, until }));

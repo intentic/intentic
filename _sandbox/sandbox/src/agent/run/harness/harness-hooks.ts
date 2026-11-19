@@ -32,7 +32,8 @@ import { opt } from "../../../opt.js";
 export type HarnessHooksDeps = Pick<
     Services,
     "workspace" | "logger" | "ruleFirings" | "agents" | "agentWorktrees" | "perf" | "capabilities" | "config"
->;
+> &
+    Partial<Pick<Services, "inFlight">>;
 
 // A rule's command inside the turn's own namespace via nsenter, since the daemon-side worktree has empty dependency
 // directories; `repo` is carried this far because inside the namespace `--wdns`, not the cwd, decides where it runs.
@@ -81,7 +82,17 @@ const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: re
         capabilities: () => deps.capabilities.list(),
         relative: (file) => underRoots(file, roots),
     });
-    return { editReviewers: [bytes, installed, commands].filter((each) => each !== undefined) };
+    // Another live conversation changing the same file and not landed yet, said once per pair (conversations/overlap/).
+    const conversationId = context.base.spec.conversationId;
+    const inFlight = deps.inFlight;
+    const overlap =
+        conversationId === undefined || inFlight === undefined
+            ? undefined
+            : async (file: string): Promise<string | undefined> => {
+                  const path = underRoots(file, roots);
+                  return path === undefined ? undefined : inFlight.edited(conversationId, path);
+              };
+    return { editReviewers: [bytes, installed, commands, overlap].filter((each) => each !== undefined) };
 };
 
 // What the conversation's work changed and has not landed in the repositories `named`, workspace-relative, and the

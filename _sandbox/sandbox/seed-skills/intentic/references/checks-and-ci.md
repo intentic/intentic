@@ -23,7 +23,18 @@ a typecheck of what you changed (`lsp diag --changed`), never the whole reposito
 `vue-tsc`), since several conversations share the machine and CI runs those on push. A failure in code you did not touch may be main's own, and
 it is not yours to chase unless your task is about it. Your card records whether a check passed after your last edit;
 `mcp__diagnostics__turns` with `only: "unproven"` lists the turns that changed code and ran no check after their last
-edit, or whose last check failed.
+edit, or whose last check failed. Those runs take turns with every other conversation's in one queue that also picks
+cargo's jobs and waits for memory; what its lines mean, a project's own heavy scripts, and timing runs:
+`heavy-commands.md`.
+
+**Is a failing test yours?** A test command's failed run (cargo test or nextest, bun test; vitest, jest, pytest and go
+test best-effort) ends with a digest: each failing test with its first panic or error line, the counts, and per failure
+`also fails at main@<sha> (seen <when>)`, `new: passes at main@<sha>` or `new: not seen failing at main@<sha>`. Every
+test run is recorded, and one on a clean tree at a main commit is that commit's baseline: your first run in a fresh
+worktree, before any edit, is one, and so is `base run <command>` where `base` is installed. Where none is recorded the
+digest says which command makes one. Read the digest instead of piping the run through `grep` or running main yourself;
+the full output stays retrievable with `retrieve-output`. `agents ci` lists what those baselines saw fail beside CI's
+failures. cargo's compiler output comes with its errors first and each repeated warning folded to one line.
 
 ## A repository's own checks: `<repo>/.intentic/checks.json`
 

@@ -1,0 +1,36 @@
+#!/bin/sh
+# A thin wrapper for an interpreter (python3, python, bash, sh, uv, make), first on an agent command's PATH only while a
+# repository in the workspace declares heavy commands of its own (.intentic/heavy.json; workload/heavy-commands.ts
+# heavyEnvPrefix), so a project's `python3 scripts/capture.py`, `bash scripts/render.sh` or `uv run scripts/x.py` takes
+# the queue its class gives it, the same as a build. `./scripts/x.py` comes through here too when its first line is
+# `#!/usr/bin/env python3`, since env finds the interpreter on PATH. Only an argument whose file name is one a declared
+# class names (INTENTIC_HEAVY_WORDS: a script's file name, a command's last word) has node judge the whole invocation
+# (heavy-exec.cjs, @intentic/constants); everything else, an inline script (`sh -c …`) included, is the real interpreter
+# at once, with no fork on the way, since `sh` and `bash` are started by nearly everything. The other names link here.
+name=${0##*/}
+here=${0%/*}
+exec_js=${INTENTIC_HEAVY_EXEC:-/opt/sandbox/node_modules/@intentic/constants/src/heavy/heavy-exec.cjs}
+if [ -n "${INTENTIC_HEAVY_WORDS:-}" ] && [ -n "${INTENTIC_HEAVY:-}" ] && [ -z "${INTENTIC_HEAVY_HELD:-}${INTENTIC_QUEUE_SLOT:-}" ]; then
+    for arg in "$@"; do
+        case $arg in -* | '' | *[[:space:]]*) continue ;; esac
+        case ":$INTENTIC_HEAVY_WORDS:" in
+            *":${arg##*/}:"*)
+                if [ -f "$exec_js" ] && command -v node >/dev/null 2>&1; then
+                    exec node "$exec_js" "$here" "$name" "$@"
+                fi
+                ;;
+        esac
+    done
+fi
+# The real one: the first of that name on the PATH that is not this file.
+old_ifs=$IFS
+IFS=:
+for dir in $PATH; do
+    if [ -n "$dir" ] && [ -x "$dir/$name" ] && ! [ "$dir/$name" -ef "$0" ]; then
+        IFS=$old_ifs
+        exec "$dir/$name" "$@"
+    fi
+done
+IFS=$old_ifs
+echo "$name: command not found" >&2
+exit 127

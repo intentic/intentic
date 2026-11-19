@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { requires } from "@intentic/testing/requires";
-import { agentShellBusy, PIPESTATUS_TRAP } from "./agent-terminals.js";
+import { agentScript, agentShellBusy, PIPESTATUS_TRAP } from "./agent-terminals.js";
 
 // Runs against a real tmux server: the dead-vs-running window distinction (remain-on-exit) needs a real process, not a
 // stub.
@@ -144,6 +144,28 @@ test.skipIf(!pgrep.runs)(pgrep.title("a command run from its file finds its targ
         expect(lines(["-c", `pgrep -f ${marker}; echo end`])).toEqual([pid, expect.any(String), "end"]);
     } finally {
         target.kill();
+        await rm(scratch, { recursive: true, force: true });
+    }
+});
+
+// 2026-11-19, the shinobi-society audit: a stray `python3 -` read the pane's terminal, which never ends, until the soft
+// timeout moved it into tmux for good. Here stdin is a pipe nobody writes to or closes, as a pane's terminal is.
+test("an agent's script reads end-of-input on stdin, not the terminal it runs on, and finishes at once", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "agent-stdin-"));
+    try {
+        await writeFile(join(scratch, "agent"), `read -r line; echo "read exited $?"\n`);
+        const shell = spawn("bash", ["-c", agentScript(join(scratch, "agent"))], { stdio: ["pipe", "pipe", "inherit"] });
+        let out = "";
+        shell.stdout.on("data", (chunk: Buffer) => {
+            out += chunk.toString();
+        });
+        const code = await Promise.race([
+            new Promise<number | null>((resolve) => shell.on("exit", resolve)),
+            new Promise<string>((resolve) => setTimeout(() => resolve("still reading"), 3_000)),
+        ]);
+        shell.kill("SIGKILL");
+        expect([code, out]).toEqual([0, "read exited 1\n"]);
+    } finally {
         await rm(scratch, { recursive: true, force: true });
     }
 });

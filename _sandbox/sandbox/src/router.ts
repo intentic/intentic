@@ -14,6 +14,8 @@ import { reattributeHandedPorts } from "./agent/tools/jobs/handed-ports.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { createTranslatorRoutes } from "./agent/routes/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
+import { baseCheckoutsOf } from "./conversations/worktrees/bases/base-checkouts.js";
+import { createBasesRoutes } from "./conversations/worktrees/bases/bases.routes.js";
 import { probeDockerGpu } from "./hosts/gpu/docker-gpu-probe.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
 import { createRolesRoutes } from "./roles/roles.routes.js";
@@ -151,6 +153,8 @@ export const createRouter = (services: Services): SandboxRouter => ({
     agent: { ...createAgentRoutes(services), ...createAgentContinueRoutes(services), ...createAgentQueueRoutes(services) },
     agents: { ...createAgentsRoutes(services), ...createAttentionRoutes(services), ...createHomeFreshRoutes(services) },
     automations: createAutomationsRoutes(services),
+    // A read-only checkout of where a conversation's work started, for the `base` command's before-and-after.
+    bases: createBasesRoutes(baseCheckoutsOf(services)),
     capabilities: createCapabilitiesRoutes(services, probeDockerGpu),
     chores: createChoresRoutes(services),
     ci: createCiRoutes(services),

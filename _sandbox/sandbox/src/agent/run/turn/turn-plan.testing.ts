@@ -154,6 +154,8 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         // Same for the owner's own browsers: none connected, which every planned turn asks about too.
         webextReach: async () => undefined,
         phoneReach: async () => undefined,
+        // No other conversation changing this one's files (conversations/files-in-flight.ts): read on every turn.
+        inFlight: unstubbed<Services["inFlight"]>("inFlight", { turnNote: () => undefined }),
         // Leased by every planned turn: its browsers, peers and extension cards mount here.
         ...testTurnMounts(),
         // No translator and no api key: the state both Codex gates refuse from, where most cases here start.

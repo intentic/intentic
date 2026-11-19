@@ -52,6 +52,8 @@ try {
             program: programOf(script),
             args: process.argv.slice(2),
             command: [process.execPath, ...process.execArgv, ...process.argv.slice(1)],
+            // `node scripts/capture.mjs`: a declared class's script is matched by its path.
+            script,
         });
     }
 } catch {

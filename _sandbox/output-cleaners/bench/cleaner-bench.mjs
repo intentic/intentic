@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { filterOutput } from "../src/agent-output-filter.mjs";
 import { parseCleaners } from "../src/cleaners.mjs";
-import { parseStatsFile, summarizeStats } from "../src/filter-stats.mjs";
+import { parseStatsFile, summarizeStats } from "../src/stats/filter-stats.mjs";
 
 // ~4 chars/token, the same heuristic as @intentic/base/format's estimateTokens.
 // Simulate the runtime's raw-output handle without writing corpus contents to disk.
@@ -135,7 +135,8 @@ const CONFIGS = [
     { name: "no-dedup", spec: "-dedup" },
     { name: "no-wide", spec: "-wide" },
     { name: "no-diff", spec: "-diff" },
-    { name: "strip-only", spec: "-cap,-dedup,-redact,-files,-ls,-wide,-diff,-hits,-templates,-csv-schema,-search" },
+    { name: "no-rustc", spec: "-rustc" },
+    { name: "strip-only", spec: "-cap,-dedup,-redact,-files,-ls,-wide,-diff,-hits,-templates,-csv-schema,-search,-rustc" },
 ];
 
 const cleanedFor = (raw, command, exitCode, spec) =>

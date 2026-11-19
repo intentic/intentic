@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { createRunGrants } from "../device-door.js";
-import { refusalFor, type DoorServices } from "../device-door.routes.js";
+import { deviceDoorRawRoutes, type DeviceDoorServices, refusalFor, type DoorServices } from "../device-door.routes.js";
 
 // Who may act on one of the owner's computers from a shell: an agent whose live turn mounts that computer, or a run the
 // owner started from the editor, for its one computer, while it lasts.
@@ -53,4 +53,34 @@ test("a run from the editor reaches its own computer by its grant, and a grant d
     expect((await ask(door, "omen", { "x-intentic-run-grant": grant })).status).toBe(200);
     // A grant for one computer is not a key to another, even with a conversation that mounts it beside it.
     expect((await ask(door, "rog", { "x-intentic-run-grant": grant, "x-intentic-conversation": "conv-a" })).status).toBe(403);
+});
+
+// `devices exec` writes for the computer's own shell and keeps its mirror in the folders it allows (bin/devices-exec.mjs).
+test("a computer's facts reach an agent's shell by the same rule, only the part a command writes for, and only while it is connected", async () => {
+    const facts = {
+        os: "Microsoft Windows 11 Home",
+        arch: "x64",
+        shell: "powershell",
+        home: "C:\\Users\\me",
+        roots: ["C:\\Users\\me"],
+        wslDistros: ["archlinux"],
+        links: { total: 3, unreachable: 1 },
+        features: ["file-copy"],
+    };
+    let connected = true;
+    // SAFETY: the facts route reads only the door's rule and the hub's state and online answers.
+    const door = { ...services(), hostHub: { state: () => ({ online: connected, facts }), online: () => connected }, deviceTunnels: {} } as unknown as DeviceDoorServices;
+    const app = new Hono<AppEnv>();
+    app.get("/devices/:name/facts", deviceDoorRawRoutes(door)["GET /devices/{name}/facts"]);
+    const asked = async (device: string): Promise<{ status: number; body: unknown }> => {
+        const response = await app.request(`/devices/${device}/facts`, { headers: { "x-intentic-conversation": "conv-a" } });
+        return { status: response.status, body: await response.json() };
+    };
+    expect(await asked("rog")).toEqual({
+        status: 200,
+        body: { device: "rog", os: "Microsoft Windows 11 Home", arch: "x64", shell: "powershell", home: "C:\\Users\\me", roots: ["C:\\Users\\me"], wslDistros: ["archlinux"] },
+    });
+    expect((await asked("omen")).status).toBe(403);
+    connected = false;
+    expect(await asked("rog")).toEqual({ status: 409, body: { error: expect.stringContaining("not connected right now") } });
 });

@@ -32,6 +32,10 @@ export interface DispatchServices {
     readonly workspace: Pick<Services["workspace"], "root">;
 }
 
+/** How a turn whose runner could not prepare its workspace ends, nothing having run there: a spawned child placed on the
+ *  runner by the sandbox runs here instead on reading it (children.ts). */
+export const RUNNER_PREP_FAILED = "Preparing the runner's workspace failed";
+
 // Sync lines go to the log, not the transcript: they are operations plumbing (clone progress, per-repo acks), and the
 // transcript's own worktree frame already tells the user where things stand.
 const drainSync = async (services: Pick<DispatchServices, "logger">, stream: AsyncIterable<RunnerSyncLine>): Promise<string | undefined> => {
@@ -195,11 +199,12 @@ export async function* dispatchRemoteTurn(
         const live = services.runnerHub.client(runnerId) ?? client;
         const pulled = await drainSync(services, await live.syncWorkspace(sync("pull")));
         if (pulled !== undefined) {
-            // Said so the agent that placed it can act: the runner's copy is the runner's to repair, and the same task runs
-            // here meanwhile (the shinobi-society audit, 2026-11-17: four children failed on a runner with no way on).
+            // Said so whoever placed it can act: the runner's copy is the runner's to repair, and the same task runs here
+            // meanwhile (the shinobi-society audit, 2026-11-17: four children failed on a runner with no way on). A spawned
+            // child goes on here by itself (children.ts).
             yield {
                 kind: "error",
-                message: `Preparing the runner's workspace failed: ${pulled}. Nothing ran there. To run this task anyway, spawn it again with \`on: "here"\`, which runs it in this sandbox.`,
+                message: `${RUNNER_PREP_FAILED}: ${pulled}. Nothing ran there. To run this task anyway, run it here, in this sandbox.`,
             };
             yield { kind: "done" };
             return;

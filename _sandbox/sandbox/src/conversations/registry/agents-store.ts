@@ -194,6 +194,9 @@ const PosturesSchema = z.object({
     stopped: RetryPolicySchema.optional(),
     memory: RoomPolicySchema.optional(),
     memoryKill: MemoryKillPolicySchema.optional(),
+    // Added 2026-11-19, optional: whether its turns proceed without asking for a go-ahead (agent/run/decide/proceed.ts);
+    // absent follows the conversation that started it, else the sandbox's `proceedWithoutAsking`.
+    proceed: z.boolean().optional(),
 });
 export type Postures = z.infer<typeof PosturesSchema>;
 

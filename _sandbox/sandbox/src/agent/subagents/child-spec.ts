@@ -7,6 +7,7 @@ import { canonicalHarness, loopLabel, loopOf } from "@intentic/sandbox-contract/
 import { failureTraitsOf } from "@intentic/sandbox-contract/policy/failure-codes";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { opt } from "../../opt.js";
+import { RUNNER_PREP_FAILED } from "../../runners/runner-dispatch.js";
 import { turnStandingOf } from "../../conversations/actor/turn-standing.js";
 import type { ChildParent, ChildRecord, ChildSpawnSpec, ChildTurnTally, PendingChildCard } from "./children.js";
 
@@ -54,9 +55,10 @@ const SANDBOX_SIDE: ReadonlySet<string> = new Set([
 ]);
 
 // What a child's failure tells its siblings about its provider: a refusal its provider's own frame said, never a start
-// this sandbox could not make (memory, its own view of the workspace).
+// this sandbox could not make (memory, its own view of the workspace, a runner's copy of it: the shinobi-society audit's
+// spawns were told "Siblings on this provider were refused" of a runner that could not prepare, 2026-11-17).
 export const providerRefusal = (tally: ChildTurnTally): string | undefined =>
-    tally.errored && (tally.code === undefined || !SANDBOX_SIDE.has(tally.code)) ? tally.failure : undefined;
+    tally.errored && (tally.code === undefined || !SANDBOX_SIDE.has(tally.code)) && tally.failure?.startsWith(RUNNER_PREP_FAILED) !== true ? tally.failure : undefined;
 
 // Whether a child's failure was its provider's capacity (a spent allowance, a rate limit, the provider failing past its
 // retries): the only failures an account coming back answers (capacity-reopened.ts). A runner's workspace prep failing,

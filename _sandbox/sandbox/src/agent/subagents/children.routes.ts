@@ -38,6 +38,8 @@ const SpawnBodySchema = z.object({
     // Which machine runs it: a runner's name, or "here" for this sandbox; absent lets the fleet place it where there is
     // room (runners/child-placement.ts), the answer to prefer.
     on: z.string().min(1).optional(),
+    // Other children of this conversation it starts after, once their work is in its checkout (child-after.ts).
+    after: z.array(z.string().min(1)).max(16).optional(),
 });
 
 // Wait's default and ceiling: long enough for a real child, short enough that a forgotten wait still returns.
@@ -170,16 +172,10 @@ const createChildrenRoutes = (services: Services) => ({
                 400,
             );
         }
-        const { prompt, description, provider, harness, model, effort, on } = parsed.data;
-        const result = await supervisor.spawn({
-            prompt,
-            provider,
-            model,
-            ...(description !== undefined ? { description } : {}),
-            ...(harness !== undefined ? { harness } : {}),
-            ...(effort !== undefined ? { effort } : {}),
-            ...(on !== undefined ? { on } : {}),
-        });
+        // The prompt, provider and model it must name, then each knob only where one was named.
+        const { description, harness, effort, on, after, ...named } = parsed.data;
+        const knobs = { ...opt("description", description), ...opt("harness", harness), ...opt("effort", effort), ...opt("on", on) };
+        const result = await supervisor.spawn({ ...named, ...knobs, ...opt("after", after) });
         return c.json(result, result.ok ? 200 : 409);
     },
     /** GET /children/providers — what a child could be started on right now, and what still has allowance. */

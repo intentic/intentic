@@ -77,8 +77,9 @@ const readDocument = async (services: Services, loop: Loop, iteration: number): 
             return { done: false, detail: `Output \`data.${issue?.path.join(".") ?? ""}\` is wrong: ${issue?.message ?? "invalid"}.` };
         }
     }
-    // Still carried out even when done is false: an exhausted loop should show its last valid document, not a blank.
-    return { done: document.done, detail: document.reason.slice(0, DETAIL_TAIL), document };
+    // Still carried out even when done is false: an exhausted loop should show its last valid document, not a blank. A
+    // count of zero is done whatever `done` says: the number is what the round was asked to keep, the flag its opinion.
+    return { done: document.done || document.remaining === 0, detail: document.reason.slice(0, DETAIL_TAIL), document };
 };
 
 // Judge sees the goal, rubric, and closing report, never the diff (a real limit; a judge needing the tree is a

@@ -8,6 +8,7 @@
 //   run     all of it from the repository's `.intentic/run.json`: build, push, reach, start (and, attached, follow it)
 //   stop    stop a program started there, with the ports opened for it
 //   attach  follow a program already running there (Ctrl+C stops it, Ctrl+D leaves it)
+//   exec    run a command there in a mirror of this checkout kept in step, and fetch results back (devices-exec.mjs)
 //   ports   every port listening in this sandbox, and whose it is
 //
 // It reads the bytes HERE, in this shell's own view of /work, which is the conversation's own checkout during an
@@ -41,6 +42,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { EXEC_USAGE, execVerb } from "./devices-exec.mjs";
 
 const COMMAND = "devices";
 const TOKEN_PATH = process.env.INTENTIC_AGENT_TOKEN_PATH ?? "/run/intentic/agent.token";
@@ -91,6 +93,8 @@ const USAGE = `devices — run a program built here on one of the owner's connec
       Copy a file (an .exe, an installer) or a whole folder (a build with its DLLs) to <device>, the computer's name as
       its tools are mounted (mcp__<device>__…). It lands in that computer's runs folder, in a folder named for its
       content; the path printed is what to start. The same build pushed again is not sent twice.
+
+${EXEC_USAGE}
 
   devices start <device> <program> [--isolated] [--no-network] [--name <name>] [-- <args>…]
       Start a program on <device> (a path push printed, or the .exe inside a pushed folder) and keep it running.
@@ -1056,7 +1060,8 @@ if (verb === undefined || verb === "--help" || verb === "-h" || verb === "help")
     say(USAGE);
     process.exit(verb === undefined ? 2 : 0);
 }
-const verbs = { copy, cp: copy, push, start, reach, run, stop, attach, ports };
+const exec = (args) => execVerb(args, { answered, call, download, hashOf, say, die, refusalOf, deviceRoute });
+const verbs = { copy, cp: copy, push, start, reach, run, stop, attach, ports, exec };
 if (verbs[verb] === undefined) {
     die(`unknown command "${verb}"\n\n${USAGE}`);
 }

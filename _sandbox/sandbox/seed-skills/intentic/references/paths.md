@@ -22,7 +22,8 @@
                                      from the repo root, `*` within one name, no `**`/`!`. Committed; ignored files
                                      stay where they are on both sides, they just stop syncing
 /work/.intentic/records/             sessions/ (transcripts), artifacts/browser/ (screenshots),
-                                     artifacts/pages/<conversation>/ (pages shown in chat). Shared live
+                                     artifacts/pages/<conversation>/ (pages shown in chat), artifacts/glance/
+                                     (`glance` contact sheets, diffs, frames, crops). Shared live
 /work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay). Shared live
 /work/.intentic/local/extensions/    installed extensions: clones at their pinned commit, run live. Not source: never
                                      edit them (their source is under /work/extensions/, see `extension list`)
@@ -58,6 +59,16 @@ checkout with its own node_modules. What you cannot place has a known home:
 - **Builds.** Build output belongs to the checkout that built it: never run or copy a binary from another
   conversation's checkout under `/history/worktrees`, which was built from different code. Where `RUSTC_WRAPPER` is
   set, every checkout's cargo shares one compiler cache (`/history/cache/sccache`), so a first build recompiles mainly
-  the workspace's own crates.
+  the workspace's own crates. A new checkout's Cargo `target/` is also seeded, in the background of its first turn, from
+  one that already built (a spawned child's parent's first, else the main checkout's or another conversation's with the
+  same `Cargo.lock`), leaving out every crate the checkout declares itself: never rsync or copy a `target/` in by hand.
+  A `target/` your build creates first is kept as it is, so a build started in the first seconds may be cold.
+- **Before and after.** `base run <command>` runs a command in a read-only checkout of where your work started (the
+  fork point, `git merge-base HEAD main`; `--at main` or `--at <commit>` for another), at the folder matching yours,
+  and exits with the command's code (125: no base). `base path` prints that folder. It is shared per commit, kept
+  outside every conversation's checkout with its builds warm, and never touches your own: no `git archive`, no
+  reverting your work to build a baseline, no copied binaries (a binary is tied to the path it was built at, and a
+  base's path stays put while anyone uses it). Never edit a base. A JavaScript base has no `node_modules`: run its
+  install first (`base run pnpm install --offline`). `base --help`.
 - **Python** has only the standard library, PyYAML and Pillow: run a script that needs more with
   `uv run --with <package> python …`.
