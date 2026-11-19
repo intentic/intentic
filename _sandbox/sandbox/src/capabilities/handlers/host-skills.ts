@@ -63,6 +63,10 @@ Then:
 | \`mcp__devices__remove_sandbox\` | Delete one, with its files and its history. Irreversible. Same permission as \`manage_sandbox\`, so nothing but you stands between the ask and the deletion: ask before calling it, every time. |
 | \`mcp__devices__sandbox_logs\` | The tail of one's container log: why it will not start, or what it did before it stopped. |
 | \`mcp__devices__inspect_sandbox\` | Read another sandbox's conversations, transcripts and diagnostics, read-only, through its own \`agents\` (ls, show, find, bundle) and \`diagnostics\` commands: \`{command: "agents", args: ["show", "<id>", "--transcript"]}\`. Use it instead of \`docker exec\` through \`run_command\`. |
+| \`mcp__devices__list_stacks\` | The Docker compose stacks on this machine, as JSON: each project's state and its services' containers, images and health, and \`root\`, the folder deploys land in. An Intentic sandbox's own project is marked \`sandbox\`: the sandbox tools above drive those. |
+| \`mcp__devices__stack_action\` | \`up\`, \`pull\` (then up), \`restart\`, \`start\` or \`stop\` one stack by its name from \`list_stacks\`; answers what compose printed. Nothing here takes a stack down or deletes a volume. |
+| \`mcp__devices__stack_logs\` | The end of one stack's logs, every service's lines together. |
+| \`mcp__devices__deploy_stack\` | Runs a repository the sandbox already carried here as a stack. It accepts only a folder the sandbox staged, so you cannot call it with a path of your own: to deploy a workspace repository, use the Deployments extension's \`deploy_to_device\` tool, which packs the committed HEAD and carries it here first. |
 | \`mcp__devices__device_logs\` | This device's own records by name: machine.log (watchdog, keeper, restarts), machine-update.log, audit.jsonl of every tool call, ic's per-run logs; no name lists them. Use it instead of hunting paths with \`run_command\`. |
 
 **Files between the sandbox and this machine** move with \`devices copy\` in the sandbox shell, either way, a file or a

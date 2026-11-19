@@ -1,0 +1,130 @@
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, sep } from "node:path";
+import { stderrOf } from "@intentic/base/errors";
+import { sizeLabel } from "@intentic/base/format";
+import { defaultGit } from "@intentic/base/git";
+import { ORPCError } from "@orpc/server";
+import { hasGitEntry, isValidRepoId, repoDirOf, ROOT_REPO } from "../../workspace/layout/repo-discovery.js";
+
+// A WORKSPACE REPOSITORY'S COMMITTED TREE, PACKED FOR A STACK'S DEPLOY (device-stacks.ts). Only a commit is deployed,
+// never the uncommitted edits around it, so what runs on the computer is something anyone can name and check out again.
+// The tree is `git archive`'s: `export-ignore` paths are left out and a submodule's files are not in it. Every git here
+// is run without a shell, and the only caller words that reach one are the repository id (held to the workspace's own
+// repo-id rule before it becomes a path) and the compose file (held by the contract to plain path characters, and
+// passed after `<commit>:`, so it can never read as an option).
+
+// The files compose itself looks for when told none, in its own order.
+export const COMPOSE_FILE_DEFAULTS: readonly string[] = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
+
+// The most a packed tree may weigh. A compose project's source is code and configuration, megabytes; one past this
+// holds datasets, media or build output that belong in a volume or a registry, and every byte of it crosses the device
+// link in 2 MiB calls (256 at this size) and is unpacked and copied again on the computer. The link's own ceiling,
+// ARTIFACT_MAX_BYTES (4 GiB), is sized for a disk image, not a repository.
+const STACK_BUNDLE_MAX_BYTES = 512 * 1024 * 1024;
+
+// What a deploy carries: the commit, and the compose file inside it the computer is told to run.
+export interface CommittedStack {
+    readonly commit: string;
+    readonly composeFile: string;
+}
+
+// The packed tree on this sandbox's disk, for as long as the callback that sends it runs.
+export interface PackedTree {
+    readonly file: string;
+    readonly size: number;
+    readonly sha256: string;
+}
+
+const refused = (message: string): ORPCError<"BAD_REQUEST", unknown> => new ORPCError("BAD_REQUEST", { message });
+
+// The repository's folder, resolved inside the workspace. The id is held to the same rule every `repo` route uses, so
+// joining it under the root never climbs out; the real path is checked too, since a folder that is a symlink may lead
+// anywhere. It must be a repository's own top (its `.git` is there): from a folder inside one, `git archive` would pack
+// only that folder, and what was deployed would not be the repository named.
+export const repoFolder = async (root: string, repo: string): Promise<string> => {
+    if (repo !== ROOT_REPO && !isValidRepoId(repo)) {
+        throw refused(`"${repo}" is not a repository in this workspace: name it by its folder under the workspace, like my-app or apps/web`);
+    }
+    const [real, realRoot] = await Promise.all([
+        // allow(silent-catch): a folder that cannot be resolved is refused by name just below, whatever kept it from resolving
+        realpath(repoDirOf(root, repo)).catch(() => undefined),
+        realpath(root),
+    ]);
+    if (real === undefined) {
+        throw refused(`there is no folder "${repo}" in this workspace`);
+    }
+    if (real !== realRoot && !real.startsWith(`${realRoot}${sep}`)) {
+        throw refused(`"${repo}" leads outside this workspace`);
+    }
+    if (!(await hasGitEntry(real))) {
+        throw refused(`"${repo}" is not a git repository: a deploy carries a commit, so the folder must be a repository's own top`);
+    }
+    return real;
+};
+
+// HEAD's full sha, and the compose file the computer runs: the one named, which must be a file in that commit, or the
+// first of compose's own defaults at the commit's root. Read off the commit rather than HEAD from here on, so a land
+// moving HEAD meanwhile cannot make the tree that goes differ from the commit reported.
+export const committedStack = async (dir: string, repo: string, composeFile: string | undefined): Promise<CommittedStack> => {
+    const commit = await defaultGit(dir, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]).then(
+        ({ stdout }) => stdout.trim(),
+        (error: Error) => {
+            // `--quiet` keeps a missing HEAD silent, so anything git did say is another failure, passed on in its words.
+            const said = stderrOf(error)?.trim() ?? "";
+            throw refused(said === "" ? `"${repo}" has no commits yet: commit what should run, then deploy` : `could not read "${repo}"'s last commit: ${said}`);
+        },
+    );
+    if (composeFile !== undefined) {
+        // `-t` rather than `-e`: a folder of that name is in the commit too, and compose cannot run a folder.
+        const kind = await defaultGit(dir, ["cat-file", "-t", `${commit}:${composeFile}`]).then(
+            ({ stdout }) => stdout.trim(),
+            // allow(silent-catch): git's only answer for a path missing from a commit is a failure, refused by name just below
+            () => undefined,
+        );
+        if (kind !== "blob") {
+            throw refused(`"${composeFile}" is not a file in "${repo}"'s last commit (${commit.slice(0, 12)}): commit it, or name another compose file`);
+        }
+        return { commit, composeFile };
+    }
+    const { stdout } = await defaultGit(dir, ["ls-tree", "-z", "--name-only", commit]);
+    const top = new Set(stdout.split("\0"));
+    const found = COMPOSE_FILE_DEFAULTS.find((name) => top.has(name));
+    if (found === undefined) {
+        throw refused(
+            `"${repo}"'s last commit (${commit.slice(0, 12)}) has none of ${COMPOSE_FILE_DEFAULTS.join(", ")} at its root: commit one, or name the compose file to run`,
+        );
+    }
+    return { commit, composeFile: found };
+};
+
+const sha256Of = async (file: string): Promise<string> => {
+    const hash = createHash("sha256");
+    for await (const piece of createReadStream(file)) {
+        hash.update(piece);
+    }
+    return hash.digest("hex");
+};
+
+// Packs `commit`'s tree as a tar into a folder of its own and hands it to `send`, removing it whatever `send` does. Packed
+// to disk rather than into memory: the daemon must not hold half a gigabyte for one request, and the send reads it back a
+// chunk at a time. A tree past the bound is packed once and then refused, which costs the disk no more than the
+// repository already takes.
+export const withPackedTree = async <T>(dir: string, repo: string, commit: string, send: (packed: PackedTree) => Promise<T>): Promise<T> => {
+    const folder = await mkdtemp(join(tmpdir(), "intentic-stack-"));
+    try {
+        const file = join(folder, "tree.tar");
+        await defaultGit(dir, ["archive", "--format=tar", "-o", file, commit]);
+        const { size } = await stat(file);
+        if (size > STACK_BUNDLE_MAX_BYTES) {
+            throw refused(
+                `"${repo}"'s last commit packs to ${sizeLabel(size)}, past the ${sizeLabel(STACK_BUNDLE_MAX_BYTES)} a deploy carries: keep data, media and build output out of the repository (or mark them export-ignore in .gitattributes)`,
+            );
+        }
+        return await send({ file, size, sha256: await sha256Of(file) });
+    } finally {
+        await rm(folder, { recursive: true, force: true });
+    }
+};

@@ -37,8 +37,10 @@ const crossingOf = (message: RpcMessage): { readonly named: string; readonly res
 // the distro's agent has the same tools and one Docker engine serves every side: the agent fell back to running `ic
 // sandbox inspect` through run_command by hand. These four only read what `ic` reads from that engine, so whichever
 // side answers gives the same answer. The ones that change a sandbox stay with the Windows side, whose `ic` keeps the
-// ledger and the saved shapes they act on.
-const ENGINE_READS: ReadonlySet<string> = new Set(["list_sandboxes", "inspect_sandbox", "sandbox_logs", "diagnose_sandbox"]);
+// ledger and the saved shapes they act on. (2026-11-19) `stack_logs` reads a compose stack's log from that same engine
+// by its project name, so it is answered there too. `list_stacks` is not: its `root`, and with it which stacks read as
+// deployed here (`managed`), is the answering side's own folder, so a distro would answer differently.
+const ENGINE_READS: ReadonlySet<string> = new Set(["list_sandboxes", "inspect_sandbox", "sandbox_logs", "diagnose_sandbox", "stack_logs"]);
 
 const ToolCallSchema = z.object({ params: z.object({ name: z.string() }) });
 
@@ -62,7 +64,7 @@ export const partlyConnectedRefusal = (card: string, awake: readonly string[], n
     const how = crossings.length === 1 ? `pass ${crossings[0] ?? ""} to run_command to run there` : `pass ${crossings.join(" or ")} to run_command to run in one`;
     return (
         `${down}: its agent there is not running or cannot reach this sandbox. ${sides}: ${how}. ` +
-        `The sandbox reads (list_sandboxes, inspect_sandbox, sandbox_logs, diagnose_sandbox) are answered there too; every other tool reaches the Windows side only, so it waits until that side is back.`
+        `The engine reads (${[...ENGINE_READS].join(", ")}) are answered there too; every other tool reaches the Windows side only, so it waits until that side is back.`
     );
 };
 

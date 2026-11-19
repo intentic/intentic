@@ -115,6 +115,10 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "inspect_sandbox",
         "device_logs",
         "diagnose_sandbox",
+        "list_stacks",
+        "stack_action",
+        "stack_logs",
+        "deploy_stack",
     ]);
     expect(names).not.toContain("delete_file");
     // remove_sandbox is the one exception to "there is no delete", and is not a file tool: it deletes a sandbox
@@ -174,6 +178,34 @@ test("an argument the schema does not accept is a readable result, and nothing i
     expect(tooManyWords.isError).toBe(true);
     const noPath = await call("read_file", { path: "" }, scopes());
     expect(noPath.isError).toBe(true);
+});
+
+// The stack tools hold their arguments to the contract's own schemas and their switches before docker is asked
+// anything, so none of these reaches an engine.
+test("the stack tools take only the contract's ops and arguments, and name the switch that is off", async () => {
+    const down = await call("stack_action", { name: "shop", op: "down" }, scopes());
+    expect(down.isError).toBe(true);
+    expect(down.text).toMatch(/op/);
+    const flagName = await call("stack_logs", { name: "-v" }, scopes());
+    expect(flagName.isError).toBe(true);
+    expect(flagName.text).toMatch(/name/);
+    const tooMany = await call("stack_logs", { name: "shop", tail: 5001 }, scopes());
+    expect(tooMany.isError).toBe(true);
+    expect(tooMany.text).toMatch(/tail/);
+    const deploy = { source: "/tmp/x", name: "shop", composeFile: "compose.yaml", commit: "a".repeat(40) };
+    const extra = await call("deploy_stack", { ...deploy, cwd: "/" }, scopes({ programs: "on" }));
+    expect(extra.isError).toBe(true);
+    expect(extra.text).toMatch(/cwd/);
+    const climbing = await call("deploy_stack", { ...deploy, composeFile: "../compose.yaml" }, scopes({ programs: "on" }));
+    expect(climbing.isError).toBe(true);
+    expect(climbing.text).toMatch(/composeFile/);
+
+    const unread = await call("list_stacks", {}, scopes({ shell: "off" }));
+    expect(unread.isError).toBe(true);
+    expect(unread.text).toMatch(/Run commands.*switched off/);
+    const unsent = await call("deploy_stack", deploy, scopes());
+    expect(unsent.isError).toBe(true);
+    expect(unsent.text).toMatch(/Run programs this sandbox sends.*switched off/);
 });
 
 // A notification expects no answer; replying to one is a protocol violation the client reports as noise.
@@ -277,6 +309,8 @@ test("every tool says what a call can do to the device", async () => {
         "inspect_sandbox",
         "device_logs",
         "diagnose_sandbox",
+        "list_stacks",
+        "stack_logs",
     ]);
     expect(tools.filter((entry) => entry.annotations.destructiveHint).map((entry) => entry.name)).toEqual([
         "run_command",

@@ -56,14 +56,16 @@ test("a call naming no side, or one that is down, is told which sides are up and
 });
 
 // rog's Windows agent slept while its WSL agent stayed up (2026-11-17): the sandbox reads went unanswered, though the
-// distro's `ic` reads the same Docker engine.
-test("a sandbox read naming no side goes to an awake distro, and a sandbox change still waits for the Windows side", async () => {
+// distro's `ic` reads the same Docker engine. A stack's log is read from that engine too (2026-11-19).
+test("an engine read naming no side goes to an awake distro, and a sandbox change or a stack list still waits for the Windows side", async () => {
     const route = routeOver(["rog::wsl:ubuntu"]);
     const read = (name: string) => ({ jsonrpc: "2.0" as const, id: 6, method: "tools/call", params: { name, arguments: { slug: "sandbox-a4ba63bf2aa5" } } });
-    for (const name of ["list_sandboxes", "inspect_sandbox", "sandbox_logs", "diagnose_sandbox"]) {
+    for (const name of ["list_sandboxes", "inspect_sandbox", "sandbox_logs", "diagnose_sandbox", "stack_logs"]) {
         expect(await route("rog", read(name))).toEqual({ id: "rog::wsl:ubuntu", message: read(name) });
     }
     expect(await route("rog", read("manage_sandbox"))).toHaveProperty("refusal");
+    // A stack list names the answering side's own stacks folder, so it is not the same answer from a distro.
+    expect(await route("rog", read("list_stacks"))).toHaveProperty("refusal");
     // While the Windows side answers, it serves them as it always did.
     expect(await routeOver(["rog", "rog::wsl:ubuntu"])("rog", read("list_sandboxes"))).toBeUndefined();
 });
@@ -85,12 +87,12 @@ test("the refusal names every side that is up, and the way into each", () => {
     expect(partlyConnectedRefusal("rog", ["wsl:archlinux"], undefined)).toBe(
         `"rog" (its Windows side) is not connected right now: its agent there is not running or cannot reach this sandbox. ` +
             `Its WSL side archlinux is: pass in: "wsl:archlinux" to run_command to run there. ` +
-            `The sandbox reads (list_sandboxes, inspect_sandbox, sandbox_logs, diagnose_sandbox) are answered there too; every other tool reaches the Windows side only, so it waits until that side is back.`,
+            `The engine reads (list_sandboxes, inspect_sandbox, sandbox_logs, diagnose_sandbox, stack_logs) are answered there too; every other tool reaches the Windows side only, so it waits until that side is back.`,
     );
     expect(partlyConnectedRefusal("rog", ["wsl:archlinux", "wsl:ubuntu"], "wsl:debian")).toBe(
         `Nothing on "rog" answers to in: "wsl:debian" right now, and its Windows side is not connected either: its agent there is not running or cannot reach this sandbox. ` +
             `Its WSL sides archlinux and ubuntu are: pass in: "wsl:archlinux" or in: "wsl:ubuntu" to run_command to run in one. ` +
-            `The sandbox reads (list_sandboxes, inspect_sandbox, sandbox_logs, diagnose_sandbox) are answered there too; every other tool reaches the Windows side only, so it waits until that side is back.`,
+            `The engine reads (list_sandboxes, inspect_sandbox, sandbox_logs, diagnose_sandbox, stack_logs) are answered there too; every other tool reaches the Windows side only, so it waits until that side is back.`,
     );
 });
 

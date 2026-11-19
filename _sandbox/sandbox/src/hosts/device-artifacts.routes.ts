@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import {
     ARTIFACT_CHUNK_BYTES,
     ARTIFACT_MAX_BYTES,
@@ -14,6 +13,7 @@ import { z } from "zod";
 import type { AppEnv } from "../app-env.js";
 import { type DoorServices, refusalFor } from "./device-door.routes.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
+import { alreadyStaged, stageBundle, type StagedBundle } from "./runs/device-staging.js";
 
 // THE `devices push` DOOR: a program the agent built, carried from its shell to one of the owner's computers
 // (schemas/device-artifacts.ts). The CLI reads the bytes in the agent's own view of /work, so a build in a conversation's
@@ -75,10 +75,11 @@ export const createDeviceArtifactRoutes = (services: DoorServices) => ({
             return refuse(c, 409, `the agent on "${device}" is too old to receive programs: update it there (\`intentic-machine upgrade\`) and push again`);
         }
         const answered = (path: string, reused: boolean): Response => c.json({ device, path, size, sha256, reused } satisfies PushedArtifact);
+        const bundle: StagedBundle = { name, kind, fileName: file, size, sha256 };
         try {
-            const had = await client.stageArtifact({ op: "have", name, sha256, kind, fileName: file });
-            if (had.path !== undefined) {
-                return answered(had.path, true);
+            const had = await alreadyStaged(client, bundle);
+            if (had !== undefined) {
+                return answered(had, true);
             }
         } catch (error) {
             return refuse(c, 502, errorMessage(error));
@@ -90,26 +91,10 @@ export const createDeviceArtifactRoutes = (services: DoorServices) => ({
         if (body === null) {
             return refuse(c, 400, "nothing was sent");
         }
-        const upload = randomBytes(16).toString("hex");
-        let offset = 0;
-        try {
-            for await (const chunk of chunksOf(body, ARTIFACT_CHUNK_BYTES)) {
-                if (offset + chunk.byteLength > size) {
-                    throw new Error(`more bytes arrived than the ${size} the push announced`);
-                }
-                await client.stageArtifact({ op: "chunk", upload, offset, data: chunk.toString("base64") });
-                offset += chunk.byteLength;
-            }
-            const committed = await client.stageArtifact({ op: "commit", upload, name, kind, fileName: file, size, sha256 });
-            if (committed.path === undefined) {
-                throw new Error(`"${device}" took the bytes but did not say where it put them`);
-            }
-            return answered(committed.path, false);
-        } catch (error) {
-            // allow(silent-catch): the abort only tidies the machine's half-written upload; the push already failed and says why
-            await client.stageArtifact({ op: "abort", upload }).catch(() => undefined);
-            return refuse(c, 502, `the push to "${device}" stopped after ${offset} of ${size} bytes: ${errorMessage(error)}`);
-        }
+        const staged = await stageBundle(client, bundle, chunksOf(body, ARTIFACT_CHUNK_BYTES));
+        return "path" in staged
+            ? answered(staged.path, false)
+            : refuse(c, 502, `the push to "${device}" stopped after ${staged.sent} of ${size} bytes: ${errorMessage(staged.failure)}`);
     },
 });
 

@@ -24,9 +24,9 @@ export const uninstall = buildCommand<UninstallFlags>({
             purge: {
                 kind: "boolean",
                 default: false,
-                brief: "Everything of the agent too: keyring, PATH entry, Mutagen, WSL distros' agents, its files; your data (saved passwords, restore points, its record) stays",
+                brief: "Everything of the agent too: keyring, PATH entry, Mutagen, WSL distros' agents, its files; your data (saved passwords, restore points, deployed stacks, its record) stays",
             },
-            deleteData: { kind: "boolean", default: false, brief: "With --purge (which it implies), delete your data too: saved passwords, restore points, its record" },
+            deleteData: { kind: "boolean", default: false, brief: "With --purge (which it implies), delete your data too: saved passwords, restore points, deployed stacks, its record" },
         },
     },
     async func(this: CommandContext, flags: UninstallFlags) {

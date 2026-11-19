@@ -39,6 +39,7 @@ const teardown = async (say: Tally, deleteData: boolean): Promise<void> => {
 const DATA_WORDS: readonly (readonly [(name: string) => boolean, string, "machine" | "keyring"])[] = [
     [(name) => name === "vault.json", "your saved passwords (the keyring vault)", "keyring"],
     [(name) => name === "restore", "the restore points of your synced folders", "machine"],
+    [(name) => name === "stacks", "the compose stacks deployed to this device, and what their services keep in their folders", "machine"],
     [(name) => name.startsWith("audit.jsonl"), "the record of what this agent did on this device", "machine"],
     [(name) => name.startsWith("trash/") && sandboxTrashName(name.slice("trash/".length)), "files a sandbox moved to this device's trash", "machine"],
 ];

@@ -33,11 +33,11 @@ describe("purgeChoice", () => {
 const STAMP = "2026-10-05T22-45-00-000Z";
 
 describe("machineSweep", () => {
-    const names = ["bin", "mutagen", "machine.log", "device.json", "sync.json", "restore", "audit.jsonl", "audit.jsonl.1", "runs", "trash", "machine.json"];
+    const names = ["bin", "mutagen", "machine.log", "device.json", "sync.json", "restore", "audit.jsonl", "audit.jsonl.1", "runs", "stacks", "trash", "machine.json"];
 
-    it("keeps the restore points and every audit log, and removes the rest", () => {
+    it("keeps the restore points, every audit log and the deployed stacks, and removes the rest", () => {
         const sweep = machineSweep(names, [], false);
-        expect(sweep.keep).toEqual(["restore", "audit.jsonl", "audit.jsonl.1"]);
+        expect(sweep.keep).toEqual(["restore", "audit.jsonl", "audit.jsonl.1", "stacks"]);
         expect(sweep.remove).toEqual(["bin", "mutagen", "machine.log", "device.json", "sync.json", "runs", "trash", "machine.json"]);
     });
 
@@ -51,8 +51,8 @@ describe("machineSweep", () => {
         expect(machineSweep(names, [STAMP], true)).toEqual({ remove: names, keep: [] });
     });
 
-    it("never counts a name that only starts like the audit log's folder or the restore points as data", () => {
-        expect(machineSweep(["restore-old", "audit"], [], false).keep).toEqual([]);
+    it("never counts a name that only starts like the audit log's folder, the restore points or the stacks as data", () => {
+        expect(machineSweep(["restore-old", "audit", "stacks-old"], [], false).keep).toEqual([]);
     });
 });
 

@@ -20,8 +20,10 @@ export const purgeChoice = (flags: { readonly purge?: boolean; readonly deleteDa
 const SANDBOX_TRASH = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/u;
 
 // The person's data in ~/.intentic/machine: restore points of their synced folders, the record of what this agent did,
-// and the trash, as far as it holds files of theirs that a sandbox moved there (theirs to get back, not the agent's).
-const machineDataName = (name: string): boolean => name === "restore" || name.startsWith("audit.jsonl");
+// the compose stacks deployed here (device/tools/stacks/stacks.ts: their services run on after the agent goes, and may keep
+// their data in those folders), and the trash, as far as it holds files of theirs that a sandbox moved there (theirs to
+// get back, not the agent's).
+const machineDataName = (name: string): boolean => name === "restore" || name === "stacks" || name.startsWith("audit.jsonl");
 export const sandboxTrashName = (name: string): boolean => SANDBOX_TRASH.test(name);
 
 // The person's data in ~/.intentic/keyring: the vault, the keys that open it, and its record (the keyring's VAULT_FILES).

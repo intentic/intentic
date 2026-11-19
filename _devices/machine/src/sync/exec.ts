@@ -1,3 +1,4 @@
+import { errnoCode } from "@intentic/base/errors";
 import { runBounded, runBoundedSync } from "@intentic/base/process";
 import { childEnv } from "./mutagen-env.js";
 
@@ -11,6 +12,9 @@ export interface ExecResult {
     readonly status: number | null;
     readonly stdout: string;
     readonly stderr: string;
+    // The errno a spawn that never started failed with (ENOENT: no such program on PATH), read from the error itself so
+    // no caller has to match it in the words appended to stderr.
+    readonly spawnCode?: string;
 }
 
 // THE BOUND EVERY CHILD HAS, whatever its caller forgot: a child that never exits holds the watcher's whole pass with
@@ -34,7 +38,9 @@ export const runProcess = async (
     });
     // A spawn failure (e.g. a missing binary) resolves as a failed result with its reason after stderr, not a throw.
     const failure = result.spawnError?.message ?? "";
-    return { status: result.exitCode, stdout: result.stdout.text, stderr: `${result.stderr.text}${failure}` };
+    const spawnCode = errnoCode(result.spawnError);
+    const answer: ExecResult = { status: result.exitCode, stdout: result.stdout.text, stderr: `${result.stderr.text}${failure}` };
+    return spawnCode === undefined ? answer : { ...answer, spawnCode };
 };
 
 // How a watched command ended: by itself, gone quiet past its allowance, still going at its ceiling, or stopped by the

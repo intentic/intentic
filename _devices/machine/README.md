@@ -42,6 +42,21 @@ flowchart LR
   `.<name>.<id>.intentic-part` and is renamed into place once its size and sha256 match; a taken path needs
   `overwrite`, and a folder copied onto one that exists merges into it. A folder copied off is packed under
   `~/.intentic/machine/outgoing` and deleted with the copy; one left idle 30 minutes is dropped.
+- (2026-11-19) **Docker compose stacks** ([`tools/stacks/stacks.ts`](src/device/tools/stacks/stacks.ts), the copy in
+  `stack-folder.ts`): the Deployments board deploys to a paired server through this agent, with no second agent (a
+  Komodo Periphery) beside it. `list_stacks` reads `docker compose ls --all` and `docker ps` into the contract's
+  `DeviceStacks`, each label read by name through a `--format` template: `{{json .}}` joins them into one string, and a
+  project's comma-joined compose files make that string ambiguous. `stack_action` runs `up`, `pull` (then `up`),
+  `restart`, `start` or `stop` on one project by name, refusing a sandbox's own and, for `up` and `pull`, one whose
+  compose files are gone; `stack_logs` reads its tail. `deploy_stack` copies a repository the sandbox pushed (only a
+  folder filed whole in that sandbox's own `runs/` folder) into `~/.intentic/machine/stacks/<name>`, records the commit
+  in `.intentic-deploy.json`, and runs `docker compose up -d --build --remove-orphans` there, ten minutes at most. The
+  copy adds and overwrites and deletes nothing, since a service's data may live in that folder. It never writes a
+  `.env`, at any depth, so the secrets put there stay. Before writing anything it refuses a path whose kind differs
+  between the folder and the repository, so it never writes through a link it finds there. A name another compose
+  project already runs under is refused. Reading and driving need "Run commands"; a deploy also needs "Run programs
+  this sandbox sends". Nothing here runs `down`, `rm` or `-v`, and `uninstall --purge` keeps `stacks/` as the person's
+  data (`ic uninstall`, which removes `~/.intentic` whole, does not).
 - What the agent has been shown of the screen is kept for the process's life
   ([`tools/view.ts`](src/device/tools/view.ts)): each screenshot is a frame with an id, shrunk to what a model reads
   whole, and a coordinate is read in the newest frame and mapped back to desktop pixels, so one naming an older frame
@@ -1220,9 +1235,9 @@ person who runs it alone, and either way it never downloads anything.
       touched. On Windows the running agent is moved to `%TEMP%` first, and a hidden PowerShell removes what was still
       in use once this process has exited.
 - **The data that stays** without `--delete-data`: the keyring's `vault.json`, `keys.json` and `audit.jsonl*`;
-  `machine/restore`; `machine/audit.jsonl*`; and in `machine/trash` the folders `trash_file` made for files a sandbox
-  moved aside on this device (named for the moment alone; the upkeep's own trash entries go). The narration says what
-  stayed and why.
+  `machine/restore`; `machine/audit.jsonl*`; `machine/stacks`, the compose stacks `deploy_stack` put here, whose
+  services keep running; and in `machine/trash` the folders `trash_file` made for files a sandbox moved aside on this
+  device (named for the moment alone; the upkeep's own trash entries go). The narration says what stayed and why.
 - **`--delete-data`** implies `--purge` and removes the data too.
 - A step that does not finish is a warning with the command that finishes it by hand (`fix:` on its own line), and the
   verdict counts them. The run fails, exit 1, only when the agent is still running or its files could not be removed.

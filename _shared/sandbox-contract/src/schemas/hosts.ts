@@ -197,6 +197,9 @@ export const DeviceFeatureSchema = z.enum([
     // (2026-11-17) `copyFile`: a file or a folder copied to or from a path the agent names (`devices copy`), held to the
     // folders and the write switch the file tools are.
     "file-copy",
+    // (2026-11-19) `list_stacks`, `stack_action`, `stack_logs` and `deploy_stack`: Docker compose stacks on the machine,
+    // read, driven and deployed to from the Deployments board (schemas/device-stacks.ts).
+    "stacks",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -213,6 +216,7 @@ export const DEVICE_FEATURE_REACHABLE_WAYS_BACK: DeviceFeature = "reachable-ways
 export const DEVICE_FEATURE_REACH_NETWORK: DeviceFeature = "reach-network";
 export const DEVICE_FEATURE_SANDBOX_MOVE: DeviceFeature = "sandbox-move";
 export const DEVICE_FEATURE_FILE_COPY: DeviceFeature = "file-copy";
+export const DEVICE_FEATURE_STACKS: DeviceFeature = "stacks";
 // What `ic features --json` answers (_sandbox/ic/src/features.rs, golden/ic-features.json): the optional ops that ic
 // implements, as strings, since a newer ic's word means nothing to an older agent.
 export const IcFeaturesAnswerSchema = z.object({ features: z.array(z.string()) });

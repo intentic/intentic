@@ -10,6 +10,7 @@ import type { Services } from "../composition.js";
 import { opt } from "../opt.js";
 import { runDeviceCommand } from "./device-commands.js";
 import { devices, manageDeviceSandbox, runDeviceAgentFlow } from "./device-reports.js";
+import { deployDeviceStack, deviceStackLogs, deviceStackOp, deviceStacks } from "./stacks/device-stacks.js";
 import { egressOwnerKeys } from "./egress/owner-keys.js";
 import { egressSuggestions } from "./egress/suggestions.js";
 import { isOwnerBearer, requireMaintainer } from "../auth/owner-gates.js";
@@ -138,5 +139,20 @@ export const createDeviceSystemRoutes = (services: Services) => {
             await requireMaintainer(services, context.headers, "only a sandbox maintainer can update a connected device's agent");
             yield* runDeviceAgentFlow(services, input.id, { op: input.op });
         }),
+        ...createDeviceStackRoutes(services),
+    };
+};
+
+// Docker compose stacks on a connected device, for the Deployments board (stacks/device-stacks.ts). No requireMaintainer here,
+// unlike the doors above: the board's backend calls with its extension token, which the grant middleware admits by the
+// routes its manifest declares and which a bearer gate would refuse whatever it declared. A person still meets each
+// route's maintainer floor there, and the computer checks its own switches on every call.
+const createDeviceStackRoutes = (services: Services) => {
+    const i = implement(systemContract).$context<OrpcContext>();
+    return {
+        deviceStacks: i.deviceStacks.handler(async ({ input }) => await deviceStacks(services, input.id)),
+        deviceStackOp: i.deviceStackOp.handler(async ({ input }) => await deviceStackOp(services, input)),
+        deviceStackLogs: i.deviceStackLogs.handler(async ({ input }) => await deviceStackLogs(services, input)),
+        deployDeviceStack: i.deployDeviceStack.handler(async ({ input }) => await deployDeviceStack(services, input)),
     };
 };

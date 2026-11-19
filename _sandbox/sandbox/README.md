@@ -245,6 +245,13 @@ flowchart LR
   against the computer's sha256 before it passes on the last piece. Each chunk waits up to two minutes, and packing or
   unpacking a folder up to ten. (In the shinobi-society audit, agents moved a 12 MB tarball with `docker cp` through
   rog's `run_command`.)
+- (2026-11-19) The Deployments board reads, drives and deploys Docker compose stacks on the owner's computers with no
+  Komodo in between (`hosts/stacks/device-stacks.ts`, `/system/devices/{id}/stacks…`). The daemon only relays to the
+  machine's own stack tools, which check its switches, so a refusal arrives in the machine's words. A deploy carries a
+  repository's last commit, never its uncommitted edits: `git archive` packs it to disk (`hosts/stacks/device-stack-bundle.ts`,
+  512 MiB at most), it travels into the machine's staging the way `devices push` does (`hosts/runs/device-staging.ts`), and
+  the machine brings it up with `--build`. These handlers hold no bearer gate, since the board's backend calls with its
+  extension token, admitted by the routes its manifest declares; a person still meets their maintainer floor.
 - A device or desktop sync joins with a command that carries a short code, never a token
   (`peers/redeem-codes.ts`). The code is 8 characters, single-use and expires in 10 minutes. The device's script spends
   it at the public `POST /system/redeem/<code>`, which is rate-limited, and gets back what the command used to carry. Codes live

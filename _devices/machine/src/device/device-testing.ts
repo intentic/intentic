@@ -10,8 +10,10 @@ import {
     type UiElement,
     type WindowInfo,
 } from "@intentic/desktop-automation";
+import type { ExecResult } from "../sync/exec.js";
 import type { IndicatorDeps } from "./indicator.js";
 import type { AdbOutput, AdbRunner } from "./tools/android.js";
+import type { Docker } from "./tools/stacks/stacks.js";
 
 // The fake desktop the tool tests drive (this repo's `testing.ts` convention, excluded from the build), so both
 // tool suites share one double. @intentic/desktop-automation's methods move a real cursor on a real screen and
@@ -281,6 +283,31 @@ export const fakeAdb = (respond: (args: readonly string[]) => Partial<AdbOutput>
         run: async (args) => {
             calls.push(args.join(" "));
             return { code: 0, stdout: Buffer.alloc(0), stderr: "", timedOut: false, ...respond(args) };
+        },
+    };
+};
+
+// A docker run that exited 0 with this output.
+export const dockerAnswered = (stdout: string, stderr = ""): ExecResult => ({ status: 0, stdout, stderr });
+
+export interface FakeDocker {
+    readonly docker: Docker;
+    // Every invocation, in order, with the folder it ran in.
+    readonly calls: { readonly args: readonly string[]; readonly cwd: string | undefined }[];
+}
+
+// The docker the stack tools run, answering by what was asked: `compose ls` and `ps` with the listing's two reads, any
+// other compose run with `compose`. Unset, it is an engine with nothing on it whose every run succeeds.
+export const fakeDocker = (answers: { readonly ls?: ExecResult; readonly ps?: ExecResult; readonly compose?: ExecResult } = {}): FakeDocker => {
+    const calls: { args: readonly string[]; cwd: string | undefined }[] = [];
+    return {
+        calls,
+        docker: async (args, options) => {
+            calls.push({ args, cwd: options.cwd });
+            if (args[0] === "ps") {
+                return answers.ps ?? dockerAnswered("");
+            }
+            return args[1] === "ls" ? (answers.ls ?? dockerAnswered("[]")) : (answers.compose ?? dockerAnswered("", " Container a-1  Started\n"));
         },
     };
 };
