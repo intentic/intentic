@@ -121,6 +121,7 @@ describe("createAutoUpdater", () => {
     let relayed: { host: string; flow: DeviceSandboxFlow }[] = [];
     let asks: string[] = [];
     let changes = 0;
+    let releaseLooks = 0;
     let updater: AutoUpdater | undefined;
 
     const policyFile: UpdatePolicyFile = {
@@ -166,6 +167,9 @@ describe("createAutoUpdater", () => {
             changed: () => {
                 changes += 1;
             },
+            lookForRelease: () => {
+                releaseLooks += 1;
+            },
             logger: { info: () => undefined, warn: () => undefined },
             pollMs,
             countdownMs,
@@ -189,6 +193,16 @@ describe("createAutoUpdater", () => {
         relayed = [];
         asks = [];
         changes = 0;
+        releaseLooks = 0;
+    });
+
+    // Flipping the switch off and on was the owner's way of asking "is there one?", and it changed nothing for an hour.
+    test("switching automatic updates on looks for a release now; switching them off does not", async () => {
+        const auto = make();
+        await auto.configure({ enabled: false });
+        expect(releaseLooks).toBe(0);
+        await auto.configure({ enabled: true });
+        expect({ releaseLooks, auto: policy.auto }).toEqual({ releaseLooks: 1, auto: undefined });
     });
 
     test("a quiet reading arriving after stop cannot arm a new countdown", async () => {

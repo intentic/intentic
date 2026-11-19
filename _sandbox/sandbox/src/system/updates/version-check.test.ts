@@ -3,13 +3,16 @@ import { isDevBuild } from "../../version.js";
 import { expireTimeouts, stalledFetch } from "../../http/fetch.testing.js";
 import {
     CHASE_DELAYS_MS,
+    checkLatestNow,
     isNewer,
     latestVersion,
     noticeSeenVersions,
     onLatestVersion,
     RELEASE_FETCH_TIMEOUT_MS,
     refreshLatestVersion,
+    STABLE_ASKS,
     startVersionCheck,
+    watchStableOnce,
 } from "./version-check.js";
 
 afterEach(() => {
@@ -194,4 +197,74 @@ test("the backoff stops as soon as the release reaches `:stable`", async () => {
     expect(looks).toBe(2);
     expect(timers.delays).toEqual([CHASE_DELAYS_MS[0], CHASE_DELAYS_MS[1]]);
     expect(latestVersion()).toBe("23.0.0");
+});
+
+// Two sandboxes on one machine read 1.427.0 and 1.426.0 "up to date" for most of an hour, each on its own hourly clock:
+// `:stable` is watched in between, costing GitHub's 60-an-hour budget only once it has moved.
+const registryAndGithub = (state: { github: string; stable: string }, asked: string[]) =>
+    stubGlobal("fetch", async (url: string) => {
+        asked.push(url);
+        if (url.endsWith("/releases/latest")) {return new Response(JSON.stringify({ tag_name: `v${state.github}` }), { status: 200 });}
+        if (url.includes("/token?")) {return new Response(JSON.stringify({ token: "read-only" }), { status: 200 });}
+        const digest = url.endsWith("/stable") ? `sha256:${state.stable}` : `sha256:${url.slice(url.lastIndexOf("/") + 1)}`;
+        return new Response(null, { status: 200, headers: { "docker-content-digest": digest } });
+    });
+
+const askedGithub = (asked: readonly string[]): number => asked.filter((url) => url.endsWith("/releases/latest")).length;
+
+test("a `:stable` still where GitHub's answer put it asks GitHub nothing", async () => {
+    const asked: string[] = [];
+    registryAndGithub({ github: "30.0.0", stable: "30.0.0" }, asked);
+    await refreshLatestVersion();
+    asked.length = 0;
+    await watchStableOnce();
+    await watchStableOnce();
+    expect(askedGithub(asked)).toBe(0);
+    expect(asked.length).toBeGreaterThan(0);
+});
+
+test("a moved `:stable` asks GitHub at each look until its latest flag names the release, then offers it", async () => {
+    const asked: string[] = [];
+    const state = { github: "31.0.0", stable: "31.0.0" };
+    registryAndGithub(state, asked);
+    await refreshLatestVersion();
+    const heard: string[] = [];
+    const stop = onLatestVersion((version) => heard.push(version));
+    try {
+        asked.length = 0;
+        // The release moved `:stable` and has not flagged itself latest yet.
+        state.stable = "31.1.0";
+        await watchStableOnce();
+        expect(askedGithub(asked)).toBe(1);
+        expect(latestVersion()).toBe("31.0.0");
+        state.github = "31.1.0";
+        await watchStableOnce();
+        expect(latestVersion()).toBe("31.1.0");
+        expect(heard).toEqual(["31.1.0"]);
+        asked.length = 0;
+        await watchStableOnce();
+        expect(askedGithub(asked)).toBe(0);
+    } finally {
+        stop();
+    }
+});
+
+test("a `:stable` GitHub never names costs at most STABLE_ASKS questions, then is left to the hourly refresh", async () => {
+    const asked: string[] = [];
+    registryAndGithub({ github: "32.0.0", stable: "32.0.0" }, asked);
+    await refreshLatestVersion();
+    registryAndGithub({ github: "32.0.0", stable: "moved-by-hand" }, asked);
+    asked.length = 0;
+    for (let look = 0; look < STABLE_ASKS + 3; look += 1) {
+        await watchStableOnce();
+    }
+    expect(askedGithub(asked)).toBe(STABLE_ASKS);
+    expect(latestVersion()).toBe("32.0.0");
+});
+
+test("asking now does nothing where the version check never started, as in a dev build", async () => {
+    const asked: string[] = [];
+    registryAndGithub({ github: "33.0.0", stable: "33.0.0" }, asked);
+    await checkLatestNow();
+    expect(asked).toEqual([]);
 });

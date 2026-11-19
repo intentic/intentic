@@ -1,7 +1,7 @@
 import { startEngineWatch } from "../engines/engines.js";
 import { startExtensionUpdateWatch } from "../extensions/extension-updates.js";
 import { startAutoUpdate } from "./update-when-quiet.js";
-import { startReleaseNotesCheck } from "../system/updates/release-notes.js";
+import { refreshReleaseNotes, startReleaseNotesCheck } from "../system/updates/release-notes.js";
 import { onLatestVersion, startVersionCheck } from "../system/updates/version-check.js";
 import { autoUpdater } from "../system/updates/auto-update.js";
 import { onRuntimeChange, publishRuntimeChange } from "../seams/runtime-feed.js";
@@ -15,11 +15,14 @@ export const startVersionWatches = (phase: BootPhase): void => {
     shutdown.push(() => versionCheck?.stop());
     if (versionCheck !== undefined) {
         // A newly known release reaches the update card (`system.info`, invalidated by "update") and the automatic
-        // update now, instead of at their next poll.
+        // update now, instead of at their next poll. Its notes are read first: the automatic update holds back a
+        // release with breaking notes, and notes still an hour stale would let it take one unwarned.
         shutdown.push(
             onLatestVersion(() => {
-                publishRuntimeChange("update");
-                autoUpdater()?.poke();
+                void refreshReleaseNotes().finally(() => {
+                    publishRuntimeChange("update");
+                    autoUpdater()?.poke();
+                });
             }),
         );
         // A computer of the owner's dialling in on a newer release than this sandbox knows of: look for it now.

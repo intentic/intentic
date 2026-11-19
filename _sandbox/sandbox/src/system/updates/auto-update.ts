@@ -151,12 +151,26 @@ export interface AutoUpdateDeps {
     readonly slug: string;
     // The state moved: every page is told (the `update` runtime domain), wherever its reader is.
     readonly changed: () => void;
+    // The owner switched it on, which is also asking whether a release is out: look for one now (version-check.ts
+    // checkLatestNow), not at the next hourly refresh. A release found reaches it through its poke.
+    readonly lookForRelease?: () => void;
     readonly logger: { readonly info: (fields: object, message: string) => void; readonly warn: (fields: object, message: string) => void };
     readonly now?: () => number;
     readonly pollMs?: number;
     readonly countdownMs?: { readonly seen: number; readonly unseen: number };
     readonly cutoverGraceMs?: number;
 }
+
+// The owner's switch, kept; switching it on also looks for a release now.
+const setSwitch = async (deps: AutoUpdateDeps, enabled: boolean | undefined): Promise<void> => {
+    if (enabled === undefined) {
+        return;
+    }
+    await deps.policy.setAuto(enabled);
+    if (enabled) {
+        deps.lookForRelease?.();
+    }
+};
 
 export interface AutoUpdater {
     // Where it stands, as /info carries it.
@@ -370,9 +384,7 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
         configure: (input) =>
             serialize(async () => {
                 if (stopped) {return snapshot();}
-                if (input.enabled !== undefined) {
-                    await deps.policy.setAuto(input.enabled);
-                }
+                await setSwitch(deps, input.enabled);
                 if (input.pausedUntil !== undefined) {
                     await deps.policy.pause(input.pausedUntil === null || input.pausedUntil <= now() ? undefined : input.pausedUntil);
                 }

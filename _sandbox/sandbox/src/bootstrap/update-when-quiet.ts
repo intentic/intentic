@@ -18,7 +18,7 @@ import { breakingNotes } from "../system/updates/release-notes.js";
 import { preparingUpdate, stagedUpdate, updateOutcome } from "../system/updates/staged-update.js";
 import { fileUpdatePolicy } from "../system/updates/update-policy.js";
 import { fileUpdateSkip } from "../system/updates/update-skip.js";
-import { latestVersion } from "../system/updates/version-check.js";
+import { checkLatestNow, latestVersion } from "../system/updates/version-check.js";
 
 // Where the automatic update (system/updates/auto-update.ts) meets the rest of the daemon: what it reads to judge the moment, and the
 // one door it uses to ask the machine. Started only where a machine's `ic` swaps this container: never on a hosted
@@ -73,6 +73,7 @@ export const startAutoUpdate = ({ config, traits, role, services, logger, shutdo
         restartResume: fileRestartResume(config.historyRoot),
         slug,
         changed: () => publishRuntimeChange("update"),
+        lookForRelease: () => void checkLatestNow(),
         logger,
     });
     const release = holdAutoUpdater(updater);
