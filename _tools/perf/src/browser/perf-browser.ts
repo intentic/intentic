@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { chromium, type Browser } from "playwright";
 import { conclude, publish, recordingRefusal, rerecordOf, type Reading } from "../baseline.js";
-import { BROWSER_BUDGETS } from "./browser-budgets.js";
+import { BROWSER_BUDGETS, UNRECORDED_BROWSER_BUDGETS } from "./browser-budgets.js";
 import { startDemo, type DemoServer } from "./demo.js";
 import { describeDisagreements, disagreements } from "./determinism.js";
 import type { ProbeOptions } from "./page-probe.js";
@@ -68,7 +68,7 @@ const measure = async (browser: Browser, server: DemoServer, scenario: Scenario)
     try {
         await scenario.prepare(session);
         const reading = {
-            ...readingOf(await session.measure(() => scenario.act(session), scenario.navigations), scenario.frames),
+            ...readingOf(await session.measure(() => scenario.act(session), scenario.navigations, scenario.styled === true), scenario.frames),
             ...(await scenario.count?.(session)),
         };
         // Vite announces a late dependency optimisation, and the page reload it pushes, on its own output.
@@ -141,7 +141,7 @@ const outcome = conclude({
     },
     // Exact counts, so any move is named in the report; the budgets are what fail.
     tolerance: () => 0,
-    budgets: BROWSER_BUDGETS,
+    budgets: [...BROWSER_BUDGETS, ...UNRECORDED_BROWSER_BUDGETS],
     update: args.includes("--update"),
     complete: only === undefined,
     binding: ["chromium", "playwright", "viewport", "platform"],

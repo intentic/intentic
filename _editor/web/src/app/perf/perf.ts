@@ -23,6 +23,9 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     // The typewriter's reveal; runs every paint of an answer, paying a full transcript rebuild to append a few
     // characters.
     "chat.type": 8,
+    // One frame of a resize handle's drag, from the frame before (dragFrames.ts): past this a frame was dropped at 60Hz,
+    // and the pane lagged the pointer.
+    "layout.drag": 25,
     // Mirroring a transcript to IndexedDB.
     "chat.persist": 300,
     // Dehydrating and writing the whole vue-query cache to IndexedDB, a structured clone of megabytes.

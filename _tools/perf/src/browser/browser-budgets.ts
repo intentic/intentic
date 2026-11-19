@@ -1,5 +1,5 @@
 import type { Budget } from "../baseline.js";
-import { IDLE_MS, TICK_MS, TYPED } from "./scenarios.js";
+import { DRAG_MOVES, IDLE_MS, TICK_MS, TYPED } from "./scenarios.js";
 
 const IDLE_TICKS = IDLE_MS / TICK_MS;
 
@@ -28,5 +28,35 @@ export const BROWSER_BUDGETS: readonly Budget[] = [
         reads: ["chat-typing"],
         value: (measured) => measured["chat-typing"]!["vue.renders"]! / TYPED.length,
         max: 6,
+    },
+];
+
+/**
+ * Budgets on scenarios the record workflow (perf-record.yml) has not recorded yet. Judged on every run like the rest,
+ * so a regression fails CI from the day the scenario lands; moved into BROWSER_BUDGETS by the change that commits the
+ * scenario's first recording, which budgets.test.ts holds them to from then on, headroom and all.
+ */
+export const UNRECORDED_BROWSER_BUDGETS: readonly Budget[] = [
+    {
+        name: "chat-edge-drag: elements restyled per frame of the drag",
+        // Measured at 1,092 over 24 frames (45 each; Chromium 156, 2026-11-19), most of it the release, where the board
+        // folds at its breakpoint and its cards redraw. Before `--side-width` was registered non-inherited it was 16,869
+        // (703 a frame): the custom property changed on the shell's root restyled the whole app every frame. 150 fails
+        // long before that.
+        claim: "a frame of a drag of the chat's edge restyles the shell's grid, not the page under it",
+        reads: ["chat-edge-drag"],
+        value: (measured) => measured["chat-edge-drag"]!["blink.styledElements"]! / DRAG_MOVES,
+        max: 150,
+    },
+    {
+        name: "chat-edge-drag: Vue renders per frame of the drag",
+        // Measured at 52 renders over 24 frames (2.2 each), none of them the shell's or the side panel's: the seam's own
+        // light going on and off, and the board's cards folding at its breakpoint, which waits for the release. When the
+        // width was a template binding it was 244 (10.2 a frame): the shell, its rail's every tile and the side panel,
+        // each frame. Five leaves room for a release that redraws more and fails when the frames redraw again.
+        claim: "a frame of a drag of the chat's edge redraws no component; the release redraws what changed size",
+        reads: ["chat-edge-drag"],
+        value: (measured) => measured["chat-edge-drag"]!["vue.renders"]! / DRAG_MOVES,
+        max: 5,
     },
 ];

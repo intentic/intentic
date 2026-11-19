@@ -19,12 +19,18 @@ flowchart LR
   the transcript fold) under `valgrind --tool=cachegrind` twice, setup only and setup plus work, and keeps the
   difference. `node --predictable`, fixed heap sizes and seeded fixtures make the count repeat.
 - `perf:browser` starts `_site/demo` with its own Vite and counts Vue renders, V8 calls, layouts, style recalcs and
-  DOM mutations per interaction, under a paused Playwright clock and a forced flush after every step.
+  DOM mutations per interaction, under a paused Playwright clock and a forced flush after every step. A scenario that
+  sets `styled` also traces how many elements its style recalcs reached (`blink.styledElements`): a recalc count reads
+  the same whether one element was restyled or the whole page, which is what an inherited custom property changed on
+  the shell's root cost a drag of the chat's edge on every frame.
 - A run fails only on a budget (`src/instr/instr-budgets.ts`, `src/browser/browser-budgets.ts`): a one-directional
   claim about what an event costs, set well above today's reading, with the claim and the reason for its limit beside
-  it. Today they are renders per idle clock tick, renders per keystroke in the composer, a repeat ignore walk at most a
-  tenth of the first, and incremental quick-open ranking at most 60% of re-ranking from scratch. A new budget encodes a property
-  someone would defend, not a number that happened to be measured.
+  it. Today they are renders per idle clock tick, renders per keystroke in the composer, elements restyled and renders
+  per frame of a drag of the chat's edge, a repeat ignore walk at most a tenth of the first, and incremental quick-open
+  ranking at most 60% of re-ranking from scratch. A new budget encodes a property someone would defend, not a number that
+  happened to be measured. A budget on a scenario the record workflow has not recorded yet waits in
+  `UNRECORDED_BROWSER_BUDGETS`, judged on every run all the same, and moves into `BROWSER_BUDGETS` with the scenario's
+  first recording, which `budgets.test.ts` then holds to the same headroom.
 - Every other count is a report: the diff against `baselines/` goes to stdout and, in CI, to the job summary, and
   never fails the job. A baseline that failed on every move was re-recorded four times in its first 28 hours by
   whoever the failed run landed on, which is what a golden master turns into.

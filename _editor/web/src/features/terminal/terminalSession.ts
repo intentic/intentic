@@ -4,7 +4,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { TERMINAL_PATH, type TerminalClientMessage, type TerminalServerMessage } from "@intentic/sandbox-contract/browser-wire";
-import { clipboardOf, parseLoopbackLink, useDevice } from "@intentic/ui";
+import { afterResize, clipboardOf, parseLoopbackLink, useDevice } from "@intentic/ui";
 import { boundCommand } from "../../workbench/commands/useCommands";
 import { isApplePlatform } from "../../workbench/commands/keybindings";
 import { toScreenPx } from "../../workbench/window/uiScale";
@@ -267,11 +267,15 @@ const observeHost = (s: TerminalSession): void => {
         tellTerminalPresence(s);
         schedule();
     };
-    const observer = new view.ResizeObserver(schedule);
+    // A resize handle being dragged (the terminal's own top edge, the chat's beside it) holds the fit until the pointer
+    // rests or lets go: each fit reflows the whole scrollback and asks the daemon for a new grid, once a frame of the drag.
+    let waiting = (): void => {};
+    const observer = new view.ResizeObserver(() => (waiting = afterResize(schedule)));
     observer.observe(s.host);
     view.addEventListener(`resize`, schedule);
     view.document.addEventListener(`visibilitychange`, seen);
     s.unobserve = () => {
+        waiting();
         observer.disconnect();
         view.removeEventListener(`resize`, schedule);
         view.document.removeEventListener(`visibilitychange`, seen);

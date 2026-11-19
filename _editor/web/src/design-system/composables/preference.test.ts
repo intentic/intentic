@@ -5,6 +5,7 @@ import {
     choosePreference,
     definePreference,
     enumPreference,
+    holdPreferenceWrites,
     numberPreference,
     onPreferenceChange,
     onPreferenceWrite,
@@ -248,6 +249,46 @@ describe(`every change, whoever made it`, () => {
         expect(heard).toContainEqual([`ui-not-held-here`, `on`]);
         expect(heard.at(-1)).toEqual([`ui-size-changes`, null]);
         expect(heard).not.toContainEqual([`ui-size-changes`, `compact`]);
+    });
+});
+
+// A drag of a resize handle holds writes (resizeGesture.ts): a width it passes through on every frame used to be stored,
+// broadcast to every other window and handed to the account each time.
+describe(`a choice made while writes are held`, () => {
+    it(`is worn at once, and stored, told and heard once, as it stands when the hold lets go`, () => {
+        const applied: number[] = [];
+        const writes: (string | null)[] = [];
+        const stop = onPreferenceWrite((key, raw) => key === `ui-held-width` && writes.push(raw));
+        const width = definePreference<number>({ key: `ui-held-width`, read: (raw) => Number(raw ?? 300), write: String, apply: (v) => applied.push(v) });
+
+        const release = holdPreferenceWrites();
+        width.value = 310;
+        width.value = 320;
+        width.value = 330;
+        expect(applied).toEqual([300, 310, 320, 330]);
+        expect(localStorage.getItem(`ui-held-width`)).toBeNull();
+        expect(writes).toEqual([]);
+
+        release();
+        release();
+        stop();
+        expect(localStorage.getItem(`ui-held-width`)).toBe(`330`);
+        expect(writes).toEqual([`330`]);
+    });
+
+    it(`gives way to what another window says meanwhile, which is never told back as this window's`, () => {
+        const writes: (string | null)[] = [];
+        const stop = onPreferenceWrite((key, raw) => key === `ui-held-skin` && writes.push(raw));
+        const skin = definePreference<string>({ key: `ui-held-skin`, read: (raw) => raw ?? `none`, write: (value) => value });
+
+        const release = holdPreferenceWrites();
+        skin.value = `silver`;
+        receivePreferenceChange({ key: `ui-held-skin`, raw: `sanctum` });
+        release();
+        stop();
+
+        expect(skin.value).toBe(`sanctum`);
+        expect(writes).toEqual([]);
     });
 });
 

@@ -393,6 +393,7 @@ export { NARROW_HYSTERESIS_REM, useNarrow } from "./composables/useNarrow.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
 // Every draggable divider in the app; only the per-surface setter differs.
 export { type PointerResize, usePointerResize } from "./composables/usePointerResize.js";
+export { afterResize, beginResizeGesture, layoutResizing, noteResizeMove, RESIZE_REST_MS } from "./composables/resizeGesture.js";
 // Resets a page-scrolling surface's scroll position when the shown document changes; otherwise the old offset
 // points into the new content.
 export { useScrollReset } from "./composables/useScrollReset.js";

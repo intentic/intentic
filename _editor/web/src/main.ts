@@ -28,6 +28,7 @@ import { installDesktopFullscreen, installDesktopLinks, installDesktopOpener } f
 import { installAppOffer } from "./workbench/commands/appInstall";
 import { installComposingEnterGuard, installModEnterSubmit } from "@intentic/ui/keys";
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf/perf";
+import { watchDragFrames } from "./app/perf/dragFrames";
 import { markBoot } from "./app/perf/boot";
 import { watchStalledQueries } from "./app/perf/queryStalls";
 import { startRequestRateReports } from "./app/perf/requestRate";
@@ -151,6 +152,8 @@ installPerfReporter((op, _ms, fields, requestId) =>
 );
 // A frame that held the page past what a reader feels, with the scripts that held it (perf.ts, observeLongFrames).
 observeLongFrames((fields) => reportClient(`perf.frame`, `long frame`, { level: `warn`, fields: { ...fields } }));
+// Every frame of a resize handle's drag, against a dropped frame's budget (dragFrames.ts).
+watchDragFrames();
 // A read that never settles, which no slow span can name since a span is filed only when the call ends (queryStalls.ts).
 watchStalledQueries(queryClient);
 // A read this window and another editor window both show is fetched by one of them (lib/windows/siblingQueries.ts); before

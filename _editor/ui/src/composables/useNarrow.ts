@@ -1,4 +1,5 @@
 import { computed, onUnmounted, ref, watch, type ComputedRef, type Ref } from "vue";
+import { afterResize } from "./resizeGesture.js";
 import { useTextSize } from "./useTextSize.js";
 
 // Is this element narrower than the layout it wants, measured off the element, never the window: a view
@@ -39,9 +40,14 @@ export function useNarrow(element: Readonly<Ref<HTMLElement | undefined>>, at: n
     // frame's notifications ("ResizeObserver loop completed with undelivered notifications") and lay the page out again
     // under every observer after it.
     let fold = 0;
+    // While a resize handle is dragged the fold waits for the pointer to rest or let go (resizeGesture.ts): a breakpoint
+    // crossed mid-drag redraws the whole pane behind it (a board's every card), and a drag back and forth across it did
+    // so on each crossing. Made when it rests, the fold is judged on the width it rests at.
+    let held = (): void => {};
     const unobserve = (): void => {
         observer?.disconnect();
         observer = undefined;
+        held();
         if (fold !== 0) {
             cancelAnimationFrame(fold);
             fold = 0;
@@ -61,7 +67,7 @@ export function useNarrow(element: Readonly<Ref<HTMLElement | undefined>>, at: n
                 if (fold === 0 && verdict() !== narrow.value) {
                     fold = requestAnimationFrame(() => {
                         fold = 0;
-                        judge();
+                        held = afterResize(judge);
                     });
                 }
             });

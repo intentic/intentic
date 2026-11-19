@@ -14,6 +14,11 @@ export const TYPED = "the plan looks right";
 /** How long agents-idle watches the board, and the shared clock's tick it steps by. */
 export const IDLE_MS = 15_000;
 export const TICK_MS = 1_000;
+/** How many frames chat-edge-drag drags the chat's edge for, and how far it moves it each frame. */
+export const DRAG_MOVES = 24;
+const DRAG_STEP_PX = 10;
+// Fake ms between two moves of a drag: one frame at 60Hz, so each move is drawn by its own frame.
+const FRAME_MS = 16;
 /** How long chat-long-open's conversation is, in rows: the fixture's 7 copied, far past any window a chat draws. */
 const LONG_ROWS = 2_002;
 // The curated recording's conversation with the most to draw: prompts, answers, edits with diffs, a job row.
@@ -33,20 +38,32 @@ export interface Scenario {
     readonly frames: boolean;
     /** Counts of the page as `act` left it, read once the window closes and stored beside the window's own. */
     readonly count?: (session: Session) => Promise<Readonly<Record<string, number>>>;
+    /** Also counts the elements each style recalc reached (`blink.styledElements`), from a trace of the window. */
+    readonly styled?: boolean;
+}
+
+interface Point {
+    readonly x: number;
+    readonly y: number;
 }
 
 /**
  * Hovers the target before the window opens: a locator click inside it would run Playwright's actionability polling in
- * the page, and the hover's restyle belongs to the pointer arriving, not to the press.
+ * the page, and the hover's restyle belongs to the pointer arriving, not to the press. Returns where the pointer is.
  */
-const aim = async (session: Session, target: Locator): Promise<void> => {
+const aim = async (session: Session, target: Locator): Promise<Point> => {
     const box = await target.boundingBox();
     if (box === null) {
         throw new Error(`nothing to press: ${String(target)}`);
     }
-    await session.page.mouse.move(Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2));
+    const point = { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) };
+    await session.page.mouse.move(point.x, point.y);
     await session.quiesce();
+    return point;
 };
+
+// Where chat-edge-drag's prepare left the pointer, on the edge, for its act to drag from without querying the page.
+let chatEdge: Point = { x: 0, y: 0 };
 
 /** Presses where `aim` left the pointer, then lets the press's own timers run. */
 const press = async (session: Session): Promise<void> => {
@@ -103,6 +120,27 @@ export const SCENARIOS: readonly Scenario[] = [
         },
         navigations: 0,
         frames: true,
+    },
+    {
+        name: "chat-edge-drag",
+        about: `drag the docked chat's edge ${DRAG_MOVES} frames wider and let go: what each frame of a drag restyles and redraws`,
+        prepare: async (session) => {
+            await session.open("/demo/agents", SETTLE_MS);
+            // The side panel's own left edge, which sizes the chat while nothing is open beside it.
+            chatEdge = await aim(session, session.page.locator(".side-panel > [role=separator]").last());
+        },
+        act: async (session) => {
+            await session.page.mouse.down();
+            for (let move = 1; move <= DRAG_MOVES; move += 1) {
+                await session.page.mouse.move(chatEdge.x - move * DRAG_STEP_PX, chatEdge.y);
+                await session.advance(FRAME_MS);
+            }
+            await session.page.mouse.up();
+            await session.advance(TAIL_MS);
+        },
+        navigations: 0,
+        frames: true,
+        styled: true,
     },
     {
         name: "chat-long-open",

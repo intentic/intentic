@@ -1,5 +1,5 @@
 import { sandboxRef } from "@intentic/extension-api";
-import { computed } from "vue";
+import { computed, readonly, shallowRef } from "vue";
 import { boolPreference, enumPreference, numberPreference } from "@intentic/ui/preference";
 import { useAudience } from "../../app/useAudience";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
@@ -203,6 +203,16 @@ const diffOpen = enumPreference(DIFF_OPEN_KEY, [`top`, `imports`, `biggest`] as 
 const markdownOutline = boolPreference(MARKDOWN_OUTLINE_KEY, true);
 const homeArrange = enumPreference(HOME_ARRANGE_KEY, [`kind`, `date`] as const, `kind`);
 
+// THE CHAT'S WIDTH WHILE ITS EDGE IS DRAGGED (SidePanel's seam, through <ResizeSeam>'s preview): drawn by the shell's
+// grid straight from here, and read by nothing that renders, so a drag redraws no component and stores nothing, where
+// writing `chatWidth` once a frame redrew the shell's whole rail and stored and broadcast every value it passed through.
+// Cleared on release, when the width the pointer let go at is stored once.
+const liveChatWidth = shallowRef<number | undefined>(undefined);
+
+const previewChatWidth = (px: number | undefined): void => {
+    liveChatWidth.value = px === undefined ? undefined : clampWidth(px);
+};
+
 const set = (value: ChatPosition): void => {
     position.value = value;
 };
@@ -330,6 +340,7 @@ export function useLayout() {
         position,
         chatHome,
         chatWidth,
+        liveChatWidth: readonly(liveChatWidth),
         floatingSideWidth,
         sidebarWidth,
         reviewListWidth,
@@ -355,6 +366,7 @@ export function useLayout() {
         setChatHome,
         setChatWidth,
         resetChatWidth,
+        previewChatWidth,
         setFloatingSideWidth,
         setSidebarWidth,
         resetSidebarWidth,

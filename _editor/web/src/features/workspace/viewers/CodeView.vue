@@ -14,6 +14,7 @@ import { requestCodeAnalysis } from "../health/codeAnalysisClient";
 import { takeCaret } from "../files/caretRequest";
 import { normalizationEdits } from "../files/normalizeOnSave";
 import { useEditorSelection } from "../../../models/workspace/files/useEditorSelection";
+import { followHostSize } from "../files/editorLayout";
 import { editorType, useMonaco, watchEditorType } from "../files/useMonaco";
 import type { LineJump } from "../../../models/workspace/tabs/workspaceTabs";
 
@@ -44,6 +45,7 @@ const pointerOptions = (): Pick<Monaco.editor.IStandaloneEditorConstructionOptio
         : { minimap: { enabled: true, showSlider: `always` }, scrollbar: { vertical: `hidden`, verticalScrollbarSize: 0 } };
 
 const host = ref<HTMLElement>();
+let stopFollowing = (): void => {};
 const editor = shallowRef<Monaco.editor.IStandaloneCodeEditor>();
 let monaco: typeof Monaco | undefined;
 let model: Monaco.editor.ITextModel | undefined;
@@ -191,7 +193,6 @@ onMounted(async () => {
         model,
         readOnly: !editable,
         domReadOnly: !editable,
-        automaticLayout: true,
         ...pointerOptions(),
         // Wraps a long line to be read, not scrolled to; continuation rows carry no gutter number. `bounded` wraps at
         // the viewport when narrow, else past this repo's 150-column width, so only real overflow folds.
@@ -210,6 +211,8 @@ onMounted(async () => {
         fixedOverflowWidgets: true,
     });
     editor.value = view;
+    // Laid out to its host as it resizes, held while a resize handle is dragged (editorLayout.ts).
+    stopFollowing = followHostSize(host.value, view);
 
     // A file the reader has just created takes the caret: typing into it is the next thing they do (caretRequest.ts).
     if (editable && path !== undefined && takeCaret(path)) {
@@ -319,6 +322,7 @@ onBeforeUnmount(() => {
             viewStates.set(path, state);
         }
     }
+    stopFollowing();
     model?.dispose();
     editor.value?.dispose();
 });

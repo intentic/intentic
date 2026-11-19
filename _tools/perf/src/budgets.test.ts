@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { judgeBudgets, type Baseline, type Budget } from "./baseline.js";
-import { BROWSER_BUDGETS } from "./browser/browser-budgets.js";
+import { BROWSER_BUDGETS, UNRECORDED_BROWSER_BUDGETS } from "./browser/browser-budgets.js";
 import { SCENARIOS } from "./browser/scenarios.js";
 import { INSTR_BUDGETS } from "./instr/instr-budgets.js";
 
@@ -25,6 +25,15 @@ describe("the declared budgets", () => {
 
     it("reads browser scenarios that exist", () => {
         const names = new Set(SCENARIOS.map((scenario) => scenario.name));
-        expect(BROWSER_BUDGETS.flatMap((budget) => budget.reads).filter((name) => !names.has(name))).toEqual([]);
+        const budgets = [...BROWSER_BUDGETS, ...UNRECORDED_BROWSER_BUDGETS];
+        expect(budgets.flatMap((budget) => budget.reads).filter((name) => !names.has(name))).toEqual([]);
+    });
+
+    // A budget waits outside the recorded list only until its scenario is recorded; then it joins it, and the headroom
+    // check above, in the same change.
+    it("keeps a budget out of the recorded list only while its scenario has no recording", () => {
+        const { scenarios } = recorded("browser");
+        const recordedNow = UNRECORDED_BROWSER_BUDGETS.filter((budget) => budget.reads.some((scenario) => scenarios[scenario] !== undefined));
+        expect(recordedNow.map((budget) => budget.name)).toEqual([]);
     });
 });

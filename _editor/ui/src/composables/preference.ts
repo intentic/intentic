@@ -139,6 +139,37 @@ export const choosePreference = (key: string, raw: string | null): void => {
     }
 };
 
+// WRITES HELD FOR A GESTURE (holdPreferenceWrites): a width dragged through a value a frame was stored, told to every
+// other window (each of which wore it and laid itself out again) and handed to whatever keeps preferences beyond this
+// browser, once per frame. While a hold lasts a choice is worn here at once and written once, when the last hold lets
+// go, as whatever its preference holds then. Keyed by storage key, so a key chosen many times is written once.
+let holds = 0;
+const heldWrites = new Map<string, () => void>();
+
+/**
+ * Holds back storing and telling every choice made in this window until the returned function is called (a second call
+ * does nothing): what was chosen meanwhile is worn at once, and written once, as it stands on release.
+ */
+export const holdPreferenceWrites = (): (() => void) => {
+    holds += 1;
+    let released = false;
+    return () => {
+        if (released) {
+            return;
+        }
+        released = true;
+        holds -= 1;
+        if (holds > 0) {
+            return;
+        }
+        const writes = [...heldWrites.values()];
+        heldWrites.clear();
+        for (const write of writes) {
+            write();
+        }
+    };
+};
+
 /** Declare one preference and hand back the ref the app reads and writes; assigning it applies, persists, and notifies every other window. */
 export const definePreference = <T>({ key: name, read, write, apply, scope = `device` }: PreferenceOptions<T>): Ref<T> => {
     const key = scope === `account` ? accountKey(name) : deviceKey(name);
@@ -154,6 +185,9 @@ export const definePreference = <T>({ key: name, read, write, apply, scope = `de
     // correct against the write happening in the same tick.
     let adopting = false;
     held.set(key, (raw) => {
+        // What another window says now outranks a choice held back here: written on release, it would be told back as
+        // this window's own.
+        heldWrites.delete(key);
         adopting = true;
         try {
             state.value = read(raw);
@@ -162,6 +196,15 @@ export const definePreference = <T>({ key: name, read, write, apply, scope = `de
         }
     });
 
+    const say = (raw: string | null): void => {
+        persist(key, raw);
+        tell(key, raw);
+        for (const listener of writeListeners) {
+            listener(key, raw);
+        }
+        changed(key, raw);
+    };
+
     watch(
         state,
         (value) => {
@@ -169,13 +212,11 @@ export const definePreference = <T>({ key: name, read, write, apply, scope = `de
             if (adopting) {
                 return;
             }
-            const raw = write(value);
-            persist(key, raw);
-            tell(key, raw);
-            for (const listener of writeListeners) {
-                listener(key, raw);
+            if (holds > 0) {
+                heldWrites.set(key, () => say(write(state.value)));
+                return;
             }
-            changed(key, raw);
+            say(write(value));
         },
         { flush: `sync` },
     );

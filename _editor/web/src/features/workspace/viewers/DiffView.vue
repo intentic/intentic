@@ -6,6 +6,7 @@ import { useLayout } from "../../../workbench/window/useLayout";
 import { highlightLangFor, lineStat, type CodeAnalysis, type LineStat } from "@intentic/code-read";
 import { requestCodeAnalysis } from "../health/codeAnalysisClient";
 import { landingChange, type ImportSide } from "../health/codeLanding";
+import { followHostSize } from "../files/editorLayout";
 import { editorType, useMonaco, watchEditorType } from "../files/useMonaco";
 import { PATCH_GAP } from "./diffPatch";
 import { useT } from "@intentic/ui/i18n";
@@ -30,6 +31,7 @@ const { mobile } = useDevice();
 const { ensureMonaco, ensureLanguage } = useMonaco();
 const { showComments, toggleShowComments, diffLayout, diffOpen } = useLayout();
 const host = ref<HTMLElement>();
+let stopFollowing = (): void => {};
 // The stored preference is a desktop one: two panes cannot fit a phone, so mobile is always inline regardless. Nor do
 // they fit a pane: a review beside a preview and a docked chat on a laptop leaves each half a column of fragments, so
 // below this width (rem) the diff reads inline too. The preference is left as it is, and the diff splits again as soon
@@ -186,7 +188,6 @@ onMounted(async () => {
     const editor = m.editor.createDiffEditor(host.value, {
         readOnly: true,
         originalEditable: false,
-        automaticLayout: true,
         renderSideBySide: split.value,
         // Always-visible slider: with scrollbars off, a hover-only slider would leave no position indicator at all.
         // No minimap on a phone: it spends a seventh of the width on a picture a finger cannot use.
@@ -207,6 +208,8 @@ onMounted(async () => {
         ...editorType(`diff`),
     });
     diff.value = editor;
+    // Laid out to its host as it resizes, held while a resize handle is dragged (editorLayout.ts).
+    stopFollowing = followHostSize(host.value, editor);
     // Empty models first: `render` owns what goes in them, so the toggle and the first paint take one path.
     original = m.editor.createModel(``, modelLang);
     modified = m.editor.createModel(``, modelLang);
@@ -242,6 +245,7 @@ watch(showComments, async () => {
 
 onBeforeUnmount(() => {
     disposed = true;
+    stopFollowing();
     diff.value?.dispose();
     original?.dispose();
     modified?.dispose();

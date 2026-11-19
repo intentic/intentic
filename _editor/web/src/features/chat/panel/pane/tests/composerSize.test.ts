@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { createApp, h, ref } from "vue";
-import { growTextarea } from "@intentic/ui";
+import { beginResizeGesture, growTextarea } from "@intentic/ui";
 import { useComposerSize } from "../composerSize";
 
 // Pins the composer box's cap (the pane's free height less the composer's chrome and a strip of transcript, floored,
@@ -64,6 +64,42 @@ it(`keeps the last good cap while nothing is laid out, or the composer has gone`
     input.value = null;
     size.grow();
     expect(size.composerCap.value).toBe(708);
+});
+
+// A drag of the chat's edge resizes the pane on every frame; the box is measured once, when it lets go.
+it(`measures again once a drag of a resize handle lets go, not on every frame of it`, async () => {
+    const observed: ResizeObserverCallback[] = [];
+    const { ResizeObserver: realObserver } = globalThis;
+    globalThis.ResizeObserver = class {
+        constructor(callback: ResizeObserverCallback) {
+            observed.push(callback);
+        }
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    };
+    try {
+        const { size, footer } = sizeOf({ pane: 900, footer: 160, field: 40 });
+        size.grow();
+        expect(size.composerCap.value).toBe(708);
+        const [paneResized] = observed;
+
+        const end = beginResizeGesture();
+        // The chips wrapped onto a second row as the pane narrowed: more chrome, less room for the box.
+        laidOut(footer.value!, { offsetHeight: 260 });
+        // SAFETY: the composer's observer reads neither its entries nor the observer it is handed.
+        const observer = {} as ResizeObserver;
+        paneResized?.([], observer);
+        paneResized?.([], observer);
+        expect(size.composerCap.value).toBe(708);
+
+        end();
+        await Promise.resolve();
+        // 900 - (260 - 40) - 72
+        expect(size.composerCap.value).toBe(608);
+    } finally {
+        globalThis.ResizeObserver = realObserver;
+    }
 });
 
 // The box's height writes, and how often its content was measured; jsdom lays nothing out, so content height is given.

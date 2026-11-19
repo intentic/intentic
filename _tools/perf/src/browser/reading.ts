@@ -8,11 +8,14 @@ export const NAMED_RENDERS = 2;
 
 const sum = (counts: Readonly<Record<string, number>>): number => Object.values(counts).reduce((total, count) => total + count, 0);
 
-/** Folds one window into the metrics the baseline stores; without `frames`, the layout and style counts are left out. */
+/**
+ * Folds one window into the metrics the baseline stores; without `frames`, the layout and style counts are left out, and
+ * the elements its style recalcs reached are counted only for a window that traced them.
+ */
 export const readingOf = (window: Window, frames: boolean): Reading => {
     const calls = callsByOwner(window.scripts);
     const named = Object.entries(window.probe.renders).filter(([, count]) => count >= NAMED_RENDERS);
-    return {
+    const reading = {
         "vue.renders": sum(window.probe.renders),
         "vue.mounts": sum(window.probe.mounts),
         ...Object.fromEntries(named.map(([name, count]) => [`vue.render:${name}`, count])),
@@ -23,4 +26,5 @@ export const readingOf = (window: Window, frames: boolean): Reading => {
         "dom.added": window.probe.mutations.added,
         "dom.removed": window.probe.mutations.removed,
     };
+    return window.styled === undefined ? reading : { ...reading, "blink.styledElements": window.styled };
 };

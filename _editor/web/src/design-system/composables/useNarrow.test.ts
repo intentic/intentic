@@ -1,7 +1,7 @@
 // A pane's width, measured the moment its element arrives: the observer's first answer can land a frame after the first
 // paint, and a phone drew that frame in the wide layout and then folded it, shifting everything under it.
 import "@intentic/testing/dom";
-import { useNarrow } from "@intentic/ui";
+import { beginResizeGesture, useNarrow } from "@intentic/ui";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 
 const mountAt = async (width: number) => {
@@ -73,6 +73,41 @@ it(`folds on the next frame when the observer says the pane crossed the line, ne
         // A size that leaves the answer as it was asks for no frame at all.
         resize(500);
         expect(frames).toHaveLength(1);
+        pane.done();
+    } finally {
+        globalThis.ResizeObserver = realObserver;
+        globalThis.requestAnimationFrame = realFrame;
+    }
+});
+
+it(`holds a fold the pane crossed into while a resize handle is dragged, and makes it once the drag lets go`, async () => {
+    // A board folding at its breakpoint redraws every card; dragged back and forth across the line, it did so each time.
+    const observed: ResizeObserverCallback[] = [];
+    const frames: FrameRequestCallback[] = [];
+    const { ResizeObserver: realObserver, requestAnimationFrame: realFrame } = globalThis;
+    globalThis.ResizeObserver = class {
+        constructor(callback: ResizeObserverCallback) {
+            observed.push(callback);
+        }
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    };
+    globalThis.requestAnimationFrame = (callback) => frames.push(callback);
+    try {
+        const pane = await mountAt(1_400);
+        const [report] = observed;
+        // SAFETY: useNarrow reads only `contentRect.width` off an entry, and nothing off the observer it is handed.
+        const resize = (width: number): void => report?.([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver);
+
+        const end = beginResizeGesture();
+        resize(412);
+        frames[0]?.(0);
+        expect(pane.narrow.value).toBe(false);
+
+        end();
+        await Promise.resolve();
+        expect(pane.narrow.value).toBe(true);
         pane.done();
     } finally {
         globalThis.ResizeObserver = realObserver;

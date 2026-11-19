@@ -9,7 +9,7 @@ import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import { ui, ContextMenu, type TipTone, type TooltipValue } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, provide, ref, watch, watchPostEffect } from "vue";
 import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRouter } from "vue-router";
 import { askForAttention } from "../models/fleet/board/attentionOutside";
 import { useTier } from "../client/sandbox/useTier";
@@ -85,7 +85,7 @@ const tileTip = (tile: SectionTile, extra?: string): TooltipValue => {
 };
 
 // Desktop chrome of the post-login shell: a square-tile rail, a workspace outlet, and the side panel (the chat and what
-// was opened beside), laid out as a three-column grid (the side panel's width via --side-width, set by its drag handle).
+// was opened beside), laid out as a three-column grid (the side panel's width via --side-width, written below).
 // Shared lifecycle (liveness, presence, plan) lives in WorkspaceShell, which picks this or ShellMobile.
 
 const { panels } = usePanels();
@@ -283,14 +283,20 @@ const onTileContextMenu = (tile: RailTile, event: MouseEvent): void => {
     showBesideRail(tileMenu.value, event);
 };
 
-const sideWidth = computed(() =>
-    besideChat.value && !besideFills.value ? layout.chatWidth.value + layout.besideWidth.value : layout.chatWidth.value,
-);
-const gridStyle = computed(() => ({
-    "--side-width": sideColumnShown.value ? uiLength(sideWidth.value) : `0px`,
-    // The rail's own measures, shared with a desktop window on a local folder (railFrame.ts, iconRail.css).
-    ...railFrame(),
-}));
+// The rail's own measures, shared with a desktop window on a local folder (railFrame.ts, iconRail.css).
+const railStyle = railFrame();
+
+// THE SIDE COLUMN'S WIDTH IS WRITTEN ONTO THE GRID, NOT DRAWN BY THIS TEMPLATE. It moves on every frame of a drag of the
+// chat's edge, and as a template binding each move redrew this whole component, the rail's every tile with it. While
+// the edge is dragged it is the chat's live width (useLayout's previewChatWidth), which nothing else reads.
+// `--side-width` is registered non-inherited (below): an inherited custom property changed on this root restyled every
+// element in the app on every move, most of what a drag cost.
+const shellEl = ref<HTMLElement>();
+const chatColumn = computed(() => layout.liveChatWidth.value ?? layout.chatWidth.value);
+const sideWidth = computed(() => (besideChat.value && !besideFills.value ? chatColumn.value + layout.besideWidth.value : chatColumn.value));
+watchPostEffect(() => {
+    shellEl.value?.style.setProperty(`--side-width`, sideColumnShown.value ? uiLength(sideWidth.value) : `0px`);
+});
 
 // Toggled by the rail tile or Ctrl+`; the panel docks below the workspace since sessions are sandbox-global.
 const terminal = useTerminalPanel();
@@ -338,7 +344,7 @@ useGettingStarted();
 </script>
 
 <template>
-    <div class="shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
+    <div ref="shellEl" class="shell grid h-screen overflow-hidden bg-canvas text-content" :style="railStyle">
         <!-- The one rail. Unrolled, its tiles are the sandboxes and its sections are in the bookmark (rail/MasterRail.vue);
              folded, the template below: one sandbox's sections, the others in the cluster under its switcher. -->
         <nav
@@ -526,6 +532,15 @@ useGettingStarted();
 </template>
 
 <style scoped>
+/* Not inherited: written on the shell's root on every frame of a drag of the chat's edge, and an inherited custom
+   property changed there restyles every element under it (the root holds over a thousand of them to inherit), where
+   this one restyles the grid alone. Measured beside a docked chat: 54ms of style and layout a move, against 4ms. A
+   custom property an interaction changes belongs on the element that reads it, registered like this one. */
+@property --side-width {
+    syntax: "*";
+    inherits: false;
+}
+
 .shell {
     /* Floor is 0, not the stored width, which was clamped at drag time and could push past a shrunk window. */
     grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--side-width, 22rem));

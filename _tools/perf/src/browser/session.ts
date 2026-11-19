@@ -23,6 +23,14 @@ export interface Window {
     readonly scripts: readonly ScriptCoverage[];
     readonly layouts: number;
     readonly styles: number;
+    /** Elements whose style was worked out again, summed over every recalc; only when the window asked for them. */
+    readonly styled?: number;
+}
+
+/** The slice of a CDP trace event the style count reads. */
+interface TraceEvent {
+    readonly name?: string;
+    readonly args?: { readonly elementCount?: number };
 }
 
 type ProbeScope = typeof globalThis & { readonly perfProbe: Probe };
@@ -119,14 +127,19 @@ export class Session {
         }
     }
 
-    /** Counts what `act` costs, from a settled page to a settled page; `navigations` is how many documents `act` loads. */
-    async measure(act: () => Promise<void>, navigations = 0): Promise<Window> {
+    /**
+     * Counts what `act` costs, from a settled page to a settled page; `navigations` is how many documents `act` loads.
+     * `styled` also traces the window for how many elements each style recalc reached: a recalc count cannot tell a
+     * restyle of one element from one of the whole page, which is what an inherited custom property changed high up costs.
+     */
+    async measure(act: () => Promise<void>, navigations = 0, styled = false): Promise<Window> {
         await this.quiesce();
         await this.page.evaluate(() => (globalThis as ProbeScope).perfProbe.take());
         // Taking coverage zeroes V8's counters, so this take is the window's start.
         await this.cdp.send("Profiler.takePreciseCoverage");
         const before = await this.metrics();
         const navigatedBefore = this.navigations;
+        const trace = styled ? await this.startStyleTrace() : undefined;
         await act();
         await this.quiesce();
         if (this.navigations - navigatedBefore !== navigations) {
@@ -137,11 +150,28 @@ export class Session {
         const probe = await this.page.evaluate(() => (globalThis as ProbeScope).perfProbe.take());
         const after = await this.metrics();
         const { result } = await this.cdp.send("Profiler.takePreciseCoverage");
-        return {
-            probe,
-            scripts: result,
-            layouts: after.layouts - before.layouts,
-            styles: after.styles - before.styles,
+        const window: Window = { probe, scripts: result, layouts: after.layouts - before.layouts, styles: after.styles - before.styles };
+        return trace === undefined ? window : { ...window, styled: await trace() };
+    }
+
+    /** Starts tracing style recalcs; the returned function ends it and sums the elements they reached. */
+    private async startStyleTrace(): Promise<() => Promise<number>> {
+        const events: TraceEvent[] = [];
+        const collect = (chunk: { readonly value: readonly TraceEvent[] }): void => {
+            events.push(...chunk.value);
+        };
+        this.cdp.on("Tracing.dataCollected", collect);
+        await this.cdp.send("Tracing.start", {
+            transferMode: "ReportEvents",
+            traceConfig: { recordMode: "recordAsMuchAsPossible", includedCategories: ["devtools.timeline"] },
+        });
+        return async () => {
+            const complete = new Promise<void>((resolve) => this.cdp.once("Tracing.tracingComplete", () => resolve()));
+            await this.cdp.send("Tracing.end");
+            await complete;
+            this.cdp.off("Tracing.dataCollected", collect);
+            // Each recalc is one complete event carrying how many elements it reached.
+            return events.reduce((sum, event) => sum + (event.name === "UpdateLayoutTree" ? (event.args?.elementCount ?? 0) : 0), 0);
         };
     }
 

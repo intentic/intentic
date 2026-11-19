@@ -267,7 +267,7 @@ decides when the account changes (`_editor/web/src/lib/accounts/accountBoundary.
 | Directory | Holds |
 | --- | --- |
 | `components/` | Components by role: primitives, layout, forms, rows, overlays, feedback, charts, markdown, brand, sandbox |
-| `composables/` | Shared reactive state: theme, text size, device, drafts, list navigation, preferences, the shared clock, polling |
+| `composables/` | Shared reactive state: theme, text size, device, drafts, list navigation, preferences, the shared clock, polling, resize gestures |
 | `motion/` | Whether the interface moves, looping glyphs, folds, rows arriving and leaving, swipes and springs |
 | `markdown/` | The markdown engine: render, figures, frontmatter, code blocks, block editing, history |
 | `styles/` | Tokens, motion, colour scales, the PrimeVue skin; `opt-in/` for prose and the extension class surface |

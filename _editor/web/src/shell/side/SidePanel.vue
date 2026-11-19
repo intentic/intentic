@@ -96,6 +96,12 @@ const edgeSeam = computed<number>({
               ? layout.setFloatingSideWidth(toAppPx(px))
               : layout.setChatWidth(toAppPx(px)),
 });
+// Alone in the panel, the chat's edge is drawn live while dragged (useLayout's previewChatWidth, which only the shell's
+// grid reads) and stored once on release, so the drag moves the column and redraws nothing. Beside what was opened it
+// trades two widths and may snap that column to filling the middle, so there it moves the stored widths as it goes.
+const edgePreview = computed(() =>
+    beside.value || floating ? undefined : (px: number | undefined): void => layout.previewChatWidth(px === undefined ? undefined : toAppPx(px)),
+);
 const edgeBounds = computed(() =>
     beside.value
         ? { min: MIN_PANE_PX, max: roomBesideChat(), reset: roomBesideChat() }
@@ -404,6 +410,7 @@ onBeforeUnmount(() => {
             v-model="edgeSeam"
             place="edge"
             pane="after"
+            :preview="edgePreview"
             :min="toScreenPx(edgeBounds.min)"
             :max="toScreenPx(edgeBounds.max)"
             :reset="toScreenPx(edgeBounds.reset)"
